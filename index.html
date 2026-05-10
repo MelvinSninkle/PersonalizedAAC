@@ -154,12 +154,23 @@
   }
   .bulk-row {
     display: grid;
-    grid-template-columns: 56px 1fr auto;
+    grid-template-columns: 32px 56px 1fr auto;
     gap: 10px;
     align-items: center;
     padding: 8px 10px;
     border-bottom: 1px solid #eef1f6;
   }
+  .bulk-row .row-icon {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 22px;
+    color: #cfd4db;
+    padding: 0;
+    line-height: 1;
+  }
+  .bulk-row .row-icon.active { color: #f0a830; }
+  .bulk-row .row-icon:hover { color: #f0a830; }
   .bulk-row:last-child { border-bottom: none; }
   .bulk-row img {
     width: 56px;
@@ -538,12 +549,14 @@
     <h3 id="bulk-modal-title">Bulk Add Category</h3>
     <div id="bulk-modal-context" style="font-size:13px;color:#666;margin-bottom:8px;"></div>
     <label for="bulk-cat-label">Category Name</label>
-    <input type="text" id="bulk-cat-label" autocomplete="off" placeholder="e.g. Snacks">
-    <label for="bulk-cat-image">Category Image</label>
-    <input type="file" id="bulk-cat-image" accept="image/*">
-    <div class="file-status" id="bulk-cat-image-status">No image selected</div>
-    <label for="bulk-item-images">Item Images (select multiple)</label>
-    <input type="file" id="bulk-item-images" accept="image/*" multiple>
+    <input type="text" id="bulk-cat-label" autocomplete="off" placeholder="e.g. Snacks (auto-fills from folder name)">
+    <label>Item Images</label>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="file" id="bulk-item-images" accept="image/*" multiple style="flex:1;min-width:180px;">
+      <button type="button" class="secondary" id="bulk-folder-btn" style="margin:0;padding:8px 14px;border-radius:6px;background:#e0e3e8;color:#333;border:none;font-weight:600;cursor:pointer;">Upload Folder</button>
+    </div>
+    <input type="file" id="bulk-folder-input" accept="image/*" webkitdirectory directory style="display:none;">
+    <div style="font-size:12px;color:#888;margin-top:6px;">Click ★ on a row to use that image as the category icon (defaults to the first image).</div>
     <div class="checkbox-row" style="margin-top:10px;">
       <input type="checkbox" id="bulk-tts" checked>
       <label for="bulk-tts">Generate audio for each item from its name</label>
@@ -1201,13 +1214,18 @@
   // ---- Bulk add modal ----
   const bulkModal = document.getElementById('bulk-modal');
   let bulkSection = null;
-  let bulkCatImage = null;
   let bulkItems = [];
+  let bulkIconIndex = 0;
 
   function filenameToLabel(name) {
     const base = name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
     if (!base) return '';
     return base.charAt(0).toUpperCase() + base.slice(1);
+  }
+
+  function isImageFile(f) {
+    if (f.type && f.type.startsWith('image/')) return true;
+    return /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/i.test(f.name);
   }
 
   function renderBulkList() {
@@ -1217,9 +1235,19 @@
       list.innerHTML = '<div class="bulk-empty">No images selected yet</div>';
       return;
     }
+    if (bulkIconIndex >= bulkItems.length) bulkIconIndex = 0;
     bulkItems.forEach((it, idx) => {
       const row = document.createElement('div');
       row.className = 'bulk-row';
+      const star = document.createElement('button');
+      star.type = 'button';
+      star.className = 'row-icon' + (idx === bulkIconIndex ? ' active' : '');
+      star.textContent = idx === bulkIconIndex ? '★' : '☆';
+      star.title = idx === bulkIconIndex ? 'Category icon' : 'Set as category icon';
+      star.addEventListener('click', () => {
+        bulkIconIndex = idx;
+        renderBulkList();
+      });
       const img = document.createElement('img');
       img.src = it.previewUrl;
       const input = document.createElement('input');
@@ -1234,8 +1262,10 @@
       rm.addEventListener('click', () => {
         URL.revokeObjectURL(bulkItems[idx].previewUrl);
         bulkItems.splice(idx, 1);
+        if (bulkIconIndex >= bulkItems.length) bulkIconIndex = Math.max(0, bulkItems.length - 1);
         renderBulkList();
       });
+      row.appendChild(star);
       row.appendChild(img);
       row.appendChild(input);
       row.appendChild(rm);
@@ -1246,19 +1276,37 @@
   function clearBulkPreviews() {
     bulkItems.forEach(it => URL.revokeObjectURL(it.previewUrl));
     bulkItems = [];
+    bulkIconIndex = 0;
+  }
+
+  function addBulkFiles(files, folderName) {
+    const wasEmpty = bulkItems.length === 0;
+    let added = 0;
+    files.forEach(file => {
+      if (!isImageFile(file)) return;
+      bulkItems.push({
+        file,
+        label: filenameToLabel(file.name),
+        previewUrl: URL.createObjectURL(file),
+      });
+      added++;
+    });
+    if (wasEmpty && folderName) {
+      const labelInput = document.getElementById('bulk-cat-label');
+      if (!labelInput.value.trim()) labelInput.value = filenameToLabel(folderName);
+    }
+    renderBulkList();
+    return added;
   }
 
   function openBulkModal(section) {
     bulkSection = section;
-    bulkCatImage = null;
     clearBulkPreviews();
     document.getElementById('bulk-modal-title').textContent = `Bulk Add Category in ${section}`;
     document.getElementById('bulk-modal-context').textContent = '';
     document.getElementById('bulk-cat-label').value = '';
-    document.getElementById('bulk-cat-image').value = '';
     document.getElementById('bulk-item-images').value = '';
-    document.getElementById('bulk-cat-image-status').textContent = 'No image selected';
-    document.getElementById('bulk-cat-image-status').className = 'file-status';
+    document.getElementById('bulk-folder-input').value = '';
     document.getElementById('bulk-tts').checked = true;
     document.getElementById('bulk-progress').textContent = '';
     document.getElementById('bulk-error').textContent = '';
@@ -1266,27 +1314,28 @@
     bulkModal.classList.add('show');
   }
 
-  document.getElementById('bulk-cat-image').addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      bulkCatImage = file;
-      const s = document.getElementById('bulk-cat-image-status');
-      s.textContent = `Selected: ${file.name}`;
-      s.className = 'file-status has-file';
-    }
+  document.getElementById('bulk-item-images').addEventListener('change', (e) => {
+    addBulkFiles(Array.from(e.target.files || []), null);
+    e.target.value = '';
   });
 
-  document.getElementById('bulk-item-images').addEventListener('change', (e) => {
+  document.getElementById('bulk-folder-btn').addEventListener('click', () => {
+    document.getElementById('bulk-folder-input').click();
+  });
+
+  document.getElementById('bulk-folder-input').addEventListener('change', (e) => {
     const files = Array.from(e.target.files || []);
-    files.forEach(file => {
-      bulkItems.push({
-        file,
-        label: filenameToLabel(file.name),
-        previewUrl: URL.createObjectURL(file),
-      });
-    });
+    let folderName = null;
+    const first = files.find(f => f.webkitRelativePath);
+    if (first) {
+      const parts = first.webkitRelativePath.split('/');
+      if (parts.length > 1) folderName = parts[0];
+    }
+    const added = addBulkFiles(files, folderName);
     e.target.value = '';
-    renderBulkList();
+    if (added === 0) {
+      document.getElementById('bulk-error').textContent = 'No image files found in that folder';
+    }
   });
 
   document.getElementById('bulk-cancel').addEventListener('click', () => {
@@ -1303,10 +1352,12 @@
     errEl.textContent = '';
 
     if (!label) { errEl.textContent = 'Please enter a category name'; return; }
-    if (!bulkCatImage) { errEl.textContent = 'Please choose a category image'; return; }
-    if (!bulkItems.length) { errEl.textContent = 'Please select at least one item image'; return; }
+    if (!bulkItems.length) { errEl.textContent = 'Please select at least one image'; return; }
     const blank = bulkItems.findIndex(it => !it.label.trim());
     if (blank >= 0) { errEl.textContent = `Item #${blank + 1} needs a name`; return; }
+
+    const iconIdx = Math.min(bulkIconIndex, bulkItems.length - 1);
+    const catImage = bulkItems[iconIdx].file;
 
     saveBtn.disabled = true;
     const prevSaveText = saveBtn.textContent;
@@ -1318,7 +1369,7 @@
       newCatId = await putCat({
         section: bulkSection,
         label,
-        image: bulkCatImage,
+        image: catImage,
         order: Date.now(),
       });
     } catch (err) {
