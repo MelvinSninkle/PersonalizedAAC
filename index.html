@@ -115,8 +115,10 @@
     flex: 0 0 auto;
     padding: 8px 12px 12px;
     display: none;
+    flex-direction: column;
+    gap: 6px;
   }
-  body.edit-mode .section-footer { display: block; }
+  body.edit-mode .section-footer { display: flex; }
   .add-cat-btn {
     width: 100%;
     background: #2c3e50;
@@ -129,6 +131,60 @@
     cursor: pointer;
   }
   .add-cat-btn:hover { background: #1f2c3a; }
+  .add-bulk-btn {
+    width: 100%;
+    background: #557fa3;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .add-bulk-btn:hover { background: #406285; }
+
+  .modal.wide { max-width: 720px; }
+  .bulk-list {
+    margin-top: 10px;
+    border: 1px solid #e2e6ec;
+    border-radius: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .bulk-row {
+    display: grid;
+    grid-template-columns: 56px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 10px;
+    border-bottom: 1px solid #eef1f6;
+  }
+  .bulk-row:last-child { border-bottom: none; }
+  .bulk-row img {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: #f4f6fa;
+  }
+  .bulk-row input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  .bulk-row .row-remove {
+    background: transparent;
+    border: none;
+    color: #c94f5f;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+  .bulk-empty { padding: 16px; color: #888; font-size: 13px; text-align: center; }
+  .bulk-progress { font-size: 13px; color: #557fa3; margin-top: 8px; min-height: 18px; }
 
   .tile-wrap {
     display: flex;
@@ -392,6 +448,7 @@
     <div class="items-cols" id="items-people"></div>
     <div class="section-footer">
       <button class="add-cat-btn" data-section="people">+ New Category</button>
+      <button class="add-bulk-btn" data-section="people">+ Bulk Add Category</button>
     </div>
   </section>
   <section class="aac-section" data-section="nouns">
@@ -400,6 +457,7 @@
     <div class="items-cols" id="items-nouns"></div>
     <div class="section-footer">
       <button class="add-cat-btn" data-section="nouns">+ New Category</button>
+      <button class="add-bulk-btn" data-section="nouns">+ Bulk Add Category</button>
     </div>
   </section>
   <section class="aac-section" data-section="verbs">
@@ -408,6 +466,7 @@
     <div class="items-cols" id="items-verbs"></div>
     <div class="section-footer">
       <button class="add-cat-btn" data-section="verbs">+ New Category</button>
+      <button class="add-bulk-btn" data-section="verbs">+ Bulk Add Category</button>
     </div>
   </section>
 </main>
@@ -470,6 +529,33 @@
       <button class="danger" id="cat-delete" style="display:none;">Delete</button>
       <button class="secondary" id="cat-cancel">Cancel</button>
       <button class="primary" id="cat-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="bulk-modal">
+  <div class="modal wide">
+    <h3 id="bulk-modal-title">Bulk Add Category</h3>
+    <div id="bulk-modal-context" style="font-size:13px;color:#666;margin-bottom:8px;"></div>
+    <label for="bulk-cat-label">Category Name</label>
+    <input type="text" id="bulk-cat-label" autocomplete="off" placeholder="e.g. Snacks">
+    <label for="bulk-cat-image">Category Image</label>
+    <input type="file" id="bulk-cat-image" accept="image/*">
+    <div class="file-status" id="bulk-cat-image-status">No image selected</div>
+    <label for="bulk-item-images">Item Images (select multiple)</label>
+    <input type="file" id="bulk-item-images" accept="image/*" multiple>
+    <div class="checkbox-row" style="margin-top:10px;">
+      <input type="checkbox" id="bulk-tts" checked>
+      <label for="bulk-tts">Generate audio for each item from its name</label>
+    </div>
+    <div class="bulk-list" id="bulk-list">
+      <div class="bulk-empty">No images selected yet</div>
+    </div>
+    <div class="bulk-progress" id="bulk-progress"></div>
+    <div class="error" id="bulk-error"></div>
+    <div class="button-row">
+      <button class="secondary" id="bulk-cancel">Cancel</button>
+      <button class="primary" id="bulk-save">Create Category & Items</button>
     </div>
   </div>
 </div>
@@ -1110,6 +1196,192 @@
 
   document.querySelectorAll('.add-cat-btn').forEach(btn => {
     btn.addEventListener('click', () => openCatModal(btn.dataset.section, null));
+  });
+
+  // ---- Bulk add modal ----
+  const bulkModal = document.getElementById('bulk-modal');
+  let bulkSection = null;
+  let bulkCatImage = null;
+  let bulkItems = [];
+
+  function filenameToLabel(name) {
+    const base = name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    if (!base) return '';
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  }
+
+  function renderBulkList() {
+    const list = document.getElementById('bulk-list');
+    list.innerHTML = '';
+    if (!bulkItems.length) {
+      list.innerHTML = '<div class="bulk-empty">No images selected yet</div>';
+      return;
+    }
+    bulkItems.forEach((it, idx) => {
+      const row = document.createElement('div');
+      row.className = 'bulk-row';
+      const img = document.createElement('img');
+      img.src = it.previewUrl;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = it.label;
+      input.addEventListener('input', (e) => { bulkItems[idx].label = e.target.value; });
+      const rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'row-remove';
+      rm.textContent = '✕';
+      rm.title = 'Remove';
+      rm.addEventListener('click', () => {
+        URL.revokeObjectURL(bulkItems[idx].previewUrl);
+        bulkItems.splice(idx, 1);
+        renderBulkList();
+      });
+      row.appendChild(img);
+      row.appendChild(input);
+      row.appendChild(rm);
+      list.appendChild(row);
+    });
+  }
+
+  function clearBulkPreviews() {
+    bulkItems.forEach(it => URL.revokeObjectURL(it.previewUrl));
+    bulkItems = [];
+  }
+
+  function openBulkModal(section) {
+    bulkSection = section;
+    bulkCatImage = null;
+    clearBulkPreviews();
+    document.getElementById('bulk-modal-title').textContent = `Bulk Add Category in ${section}`;
+    document.getElementById('bulk-modal-context').textContent = '';
+    document.getElementById('bulk-cat-label').value = '';
+    document.getElementById('bulk-cat-image').value = '';
+    document.getElementById('bulk-item-images').value = '';
+    document.getElementById('bulk-cat-image-status').textContent = 'No image selected';
+    document.getElementById('bulk-cat-image-status').className = 'file-status';
+    document.getElementById('bulk-tts').checked = true;
+    document.getElementById('bulk-progress').textContent = '';
+    document.getElementById('bulk-error').textContent = '';
+    renderBulkList();
+    bulkModal.classList.add('show');
+  }
+
+  document.getElementById('bulk-cat-image').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      bulkCatImage = file;
+      const s = document.getElementById('bulk-cat-image-status');
+      s.textContent = `Selected: ${file.name}`;
+      s.className = 'file-status has-file';
+    }
+  });
+
+  document.getElementById('bulk-item-images').addEventListener('change', (e) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach(file => {
+      bulkItems.push({
+        file,
+        label: filenameToLabel(file.name),
+        previewUrl: URL.createObjectURL(file),
+      });
+    });
+    e.target.value = '';
+    renderBulkList();
+  });
+
+  document.getElementById('bulk-cancel').addEventListener('click', () => {
+    clearBulkPreviews();
+    bulkModal.classList.remove('show');
+  });
+
+  document.getElementById('bulk-save').addEventListener('click', async () => {
+    const label = document.getElementById('bulk-cat-label').value.trim();
+    const useTts = document.getElementById('bulk-tts').checked;
+    const errEl = document.getElementById('bulk-error');
+    const progEl = document.getElementById('bulk-progress');
+    const saveBtn = document.getElementById('bulk-save');
+    errEl.textContent = '';
+
+    if (!label) { errEl.textContent = 'Please enter a category name'; return; }
+    if (!bulkCatImage) { errEl.textContent = 'Please choose a category image'; return; }
+    if (!bulkItems.length) { errEl.textContent = 'Please select at least one item image'; return; }
+    const blank = bulkItems.findIndex(it => !it.label.trim());
+    if (blank >= 0) { errEl.textContent = `Item #${blank + 1} needs a name`; return; }
+
+    saveBtn.disabled = true;
+    const prevSaveText = saveBtn.textContent;
+    saveBtn.textContent = 'Saving…';
+    progEl.textContent = 'Creating category…';
+
+    let newCatId;
+    try {
+      newCatId = await putCat({
+        section: bulkSection,
+        label,
+        image: bulkCatImage,
+        order: Date.now(),
+      });
+    } catch (err) {
+      errEl.textContent = 'Category save failed: ' + err.message;
+      saveBtn.disabled = false;
+      saveBtn.textContent = prevSaveText;
+      progEl.textContent = '';
+      return;
+    }
+
+    const failures = [];
+    for (let i = 0; i < bulkItems.length; i++) {
+      const it = bulkItems[i];
+      progEl.textContent = `Processing ${i + 1} of ${bulkItems.length}: ${it.label}`;
+      let sound = null;
+      if (useTts) {
+        try {
+          const r = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: it.label.trim() }),
+          });
+          if (!r.ok) {
+            const detail = await r.text();
+            throw new Error(`${r.status}: ${detail.slice(0, 120)}`);
+          }
+          sound = await r.blob();
+        } catch (err) {
+          failures.push(`${it.label}: ${err.message}`);
+        }
+      }
+      try {
+        const item = {
+          section: bulkSection,
+          categoryId: newCatId,
+          label: it.label.trim(),
+          image: it.file,
+          order: Date.now() + i,
+        };
+        if (sound) item.sound = sound;
+        await putItem(item);
+      } catch (err) {
+        failures.push(`${it.label}: save failed — ${err.message}`);
+      }
+    }
+
+    activeCategoryId[bulkSection] = newCatId;
+    clearBulkPreviews();
+    saveBtn.disabled = false;
+    saveBtn.textContent = prevSaveText;
+
+    if (failures.length) {
+      progEl.textContent = '';
+      errEl.textContent = `Done with ${failures.length} issue(s): ` + failures.slice(0, 3).join(' | ');
+      await renderSection(bulkSection);
+    } else {
+      bulkModal.classList.remove('show');
+      await renderSection(bulkSection);
+    }
+  });
+
+  document.querySelectorAll('.add-bulk-btn').forEach(btn => {
+    btn.addEventListener('click', () => openBulkModal(btn.dataset.section));
   });
 
   // ---- Export / Import ----
