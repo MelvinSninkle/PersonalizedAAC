@@ -77,6 +77,20 @@ The app does not read these directories at runtime; uploaded media goes straight
 
 ```
 index.html      Entire app — HTML, CSS, JS in one file
+api/tts.js      Vercel Serverless Function: ElevenLabs TTS proxy
 README.md       This file
 .gitignore      Excludes media folders and backups
 ```
+
+## TTS (ElevenLabs)
+
+The item editor has an "Or generate from text" field. Clicking **Generate audio**
+POSTs the phrase to `/api/tts`, which proxies to ElevenLabs and returns MP3
+bytes. The Blob is stored in the item's `sound` field exactly like an uploaded
+file, so it persists in IndexedDB and replays without re-calling the API.
+
+Env vars (set in Vercel → Project → Settings → Environment Variables):
+
+- `Fletchers_AAC_Device` — required (ElevenLabs API key)
+- `ELEVENLABS_VOICE_ID` — optional, defaults to Rachel (`21m00Tcm4TlvDq8ikWAM`)
+- `ELEVENLABS_MODEL_ID` — optional, defaults to `eleven_turbo_v2_5`
