@@ -513,12 +513,50 @@
   .modal .error { color: #c94f5f; font-size: 14px; margin-top: 8px; min-height: 18px; }
 
   @media (max-width: 900px) {
+    html, body {
+      height: auto;
+      overflow: auto;
+    }
     main {
       grid-template-columns: 1fr;
-      grid-auto-rows: minmax(260px, 1fr);
-      overflow-y: auto;
-      height: calc(100% - 64px);
+      grid-auto-rows: auto;
+      height: auto;
+      min-height: calc(100vh - 64px);
+      padding: 8px;
+      gap: 8px;
     }
+    .aac-section {
+      min-height: 80vh;
+    }
+    .aac-section h2 {
+      padding: 10px 14px;
+      font-size: 16px;
+    }
+    /* Nouns has 4 cols on desktop — too cramped on a phone. JS still
+       creates 4 column divs but CSS wraps them into a 2x2 grid. */
+    .aac-section[data-section="nouns"] .tab-strip,
+    .aac-section[data-section="nouns"] .items-cols {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .tab-strip { gap: 8px; padding: 8px; }
+    .items-cols { gap: 8px; padding: 8px; }
+    .tile-label { font-size: 13px; }
+    .tile-add { min-height: 56px; }
+    .tile-add-cat { min-height: 80px; }
+    header { padding: 10px 14px; height: 56px; }
+    header h1 { font-size: 17px; }
+    header button { padding: 8px 12px; font-size: 13px; }
+    .modal { padding: 18px; }
+    .modal h3 { font-size: 18px; }
+  }
+  @media (max-width: 480px) {
+    main { padding: 6px; gap: 6px; }
+    /* On very small phones, drop Verbs to single-col too */
+    .aac-section[data-section="verbs"] .tab-strip,
+    .aac-section[data-section="verbs"] .items-cols {
+      grid-template-columns: 1fr;
+    }
+    .aac-section h2 { font-size: 15px; padding: 8px 12px; }
   }
 </style>
 </head>
