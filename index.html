@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fletcher's AAC</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f4f6fa;
+    color: #222;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: #2c3e50;
+    color: white;
+    box-shadow: 0 2px 6px rgba(0,0,0,.15);
+    height: 64px;
+  }
+  header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+  header .status { font-size: 13px; opacity: .85; margin-right: 12px; }
+  header button {
+    background: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  header button:hover { background: #3a7bc8; }
+  body.edit-mode header { background: #8b2c3e; }
+  body.edit-mode header button { background: #c94f5f; }
+  body.edit-mode header button:hover { background: #b3404e; }
+
+  header button.edit-only { display: none; }
+  body.edit-mode header button.edit-only {
+    display: inline-block;
+    background: #557fa3;
+  }
+  body.edit-mode header button.edit-only:hover { background: #406285; }
+
+  main {
+    display: grid;
+    grid-template-columns: 1fr 4fr 2fr;
+    gap: 12px;
+    padding: 12px;
+    height: calc(100% - 64px);
+  }
+
+  .aac-section {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .aac-section h2 {
+    margin: 0;
+    padding: 12px 16px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #555;
+    border-bottom: 1px solid #eee;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+
+  .tab-strip {
+    flex: 0 0 auto;
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+    border-bottom: 2px solid #eef1f6;
+  }
+  .aac-section[data-section="people"] .tab-strip { grid-template-columns: 1fr; }
+  .aac-section[data-section="nouns"]  .tab-strip { grid-template-columns: repeat(4, 1fr); }
+  .aac-section[data-section="verbs"]  .tab-strip { grid-template-columns: repeat(2, 1fr); }
+
+  .items-cols {
+    flex: 1;
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+    min-height: 0;
+  }
+  .aac-section[data-section="people"] .items-cols { grid-template-columns: 1fr; }
+  .aac-section[data-section="nouns"]  .items-cols { grid-template-columns: repeat(4, 1fr); }
+  .aac-section[data-section="verbs"]  .items-cols { grid-template-columns: repeat(2, 1fr); }
+  .items-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    min-height: 0;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .items-col::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+  .section-footer {
+    flex: 0 0 auto;
+    padding: 8px 12px 12px;
+    display: none;
+  }
+  body.edit-mode .section-footer { display: block; }
+  .add-cat-btn {
+    width: 100%;
+    background: #2c3e50;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .add-cat-btn:hover { background: #1f2c3a; }
+
+  .tile-wrap {
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+  }
+  .tile-square {
+    aspect-ratio: 1;
+    border-radius: 14px;
+    background: #e9eef5 center/cover no-repeat;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      inset 0 2px 0 rgba(255,255,255,.55),
+      inset 0 -2px 0 rgba(0,0,0,.10),
+      0 2px 5px rgba(0,0,0,.15);
+    transition: transform .08s ease, box-shadow .08s ease;
+  }
+  .tile-wrap:active .tile-square {
+    transform: scale(0.96);
+    box-shadow:
+      inset 0 2px 0 rgba(255,255,255,.3),
+      inset 0 -2px 0 rgba(0,0,0,.15),
+      0 1px 2px rgba(0,0,0,.2);
+  }
+  .tile-label {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+    color: #000;
+    padding: 6px 4px 0;
+    line-height: 1.2;
+    word-break: break-word;
+    min-height: 22px;
+  }
+
+  /* Category tabs */
+  .tile-wrap.category .tile-square {
+    border: 3px solid #b8c2d0;
+    background-color: #f0f3f8;
+  }
+  .tile-wrap.category:not(.active) { opacity: .75; }
+  .tile-wrap.category:not(.active):hover { opacity: 1; }
+  .tile-wrap.category.active .tile-square {
+    border-color: #4a90e2;
+    background-color: #dbe7f5;
+    box-shadow:
+      inset 0 2px 0 rgba(255,255,255,.55),
+      inset 0 -2px 0 rgba(0,0,0,.10),
+      0 4px 10px rgba(74,144,226,.35);
+  }
+  .tile-wrap.category.active .tile-label { color: #1f4878; }
+  .tile-wrap.category .cycle-badge {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    width: 26px;
+    height: 26px;
+    background: rgba(255,255,255,.92);
+    color: #1f4878;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.25);
+    pointer-events: none;
+  }
+
+  .pin-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    background: #ffcc33;
+    color: #5a3e00;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: bold;
+    box-shadow: 0 1px 2px rgba(0,0,0,.3);
+    pointer-events: none;
+  }
+  .edit-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: 30px;
+    height: 30px;
+    background: rgba(255,255,255,.95);
+    color: #333;
+    border-radius: 50%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    z-index: 2;
+  }
+  body.edit-mode .edit-badge { display: flex; }
+  .edit-badge:hover { background: white; }
+
+  .tile-add {
+    aspect-ratio: 1;
+    border-radius: 14px;
+    background: #d0d6de;
+    border: 3px dashed #8b94a3;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 56px;
+    color: #6b7280;
+    cursor: pointer;
+    font-weight: 300;
+    line-height: 1;
+  }
+  body.edit-mode .tile-add { display: flex; }
+  .tile-add:active { background: #c0c6cf; }
+
+  .tile-add-cat {
+    aspect-ratio: 1;
+    border-radius: 14px;
+    background: #e0e8f4;
+    border: 3px dashed #4a90e2;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #4a90e2;
+    cursor: pointer;
+    text-align: center;
+    padding: 6px;
+  }
+  body.edit-mode .tile-add-cat { display: flex; }
+  .tile-add-cat .plus { font-size: 40px; line-height: 1; font-weight: 300; }
+  .tile-add-cat .lbl { font-size: 12px; font-weight: 700; margin-top: 2px; }
+  .tile-add-cat:active { background: #c8d6ec; }
+
+  body.edit-mode .tile-wrap:not(.category) { cursor: grab; }
+  .tile-wrap.dragging { opacity: 0.4; }
+  .tile-wrap.drop-target .tile-square {
+    outline: 3px solid #4a90e2;
+    outline-offset: 3px;
+  }
+
+  .empty-hint {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #99a1ad;
+    padding: 20px 8px;
+    font-size: 14px;
+    font-style: italic;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 460px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,.3);
+  }
+  .modal h3 { margin: 0 0 16px; font-size: 20px; }
+  .modal label {
+    display: block;
+    margin: 14px 0 6px;
+    font-weight: 600;
+    font-size: 14px;
+    color: #444;
+  }
+  .modal input[type="text"],
+  .modal input[type="password"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
+  }
+  .modal input[type="file"] {
+    width: 100%;
+    padding: 8px 0;
+    font-size: 14px;
+  }
+  .modal .file-status { font-size: 13px; color: #4a90e2; margin-top: 4px; }
+  .modal .file-status.has-file { color: #2c8a3e; }
+  .modal .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .modal .checkbox-row input { width: 20px; height: 20px; }
+  .modal .checkbox-row label { margin: 0; }
+  .modal .button-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 22px;
+    flex-wrap: wrap;
+  }
+  .modal button {
+    flex: 1;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    min-width: 90px;
+  }
+  .modal button.primary { background: #4a90e2; color: white; }
+  .modal button.primary:hover { background: #3a7bc8; }
+  .modal button.secondary { background: #e0e3e8; color: #333; }
+  .modal button.secondary:hover { background: #cfd4db; }
+  .modal button.danger { background: #c94f5f; color: white; }
+  .modal button.danger:hover { background: #b3404e; }
+  .modal .error { color: #c94f5f; font-size: 14px; margin-top: 8px; min-height: 18px; }
+
+  @media (max-width: 900px) {
+    main {
+      grid-template-columns: 1fr;
+      grid-auto-rows: minmax(260px, 1fr);
+      overflow-y: auto;
+      height: calc(100% - 64px);
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Fletcher's AAC</h1>
+  <div style="display:flex; align-items:center; gap:8px;">
+    <span class="status" id="mode-status"></span>
+    <button id="export-btn" class="edit-only">Export</button>
+    <button id="import-btn" class="edit-only">Import</button>
+    <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
+    <button id="login-btn">Login</button>
+  </div>
+</header>
+
+<main>
+  <section class="aac-section" data-section="people">
+    <h2>People</h2>
+    <div class="tab-strip" id="tabs-people"></div>
+    <div class="items-cols" id="items-people"></div>
+    <div class="section-footer">
+      <button class="add-cat-btn" data-section="people">+ New Category</button>
+    </div>
+  </section>
+  <section class="aac-section" data-section="nouns">
+    <h2>Nouns</h2>
+    <div class="tab-strip" id="tabs-nouns"></div>
+    <div class="items-cols" id="items-nouns"></div>
+    <div class="section-footer">
+      <button class="add-cat-btn" data-section="nouns">+ New Category</button>
+    </div>
+  </section>
+  <section class="aac-section" data-section="verbs">
+    <h2>Verbs</h2>
+    <div class="tab-strip" id="tabs-verbs"></div>
+    <div class="items-cols" id="items-verbs"></div>
+    <div class="section-footer">
+      <button class="add-cat-btn" data-section="verbs">+ New Category</button>
+    </div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="login-modal">
+  <div class="modal">
+    <h3>Login</h3>
+    <label for="login-user">Username</label>
+    <input type="text" id="login-user" autocomplete="off">
+    <label for="login-pass">Password</label>
+    <input type="password" id="login-pass" autocomplete="off">
+    <div class="error" id="login-error"></div>
+    <div class="button-row">
+      <button class="secondary" id="login-cancel">Cancel</button>
+      <button class="primary" id="login-submit">Login</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="item-modal">
+  <div class="modal">
+    <h3 id="item-modal-title">Add Item</h3>
+    <div id="item-modal-context" style="font-size:13px;color:#666;margin-bottom:8px;"></div>
+    <label for="item-label">Label</label>
+    <input type="text" id="item-label" autocomplete="off" placeholder="e.g. Mom">
+    <label for="item-image">Image</label>
+    <input type="file" id="item-image" accept="image/*">
+    <div class="file-status" id="item-image-status">No image selected</div>
+    <label for="item-sound">Sound</label>
+    <input type="file" id="item-sound" accept="audio/*">
+    <div class="file-status" id="item-sound-status">No sound selected</div>
+    <div class="checkbox-row" id="pin-row" style="display:none;">
+      <input type="checkbox" id="item-pin">
+      <label for="item-pin">Pin to top (e.g. for Fletcher)</label>
+    </div>
+    <div class="error" id="item-error"></div>
+    <div class="button-row">
+      <button class="danger" id="item-delete" style="display:none;">Delete</button>
+      <button class="secondary" id="item-cancel">Cancel</button>
+      <button class="primary" id="item-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="cat-modal">
+  <div class="modal">
+    <h3 id="cat-modal-title">New Category</h3>
+    <label for="cat-label">Category Name</label>
+    <input type="text" id="cat-label" autocomplete="off" placeholder="e.g. Family">
+    <label for="cat-image">Category Image</label>
+    <input type="file" id="cat-image" accept="image/*">
+    <div class="file-status" id="cat-image-status">No image selected</div>
+    <div class="error" id="cat-error"></div>
+    <div class="button-row">
+      <button class="danger" id="cat-delete" style="display:none;">Delete</button>
+      <button class="secondary" id="cat-cancel">Cancel</button>
+      <button class="primary" id="cat-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<audio id="audio-player" preload="auto"></audio>
+
+<script>
+(() => {
+  const DB_NAME = 'fletcher_aac';
+  const DB_VERSION = 2;
+  const ITEMS = 'items';
+  const CATS = 'categories';
+  const SECTIONS = ['people', 'nouns', 'verbs'];
+  const COLUMN_COUNT = { people: 1, nouns: 4, verbs: 2 };
+
+  let db = null;
+  let editMode = false;
+  const objectURLs = new Map();
+  const activeCategoryId = { people: null, nouns: null, verbs: null };
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const _db = e.target.result;
+        if (!_db.objectStoreNames.contains(ITEMS)) {
+          const store = _db.createObjectStore(ITEMS, { keyPath: 'id', autoIncrement: true });
+          store.createIndex('section', 'section');
+        }
+        if (!_db.objectStoreNames.contains(CATS)) {
+          const cstore = _db.createObjectStore(CATS, { keyPath: 'id', autoIncrement: true });
+          cstore.createIndex('section', 'section');
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function tx(store, mode = 'readonly') {
+    return db.transaction(store, mode).objectStore(store);
+  }
+  function reqPromise(req) {
+    return new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function getAllItems(section) {
+    const items = [];
+    return new Promise((resolve, reject) => {
+      const req = tx(ITEMS).index('section').openCursor(IDBKeyRange.only(section));
+      req.onsuccess = (e) => {
+        const c = e.target.result;
+        if (c) { items.push(c.value); c.continue(); }
+        else resolve(items);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function getAllCats(section) {
+    const cats = [];
+    return new Promise((resolve, reject) => {
+      const req = tx(CATS).index('section').openCursor(IDBKeyRange.only(section));
+      req.onsuccess = (e) => {
+        const c = e.target.result;
+        if (c) { cats.push(c.value); c.continue(); }
+        else resolve(cats.sort((a,b) => (a.order ?? 0) - (b.order ?? 0)));
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function putItem(item)   { return reqPromise(tx(ITEMS, 'readwrite').put(item)); }
+  function deleteItemDB(id){ return reqPromise(tx(ITEMS, 'readwrite').delete(id)); }
+  function putCat(cat)     { return reqPromise(tx(CATS,  'readwrite').put(cat)); }
+  function deleteCatDB(id) { return reqPromise(tx(CATS,  'readwrite').delete(id)); }
+
+  async function migrateLegacyItems() {
+    for (const section of SECTIONS) {
+      const items = await getAllItems(section);
+      const orphans = items.filter(i => i.categoryId === undefined || i.categoryId === null);
+      if (orphans.length === 0) continue;
+      const cats = await getAllCats(section);
+      let defaultCat = cats.find(c => c.label === 'Default');
+      if (!defaultCat) {
+        const id = await putCat({ section, label: 'Default', order: 0 });
+        defaultCat = { id, section, label: 'Default', order: 0 };
+      }
+      for (const it of orphans) {
+        it.categoryId = defaultCat.id;
+        await putItem(it);
+      }
+    }
+  }
+
+  function getURL(kind, id, blob, key) {
+    if (!blob) return null;
+    const cacheKey = `${kind}-${id}-${key}`;
+    if (objectURLs.has(cacheKey)) return objectURLs.get(cacheKey);
+    const url = URL.createObjectURL(blob);
+    objectURLs.set(cacheKey, url);
+    return url;
+  }
+  function clearURLs(kind, id) {
+    const prefix = `${kind}-${id}-`;
+    for (const k of [...objectURLs.keys()]) {
+      if (k.startsWith(prefix)) {
+        URL.revokeObjectURL(objectURLs.get(k));
+        objectURLs.delete(k);
+      }
+    }
+  }
+
+  function sortItems(items, section) {
+    return items.sort((a, b) => {
+      if (section === 'people') {
+        const ap = a.pinned ? 0 : 1;
+        const bp = b.pinned ? 0 : 1;
+        if (ap !== bp) return ap - bp;
+      }
+      return (a.order ?? 0) - (b.order ?? 0);
+    });
+  }
+
+  function makeTile({ kind, id, image, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
+    const wrap = document.createElement('div');
+    wrap.className = 'tile-wrap'
+      + (isCategory ? ' category' : '')
+      + (isActive ? ' active' : '');
+
+    const sq = document.createElement('div');
+    sq.className = 'tile-square';
+    const url = image ? getURL(kind, id, image, 'image') : null;
+    if (url) sq.style.backgroundImage = `url("${url}")`;
+
+    if (pinned) {
+      const pin = document.createElement('div');
+      pin.className = 'pin-badge';
+      pin.textContent = '★';
+      sq.appendChild(pin);
+    }
+    if (isCategory && showCycleBadge) {
+      const cyc = document.createElement('div');
+      cyc.className = 'cycle-badge';
+      cyc.textContent = '↻';
+      sq.appendChild(cyc);
+    }
+    if (onEdit) {
+      const eb = document.createElement('div');
+      eb.className = 'edit-badge';
+      eb.textContent = '✎';
+      eb.addEventListener('click', (e) => { e.stopPropagation(); onEdit(); });
+      sq.appendChild(eb);
+    }
+    wrap.appendChild(sq);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'tile-label';
+    lbl.textContent = label || '';
+    wrap.appendChild(lbl);
+
+    if (onClick) wrap.addEventListener('click', onClick);
+    return wrap;
+  }
+
+  function makeAddItemTile(onClick) {
+    const t = document.createElement('div');
+    t.className = 'tile-add';
+    t.textContent = '+';
+    t.addEventListener('click', onClick);
+    return t;
+  }
+  function makeAddCatTile(onClick) {
+    const t = document.createElement('div');
+    t.className = 'tile-add-cat';
+    const p = document.createElement('div'); p.className = 'plus'; p.textContent = '+';
+    const l = document.createElement('div'); l.className = 'lbl'; l.textContent = 'Add Category';
+    t.appendChild(p); t.appendChild(l);
+    t.addEventListener('click', onClick);
+    return t;
+  }
+
+  // ---- Item drag-and-drop reordering (edit mode only) ----
+  let draggedItemId = null;
+  let draggedSection = null;
+
+  function onItemDragStart(e) {
+    draggedItemId = parseInt(this.dataset.itemId);
+    draggedSection = this.dataset.section;
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', this.dataset.itemId); } catch (_) {}
+  }
+  function onItemDragOver(e) {
+    if (draggedItemId === null) return;
+    if (this.dataset.section !== draggedSection) return;
+    if (parseInt(this.dataset.itemId) === draggedItemId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    this.classList.add('drop-target');
+  }
+  function onItemDragLeave() {
+    this.classList.remove('drop-target');
+  }
+  async function onItemDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    this.classList.remove('drop-target');
+    const targetId = parseInt(this.dataset.itemId);
+    const section = this.dataset.section;
+    if (draggedItemId === null || targetId === draggedItemId) return;
+    await moveItemTo(draggedItemId, targetId, section);
+  }
+  function onItemDragEnd() {
+    this.classList.remove('dragging');
+    document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+    draggedItemId = null;
+    draggedSection = null;
+  }
+
+  async function moveItemTo(draggedId, targetId, section) {
+    const activeId = activeCategoryId[section];
+    if (!activeId) return;
+    const allItems = await getAllItems(section);
+    const inCat = sortItems(
+      allItems.filter(i => i.categoryId === activeId),
+      section
+    );
+    const draggedIdx = inCat.findIndex(i => i.id === draggedId);
+    const targetIdx  = inCat.findIndex(i => i.id === targetId);
+    if (draggedIdx < 0 || targetIdx < 0 || draggedIdx === targetIdx) return;
+    const [dragged] = inCat.splice(draggedIdx, 1);
+    const insertAt = draggedIdx < targetIdx ? targetIdx - 1 : targetIdx;
+    inCat.splice(insertAt, 0, dragged);
+    for (let i = 0; i < inCat.length; i++) {
+      const newOrder = i * 1000;
+      if (inCat[i].order !== newOrder) {
+        inCat[i].order = newOrder;
+        await putItem(inCat[i]);
+      }
+    }
+    await renderSection(section);
+  }
+
+  async function renderSection(section) {
+    const N = COLUMN_COUNT[section];
+    const cats = await getAllCats(section);
+    const items = sortItems(await getAllItems(section), section);
+
+    // Validate / default active category
+    if (cats.length === 0) {
+      activeCategoryId[section] = null;
+    } else if (!cats.some(c => c.id === activeCategoryId[section])) {
+      activeCategoryId[section] = cats[0].id;
+    }
+
+    // -------- Tab strip --------
+    const tabsEl = document.getElementById(`tabs-${section}`);
+    tabsEl.innerHTML = '';
+
+    if (section === 'people') {
+      // Single tab slot: shows the active category, click cycles
+      if (cats.length === 0) {
+        tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
+      } else {
+        const activeCat = cats.find(c => c.id === activeCategoryId[section]);
+        const canCycle = cats.length > 1;
+        tabsEl.appendChild(makeTile({
+          kind: 'c',
+          id: activeCat.id,
+          image: activeCat.image,
+          label: activeCat.label,
+          isCategory: true,
+          isActive: true,
+          showCycleBadge: canCycle,
+          onClick: () => {
+            if (!canCycle) return;
+            const idx = cats.findIndex(c => c.id === activeCategoryId[section]);
+            activeCategoryId[section] = cats[(idx + 1) % cats.length].id;
+            renderSection(section);
+          },
+          onEdit: () => openCatModal(section, activeCat),
+        }));
+      }
+    } else {
+      // Nouns / Verbs: N tab slots showing categories[0..N-1]
+      for (let i = 0; i < N; i++) {
+        const cat = cats[i];
+        if (cat) {
+          const isActive = cat.id === activeCategoryId[section];
+          tabsEl.appendChild(makeTile({
+            kind: 'c',
+            id: cat.id,
+            image: cat.image,
+            label: cat.label,
+            isCategory: true,
+            isActive,
+            onClick: () => {
+              if (cat.id !== activeCategoryId[section]) {
+                activeCategoryId[section] = cat.id;
+                renderSection(section);
+              }
+            },
+            onEdit: () => openCatModal(section, cat),
+          }));
+        } else {
+          tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
+        }
+      }
+    }
+
+    // -------- Items grid --------
+    const itemsEl = document.getElementById(`items-${section}`);
+    itemsEl.innerHTML = '';
+
+    const activeId = activeCategoryId[section];
+    if (!activeId) {
+      if (!editMode) {
+        const hint = document.createElement('div');
+        hint.className = 'empty-hint';
+        hint.textContent = 'No categories yet';
+        itemsEl.appendChild(hint);
+      }
+      return;
+    }
+
+    // Create N independently-scrolling column containers
+    const colEls = [];
+    for (let i = 0; i < N; i++) {
+      const col = document.createElement('div');
+      col.className = 'items-col';
+      itemsEl.appendChild(col);
+      colEls.push(col);
+    }
+
+    const activeItems = items.filter(i => i.categoryId === activeId);
+    activeItems.forEach((it, idx) => {
+      const tile = makeTile({
+        kind: 'i',
+        id: it.id,
+        image: it.image,
+        label: it.label,
+        pinned: it.pinned,
+        onClick: () => {
+          if (editMode) openItemModal(section, activeId, it);
+          else if (it.sound) playSound(it);
+        },
+        onEdit: () => openItemModal(section, activeId, it),
+      });
+      tile.dataset.itemId = it.id;
+      tile.dataset.section = section;
+      if (editMode) {
+        tile.draggable = true;
+        tile.addEventListener('dragstart', onItemDragStart);
+        tile.addEventListener('dragover', onItemDragOver);
+        tile.addEventListener('dragleave', onItemDragLeave);
+        tile.addEventListener('drop', onItemDrop);
+        tile.addEventListener('dragend', onItemDragEnd);
+      }
+      colEls[idx % N].appendChild(tile);
+    });
+    // + Add Item tile always at the bottom of column 0 (only visible in edit mode)
+    colEls[0].appendChild(makeAddItemTile(() => openItemModal(section, activeId, null)));
+  }
+
+  async function renderAll() {
+    for (const s of SECTIONS) await renderSection(s);
+  }
+
+  function playSound(item) {
+    const player = document.getElementById('audio-player');
+    const url = getURL('i', item.id, item.sound, 'sound');
+    if (!url) return;
+    player.src = url;
+    player.currentTime = 0;
+    player.play().catch(() => {});
+  }
+
+  function setEditMode(on) {
+    editMode = on;
+    document.body.classList.toggle('edit-mode', on);
+    document.getElementById('login-btn').textContent = on ? 'Logout' : 'Login';
+    document.getElementById('mode-status').textContent = on ? 'Edit mode' : '';
+    renderAll();
+  }
+
+  // ---- Login modal ----
+  const loginModal = document.getElementById('login-modal');
+  document.getElementById('login-btn').addEventListener('click', () => {
+    if (editMode) { setEditMode(false); return; }
+    document.getElementById('login-user').value = '';
+    document.getElementById('login-pass').value = '';
+    document.getElementById('login-error').textContent = '';
+    loginModal.classList.add('show');
+    document.getElementById('login-user').focus();
+  });
+  document.getElementById('login-cancel').addEventListener('click', () => loginModal.classList.remove('show'));
+  function attemptLogin() {
+    const u = document.getElementById('login-user').value.trim();
+    const p = document.getElementById('login-pass').value;
+    if (u === 'admin' && p === 'password') {
+      loginModal.classList.remove('show');
+      setEditMode(true);
+    } else {
+      document.getElementById('login-error').textContent = 'Invalid username or password';
+    }
+  }
+  document.getElementById('login-submit').addEventListener('click', attemptLogin);
+  document.getElementById('login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
+
+  // ---- Item modal ----
+  const itemModal = document.getElementById('item-modal');
+  let editingItem = null;
+  let editingItemSection = null;
+  let editingItemCategoryId = null;
+  let pendingImage = null;
+  let pendingSound = null;
+
+  async function openItemModal(section, categoryId, item) {
+    editingItemSection = section;
+    editingItemCategoryId = categoryId;
+    editingItem = item;
+    pendingImage = null;
+    pendingSound = null;
+
+    const cats = await getAllCats(section);
+    const cat = cats.find(c => c.id === categoryId);
+    document.getElementById('item-modal-title').textContent = item ? 'Edit Item' : 'Add Item';
+    document.getElementById('item-modal-context').textContent = `${section} / ${cat?.label || '(unnamed)'}`;
+    document.getElementById('item-label').value = item?.label || '';
+    document.getElementById('item-image').value = '';
+    document.getElementById('item-sound').value = '';
+    const ist = document.getElementById('item-image-status');
+    ist.textContent = item?.image ? 'Current image will be kept' : 'No image selected';
+    ist.className = 'file-status' + (item?.image ? ' has-file' : '');
+    const sst = document.getElementById('item-sound-status');
+    sst.textContent = item?.sound ? 'Current sound will be kept' : 'No sound selected';
+    sst.className = 'file-status' + (item?.sound ? ' has-file' : '');
+    document.getElementById('item-error').textContent = '';
+    document.getElementById('pin-row').style.display = section === 'people' ? 'flex' : 'none';
+    document.getElementById('item-pin').checked = !!item?.pinned;
+    document.getElementById('item-delete').style.display = item ? 'block' : 'none';
+
+    itemModal.classList.add('show');
+  }
+
+  document.getElementById('item-image').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      pendingImage = file;
+      const s = document.getElementById('item-image-status');
+      s.textContent = `Selected: ${file.name}`;
+      s.className = 'file-status has-file';
+    }
+  });
+  document.getElementById('item-sound').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      pendingSound = file;
+      const s = document.getElementById('item-sound-status');
+      s.textContent = `Selected: ${file.name}`;
+      s.className = 'file-status has-file';
+    }
+  });
+  document.getElementById('item-cancel').addEventListener('click', () => itemModal.classList.remove('show'));
+
+  document.getElementById('item-save').addEventListener('click', async () => {
+    const label = document.getElementById('item-label').value.trim();
+    const pinned = document.getElementById('item-pin').checked;
+    const errEl = document.getElementById('item-error');
+    errEl.textContent = '';
+
+    if (!editingItem && !pendingImage) { errEl.textContent = 'Please choose an image'; return; }
+    if (!editingItem && !pendingSound) { errEl.textContent = 'Please choose a sound file'; return; }
+
+    const item = editingItem ? { ...editingItem } : {
+      section: editingItemSection,
+      categoryId: editingItemCategoryId,
+      order: Date.now(),
+    };
+    item.label = label;
+    if (pendingImage) item.image = pendingImage;
+    if (pendingSound) item.sound = pendingSound;
+    if (editingItemSection === 'people') item.pinned = pinned;
+
+    try {
+      if (editingItem) clearURLs('i', editingItem.id);
+      await putItem(item);
+      itemModal.classList.remove('show');
+      await renderSection(editingItemSection);
+    } catch (err) {
+      errEl.textContent = 'Save failed: ' + err.message;
+    }
+  });
+
+  document.getElementById('item-delete').addEventListener('click', async () => {
+    if (!editingItem) return;
+    if (!confirm('Delete this item?')) return;
+    try {
+      clearURLs('i', editingItem.id);
+      await deleteItemDB(editingItem.id);
+      itemModal.classList.remove('show');
+      await renderSection(editingItemSection);
+    } catch (err) {
+      document.getElementById('item-error').textContent = 'Delete failed: ' + err.message;
+    }
+  });
+
+  // ---- Category modal ----
+  const catModal = document.getElementById('cat-modal');
+  let editingCat = null;
+  let editingCatSection = null;
+  let pendingCatImage = null;
+
+  function openCatModal(section, cat) {
+    editingCatSection = section;
+    editingCat = cat;
+    pendingCatImage = null;
+
+    document.getElementById('cat-modal-title').textContent = cat ? 'Edit Category' : `New Category in ${section}`;
+    document.getElementById('cat-label').value = cat?.label || '';
+    document.getElementById('cat-image').value = '';
+    const cist = document.getElementById('cat-image-status');
+    cist.textContent = cat?.image ? 'Current image will be kept' : 'No image selected';
+    cist.className = 'file-status' + (cat?.image ? ' has-file' : '');
+    document.getElementById('cat-error').textContent = '';
+    document.getElementById('cat-delete').style.display = cat ? 'block' : 'none';
+
+    catModal.classList.add('show');
+    document.getElementById('cat-label').focus();
+  }
+
+  document.getElementById('cat-image').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      pendingCatImage = file;
+      const s = document.getElementById('cat-image-status');
+      s.textContent = `Selected: ${file.name}`;
+      s.className = 'file-status has-file';
+    }
+  });
+  document.getElementById('cat-cancel').addEventListener('click', () => catModal.classList.remove('show'));
+
+  document.getElementById('cat-save').addEventListener('click', async () => {
+    const label = document.getElementById('cat-label').value.trim();
+    const errEl = document.getElementById('cat-error');
+    errEl.textContent = '';
+    if (!label) { errEl.textContent = 'Please enter a category name'; return; }
+    if (!editingCat && !pendingCatImage) { errEl.textContent = 'Please choose an image'; return; }
+
+    const cat = editingCat ? { ...editingCat } : {
+      section: editingCatSection,
+      order: Date.now(),
+    };
+    cat.label = label;
+    if (pendingCatImage) cat.image = pendingCatImage;
+
+    try {
+      if (editingCat) clearURLs('c', editingCat.id);
+      const newId = await putCat(cat);
+      // For brand-new categories, make the new one active
+      if (!editingCat) activeCategoryId[editingCatSection] = newId;
+      catModal.classList.remove('show');
+      await renderSection(editingCatSection);
+    } catch (err) {
+      errEl.textContent = 'Save failed: ' + err.message;
+    }
+  });
+
+  document.getElementById('cat-delete').addEventListener('click', async () => {
+    if (!editingCat) return;
+    const items = (await getAllItems(editingCatSection)).filter(i => i.categoryId === editingCat.id);
+    const msg = items.length
+      ? `Delete category "${editingCat.label}" and its ${items.length} item(s)?`
+      : `Delete category "${editingCat.label}"?`;
+    if (!confirm(msg)) return;
+    try {
+      for (const it of items) {
+        clearURLs('i', it.id);
+        await deleteItemDB(it.id);
+      }
+      clearURLs('c', editingCat.id);
+      await deleteCatDB(editingCat.id);
+      // Reset active so renderSection picks the next one
+      if (activeCategoryId[editingCatSection] === editingCat.id) {
+        activeCategoryId[editingCatSection] = null;
+      }
+      catModal.classList.remove('show');
+      await renderSection(editingCatSection);
+    } catch (err) {
+      document.getElementById('cat-error').textContent = 'Delete failed: ' + err.message;
+    }
+  });
+
+  document.querySelectorAll('.add-cat-btn').forEach(btn => {
+    btn.addEventListener('click', () => openCatModal(btn.dataset.section, null));
+  });
+
+  // ---- Export / Import ----
+  function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+  function dataURLToBlob(dataURL) {
+    const [meta, b64] = dataURL.split(',');
+    const mime = (meta.match(/:(.*?);/) || [, 'application/octet-stream'])[1];
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
+  async function exportData() {
+    const out = { version: 1, exportedAt: new Date().toISOString(), categories: [], items: [] };
+    for (const section of SECTIONS) {
+      for (const c of await getAllCats(section)) {
+        const exp = { id: c.id, section: c.section, label: c.label, order: c.order ?? 0 };
+        if (c.image) exp.image = await blobToDataURL(c.image);
+        out.categories.push(exp);
+      }
+      for (const it of await getAllItems(section)) {
+        const exp = {
+          id: it.id, section: it.section, categoryId: it.categoryId,
+          label: it.label, order: it.order ?? 0, pinned: !!it.pinned,
+        };
+        if (it.image) exp.image = await blobToDataURL(it.image);
+        if (it.sound) exp.sound = await blobToDataURL(it.sound);
+        out.items.push(exp);
+      }
+    }
+    const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fletcher-aac-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function importData(file) {
+    let data;
+    try {
+      data = JSON.parse(await file.text());
+    } catch (err) {
+      alert('Could not read file: ' + err.message);
+      return;
+    }
+    if (!Array.isArray(data.categories) || !Array.isArray(data.items)) {
+      alert('This does not look like a valid backup file.');
+      return;
+    }
+    if (!confirm(
+      `Import ${data.categories.length} categories and ${data.items.length} items?\n\n` +
+      `This will REPLACE all existing AAC data on this device.`
+    )) return;
+
+    await new Promise((res, rej) => {
+      const t = db.transaction([ITEMS, CATS], 'readwrite');
+      t.objectStore(ITEMS).clear();
+      t.objectStore(CATS).clear();
+      t.oncomplete = () => res();
+      t.onerror = () => rej(t.error);
+    });
+
+    const catIdMap = new Map();
+    for (const c of data.categories) {
+      const newCat = { section: c.section, label: c.label, order: c.order ?? 0 };
+      if (c.image) newCat.image = dataURLToBlob(c.image);
+      const newId = await putCat(newCat);
+      catIdMap.set(c.id, newId);
+    }
+    for (const it of data.items) {
+      const newItem = {
+        section: it.section,
+        categoryId: catIdMap.get(it.categoryId) ?? null,
+        label: it.label,
+        order: it.order ?? 0,
+        pinned: !!it.pinned,
+      };
+      if (it.image) newItem.image = dataURLToBlob(it.image);
+      if (it.sound) newItem.sound = dataURLToBlob(it.sound);
+      await putItem(newItem);
+    }
+
+    for (const url of objectURLs.values()) URL.revokeObjectURL(url);
+    objectURLs.clear();
+    for (const s of SECTIONS) activeCategoryId[s] = null;
+    await renderAll();
+    alert(`Imported ${data.categories.length} categories and ${data.items.length} items.`);
+  }
+
+  document.getElementById('export-btn').addEventListener('click', () => {
+    exportData().catch(err => alert('Export failed: ' + err.message));
+  });
+  const importInput = document.getElementById('import-file');
+  document.getElementById('import-btn').addEventListener('click', () => importInput.click());
+  importInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    try { await importData(file); }
+    catch (err) { alert('Import failed: ' + err.message); }
+  });
+
+  // Init
+  (async () => {
+    try {
+      db = await openDB();
+      await migrateLegacyItems();
+      await renderAll();
+    } catch (err) {
+      document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif;">Failed to open storage: ${err.message}<br><br>Try opening this file in Chrome.</div>`;
+    }
+  })();
+})();
+</script>
+</body>
+</html>
