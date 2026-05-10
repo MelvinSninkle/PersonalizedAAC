@@ -90,6 +90,89 @@
   .aac-section[data-section="nouns"]  .tab-strip { grid-template-columns: repeat(4, 1fr); }
   .aac-section[data-section="verbs"]  .tab-strip { grid-template-columns: repeat(2, 1fr); }
 
+  .subcat-row {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    border-bottom: 1px solid #eef1f6;
+    scrollbar-width: thin;
+  }
+  .subcat-row:empty { display: none; }
+  .subcat-tile {
+    flex: 0 0 auto;
+    width: 84px;
+    background: #f4f6fa;
+    border: 1px solid #dde2e8;
+    border-radius: 8px;
+    padding: 6px;
+    cursor: pointer;
+    text-align: center;
+    position: relative;
+    user-select: none;
+  }
+  .subcat-tile:hover { background: #eaeef4; }
+  .subcat-tile .sq {
+    width: 100%;
+    aspect-ratio: 1;
+    background: #fff center/cover no-repeat;
+    border-radius: 4px;
+    margin-bottom: 4px;
+  }
+  .subcat-tile .lbl {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .subcat-tile .edit-badge {
+    position: absolute; top: 2px; right: 2px;
+    width: 22px; height: 22px;
+    background: rgba(255,255,255,.95);
+    border: 1px solid #cfd4db;
+    border-radius: 50%;
+    font-size: 12px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  body.edit-mode .subcat-tile .edit-badge { display: flex; }
+  .back-tile {
+    flex: 0 0 auto;
+    background: #2c3e50;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .back-tile:hover { background: #1f2c3a; }
+  .add-subcat-tile {
+    flex: 0 0 auto;
+    width: 84px;
+    border: 2px dashed #b8c1cf;
+    border-radius: 8px;
+    background: #f9fafc;
+    color: #557fa3;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.2;
+  }
+  body.edit-mode .add-subcat-tile { display: flex; }
+  .add-subcat-tile:hover { background: #eef2f8; }
+
   .items-cols {
     flex: 1;
     display: grid;
@@ -456,6 +539,7 @@
   <section class="aac-section" data-section="people">
     <h2>People</h2>
     <div class="tab-strip" id="tabs-people"></div>
+    <div class="subcat-row" id="subs-people"></div>
     <div class="items-cols" id="items-people"></div>
     <div class="section-footer">
       <button class="add-cat-btn" data-section="people">+ New Category</button>
@@ -465,6 +549,7 @@
   <section class="aac-section" data-section="nouns">
     <h2>Nouns</h2>
     <div class="tab-strip" id="tabs-nouns"></div>
+    <div class="subcat-row" id="subs-nouns"></div>
     <div class="items-cols" id="items-nouns"></div>
     <div class="section-footer">
       <button class="add-cat-btn" data-section="nouns">+ New Category</button>
@@ -474,6 +559,7 @@
   <section class="aac-section" data-section="verbs">
     <h2>Verbs</h2>
     <div class="tab-strip" id="tabs-verbs"></div>
+    <div class="subcat-row" id="subs-verbs"></div>
     <div class="items-cols" id="items-verbs"></div>
     <div class="section-footer">
       <button class="add-cat-btn" data-section="verbs">+ New Category</button>
@@ -814,52 +900,79 @@
     await renderSection(section);
   }
 
+  function findTopAncestor(cats, catId) {
+    const byId = new Map(cats.map(c => [c.id, c]));
+    let cur = byId.get(catId);
+    while (cur && cur.parentId != null && byId.has(cur.parentId)) {
+      cur = byId.get(cur.parentId);
+    }
+    return cur || null;
+  }
+
+  function descendantCatIds(cats, rootId) {
+    const out = [];
+    const stack = [rootId];
+    while (stack.length) {
+      const id = stack.pop();
+      out.push(id);
+      cats.forEach(c => { if (c.parentId === id) stack.push(c.id); });
+    }
+    return out;
+  }
+
   async function renderSection(section) {
     const N = COLUMN_COUNT[section];
     const cats = await getAllCats(section);
     const items = sortItems(await getAllItems(section), section);
 
-    // Validate / default active category
+    const topCats = cats.filter(c => c.parentId == null);
+
+    // Validate / default active category — must be a real cat in this section
     if (cats.length === 0) {
       activeCategoryId[section] = null;
     } else if (!cats.some(c => c.id === activeCategoryId[section])) {
-      activeCategoryId[section] = cats[0].id;
+      activeCategoryId[section] = topCats[0]?.id ?? null;
     }
 
-    // -------- Tab strip --------
+    const activeId = activeCategoryId[section];
+    const activeCat = activeId != null ? cats.find(c => c.id === activeId) : null;
+    const topAncestor = activeCat ? findTopAncestor(cats, activeCat.id) : null;
+    const topAncestorId = topAncestor?.id ?? null;
+
+    // -------- Tab strip (top-level categories only) --------
     const tabsEl = document.getElementById(`tabs-${section}`);
     tabsEl.innerHTML = '';
 
     if (section === 'people') {
-      // Single tab slot: shows the active category, click cycles
-      if (cats.length === 0) {
+      // Single tab slot shows the active TOP-LEVEL ancestor; click cycles top-level cats
+      if (topCats.length === 0) {
         tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
       } else {
-        const activeCat = cats.find(c => c.id === activeCategoryId[section]);
-        const canCycle = cats.length > 1;
+        const tabCat = topAncestor || topCats[0];
+        const canCycle = topCats.length > 1;
         tabsEl.appendChild(makeTile({
           kind: 'c',
-          id: activeCat.id,
-          image: activeCat.image,
-          label: activeCat.label,
+          id: tabCat.id,
+          image: tabCat.image,
+          label: tabCat.label,
           isCategory: true,
           isActive: true,
           showCycleBadge: canCycle,
           onClick: () => {
             if (!canCycle) return;
-            const idx = cats.findIndex(c => c.id === activeCategoryId[section]);
-            activeCategoryId[section] = cats[(idx + 1) % cats.length].id;
+            const idx = topCats.findIndex(c => c.id === topAncestorId);
+            activeCategoryId[section] = topCats[(idx + 1) % topCats.length].id;
             renderSection(section);
           },
-          onEdit: () => openCatModal(section, activeCat),
+          onEdit: () => openCatModal(section, tabCat),
         }));
       }
     } else {
-      // Nouns / Verbs: N tab slots showing categories[0..N-1]
+      // Nouns / Verbs: N tab slots showing top-level categories[0..N-1]
       for (let i = 0; i < N; i++) {
-        const cat = cats[i];
+        const cat = topCats[i];
         if (cat) {
-          const isActive = cat.id === activeCategoryId[section];
+          const isActive = cat.id === topAncestorId;
           tabsEl.appendChild(makeTile({
             kind: 'c',
             id: cat.id,
@@ -868,7 +981,7 @@
             isCategory: true,
             isActive,
             onClick: () => {
-              if (cat.id !== activeCategoryId[section]) {
+              if (cat.id !== topAncestorId) {
                 activeCategoryId[section] = cat.id;
                 renderSection(section);
               }
@@ -881,11 +994,66 @@
       }
     }
 
+    // -------- Subcategory row --------
+    const subsEl = document.getElementById(`subs-${section}`);
+    subsEl.innerHTML = '';
+
+    if (activeCat) {
+      // Back tile if drilled into a subcategory
+      if (activeCat.parentId != null) {
+        const parent = cats.find(c => c.id === activeCat.parentId);
+        const back = document.createElement('button');
+        back.type = 'button';
+        back.className = 'back-tile';
+        back.textContent = parent ? `← ${parent.label}` : '← Back';
+        back.addEventListener('click', () => {
+          activeCategoryId[section] = activeCat.parentId;
+          renderSection(section);
+        });
+        subsEl.appendChild(back);
+      }
+
+      // Subcategories of the currently-viewed category
+      const subs = cats
+        .filter(c => c.parentId === activeCat.id)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      subs.forEach(sub => {
+        const tile = document.createElement('div');
+        tile.className = 'subcat-tile';
+        const sq = document.createElement('div');
+        sq.className = 'sq';
+        const url = sub.image ? getURL('c', sub.id, sub.image, 'image') : null;
+        if (url) sq.style.backgroundImage = `url("${url}")`;
+        const lbl = document.createElement('div');
+        lbl.className = 'lbl';
+        lbl.textContent = sub.label;
+        tile.appendChild(sq);
+        tile.appendChild(lbl);
+        const eb = document.createElement('div');
+        eb.className = 'edit-badge';
+        eb.textContent = '✎';
+        eb.addEventListener('click', (e) => { e.stopPropagation(); openCatModal(section, sub); });
+        tile.appendChild(eb);
+        tile.addEventListener('click', () => {
+          activeCategoryId[section] = sub.id;
+          renderSection(section);
+        });
+        subsEl.appendChild(tile);
+      });
+
+      // + Add Subcategory tile (edit mode only — CSS controls visibility)
+      const addSub = document.createElement('div');
+      addSub.className = 'add-subcat-tile';
+      addSub.textContent = '+ Add\nSubcategory';
+      addSub.style.whiteSpace = 'pre-line';
+      addSub.addEventListener('click', () => openCatModal(section, null, activeCat.id));
+      subsEl.appendChild(addSub);
+    }
+
     // -------- Items grid --------
     const itemsEl = document.getElementById(`items-${section}`);
     itemsEl.innerHTML = '';
 
-    const activeId = activeCategoryId[section];
     if (!activeId) {
       if (!editMode) {
         const hint = document.createElement('div');
@@ -1125,14 +1293,26 @@
   const catModal = document.getElementById('cat-modal');
   let editingCat = null;
   let editingCatSection = null;
+  let editingCatParentId = null;
   let pendingCatImage = null;
 
-  function openCatModal(section, cat) {
+  async function openCatModal(section, cat, parentId = null) {
     editingCatSection = section;
     editingCat = cat;
+    editingCatParentId = cat ? (cat.parentId ?? null) : parentId;
     pendingCatImage = null;
 
-    document.getElementById('cat-modal-title').textContent = cat ? 'Edit Category' : `New Category in ${section}`;
+    let title;
+    if (cat) {
+      title = (cat.parentId != null) ? 'Edit Subcategory' : 'Edit Category';
+    } else if (parentId != null) {
+      const cats = await getAllCats(section);
+      const parent = cats.find(c => c.id === parentId);
+      title = `New Subcategory in ${parent ? parent.label : section}`;
+    } else {
+      title = `New Category in ${section}`;
+    }
+    document.getElementById('cat-modal-title').textContent = title;
     document.getElementById('cat-label').value = cat?.label || '';
     document.getElementById('cat-image').value = '';
     const cist = document.getElementById('cat-image-status');
@@ -1166,6 +1346,7 @@
     const cat = editingCat ? { ...editingCat } : {
       section: editingCatSection,
       order: Date.now(),
+      parentId: editingCatParentId,
     };
     cat.label = label;
     if (pendingCatImage) cat.image = pendingCatImage;
@@ -1173,7 +1354,7 @@
     try {
       if (editingCat) clearURLs('c', editingCat.id);
       const newId = await putCat(cat);
-      // For brand-new categories, make the new one active
+      // Make the new (sub)category active so the user lands inside it
       if (!editingCat) activeCategoryId[editingCatSection] = newId;
       catModal.classList.remove('show');
       await renderSection(editingCatSection);
@@ -1184,21 +1365,31 @@
 
   document.getElementById('cat-delete').addEventListener('click', async () => {
     if (!editingCat) return;
-    const items = (await getAllItems(editingCatSection)).filter(i => i.categoryId === editingCat.id);
-    const msg = items.length
-      ? `Delete category "${editingCat.label}" and its ${items.length} item(s)?`
-      : `Delete category "${editingCat.label}"?`;
+    const allCats = await getAllCats(editingCatSection);
+    const allItems = await getAllItems(editingCatSection);
+    const idsToDelete = descendantCatIds(allCats, editingCat.id);
+    const idSet = new Set(idsToDelete);
+    const itemsToDelete = allItems.filter(i => idSet.has(i.categoryId));
+    const subCount = idsToDelete.length - 1;
+    const parts = [];
+    if (subCount > 0) parts.push(`${subCount} subcategor${subCount === 1 ? 'y' : 'ies'}`);
+    if (itemsToDelete.length) parts.push(`${itemsToDelete.length} item${itemsToDelete.length === 1 ? '' : 's'}`);
+    const msg = parts.length
+      ? `Delete "${editingCat.label}" and its ${parts.join(' and ')}?`
+      : `Delete "${editingCat.label}"?`;
     if (!confirm(msg)) return;
     try {
-      for (const it of items) {
+      for (const it of itemsToDelete) {
         clearURLs('i', it.id);
         await deleteItemDB(it.id);
       }
-      clearURLs('c', editingCat.id);
-      await deleteCatDB(editingCat.id);
+      for (const cid of idsToDelete) {
+        clearURLs('c', cid);
+        await deleteCatDB(cid);
+      }
       // Reset active so renderSection picks the next one
-      if (activeCategoryId[editingCatSection] === editingCat.id) {
-        activeCategoryId[editingCatSection] = null;
+      if (idSet.has(activeCategoryId[editingCatSection])) {
+        activeCategoryId[editingCatSection] = editingCat.parentId ?? null;
       }
       catModal.classList.remove('show');
       await renderSection(editingCatSection);
@@ -1456,7 +1647,7 @@
     const out = { version: 1, exportedAt: new Date().toISOString(), categories: [], items: [] };
     for (const section of SECTIONS) {
       for (const c of await getAllCats(section)) {
-        const exp = { id: c.id, section: c.section, label: c.label, order: c.order ?? 0 };
+        const exp = { id: c.id, section: c.section, label: c.label, order: c.order ?? 0, parentId: c.parentId ?? null };
         if (c.image) exp.image = await blobToDataURL(c.image);
         out.categories.push(exp);
       }
@@ -1507,10 +1698,22 @@
 
     const catIdMap = new Map();
     for (const c of data.categories) {
-      const newCat = { section: c.section, label: c.label, order: c.order ?? 0 };
+      const newCat = { section: c.section, label: c.label, order: c.order ?? 0, parentId: null };
       if (c.image) newCat.image = dataURLToBlob(c.image);
       const newId = await putCat(newCat);
       catIdMap.set(c.id, newId);
+    }
+    // Second pass: rewire parentId references using the new ids
+    for (const c of data.categories) {
+      if (c.parentId == null) continue;
+      const newId = catIdMap.get(c.id);
+      const newParent = catIdMap.get(c.parentId);
+      if (newId == null || newParent == null) continue;
+      const cur = await reqPromise(tx(CATS).get(newId));
+      if (cur) {
+        cur.parentId = newParent;
+        await putCat(cur);
+      }
     }
     for (const it of data.items) {
       const newItem = {
