@@ -439,6 +439,11 @@
     <label for="item-sound">Sound</label>
     <input type="file" id="item-sound" accept="audio/*">
     <div class="file-status" id="item-sound-status">No sound selected</div>
+    <label for="item-phrase">Or generate from text</label>
+    <input type="text" id="item-phrase" autocomplete="off" placeholder="e.g. Mom is here">
+    <div class="button-row" style="margin-top:6px;justify-content:flex-start;">
+      <button type="button" class="secondary" id="item-generate">Generate audio</button>
+    </div>
     <div class="checkbox-row" id="pin-row" style="display:none;">
       <input type="checkbox" id="item-pin">
       <label for="item-pin">Pin to top (e.g. for Fletcher)</label>
@@ -898,6 +903,7 @@
     document.getElementById('item-label').value = item?.label || '';
     document.getElementById('item-image').value = '';
     document.getElementById('item-sound').value = '';
+    document.getElementById('item-phrase').value = '';
     const ist = document.getElementById('item-image-status');
     ist.textContent = item?.image ? 'Current image will be kept' : 'No image selected';
     ist.className = 'file-status' + (item?.image ? ' has-file' : '');
@@ -930,6 +936,48 @@
       s.className = 'file-status has-file';
     }
   });
+
+  document.getElementById('item-generate').addEventListener('click', async () => {
+    const phrase = document.getElementById('item-phrase').value.trim();
+    const status = document.getElementById('item-sound-status');
+    const errEl = document.getElementById('item-error');
+    const btn = document.getElementById('item-generate');
+    errEl.textContent = '';
+    if (!phrase) { errEl.textContent = 'Type a phrase to generate'; return; }
+    btn.disabled = true;
+    const prevText = btn.textContent;
+    btn.textContent = 'Generating…';
+    status.textContent = 'Generating audio…';
+    status.className = 'file-status';
+    try {
+      const r = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: phrase }),
+      });
+      if (!r.ok) {
+        const detail = await r.text();
+        throw new Error(`${r.status}: ${detail.slice(0, 200)}`);
+      }
+      const blob = await r.blob();
+      pendingSound = blob;
+      status.textContent = `Generated: "${phrase}"`;
+      status.className = 'file-status has-file';
+      const player = document.getElementById('audio-player');
+      const url = URL.createObjectURL(blob);
+      player.src = url;
+      player.play().catch(() => {});
+      player.addEventListener('ended', () => URL.revokeObjectURL(url), { once: true });
+    } catch (err) {
+      errEl.textContent = 'Generate failed: ' + err.message;
+      status.textContent = 'No sound selected';
+      status.className = 'file-status';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevText;
+    }
+  });
+
   document.getElementById('item-cancel').addEventListener('click', () => itemModal.classList.remove('show'));
 
   document.getElementById('item-save').addEventListener('click', async () => {
