@@ -91,6 +91,6 @@ file, so it persists in IndexedDB and replays without re-calling the API.
 
 Env vars (set in Vercel → Project → Settings → Environment Variables):
 
-- `ELEVENLABS_API_KEY` — required
+- `Fletchers_AAC_Device` — required (ElevenLabs API key)
 - `ELEVENLABS_VOICE_ID` — optional, defaults to Rachel (`21m00Tcm4TlvDq8ikWAM`)
 - `ELEVENLABS_MODEL_ID` — optional, defaults to `eleven_turbo_v2_5`

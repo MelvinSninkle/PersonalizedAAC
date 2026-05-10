@@ -1,8 +1,8 @@
 // Vercel Serverless Function: POST /api/tts { text: string } -> audio/mpeg bytes
 // Env vars:
-//   ELEVENLABS_API_KEY  (required)
-//   ELEVENLABS_VOICE_ID (optional, defaults to "Rachel")
-//   ELEVENLABS_MODEL_ID (optional, defaults to "eleven_turbo_v2_5")
+//   Fletchers_AAC_Device  (required — ElevenLabs API key)
+//   ELEVENLABS_VOICE_ID   (optional, defaults to "Rachel")
+//   ELEVENLABS_MODEL_ID   (optional, defaults to "eleven_turbo_v2_5")
 
 const MAX_TEXT_LEN = 300;
 
@@ -12,9 +12,9 @@ export default async function handler(req, res) {
     return;
   }
 
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const apiKey = process.env.Fletchers_AAC_Device;
   if (!apiKey) {
-    res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
+    res.status(500).json({ error: 'Fletchers_AAC_Device env var not configured' });
     return;
   }
   const voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
