@@ -3,12 +3,18 @@
 //   Fletchers_AAC_Device  (required — ElevenLabs API key)
 //   ELEVENLABS_VOICE_ID   (optional, defaults to "Rachel")
 //   ELEVENLABS_MODEL_ID   (optional, defaults to "eleven_turbo_v2_5")
+import { checkAuth } from './_lib/auth.js';
 
 const MAX_TEXT_LEN = 300;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+  const auth = checkAuth(req);
+  if (!auth.ok) {
+    res.status(auth.status).json({ error: auth.error });
     return;
   }
 

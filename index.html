@@ -571,10 +571,10 @@
 <div class="modal-backdrop" id="login-modal">
   <div class="modal">
     <h3>Login</h3>
-    <label for="login-user">Username</label>
-    <input type="text" id="login-user" autocomplete="off">
-    <label for="login-pass">Password</label>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">Paste your admin token. Your browser will remember it.</div>
+    <label for="login-pass">Admin Token</label>
     <input type="password" id="login-pass" autocomplete="off">
+    <input type="hidden" id="login-user" value="admin">
     <div class="error" id="login-error"></div>
     <div class="button-row">
       <button class="secondary" id="login-cancel">Cancel</button>
@@ -669,11 +669,62 @@
   const CATS = 'categories';
   const SECTIONS = ['people', 'nouns', 'verbs'];
   const COLUMN_COUNT = { people: 1, nouns: 4, verbs: 2 };
+  const TOKEN_KEY = 'aacToken';
 
   let db = null;
   let editMode = false;
+  let authToken = localStorage.getItem(TOKEN_KEY) || '';
   const objectURLs = new Map();
   const activeCategoryId = { people: null, nouns: null, verbs: null };
+
+  // ---- API helper: auto-injects Bearer token ----
+  async function apiFetch(path, opts = {}) {
+    const headers = { ...(opts.headers || {}) };
+    if (authToken) headers.Authorization = 'Bearer ' + authToken;
+    const r = await fetch(path, { ...opts, headers });
+    if (r.status === 401) {
+      // Token went stale — drop it so the next login can refresh
+      authToken = '';
+      localStorage.removeItem(TOKEN_KEY);
+      throw new Error('Unauthorized — please log in again');
+    }
+    return r;
+  }
+
+  async function apiJSON(path, opts = {}) {
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    const r = await apiFetch(path, { ...opts, headers });
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(`${r.status}: ${t.slice(0, 200)}`);
+    }
+    return r.json();
+  }
+
+  async function uploadBlob(blob, kind, ext) {
+    const r = await apiFetch(`/api/upload?kind=${encodeURIComponent(kind)}&ext=${encodeURIComponent(ext)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+      body: blob,
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(`Upload failed ${r.status}: ${t.slice(0, 200)}`);
+    }
+    return r.json();
+  }
+
+  function extFor(blob, fallback) {
+    const t = (blob.type || '').toLowerCase();
+    if (t.includes('jpeg') || t.includes('jpg')) return 'jpg';
+    if (t.includes('png')) return 'png';
+    if (t.includes('webp')) return 'webp';
+    if (t.includes('gif')) return 'gif';
+    if (t.includes('mpeg') || t.includes('mp3')) return 'mp3';
+    if (t.includes('wav')) return 'wav';
+    if (t.includes('ogg')) return 'ogg';
+    return fallback || 'bin';
+  }
 
   function openDB() {
     return new Promise((resolve, reject) => {
@@ -751,13 +802,15 @@
     }
   }
 
-  function getURL(kind, id, blob, key) {
-    if (!blob) return null;
-    const cacheKey = `${kind}-${id}-${key}`;
-    if (objectURLs.has(cacheKey)) return objectURLs.get(cacheKey);
-    const url = URL.createObjectURL(blob);
-    objectURLs.set(cacheKey, url);
-    return url;
+  function getURL(kind, id, blob, key, urlFallback) {
+    if (blob) {
+      const cacheKey = `${kind}-${id}-${key}`;
+      if (objectURLs.has(cacheKey)) return objectURLs.get(cacheKey);
+      const url = URL.createObjectURL(blob);
+      objectURLs.set(cacheKey, url);
+      return url;
+    }
+    return urlFallback || null;
   }
   function clearURLs(kind, id) {
     const prefix = `${kind}-${id}-`;
@@ -780,7 +833,7 @@
     });
   }
 
-  function makeTile({ kind, id, image, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
+  function makeTile({ kind, id, image, imageUrl, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
     const wrap = document.createElement('div');
     wrap.className = 'tile-wrap'
       + (isCategory ? ' category' : '')
@@ -788,7 +841,7 @@
 
     const sq = document.createElement('div');
     sq.className = 'tile-square';
-    const url = image ? getURL(kind, id, image, 'image') : null;
+    const url = getURL(kind, id, image, 'image', imageUrl);
     if (url) sq.style.backgroundImage = `url("${url}")`;
 
     if (pinned) {
@@ -893,8 +946,13 @@
     for (let i = 0; i < inCat.length; i++) {
       const newOrder = i * 1000;
       if (inCat[i].order !== newOrder) {
-        inCat[i].order = newOrder;
-        await putItem(inCat[i]);
+        try {
+          await serverUpdateItem(inCat[i], { order: newOrder });
+        } catch (err) {
+          // Fall back to local-only update if server is unreachable
+          inCat[i].order = newOrder;
+          await putItem(inCat[i]);
+        }
       }
     }
     await renderSection(section);
@@ -954,6 +1012,7 @@
           kind: 'c',
           id: tabCat.id,
           image: tabCat.image,
+          imageUrl: tabCat.imageUrl,
           label: tabCat.label,
           isCategory: true,
           isActive: true,
@@ -977,6 +1036,7 @@
             kind: 'c',
             id: cat.id,
             image: cat.image,
+            imageUrl: cat.imageUrl,
             label: cat.label,
             isCategory: true,
             isActive,
@@ -1022,7 +1082,7 @@
         tile.className = 'subcat-tile';
         const sq = document.createElement('div');
         sq.className = 'sq';
-        const url = sub.image ? getURL('c', sub.id, sub.image, 'image') : null;
+        const url = getURL('c', sub.id, sub.image, 'image', sub.imageUrl);
         if (url) sq.style.backgroundImage = `url("${url}")`;
         const lbl = document.createElement('div');
         lbl.className = 'lbl';
@@ -1079,6 +1139,7 @@
         kind: 'i',
         id: it.id,
         image: it.image,
+        imageUrl: it.imageUrl,
         label: it.label,
         pinned: it.pinned,
         onClick: () => {
@@ -1107,9 +1168,25 @@
     for (const s of SECTIONS) await renderSection(s);
   }
 
-  function playSound(item) {
+  async function playSound(item) {
     const player = document.getElementById('audio-player');
-    const url = getURL('i', item.id, item.sound, 'sound');
+    let url = getURL('i', item.id, item.sound, 'sound');
+    if (!url && item.soundUrl) {
+      // Lazy fetch + cache: pull the MP3 once, store as Blob for next time.
+      try {
+        const r = await fetch(item.soundUrl);
+        if (r.ok) {
+          const blob = await r.blob();
+          item.sound = blob;
+          await putItem(item);
+          url = getURL('i', item.id, blob, 'sound');
+        } else {
+          url = item.soundUrl;
+        }
+      } catch (_) {
+        url = item.soundUrl;
+      }
+    }
     if (!url) return;
     player.src = url;
     player.currentTime = 0;
@@ -1128,25 +1205,186 @@
   const loginModal = document.getElementById('login-modal');
   document.getElementById('login-btn').addEventListener('click', () => {
     if (editMode) { setEditMode(false); return; }
+    // If we already have a stored token, just toggle edit mode on without prompting.
+    if (authToken) { setEditMode(true); return; }
     document.getElementById('login-user').value = '';
     document.getElementById('login-pass').value = '';
     document.getElementById('login-error').textContent = '';
     loginModal.classList.add('show');
-    document.getElementById('login-user').focus();
+    document.getElementById('login-pass').focus();
   });
   document.getElementById('login-cancel').addEventListener('click', () => loginModal.classList.remove('show'));
-  function attemptLogin() {
-    const u = document.getElementById('login-user').value.trim();
-    const p = document.getElementById('login-pass').value;
-    if (u === 'admin' && p === 'password') {
+  async function attemptLogin() {
+    const p = document.getElementById('login-pass').value.trim();
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = '';
+    if (!p) { errEl.textContent = 'Token required'; return; }
+    const submit = document.getElementById('login-submit');
+    submit.disabled = true;
+    const prev = submit.textContent;
+    submit.textContent = 'Verifying…';
+    try {
+      // Validate token by hitting an auth-gated endpoint
+      const r = await fetch('/api/sync', { headers: { Authorization: 'Bearer ' + p } });
+      if (r.status === 401) { errEl.textContent = 'Invalid token'; return; }
+      if (!r.ok) { errEl.textContent = `Server error: ${r.status}`; return; }
+      const data = await r.json();
+      authToken = p;
+      localStorage.setItem(TOKEN_KEY, p);
       loginModal.classList.remove('show');
       setEditMode(true);
-    } else {
-      document.getElementById('login-error').textContent = 'Invalid username or password';
+      // Hydrate IndexedDB if it's empty
+      const existingCats = await (async () => {
+        let total = 0;
+        for (const s of SECTIONS) total += (await getAllCats(s)).length;
+        return total;
+      })();
+      if (existingCats === 0 && (data.categories.length || data.items.length)) {
+        await hydrateFromServer(data);
+        await renderAll();
+      }
+    } catch (err) {
+      errEl.textContent = 'Login failed: ' + (err.message || err);
+    } finally {
+      submit.disabled = false;
+      submit.textContent = prev;
     }
   }
   document.getElementById('login-submit').addEventListener('click', attemptLogin);
   document.getElementById('login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
+
+  async function hydrateFromServer(data) {
+    // Clear any leftover local data, then write the server snapshot.
+    // Image/sound bytes are NOT downloaded here — they're fetched lazily on first display/play.
+    await new Promise((res, rej) => {
+      const t = db.transaction([ITEMS, CATS], 'readwrite');
+      t.objectStore(ITEMS).clear();
+      t.objectStore(CATS).clear();
+      t.oncomplete = () => res();
+      t.onerror = () => rej(t.error);
+    });
+    for (const c of data.categories) {
+      await putCat({
+        id: c.id, section: c.section, label: c.label,
+        parentId: c.parentId, order: c.order,
+        imageUrl: c.imageUrl, imageKey: c.imageKey,
+      });
+    }
+    for (const it of data.items) {
+      await putItem({
+        id: it.id, section: it.section, categoryId: it.categoryId, label: it.label,
+        order: it.order, pinned: !!it.pinned,
+        imageUrl: it.imageUrl, imageKey: it.imageKey,
+        soundUrl: it.soundUrl, soundKey: it.soundKey,
+      });
+    }
+  }
+
+  // ---- Server write helpers ----
+  async function uploadIfBlob(field, blob, kind) {
+    if (!(blob instanceof Blob)) return null;
+    const fallbackExt = kind.includes('sound') ? 'mp3' : 'jpg';
+    const ext = extFor(blob, fallbackExt);
+    return uploadBlob(blob, kind, ext);
+  }
+
+  async function serverCreateCategory({ section, label, parentId, image, order }) {
+    const up = await uploadIfBlob('image', image, 'cat-image');
+    const saved = await apiJSON('/api/categories', {
+      method: 'POST',
+      body: JSON.stringify({
+        section, label, parentId: parentId ?? null, order: order ?? Date.now(),
+        imageUrl: up?.url || null, imageKey: up?.key || null,
+      }),
+    });
+    const local = { ...saved };
+    if (image instanceof Blob) local.image = image;
+    await putCat(local);
+    return saved;
+  }
+
+  async function serverUpdateCategory(old, { label, parentId, image, order }) {
+    const up = await uploadIfBlob('image', image, 'cat-image');
+    const body = {};
+    if (label !== undefined) body.label = label;
+    if (parentId !== undefined) body.parentId = parentId;
+    if (order !== undefined) body.order = order;
+    if (up) { body.imageUrl = up.url; body.imageKey = up.key; }
+    const saved = await apiJSON('/api/categories?id=' + old.id, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+    const local = { ...old, ...saved };
+    if (image instanceof Blob) local.image = image;
+    clearURLs('c', old.id);
+    await putCat(local);
+    return saved;
+  }
+
+  async function serverDeleteCategory(catId, section) {
+    const result = await apiJSON('/api/categories?id=' + catId, { method: 'DELETE' });
+    const ids = result.deletedCategoryIds || [catId];
+    const idSet = new Set(ids);
+    // Mirror the cascade locally
+    const allItems = await getAllItems(section);
+    for (const it of allItems) {
+      if (idSet.has(it.categoryId)) {
+        clearURLs('i', it.id);
+        await deleteItemDB(it.id);
+      }
+    }
+    for (const id of ids) {
+      clearURLs('c', id);
+      await deleteCatDB(id);
+    }
+  }
+
+  async function serverCreateItem({ section, categoryId, label, image, sound, order, pinned }) {
+    const upImg = await uploadIfBlob('image', image, 'item-image');
+    const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
+    const saved = await apiJSON('/api/items', {
+      method: 'POST',
+      body: JSON.stringify({
+        section, categoryId: categoryId ?? null, label,
+        order: order ?? Date.now(), pinned: !!pinned,
+        imageUrl: upImg?.url || null, imageKey: upImg?.key || null,
+        soundUrl: upSnd?.url || null, soundKey: upSnd?.key || null,
+      }),
+    });
+    const local = { ...saved };
+    if (image instanceof Blob) local.image = image;
+    if (sound instanceof Blob) local.sound = sound;
+    await putItem(local);
+    return saved;
+  }
+
+  async function serverUpdateItem(old, { label, categoryId, image, sound, order, pinned }) {
+    const upImg = await uploadIfBlob('image', image, 'item-image');
+    const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
+    const body = {};
+    if (label !== undefined) body.label = label;
+    if (categoryId !== undefined) body.categoryId = categoryId;
+    if (order !== undefined) body.order = order;
+    if (pinned !== undefined) body.pinned = !!pinned;
+    if (upImg) { body.imageUrl = upImg.url; body.imageKey = upImg.key; }
+    if (upSnd) { body.soundUrl = upSnd.url; body.soundKey = upSnd.key; }
+    const saved = await apiJSON('/api/items?id=' + old.id, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+    const local = { ...old, ...saved };
+    if (image instanceof Blob) local.image = image;
+    if (sound instanceof Blob) local.sound = sound;
+    clearURLs('i', old.id);
+    await putItem(local);
+    return saved;
+  }
+
+  async function serverDeleteItem(itemId) {
+    await apiJSON('/api/items?id=' + itemId, { method: 'DELETE' });
+    clearURLs('i', itemId);
+    await deleteItemDB(itemId);
+  }
 
   // ---- Item modal ----
   const itemModal = document.getElementById('item-modal');
@@ -1217,7 +1455,7 @@
     status.textContent = 'Generating audio…';
     status.className = 'file-status';
     try {
-      const r = await fetch('/api/tts', {
+      const r = await apiFetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: phrase }),
@@ -1256,23 +1494,37 @@
     if (!editingItem && !pendingImage) { errEl.textContent = 'Please choose an image'; return; }
     if (!editingItem && !pendingSound) { errEl.textContent = 'Please choose a sound file'; return; }
 
-    const item = editingItem ? { ...editingItem } : {
-      section: editingItemSection,
-      categoryId: editingItemCategoryId,
-      order: Date.now(),
-    };
-    item.label = label;
-    if (pendingImage) item.image = pendingImage;
-    if (pendingSound) item.sound = pendingSound;
-    if (editingItemSection === 'people') item.pinned = pinned;
+    const saveBtn = document.getElementById('item-save');
+    saveBtn.disabled = true;
+    const prevText = saveBtn.textContent;
+    saveBtn.textContent = 'Saving…';
 
     try {
-      if (editingItem) clearURLs('i', editingItem.id);
-      await putItem(item);
+      if (editingItem) {
+        await serverUpdateItem(editingItem, {
+          label,
+          image: pendingImage,
+          sound: pendingSound,
+          pinned: editingItemSection === 'people' ? pinned : undefined,
+        });
+      } else {
+        await serverCreateItem({
+          section: editingItemSection,
+          categoryId: editingItemCategoryId,
+          label,
+          image: pendingImage,
+          sound: pendingSound,
+          order: Date.now(),
+          pinned: editingItemSection === 'people' ? pinned : false,
+        });
+      }
       itemModal.classList.remove('show');
       await renderSection(editingItemSection);
     } catch (err) {
-      errEl.textContent = 'Save failed: ' + err.message;
+      errEl.textContent = 'Save failed: ' + (err.message || err);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = prevText;
     }
   });
 
@@ -1280,12 +1532,11 @@
     if (!editingItem) return;
     if (!confirm('Delete this item?')) return;
     try {
-      clearURLs('i', editingItem.id);
-      await deleteItemDB(editingItem.id);
+      await serverDeleteItem(editingItem.id);
       itemModal.classList.remove('show');
       await renderSection(editingItemSection);
     } catch (err) {
-      document.getElementById('item-error').textContent = 'Delete failed: ' + err.message;
+      document.getElementById('item-error').textContent = 'Delete failed: ' + (err.message || err);
     }
   });
 
@@ -1343,23 +1594,34 @@
     if (!label) { errEl.textContent = 'Please enter a category name'; return; }
     if (!editingCat && !pendingCatImage) { errEl.textContent = 'Please choose an image'; return; }
 
-    const cat = editingCat ? { ...editingCat } : {
-      section: editingCatSection,
-      order: Date.now(),
-      parentId: editingCatParentId,
-    };
-    cat.label = label;
-    if (pendingCatImage) cat.image = pendingCatImage;
+    const saveBtn = document.getElementById('cat-save');
+    saveBtn.disabled = true;
+    const prev = saveBtn.textContent;
+    saveBtn.textContent = 'Saving…';
 
     try {
-      if (editingCat) clearURLs('c', editingCat.id);
-      const newId = await putCat(cat);
-      // Make the new (sub)category active so the user lands inside it
-      if (!editingCat) activeCategoryId[editingCatSection] = newId;
+      if (editingCat) {
+        await serverUpdateCategory(editingCat, {
+          label,
+          image: pendingCatImage,
+        });
+      } else {
+        const saved = await serverCreateCategory({
+          section: editingCatSection,
+          label,
+          parentId: editingCatParentId,
+          image: pendingCatImage,
+          order: Date.now(),
+        });
+        activeCategoryId[editingCatSection] = saved.id;
+      }
       catModal.classList.remove('show');
       await renderSection(editingCatSection);
     } catch (err) {
-      errEl.textContent = 'Save failed: ' + err.message;
+      errEl.textContent = 'Save failed: ' + (err.message || err);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = prev;
     }
   });
 
@@ -1379,14 +1641,7 @@
       : `Delete "${editingCat.label}"?`;
     if (!confirm(msg)) return;
     try {
-      for (const it of itemsToDelete) {
-        clearURLs('i', it.id);
-        await deleteItemDB(it.id);
-      }
-      for (const cid of idsToDelete) {
-        clearURLs('c', cid);
-        await deleteCatDB(cid);
-      }
+      await serverDeleteCategory(editingCat.id, editingCatSection);
       // Reset active so renderSection picks the next one
       if (idSet.has(activeCategoryId[editingCatSection])) {
         activeCategoryId[editingCatSection] = editingCat.parentId ?? null;
@@ -1557,14 +1812,15 @@
 
     let newCatId;
     try {
-      newCatId = await putCat({
+      const savedCat = await serverCreateCategory({
         section: bulkSection,
         label,
         image: catImage,
         order: Date.now(),
       });
+      newCatId = savedCat.id;
     } catch (err) {
-      errEl.textContent = 'Category save failed: ' + err.message;
+      errEl.textContent = 'Category save failed: ' + (err.message || err);
       saveBtn.disabled = false;
       saveBtn.textContent = prevSaveText;
       progEl.textContent = '';
@@ -1578,7 +1834,7 @@
       let sound = null;
       if (useTts) {
         try {
-          const r = await fetch('/api/tts', {
+          const r = await apiFetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: it.label.trim() }),
@@ -1593,15 +1849,14 @@
         }
       }
       try {
-        const item = {
+        await serverCreateItem({
           section: bulkSection,
           categoryId: newCatId,
           label: it.label.trim(),
           image: it.file,
+          sound: sound || undefined,
           order: Date.now() + i,
-        };
-        if (sound) item.sound = sound;
-        await putItem(item);
+        });
       } catch (err) {
         failures.push(`${it.label}: save failed — ${err.message}`);
       }
@@ -1683,11 +1938,15 @@
       alert('This does not look like a valid backup file.');
       return;
     }
-    if (!confirm(
-      `Import ${data.categories.length} categories and ${data.items.length} items?\n\n` +
-      `This will REPLACE all existing AAC data on this device.`
-    )) return;
+    const useCloud = !!authToken;
+    const msg = useCloud
+      ? `Import ${data.categories.length} categories and ${data.items.length} items?\n\n`
+        + `This will REPLACE local data AND push everything to the cloud.`
+      : `Import ${data.categories.length} categories and ${data.items.length} items?\n\n`
+        + `This will REPLACE local data on this device only (not logged in to cloud).`;
+    if (!confirm(msg)) return;
 
+    // Wipe local cache
     await new Promise((res, rej) => {
       const t = db.transaction([ITEMS, CATS], 'readwrite');
       t.objectStore(ITEMS).clear();
@@ -1695,44 +1954,70 @@
       t.oncomplete = () => res();
       t.onerror = () => rej(t.error);
     });
+    for (const url of objectURLs.values()) URL.revokeObjectURL(url);
+    objectURLs.clear();
 
     const catIdMap = new Map();
-    for (const c of data.categories) {
-      const newCat = { section: c.section, label: c.label, order: c.order ?? 0, parentId: null };
-      if (c.image) newCat.image = dataURLToBlob(c.image);
-      const newId = await putCat(newCat);
-      catIdMap.set(c.id, newId);
+    // Topological order: parents before children
+    const ordered = [];
+    const remaining = [...data.categories];
+    while (remaining.length) {
+      const before = remaining.length;
+      for (let i = remaining.length - 1; i >= 0; i--) {
+        const c = remaining[i];
+        if (c.parentId == null || catIdMap.has(c.parentId) || !remaining.some(r => r.id === c.parentId)) {
+          ordered.push(c);
+          catIdMap.set(c.id, null); // placeholder so children see we'll create it
+          remaining.splice(i, 1);
+        }
+      }
+      if (remaining.length === before) {
+        // Defensive: cycle or orphan — flush remaining as top-level
+        for (const c of remaining) ordered.push({ ...c, parentId: null });
+        break;
+      }
     }
-    // Second pass: rewire parentId references using the new ids
-    for (const c of data.categories) {
-      if (c.parentId == null) continue;
-      const newId = catIdMap.get(c.id);
-      const newParent = catIdMap.get(c.parentId);
-      if (newId == null || newParent == null) continue;
-      const cur = await reqPromise(tx(CATS).get(newId));
-      if (cur) {
-        cur.parentId = newParent;
-        await putCat(cur);
+    catIdMap.clear();
+
+    for (const c of ordered) {
+      const image = c.image ? dataURLToBlob(c.image) : null;
+      const mappedParent = c.parentId == null ? null : (catIdMap.get(c.parentId) ?? null);
+      if (useCloud) {
+        const saved = await serverCreateCategory({
+          section: c.section, label: c.label, order: c.order ?? Date.now(),
+          parentId: mappedParent, image,
+        });
+        catIdMap.set(c.id, saved.id);
+      } else {
+        const newId = await putCat({
+          section: c.section, label: c.label, order: c.order ?? Date.now(),
+          parentId: mappedParent, image: image || undefined,
+        });
+        catIdMap.set(c.id, newId);
       }
     }
     for (const it of data.items) {
-      const newItem = {
-        section: it.section,
-        categoryId: catIdMap.get(it.categoryId) ?? null,
-        label: it.label,
-        order: it.order ?? 0,
-        pinned: !!it.pinned,
-      };
-      if (it.image) newItem.image = dataURLToBlob(it.image);
-      if (it.sound) newItem.sound = dataURLToBlob(it.sound);
-      await putItem(newItem);
+      const image = it.image ? dataURLToBlob(it.image) : null;
+      const sound = it.sound ? dataURLToBlob(it.sound) : null;
+      const mappedCat = catIdMap.get(it.categoryId) ?? null;
+      if (useCloud) {
+        await serverCreateItem({
+          section: it.section, categoryId: mappedCat, label: it.label,
+          order: it.order ?? Date.now(), pinned: !!it.pinned,
+          image, sound,
+        });
+      } else {
+        await putItem({
+          section: it.section, categoryId: mappedCat, label: it.label,
+          order: it.order ?? Date.now(), pinned: !!it.pinned,
+          image: image || undefined, sound: sound || undefined,
+        });
+      }
     }
 
-    for (const url of objectURLs.values()) URL.revokeObjectURL(url);
-    objectURLs.clear();
     for (const s of SECTIONS) activeCategoryId[s] = null;
     await renderAll();
-    alert(`Imported ${data.categories.length} categories and ${data.items.length} items.`);
+    alert(`Imported ${data.categories.length} categories and ${data.items.length} items${useCloud ? ' (synced to cloud)' : ''}.`);
   }
 
   document.getElementById('export-btn').addEventListener('click', () => {
@@ -1754,6 +2039,23 @@
       db = await openDB();
       await migrateLegacyItems();
       await renderAll();
+      // If a token is stored and the local cache is empty, pull from cloud in the background
+      if (authToken) {
+        let total = 0;
+        for (const s of SECTIONS) total += (await getAllCats(s)).length;
+        if (total === 0) {
+          try {
+            const r = await apiFetch('/api/sync');
+            if (r.ok) {
+              const data = await r.json();
+              if (data.categories.length || data.items.length) {
+                await hydrateFromServer(data);
+                await renderAll();
+              }
+            }
+          } catch (_) { /* offline / unauthorized — keep local empty cache */ }
+        }
+      }
     } catch (err) {
       document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif;">Failed to open storage: ${err.message}<br><br>Try opening this file in Chrome.</div>`;
     }
