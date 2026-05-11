@@ -568,6 +568,7 @@
     <span class="status" id="mode-status"></span>
     <button id="export-btn" class="edit-only">Export</button>
     <button id="import-btn" class="edit-only">Import</button>
+    <button id="wipe-btn" class="edit-only">Wipe All</button>
     <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
     <button id="login-btn">Login</button>
   </div>
@@ -2091,6 +2092,36 @@
     try { await importData(file); }
     catch (err) { alert('Import failed: ' + err.message); }
   });
+
+  async function wipeAll() {
+    const confirmInput = prompt(
+      'This deletes EVERY category, item, image, and audio file — on this device and on the server. Type DELETE to confirm.'
+    );
+    if (confirmInput !== 'DELETE') return;
+    try {
+      const r = await apiFetch('/api/wipe', { method: 'POST' });
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error(`${r.status}: ${t.slice(0, 200)}`);
+      }
+      const result = await r.json();
+      for (const url of objectURLs.values()) URL.revokeObjectURL(url);
+      objectURLs.clear();
+      await new Promise((res, rej) => {
+        const t = db.transaction([ITEMS, CATS], 'readwrite');
+        t.objectStore(ITEMS).clear();
+        t.objectStore(CATS).clear();
+        t.oncomplete = () => res();
+        t.onerror = () => rej(t.error);
+      });
+      for (const s of SECTIONS) activeCategoryId[s] = null;
+      await renderAll();
+      alert(`Wiped. Removed ${result.blobsDeleted ?? 0} blobs.`);
+    } catch (err) {
+      alert('Wipe failed: ' + (err.message || err));
+    }
+  }
+  document.getElementById('wipe-btn').addEventListener('click', () => { wipeAll(); });
 
   // Init
   (async () => {
