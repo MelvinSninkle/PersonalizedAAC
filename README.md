@@ -89,8 +89,38 @@ POSTs the phrase to `/api/tts`, which proxies to ElevenLabs and returns MP3
 bytes. The Blob is stored in the item's `sound` field exactly like an uploaded
 file, so it persists in IndexedDB and replays without re-calling the API.
 
-Env vars (set in Vercel → Project → Settings → Environment Variables):
+## Cloud sync (Vercel Blob + Neon)
 
-- `Fletchers_AAC_Device` — required (ElevenLabs API key)
-- `ELEVENLABS_VOICE_ID` — optional, defaults to Rachel (`21m00Tcm4TlvDq8ikWAM`)
-- `ELEVENLABS_MODEL_ID` — optional, defaults to `eleven_turbo_v2_5`
+Authoritative storage lives on the server; IndexedDB is a cache.
+
+- Login is by Bearer token: paste your `ADMIN_TOKEN` value into the password
+  field. It's stored in `localStorage` so the device only asks once.
+- On a fresh device with empty cache and a valid token, the app pulls all
+  metadata from `/api/sync` and lazily fetches audio Blobs the first time
+  each item is tapped.
+- Every create / update / delete writes to the server first, then mirrors
+  to the local IndexedDB cache.
+- A category delete cascades: descendant subcategories + their items are
+  removed (DB cascade) and orphaned blobs are best-effort cleaned up.
+
+### One-time schema setup
+
+After deploying with env vars set, hit `POST /api/init` with the Bearer
+token to create the tables. From a terminal:
+
+```
+curl -X POST https://your-deploy-url/api/init -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+It's idempotent, so re-running is safe.
+
+## Env vars (Vercel → Settings → Environment Variables)
+
+Set for **Production, Preview, Development**:
+
+- `ADMIN_TOKEN` — the Bearer token clients send. Keep this long and random.
+- `DATABASE_URL` — Neon Postgres connection string (use the **pooled** one).
+- `BLOB_READ_WRITE_TOKEN` — auto-added when you create a Vercel Blob store.
+- `Fletchers_AAC_Device` — ElevenLabs API key.
+- `ELEVENLABS_VOICE_ID` — optional, defaults to Rachel (`21m00Tcm4TlvDq8ikWAM`).
+- `ELEVENLABS_MODEL_ID` — optional, defaults to `eleven_turbo_v2_5`.
