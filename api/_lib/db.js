@@ -3,10 +3,23 @@ import { neon } from '@neondatabase/serverless';
 
 let _sql = null;
 
+// Vercel's Neon marketplace integration sets several variants; accept any of
+// them so users don't have to manually duplicate env vars.
+function resolveDatabaseUrl() {
+  return process.env.DATABASE_URL
+    || process.env.POSTGRES_URL
+    || process.env.POSTGRES_PRISMA_URL
+    || process.env.POSTGRES_URL_NON_POOLING
+    || process.env.DATABASE_URL_UNPOOLED
+    || '';
+}
+
 export function sql() {
   if (_sql) return _sql;
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL env var not set');
+  const url = resolveDatabaseUrl();
+  if (!url) {
+    throw new Error('No Postgres URL found (checked DATABASE_URL, POSTGRES_URL, POSTGRES_PRISMA_URL, POSTGRES_URL_NON_POOLING, DATABASE_URL_UNPOOLED)');
+  }
   _sql = neon(url);
   return _sql;
 }
