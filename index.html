@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fletcher's AAC</title>
+<title>Fletcher's World</title>
 <style>
   * { box-sizing: border-box; }
   html, body {
@@ -23,7 +23,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 20px;
-    background: #2c3e50;
+    background: #ff1493;
     color: white;
     box-shadow: 0 2px 6px rgba(0,0,0,.15);
     height: 64px;
@@ -31,7 +31,7 @@
   header h1 { margin: 0; font-size: 22px; font-weight: 600; }
   header .status { font-size: 13px; opacity: .85; margin-right: 12px; }
   header button {
-    background: #4a90e2;
+    background: #ad1457;
     color: white;
     border: none;
     border-radius: 6px;
@@ -40,17 +40,17 @@
     font-weight: 600;
     cursor: pointer;
   }
-  header button:hover { background: #3a7bc8; }
-  body.edit-mode header { background: #8b2c3e; }
-  body.edit-mode header button { background: #c94f5f; }
-  body.edit-mode header button:hover { background: #b3404e; }
+  header button:hover { background: #880e4f; }
+  body.edit-mode header { background: #c2185b; }
+  body.edit-mode header button { background: #6a1b4d; }
+  body.edit-mode header button:hover { background: #4a0d36; }
 
   header button.edit-only { display: none; }
   body.edit-mode header button.edit-only {
     display: inline-block;
-    background: #557fa3;
+    background: #6a1b4d;
   }
-  body.edit-mode header button.edit-only:hover { background: #406285; }
+  body.edit-mode header button.edit-only:hover { background: #4a0d36; }
 
   main {
     display: grid;
@@ -494,7 +494,7 @@
     margin-top: 22px;
     flex-wrap: wrap;
   }
-  .modal button {
+  .modal .button-row > button {
     flex: 1;
     padding: 12px 16px;
     border: none;
@@ -504,12 +504,12 @@
     cursor: pointer;
     min-width: 90px;
   }
-  .modal button.primary { background: #4a90e2; color: white; }
-  .modal button.primary:hover { background: #3a7bc8; }
-  .modal button.secondary { background: #e0e3e8; color: #333; }
-  .modal button.secondary:hover { background: #cfd4db; }
-  .modal button.danger { background: #c94f5f; color: white; }
-  .modal button.danger:hover { background: #b3404e; }
+  .modal .button-row > button.primary { background: #4a90e2; color: white; }
+  .modal .button-row > button.primary:hover { background: #3a7bc8; }
+  .modal .button-row > button.secondary { background: #e0e3e8; color: #333; }
+  .modal .button-row > button.secondary:hover { background: #cfd4db; }
+  .modal .button-row > button.danger { background: #c94f5f; color: white; }
+  .modal .button-row > button.danger:hover { background: #b3404e; }
   .modal .error { color: #c94f5f; font-size: 14px; margin-top: 8px; min-height: 18px; }
 
   @media (max-width: 900px) {
@@ -563,11 +563,12 @@
 <body>
 
 <header>
-  <h1>Fletcher's AAC</h1>
+  <h1>Fletcher's World</h1>
   <div style="display:flex; align-items:center; gap:8px;">
     <span class="status" id="mode-status"></span>
     <button id="export-btn" class="edit-only">Export</button>
     <button id="import-btn" class="edit-only">Import</button>
+    <button id="wipe-btn" class="edit-only">Wipe All</button>
     <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
     <button id="login-btn">Login</button>
   </div>
@@ -2091,6 +2092,36 @@
     try { await importData(file); }
     catch (err) { alert('Import failed: ' + err.message); }
   });
+
+  async function wipeAll() {
+    const confirmInput = prompt(
+      'This deletes EVERY category, item, image, and audio file — on this device and on the server. Type DELETE to confirm.'
+    );
+    if (confirmInput !== 'DELETE') return;
+    try {
+      const r = await apiFetch('/api/wipe', { method: 'POST' });
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error(`${r.status}: ${t.slice(0, 200)}`);
+      }
+      const result = await r.json();
+      for (const url of objectURLs.values()) URL.revokeObjectURL(url);
+      objectURLs.clear();
+      await new Promise((res, rej) => {
+        const t = db.transaction([ITEMS, CATS], 'readwrite');
+        t.objectStore(ITEMS).clear();
+        t.objectStore(CATS).clear();
+        t.oncomplete = () => res();
+        t.onerror = () => rej(t.error);
+      });
+      for (const s of SECTIONS) activeCategoryId[s] = null;
+      await renderAll();
+      alert(`Wiped. Removed ${result.blobsDeleted ?? 0} blobs.`);
+    } catch (err) {
+      alert('Wipe failed: ' + (err.message || err));
+    }
+  }
+  document.getElementById('wipe-btn').addEventListener('click', () => { wipeAll(); });
 
   // Init
   (async () => {
