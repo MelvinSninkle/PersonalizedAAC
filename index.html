@@ -297,6 +297,8 @@
       0 2px 5px rgba(0,0,0,.15);
     transition: transform .08s ease, box-shadow .08s ease;
   }
+  .tile-square.contain { background-size: contain; }
+  .subcat-tile .sq.contain { background-size: contain; }
   .tile-wrap:active .tile-square {
     transform: scale(0.96);
     box-shadow:
@@ -634,10 +636,25 @@
     <label for="item-sound">Sound</label>
     <input type="file" id="item-sound" accept="audio/*">
     <div class="file-status" id="item-sound-status">No sound selected</div>
-    <label for="item-phrase">Or generate from text</label>
+    <label for="item-phrase">Phrase to speak (tweak to fix pronunciation, e.g. "Cheery-ohs")</label>
     <input type="text" id="item-phrase" autocomplete="off" placeholder="e.g. Mom is here">
-    <div class="button-row" style="margin-top:6px;justify-content:flex-start;">
-      <button type="button" class="secondary" id="item-generate">Generate audio</button>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:6px;">
+      <div style="flex:1;min-width:140px;">
+        <label for="item-emotion" style="margin-top:0;">Emotion</label>
+        <select id="item-emotion" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+          <option value="default">Default</option>
+          <option value="happy">Happy</option>
+          <option value="sad">Sad</option>
+          <option value="excited">Excited</option>
+          <option value="calm">Calm</option>
+          <option value="whisper">Whisper</option>
+        </select>
+      </div>
+      <button type="button" class="secondary" id="item-generate" style="margin:0;padding:10px 16px;border-radius:6px;background:#e0e3e8;color:#333;border:none;font-weight:600;cursor:pointer;">Generate audio</button>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="item-keep-aspect">
+      <label for="item-keep-aspect">Keep original image ratio (don't crop)</label>
     </div>
     <div class="checkbox-row" id="pin-row" style="display:none;">
       <input type="checkbox" id="item-pin">
@@ -660,6 +677,10 @@
     <label for="cat-image">Category Image</label>
     <input type="file" id="cat-image" accept="image/*">
     <div class="file-status" id="cat-image-status">No image selected</div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="cat-keep-aspect">
+      <label for="cat-keep-aspect">Keep original image ratio (don't crop)</label>
+    </div>
     <div class="error" id="cat-error"></div>
     <div class="button-row">
       <button class="danger" id="cat-delete" style="display:none;">Delete</button>
@@ -685,6 +706,21 @@
     <div class="checkbox-row" style="margin-top:10px;">
       <input type="checkbox" id="bulk-tts" checked>
       <label for="bulk-tts">Generate audio for each item from its name</label>
+    </div>
+    <div style="margin-top:6px;">
+      <label for="bulk-emotion" style="margin-top:0;">Emotion (applied to all items)</label>
+      <select id="bulk-emotion" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+        <option value="default">Default</option>
+        <option value="happy">Happy</option>
+        <option value="sad">Sad</option>
+        <option value="excited">Excited</option>
+        <option value="calm">Calm</option>
+        <option value="whisper">Whisper</option>
+      </select>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="bulk-keep-aspect">
+      <label for="bulk-keep-aspect">Keep original image ratio for category + all items</label>
     </div>
     <div class="bulk-list" id="bulk-list">
       <div class="bulk-empty">No images selected yet</div>
@@ -780,7 +816,8 @@
 
   // Sets a tile's background image, using the in-memory blob if available,
   // otherwise kicking off an async fetch via /api/media.
-  function applyImage(el, kind, id, image, imageKey) {
+  function applyImage(el, kind, id, image, imageKey, keepAspect) {
+    el.classList.toggle('contain', !!keepAspect);
     const sync = getURL(kind, id, image, 'image', null);
     if (sync) { el.style.backgroundImage = `url("${sync}")`; return; }
     if (!imageKey) return;
@@ -908,7 +945,7 @@
     });
   }
 
-  function makeTile({ kind, id, image, imageKey, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
+  function makeTile({ kind, id, image, imageKey, keepAspect, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
     const wrap = document.createElement('div');
     wrap.className = 'tile-wrap'
       + (isCategory ? ' category' : '')
@@ -916,7 +953,7 @@
 
     const sq = document.createElement('div');
     sq.className = 'tile-square';
-    applyImage(sq, kind, id, image, imageKey);
+    applyImage(sq, kind, id, image, imageKey, keepAspect);
 
     if (pinned) {
       const pin = document.createElement('div');
@@ -1087,6 +1124,7 @@
           id: tabCat.id,
           image: tabCat.image,
           imageKey: tabCat.imageKey,
+          keepAspect: tabCat.keepAspect,
           label: tabCat.label,
           isCategory: true,
           isActive: true,
@@ -1111,6 +1149,7 @@
             id: cat.id,
             image: cat.image,
             imageKey: cat.imageKey,
+            keepAspect: cat.keepAspect,
             label: cat.label,
             isCategory: true,
             isActive,
@@ -1156,7 +1195,7 @@
         tile.className = 'subcat-tile';
         const sq = document.createElement('div');
         sq.className = 'sq';
-        applyImage(sq, 'c', sub.id, sub.image, sub.imageKey);
+        applyImage(sq, 'c', sub.id, sub.image, sub.imageKey, sub.keepAspect);
         const lbl = document.createElement('div');
         lbl.className = 'lbl';
         lbl.textContent = sub.label;
@@ -1213,6 +1252,7 @@
         id: it.id,
         image: it.image,
         imageKey: it.imageKey,
+        keepAspect: it.keepAspect,
         label: it.label,
         pinned: it.pinned,
         onClick: () => {
@@ -1328,6 +1368,7 @@
         id: c.id, section: c.section, label: c.label,
         parentId: c.parentId, order: c.order,
         imageKey: c.imageKey,
+        keepAspect: !!c.keepAspect,
       });
     }
     for (const it of data.items) {
@@ -1336,6 +1377,7 @@
         order: it.order, pinned: !!it.pinned,
         imageKey: it.imageKey,
         soundKey: it.soundKey,
+        keepAspect: !!it.keepAspect,
       });
     }
   }
@@ -1348,13 +1390,14 @@
     return uploadBlob(blob, kind, ext);
   }
 
-  async function serverCreateCategory({ section, label, parentId, image, order }) {
+  async function serverCreateCategory({ section, label, parentId, image, keepAspect, order }) {
     const up = await uploadIfBlob('image', image, 'cat-image');
     const saved = await apiJSON('/api/categories', {
       method: 'POST',
       body: JSON.stringify({
         section, label, parentId: parentId ?? null, order: order ?? Date.now(),
         imageKey: up?.key || null,
+        keepAspect: !!keepAspect,
       }),
     });
     const local = { ...saved };
@@ -1363,12 +1406,13 @@
     return saved;
   }
 
-  async function serverUpdateCategory(old, { label, parentId, image, order }) {
+  async function serverUpdateCategory(old, { label, parentId, image, keepAspect, order }) {
     const up = await uploadIfBlob('image', image, 'cat-image');
     const body = {};
     if (label !== undefined) body.label = label;
     if (parentId !== undefined) body.parentId = parentId;
     if (order !== undefined) body.order = order;
+    if (keepAspect !== undefined) body.keepAspect = !!keepAspect;
     if (up) { body.imageKey = up.key; }
     const saved = await apiJSON('/api/categories?id=' + old.id, {
       method: 'PUT',
@@ -1399,7 +1443,7 @@
     }
   }
 
-  async function serverCreateItem({ section, categoryId, label, image, sound, order, pinned }) {
+  async function serverCreateItem({ section, categoryId, label, image, sound, keepAspect, order, pinned }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const saved = await apiJSON('/api/items', {
@@ -1409,6 +1453,7 @@
         order: order ?? Date.now(), pinned: !!pinned,
         imageKey: upImg?.key || null,
         soundKey: upSnd?.key || null,
+        keepAspect: !!keepAspect,
       }),
     });
     const local = { ...saved };
@@ -1418,7 +1463,7 @@
     return saved;
   }
 
-  async function serverUpdateItem(old, { label, categoryId, image, sound, order, pinned }) {
+  async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const body = {};
@@ -1426,6 +1471,7 @@
     if (categoryId !== undefined) body.categoryId = categoryId;
     if (order !== undefined) body.order = order;
     if (pinned !== undefined) body.pinned = !!pinned;
+    if (keepAspect !== undefined) body.keepAspect = !!keepAspect;
     if (upImg) { body.imageKey = upImg.key; }
     if (upSnd) { body.soundKey = upSnd.key; }
     const saved = await apiJSON('/api/items?id=' + old.id, {
@@ -1468,7 +1514,10 @@
     document.getElementById('item-label').value = item?.label || '';
     document.getElementById('item-image').value = '';
     document.getElementById('item-sound').value = '';
-    document.getElementById('item-phrase').value = '';
+    // Pre-fill phrase with current label so regeneration is a 1-edit flow
+    document.getElementById('item-phrase').value = item?.label || '';
+    document.getElementById('item-emotion').value = 'default';
+    document.getElementById('item-keep-aspect').checked = !!item?.keepAspect;
     const ist = document.getElementById('item-image-status');
     ist.textContent = item?.image ? 'Current image will be kept' : 'No image selected';
     ist.className = 'file-status' + (item?.image ? ' has-file' : '');
@@ -1515,10 +1564,11 @@
     status.textContent = 'Generating audio…';
     status.className = 'file-status';
     try {
+      const emotion = document.getElementById('item-emotion').value;
       const r = await apiFetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: phrase }),
+        body: JSON.stringify({ text: phrase, emotion }),
       });
       if (!r.ok) {
         const detail = await r.text();
@@ -1526,7 +1576,7 @@
       }
       const blob = await r.blob();
       pendingSound = blob;
-      status.textContent = `Generated: "${phrase}"`;
+      status.textContent = `Generated: "${phrase}"` + (emotion !== 'default' ? ` (${emotion})` : '');
       status.className = 'file-status has-file';
       const player = document.getElementById('audio-player');
       const url = URL.createObjectURL(blob);
@@ -1548,6 +1598,7 @@
   document.getElementById('item-save').addEventListener('click', async () => {
     const label = document.getElementById('item-label').value.trim();
     const pinned = document.getElementById('item-pin').checked;
+    const keepAspect = document.getElementById('item-keep-aspect').checked;
     const errEl = document.getElementById('item-error');
     errEl.textContent = '';
 
@@ -1565,6 +1616,7 @@
           label,
           image: pendingImage,
           sound: pendingSound,
+          keepAspect,
           pinned: editingItemSection === 'people' ? pinned : undefined,
         });
       } else {
@@ -1574,6 +1626,7 @@
           label,
           image: pendingImage,
           sound: pendingSound,
+          keepAspect,
           order: Date.now(),
           pinned: editingItemSection === 'people' ? pinned : false,
         });
@@ -1626,6 +1679,7 @@
     document.getElementById('cat-modal-title').textContent = title;
     document.getElementById('cat-label').value = cat?.label || '';
     document.getElementById('cat-image').value = '';
+    document.getElementById('cat-keep-aspect').checked = !!cat?.keepAspect;
     const cist = document.getElementById('cat-image-status');
     cist.textContent = cat?.image ? 'Current image will be kept' : 'No image selected';
     cist.className = 'file-status' + (cat?.image ? ' has-file' : '');
@@ -1649,6 +1703,7 @@
 
   document.getElementById('cat-save').addEventListener('click', async () => {
     const label = document.getElementById('cat-label').value.trim();
+    const keepAspect = document.getElementById('cat-keep-aspect').checked;
     const errEl = document.getElementById('cat-error');
     errEl.textContent = '';
     if (!label) { errEl.textContent = 'Please enter a category name'; return; }
@@ -1664,6 +1719,7 @@
         await serverUpdateCategory(editingCat, {
           label,
           image: pendingCatImage,
+          keepAspect,
         });
       } else {
         const saved = await serverCreateCategory({
@@ -1671,6 +1727,7 @@
           label,
           parentId: editingCatParentId,
           image: pendingCatImage,
+          keepAspect,
           order: Date.now(),
         });
         activeCategoryId[editingCatSection] = saved.id;
@@ -1814,6 +1871,8 @@
     document.getElementById('bulk-item-images').value = '';
     document.getElementById('bulk-folder-input').value = '';
     document.getElementById('bulk-tts').checked = true;
+    document.getElementById('bulk-emotion').value = 'default';
+    document.getElementById('bulk-keep-aspect').checked = false;
     document.getElementById('bulk-progress').textContent = '';
     document.getElementById('bulk-error').textContent = '';
     renderBulkList();
@@ -1852,6 +1911,8 @@
   document.getElementById('bulk-save').addEventListener('click', async () => {
     const label = document.getElementById('bulk-cat-label').value.trim();
     const useTts = document.getElementById('bulk-tts').checked;
+    const emotion = document.getElementById('bulk-emotion').value;
+    const keepAspect = document.getElementById('bulk-keep-aspect').checked;
     const errEl = document.getElementById('bulk-error');
     const progEl = document.getElementById('bulk-progress');
     const saveBtn = document.getElementById('bulk-save');
@@ -1876,6 +1937,7 @@
         section: bulkSection,
         label,
         image: catImage,
+        keepAspect,
         order: Date.now(),
       });
       newCatId = savedCat.id;
@@ -1897,7 +1959,7 @@
           const r = await apiFetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: it.label.trim() }),
+            body: JSON.stringify({ text: it.label.trim(), emotion }),
           });
           if (!r.ok) {
             const detail = await r.text();
@@ -1915,6 +1977,7 @@
           label: it.label.trim(),
           image: it.file,
           sound: sound || undefined,
+          keepAspect,
           order: Date.now() + i,
         });
       } catch (err) {
@@ -1962,7 +2025,7 @@
     const out = { version: 1, exportedAt: new Date().toISOString(), categories: [], items: [] };
     for (const section of SECTIONS) {
       for (const c of await getAllCats(section)) {
-        const exp = { id: c.id, section: c.section, label: c.label, order: c.order ?? 0, parentId: c.parentId ?? null };
+        const exp = { id: c.id, section: c.section, label: c.label, order: c.order ?? 0, parentId: c.parentId ?? null, keepAspect: !!c.keepAspect };
         if (c.image) exp.image = await blobToDataURL(c.image);
         out.categories.push(exp);
       }
@@ -1970,6 +2033,7 @@
         const exp = {
           id: it.id, section: it.section, categoryId: it.categoryId,
           label: it.label, order: it.order ?? 0, pinned: !!it.pinned,
+          keepAspect: !!it.keepAspect,
         };
         if (it.image) exp.image = await blobToDataURL(it.image);
         if (it.sound) exp.sound = await blobToDataURL(it.sound);
@@ -2045,13 +2109,14 @@
       if (useCloud) {
         const saved = await serverCreateCategory({
           section: c.section, label: c.label, order: c.order ?? Date.now(),
-          parentId: mappedParent, image,
+          parentId: mappedParent, image, keepAspect: !!c.keepAspect,
         });
         catIdMap.set(c.id, saved.id);
       } else {
         const newId = await putCat({
           section: c.section, label: c.label, order: c.order ?? Date.now(),
           parentId: mappedParent, image: image || undefined,
+          keepAspect: !!c.keepAspect,
         });
         catIdMap.set(c.id, newId);
       }
@@ -2064,13 +2129,14 @@
         await serverCreateItem({
           section: it.section, categoryId: mappedCat, label: it.label,
           order: it.order ?? Date.now(), pinned: !!it.pinned,
-          image, sound,
+          image, sound, keepAspect: !!it.keepAspect,
         });
       } else {
         await putItem({
           section: it.section, categoryId: mappedCat, label: it.label,
           order: it.order ?? Date.now(), pinned: !!it.pinned,
           image: image || undefined, sound: sound || undefined,
+          keepAspect: !!it.keepAspect,
         });
       }
     }

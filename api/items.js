@@ -22,18 +22,19 @@ export default async function handler(req, res) {
 }
 
 async function create(req, res, db) {
-  const { section, categoryId, label, imageUrl, imageKey, soundUrl, soundKey, order, pinned } = req.body || {};
+  const { section, categoryId, label, imageUrl, imageKey, soundUrl, soundKey, keepAspect, order, pinned } = req.body || {};
   if (!section || !label) {
     res.status(400).json({ error: 'section and label required' });
     return;
   }
   const rows = await db`
     INSERT INTO items
-      (section, category_id, label, image_url, image_key, sound_url, sound_key, display_order, pinned, updated_at)
+      (section, category_id, label, image_url, image_key, sound_url, sound_key, keep_aspect, display_order, pinned, updated_at)
     VALUES
       (${section}, ${categoryId ?? null}, ${label},
        ${imageUrl ?? null}, ${imageKey ?? null},
        ${soundUrl ?? null}, ${soundKey ?? null},
+       ${!!keepAspect},
        ${order ?? Date.now()}, ${!!pinned}, NOW())
     RETURNING *
   `;
@@ -43,7 +44,7 @@ async function create(req, res, db) {
 async function update(req, res, db) {
   const id = parseInt(req.query.id, 10);
   if (!id) { res.status(400).json({ error: 'id required' }); return; }
-  const { label, categoryId, imageUrl, imageKey, soundUrl, soundKey, order, pinned } = req.body || {};
+  const { label, categoryId, imageUrl, imageKey, soundUrl, soundKey, keepAspect, order, pinned } = req.body || {};
 
   const current = await db`SELECT * FROM items WHERE id = ${id}`;
   if (!current.length) { res.status(404).json({ error: 'Not found' }); return; }
@@ -57,6 +58,7 @@ async function update(req, res, db) {
       image_key     = COALESCE(${imageKey ?? null},   image_key),
       sound_url     = COALESCE(${soundUrl ?? null},   sound_url),
       sound_key     = COALESCE(${soundKey ?? null},   sound_key),
+      keep_aspect   = ${keepAspect === undefined ? old.keep_aspect : !!keepAspect},
       display_order = COALESCE(${order ?? null},      display_order),
       pinned        = ${pinned === undefined ? old.pinned : !!pinned},
       updated_at    = NOW()

@@ -24,10 +24,12 @@ export default async function handler(req, res) {
         parent_id BIGINT REFERENCES categories(id) ON DELETE CASCADE,
         image_url TEXT,
         image_key TEXT,
+        keep_aspect BOOLEAN NOT NULL DEFAULT FALSE,
         display_order BIGINT NOT NULL DEFAULT 0,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await db`ALTER TABLE categories ADD COLUMN IF NOT EXISTS keep_aspect BOOLEAN NOT NULL DEFAULT FALSE`;
     await db`CREATE INDEX IF NOT EXISTS categories_section_idx ON categories(section)`;
     await db`CREATE INDEX IF NOT EXISTS categories_parent_idx  ON categories(parent_id)`;
 
@@ -41,11 +43,13 @@ export default async function handler(req, res) {
         image_key TEXT,
         sound_url TEXT,
         sound_key TEXT,
+        keep_aspect BOOLEAN NOT NULL DEFAULT FALSE,
         display_order BIGINT NOT NULL DEFAULT 0,
         pinned BOOLEAN NOT NULL DEFAULT FALSE,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS keep_aspect BOOLEAN NOT NULL DEFAULT FALSE`;
     await db`CREATE INDEX IF NOT EXISTS items_section_idx  ON items(section)`;
     await db`CREATE INDEX IF NOT EXISTS items_category_idx ON items(category_id)`;
 

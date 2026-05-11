@@ -33,6 +33,7 @@ export function rowToCategory(r) {
     parentId: r.parent_id == null ? null : Number(r.parent_id),
     imageUrl: r.image_url,
     imageKey: r.image_key,
+    keepAspect: !!r.keep_aspect,
     order: r.display_order == null ? 0 : Number(r.display_order),
   };
 }
@@ -47,6 +48,7 @@ export function rowToItem(r) {
     imageKey: r.image_key,
     soundUrl: r.sound_url,
     soundKey: r.sound_key,
+    keepAspect: !!r.keep_aspect,
     order: r.display_order == null ? 0 : Number(r.display_order),
     pinned: !!r.pinned,
   };
