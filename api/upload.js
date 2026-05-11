@@ -1,5 +1,6 @@
 // POST /api/upload?kind=image|sound&ext=jpg|mp3 — raw bytes in body.
-// Returns { url, key }. Auth-gated.
+// Uploads to the private Blob store; only the `key` is meaningful to the
+// client (reads go through /api/media). Auth-gated.
 import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
@@ -47,12 +48,12 @@ export default async function handler(req, res) {
 
   const pathname = `${kind}/${randomUUID()}.${ext}`;
   try {
-    const result = await put(pathname, buffer, {
-      access: 'public',
+    await put(pathname, buffer, {
+      access: 'private',
       contentType,
       addRandomSuffix: false,
     });
-    res.status(200).json({ url: result.url, key: pathname });
+    res.status(200).json({ key: pathname });
   } catch (err) {
     res.status(500).json({ error: 'Blob upload failed', detail: String(err.message || err) });
   }

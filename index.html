@@ -752,6 +752,42 @@
     return r.json();
   }
 
+  // Fetch a private blob through the auth-gated proxy and cache the result
+  // both in memory (object URL) and in IndexedDB (so reloads don't re-fetch).
+  async function mediaURL(kind, id, key, slot) {
+    const cacheKey = `${kind}-${id}-${slot}`;
+    if (objectURLs.has(cacheKey)) return objectURLs.get(cacheKey);
+    let r;
+    try { r = await apiFetch('/api/media?key=' + encodeURIComponent(key)); }
+    catch (_) { return null; }
+    if (!r.ok) return null;
+    const blob = await r.blob();
+    try { await persistBlobToIDB(kind, id, slot, blob); } catch (_) {}
+    const url = URL.createObjectURL(blob);
+    objectURLs.set(cacheKey, url);
+    return url;
+  }
+
+  async function persistBlobToIDB(kind, id, slot, blob) {
+    const store = kind === 'i' ? ITEMS : CATS;
+    const row = await reqPromise(tx(store).get(id));
+    if (!row) return;
+    if (slot === 'image') row.image = blob;
+    else if (slot === 'sound') row.sound = blob;
+    await reqPromise(tx(store, 'readwrite').put(row));
+  }
+
+  // Sets a tile's background image, using the in-memory blob if available,
+  // otherwise kicking off an async fetch via /api/media.
+  function applyImage(el, kind, id, image, imageKey) {
+    const sync = getURL(kind, id, image, 'image', null);
+    if (sync) { el.style.backgroundImage = `url("${sync}")`; return; }
+    if (!imageKey) return;
+    mediaURL(kind, id, imageKey, 'image').then((u) => {
+      if (u) el.style.backgroundImage = `url("${u}")`;
+    }).catch(() => {});
+  }
+
   function extFor(blob, fallback) {
     const t = (blob.type || '').toLowerCase();
     if (t.includes('jpeg') || t.includes('jpg')) return 'jpg';
@@ -871,7 +907,7 @@
     });
   }
 
-  function makeTile({ kind, id, image, imageUrl, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
+  function makeTile({ kind, id, image, imageKey, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
     const wrap = document.createElement('div');
     wrap.className = 'tile-wrap'
       + (isCategory ? ' category' : '')
@@ -879,8 +915,7 @@
 
     const sq = document.createElement('div');
     sq.className = 'tile-square';
-    const url = getURL(kind, id, image, 'image', imageUrl);
-    if (url) sq.style.backgroundImage = `url("${url}")`;
+    applyImage(sq, kind, id, image, imageKey);
 
     if (pinned) {
       const pin = document.createElement('div');
@@ -1050,7 +1085,7 @@
           kind: 'c',
           id: tabCat.id,
           image: tabCat.image,
-          imageUrl: tabCat.imageUrl,
+          imageKey: tabCat.imageKey,
           label: tabCat.label,
           isCategory: true,
           isActive: true,
@@ -1074,7 +1109,7 @@
             kind: 'c',
             id: cat.id,
             image: cat.image,
-            imageUrl: cat.imageUrl,
+            imageKey: cat.imageKey,
             label: cat.label,
             isCategory: true,
             isActive,
@@ -1120,8 +1155,7 @@
         tile.className = 'subcat-tile';
         const sq = document.createElement('div');
         sq.className = 'sq';
-        const url = getURL('c', sub.id, sub.image, 'image', sub.imageUrl);
-        if (url) sq.style.backgroundImage = `url("${url}")`;
+        applyImage(sq, 'c', sub.id, sub.image, sub.imageKey);
         const lbl = document.createElement('div');
         lbl.className = 'lbl';
         lbl.textContent = sub.label;
@@ -1177,7 +1211,7 @@
         kind: 'i',
         id: it.id,
         image: it.image,
-        imageUrl: it.imageUrl,
+        imageKey: it.imageKey,
         label: it.label,
         pinned: it.pinned,
         onClick: () => {
@@ -1208,22 +1242,9 @@
 
   async function playSound(item) {
     const player = document.getElementById('audio-player');
-    let url = getURL('i', item.id, item.sound, 'sound');
-    if (!url && item.soundUrl) {
-      // Lazy fetch + cache: pull the MP3 once, store as Blob for next time.
-      try {
-        const r = await fetch(item.soundUrl);
-        if (r.ok) {
-          const blob = await r.blob();
-          item.sound = blob;
-          await putItem(item);
-          url = getURL('i', item.id, blob, 'sound');
-        } else {
-          url = item.soundUrl;
-        }
-      } catch (_) {
-        url = item.soundUrl;
-      }
+    let url = getURL('i', item.id, item.sound, 'sound', null);
+    if (!url && item.soundKey) {
+      url = await mediaURL('i', item.id, item.soundKey, 'sound');
     }
     if (!url) return;
     player.src = url;
@@ -1305,15 +1326,15 @@
       await putCat({
         id: c.id, section: c.section, label: c.label,
         parentId: c.parentId, order: c.order,
-        imageUrl: c.imageUrl, imageKey: c.imageKey,
+        imageKey: c.imageKey,
       });
     }
     for (const it of data.items) {
       await putItem({
         id: it.id, section: it.section, categoryId: it.categoryId, label: it.label,
         order: it.order, pinned: !!it.pinned,
-        imageUrl: it.imageUrl, imageKey: it.imageKey,
-        soundUrl: it.soundUrl, soundKey: it.soundKey,
+        imageKey: it.imageKey,
+        soundKey: it.soundKey,
       });
     }
   }
@@ -1332,7 +1353,7 @@
       method: 'POST',
       body: JSON.stringify({
         section, label, parentId: parentId ?? null, order: order ?? Date.now(),
-        imageUrl: up?.url || null, imageKey: up?.key || null,
+        imageKey: up?.key || null,
       }),
     });
     const local = { ...saved };
@@ -1347,7 +1368,7 @@
     if (label !== undefined) body.label = label;
     if (parentId !== undefined) body.parentId = parentId;
     if (order !== undefined) body.order = order;
-    if (up) { body.imageUrl = up.url; body.imageKey = up.key; }
+    if (up) { body.imageKey = up.key; }
     const saved = await apiJSON('/api/categories?id=' + old.id, {
       method: 'PUT',
       body: JSON.stringify(body),
@@ -1385,8 +1406,8 @@
       body: JSON.stringify({
         section, categoryId: categoryId ?? null, label,
         order: order ?? Date.now(), pinned: !!pinned,
-        imageUrl: upImg?.url || null, imageKey: upImg?.key || null,
-        soundUrl: upSnd?.url || null, soundKey: upSnd?.key || null,
+        imageKey: upImg?.key || null,
+        soundKey: upSnd?.key || null,
       }),
     });
     const local = { ...saved };
@@ -1404,8 +1425,8 @@
     if (categoryId !== undefined) body.categoryId = categoryId;
     if (order !== undefined) body.order = order;
     if (pinned !== undefined) body.pinned = !!pinned;
-    if (upImg) { body.imageUrl = upImg.url; body.imageKey = upImg.key; }
-    if (upSnd) { body.soundUrl = upSnd.url; body.soundKey = upSnd.key; }
+    if (upImg) { body.imageKey = upImg.key; }
+    if (upSnd) { body.soundKey = upSnd.key; }
     const saved = await apiJSON('/api/items?id=' + old.id, {
       method: 'PUT',
       body: JSON.stringify(body),
