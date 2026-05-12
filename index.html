@@ -89,8 +89,10 @@
     border-bottom: 2px solid #eef1f6;
     max-height: 34%;
     overflow-y: auto;
-    scrollbar-width: thin;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
+  .tab-strip::-webkit-scrollbar { width: 0; height: 0; display: none; }
   .tab-strip .tile-wrap.category { width: 64px; }
   body.hide-labels .tab-strip .tile-wrap.category { width: 56px; }
   .tab-strip .tile-add-cat { width: 64px; aspect-ratio: 1; min-height: 0; padding: 2px; }
@@ -201,8 +203,10 @@
     padding: 12px;
     overflow-y: auto;
     min-height: 0;
-    scrollbar-width: thin;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
+  .items-grid::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
   .section-footer {
     flex: 0 0 auto;
@@ -686,6 +690,10 @@
     <div class="checkbox-row">
       <input type="checkbox" id="cat-keep-aspect">
       <label for="cat-keep-aspect">Keep original image ratio (don't crop)</label>
+    </div>
+    <div class="checkbox-row" id="cat-apply-items-row" style="display:none;">
+      <input type="checkbox" id="cat-apply-items">
+      <label for="cat-apply-items">Also apply this ratio setting to every item &amp; subcategory inside</label>
     </div>
     <div class="error" id="cat-error"></div>
     <div class="button-row">
@@ -1742,6 +1750,8 @@
     document.getElementById('cat-label').value = cat?.label || '';
     document.getElementById('cat-image').value = '';
     document.getElementById('cat-keep-aspect').checked = !!cat?.keepAspect;
+    document.getElementById('cat-apply-items').checked = false;
+    document.getElementById('cat-apply-items-row').style.display = cat ? 'flex' : 'none';
     const cist = document.getElementById('cat-image-status');
     cist.textContent = cat?.image ? 'Current image will be kept' : 'No image selected';
     cist.className = 'file-status' + (cat?.image ? ' has-file' : '');
@@ -1783,6 +1793,20 @@
           image: pendingCatImage,
           keepAspect,
         });
+        if (document.getElementById('cat-apply-items').checked) {
+          saveBtn.textContent = 'Applying…';
+          const allCats = await getAllCats(editingCatSection);
+          const subtree = new Set(descendantCatIds(allCats, editingCat.id));
+          for (const c of allCats) {
+            if (subtree.has(c.id) && c.id !== editingCat.id && !!c.keepAspect !== keepAspect) {
+              await serverUpdateCategory(c, { keepAspect });
+            }
+          }
+          const items = (await getAllItems(editingCatSection)).filter(i => subtree.has(i.categoryId));
+          for (const it of items) {
+            if (!!it.keepAspect !== keepAspect) await serverUpdateItem(it, { keepAspect });
+          }
+        }
       } else {
         const saved = await serverCreateCategory({
           section: editingCatSection,
