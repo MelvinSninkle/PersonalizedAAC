@@ -848,7 +848,8 @@
   }
   // Applies the chrome-level bits (label hiding, section visibility, column counts).
   function applyDisplay() {
-    document.body.classList.toggle('hide-labels', display.hideLabels);
+    // Labels always show in edit mode so the parent can see what they're editing.
+    document.body.classList.toggle('hide-labels', display.hideLabels && !editMode);
     const visibleFrs = SECTIONS
       .filter(s => display.sectionVisible[s])
       .map(s => `${display.tilesAcross[s]}fr`);
@@ -1391,6 +1392,7 @@
     document.body.classList.toggle('edit-mode', on);
     document.getElementById('login-btn').textContent = on ? 'Logout' : 'Login';
     document.getElementById('mode-status').textContent = on ? 'Edit mode' : '';
+    applyDisplay();   // re-evaluate label hiding now that editMode changed
     renderAll();
   }
 
@@ -1512,6 +1514,7 @@
       body: JSON.stringify(body),
     });
     const local = { ...old, ...saved };
+    if (order === undefined) local.order = old.order;   // an edit must never re-position the chip
     if (image instanceof Blob) local.image = image;
     clearURLs('c', old.id);
     await putCat(local);
@@ -1572,6 +1575,7 @@
       body: JSON.stringify(body),
     });
     const local = { ...old, ...saved };
+    if (order === undefined) local.order = old.order;   // an edit must never re-position the tile
     if (image instanceof Blob) local.image = image;
     if (sound instanceof Blob) local.sound = sound;
     clearURLs('i', old.id);
