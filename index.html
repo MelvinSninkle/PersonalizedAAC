@@ -112,13 +112,17 @@
   .subcat-row {
     flex: 0 0 auto;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
     background: #f7f9fc;
     border-bottom: 1px solid #eef1f6;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
+  .subcat-row::-webkit-scrollbar { width: 0; height: 0; display: none; }
   .subcat-row:empty { display: none; }
   .subcat-tile {
     flex: 0 0 auto;
@@ -219,16 +223,20 @@
 
   /* Scrollbars are visible only in edit mode (kids never see them). */
   body.edit-mode .items-grid,
-  body.edit-mode .tab-strip {
+  body.edit-mode .tab-strip,
+  body.edit-mode .subcat-row {
     scrollbar-width: thin;
     -ms-overflow-style: auto;
   }
   body.edit-mode .items-grid::-webkit-scrollbar,
-  body.edit-mode .tab-strip::-webkit-scrollbar { width: 10px; height: 10px; display: block; }
+  body.edit-mode .tab-strip::-webkit-scrollbar,
+  body.edit-mode .subcat-row::-webkit-scrollbar { width: 10px; height: 10px; display: block; }
   body.edit-mode .items-grid::-webkit-scrollbar-thumb,
-  body.edit-mode .tab-strip::-webkit-scrollbar-thumb { background: #c2c8d0; border-radius: 5px; }
+  body.edit-mode .tab-strip::-webkit-scrollbar-thumb,
+  body.edit-mode .subcat-row::-webkit-scrollbar-thumb { background: #c2c8d0; border-radius: 5px; }
   body.edit-mode .items-grid::-webkit-scrollbar-track,
-  body.edit-mode .tab-strip::-webkit-scrollbar-track { background: transparent; }
+  body.edit-mode .tab-strip::-webkit-scrollbar-track,
+  body.edit-mode .subcat-row::-webkit-scrollbar-track { background: transparent; }
 
   .section-footer {
     flex: 0 0 auto;
@@ -1329,12 +1337,20 @@
         if (editMode) attachDrag(tile);
         subsEl.appendChild(tile);
       });
-      const addSub = document.createElement('div');
-      addSub.className = 'add-subcat-tile';
-      addSub.textContent = '+ Sub';
-      addSub.title = 'Add subcategory';
-      addSub.addEventListener('click', () => openCatModal(section, null, activeCat.id));
-      subsEl.appendChild(addSub);
+      if (editMode) {
+        const addSub = document.createElement('div');
+        addSub.className = 'add-subcat-tile';
+        addSub.textContent = '+ Sub';
+        addSub.title = 'Add one subcategory';
+        addSub.addEventListener('click', () => openCatModal(section, null, activeCat.id));
+        subsEl.appendChild(addSub);
+        const addSubBulk = document.createElement('div');
+        addSubBulk.className = 'add-subcat-tile';
+        addSubBulk.textContent = '+ Bulk';
+        addSubBulk.title = 'Bulk-add a subcategory with items';
+        addSubBulk.addEventListener('click', () => openBulkModal(section, activeCat.id, activeCat.label));
+        subsEl.appendChild(addSubBulk);
+      }
     }
 
     // -------- Items: one wrapping grid that scrolls as a block --------
@@ -1890,6 +1906,7 @@
   // ---- Bulk add modal ----
   const bulkModal = document.getElementById('bulk-modal');
   let bulkSection = null;
+  let bulkParentId = null;
   let bulkItems = [];
   let bulkIconIndex = 0;
 
@@ -1975,11 +1992,18 @@
     return added;
   }
 
-  function openBulkModal(section) {
+  function openBulkModal(section, parentId = null, parentLabel = '') {
     bulkSection = section;
+    bulkParentId = parentId;
     clearBulkPreviews();
-    document.getElementById('bulk-modal-title').textContent = `Bulk Add Category in ${section}`;
-    document.getElementById('bulk-modal-context').textContent = '';
+    const isSub = parentId != null;
+    document.getElementById('bulk-modal-title').textContent = isSub
+      ? `Bulk Add Subcategory in "${parentLabel}"`
+      : `Bulk Add Category in ${section}`;
+    document.getElementById('bulk-modal-context').textContent = isSub
+      ? `New subcategory created inside "${parentLabel}".`
+      : '';
+    document.getElementById('bulk-save').textContent = isSub ? 'Create Subcategory & Items' : 'Create Category & Items';
     document.getElementById('bulk-cat-label').value = '';
     document.getElementById('bulk-item-images').value = '';
     document.getElementById('bulk-folder-input').value = '';
@@ -2042,13 +2066,14 @@
     saveBtn.disabled = true;
     const prevSaveText = saveBtn.textContent;
     saveBtn.textContent = 'Saving…';
-    progEl.textContent = 'Creating category…';
+    progEl.textContent = bulkParentId != null ? 'Creating subcategory…' : 'Creating category…';
 
     let newCatId;
     try {
       const savedCat = await serverCreateCategory({
         section: bulkSection,
         label,
+        parentId: bulkParentId,
         image: catImage,
         keepAspect,
         order: Date.now(),
