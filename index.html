@@ -1284,7 +1284,7 @@
         const tile = makeTile({
           kind: 'c', id: cat.id, image: cat.image, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
           label: cat.label, isCategory: true, isActive,
-          onClick: () => { if (cat.id !== topAncestorId) { activeCategoryId[section] = cat.id; renderSection(section); } },
+          onClick: () => { activeCategoryId[section] = cat.id; renderSection(section); },
           onEdit: () => openCatModal(section, cat),
         });
         tile.dataset.dragKind = 'cat-top';
@@ -1301,21 +1301,17 @@
     subsEl.innerHTML = '';
 
     if (activeCat) {
-      if (activeCat.parentId != null) {
-        const parent = cats.find(c => c.id === activeCat.parentId);
-        const back = document.createElement('button');
-        back.type = 'button';
-        back.className = 'back-tile';
-        back.textContent = parent ? `← ${parent.label}` : '← Back';
-        back.addEventListener('click', () => { activeCategoryId[section] = activeCat.parentId; renderSection(section); });
-        subsEl.appendChild(back);
-      }
+      // Show siblings of the active category (or its children if it's
+      // top-level) and highlight the active one. No text "back" button —
+      // navigation stays fully visual; the parent category is reachable
+      // again by tapping its picture chip in the strip above.
+      const subParentId = activeCat.parentId ?? activeCat.id;
       const subs = cats
-        .filter(c => c.parentId === activeCat.id)
+        .filter(c => c.parentId === subParentId)
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       subs.forEach(sub => {
         const tile = document.createElement('div');
-        tile.className = 'subcat-tile';
+        tile.className = 'subcat-tile' + (sub.id === activeCat.id ? ' active' : '');
         const sq = document.createElement('div');
         sq.className = 'sq';
         applyImage(sq, 'c', sub.id, sub.image, sub.imageKey, sub.keepAspect);
@@ -1333,22 +1329,25 @@
         tile.dataset.dragKind = 'cat-sub';
         tile.dataset.entityId = sub.id;
         tile.dataset.section = section;
-        tile.dataset.parentId = activeCat.id;
+        tile.dataset.parentId = subParentId;
         if (editMode) attachDrag(tile);
         subsEl.appendChild(tile);
       });
       if (editMode) {
+        // New subcategories land as siblings of whatever's selected.
+        const addParentId = activeCat.parentId ?? activeCat.id;
+        const addParentLabel = (cats.find(c => c.id === addParentId) || activeCat).label;
         const addSub = document.createElement('div');
         addSub.className = 'add-subcat-tile';
         addSub.textContent = '+ Sub';
         addSub.title = 'Add one subcategory';
-        addSub.addEventListener('click', () => openCatModal(section, null, activeCat.id));
+        addSub.addEventListener('click', () => openCatModal(section, null, addParentId));
         subsEl.appendChild(addSub);
         const addSubBulk = document.createElement('div');
         addSubBulk.className = 'add-subcat-tile';
         addSubBulk.textContent = '+ Bulk';
         addSubBulk.title = 'Bulk-add a subcategory with items';
-        addSubBulk.addEventListener('click', () => openBulkModal(section, activeCat.id, activeCat.label));
+        addSubBulk.addEventListener('click', () => openBulkModal(section, addParentId, addParentLabel));
         subsEl.appendChild(addSubBulk);
       }
     }
