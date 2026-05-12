@@ -765,6 +765,7 @@
       <span>Verbs</span><select id="disp-across-verbs" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
     </div>
     <div class="button-row">
+      <button class="secondary" id="display-reset">Reset to defaults</button>
       <button class="primary" id="display-done">Done</button>
     </div>
   </div>
@@ -2262,7 +2263,7 @@
     }
     el.value = String(clampAcross(value));
   }
-  function openDisplayModal() {
+  function populateDisplayModal() {
     document.getElementById('disp-hide-labels').checked = display.hideLabels;
     document.getElementById('disp-show-people').checked = display.sectionVisible.people;
     document.getElementById('disp-show-nouns').checked  = display.sectionVisible.nouns;
@@ -2270,11 +2271,16 @@
     fillAcrossSelect(document.getElementById('disp-across-people'), display.tilesAcross.people);
     fillAcrossSelect(document.getElementById('disp-across-nouns'),  display.tilesAcross.nouns);
     fillAcrossSelect(document.getElementById('disp-across-verbs'),  display.tilesAcross.verbs);
-    displayModal.classList.add('show');
   }
+  function openDisplayModal() { populateDisplayModal(); displayModal.classList.add('show'); }
   function commitDisplay() { saveDisplay(); applyDisplay(); }
   document.getElementById('display-btn').addEventListener('click', openDisplayModal);
   document.getElementById('display-done').addEventListener('click', () => displayModal.classList.remove('show'));
+  document.getElementById('display-reset').addEventListener('click', () => {
+    display = structuredClone(DISPLAY_DEFAULTS);
+    commitDisplay();
+    populateDisplayModal();
+  });
   document.getElementById('disp-hide-labels').addEventListener('change', (e) => { display.hideLabels = e.target.checked; commitDisplay(); });
   for (const s of SECTIONS) {
     document.getElementById(`disp-show-${s}`).addEventListener('change', (e) => { display.sectionVisible[s] = e.target.checked; commitDisplay(); });
