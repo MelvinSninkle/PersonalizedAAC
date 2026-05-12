@@ -54,7 +54,7 @@
 
   main {
     display: grid;
-    grid-template-columns: 1fr 4fr 2fr;
+    grid-template-columns: var(--main-cols, 2fr 4fr 3fr);
     gap: 12px;
     padding: 12px;
     height: calc(100% - 64px);
@@ -79,76 +79,91 @@
     letter-spacing: .5px;
   }
 
+  /* Category chip strip — small tiles, wraps so ALL top-level cats show */
   .tab-strip {
     flex: 0 0 auto;
-    display: grid;
-    gap: 12px;
-    padding: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px;
     border-bottom: 2px solid #eef1f6;
+    max-height: 34%;
+    overflow-y: auto;
+    scrollbar-width: thin;
   }
-  .aac-section[data-section="people"] .tab-strip { grid-template-columns: 1fr; }
-  .aac-section[data-section="nouns"]  .tab-strip { grid-template-columns: repeat(4, 1fr); }
-  .aac-section[data-section="verbs"]  .tab-strip { grid-template-columns: repeat(2, 1fr); }
+  .tab-strip .tile-wrap.category { width: 64px; }
+  body.hide-labels .tab-strip .tile-wrap.category { width: 56px; }
+  .tab-strip .tile-add-cat { width: 64px; aspect-ratio: 1; min-height: 0; padding: 2px; }
+  .tab-strip .tile-add-cat .lbl { display: none; }
+  .tab-strip .tile-add-cat .plus { font-size: 30px; }
 
+  /* Subcategory line — same small footprint as category chips */
   .subcat-row {
     flex: 0 0 auto;
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
-    padding: 8px 12px;
-    overflow-x: auto;
+    padding: 8px 10px;
+    background: #f7f9fc;
     border-bottom: 1px solid #eef1f6;
-    scrollbar-width: thin;
   }
   .subcat-row:empty { display: none; }
   .subcat-tile {
     flex: 0 0 auto;
-    width: 84px;
-    background: #f4f6fa;
+    width: 64px;
+    background: #fff;
     border: 1px solid #dde2e8;
     border-radius: 8px;
-    padding: 6px;
+    padding: 4px;
     cursor: pointer;
     text-align: center;
     position: relative;
     user-select: none;
   }
-  .subcat-tile:hover { background: #eaeef4; }
+  .subcat-tile.active { border-color: #4a90e2; box-shadow: 0 0 0 2px rgba(74,144,226,.25); }
+  .subcat-tile:hover { background: #eef3fa; }
   .subcat-tile .sq {
     width: 100%;
     aspect-ratio: 1;
-    background: #fff center/cover no-repeat;
+    background: #f4f6fa center/cover no-repeat;
     border-radius: 4px;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
   }
   .subcat-tile .lbl {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: #333;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  body.hide-labels .subcat-tile .lbl { display: none; }
+  body.hide-labels .subcat-tile { width: 56px; }
   .subcat-tile .edit-badge {
-    position: absolute; top: 2px; right: 2px;
-    width: 22px; height: 22px;
+    position: absolute; top: 1px; right: 1px;
+    width: 18px; height: 18px;
     background: rgba(255,255,255,.95);
     border: 1px solid #cfd4db;
     border-radius: 50%;
-    font-size: 12px;
+    font-size: 10px;
     display: none;
     align-items: center;
     justify-content: center;
     cursor: pointer;
   }
   body.edit-mode .subcat-tile .edit-badge { display: flex; }
+  .subcat-tile.dragging { opacity: 0.4; }
+  .subcat-tile.drop-target { outline: 3px solid #4a90e2; outline-offset: 2px; }
   .back-tile {
     flex: 0 0 auto;
+    align-self: stretch;
     background: #2c3e50;
     color: white;
     border: none;
     border-radius: 8px;
-    padding: 0 14px;
-    font-size: 13px;
+    padding: 0 12px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
@@ -156,43 +171,38 @@
   .back-tile:hover { background: #1f2c3a; }
   .add-subcat-tile {
     flex: 0 0 auto;
-    width: 84px;
+    width: 64px;
+    aspect-ratio: 1;
     border: 2px dashed #b8c1cf;
     border-radius: 8px;
     background: #f9fafc;
     color: #557fa3;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     cursor: pointer;
     display: none;
     align-items: center;
     justify-content: center;
     text-align: center;
-    line-height: 1.2;
+    line-height: 1.15;
   }
   body.edit-mode .add-subcat-tile { display: flex; }
+  body.hide-labels .add-subcat-tile { width: 56px; }
   .add-subcat-tile:hover { background: #eef2f8; }
 
-  .items-cols {
+  /* One wrapping grid per section that scrolls as a single block.
+     Column count is set inline from the per-section "tiles across" pref. */
+  .items-grid {
     flex: 1;
     display: grid;
+    grid-template-columns: var(--items-cols, repeat(2, 1fr));
+    align-content: start;
     gap: 12px;
     padding: 12px;
-    min-height: 0;
-  }
-  .aac-section[data-section="people"] .items-cols { grid-template-columns: 1fr; }
-  .aac-section[data-section="nouns"]  .items-cols { grid-template-columns: repeat(4, 1fr); }
-  .aac-section[data-section="verbs"]  .items-cols { grid-template-columns: repeat(2, 1fr); }
-  .items-col {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
     overflow-y: auto;
     min-height: 0;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    scrollbar-width: thin;
   }
-  .items-col::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
   .section-footer {
     flex: 0 0 auto;
@@ -297,6 +307,8 @@
       0 2px 5px rgba(0,0,0,.15);
     transition: transform .08s ease, box-shadow .08s ease;
   }
+  .tile-square.contain { background-size: contain; }
+  .subcat-tile .sq.contain { background-size: contain; }
   .tile-wrap:active .tile-square {
     transform: scale(0.96);
     box-shadow:
@@ -314,6 +326,15 @@
     word-break: break-word;
     min-height: 22px;
   }
+  .tab-strip .tile-wrap.category .tile-label {
+    font-size: 10px;
+    padding: 2px 1px 0;
+    min-height: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  body.hide-labels .tile-label { display: none; }
 
   /* Category tabs */
   .tile-wrap.category .tile-square {
@@ -383,6 +404,9 @@
   }
   body.edit-mode .edit-badge { display: flex; }
   .edit-badge:hover { background: white; }
+  .tab-strip .edit-badge { width: 20px; height: 20px; font-size: 11px; top: 2px; left: 2px; }
+  .tab-strip .cycle-badge { width: 18px; height: 18px; font-size: 11px; bottom: 3px; right: 3px; }
+  .tab-strip .tile-wrap.category .tile-square { border-width: 2px; border-radius: 10px; }
 
   .tile-add {
     aspect-ratio: 1;
@@ -525,24 +549,12 @@
       padding: 8px;
       gap: 8px;
     }
-    .aac-section {
-      min-height: 80vh;
-    }
-    .aac-section h2 {
-      padding: 10px 14px;
-      font-size: 16px;
-    }
-    /* Nouns has 4 cols on desktop — too cramped on a phone. JS still
-       creates 4 column divs but CSS wraps them into a 2x2 grid. */
-    .aac-section[data-section="nouns"] .tab-strip,
-    .aac-section[data-section="nouns"] .items-cols {
-      grid-template-columns: repeat(2, 1fr);
-    }
-    .tab-strip { gap: 8px; padding: 8px; }
-    .items-cols { gap: 8px; padding: 8px; }
+    .aac-section { min-height: 70vh; }
+    .aac-section h2 { padding: 10px 14px; font-size: 16px; }
+    .items-grid { overflow-y: visible; gap: 8px; padding: 8px; }
+    .tab-strip { gap: 6px; padding: 8px; max-height: none; }
     .tile-label { font-size: 13px; }
     .tile-add { min-height: 56px; }
-    .tile-add-cat { min-height: 80px; }
     header { padding: 10px 14px; height: 56px; }
     header h1 { font-size: 17px; }
     header button { padding: 8px 12px; font-size: 13px; }
@@ -551,11 +563,6 @@
   }
   @media (max-width: 480px) {
     main { padding: 6px; gap: 6px; }
-    /* On very small phones, drop Verbs to single-col too */
-    .aac-section[data-section="verbs"] .tab-strip,
-    .aac-section[data-section="verbs"] .items-cols {
-      grid-template-columns: 1fr;
-    }
     .aac-section h2 { font-size: 15px; padding: 8px 12px; }
   }
 </style>
@@ -566,6 +573,7 @@
   <h1>Fletcher's World</h1>
   <div style="display:flex; align-items:center; gap:8px;">
     <span class="status" id="mode-status"></span>
+    <button id="display-btn" class="edit-only">⚙ Display</button>
     <button id="export-btn" class="edit-only">Export</button>
     <button id="import-btn" class="edit-only">Import</button>
     <button id="wipe-btn" class="edit-only">Wipe All</button>
@@ -579,7 +587,7 @@
     <h2>People</h2>
     <div class="tab-strip" id="tabs-people"></div>
     <div class="subcat-row" id="subs-people"></div>
-    <div class="items-cols" id="items-people"></div>
+    <div class="items-grid" id="items-people"></div>
     <div class="section-footer">
       <button class="add-cat-btn" data-section="people">+ New Category</button>
       <button class="add-bulk-btn" data-section="people">+ Bulk Add Category</button>
@@ -589,7 +597,7 @@
     <h2>Nouns</h2>
     <div class="tab-strip" id="tabs-nouns"></div>
     <div class="subcat-row" id="subs-nouns"></div>
-    <div class="items-cols" id="items-nouns"></div>
+    <div class="items-grid" id="items-nouns"></div>
     <div class="section-footer">
       <button class="add-cat-btn" data-section="nouns">+ New Category</button>
       <button class="add-bulk-btn" data-section="nouns">+ Bulk Add Category</button>
@@ -599,7 +607,7 @@
     <h2>Verbs</h2>
     <div class="tab-strip" id="tabs-verbs"></div>
     <div class="subcat-row" id="subs-verbs"></div>
-    <div class="items-cols" id="items-verbs"></div>
+    <div class="items-grid" id="items-verbs"></div>
     <div class="section-footer">
       <button class="add-cat-btn" data-section="verbs">+ New Category</button>
       <button class="add-bulk-btn" data-section="verbs">+ Bulk Add Category</button>
@@ -634,10 +642,25 @@
     <label for="item-sound">Sound</label>
     <input type="file" id="item-sound" accept="audio/*">
     <div class="file-status" id="item-sound-status">No sound selected</div>
-    <label for="item-phrase">Or generate from text</label>
+    <label for="item-phrase">Phrase to speak (tweak to fix pronunciation, e.g. "Cheery-ohs")</label>
     <input type="text" id="item-phrase" autocomplete="off" placeholder="e.g. Mom is here">
-    <div class="button-row" style="margin-top:6px;justify-content:flex-start;">
-      <button type="button" class="secondary" id="item-generate">Generate audio</button>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:6px;">
+      <div style="flex:1;min-width:140px;">
+        <label for="item-emotion" style="margin-top:0;">Emotion</label>
+        <select id="item-emotion" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+          <option value="default">Default</option>
+          <option value="happy">Happy</option>
+          <option value="sad">Sad</option>
+          <option value="excited">Excited</option>
+          <option value="calm">Calm</option>
+          <option value="whisper">Whisper</option>
+        </select>
+      </div>
+      <button type="button" class="secondary" id="item-generate" style="margin:0;padding:10px 16px;border-radius:6px;background:#e0e3e8;color:#333;border:none;font-weight:600;cursor:pointer;">Generate audio</button>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="item-keep-aspect">
+      <label for="item-keep-aspect">Keep original image ratio (don't crop)</label>
     </div>
     <div class="checkbox-row" id="pin-row" style="display:none;">
       <input type="checkbox" id="item-pin">
@@ -660,6 +683,10 @@
     <label for="cat-image">Category Image</label>
     <input type="file" id="cat-image" accept="image/*">
     <div class="file-status" id="cat-image-status">No image selected</div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="cat-keep-aspect">
+      <label for="cat-keep-aspect">Keep original image ratio (don't crop)</label>
+    </div>
     <div class="error" id="cat-error"></div>
     <div class="button-row">
       <button class="danger" id="cat-delete" style="display:none;">Delete</button>
@@ -686,6 +713,21 @@
       <input type="checkbox" id="bulk-tts" checked>
       <label for="bulk-tts">Generate audio for each item from its name</label>
     </div>
+    <div style="margin-top:6px;">
+      <label for="bulk-emotion" style="margin-top:0;">Emotion (applied to all items)</label>
+      <select id="bulk-emotion" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+        <option value="default">Default</option>
+        <option value="happy">Happy</option>
+        <option value="sad">Sad</option>
+        <option value="excited">Excited</option>
+        <option value="calm">Calm</option>
+        <option value="whisper">Whisper</option>
+      </select>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="bulk-keep-aspect">
+      <label for="bulk-keep-aspect">Keep original image ratio for category + all items</label>
+    </div>
     <div class="bulk-list" id="bulk-list">
       <div class="bulk-empty">No images selected yet</div>
     </div>
@@ -694,6 +736,37 @@
     <div class="button-row">
       <button class="secondary" id="bulk-cancel">Cancel</button>
       <button class="primary" id="bulk-save">Create Category & Items</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="display-modal">
+  <div class="modal">
+    <h3>Display Settings</h3>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">These are saved on this device only.</div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="disp-hide-labels">
+      <label for="disp-hide-labels">Hide all labels (more room for tiles)</label>
+    </div>
+    <label style="margin-top:18px;">Show sections</label>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-show-people"><label for="disp-show-people">People</label>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-show-nouns"><label for="disp-show-nouns">Nouns</label>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-show-verbs"><label for="disp-show-verbs">Verbs</label>
+    </div>
+    <label style="margin-top:18px;">Tiles across each section</label>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-top:6px;">
+      <span>People</span><select id="disp-across-people" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
+      <span>Nouns</span><select id="disp-across-nouns" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
+      <span>Verbs</span><select id="disp-across-verbs" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
+    </div>
+    <div class="button-row">
+      <button class="secondary" id="display-reset">Reset to defaults</button>
+      <button class="primary" id="display-done">Done</button>
     </div>
   </div>
 </div>
@@ -707,8 +780,54 @@
   const ITEMS = 'items';
   const CATS = 'categories';
   const SECTIONS = ['people', 'nouns', 'verbs'];
-  const COLUMN_COUNT = { people: 1, nouns: 4, verbs: 2 };
   const TOKEN_KEY = 'aacToken';
+  const DISPLAY_KEY = 'aacDisplay';
+  const ACROSS_MIN = 1, ACROSS_MAX = 8;
+
+  // Per-device display preferences (not synced — screen sizes differ).
+  const DISPLAY_DEFAULTS = {
+    hideLabels: false,
+    sectionVisible: { people: true, nouns: true, verbs: true },
+    tilesAcross: { people: 2, nouns: 4, verbs: 3 },
+  };
+  let display = structuredClone(DISPLAY_DEFAULTS);
+  function loadDisplay() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(DISPLAY_KEY) || '{}');
+      display = {
+        hideLabels: !!raw.hideLabels,
+        sectionVisible: {
+          people: raw.sectionVisible?.people !== false,
+          nouns:  raw.sectionVisible?.nouns  !== false,
+          verbs:  raw.sectionVisible?.verbs  !== false,
+        },
+        tilesAcross: {
+          people: clampAcross(raw.tilesAcross?.people ?? DISPLAY_DEFAULTS.tilesAcross.people),
+          nouns:  clampAcross(raw.tilesAcross?.nouns  ?? DISPLAY_DEFAULTS.tilesAcross.nouns),
+          verbs:  clampAcross(raw.tilesAcross?.verbs  ?? DISPLAY_DEFAULTS.tilesAcross.verbs),
+        },
+      };
+    } catch (_) { display = structuredClone(DISPLAY_DEFAULTS); }
+  }
+  function saveDisplay() { localStorage.setItem(DISPLAY_KEY, JSON.stringify(display)); }
+  function clampAcross(n) {
+    n = parseInt(n, 10);
+    if (!Number.isFinite(n)) return 2;
+    return Math.min(ACROSS_MAX, Math.max(ACROSS_MIN, n));
+  }
+  // Applies the chrome-level bits (label hiding, section visibility, column counts).
+  function applyDisplay() {
+    document.body.classList.toggle('hide-labels', display.hideLabels);
+    const visibleFrs = SECTIONS
+      .filter(s => display.sectionVisible[s])
+      .map(s => `${display.tilesAcross[s]}fr`);
+    document.querySelector('main').style.setProperty('--main-cols', visibleFrs.join(' ') || '1fr');
+    for (const s of SECTIONS) {
+      const sectionEl = document.querySelector(`.aac-section[data-section="${s}"]`);
+      sectionEl.style.display = display.sectionVisible[s] ? '' : 'none';
+      document.getElementById(`items-${s}`).style.setProperty('--items-cols', `repeat(${display.tilesAcross[s]}, 1fr)`);
+    }
+  }
 
   let db = null;
   let editMode = false;
@@ -780,7 +899,8 @@
 
   // Sets a tile's background image, using the in-memory blob if available,
   // otherwise kicking off an async fetch via /api/media.
-  function applyImage(el, kind, id, image, imageKey) {
+  function applyImage(el, kind, id, image, imageKey, keepAspect) {
+    el.classList.toggle('contain', !!keepAspect);
     const sync = getURL(kind, id, image, 'image', null);
     if (sync) { el.style.backgroundImage = `url("${sync}")`; return; }
     if (!imageKey) return;
@@ -908,7 +1028,7 @@
     });
   }
 
-  function makeTile({ kind, id, image, imageKey, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
+  function makeTile({ kind, id, image, imageKey, keepAspect, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
     const wrap = document.createElement('div');
     wrap.className = 'tile-wrap'
       + (isCategory ? ' category' : '')
@@ -916,7 +1036,7 @@
 
     const sq = document.createElement('div');
     sq.className = 'tile-square';
-    applyImage(sq, kind, id, image, imageKey);
+    applyImage(sq, kind, id, image, imageKey, keepAspect);
 
     if (pinned) {
       const pin = document.createElement('div');
@@ -965,68 +1085,88 @@
     return t;
   }
 
-  // ---- Item drag-and-drop reordering (edit mode only) ----
-  let draggedItemId = null;
-  let draggedSection = null;
+  // ---- Generalized drag-and-drop reordering (edit mode only) ----
+  // Draggables carry data-drag-kind ('item' | 'cat-top' | 'cat-sub'),
+  // data-entity-id, data-section, and (cat-sub only) data-parent-id.
+  let dragState = null;
 
-  function onItemDragStart(e) {
-    draggedItemId = parseInt(this.dataset.itemId);
-    draggedSection = this.dataset.section;
+  function dragGroupKey(el) {
+    return [el.dataset.dragKind, el.dataset.section, el.dataset.parentId ?? ''].join('|');
+  }
+  function onTileDragStart(e) {
+    dragState = { id: parseInt(this.dataset.entityId, 10), key: dragGroupKey(this) };
     this.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
-    try { e.dataTransfer.setData('text/plain', this.dataset.itemId); } catch (_) {}
+    try { e.dataTransfer.setData('text/plain', String(dragState.id)); } catch (_) {}
+    e.stopPropagation();
   }
-  function onItemDragOver(e) {
-    if (draggedItemId === null) return;
-    if (this.dataset.section !== draggedSection) return;
-    if (parseInt(this.dataset.itemId) === draggedItemId) return;
+  function isDropTarget(el) {
+    return dragState
+      && dragGroupKey(el) === dragState.key
+      && parseInt(el.dataset.entityId, 10) !== dragState.id;
+  }
+  function onTileDragOver(e) {
+    if (!isDropTarget(this)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     this.classList.add('drop-target');
   }
-  function onItemDragLeave() {
-    this.classList.remove('drop-target');
-  }
-  async function onItemDrop(e) {
+  function onTileDragLeave() { this.classList.remove('drop-target'); }
+  async function onTileDrop(e) {
     e.preventDefault();
     e.stopPropagation();
     this.classList.remove('drop-target');
-    const targetId = parseInt(this.dataset.itemId);
+    if (!isDropTarget(this)) return;
+    const targetId = parseInt(this.dataset.entityId, 10);
+    const draggedId = dragState.id;
+    const kind = this.dataset.dragKind;
     const section = this.dataset.section;
-    if (draggedItemId === null || targetId === draggedItemId) return;
-    await moveItemTo(draggedItemId, targetId, section);
+    const parentId = this.dataset.parentId != null ? parseInt(this.dataset.parentId, 10) : null;
+    if (kind === 'item')        await reorderEntities(section, 'item', null, draggedId, targetId);
+    else if (kind === 'cat-top') await reorderEntities(section, 'cat', null, draggedId, targetId);
+    else if (kind === 'cat-sub') await reorderEntities(section, 'cat', parentId, draggedId, targetId);
   }
-  function onItemDragEnd() {
+  function onTileDragEnd() {
     this.classList.remove('dragging');
     document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
-    draggedItemId = null;
-    draggedSection = null;
+    dragState = null;
+  }
+  function attachDrag(el) {
+    el.draggable = true;
+    el.addEventListener('dragstart', onTileDragStart);
+    el.addEventListener('dragover', onTileDragOver);
+    el.addEventListener('dragleave', onTileDragLeave);
+    el.addEventListener('drop', onTileDrop);
+    el.addEventListener('dragend', onTileDragEnd);
   }
 
-  async function moveItemTo(draggedId, targetId, section) {
-    const activeId = activeCategoryId[section];
-    if (!activeId) return;
-    const allItems = await getAllItems(section);
-    const inCat = sortItems(
-      allItems.filter(i => i.categoryId === activeId),
-      section
-    );
-    const draggedIdx = inCat.findIndex(i => i.id === draggedId);
-    const targetIdx  = inCat.findIndex(i => i.id === targetId);
-    if (draggedIdx < 0 || targetIdx < 0 || draggedIdx === targetIdx) return;
-    const [dragged] = inCat.splice(draggedIdx, 1);
-    const insertAt = draggedIdx < targetIdx ? targetIdx - 1 : targetIdx;
-    inCat.splice(insertAt, 0, dragged);
-    for (let i = 0; i < inCat.length; i++) {
+  // Reorder a sibling group and persist new `order` values.
+  // entityKind: 'item' (scoped to the active category) | 'cat' (scoped by parentId).
+  async function reorderEntities(section, entityKind, parentId, draggedId, targetId) {
+    let list;
+    if (entityKind === 'item') {
+      const activeId = activeCategoryId[section];
+      if (!activeId) return;
+      list = sortItems((await getAllItems(section)).filter(i => i.categoryId === activeId), section);
+    } else {
+      list = (await getAllCats(section))
+        .filter(c => (c.parentId ?? null) === (parentId ?? null))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    }
+    const di = list.findIndex(x => x.id === draggedId);
+    const ti = list.findIndex(x => x.id === targetId);
+    if (di < 0 || ti < 0 || di === ti) return;
+    const [moved] = list.splice(di, 1);
+    list.splice(di < ti ? ti - 1 : ti, 0, moved);
+    for (let i = 0; i < list.length; i++) {
       const newOrder = i * 1000;
-      if (inCat[i].order !== newOrder) {
-        try {
-          await serverUpdateItem(inCat[i], { order: newOrder });
-        } catch (err) {
-          // Fall back to local-only update if server is unreachable
-          inCat[i].order = newOrder;
-          await putItem(inCat[i]);
-        }
+      if (list[i].order === newOrder) continue;
+      try {
+        if (entityKind === 'item') await serverUpdateItem(list[i], { order: newOrder });
+        else await serverUpdateCategory(list[i], { order: newOrder });
+      } catch (_) {
+        list[i].order = newOrder;
+        if (entityKind === 'item') await putItem(list[i]); else await putCat(list[i]);
       }
     }
     await renderSection(section);
@@ -1053,11 +1193,13 @@
   }
 
   async function renderSection(section) {
-    const N = COLUMN_COUNT[section];
+    const N = display.tilesAcross[section];
     const cats = await getAllCats(section);
     const items = sortItems(await getAllItems(section), section);
 
-    const topCats = cats.filter(c => c.parentId == null);
+    const topCats = cats
+      .filter(c => c.parentId == null)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
     // Validate / default active category — must be a real cat in this section
     if (cats.length === 0) {
@@ -1071,26 +1213,20 @@
     const topAncestor = activeCat ? findTopAncestor(cats, activeCat.id) : null;
     const topAncestorId = topAncestor?.id ?? null;
 
-    // -------- Tab strip (top-level categories only) --------
+    // -------- Category chip strip --------
     const tabsEl = document.getElementById(`tabs-${section}`);
     tabsEl.innerHTML = '';
 
     if (section === 'people') {
-      // Single tab slot shows the active TOP-LEVEL ancestor; click cycles top-level cats
+      // People keeps a single cycling slot (kids see one face at a time).
       if (topCats.length === 0) {
         tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
       } else {
         const tabCat = topAncestor || topCats[0];
         const canCycle = topCats.length > 1;
         tabsEl.appendChild(makeTile({
-          kind: 'c',
-          id: tabCat.id,
-          image: tabCat.image,
-          imageKey: tabCat.imageKey,
-          label: tabCat.label,
-          isCategory: true,
-          isActive: true,
-          showCycleBadge: canCycle,
+          kind: 'c', id: tabCat.id, image: tabCat.image, imageKey: tabCat.imageKey, keepAspect: tabCat.keepAspect,
+          label: tabCat.label, isCategory: true, isActive: true, showCycleBadge: canCycle,
           onClick: () => {
             if (!canCycle) return;
             const idx = topCats.findIndex(c => c.id === topAncestorId);
@@ -1099,55 +1235,41 @@
           },
           onEdit: () => openCatModal(section, tabCat),
         }));
+        tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
       }
     } else {
-      // Nouns / Verbs: N tab slots showing top-level categories[0..N-1]
-      for (let i = 0; i < N; i++) {
-        const cat = topCats[i];
-        if (cat) {
-          const isActive = cat.id === topAncestorId;
-          tabsEl.appendChild(makeTile({
-            kind: 'c',
-            id: cat.id,
-            image: cat.image,
-            imageKey: cat.imageKey,
-            label: cat.label,
-            isCategory: true,
-            isActive,
-            onClick: () => {
-              if (cat.id !== topAncestorId) {
-                activeCategoryId[section] = cat.id;
-                renderSection(section);
-              }
-            },
-            onEdit: () => openCatModal(section, cat),
-          }));
-        } else {
-          tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
-        }
-      }
+      // Nouns / Verbs: every top-level category as a small, draggable chip.
+      topCats.forEach(cat => {
+        const isActive = cat.id === topAncestorId;
+        const tile = makeTile({
+          kind: 'c', id: cat.id, image: cat.image, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
+          label: cat.label, isCategory: true, isActive,
+          onClick: () => { if (cat.id !== topAncestorId) { activeCategoryId[section] = cat.id; renderSection(section); } },
+          onEdit: () => openCatModal(section, cat),
+        });
+        tile.dataset.dragKind = 'cat-top';
+        tile.dataset.entityId = cat.id;
+        tile.dataset.section = section;
+        if (editMode) attachDrag(tile);
+        tabsEl.appendChild(tile);
+      });
+      tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
     }
 
-    // -------- Subcategory row --------
+    // -------- Subcategory line (children of the active category) --------
     const subsEl = document.getElementById(`subs-${section}`);
     subsEl.innerHTML = '';
 
     if (activeCat) {
-      // Back tile if drilled into a subcategory
       if (activeCat.parentId != null) {
         const parent = cats.find(c => c.id === activeCat.parentId);
         const back = document.createElement('button');
         back.type = 'button';
         back.className = 'back-tile';
         back.textContent = parent ? `← ${parent.label}` : '← Back';
-        back.addEventListener('click', () => {
-          activeCategoryId[section] = activeCat.parentId;
-          renderSection(section);
-        });
+        back.addEventListener('click', () => { activeCategoryId[section] = activeCat.parentId; renderSection(section); });
         subsEl.appendChild(back);
       }
-
-      // Subcategories of the currently-viewed category
       const subs = cats
         .filter(c => c.parentId === activeCat.id)
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -1156,7 +1278,7 @@
         tile.className = 'subcat-tile';
         const sq = document.createElement('div');
         sq.className = 'sq';
-        applyImage(sq, 'c', sub.id, sub.image, sub.imageKey);
+        applyImage(sq, 'c', sub.id, sub.image, sub.imageKey, sub.keepAspect);
         const lbl = document.createElement('div');
         lbl.className = 'lbl';
         lbl.textContent = sub.label;
@@ -1167,25 +1289,26 @@
         eb.textContent = '✎';
         eb.addEventListener('click', (e) => { e.stopPropagation(); openCatModal(section, sub); });
         tile.appendChild(eb);
-        tile.addEventListener('click', () => {
-          activeCategoryId[section] = sub.id;
-          renderSection(section);
-        });
+        tile.addEventListener('click', () => { activeCategoryId[section] = sub.id; renderSection(section); });
+        tile.dataset.dragKind = 'cat-sub';
+        tile.dataset.entityId = sub.id;
+        tile.dataset.section = section;
+        tile.dataset.parentId = activeCat.id;
+        if (editMode) attachDrag(tile);
         subsEl.appendChild(tile);
       });
-
-      // + Add Subcategory tile (edit mode only — CSS controls visibility)
       const addSub = document.createElement('div');
       addSub.className = 'add-subcat-tile';
-      addSub.textContent = '+ Add\nSubcategory';
-      addSub.style.whiteSpace = 'pre-line';
+      addSub.textContent = '+ Sub';
+      addSub.title = 'Add subcategory';
       addSub.addEventListener('click', () => openCatModal(section, null, activeCat.id));
       subsEl.appendChild(addSub);
     }
 
-    // -------- Items grid --------
+    // -------- Items: one wrapping grid that scrolls as a block --------
     const itemsEl = document.getElementById(`items-${section}`);
     itemsEl.innerHTML = '';
+    itemsEl.style.setProperty('--items-cols', `repeat(${N}, 1fr)`);
 
     if (!activeId) {
       if (!editMode) {
@@ -1197,44 +1320,23 @@
       return;
     }
 
-    // Create N independently-scrolling column containers
-    const colEls = [];
-    for (let i = 0; i < N; i++) {
-      const col = document.createElement('div');
-      col.className = 'items-col';
-      itemsEl.appendChild(col);
-      colEls.push(col);
-    }
-
-    const activeItems = items.filter(i => i.categoryId === activeId);
-    activeItems.forEach((it, idx) => {
+    items.filter(i => i.categoryId === activeId).forEach(it => {
       const tile = makeTile({
-        kind: 'i',
-        id: it.id,
-        image: it.image,
-        imageKey: it.imageKey,
-        label: it.label,
-        pinned: it.pinned,
+        kind: 'i', id: it.id, image: it.image, imageKey: it.imageKey, keepAspect: it.keepAspect,
+        label: it.label, pinned: it.pinned,
         onClick: () => {
           if (editMode) openItemModal(section, activeId, it);
-          else if (it.sound) playSound(it);
+          else if (it.sound || it.soundKey) playSound(it);
         },
         onEdit: () => openItemModal(section, activeId, it),
       });
-      tile.dataset.itemId = it.id;
+      tile.dataset.dragKind = 'item';
+      tile.dataset.entityId = it.id;
       tile.dataset.section = section;
-      if (editMode) {
-        tile.draggable = true;
-        tile.addEventListener('dragstart', onItemDragStart);
-        tile.addEventListener('dragover', onItemDragOver);
-        tile.addEventListener('dragleave', onItemDragLeave);
-        tile.addEventListener('drop', onItemDrop);
-        tile.addEventListener('dragend', onItemDragEnd);
-      }
-      colEls[idx % N].appendChild(tile);
+      if (editMode) attachDrag(tile);
+      itemsEl.appendChild(tile);
     });
-    // + Add Item tile always at the bottom of column 0 (only visible in edit mode)
-    colEls[0].appendChild(makeAddItemTile(() => openItemModal(section, activeId, null)));
+    itemsEl.appendChild(makeAddItemTile(() => openItemModal(section, activeId, null)));
   }
 
   async function renderAll() {
@@ -1328,6 +1430,7 @@
         id: c.id, section: c.section, label: c.label,
         parentId: c.parentId, order: c.order,
         imageKey: c.imageKey,
+        keepAspect: !!c.keepAspect,
       });
     }
     for (const it of data.items) {
@@ -1336,6 +1439,7 @@
         order: it.order, pinned: !!it.pinned,
         imageKey: it.imageKey,
         soundKey: it.soundKey,
+        keepAspect: !!it.keepAspect,
       });
     }
   }
@@ -1348,13 +1452,14 @@
     return uploadBlob(blob, kind, ext);
   }
 
-  async function serverCreateCategory({ section, label, parentId, image, order }) {
+  async function serverCreateCategory({ section, label, parentId, image, keepAspect, order }) {
     const up = await uploadIfBlob('image', image, 'cat-image');
     const saved = await apiJSON('/api/categories', {
       method: 'POST',
       body: JSON.stringify({
         section, label, parentId: parentId ?? null, order: order ?? Date.now(),
         imageKey: up?.key || null,
+        keepAspect: !!keepAspect,
       }),
     });
     const local = { ...saved };
@@ -1363,12 +1468,13 @@
     return saved;
   }
 
-  async function serverUpdateCategory(old, { label, parentId, image, order }) {
+  async function serverUpdateCategory(old, { label, parentId, image, keepAspect, order }) {
     const up = await uploadIfBlob('image', image, 'cat-image');
     const body = {};
     if (label !== undefined) body.label = label;
     if (parentId !== undefined) body.parentId = parentId;
     if (order !== undefined) body.order = order;
+    if (keepAspect !== undefined) body.keepAspect = !!keepAspect;
     if (up) { body.imageKey = up.key; }
     const saved = await apiJSON('/api/categories?id=' + old.id, {
       method: 'PUT',
@@ -1399,7 +1505,7 @@
     }
   }
 
-  async function serverCreateItem({ section, categoryId, label, image, sound, order, pinned }) {
+  async function serverCreateItem({ section, categoryId, label, image, sound, keepAspect, order, pinned }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const saved = await apiJSON('/api/items', {
@@ -1409,6 +1515,7 @@
         order: order ?? Date.now(), pinned: !!pinned,
         imageKey: upImg?.key || null,
         soundKey: upSnd?.key || null,
+        keepAspect: !!keepAspect,
       }),
     });
     const local = { ...saved };
@@ -1418,7 +1525,7 @@
     return saved;
   }
 
-  async function serverUpdateItem(old, { label, categoryId, image, sound, order, pinned }) {
+  async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const body = {};
@@ -1426,6 +1533,7 @@
     if (categoryId !== undefined) body.categoryId = categoryId;
     if (order !== undefined) body.order = order;
     if (pinned !== undefined) body.pinned = !!pinned;
+    if (keepAspect !== undefined) body.keepAspect = !!keepAspect;
     if (upImg) { body.imageKey = upImg.key; }
     if (upSnd) { body.soundKey = upSnd.key; }
     const saved = await apiJSON('/api/items?id=' + old.id, {
@@ -1468,7 +1576,10 @@
     document.getElementById('item-label').value = item?.label || '';
     document.getElementById('item-image').value = '';
     document.getElementById('item-sound').value = '';
-    document.getElementById('item-phrase').value = '';
+    // Pre-fill phrase with current label so regeneration is a 1-edit flow
+    document.getElementById('item-phrase').value = item?.label || '';
+    document.getElementById('item-emotion').value = 'default';
+    document.getElementById('item-keep-aspect').checked = !!item?.keepAspect;
     const ist = document.getElementById('item-image-status');
     ist.textContent = item?.image ? 'Current image will be kept' : 'No image selected';
     ist.className = 'file-status' + (item?.image ? ' has-file' : '');
@@ -1515,10 +1626,11 @@
     status.textContent = 'Generating audio…';
     status.className = 'file-status';
     try {
+      const emotion = document.getElementById('item-emotion').value;
       const r = await apiFetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: phrase }),
+        body: JSON.stringify({ text: phrase, emotion }),
       });
       if (!r.ok) {
         const detail = await r.text();
@@ -1526,7 +1638,7 @@
       }
       const blob = await r.blob();
       pendingSound = blob;
-      status.textContent = `Generated: "${phrase}"`;
+      status.textContent = `Generated: "${phrase}"` + (emotion !== 'default' ? ` (${emotion})` : '');
       status.className = 'file-status has-file';
       const player = document.getElementById('audio-player');
       const url = URL.createObjectURL(blob);
@@ -1548,6 +1660,7 @@
   document.getElementById('item-save').addEventListener('click', async () => {
     const label = document.getElementById('item-label').value.trim();
     const pinned = document.getElementById('item-pin').checked;
+    const keepAspect = document.getElementById('item-keep-aspect').checked;
     const errEl = document.getElementById('item-error');
     errEl.textContent = '';
 
@@ -1565,6 +1678,7 @@
           label,
           image: pendingImage,
           sound: pendingSound,
+          keepAspect,
           pinned: editingItemSection === 'people' ? pinned : undefined,
         });
       } else {
@@ -1574,6 +1688,7 @@
           label,
           image: pendingImage,
           sound: pendingSound,
+          keepAspect,
           order: Date.now(),
           pinned: editingItemSection === 'people' ? pinned : false,
         });
@@ -1626,6 +1741,7 @@
     document.getElementById('cat-modal-title').textContent = title;
     document.getElementById('cat-label').value = cat?.label || '';
     document.getElementById('cat-image').value = '';
+    document.getElementById('cat-keep-aspect').checked = !!cat?.keepAspect;
     const cist = document.getElementById('cat-image-status');
     cist.textContent = cat?.image ? 'Current image will be kept' : 'No image selected';
     cist.className = 'file-status' + (cat?.image ? ' has-file' : '');
@@ -1649,6 +1765,7 @@
 
   document.getElementById('cat-save').addEventListener('click', async () => {
     const label = document.getElementById('cat-label').value.trim();
+    const keepAspect = document.getElementById('cat-keep-aspect').checked;
     const errEl = document.getElementById('cat-error');
     errEl.textContent = '';
     if (!label) { errEl.textContent = 'Please enter a category name'; return; }
@@ -1664,6 +1781,7 @@
         await serverUpdateCategory(editingCat, {
           label,
           image: pendingCatImage,
+          keepAspect,
         });
       } else {
         const saved = await serverCreateCategory({
@@ -1671,6 +1789,7 @@
           label,
           parentId: editingCatParentId,
           image: pendingCatImage,
+          keepAspect,
           order: Date.now(),
         });
         activeCategoryId[editingCatSection] = saved.id;
@@ -1814,6 +1933,8 @@
     document.getElementById('bulk-item-images').value = '';
     document.getElementById('bulk-folder-input').value = '';
     document.getElementById('bulk-tts').checked = true;
+    document.getElementById('bulk-emotion').value = 'default';
+    document.getElementById('bulk-keep-aspect').checked = false;
     document.getElementById('bulk-progress').textContent = '';
     document.getElementById('bulk-error').textContent = '';
     renderBulkList();
@@ -1852,6 +1973,8 @@
   document.getElementById('bulk-save').addEventListener('click', async () => {
     const label = document.getElementById('bulk-cat-label').value.trim();
     const useTts = document.getElementById('bulk-tts').checked;
+    const emotion = document.getElementById('bulk-emotion').value;
+    const keepAspect = document.getElementById('bulk-keep-aspect').checked;
     const errEl = document.getElementById('bulk-error');
     const progEl = document.getElementById('bulk-progress');
     const saveBtn = document.getElementById('bulk-save');
@@ -1876,6 +1999,7 @@
         section: bulkSection,
         label,
         image: catImage,
+        keepAspect,
         order: Date.now(),
       });
       newCatId = savedCat.id;
@@ -1897,7 +2021,7 @@
           const r = await apiFetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: it.label.trim() }),
+            body: JSON.stringify({ text: it.label.trim(), emotion }),
           });
           if (!r.ok) {
             const detail = await r.text();
@@ -1915,6 +2039,7 @@
           label: it.label.trim(),
           image: it.file,
           sound: sound || undefined,
+          keepAspect,
           order: Date.now() + i,
         });
       } catch (err) {
@@ -1962,7 +2087,7 @@
     const out = { version: 1, exportedAt: new Date().toISOString(), categories: [], items: [] };
     for (const section of SECTIONS) {
       for (const c of await getAllCats(section)) {
-        const exp = { id: c.id, section: c.section, label: c.label, order: c.order ?? 0, parentId: c.parentId ?? null };
+        const exp = { id: c.id, section: c.section, label: c.label, order: c.order ?? 0, parentId: c.parentId ?? null, keepAspect: !!c.keepAspect };
         if (c.image) exp.image = await blobToDataURL(c.image);
         out.categories.push(exp);
       }
@@ -1970,6 +2095,7 @@
         const exp = {
           id: it.id, section: it.section, categoryId: it.categoryId,
           label: it.label, order: it.order ?? 0, pinned: !!it.pinned,
+          keepAspect: !!it.keepAspect,
         };
         if (it.image) exp.image = await blobToDataURL(it.image);
         if (it.sound) exp.sound = await blobToDataURL(it.sound);
@@ -2045,13 +2171,14 @@
       if (useCloud) {
         const saved = await serverCreateCategory({
           section: c.section, label: c.label, order: c.order ?? Date.now(),
-          parentId: mappedParent, image,
+          parentId: mappedParent, image, keepAspect: !!c.keepAspect,
         });
         catIdMap.set(c.id, saved.id);
       } else {
         const newId = await putCat({
           section: c.section, label: c.label, order: c.order ?? Date.now(),
           parentId: mappedParent, image: image || undefined,
+          keepAspect: !!c.keepAspect,
         });
         catIdMap.set(c.id, newId);
       }
@@ -2064,13 +2191,14 @@
         await serverCreateItem({
           section: it.section, categoryId: mappedCat, label: it.label,
           order: it.order ?? Date.now(), pinned: !!it.pinned,
-          image, sound,
+          image, sound, keepAspect: !!it.keepAspect,
         });
       } else {
         await putItem({
           section: it.section, categoryId: mappedCat, label: it.label,
           order: it.order ?? Date.now(), pinned: !!it.pinned,
           image: image || undefined, sound: sound || undefined,
+          keepAspect: !!it.keepAspect,
         });
       }
     }
@@ -2123,9 +2251,47 @@
   }
   document.getElementById('wipe-btn').addEventListener('click', () => { wipeAll(); });
 
+  // ---- Display Settings modal ----
+  const displayModal = document.getElementById('display-modal');
+  function fillAcrossSelect(el, value) {
+    el.innerHTML = '';
+    for (let n = ACROSS_MIN; n <= ACROSS_MAX; n++) {
+      const opt = document.createElement('option');
+      opt.value = String(n);
+      opt.textContent = String(n);
+      el.appendChild(opt);
+    }
+    el.value = String(clampAcross(value));
+  }
+  function populateDisplayModal() {
+    document.getElementById('disp-hide-labels').checked = display.hideLabels;
+    document.getElementById('disp-show-people').checked = display.sectionVisible.people;
+    document.getElementById('disp-show-nouns').checked  = display.sectionVisible.nouns;
+    document.getElementById('disp-show-verbs').checked  = display.sectionVisible.verbs;
+    fillAcrossSelect(document.getElementById('disp-across-people'), display.tilesAcross.people);
+    fillAcrossSelect(document.getElementById('disp-across-nouns'),  display.tilesAcross.nouns);
+    fillAcrossSelect(document.getElementById('disp-across-verbs'),  display.tilesAcross.verbs);
+  }
+  function openDisplayModal() { populateDisplayModal(); displayModal.classList.add('show'); }
+  function commitDisplay() { saveDisplay(); applyDisplay(); }
+  document.getElementById('display-btn').addEventListener('click', openDisplayModal);
+  document.getElementById('display-done').addEventListener('click', () => displayModal.classList.remove('show'));
+  document.getElementById('display-reset').addEventListener('click', () => {
+    display = structuredClone(DISPLAY_DEFAULTS);
+    commitDisplay();
+    populateDisplayModal();
+  });
+  document.getElementById('disp-hide-labels').addEventListener('change', (e) => { display.hideLabels = e.target.checked; commitDisplay(); });
+  for (const s of SECTIONS) {
+    document.getElementById(`disp-show-${s}`).addEventListener('change', (e) => { display.sectionVisible[s] = e.target.checked; commitDisplay(); });
+    document.getElementById(`disp-across-${s}`).addEventListener('change', (e) => { display.tilesAcross[s] = clampAcross(e.target.value); commitDisplay(); });
+  }
+
   // Init
   (async () => {
     try {
+      loadDisplay();
+      applyDisplay();
       db = await openDB();
       await migrateLegacyItems();
       await renderAll();

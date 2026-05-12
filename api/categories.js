@@ -22,14 +22,14 @@ export default async function handler(req, res) {
 }
 
 async function create(req, res, db) {
-  const { section, label, parentId, imageUrl, imageKey, order } = req.body || {};
+  const { section, label, parentId, imageUrl, imageKey, keepAspect, order } = req.body || {};
   if (!section || !label) {
     res.status(400).json({ error: 'section and label required' });
     return;
   }
   const rows = await db`
-    INSERT INTO categories (section, label, parent_id, image_url, image_key, display_order, updated_at)
-    VALUES (${section}, ${label}, ${parentId ?? null}, ${imageUrl ?? null}, ${imageKey ?? null}, ${order ?? Date.now()}, NOW())
+    INSERT INTO categories (section, label, parent_id, image_url, image_key, keep_aspect, display_order, updated_at)
+    VALUES (${section}, ${label}, ${parentId ?? null}, ${imageUrl ?? null}, ${imageKey ?? null}, ${!!keepAspect}, ${order ?? Date.now()}, NOW())
     RETURNING *
   `;
   res.status(200).json(rowToCategory(rows[0]));
@@ -38,7 +38,7 @@ async function create(req, res, db) {
 async function update(req, res, db) {
   const id = parseInt(req.query.id, 10);
   if (!id) { res.status(400).json({ error: 'id required' }); return; }
-  const { label, parentId, imageUrl, imageKey, order } = req.body || {};
+  const { label, parentId, imageUrl, imageKey, keepAspect, order } = req.body || {};
 
   // Load current row so we can know which old blob to delete if image changed
   const current = await db`SELECT * FROM categories WHERE id = ${id}`;
@@ -51,6 +51,7 @@ async function update(req, res, db) {
       parent_id     = ${parentId === undefined ? old.parent_id : parentId},
       image_url     = COALESCE(${imageUrl ?? null}, image_url),
       image_key     = COALESCE(${imageKey ?? null}, image_key),
+      keep_aspect   = ${keepAspect === undefined ? old.keep_aspect : !!keepAspect},
       display_order = COALESCE(${order ?? null},   display_order),
       updated_at    = NOW()
     WHERE id = ${id}
