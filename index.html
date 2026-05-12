@@ -208,6 +208,19 @@
   }
   .items-grid::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
+  /* Scrollbars are visible only in edit mode (kids never see them). */
+  body.edit-mode .items-grid,
+  body.edit-mode .tab-strip {
+    scrollbar-width: thin;
+    -ms-overflow-style: auto;
+  }
+  body.edit-mode .items-grid::-webkit-scrollbar,
+  body.edit-mode .tab-strip::-webkit-scrollbar { width: 10px; height: 10px; display: block; }
+  body.edit-mode .items-grid::-webkit-scrollbar-thumb,
+  body.edit-mode .tab-strip::-webkit-scrollbar-thumb { background: #c2c8d0; border-radius: 5px; }
+  body.edit-mode .items-grid::-webkit-scrollbar-track,
+  body.edit-mode .tab-strip::-webkit-scrollbar-track { background: transparent; }
+
   .section-footer {
     flex: 0 0 auto;
     padding: 8px 12px 12px;
