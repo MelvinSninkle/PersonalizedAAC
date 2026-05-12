@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fletcher's World</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; }
   html, body {
@@ -28,7 +31,13 @@
     box-shadow: 0 2px 6px rgba(0,0,0,.15);
     height: 64px;
   }
-  header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+  header h1 {
+    margin: 0;
+    font-size: 27px;
+    font-weight: 600;
+    letter-spacing: .4px;
+    font-family: 'Fredoka', ui-rounded, 'SF Pro Rounded', 'Varela Round', system-ui, sans-serif;
+  }
   header .status { font-size: 13px; opacity: .85; margin-right: 12px; }
   header button {
     background: #ad1457;
@@ -89,8 +98,10 @@
     border-bottom: 2px solid #eef1f6;
     max-height: 34%;
     overflow-y: auto;
-    scrollbar-width: thin;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
+  .tab-strip::-webkit-scrollbar { width: 0; height: 0; display: none; }
   .tab-strip .tile-wrap.category { width: 64px; }
   body.hide-labels .tab-strip .tile-wrap.category { width: 56px; }
   .tab-strip .tile-add-cat { width: 64px; aspect-ratio: 1; min-height: 0; padding: 2px; }
@@ -101,13 +112,17 @@
   .subcat-row {
     flex: 0 0 auto;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
     background: #f7f9fc;
     border-bottom: 1px solid #eef1f6;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
+  .subcat-row::-webkit-scrollbar { width: 0; height: 0; display: none; }
   .subcat-row:empty { display: none; }
   .subcat-tile {
     flex: 0 0 auto;
@@ -201,8 +216,27 @@
     padding: 12px;
     overflow-y: auto;
     min-height: 0;
-    scrollbar-width: thin;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
+  .items-grid::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+  /* Scrollbars are visible only in edit mode (kids never see them). */
+  body.edit-mode .items-grid,
+  body.edit-mode .tab-strip,
+  body.edit-mode .subcat-row {
+    scrollbar-width: thin;
+    -ms-overflow-style: auto;
+  }
+  body.edit-mode .items-grid::-webkit-scrollbar,
+  body.edit-mode .tab-strip::-webkit-scrollbar,
+  body.edit-mode .subcat-row::-webkit-scrollbar { width: 10px; height: 10px; display: block; }
+  body.edit-mode .items-grid::-webkit-scrollbar-thumb,
+  body.edit-mode .tab-strip::-webkit-scrollbar-thumb,
+  body.edit-mode .subcat-row::-webkit-scrollbar-thumb { background: #c2c8d0; border-radius: 5px; }
+  body.edit-mode .items-grid::-webkit-scrollbar-track,
+  body.edit-mode .tab-strip::-webkit-scrollbar-track,
+  body.edit-mode .subcat-row::-webkit-scrollbar-track { background: transparent; }
 
   .section-footer {
     flex: 0 0 auto;
@@ -335,6 +369,7 @@
     text-overflow: ellipsis;
   }
   body.hide-labels .tile-label { display: none; }
+  body.hide-labels .aac-section h2 { display: none; }
 
   /* Category tabs */
   .tile-wrap.category .tile-square {
@@ -687,6 +722,10 @@
       <input type="checkbox" id="cat-keep-aspect">
       <label for="cat-keep-aspect">Keep original image ratio (don't crop)</label>
     </div>
+    <div class="checkbox-row" id="cat-apply-items-row" style="display:none;">
+      <input type="checkbox" id="cat-apply-items">
+      <label for="cat-apply-items">Also apply this ratio setting to every item &amp; subcategory inside</label>
+    </div>
     <div class="error" id="cat-error"></div>
     <div class="button-row">
       <button class="danger" id="cat-delete" style="display:none;">Delete</button>
@@ -746,7 +785,7 @@
     <div style="font-size:13px;color:#666;margin-bottom:8px;">These are saved on this device only.</div>
     <div class="checkbox-row">
       <input type="checkbox" id="disp-hide-labels">
-      <label for="disp-hide-labels">Hide all labels (more room for tiles)</label>
+      <label for="disp-hide-labels">Hide all labels — tiles, categories &amp; the People/Nouns/Verbs headers</label>
     </div>
     <label style="margin-top:18px;">Show sections</label>
     <div class="checkbox-row" style="margin-top:6px;">
@@ -817,7 +856,8 @@
   }
   // Applies the chrome-level bits (label hiding, section visibility, column counts).
   function applyDisplay() {
-    document.body.classList.toggle('hide-labels', display.hideLabels);
+    // Labels always show in edit mode so the parent can see what they're editing.
+    document.body.classList.toggle('hide-labels', display.hideLabels && !editMode);
     const visibleFrs = SECTIONS
       .filter(s => display.sectionVisible[s])
       .map(s => `${display.tilesAcross[s]}fr`);
@@ -1297,12 +1337,20 @@
         if (editMode) attachDrag(tile);
         subsEl.appendChild(tile);
       });
-      const addSub = document.createElement('div');
-      addSub.className = 'add-subcat-tile';
-      addSub.textContent = '+ Sub';
-      addSub.title = 'Add subcategory';
-      addSub.addEventListener('click', () => openCatModal(section, null, activeCat.id));
-      subsEl.appendChild(addSub);
+      if (editMode) {
+        const addSub = document.createElement('div');
+        addSub.className = 'add-subcat-tile';
+        addSub.textContent = '+ Sub';
+        addSub.title = 'Add one subcategory';
+        addSub.addEventListener('click', () => openCatModal(section, null, activeCat.id));
+        subsEl.appendChild(addSub);
+        const addSubBulk = document.createElement('div');
+        addSubBulk.className = 'add-subcat-tile';
+        addSubBulk.textContent = '+ Bulk';
+        addSubBulk.title = 'Bulk-add a subcategory with items';
+        addSubBulk.addEventListener('click', () => openBulkModal(section, activeCat.id, activeCat.label));
+        subsEl.appendChild(addSubBulk);
+      }
     }
 
     // -------- Items: one wrapping grid that scrolls as a block --------
@@ -1360,6 +1408,7 @@
     document.body.classList.toggle('edit-mode', on);
     document.getElementById('login-btn').textContent = on ? 'Logout' : 'Login';
     document.getElementById('mode-status').textContent = on ? 'Edit mode' : '';
+    applyDisplay();   // re-evaluate label hiding now that editMode changed
     renderAll();
   }
 
@@ -1481,6 +1530,7 @@
       body: JSON.stringify(body),
     });
     const local = { ...old, ...saved };
+    if (order === undefined) local.order = old.order;   // an edit must never re-position the chip
     if (image instanceof Blob) local.image = image;
     clearURLs('c', old.id);
     await putCat(local);
@@ -1541,6 +1591,7 @@
       body: JSON.stringify(body),
     });
     const local = { ...old, ...saved };
+    if (order === undefined) local.order = old.order;   // an edit must never re-position the tile
     if (image instanceof Blob) local.image = image;
     if (sound instanceof Blob) local.sound = sound;
     clearURLs('i', old.id);
@@ -1742,6 +1793,8 @@
     document.getElementById('cat-label').value = cat?.label || '';
     document.getElementById('cat-image').value = '';
     document.getElementById('cat-keep-aspect').checked = !!cat?.keepAspect;
+    document.getElementById('cat-apply-items').checked = false;
+    document.getElementById('cat-apply-items-row').style.display = cat ? 'flex' : 'none';
     const cist = document.getElementById('cat-image-status');
     cist.textContent = cat?.image ? 'Current image will be kept' : 'No image selected';
     cist.className = 'file-status' + (cat?.image ? ' has-file' : '');
@@ -1783,6 +1836,20 @@
           image: pendingCatImage,
           keepAspect,
         });
+        if (document.getElementById('cat-apply-items').checked) {
+          saveBtn.textContent = 'Applying…';
+          const allCats = await getAllCats(editingCatSection);
+          const subtree = new Set(descendantCatIds(allCats, editingCat.id));
+          for (const c of allCats) {
+            if (subtree.has(c.id) && c.id !== editingCat.id && !!c.keepAspect !== keepAspect) {
+              await serverUpdateCategory(c, { keepAspect });
+            }
+          }
+          const items = (await getAllItems(editingCatSection)).filter(i => subtree.has(i.categoryId));
+          for (const it of items) {
+            if (!!it.keepAspect !== keepAspect) await serverUpdateItem(it, { keepAspect });
+          }
+        }
       } else {
         const saved = await serverCreateCategory({
           section: editingCatSection,
@@ -1839,6 +1906,7 @@
   // ---- Bulk add modal ----
   const bulkModal = document.getElementById('bulk-modal');
   let bulkSection = null;
+  let bulkParentId = null;
   let bulkItems = [];
   let bulkIconIndex = 0;
 
@@ -1924,11 +1992,18 @@
     return added;
   }
 
-  function openBulkModal(section) {
+  function openBulkModal(section, parentId = null, parentLabel = '') {
     bulkSection = section;
+    bulkParentId = parentId;
     clearBulkPreviews();
-    document.getElementById('bulk-modal-title').textContent = `Bulk Add Category in ${section}`;
-    document.getElementById('bulk-modal-context').textContent = '';
+    const isSub = parentId != null;
+    document.getElementById('bulk-modal-title').textContent = isSub
+      ? `Bulk Add Subcategory in "${parentLabel}"`
+      : `Bulk Add Category in ${section}`;
+    document.getElementById('bulk-modal-context').textContent = isSub
+      ? `New subcategory created inside "${parentLabel}".`
+      : '';
+    document.getElementById('bulk-save').textContent = isSub ? 'Create Subcategory & Items' : 'Create Category & Items';
     document.getElementById('bulk-cat-label').value = '';
     document.getElementById('bulk-item-images').value = '';
     document.getElementById('bulk-folder-input').value = '';
@@ -1991,13 +2066,14 @@
     saveBtn.disabled = true;
     const prevSaveText = saveBtn.textContent;
     saveBtn.textContent = 'Saving…';
-    progEl.textContent = 'Creating category…';
+    progEl.textContent = bulkParentId != null ? 'Creating subcategory…' : 'Creating category…';
 
     let newCatId;
     try {
       const savedCat = await serverCreateCategory({
         section: bulkSection,
         label,
+        parentId: bulkParentId,
         image: catImage,
         keepAspect,
         order: Date.now(),
