@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fletcher's World</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; }
   html, body {
@@ -28,7 +31,13 @@
     box-shadow: 0 2px 6px rgba(0,0,0,.15);
     height: 64px;
   }
-  header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+  header h1 {
+    margin: 0;
+    font-size: 27px;
+    font-weight: 600;
+    letter-spacing: .4px;
+    font-family: 'Fredoka', ui-rounded, 'SF Pro Rounded', 'Varela Round', system-ui, sans-serif;
+  }
   header .status { font-size: 13px; opacity: .85; margin-right: 12px; }
   header button {
     background: #ad1457;
@@ -352,6 +361,7 @@
     text-overflow: ellipsis;
   }
   body.hide-labels .tile-label { display: none; }
+  body.hide-labels .aac-section h2 { display: none; }
 
   /* Category tabs */
   .tile-wrap.category .tile-square {
@@ -767,7 +777,7 @@
     <div style="font-size:13px;color:#666;margin-bottom:8px;">These are saved on this device only.</div>
     <div class="checkbox-row">
       <input type="checkbox" id="disp-hide-labels">
-      <label for="disp-hide-labels">Hide all labels (more room for tiles)</label>
+      <label for="disp-hide-labels">Hide all labels — tiles, categories &amp; the People/Nouns/Verbs headers</label>
     </div>
     <label style="margin-top:18px;">Show sections</label>
     <div class="checkbox-row" style="margin-top:6px;">
