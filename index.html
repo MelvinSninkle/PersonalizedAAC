@@ -600,6 +600,96 @@
     main { padding: 6px; gap: 6px; }
     .aac-section h2 { font-size: 15px; padding: 8px 12px; }
   }
+
+  /* ---- Organize view (Miller columns, edit-mode only, desktop-first) ---- */
+  .organize-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: #f4f6fa;
+    display: none;
+    flex-direction: column;
+  }
+  .organize-overlay.show { display: flex; }
+  .organize-overlay .org-header {
+    flex: 0 0 auto;
+    background: #c2185b;
+    color: white;
+    padding: 12px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 2px 6px rgba(0,0,0,.15);
+  }
+  .organize-overlay .org-header h2 {
+    margin: 0; font-size: 20px; font-weight: 600;
+    font-family: 'Fredoka', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+  }
+  .organize-overlay .org-header button {
+    background: #6a1b4d; color: white; border: none;
+    border-radius: 6px; padding: 8px 14px; font-size: 14px;
+    font-weight: 600; cursor: pointer;
+  }
+  .organize-overlay .org-header button:hover { background: #4a0d36; }
+  .org-columns {
+    flex: 1; display: flex; min-height: 0;
+    gap: 1px; background: #dde2e8;
+  }
+  .org-col {
+    flex: 1 1 0; min-width: 180px;
+    display: flex; flex-direction: column;
+    background: white; min-height: 0;
+  }
+  .org-col-header {
+    flex: 0 0 auto;
+    padding: 10px 12px;
+    font-size: 12px; font-weight: 700; color: #557fa3;
+    text-transform: uppercase; letter-spacing: .5px;
+    border-bottom: 1px solid #eef1f6;
+    background: #fafbfd;
+  }
+  .org-col-body {
+    flex: 1; overflow-y: auto; padding: 6px;
+    min-height: 0;
+  }
+  .org-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 8px; border-radius: 6px;
+    cursor: pointer; user-select: none;
+    position: relative;
+  }
+  .org-row:hover { background: #eef3fa; }
+  .org-row.selected { background: #dbe7f5; }
+  .org-row .org-thumb {
+    flex: 0 0 auto;
+    width: 32px; height: 32px;
+    border-radius: 4px;
+    background: #e9eef5 center/cover no-repeat;
+  }
+  .org-row .org-thumb.contain { background-size: contain; }
+  .org-row .org-label {
+    flex: 1; min-width: 0;
+    font-size: 14px; color: #222;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .org-row .org-chevron {
+    flex: 0 0 auto;
+    color: #b8c1cf; font-size: 14px;
+  }
+  /* Drag visuals */
+  .org-row.dragging { opacity: 0.4; }
+  .org-row.drop-before::before {
+    content: ''; position: absolute;
+    left: 4px; right: 4px; top: -2px;
+    height: 3px; background: #4a90e2; border-radius: 2px;
+  }
+  .org-row.drop-into { outline: 2px solid #4a90e2; outline-offset: -2px; background: #dbe7f5; }
+  .org-col-body.drop-end { background: rgba(74,144,226,.08); box-shadow: inset 0 -3px 0 #4a90e2; }
+  .org-empty {
+    color: #99a1ad; font-size: 13px; font-style: italic;
+    padding: 12px 8px; text-align: center;
+  }
+
+  @media (max-width: 900px) {
+    .organize-overlay .org-columns { flex-direction: column; }
+    .organize-overlay .org-col { min-width: 0; min-height: 120px; }
+  }
 </style>
 </head>
 <body>
@@ -608,6 +698,7 @@
   <h1>Fletcher's World</h1>
   <div style="display:flex; align-items:center; gap:8px;">
     <span class="status" id="mode-status"></span>
+    <button id="organize-btn" class="edit-only">📁 Organize</button>
     <button id="display-btn" class="edit-only">⚙ Display</button>
     <button id="export-btn" class="edit-only">Export</button>
     <button id="import-btn" class="edit-only">Import</button>
@@ -806,6 +897,31 @@
     <div class="button-row">
       <button class="secondary" id="display-reset">Reset to defaults</button>
       <button class="primary" id="display-done">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="organize-overlay" id="organize-overlay">
+  <div class="org-header">
+    <h2>📁 Organize</h2>
+    <button id="organize-close">Done</button>
+  </div>
+  <div class="org-columns">
+    <div class="org-col" data-col="sec">
+      <div class="org-col-header">Sections</div>
+      <div class="org-col-body" id="org-col-sec"></div>
+    </div>
+    <div class="org-col" data-col="top">
+      <div class="org-col-header">Categories</div>
+      <div class="org-col-body" id="org-col-top"></div>
+    </div>
+    <div class="org-col" data-col="sub">
+      <div class="org-col-header">Subcategories</div>
+      <div class="org-col-body" id="org-col-sub"></div>
+    </div>
+    <div class="org-col" data-col="item">
+      <div class="org-col-header">Items</div>
+      <div class="org-col-body" id="org-col-item"></div>
     </div>
   </div>
 </div>
@@ -2397,6 +2513,359 @@
   for (const s of SECTIONS) {
     document.getElementById(`disp-show-${s}`).addEventListener('change', (e) => { display.sectionVisible[s] = e.target.checked; commitDisplay(); });
     document.getElementById(`disp-across-${s}`).addEventListener('change', (e) => { display.tilesAcross[s] = clampAcross(e.target.value); commitDisplay(); });
+  }
+
+  // ---- Organize view (Miller columns) ----
+  // Drill state: which section, which top-level cat, which subcategory.
+  const orgSel = { section: 'people', topCatId: null, subCatId: null };
+  let orgDrag = null;   // { kind: 'cat' | 'item', id, section, parentId|categoryId }
+
+  const organizeOverlay = document.getElementById('organize-overlay');
+
+  function openOrganize() {
+    if (!display.sectionVisible[orgSel.section]) {
+      orgSel.section = SECTIONS.find(s => display.sectionVisible[s]) || 'people';
+    }
+    organizeOverlay.classList.add('show');
+    renderOrganize();
+  }
+  function closeOrganize() {
+    organizeOverlay.classList.remove('show');
+    renderAll();   // structure may have changed; refresh the main view
+  }
+  document.getElementById('organize-btn').addEventListener('click', openOrganize);
+  document.getElementById('organize-close').addEventListener('click', closeOrganize);
+
+  // Build a single row. `entity` is null for section rows. Returns an HTMLElement.
+  function makeOrgRow({ kind, entity, section, label, imageKey, keepAspect, selected, hasChildren }) {
+    const row = document.createElement('div');
+    row.className = 'org-row' + (selected ? ' selected' : '');
+    row.dataset.kind = kind;
+    row.dataset.section = section;
+    if (entity) row.dataset.id = entity.id;
+    const thumb = document.createElement('div');
+    thumb.className = 'org-thumb' + (keepAspect ? ' contain' : '');
+    if (imageKey) {
+      const cached = getMediaURLSync(imageKey);
+      if (cached) thumb.style.backgroundImage = `url("${cached}")`;
+      else getMediaURL(imageKey).then((u) => { if (u) thumb.style.backgroundImage = `url("${u}")`; }).catch(() => {});
+    }
+    const lbl = document.createElement('div');
+    lbl.className = 'org-label';
+    lbl.textContent = label;
+    row.appendChild(thumb);
+    row.appendChild(lbl);
+    if (hasChildren) {
+      const chev = document.createElement('div');
+      chev.className = 'org-chevron';
+      chev.textContent = '›';
+      row.appendChild(chev);
+    }
+    return row;
+  }
+
+  async function renderOrganize() {
+    const allCats = {};   // section -> cats[]
+    const allItems = {};  // section -> items[]
+    for (const s of SECTIONS) {
+      allCats[s] = (await getAllCats(s)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      allItems[s] = (await getAllItems(s)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    }
+
+    // -------- Column 1: Sections --------
+    const secBody = document.getElementById('org-col-sec');
+    secBody.innerHTML = '';
+    for (const s of SECTIONS) {
+      const row = makeOrgRow({
+        kind: 'section',
+        entity: null,
+        section: s,
+        label: s[0].toUpperCase() + s.slice(1),
+        selected: s === orgSel.section,
+        hasChildren: true,
+      });
+      row.dataset.kind = 'section';
+      row.dataset.section = s;
+      row.addEventListener('click', () => {
+        orgSel.section = s; orgSel.topCatId = null; orgSel.subCatId = null;
+        renderOrganize();
+      });
+      attachOrgDrop(row);
+      secBody.appendChild(row);
+    }
+
+    // -------- Column 2: top-level cats of selected section --------
+    const topBody = document.getElementById('org-col-top');
+    topBody.innerHTML = '';
+    const topCats = allCats[orgSel.section].filter(c => c.parentId == null);
+    if (!topCats.length) topBody.appendChild(orgEmptyHint('No categories yet — drag items here to start.'));
+    for (const cat of topCats) {
+      const subs = allCats[orgSel.section].filter(c => c.parentId === cat.id);
+      const row = makeOrgRow({
+        kind: 'cat',
+        entity: cat, section: orgSel.section,
+        label: cat.label, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
+        selected: cat.id === orgSel.topCatId,
+        hasChildren: subs.length > 0,
+      });
+      row.dataset.parentId = '';
+      row.draggable = true;
+      row.addEventListener('click', () => {
+        orgSel.topCatId = cat.id; orgSel.subCatId = null;
+        renderOrganize();
+      });
+      attachOrgDrag(row); attachOrgDrop(row);
+      topBody.appendChild(row);
+    }
+    attachOrgColBodyDrop(topBody, { col: 'top', section: orgSel.section, parentId: null });
+
+    // -------- Column 3: subcategories of selected top cat --------
+    const subBody = document.getElementById('org-col-sub');
+    subBody.innerHTML = '';
+    if (orgSel.topCatId != null) {
+      const subs = allCats[orgSel.section].filter(c => c.parentId === orgSel.topCatId);
+      if (!subs.length) subBody.appendChild(orgEmptyHint('No subcategories.'));
+      for (const sub of subs) {
+        const row = makeOrgRow({
+          kind: 'cat',
+          entity: sub, section: orgSel.section,
+          label: sub.label, imageKey: sub.imageKey, keepAspect: sub.keepAspect,
+          selected: sub.id === orgSel.subCatId,
+          hasChildren: false,
+        });
+        row.dataset.parentId = String(orgSel.topCatId);
+        row.draggable = true;
+        row.addEventListener('click', () => {
+          orgSel.subCatId = sub.id;
+          renderOrganize();
+        });
+        attachOrgDrag(row); attachOrgDrop(row);
+        subBody.appendChild(row);
+      }
+      attachOrgColBodyDrop(subBody, { col: 'sub', section: orgSel.section, parentId: orgSel.topCatId });
+    }
+
+    // -------- Column 4: items of selected category (subcat if any, else top cat) --------
+    const itemBody = document.getElementById('org-col-item');
+    itemBody.innerHTML = '';
+    const itemParentId = orgSel.subCatId ?? orgSel.topCatId;
+    if (itemParentId != null) {
+      const items = allItems[orgSel.section].filter(it => it.categoryId === itemParentId);
+      if (!items.length) itemBody.appendChild(orgEmptyHint('No items.'));
+      for (const it of items) {
+        const row = makeOrgRow({
+          kind: 'item',
+          entity: it, section: orgSel.section,
+          label: it.label, imageKey: it.imageKey, keepAspect: it.keepAspect,
+          selected: false,
+          hasChildren: false,
+        });
+        row.dataset.categoryId = String(itemParentId);
+        row.draggable = true;
+        attachOrgDrag(row); attachOrgDrop(row);
+        itemBody.appendChild(row);
+      }
+      attachOrgColBodyDrop(itemBody, { col: 'item', section: orgSel.section, parentId: itemParentId });
+    }
+  }
+
+  function orgEmptyHint(text) {
+    const d = document.createElement('div');
+    d.className = 'org-empty';
+    d.textContent = text;
+    return d;
+  }
+
+  // ---- Drag handlers ----
+  function attachOrgDrag(row) {
+    row.addEventListener('dragstart', (e) => {
+      const kind = row.dataset.kind;
+      const id = parseInt(row.dataset.id, 10);
+      const section = row.dataset.section;
+      const parentId = row.dataset.parentId !== undefined && row.dataset.parentId !== ''
+        ? parseInt(row.dataset.parentId, 10) : null;
+      const categoryId = row.dataset.categoryId !== undefined
+        ? parseInt(row.dataset.categoryId, 10) : null;
+      orgDrag = { kind, id, section, parentId, categoryId };
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', String(id)); } catch (_) {}
+      e.stopPropagation();
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      document.querySelectorAll('.drop-before, .drop-into, .drop-end').forEach(el => {
+        el.classList.remove('drop-before', 'drop-into', 'drop-end');
+      });
+      orgDrag = null;
+    });
+  }
+
+  function attachOrgDrop(row) {
+    row.addEventListener('dragover', (e) => {
+      if (!orgDrag) return;
+      const plan = planRowDrop(row);
+      if (!plan) return;
+      e.preventDefault();
+      e.stopPropagation();   // keep the col-body handler from also lighting up
+      e.dataTransfer.dropEffect = 'move';
+      row.classList.add(plan.mode === 'into' ? 'drop-into' : 'drop-before');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drop-before', 'drop-into'));
+    row.addEventListener('drop', async (e) => {
+      if (!orgDrag) return;
+      e.preventDefault(); e.stopPropagation();
+      row.classList.remove('drop-before', 'drop-into');
+      const plan = planRowDrop(row);
+      if (!plan) return;
+      await moveEntity(plan);
+      await renderOrganize();
+    });
+  }
+
+  function attachOrgColBodyDrop(body, ctx) {
+    body.addEventListener('dragover', (e) => {
+      if (!orgDrag) return;
+      const plan = planColBodyDrop(ctx);
+      if (!plan) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      body.classList.add('drop-end');
+    });
+    body.addEventListener('dragleave', (e) => {
+      // Only clear when the cursor actually leaves the body, not when crossing into a child row.
+      if (e.target === body) body.classList.remove('drop-end');
+    });
+    body.addEventListener('drop', async (e) => {
+      if (!orgDrag) return;
+      e.preventDefault();
+      body.classList.remove('drop-end');
+      const plan = planColBodyDrop(ctx);
+      if (!plan) return;
+      await moveEntity(plan);
+      await renderOrganize();
+    });
+  }
+
+  // Returns null if drop is disallowed; otherwise { mode, kind, id, fromSection, toSection, newParentId, beforeTargetId }
+  function planRowDrop(targetRow) {
+    if (!orgDrag) return null;
+    const t = {
+      kind: targetRow.dataset.kind,
+      id: targetRow.dataset.id ? parseInt(targetRow.dataset.id, 10) : null,
+      section: targetRow.dataset.section,
+      parentId: targetRow.dataset.parentId !== undefined && targetRow.dataset.parentId !== ''
+        ? parseInt(targetRow.dataset.parentId, 10) : null,
+      categoryId: targetRow.dataset.categoryId !== undefined
+        ? parseInt(targetRow.dataset.categoryId, 10) : null,
+    };
+    // v1: same-section only
+    if (orgDrag.section !== t.section) return null;
+    // No-op on self
+    if (orgDrag.kind === t.kind && orgDrag.id === t.id) return null;
+    // Same kind: reorder as sibling-of-target (insert before target)
+    if (orgDrag.kind === 'cat' && t.kind === 'cat') {
+      // Disallow dropping a category into its own subtree (would create a cycle)
+      // i.e., target's parentId chain must not contain orgDrag.id
+      // We'll compute via descendants of orgDrag.id below.
+      return {
+        mode: 'before', kind: 'cat', id: orgDrag.id,
+        toSection: t.section, newParentId: t.parentId,
+        beforeTargetId: t.id,
+      };
+    }
+    if (orgDrag.kind === 'item' && t.kind === 'item') {
+      return {
+        mode: 'before', kind: 'item', id: orgDrag.id,
+        toSection: t.section, newParentId: t.categoryId,
+        beforeTargetId: t.id,
+      };
+    }
+    // Cross kind: item onto cat → move into that cat (append)
+    if (orgDrag.kind === 'item' && t.kind === 'cat') {
+      return {
+        mode: 'into', kind: 'item', id: orgDrag.id,
+        toSection: t.section, newParentId: t.id,
+        beforeTargetId: null,
+      };
+    }
+    // Cross kind: cat onto section row → promote to top-level of section
+    if (orgDrag.kind === 'cat' && t.kind === 'section') {
+      return {
+        mode: 'into', kind: 'cat', id: orgDrag.id,
+        toSection: t.section, newParentId: null,
+        beforeTargetId: null,
+      };
+    }
+    return null;
+  }
+
+  function planColBodyDrop(ctx) {
+    if (!orgDrag) return null;
+    if (orgDrag.section !== ctx.section) return null;
+    if (ctx.col === 'top' && orgDrag.kind === 'cat') {
+      return { mode: 'into', kind: 'cat', id: orgDrag.id, toSection: ctx.section, newParentId: null, beforeTargetId: null };
+    }
+    if (ctx.col === 'sub') {
+      if (orgDrag.kind === 'cat')  return { mode: 'into', kind: 'cat',  id: orgDrag.id, toSection: ctx.section, newParentId: ctx.parentId, beforeTargetId: null };
+      if (orgDrag.kind === 'item') return { mode: 'into', kind: 'item', id: orgDrag.id, toSection: ctx.section, newParentId: ctx.parentId, beforeTargetId: null };
+    }
+    if (ctx.col === 'item' && orgDrag.kind === 'item') {
+      return { mode: 'into', kind: 'item', id: orgDrag.id, toSection: ctx.section, newParentId: ctx.parentId, beforeTargetId: null };
+    }
+    return null;
+  }
+
+  // Apply a drop plan: reparent (if needed) and re-stamp sibling orders.
+  async function moveEntity(plan) {
+    const { kind, id, toSection, newParentId, beforeTargetId } = plan;
+    if (kind === 'cat') {
+      const cats = await getAllCats(toSection);
+      const moving = cats.find(c => c.id === id);
+      if (!moving) return;
+      // Cycle guard: can't move a cat into its own subtree.
+      const subtree = new Set(descendantCatIds(cats, id));
+      if (newParentId != null && subtree.has(newParentId)) return;
+      // 1) Change parent if it differs.
+      if ((moving.parentId ?? null) !== (newParentId ?? null)) {
+        await serverUpdateCategory(moving, { parentId: newParentId });
+      }
+      // 2) Re-stamp orders in the new sibling group.
+      const fresh = await getAllCats(toSection);
+      const siblings = fresh
+        .filter(c => (c.parentId ?? null) === (newParentId ?? null))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      arrangeBefore(siblings, id, beforeTargetId);
+      for (let i = 0; i < siblings.length; i++) {
+        const newOrder = i * 1000;
+        if (siblings[i].order === newOrder) continue;
+        await serverUpdateCategory(siblings[i], { order: newOrder });
+      }
+    } else if (kind === 'item') {
+      const items = await getAllItems(toSection);
+      const moving = items.find(it => it.id === id);
+      if (!moving) return;
+      if ((moving.categoryId ?? null) !== (newParentId ?? null)) {
+        await serverUpdateItem(moving, { categoryId: newParentId });
+      }
+      const fresh = await getAllItems(toSection);
+      const siblings = sortItems(fresh.filter(it => it.categoryId === newParentId), toSection);
+      arrangeBefore(siblings, id, beforeTargetId);
+      for (let i = 0; i < siblings.length; i++) {
+        const newOrder = i * 1000;
+        if (siblings[i].order === newOrder) continue;
+        await serverUpdateItem(siblings[i], { order: newOrder });
+      }
+    }
+  }
+  // Move `id` to just before `beforeId` in `arr`, or to the end if beforeId is null.
+  function arrangeBefore(arr, id, beforeId) {
+    const fromIdx = arr.findIndex(x => x.id === id);
+    if (fromIdx < 0) return;
+    const [moved] = arr.splice(fromIdx, 1);
+    if (beforeId == null) { arr.push(moved); return; }
+    const ti = arr.findIndex(x => x.id === beforeId);
+    if (ti < 0) arr.push(moved); else arr.splice(ti, 0, moved);
   }
 
   // Init
