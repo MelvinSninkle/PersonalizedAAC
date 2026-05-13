@@ -1492,12 +1492,43 @@
     }
   }
 
+  // Downscale + re-encode an image before upload: ≤512px longest side, JPEG q0.85.
+  // Re-encoding also strips EXIF (fixes sideways-phone-photo rotation). GIF/SVG and
+  // anything that fails to decode are passed through untouched.
+  async function compressImage(file, maxDim = 512, quality = 0.85) {
+    if (!(file instanceof Blob)) return file;
+    const type = (file.type || '').toLowerCase();
+    if (!type.startsWith('image/')) return file;
+    if (type === 'image/gif' || type === 'image/svg+xml') return file;
+    try {
+      let bitmap;
+      try { bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+      catch (_) { bitmap = await createImageBitmap(file); }
+      const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+      const w = Math.max(1, Math.round(bitmap.width * scale));
+      const h = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      if (bitmap.close) bitmap.close();
+      const out = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', quality));
+      if (out && out.size < file.size) return out;
+      return file;
+    } catch (_) { return file; }
+  }
+
   // ---- Server write helpers ----
+  // Returns { key, blob } where `blob` is what actually got uploaded
+  // (the recompressed image, or the original for sounds / pass-throughs),
+  // so callers cache the same bytes the server has.
   async function uploadIfBlob(field, blob, kind) {
     if (!(blob instanceof Blob)) return null;
-    const fallbackExt = kind.includes('sound') ? 'mp3' : 'jpg';
-    const ext = extFor(blob, fallbackExt);
-    return uploadBlob(blob, kind, ext);
+    const isSound = kind.includes('sound');
+    const finalBlob = isSound ? blob : await compressImage(blob);
+    const ext = extFor(finalBlob, isSound ? 'mp3' : 'jpg');
+    const res = await uploadBlob(finalBlob, kind, ext);
+    return { key: res.key, blob: finalBlob };
   }
 
   async function serverCreateCategory({ section, label, parentId, image, keepAspect, order }) {
@@ -1511,7 +1542,7 @@
       }),
     });
     const local = { ...saved };
-    if (image instanceof Blob) local.image = image;
+    if (up?.blob) local.image = up.blob;
     await putCat(local);
     return saved;
   }
@@ -1530,7 +1561,7 @@
     });
     const local = { ...old, ...saved };
     if (order === undefined) local.order = old.order;   // an edit must never re-position the chip
-    if (image instanceof Blob) local.image = image;
+    if (up?.blob) local.image = up.blob;
     clearURLs('c', old.id);
     await putCat(local);
     return saved;
@@ -1568,8 +1599,8 @@
       }),
     });
     const local = { ...saved };
-    if (image instanceof Blob) local.image = image;
-    if (sound instanceof Blob) local.sound = sound;
+    if (upImg?.blob) local.image = upImg.blob;
+    if (upSnd?.blob) local.sound = upSnd.blob;
     await putItem(local);
     return saved;
   }
@@ -1591,8 +1622,8 @@
     });
     const local = { ...old, ...saved };
     if (order === undefined) local.order = old.order;   // an edit must never re-position the tile
-    if (image instanceof Blob) local.image = image;
-    if (sound instanceof Blob) local.sound = sound;
+    if (upImg?.blob) local.image = upImg.blob;
+    if (upSnd?.blob) local.sound = upSnd.blob;
     clearURLs('i', old.id);
     await putItem(local);
     return saved;
