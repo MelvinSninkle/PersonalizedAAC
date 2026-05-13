@@ -50,6 +50,18 @@
     cursor: pointer;
   }
   header button:hover { background: #880e4f; }
+  header #role-select {
+    background: rgba(255,255,255,.15);
+    color: white;
+    border: 1px solid rgba(255,255,255,.35);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-right: 4px;
+  }
+  header #role-select option { color: #222; }
   body.edit-mode header { background: #c2185b; }
   body.edit-mode header button { background: #6a1b4d; }
   body.edit-mode header button:hover { background: #4a0d36; }
@@ -698,6 +710,11 @@
   <h1>Fletcher's World</h1>
   <div style="display:flex; align-items:center; gap:8px;">
     <span class="status" id="mode-status"></span>
+    <select id="role-select" title="Who is using this device?" aria-label="Role">
+      <option value="student">👧 Student</option>
+      <option value="teacher">🧑‍🏫 Teacher</option>
+      <option value="parent">👨‍👩 Parent</option>
+    </select>
     <button id="organize-btn" class="edit-only">📁 Organize</button>
     <button id="display-btn" class="edit-only">⚙ Display</button>
     <button id="export-btn" class="edit-only">Export</button>
@@ -931,10 +948,11 @@
 <script>
 (() => {
   const DB_NAME = 'fletcher_aac';
-  const DB_VERSION = 3;
+  const DB_VERSION = 4;
   const ITEMS = 'items';
   const CATS = 'categories';
   const BLOBS = 'blobs';
+  const EVENTS = 'events';
   const SECTIONS = ['people', 'nouns', 'verbs'];
   const TOKEN_KEY = 'aacToken';
   const DISPLAY_KEY = 'aacDisplay';
@@ -991,6 +1009,17 @@
   let authToken = localStorage.getItem(TOKEN_KEY) || '';
   const objectURLs = new Map();
   const activeCategoryId = { people: null, nouns: null, verbs: null };
+
+  // ---- Role + per-device client id (for activity logging) ----
+  const ROLE_KEY = 'aacRole';
+  const CLIENT_ID_KEY = 'aacClientId';
+  const VALID_ROLES = ['student', 'teacher', 'parent'];
+  let role = VALID_ROLES.includes(localStorage.getItem(ROLE_KEY)) ? localStorage.getItem(ROLE_KEY) : 'student';
+  let clientId = localStorage.getItem(CLIENT_ID_KEY) || '';
+  if (!clientId) {
+    clientId = (crypto.randomUUID ? crypto.randomUUID() : 'c-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
+    localStorage.setItem(CLIENT_ID_KEY, clientId);
+  }
 
   // ---- API helper: auto-injects Bearer token ----
   async function apiFetch(path, opts = {}) {
@@ -1107,6 +1136,10 @@
         if (!_db.objectStoreNames.contains(BLOBS)) {
           // Out-of-line keys: the value is a Blob, the key is its storage `key` string.
           _db.createObjectStore(BLOBS);
+        }
+        if (!_db.objectStoreNames.contains(EVENTS)) {
+          // Offline queue for student taps. Auto-increment id, no index needed.
+          _db.createObjectStore(EVENTS, { autoIncrement: true });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -1486,8 +1519,9 @@
         kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: it.keepAspect,
         label: it.label, pinned: it.pinned,
         onClick: () => {
-          if (editMode) openItemModal(section, activeId, it);
-          else if (it.soundKey) playSound(it);
+          if (editMode) { openItemModal(section, activeId, it); return; }
+          enqueueEvent(it);   // log every kid-mode tile tap (no-op unless role === 'student')
+          if (it.soundKey) playSound(it);
         },
         onEdit: () => openItemModal(section, activeId, it),
       });
@@ -1513,6 +1547,66 @@
     player.currentTime = 0;
     player.play().catch(() => {});
   }
+
+  // ---- Activity log (student taps; offline queue with auto-flush) ----
+  async function enqueueEvent(item) {
+    if (role !== 'student') return;
+    if (!db || !item) return;
+    const evt = {
+      role,
+      itemId: Number.isFinite(item.id) ? item.id : null,
+      section: item.section || null,
+      label: (item.label || '').slice(0, 200),
+      clientId,
+      occurredAt: new Date().toISOString(),
+    };
+    try { await reqPromise(tx(EVENTS, 'readwrite').add(evt)); } catch (_) { return; }
+    flushEvents().catch(() => {});
+  }
+
+  let flushing = false;
+  async function flushEvents() {
+    if (flushing || !db || !authToken || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+    flushing = true;
+    try {
+      // Read up to 200 queued events
+      const batch = [];
+      const keys = [];
+      await new Promise((res, rej) => {
+        const req = tx(EVENTS).openCursor();
+        req.onsuccess = (e) => {
+          const c = e.target.result;
+          if (!c || batch.length >= 200) { res(); return; }
+          batch.push(c.value);
+          keys.push(c.primaryKey);
+          c.continue();
+        };
+        req.onerror = () => rej(req.error);
+      });
+      if (!batch.length) return;
+      let r;
+      try {
+        r = await apiFetch('/api/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ events: batch }),
+        });
+      } catch (_) { return; }
+      if (!r.ok) return;
+      await new Promise((res, rej) => {
+        const t = db.transaction(EVENTS, 'readwrite');
+        const store = t.objectStore(EVENTS);
+        for (const k of keys) store.delete(k);
+        t.oncomplete = () => res();
+        t.onerror = () => rej(t.error);
+      });
+      // If we hit the batch cap, more may be queued — try again.
+      if (batch.length >= 200) { flushing = false; flushEvents().catch(() => {}); }
+    } finally {
+      flushing = false;
+    }
+  }
+  window.addEventListener('online', () => flushEvents().catch(() => {}));
 
   function setEditMode(on) {
     editMode = on;
@@ -2868,6 +2962,16 @@
     if (ti < 0) arr.push(moved); else arr.splice(ti, 0, moved);
   }
 
+  // ---- Role picker wiring ----
+  const roleSelect = document.getElementById('role-select');
+  roleSelect.value = role;
+  roleSelect.addEventListener('change', (e) => {
+    const v = e.target.value;
+    if (!VALID_ROLES.includes(v)) return;
+    role = v;
+    localStorage.setItem(ROLE_KEY, role);
+  });
+
   // Init
   (async () => {
     try {
@@ -2879,6 +2983,7 @@
       // then refresh the structure from the server (which is canonical). Media
       // files stay lazy — fetched on demand and cached by their storage key.
       await renderAll();
+      flushEvents().catch(() => {});   // drain any taps queued from a previous offline session
       if (authToken) {
         try {
           const r = await apiFetch('/api/sync');

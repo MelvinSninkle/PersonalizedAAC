@@ -53,6 +53,24 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS items_section_idx  ON items(section)`;
     await db`CREATE INDEX IF NOT EXISTS items_category_idx ON items(category_id)`;
 
+    // Activity log — student/teacher/parent button taps. No FK to items so
+    // history survives item deletes; we snapshot the label at log time.
+    await db`
+      CREATE TABLE IF NOT EXISTS events (
+        id BIGSERIAL PRIMARY KEY,
+        role TEXT NOT NULL,
+        item_id BIGINT,
+        section TEXT,
+        label TEXT,
+        client_id TEXT,
+        occurred_at TIMESTAMPTZ NOT NULL,
+        received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS events_role_idx          ON events(role)`;
+    await db`CREATE INDEX IF NOT EXISTS events_occurred_at_idx   ON events(occurred_at)`;
+    await db`CREATE INDEX IF NOT EXISTS events_item_idx          ON events(item_id)`;
+
     res.status(200).json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Init failed', detail: String(err.message || err) });
