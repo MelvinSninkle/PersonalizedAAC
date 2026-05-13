@@ -815,9 +815,10 @@
 <script>
 (() => {
   const DB_NAME = 'fletcher_aac';
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   const ITEMS = 'items';
   const CATS = 'categories';
+  const BLOBS = 'blobs';
   const SECTIONS = ['people', 'nouns', 'verbs'];
   const TOKEN_KEY = 'aacToken';
   const DISPLAY_KEY = 'aacDisplay';
@@ -912,41 +913,54 @@
     return r.json();
   }
 
-  // Fetch a private blob through the auth-gated proxy and cache the result
-  // both in memory (object URL) and in IndexedDB (so reloads don't re-fetch).
-  async function mediaURL(kind, id, key, slot) {
-    const cacheKey = `${kind}-${id}-${slot}`;
-    if (objectURLs.has(cacheKey)) return objectURLs.get(cacheKey);
+  // ---- Media blob cache (content-addressed by storage key) ----
+  // Blobs live in the BLOBS store keyed by their storage `key`, so they survive
+  // a structure re-sync and can never go stale (a new image = a new key).
+  // objectURLs holds live object URLs, also keyed by storage key.
+  function cacheBlob(key, blob) {
+    if (!key || !(blob instanceof Blob)) return Promise.resolve();
+    return reqPromise(tx(BLOBS, 'readwrite').put(blob, key)).catch(() => {});
+  }
+  async function getMediaBlob(key) {
+    if (!key) return null;
+    try {
+      const cached = await reqPromise(tx(BLOBS).get(key));
+      if (cached) return cached;
+    } catch (_) {}
     let r;
     try { r = await apiFetch('/api/media?key=' + encodeURIComponent(key)); }
     catch (_) { return null; }
     if (!r.ok) return null;
     const blob = await r.blob();
-    try { await persistBlobToIDB(kind, id, slot, blob); } catch (_) {}
+    cacheBlob(key, blob);
+    return blob;
+  }
+  function getMediaURLSync(key) {
+    return key && objectURLs.has(key) ? objectURLs.get(key) : null;
+  }
+  async function getMediaURL(key) {
+    if (!key) return null;
+    if (objectURLs.has(key)) return objectURLs.get(key);
+    const blob = await getMediaBlob(key);
+    if (!blob) return null;
+    if (objectURLs.has(key)) return objectURLs.get(key);   // a parallel call may have created one
     const url = URL.createObjectURL(blob);
-    objectURLs.set(cacheKey, url);
+    objectURLs.set(key, url);
     return url;
   }
-
-  async function persistBlobToIDB(kind, id, slot, blob) {
-    const store = kind === 'i' ? ITEMS : CATS;
-    const row = await reqPromise(tx(store).get(id));
-    if (!row) return;
-    if (slot === 'image') row.image = blob;
-    else if (slot === 'sound') row.sound = blob;
-    await reqPromise(tx(store, 'readwrite').put(row));
+  function revokeMediaURL(key) {
+    if (!key) return;
+    if (objectURLs.has(key)) { URL.revokeObjectURL(objectURLs.get(key)); objectURLs.delete(key); }
+    reqPromise(tx(BLOBS, 'readwrite').delete(key)).catch(() => {});
   }
 
-  // Sets a tile's background image, using the in-memory blob if available,
-  // otherwise kicking off an async fetch via /api/media.
-  function applyImage(el, kind, id, image, imageKey, keepAspect) {
+  // Set a tile's background image from its storage key (lazy fetch + cache).
+  function applyImage(el, imageKey, keepAspect) {
     el.classList.toggle('contain', !!keepAspect);
-    const sync = getURL(kind, id, image, 'image', null);
-    if (sync) { el.style.backgroundImage = `url("${sync}")`; return; }
     if (!imageKey) return;
-    mediaURL(kind, id, imageKey, 'image').then((u) => {
-      if (u) el.style.backgroundImage = `url("${u}")`;
-    }).catch(() => {});
+    const cached = getMediaURLSync(imageKey);
+    if (cached) { el.style.backgroundImage = `url("${cached}")`; return; }
+    getMediaURL(imageKey).then((u) => { if (u) el.style.backgroundImage = `url("${u}")`; }).catch(() => {});
   }
 
   function extFor(blob, fallback) {
@@ -973,6 +987,10 @@
         if (!_db.objectStoreNames.contains(CATS)) {
           const cstore = _db.createObjectStore(CATS, { keyPath: 'id', autoIncrement: true });
           cstore.createIndex('section', 'section');
+        }
+        if (!_db.objectStoreNames.contains(BLOBS)) {
+          // Out-of-line keys: the value is a Blob, the key is its storage `key` string.
+          _db.createObjectStore(BLOBS);
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -1037,26 +1055,6 @@
     }
   }
 
-  function getURL(kind, id, blob, key, urlFallback) {
-    if (blob) {
-      const cacheKey = `${kind}-${id}-${key}`;
-      if (objectURLs.has(cacheKey)) return objectURLs.get(cacheKey);
-      const url = URL.createObjectURL(blob);
-      objectURLs.set(cacheKey, url);
-      return url;
-    }
-    return urlFallback || null;
-  }
-  function clearURLs(kind, id) {
-    const prefix = `${kind}-${id}-`;
-    for (const k of [...objectURLs.keys()]) {
-      if (k.startsWith(prefix)) {
-        URL.revokeObjectURL(objectURLs.get(k));
-        objectURLs.delete(k);
-      }
-    }
-  }
-
   function sortItems(items, section) {
     return items.sort((a, b) => {
       if (section === 'people') {
@@ -1068,7 +1066,7 @@
     });
   }
 
-  function makeTile({ kind, id, image, imageKey, keepAspect, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
+  function makeTile({ kind, id, imageKey, keepAspect, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
     const wrap = document.createElement('div');
     wrap.className = 'tile-wrap'
       + (isCategory ? ' category' : '')
@@ -1076,7 +1074,7 @@
 
     const sq = document.createElement('div');
     sq.className = 'tile-square';
-    applyImage(sq, kind, id, image, imageKey, keepAspect);
+    applyImage(sq, imageKey, keepAspect);
 
     if (pinned) {
       const pin = document.createElement('div');
@@ -1265,7 +1263,7 @@
         const tabCat = topAncestor || topCats[0];
         const canCycle = topCats.length > 1;
         tabsEl.appendChild(makeTile({
-          kind: 'c', id: tabCat.id, image: tabCat.image, imageKey: tabCat.imageKey, keepAspect: tabCat.keepAspect,
+          kind: 'c', id: tabCat.id, imageKey: tabCat.imageKey, keepAspect: tabCat.keepAspect,
           label: tabCat.label, isCategory: true, isActive: true, showCycleBadge: canCycle,
           onClick: () => {
             if (!canCycle) return;
@@ -1282,7 +1280,7 @@
       topCats.forEach(cat => {
         const isActive = cat.id === topAncestorId;
         const tile = makeTile({
-          kind: 'c', id: cat.id, image: cat.image, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
+          kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
           label: cat.label, isCategory: true, isActive,
           onClick: () => { activeCategoryId[section] = cat.id; renderSection(section); },
           onEdit: () => openCatModal(section, cat),
@@ -1314,7 +1312,7 @@
         tile.className = 'subcat-tile' + (sub.id === activeCat.id ? ' active' : '');
         const sq = document.createElement('div');
         sq.className = 'sq';
-        applyImage(sq, 'c', sub.id, sub.image, sub.imageKey, sub.keepAspect);
+        applyImage(sq, sub.imageKey, sub.keepAspect);
         const lbl = document.createElement('div');
         lbl.className = 'lbl';
         lbl.textContent = sub.label;
@@ -1369,11 +1367,11 @@
 
     items.filter(i => i.categoryId === activeId).forEach(it => {
       const tile = makeTile({
-        kind: 'i', id: it.id, image: it.image, imageKey: it.imageKey, keepAspect: it.keepAspect,
+        kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: it.keepAspect,
         label: it.label, pinned: it.pinned,
         onClick: () => {
           if (editMode) openItemModal(section, activeId, it);
-          else if (it.sound || it.soundKey) playSound(it);
+          else if (it.soundKey) playSound(it);
         },
         onEdit: () => openItemModal(section, activeId, it),
       });
@@ -1391,12 +1389,10 @@
   }
 
   async function playSound(item) {
-    const player = document.getElementById('audio-player');
-    let url = getURL('i', item.id, item.sound, 'sound', null);
-    if (!url && item.soundKey) {
-      url = await mediaURL('i', item.id, item.soundKey, 'sound');
-    }
+    if (!item.soundKey) return;
+    const url = await getMediaURL(item.soundKey);
     if (!url) return;
+    const player = document.getElementById('audio-player');
     player.src = url;
     player.currentTime = 0;
     player.play().catch(() => {});
@@ -1541,9 +1537,8 @@
         keepAspect: !!keepAspect,
       }),
     });
-    const local = { ...saved };
-    if (up?.blob) local.image = up.blob;
-    await putCat(local);
+    if (up) await cacheBlob(up.key, up.blob);
+    await putCat(saved);
     return saved;
   }
 
@@ -1559,10 +1554,9 @@
       method: 'PUT',
       body: JSON.stringify(body),
     });
-    const local = { ...old, ...saved };
+    if (up) { await cacheBlob(up.key, up.blob); if (old.imageKey && old.imageKey !== up.key) revokeMediaURL(old.imageKey); }
+    const local = { ...saved };
     if (order === undefined) local.order = old.order;   // an edit must never re-position the chip
-    if (up?.blob) local.image = up.blob;
-    clearURLs('c', old.id);
     await putCat(local);
     return saved;
   }
@@ -1571,16 +1565,18 @@
     const result = await apiJSON('/api/categories?id=' + catId, { method: 'DELETE' });
     const ids = result.deletedCategoryIds || [catId];
     const idSet = new Set(ids);
-    // Mirror the cascade locally
+    // Mirror the cascade locally + drop their cached blobs
+    const allCats = await getAllCats(section);
     const allItems = await getAllItems(section);
     for (const it of allItems) {
       if (idSet.has(it.categoryId)) {
-        clearURLs('i', it.id);
+        revokeMediaURL(it.imageKey); revokeMediaURL(it.soundKey);
         await deleteItemDB(it.id);
       }
     }
     for (const id of ids) {
-      clearURLs('c', id);
+      const c = allCats.find(x => x.id === id);
+      if (c) revokeMediaURL(c.imageKey);
       await deleteCatDB(id);
     }
   }
@@ -1598,10 +1594,9 @@
         keepAspect: !!keepAspect,
       }),
     });
-    const local = { ...saved };
-    if (upImg?.blob) local.image = upImg.blob;
-    if (upSnd?.blob) local.sound = upSnd.blob;
-    await putItem(local);
+    if (upImg) await cacheBlob(upImg.key, upImg.blob);
+    if (upSnd) await cacheBlob(upSnd.key, upSnd.blob);
+    await putItem(saved);
     return saved;
   }
 
@@ -1620,18 +1615,19 @@
       method: 'PUT',
       body: JSON.stringify(body),
     });
-    const local = { ...old, ...saved };
+    if (upImg) { await cacheBlob(upImg.key, upImg.blob); if (old.imageKey && old.imageKey !== upImg.key) revokeMediaURL(old.imageKey); }
+    if (upSnd) { await cacheBlob(upSnd.key, upSnd.blob); if (old.soundKey && old.soundKey !== upSnd.key) revokeMediaURL(old.soundKey); }
+    const local = { ...saved };
     if (order === undefined) local.order = old.order;   // an edit must never re-position the tile
-    if (upImg?.blob) local.image = upImg.blob;
-    if (upSnd?.blob) local.sound = upSnd.blob;
-    clearURLs('i', old.id);
     await putItem(local);
     return saved;
   }
 
   async function serverDeleteItem(itemId) {
+    let stale;
+    try { stale = await reqPromise(tx(ITEMS).get(itemId)); } catch (_) {}
     await apiJSON('/api/items?id=' + itemId, { method: 'DELETE' });
-    clearURLs('i', itemId);
+    if (stale) { revokeMediaURL(stale.imageKey); revokeMediaURL(stale.soundKey); }
     await deleteItemDB(itemId);
   }
 
@@ -1662,11 +1658,11 @@
     document.getElementById('item-emotion').value = 'default';
     document.getElementById('item-keep-aspect').checked = !!item?.keepAspect;
     const ist = document.getElementById('item-image-status');
-    ist.textContent = item?.image ? 'Current image will be kept' : 'No image selected';
-    ist.className = 'file-status' + (item?.image ? ' has-file' : '');
+    ist.textContent = item?.imageKey ? 'Current image will be kept' : 'No image selected';
+    ist.className = 'file-status' + (item?.imageKey ? ' has-file' : '');
     const sst = document.getElementById('item-sound-status');
-    sst.textContent = item?.sound ? 'Current sound will be kept' : 'No sound selected';
-    sst.className = 'file-status' + (item?.sound ? ' has-file' : '');
+    sst.textContent = item?.soundKey ? 'Current sound will be kept' : 'No sound selected';
+    sst.className = 'file-status' + (item?.soundKey ? ' has-file' : '');
     document.getElementById('item-error').textContent = '';
     document.getElementById('pin-row').style.display = section === 'people' ? 'flex' : 'none';
     document.getElementById('item-pin').checked = !!item?.pinned;
@@ -1826,8 +1822,8 @@
     document.getElementById('cat-apply-items').checked = false;
     document.getElementById('cat-apply-items-row').style.display = cat ? 'flex' : 'none';
     const cist = document.getElementById('cat-image-status');
-    cist.textContent = cat?.image ? 'Current image will be kept' : 'No image selected';
-    cist.className = 'file-status' + (cat?.image ? ' has-file' : '');
+    cist.textContent = cat?.imageKey ? 'Current image will be kept' : 'No image selected';
+    cist.className = 'file-status' + (cat?.imageKey ? ' has-file' : '');
     document.getElementById('cat-error').textContent = '';
     document.getElementById('cat-delete').style.display = cat ? 'block' : 'none';
 
@@ -2194,7 +2190,10 @@
     for (const section of SECTIONS) {
       for (const c of await getAllCats(section)) {
         const exp = { id: c.id, section: c.section, label: c.label, order: c.order ?? 0, parentId: c.parentId ?? null, keepAspect: !!c.keepAspect };
-        if (c.image) exp.image = await blobToDataURL(c.image);
+        if (c.imageKey) {
+          const b = await getMediaBlob(c.imageKey);
+          if (b) exp.image = await blobToDataURL(b);
+        }
         out.categories.push(exp);
       }
       for (const it of await getAllItems(section)) {
@@ -2203,8 +2202,14 @@
           label: it.label, order: it.order ?? 0, pinned: !!it.pinned,
           keepAspect: !!it.keepAspect,
         };
-        if (it.image) exp.image = await blobToDataURL(it.image);
-        if (it.sound) exp.sound = await blobToDataURL(it.sound);
+        if (it.imageKey) {
+          const b = await getMediaBlob(it.imageKey);
+          if (b) exp.image = await blobToDataURL(b);
+        }
+        if (it.soundKey) {
+          const b = await getMediaBlob(it.soundKey);
+          if (b) exp.sound = await blobToDataURL(b);
+        }
         out.items.push(exp);
       }
     }
@@ -2342,9 +2347,10 @@
       for (const url of objectURLs.values()) URL.revokeObjectURL(url);
       objectURLs.clear();
       await new Promise((res, rej) => {
-        const t = db.transaction([ITEMS, CATS], 'readwrite');
+        const t = db.transaction([ITEMS, CATS, BLOBS], 'readwrite');
         t.objectStore(ITEMS).clear();
         t.objectStore(CATS).clear();
+        t.objectStore(BLOBS).clear();
         t.oncomplete = () => res();
         t.onerror = () => rej(t.error);
       });
@@ -2400,23 +2406,19 @@
       applyDisplay();
       db = await openDB();
       await migrateLegacyItems();
+      // Paint immediately from whatever's cached locally so the app feels instant,
+      // then refresh the structure from the server (which is canonical). Media
+      // files stay lazy — fetched on demand and cached by their storage key.
       await renderAll();
-      // If a token is stored and the local cache is empty, pull from cloud in the background
       if (authToken) {
-        let total = 0;
-        for (const s of SECTIONS) total += (await getAllCats(s)).length;
-        if (total === 0) {
-          try {
-            const r = await apiFetch('/api/sync');
-            if (r.ok) {
-              const data = await r.json();
-              if (data.categories.length || data.items.length) {
-                await hydrateFromServer(data);
-                await renderAll();
-              }
-            }
-          } catch (_) { /* offline / unauthorized — keep local empty cache */ }
-        }
+        try {
+          const r = await apiFetch('/api/sync');
+          if (r.ok) {
+            const data = await r.json();
+            await hydrateFromServer(data);
+            await renderAll();
+          }
+        } catch (_) { /* offline — keep whatever was cached locally */ }
       }
     } catch (err) {
       document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif;">Failed to open storage: ${err.message}<br><br>Try opening this file in Chrome.</div>`;
