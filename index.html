@@ -50,6 +50,18 @@
     cursor: pointer;
   }
   header button:hover { background: #880e4f; }
+  header #role-select {
+    background: rgba(255,255,255,.15);
+    color: white;
+    border: 1px solid rgba(255,255,255,.35);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-right: 4px;
+  }
+  header #role-select option { color: #222; }
   body.edit-mode header { background: #c2185b; }
   body.edit-mode header button { background: #6a1b4d; }
   body.edit-mode header button:hover { background: #4a0d36; }
@@ -600,6 +612,96 @@
     main { padding: 6px; gap: 6px; }
     .aac-section h2 { font-size: 15px; padding: 8px 12px; }
   }
+
+  /* ---- Organize view (Miller columns, edit-mode only, desktop-first) ---- */
+  .organize-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: #f4f6fa;
+    display: none;
+    flex-direction: column;
+  }
+  .organize-overlay.show { display: flex; }
+  .organize-overlay .org-header {
+    flex: 0 0 auto;
+    background: #c2185b;
+    color: white;
+    padding: 12px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 2px 6px rgba(0,0,0,.15);
+  }
+  .organize-overlay .org-header h2 {
+    margin: 0; font-size: 20px; font-weight: 600;
+    font-family: 'Fredoka', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+  }
+  .organize-overlay .org-header button {
+    background: #6a1b4d; color: white; border: none;
+    border-radius: 6px; padding: 8px 14px; font-size: 14px;
+    font-weight: 600; cursor: pointer;
+  }
+  .organize-overlay .org-header button:hover { background: #4a0d36; }
+  .org-columns {
+    flex: 1; display: flex; min-height: 0;
+    gap: 1px; background: #dde2e8;
+  }
+  .org-col {
+    flex: 1 1 0; min-width: 180px;
+    display: flex; flex-direction: column;
+    background: white; min-height: 0;
+  }
+  .org-col-header {
+    flex: 0 0 auto;
+    padding: 10px 12px;
+    font-size: 12px; font-weight: 700; color: #557fa3;
+    text-transform: uppercase; letter-spacing: .5px;
+    border-bottom: 1px solid #eef1f6;
+    background: #fafbfd;
+  }
+  .org-col-body {
+    flex: 1; overflow-y: auto; padding: 6px;
+    min-height: 0;
+  }
+  .org-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 8px; border-radius: 6px;
+    cursor: pointer; user-select: none;
+    position: relative;
+  }
+  .org-row:hover { background: #eef3fa; }
+  .org-row.selected { background: #dbe7f5; }
+  .org-row .org-thumb {
+    flex: 0 0 auto;
+    width: 32px; height: 32px;
+    border-radius: 4px;
+    background: #e9eef5 center/cover no-repeat;
+  }
+  .org-row .org-thumb.contain { background-size: contain; }
+  .org-row .org-label {
+    flex: 1; min-width: 0;
+    font-size: 14px; color: #222;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .org-row .org-chevron {
+    flex: 0 0 auto;
+    color: #b8c1cf; font-size: 14px;
+  }
+  /* Drag visuals */
+  .org-row.dragging { opacity: 0.4; }
+  .org-row.drop-before::before {
+    content: ''; position: absolute;
+    left: 4px; right: 4px; top: -2px;
+    height: 3px; background: #4a90e2; border-radius: 2px;
+  }
+  .org-row.drop-into { outline: 2px solid #4a90e2; outline-offset: -2px; background: #dbe7f5; }
+  .org-col-body.drop-end { background: rgba(74,144,226,.08); box-shadow: inset 0 -3px 0 #4a90e2; }
+  .org-empty {
+    color: #99a1ad; font-size: 13px; font-style: italic;
+    padding: 12px 8px; text-align: center;
+  }
+
+  @media (max-width: 900px) {
+    .organize-overlay .org-columns { flex-direction: column; }
+    .organize-overlay .org-col { min-width: 0; min-height: 120px; }
+  }
 </style>
 </head>
 <body>
@@ -608,6 +710,12 @@
   <h1>Fletcher's World</h1>
   <div style="display:flex; align-items:center; gap:8px;">
     <span class="status" id="mode-status"></span>
+    <select id="role-select" title="Who is using this device?" aria-label="Role">
+      <option value="student">👧 Student</option>
+      <option value="teacher">🧑‍🏫 Teacher</option>
+      <option value="parent">👨‍👩 Parent</option>
+    </select>
+    <button id="organize-btn" class="edit-only">📁 Organize</button>
     <button id="display-btn" class="edit-only">⚙ Display</button>
     <button id="export-btn" class="edit-only">Export</button>
     <button id="import-btn" class="edit-only">Import</button>
@@ -810,14 +918,41 @@
   </div>
 </div>
 
+<div class="organize-overlay" id="organize-overlay">
+  <div class="org-header">
+    <h2>📁 Organize</h2>
+    <button id="organize-close">Done</button>
+  </div>
+  <div class="org-columns">
+    <div class="org-col" data-col="sec">
+      <div class="org-col-header">Sections</div>
+      <div class="org-col-body" id="org-col-sec"></div>
+    </div>
+    <div class="org-col" data-col="top">
+      <div class="org-col-header">Categories</div>
+      <div class="org-col-body" id="org-col-top"></div>
+    </div>
+    <div class="org-col" data-col="sub">
+      <div class="org-col-header">Subcategories</div>
+      <div class="org-col-body" id="org-col-sub"></div>
+    </div>
+    <div class="org-col" data-col="item">
+      <div class="org-col-header">Items</div>
+      <div class="org-col-body" id="org-col-item"></div>
+    </div>
+  </div>
+</div>
+
 <audio id="audio-player" preload="auto"></audio>
 
 <script>
 (() => {
   const DB_NAME = 'fletcher_aac';
-  const DB_VERSION = 2;
+  const DB_VERSION = 4;
   const ITEMS = 'items';
   const CATS = 'categories';
+  const BLOBS = 'blobs';
+  const EVENTS = 'events';
   const SECTIONS = ['people', 'nouns', 'verbs'];
   const TOKEN_KEY = 'aacToken';
   const DISPLAY_KEY = 'aacDisplay';
@@ -875,6 +1010,17 @@
   const objectURLs = new Map();
   const activeCategoryId = { people: null, nouns: null, verbs: null };
 
+  // ---- Role + per-device client id (for activity logging) ----
+  const ROLE_KEY = 'aacRole';
+  const CLIENT_ID_KEY = 'aacClientId';
+  const VALID_ROLES = ['student', 'teacher', 'parent'];
+  let role = VALID_ROLES.includes(localStorage.getItem(ROLE_KEY)) ? localStorage.getItem(ROLE_KEY) : 'student';
+  let clientId = localStorage.getItem(CLIENT_ID_KEY) || '';
+  if (!clientId) {
+    clientId = (crypto.randomUUID ? crypto.randomUUID() : 'c-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
+    localStorage.setItem(CLIENT_ID_KEY, clientId);
+  }
+
   // ---- API helper: auto-injects Bearer token ----
   async function apiFetch(path, opts = {}) {
     const headers = { ...(opts.headers || {}) };
@@ -912,41 +1058,54 @@
     return r.json();
   }
 
-  // Fetch a private blob through the auth-gated proxy and cache the result
-  // both in memory (object URL) and in IndexedDB (so reloads don't re-fetch).
-  async function mediaURL(kind, id, key, slot) {
-    const cacheKey = `${kind}-${id}-${slot}`;
-    if (objectURLs.has(cacheKey)) return objectURLs.get(cacheKey);
+  // ---- Media blob cache (content-addressed by storage key) ----
+  // Blobs live in the BLOBS store keyed by their storage `key`, so they survive
+  // a structure re-sync and can never go stale (a new image = a new key).
+  // objectURLs holds live object URLs, also keyed by storage key.
+  function cacheBlob(key, blob) {
+    if (!key || !(blob instanceof Blob)) return Promise.resolve();
+    return reqPromise(tx(BLOBS, 'readwrite').put(blob, key)).catch(() => {});
+  }
+  async function getMediaBlob(key) {
+    if (!key) return null;
+    try {
+      const cached = await reqPromise(tx(BLOBS).get(key));
+      if (cached) return cached;
+    } catch (_) {}
     let r;
     try { r = await apiFetch('/api/media?key=' + encodeURIComponent(key)); }
     catch (_) { return null; }
     if (!r.ok) return null;
     const blob = await r.blob();
-    try { await persistBlobToIDB(kind, id, slot, blob); } catch (_) {}
+    cacheBlob(key, blob);
+    return blob;
+  }
+  function getMediaURLSync(key) {
+    return key && objectURLs.has(key) ? objectURLs.get(key) : null;
+  }
+  async function getMediaURL(key) {
+    if (!key) return null;
+    if (objectURLs.has(key)) return objectURLs.get(key);
+    const blob = await getMediaBlob(key);
+    if (!blob) return null;
+    if (objectURLs.has(key)) return objectURLs.get(key);   // a parallel call may have created one
     const url = URL.createObjectURL(blob);
-    objectURLs.set(cacheKey, url);
+    objectURLs.set(key, url);
     return url;
   }
-
-  async function persistBlobToIDB(kind, id, slot, blob) {
-    const store = kind === 'i' ? ITEMS : CATS;
-    const row = await reqPromise(tx(store).get(id));
-    if (!row) return;
-    if (slot === 'image') row.image = blob;
-    else if (slot === 'sound') row.sound = blob;
-    await reqPromise(tx(store, 'readwrite').put(row));
+  function revokeMediaURL(key) {
+    if (!key) return;
+    if (objectURLs.has(key)) { URL.revokeObjectURL(objectURLs.get(key)); objectURLs.delete(key); }
+    reqPromise(tx(BLOBS, 'readwrite').delete(key)).catch(() => {});
   }
 
-  // Sets a tile's background image, using the in-memory blob if available,
-  // otherwise kicking off an async fetch via /api/media.
-  function applyImage(el, kind, id, image, imageKey, keepAspect) {
+  // Set a tile's background image from its storage key (lazy fetch + cache).
+  function applyImage(el, imageKey, keepAspect) {
     el.classList.toggle('contain', !!keepAspect);
-    const sync = getURL(kind, id, image, 'image', null);
-    if (sync) { el.style.backgroundImage = `url("${sync}")`; return; }
     if (!imageKey) return;
-    mediaURL(kind, id, imageKey, 'image').then((u) => {
-      if (u) el.style.backgroundImage = `url("${u}")`;
-    }).catch(() => {});
+    const cached = getMediaURLSync(imageKey);
+    if (cached) { el.style.backgroundImage = `url("${cached}")`; return; }
+    getMediaURL(imageKey).then((u) => { if (u) el.style.backgroundImage = `url("${u}")`; }).catch(() => {});
   }
 
   function extFor(blob, fallback) {
@@ -973,6 +1132,14 @@
         if (!_db.objectStoreNames.contains(CATS)) {
           const cstore = _db.createObjectStore(CATS, { keyPath: 'id', autoIncrement: true });
           cstore.createIndex('section', 'section');
+        }
+        if (!_db.objectStoreNames.contains(BLOBS)) {
+          // Out-of-line keys: the value is a Blob, the key is its storage `key` string.
+          _db.createObjectStore(BLOBS);
+        }
+        if (!_db.objectStoreNames.contains(EVENTS)) {
+          // Offline queue for student taps. Auto-increment id, no index needed.
+          _db.createObjectStore(EVENTS, { autoIncrement: true });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -1037,26 +1204,6 @@
     }
   }
 
-  function getURL(kind, id, blob, key, urlFallback) {
-    if (blob) {
-      const cacheKey = `${kind}-${id}-${key}`;
-      if (objectURLs.has(cacheKey)) return objectURLs.get(cacheKey);
-      const url = URL.createObjectURL(blob);
-      objectURLs.set(cacheKey, url);
-      return url;
-    }
-    return urlFallback || null;
-  }
-  function clearURLs(kind, id) {
-    const prefix = `${kind}-${id}-`;
-    for (const k of [...objectURLs.keys()]) {
-      if (k.startsWith(prefix)) {
-        URL.revokeObjectURL(objectURLs.get(k));
-        objectURLs.delete(k);
-      }
-    }
-  }
-
   function sortItems(items, section) {
     return items.sort((a, b) => {
       if (section === 'people') {
@@ -1068,7 +1215,7 @@
     });
   }
 
-  function makeTile({ kind, id, image, imageKey, keepAspect, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
+  function makeTile({ kind, id, imageKey, keepAspect, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
     const wrap = document.createElement('div');
     wrap.className = 'tile-wrap'
       + (isCategory ? ' category' : '')
@@ -1076,7 +1223,7 @@
 
     const sq = document.createElement('div');
     sq.className = 'tile-square';
-    applyImage(sq, kind, id, image, imageKey, keepAspect);
+    applyImage(sq, imageKey, keepAspect);
 
     if (pinned) {
       const pin = document.createElement('div');
@@ -1265,7 +1412,7 @@
         const tabCat = topAncestor || topCats[0];
         const canCycle = topCats.length > 1;
         tabsEl.appendChild(makeTile({
-          kind: 'c', id: tabCat.id, image: tabCat.image, imageKey: tabCat.imageKey, keepAspect: tabCat.keepAspect,
+          kind: 'c', id: tabCat.id, imageKey: tabCat.imageKey, keepAspect: tabCat.keepAspect,
           label: tabCat.label, isCategory: true, isActive: true, showCycleBadge: canCycle,
           onClick: () => {
             if (!canCycle) return;
@@ -1282,7 +1429,7 @@
       topCats.forEach(cat => {
         const isActive = cat.id === topAncestorId;
         const tile = makeTile({
-          kind: 'c', id: cat.id, image: cat.image, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
+          kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
           label: cat.label, isCategory: true, isActive,
           onClick: () => { activeCategoryId[section] = cat.id; renderSection(section); },
           onEdit: () => openCatModal(section, cat),
@@ -1314,7 +1461,7 @@
         tile.className = 'subcat-tile' + (sub.id === activeCat.id ? ' active' : '');
         const sq = document.createElement('div');
         sq.className = 'sq';
-        applyImage(sq, 'c', sub.id, sub.image, sub.imageKey, sub.keepAspect);
+        applyImage(sq, sub.imageKey, sub.keepAspect);
         const lbl = document.createElement('div');
         lbl.className = 'lbl';
         lbl.textContent = sub.label;
@@ -1369,11 +1516,12 @@
 
     items.filter(i => i.categoryId === activeId).forEach(it => {
       const tile = makeTile({
-        kind: 'i', id: it.id, image: it.image, imageKey: it.imageKey, keepAspect: it.keepAspect,
+        kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: it.keepAspect,
         label: it.label, pinned: it.pinned,
         onClick: () => {
-          if (editMode) openItemModal(section, activeId, it);
-          else if (it.sound || it.soundKey) playSound(it);
+          if (editMode) { openItemModal(section, activeId, it); return; }
+          enqueueEvent(it);   // log every kid-mode tile tap (no-op unless role === 'student')
+          if (it.soundKey) playSound(it);
         },
         onEdit: () => openItemModal(section, activeId, it),
       });
@@ -1391,16 +1539,74 @@
   }
 
   async function playSound(item) {
-    const player = document.getElementById('audio-player');
-    let url = getURL('i', item.id, item.sound, 'sound', null);
-    if (!url && item.soundKey) {
-      url = await mediaURL('i', item.id, item.soundKey, 'sound');
-    }
+    if (!item.soundKey) return;
+    const url = await getMediaURL(item.soundKey);
     if (!url) return;
+    const player = document.getElementById('audio-player');
     player.src = url;
     player.currentTime = 0;
     player.play().catch(() => {});
   }
+
+  // ---- Activity log (student taps; offline queue with auto-flush) ----
+  async function enqueueEvent(item) {
+    if (role !== 'student') return;
+    if (!db || !item) return;
+    const evt = {
+      role,
+      itemId: Number.isFinite(item.id) ? item.id : null,
+      section: item.section || null,
+      label: (item.label || '').slice(0, 200),
+      clientId,
+      occurredAt: new Date().toISOString(),
+    };
+    try { await reqPromise(tx(EVENTS, 'readwrite').add(evt)); } catch (_) { return; }
+    flushEvents().catch(() => {});
+  }
+
+  let flushing = false;
+  async function flushEvents() {
+    if (flushing || !db || !authToken || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+    flushing = true;
+    try {
+      // Read up to 200 queued events
+      const batch = [];
+      const keys = [];
+      await new Promise((res, rej) => {
+        const req = tx(EVENTS).openCursor();
+        req.onsuccess = (e) => {
+          const c = e.target.result;
+          if (!c || batch.length >= 200) { res(); return; }
+          batch.push(c.value);
+          keys.push(c.primaryKey);
+          c.continue();
+        };
+        req.onerror = () => rej(req.error);
+      });
+      if (!batch.length) return;
+      let r;
+      try {
+        r = await apiFetch('/api/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ events: batch }),
+        });
+      } catch (_) { return; }
+      if (!r.ok) return;
+      await new Promise((res, rej) => {
+        const t = db.transaction(EVENTS, 'readwrite');
+        const store = t.objectStore(EVENTS);
+        for (const k of keys) store.delete(k);
+        t.oncomplete = () => res();
+        t.onerror = () => rej(t.error);
+      });
+      // If we hit the batch cap, more may be queued — try again.
+      if (batch.length >= 200) { flushing = false; flushEvents().catch(() => {}); }
+    } finally {
+      flushing = false;
+    }
+  }
+  window.addEventListener('online', () => flushEvents().catch(() => {}));
 
   function setEditMode(on) {
     editMode = on;
@@ -1492,12 +1698,43 @@
     }
   }
 
+  // Downscale + re-encode an image before upload: ≤512px longest side, JPEG q0.85.
+  // Re-encoding also strips EXIF (fixes sideways-phone-photo rotation). GIF/SVG and
+  // anything that fails to decode are passed through untouched.
+  async function compressImage(file, maxDim = 512, quality = 0.85) {
+    if (!(file instanceof Blob)) return file;
+    const type = (file.type || '').toLowerCase();
+    if (!type.startsWith('image/')) return file;
+    if (type === 'image/gif' || type === 'image/svg+xml') return file;
+    try {
+      let bitmap;
+      try { bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+      catch (_) { bitmap = await createImageBitmap(file); }
+      const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+      const w = Math.max(1, Math.round(bitmap.width * scale));
+      const h = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      if (bitmap.close) bitmap.close();
+      const out = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', quality));
+      if (out && out.size < file.size) return out;
+      return file;
+    } catch (_) { return file; }
+  }
+
   // ---- Server write helpers ----
+  // Returns { key, blob } where `blob` is what actually got uploaded
+  // (the recompressed image, or the original for sounds / pass-throughs),
+  // so callers cache the same bytes the server has.
   async function uploadIfBlob(field, blob, kind) {
     if (!(blob instanceof Blob)) return null;
-    const fallbackExt = kind.includes('sound') ? 'mp3' : 'jpg';
-    const ext = extFor(blob, fallbackExt);
-    return uploadBlob(blob, kind, ext);
+    const isSound = kind.includes('sound');
+    const finalBlob = isSound ? blob : await compressImage(blob);
+    const ext = extFor(finalBlob, isSound ? 'mp3' : 'jpg');
+    const res = await uploadBlob(finalBlob, kind, ext);
+    return { key: res.key, blob: finalBlob };
   }
 
   async function serverCreateCategory({ section, label, parentId, image, keepAspect, order }) {
@@ -1510,9 +1747,8 @@
         keepAspect: !!keepAspect,
       }),
     });
-    const local = { ...saved };
-    if (image instanceof Blob) local.image = image;
-    await putCat(local);
+    if (up) await cacheBlob(up.key, up.blob);
+    await putCat(saved);
     return saved;
   }
 
@@ -1528,10 +1764,9 @@
       method: 'PUT',
       body: JSON.stringify(body),
     });
-    const local = { ...old, ...saved };
+    if (up) { await cacheBlob(up.key, up.blob); if (old.imageKey && old.imageKey !== up.key) revokeMediaURL(old.imageKey); }
+    const local = { ...saved };
     if (order === undefined) local.order = old.order;   // an edit must never re-position the chip
-    if (image instanceof Blob) local.image = image;
-    clearURLs('c', old.id);
     await putCat(local);
     return saved;
   }
@@ -1540,16 +1775,18 @@
     const result = await apiJSON('/api/categories?id=' + catId, { method: 'DELETE' });
     const ids = result.deletedCategoryIds || [catId];
     const idSet = new Set(ids);
-    // Mirror the cascade locally
+    // Mirror the cascade locally + drop their cached blobs
+    const allCats = await getAllCats(section);
     const allItems = await getAllItems(section);
     for (const it of allItems) {
       if (idSet.has(it.categoryId)) {
-        clearURLs('i', it.id);
+        revokeMediaURL(it.imageKey); revokeMediaURL(it.soundKey);
         await deleteItemDB(it.id);
       }
     }
     for (const id of ids) {
-      clearURLs('c', id);
+      const c = allCats.find(x => x.id === id);
+      if (c) revokeMediaURL(c.imageKey);
       await deleteCatDB(id);
     }
   }
@@ -1567,10 +1804,9 @@
         keepAspect: !!keepAspect,
       }),
     });
-    const local = { ...saved };
-    if (image instanceof Blob) local.image = image;
-    if (sound instanceof Blob) local.sound = sound;
-    await putItem(local);
+    if (upImg) await cacheBlob(upImg.key, upImg.blob);
+    if (upSnd) await cacheBlob(upSnd.key, upSnd.blob);
+    await putItem(saved);
     return saved;
   }
 
@@ -1589,18 +1825,19 @@
       method: 'PUT',
       body: JSON.stringify(body),
     });
-    const local = { ...old, ...saved };
+    if (upImg) { await cacheBlob(upImg.key, upImg.blob); if (old.imageKey && old.imageKey !== upImg.key) revokeMediaURL(old.imageKey); }
+    if (upSnd) { await cacheBlob(upSnd.key, upSnd.blob); if (old.soundKey && old.soundKey !== upSnd.key) revokeMediaURL(old.soundKey); }
+    const local = { ...saved };
     if (order === undefined) local.order = old.order;   // an edit must never re-position the tile
-    if (image instanceof Blob) local.image = image;
-    if (sound instanceof Blob) local.sound = sound;
-    clearURLs('i', old.id);
     await putItem(local);
     return saved;
   }
 
   async function serverDeleteItem(itemId) {
+    let stale;
+    try { stale = await reqPromise(tx(ITEMS).get(itemId)); } catch (_) {}
     await apiJSON('/api/items?id=' + itemId, { method: 'DELETE' });
-    clearURLs('i', itemId);
+    if (stale) { revokeMediaURL(stale.imageKey); revokeMediaURL(stale.soundKey); }
     await deleteItemDB(itemId);
   }
 
@@ -1631,11 +1868,11 @@
     document.getElementById('item-emotion').value = 'default';
     document.getElementById('item-keep-aspect').checked = !!item?.keepAspect;
     const ist = document.getElementById('item-image-status');
-    ist.textContent = item?.image ? 'Current image will be kept' : 'No image selected';
-    ist.className = 'file-status' + (item?.image ? ' has-file' : '');
+    ist.textContent = item?.imageKey ? 'Current image will be kept' : 'No image selected';
+    ist.className = 'file-status' + (item?.imageKey ? ' has-file' : '');
     const sst = document.getElementById('item-sound-status');
-    sst.textContent = item?.sound ? 'Current sound will be kept' : 'No sound selected';
-    sst.className = 'file-status' + (item?.sound ? ' has-file' : '');
+    sst.textContent = item?.soundKey ? 'Current sound will be kept' : 'No sound selected';
+    sst.className = 'file-status' + (item?.soundKey ? ' has-file' : '');
     document.getElementById('item-error').textContent = '';
     document.getElementById('pin-row').style.display = section === 'people' ? 'flex' : 'none';
     document.getElementById('item-pin').checked = !!item?.pinned;
@@ -1795,8 +2032,8 @@
     document.getElementById('cat-apply-items').checked = false;
     document.getElementById('cat-apply-items-row').style.display = cat ? 'flex' : 'none';
     const cist = document.getElementById('cat-image-status');
-    cist.textContent = cat?.image ? 'Current image will be kept' : 'No image selected';
-    cist.className = 'file-status' + (cat?.image ? ' has-file' : '');
+    cist.textContent = cat?.imageKey ? 'Current image will be kept' : 'No image selected';
+    cist.className = 'file-status' + (cat?.imageKey ? ' has-file' : '');
     document.getElementById('cat-error').textContent = '';
     document.getElementById('cat-delete').style.display = cat ? 'block' : 'none';
 
@@ -2163,7 +2400,10 @@
     for (const section of SECTIONS) {
       for (const c of await getAllCats(section)) {
         const exp = { id: c.id, section: c.section, label: c.label, order: c.order ?? 0, parentId: c.parentId ?? null, keepAspect: !!c.keepAspect };
-        if (c.image) exp.image = await blobToDataURL(c.image);
+        if (c.imageKey) {
+          const b = await getMediaBlob(c.imageKey);
+          if (b) exp.image = await blobToDataURL(b);
+        }
         out.categories.push(exp);
       }
       for (const it of await getAllItems(section)) {
@@ -2172,8 +2412,14 @@
           label: it.label, order: it.order ?? 0, pinned: !!it.pinned,
           keepAspect: !!it.keepAspect,
         };
-        if (it.image) exp.image = await blobToDataURL(it.image);
-        if (it.sound) exp.sound = await blobToDataURL(it.sound);
+        if (it.imageKey) {
+          const b = await getMediaBlob(it.imageKey);
+          if (b) exp.image = await blobToDataURL(b);
+        }
+        if (it.soundKey) {
+          const b = await getMediaBlob(it.soundKey);
+          if (b) exp.sound = await blobToDataURL(b);
+        }
         out.items.push(exp);
       }
     }
@@ -2311,9 +2557,10 @@
       for (const url of objectURLs.values()) URL.revokeObjectURL(url);
       objectURLs.clear();
       await new Promise((res, rej) => {
-        const t = db.transaction([ITEMS, CATS], 'readwrite');
+        const t = db.transaction([ITEMS, CATS, BLOBS], 'readwrite');
         t.objectStore(ITEMS).clear();
         t.objectStore(CATS).clear();
+        t.objectStore(BLOBS).clear();
         t.oncomplete = () => res();
         t.onerror = () => rej(t.error);
       });
@@ -2362,6 +2609,369 @@
     document.getElementById(`disp-across-${s}`).addEventListener('change', (e) => { display.tilesAcross[s] = clampAcross(e.target.value); commitDisplay(); });
   }
 
+  // ---- Organize view (Miller columns) ----
+  // Drill state: which section, which top-level cat, which subcategory.
+  const orgSel = { section: 'people', topCatId: null, subCatId: null };
+  let orgDrag = null;   // { kind: 'cat' | 'item', id, section, parentId|categoryId }
+
+  const organizeOverlay = document.getElementById('organize-overlay');
+
+  function openOrganize() {
+    if (!display.sectionVisible[orgSel.section]) {
+      orgSel.section = SECTIONS.find(s => display.sectionVisible[s]) || 'people';
+    }
+    organizeOverlay.classList.add('show');
+    renderOrganize();
+  }
+  function closeOrganize() {
+    organizeOverlay.classList.remove('show');
+    renderAll();   // structure may have changed; refresh the main view
+  }
+  document.getElementById('organize-btn').addEventListener('click', openOrganize);
+  document.getElementById('organize-close').addEventListener('click', closeOrganize);
+
+  // Build a single row. `entity` is null for section rows. Returns an HTMLElement.
+  function makeOrgRow({ kind, entity, section, label, imageKey, keepAspect, selected, hasChildren }) {
+    const row = document.createElement('div');
+    row.className = 'org-row' + (selected ? ' selected' : '');
+    row.dataset.kind = kind;
+    row.dataset.section = section;
+    if (entity) row.dataset.id = entity.id;
+    const thumb = document.createElement('div');
+    thumb.className = 'org-thumb' + (keepAspect ? ' contain' : '');
+    if (imageKey) {
+      const cached = getMediaURLSync(imageKey);
+      if (cached) thumb.style.backgroundImage = `url("${cached}")`;
+      else getMediaURL(imageKey).then((u) => { if (u) thumb.style.backgroundImage = `url("${u}")`; }).catch(() => {});
+    }
+    const lbl = document.createElement('div');
+    lbl.className = 'org-label';
+    lbl.textContent = label;
+    row.appendChild(thumb);
+    row.appendChild(lbl);
+    if (hasChildren) {
+      const chev = document.createElement('div');
+      chev.className = 'org-chevron';
+      chev.textContent = '›';
+      row.appendChild(chev);
+    }
+    return row;
+  }
+
+  async function renderOrganize() {
+    const allCats = {};   // section -> cats[]
+    const allItems = {};  // section -> items[]
+    for (const s of SECTIONS) {
+      allCats[s] = (await getAllCats(s)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      allItems[s] = (await getAllItems(s)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    }
+
+    // -------- Column 1: Sections --------
+    const secBody = document.getElementById('org-col-sec');
+    secBody.innerHTML = '';
+    for (const s of SECTIONS) {
+      const row = makeOrgRow({
+        kind: 'section',
+        entity: null,
+        section: s,
+        label: s[0].toUpperCase() + s.slice(1),
+        selected: s === orgSel.section,
+        hasChildren: true,
+      });
+      row.dataset.kind = 'section';
+      row.dataset.section = s;
+      row.addEventListener('click', () => {
+        orgSel.section = s; orgSel.topCatId = null; orgSel.subCatId = null;
+        renderOrganize();
+      });
+      attachOrgDrop(row);
+      secBody.appendChild(row);
+    }
+
+    // -------- Column 2: top-level cats of selected section --------
+    const topBody = document.getElementById('org-col-top');
+    topBody.innerHTML = '';
+    const topCats = allCats[orgSel.section].filter(c => c.parentId == null);
+    if (!topCats.length) topBody.appendChild(orgEmptyHint('No categories yet — drag items here to start.'));
+    for (const cat of topCats) {
+      const subs = allCats[orgSel.section].filter(c => c.parentId === cat.id);
+      const row = makeOrgRow({
+        kind: 'cat',
+        entity: cat, section: orgSel.section,
+        label: cat.label, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
+        selected: cat.id === orgSel.topCatId,
+        hasChildren: subs.length > 0,
+      });
+      row.dataset.parentId = '';
+      row.draggable = true;
+      row.addEventListener('click', () => {
+        orgSel.topCatId = cat.id; orgSel.subCatId = null;
+        renderOrganize();
+      });
+      attachOrgDrag(row); attachOrgDrop(row);
+      topBody.appendChild(row);
+    }
+    attachOrgColBodyDrop(topBody, { col: 'top', section: orgSel.section, parentId: null });
+
+    // -------- Column 3: subcategories of selected top cat --------
+    const subBody = document.getElementById('org-col-sub');
+    subBody.innerHTML = '';
+    if (orgSel.topCatId != null) {
+      const subs = allCats[orgSel.section].filter(c => c.parentId === orgSel.topCatId);
+      if (!subs.length) subBody.appendChild(orgEmptyHint('No subcategories.'));
+      for (const sub of subs) {
+        const row = makeOrgRow({
+          kind: 'cat',
+          entity: sub, section: orgSel.section,
+          label: sub.label, imageKey: sub.imageKey, keepAspect: sub.keepAspect,
+          selected: sub.id === orgSel.subCatId,
+          hasChildren: false,
+        });
+        row.dataset.parentId = String(orgSel.topCatId);
+        row.draggable = true;
+        row.addEventListener('click', () => {
+          orgSel.subCatId = sub.id;
+          renderOrganize();
+        });
+        attachOrgDrag(row); attachOrgDrop(row);
+        subBody.appendChild(row);
+      }
+      attachOrgColBodyDrop(subBody, { col: 'sub', section: orgSel.section, parentId: orgSel.topCatId });
+    }
+
+    // -------- Column 4: items of selected category (subcat if any, else top cat) --------
+    const itemBody = document.getElementById('org-col-item');
+    itemBody.innerHTML = '';
+    const itemParentId = orgSel.subCatId ?? orgSel.topCatId;
+    if (itemParentId != null) {
+      const items = allItems[orgSel.section].filter(it => it.categoryId === itemParentId);
+      if (!items.length) itemBody.appendChild(orgEmptyHint('No items.'));
+      for (const it of items) {
+        const row = makeOrgRow({
+          kind: 'item',
+          entity: it, section: orgSel.section,
+          label: it.label, imageKey: it.imageKey, keepAspect: it.keepAspect,
+          selected: false,
+          hasChildren: false,
+        });
+        row.dataset.categoryId = String(itemParentId);
+        row.draggable = true;
+        attachOrgDrag(row); attachOrgDrop(row);
+        itemBody.appendChild(row);
+      }
+      attachOrgColBodyDrop(itemBody, { col: 'item', section: orgSel.section, parentId: itemParentId });
+    }
+  }
+
+  function orgEmptyHint(text) {
+    const d = document.createElement('div');
+    d.className = 'org-empty';
+    d.textContent = text;
+    return d;
+  }
+
+  // ---- Drag handlers ----
+  function attachOrgDrag(row) {
+    row.addEventListener('dragstart', (e) => {
+      const kind = row.dataset.kind;
+      const id = parseInt(row.dataset.id, 10);
+      const section = row.dataset.section;
+      const parentId = row.dataset.parentId !== undefined && row.dataset.parentId !== ''
+        ? parseInt(row.dataset.parentId, 10) : null;
+      const categoryId = row.dataset.categoryId !== undefined
+        ? parseInt(row.dataset.categoryId, 10) : null;
+      orgDrag = { kind, id, section, parentId, categoryId };
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', String(id)); } catch (_) {}
+      e.stopPropagation();
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      document.querySelectorAll('.drop-before, .drop-into, .drop-end').forEach(el => {
+        el.classList.remove('drop-before', 'drop-into', 'drop-end');
+      });
+      orgDrag = null;
+    });
+  }
+
+  function attachOrgDrop(row) {
+    row.addEventListener('dragover', (e) => {
+      if (!orgDrag) return;
+      const plan = planRowDrop(row);
+      if (!plan) return;
+      e.preventDefault();
+      e.stopPropagation();   // keep the col-body handler from also lighting up
+      e.dataTransfer.dropEffect = 'move';
+      row.classList.add(plan.mode === 'into' ? 'drop-into' : 'drop-before');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drop-before', 'drop-into'));
+    row.addEventListener('drop', async (e) => {
+      if (!orgDrag) return;
+      e.preventDefault(); e.stopPropagation();
+      row.classList.remove('drop-before', 'drop-into');
+      const plan = planRowDrop(row);
+      if (!plan) return;
+      await moveEntity(plan);
+      await renderOrganize();
+    });
+  }
+
+  function attachOrgColBodyDrop(body, ctx) {
+    body.addEventListener('dragover', (e) => {
+      if (!orgDrag) return;
+      const plan = planColBodyDrop(ctx);
+      if (!plan) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      body.classList.add('drop-end');
+    });
+    body.addEventListener('dragleave', (e) => {
+      // Only clear when the cursor actually leaves the body, not when crossing into a child row.
+      if (e.target === body) body.classList.remove('drop-end');
+    });
+    body.addEventListener('drop', async (e) => {
+      if (!orgDrag) return;
+      e.preventDefault();
+      body.classList.remove('drop-end');
+      const plan = planColBodyDrop(ctx);
+      if (!plan) return;
+      await moveEntity(plan);
+      await renderOrganize();
+    });
+  }
+
+  // Returns null if drop is disallowed; otherwise { mode, kind, id, fromSection, toSection, newParentId, beforeTargetId }
+  function planRowDrop(targetRow) {
+    if (!orgDrag) return null;
+    const t = {
+      kind: targetRow.dataset.kind,
+      id: targetRow.dataset.id ? parseInt(targetRow.dataset.id, 10) : null,
+      section: targetRow.dataset.section,
+      parentId: targetRow.dataset.parentId !== undefined && targetRow.dataset.parentId !== ''
+        ? parseInt(targetRow.dataset.parentId, 10) : null,
+      categoryId: targetRow.dataset.categoryId !== undefined
+        ? parseInt(targetRow.dataset.categoryId, 10) : null,
+    };
+    // v1: same-section only
+    if (orgDrag.section !== t.section) return null;
+    // No-op on self
+    if (orgDrag.kind === t.kind && orgDrag.id === t.id) return null;
+    // Same kind: reorder as sibling-of-target (insert before target)
+    if (orgDrag.kind === 'cat' && t.kind === 'cat') {
+      // Disallow dropping a category into its own subtree (would create a cycle)
+      // i.e., target's parentId chain must not contain orgDrag.id
+      // We'll compute via descendants of orgDrag.id below.
+      return {
+        mode: 'before', kind: 'cat', id: orgDrag.id,
+        toSection: t.section, newParentId: t.parentId,
+        beforeTargetId: t.id,
+      };
+    }
+    if (orgDrag.kind === 'item' && t.kind === 'item') {
+      return {
+        mode: 'before', kind: 'item', id: orgDrag.id,
+        toSection: t.section, newParentId: t.categoryId,
+        beforeTargetId: t.id,
+      };
+    }
+    // Cross kind: item onto cat → move into that cat (append)
+    if (orgDrag.kind === 'item' && t.kind === 'cat') {
+      return {
+        mode: 'into', kind: 'item', id: orgDrag.id,
+        toSection: t.section, newParentId: t.id,
+        beforeTargetId: null,
+      };
+    }
+    // Cross kind: cat onto section row → promote to top-level of section
+    if (orgDrag.kind === 'cat' && t.kind === 'section') {
+      return {
+        mode: 'into', kind: 'cat', id: orgDrag.id,
+        toSection: t.section, newParentId: null,
+        beforeTargetId: null,
+      };
+    }
+    return null;
+  }
+
+  function planColBodyDrop(ctx) {
+    if (!orgDrag) return null;
+    if (orgDrag.section !== ctx.section) return null;
+    if (ctx.col === 'top' && orgDrag.kind === 'cat') {
+      return { mode: 'into', kind: 'cat', id: orgDrag.id, toSection: ctx.section, newParentId: null, beforeTargetId: null };
+    }
+    if (ctx.col === 'sub') {
+      if (orgDrag.kind === 'cat')  return { mode: 'into', kind: 'cat',  id: orgDrag.id, toSection: ctx.section, newParentId: ctx.parentId, beforeTargetId: null };
+      if (orgDrag.kind === 'item') return { mode: 'into', kind: 'item', id: orgDrag.id, toSection: ctx.section, newParentId: ctx.parentId, beforeTargetId: null };
+    }
+    if (ctx.col === 'item' && orgDrag.kind === 'item') {
+      return { mode: 'into', kind: 'item', id: orgDrag.id, toSection: ctx.section, newParentId: ctx.parentId, beforeTargetId: null };
+    }
+    return null;
+  }
+
+  // Apply a drop plan: reparent (if needed) and re-stamp sibling orders.
+  async function moveEntity(plan) {
+    const { kind, id, toSection, newParentId, beforeTargetId } = plan;
+    if (kind === 'cat') {
+      const cats = await getAllCats(toSection);
+      const moving = cats.find(c => c.id === id);
+      if (!moving) return;
+      // Cycle guard: can't move a cat into its own subtree.
+      const subtree = new Set(descendantCatIds(cats, id));
+      if (newParentId != null && subtree.has(newParentId)) return;
+      // 1) Change parent if it differs.
+      if ((moving.parentId ?? null) !== (newParentId ?? null)) {
+        await serverUpdateCategory(moving, { parentId: newParentId });
+      }
+      // 2) Re-stamp orders in the new sibling group.
+      const fresh = await getAllCats(toSection);
+      const siblings = fresh
+        .filter(c => (c.parentId ?? null) === (newParentId ?? null))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      arrangeBefore(siblings, id, beforeTargetId);
+      for (let i = 0; i < siblings.length; i++) {
+        const newOrder = i * 1000;
+        if (siblings[i].order === newOrder) continue;
+        await serverUpdateCategory(siblings[i], { order: newOrder });
+      }
+    } else if (kind === 'item') {
+      const items = await getAllItems(toSection);
+      const moving = items.find(it => it.id === id);
+      if (!moving) return;
+      if ((moving.categoryId ?? null) !== (newParentId ?? null)) {
+        await serverUpdateItem(moving, { categoryId: newParentId });
+      }
+      const fresh = await getAllItems(toSection);
+      const siblings = sortItems(fresh.filter(it => it.categoryId === newParentId), toSection);
+      arrangeBefore(siblings, id, beforeTargetId);
+      for (let i = 0; i < siblings.length; i++) {
+        const newOrder = i * 1000;
+        if (siblings[i].order === newOrder) continue;
+        await serverUpdateItem(siblings[i], { order: newOrder });
+      }
+    }
+  }
+  // Move `id` to just before `beforeId` in `arr`, or to the end if beforeId is null.
+  function arrangeBefore(arr, id, beforeId) {
+    const fromIdx = arr.findIndex(x => x.id === id);
+    if (fromIdx < 0) return;
+    const [moved] = arr.splice(fromIdx, 1);
+    if (beforeId == null) { arr.push(moved); return; }
+    const ti = arr.findIndex(x => x.id === beforeId);
+    if (ti < 0) arr.push(moved); else arr.splice(ti, 0, moved);
+  }
+
+  // ---- Role picker wiring ----
+  const roleSelect = document.getElementById('role-select');
+  roleSelect.value = role;
+  roleSelect.addEventListener('change', (e) => {
+    const v = e.target.value;
+    if (!VALID_ROLES.includes(v)) return;
+    role = v;
+    localStorage.setItem(ROLE_KEY, role);
+  });
+
   // Init
   (async () => {
     try {
@@ -2369,23 +2979,20 @@
       applyDisplay();
       db = await openDB();
       await migrateLegacyItems();
+      // Paint immediately from whatever's cached locally so the app feels instant,
+      // then refresh the structure from the server (which is canonical). Media
+      // files stay lazy — fetched on demand and cached by their storage key.
       await renderAll();
-      // If a token is stored and the local cache is empty, pull from cloud in the background
+      flushEvents().catch(() => {});   // drain any taps queued from a previous offline session
       if (authToken) {
-        let total = 0;
-        for (const s of SECTIONS) total += (await getAllCats(s)).length;
-        if (total === 0) {
-          try {
-            const r = await apiFetch('/api/sync');
-            if (r.ok) {
-              const data = await r.json();
-              if (data.categories.length || data.items.length) {
-                await hydrateFromServer(data);
-                await renderAll();
-              }
-            }
-          } catch (_) { /* offline / unauthorized — keep local empty cache */ }
-        }
+        try {
+          const r = await apiFetch('/api/sync');
+          if (r.ok) {
+            const data = await r.json();
+            await hydrateFromServer(data);
+            await renderAll();
+          }
+        } catch (_) { /* offline — keep whatever was cached locally */ }
       }
     } catch (err) {
       document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif;">Failed to open storage: ${err.message}<br><br>Try opening this file in Chrome.</div>`;
