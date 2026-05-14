@@ -20,6 +20,10 @@
     -webkit-tap-highlight-color: transparent;
     user-select: none;
   }
+  body { display: flex; flex-direction: column; min-height: 0; }
+  header { flex: 0 0 auto; }
+  main   { flex: 1 1 auto; min-height: 0; }
+  .needs-section { flex: 0 0 auto; }
 
   header {
     display: flex;
@@ -50,18 +54,25 @@
     cursor: pointer;
   }
   header button:hover { background: #880e4f; }
-  header #role-select {
-    background: rgba(255,255,255,.15);
-    color: white;
-    border: 1px solid rgba(255,255,255,.35);
-    border-radius: 6px;
-    padding: 8px 10px;
+  /* Login icon: small + low-contrast so it doesn't distract the kid (and
+     so a stray tap isn't tempting). Becomes more visible once the parent
+     is in edit mode (everything else in the header is already louder). */
+  header #login-btn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,.25);
+    color: rgba(255,255,255,.55);
+    padding: 4px 6px;
     font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    margin-right: 4px;
+    line-height: 1;
+    border-radius: 50%;
+    width: 28px; height: 28px;
+    min-width: 0;
+    display: inline-flex; align-items: center; justify-content: center;
   }
-  header #role-select option { color: #222; }
+  header #login-btn:hover { background: rgba(255,255,255,.12); color: white; }
+  body.edit-mode header #login-btn {
+    background: #6a1b4d; border-color: transparent; color: white;
+  }
   body.edit-mode header { background: #c2185b; }
   body.edit-mode header button { background: #6a1b4d; }
   body.edit-mode header button:hover { background: #4a0d36; }
@@ -78,7 +89,21 @@
     grid-template-columns: var(--main-cols, 2fr 4fr 3fr);
     gap: 12px;
     padding: 12px;
-    height: calc(100% - 64px);
+  }
+  /* Needs strip — Fletcher's most-used words; lives below the three section
+     columns and spans the full width. Column count = sum of the visible
+     section tiles-across, set in JS via --items-cols. */
+  .needs-section {
+    background: white;
+    border-top: 4px solid #ff1493;
+    box-shadow: 0 -1px 3px rgba(0,0,0,.08);
+    display: flex; flex-direction: column;
+  }
+  .needs-section .items-grid {
+    flex: 0 0 auto;          /* don't take all remaining space */
+    overflow-y: visible;
+    padding: 10px 12px;
+    gap: 10px;
   }
 
   .aac-section {
@@ -710,18 +735,13 @@
   <h1>Fletcher's World</h1>
   <div style="display:flex; align-items:center; gap:8px;">
     <span class="status" id="mode-status"></span>
-    <select id="role-select" title="Who is using this device?" aria-label="Role">
-      <option value="student">👧 Student</option>
-      <option value="teacher">🧑‍🏫 Teacher</option>
-      <option value="parent">👨‍👩 Parent</option>
-    </select>
     <button id="organize-btn" class="edit-only">📁 Organize</button>
     <button id="display-btn" class="edit-only">⚙ Display</button>
     <button id="export-btn" class="edit-only">Export</button>
     <button id="import-btn" class="edit-only">Import</button>
     <button id="wipe-btn" class="edit-only">Wipe All</button>
     <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
-    <button id="login-btn">Login</button>
+    <button id="login-btn" aria-label="Login" title="Login">🔒</button>
   </div>
 </header>
 
@@ -757,6 +777,10 @@
     </div>
   </section>
 </main>
+
+<section class="aac-section needs-section" data-section="needs">
+  <div class="items-grid" id="items-needs"></div>
+</section>
 
 <div class="modal-backdrop" id="login-modal">
   <div class="modal">
@@ -905,6 +929,9 @@
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-show-verbs"><label for="disp-show-verbs">Verbs</label>
     </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-show-needs"><label for="disp-show-needs">Needs strip (bottom row)</label>
+    </div>
     <label style="margin-top:18px;">Tiles across each section</label>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-top:6px;">
       <span>People</span><select id="disp-across-people" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
@@ -953,7 +980,9 @@
   const CATS = 'categories';
   const BLOBS = 'blobs';
   const EVENTS = 'events';
-  const SECTIONS = ['people', 'nouns', 'verbs'];
+  const SECTIONS = ['people', 'nouns', 'verbs', 'needs'];
+  // Sections that participate in the main 3-column grid (excludes the flat "needs" strip).
+  const MAIN_SECTIONS = ['people', 'nouns', 'verbs'];
   const TOKEN_KEY = 'aacToken';
   const DISPLAY_KEY = 'aacDisplay';
   const ACROSS_MIN = 1, ACROSS_MAX = 8;
@@ -961,7 +990,8 @@
   // Per-device display preferences (not synced — screen sizes differ).
   const DISPLAY_DEFAULTS = {
     hideLabels: false,
-    sectionVisible: { people: true, nouns: true, verbs: true },
+    sectionVisible: { people: true, nouns: true, verbs: true, needs: true },
+    // 'needs' has no own tilesAcross — it's computed as the sum of the visible main sections.
     tilesAcross: { people: 2, nouns: 4, verbs: 3 },
   };
   let display = structuredClone(DISPLAY_DEFAULTS);
@@ -974,6 +1004,7 @@
           people: raw.sectionVisible?.people !== false,
           nouns:  raw.sectionVisible?.nouns  !== false,
           verbs:  raw.sectionVisible?.verbs  !== false,
+          needs:  raw.sectionVisible?.needs  !== false,
         },
         tilesAcross: {
           people: clampAcross(raw.tilesAcross?.people ?? DISPLAY_DEFAULTS.tilesAcross.people),
@@ -989,18 +1020,29 @@
     if (!Number.isFinite(n)) return 2;
     return Math.min(ACROSS_MAX, Math.max(ACROSS_MIN, n));
   }
+  // Total columns in the needs strip = sum of the visible main sections.
+  function needsColCount() {
+    const n = MAIN_SECTIONS
+      .filter(s => display.sectionVisible[s])
+      .reduce((sum, s) => sum + (display.tilesAcross[s] || 0), 0);
+    return Math.max(1, n);
+  }
   // Applies the chrome-level bits (label hiding, section visibility, column counts).
   function applyDisplay() {
     // Labels always show in edit mode so the parent can see what they're editing.
     document.body.classList.toggle('hide-labels', display.hideLabels && !editMode);
-    const visibleFrs = SECTIONS
+    const visibleFrs = MAIN_SECTIONS
       .filter(s => display.sectionVisible[s])
       .map(s => `${display.tilesAcross[s]}fr`);
     document.querySelector('main').style.setProperty('--main-cols', visibleFrs.join(' ') || '1fr');
     for (const s of SECTIONS) {
       const sectionEl = document.querySelector(`.aac-section[data-section="${s}"]`);
-      sectionEl.style.display = display.sectionVisible[s] ? '' : 'none';
-      document.getElementById(`items-${s}`).style.setProperty('--items-cols', `repeat(${display.tilesAcross[s]}, 1fr)`);
+      if (sectionEl) sectionEl.style.display = display.sectionVisible[s] ? '' : 'none';
+      const itemsEl = document.getElementById(`items-${s}`);
+      if (itemsEl) {
+        const n = s === 'needs' ? needsColCount() : display.tilesAcross[s];
+        itemsEl.style.setProperty('--items-cols', `repeat(${n}, 1fr)`);
+      }
     }
   }
 
@@ -1010,11 +1052,11 @@
   const objectURLs = new Map();
   const activeCategoryId = { people: null, nouns: null, verbs: null };
 
-  // ---- Role + per-device client id (for activity logging) ----
-  const ROLE_KEY = 'aacRole';
+  // ---- Per-device client id (for activity logging) ----
+  // Role distinction is shelved for now — every tap is logged with role
+  // 'student' so the column stays populated for when we bring roles back.
   const CLIENT_ID_KEY = 'aacClientId';
-  const VALID_ROLES = ['student', 'teacher', 'parent'];
-  let role = VALID_ROLES.includes(localStorage.getItem(ROLE_KEY)) ? localStorage.getItem(ROLE_KEY) : 'student';
+  const role = 'student';
   let clientId = localStorage.getItem(CLIENT_ID_KEY) || '';
   if (!clientId) {
     clientId = (crypto.randomUUID ? crypto.randomUUID() : 'c-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
@@ -1332,9 +1374,13 @@
   async function reorderEntities(section, entityKind, parentId, draggedId, targetId) {
     let list;
     if (entityKind === 'item') {
-      const activeId = activeCategoryId[section];
-      if (!activeId) return;
-      list = sortItems((await getAllItems(section)).filter(i => i.categoryId === activeId), section);
+      // 'needs' items have no categoryId; everything else filters by the active category.
+      const activeId = section === 'needs' ? null : activeCategoryId[section];
+      if (section !== 'needs' && !activeId) return;
+      list = sortItems(
+        (await getAllItems(section)).filter(i => (i.categoryId ?? null) === (activeId ?? null)),
+        section
+      );
     } else {
       list = (await getAllCats(section))
         .filter(c => (c.parentId ?? null) === (parentId ?? null))
@@ -1380,6 +1426,7 @@
   }
 
   async function renderSection(section) {
+    if (section === 'needs') return renderNeeds();
     const N = display.tilesAcross[section];
     const cats = await getAllCats(section);
     const items = sortItems(await getAllItems(section), section);
@@ -1514,13 +1561,21 @@
       return;
     }
 
+    // Snapshot the breadcrumb for activity logging: if the active category
+    // is a subcategory, its parent's label is the "category" and its own
+    // label is the "subcategory"; otherwise just the top-level label.
+    const isSub = activeCat?.parentId != null;
+    const topForLog = isSub ? cats.find(c => c.id === activeCat.parentId) : activeCat;
+    const tapCategoryName = topForLog?.label || null;
+    const tapSubcategoryName = isSub ? (activeCat?.label || null) : null;
+
     items.filter(i => i.categoryId === activeId).forEach(it => {
       const tile = makeTile({
         kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: it.keepAspect,
         label: it.label, pinned: it.pinned,
         onClick: () => {
           if (editMode) { openItemModal(section, activeId, it); return; }
-          enqueueEvent(it);   // log every kid-mode tile tap (no-op unless role === 'student')
+          enqueueEvent(it, tapCategoryName, tapSubcategoryName);
           if (it.soundKey) playSound(it);
         },
         onEdit: () => openItemModal(section, activeId, it),
@@ -1538,6 +1593,35 @@
     for (const s of SECTIONS) await renderSection(s);
   }
 
+  // The "needs" strip is flat: no categories, items with categoryId=null,
+  // grid spans as many columns as the visible main sections combined.
+  async function renderNeeds() {
+    const items = sortItems(await getAllItems('needs'), 'needs');
+    const itemsEl = document.getElementById('items-needs');
+    if (!itemsEl) return;
+    itemsEl.innerHTML = '';
+    itemsEl.style.setProperty('--items-cols', `repeat(${needsColCount()}, 1fr)`);
+
+    items.forEach(it => {
+      const tile = makeTile({
+        kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: it.keepAspect,
+        label: it.label, pinned: false,
+        onClick: () => {
+          if (editMode) { openItemModal('needs', null, it); return; }
+          enqueueEvent(it, null, null);   // needs items have no category path
+          if (it.soundKey) playSound(it);
+        },
+        onEdit: () => openItemModal('needs', null, it),
+      });
+      tile.dataset.dragKind = 'item';
+      tile.dataset.entityId = it.id;
+      tile.dataset.section = 'needs';
+      if (editMode) attachDrag(tile);
+      itemsEl.appendChild(tile);
+    });
+    itemsEl.appendChild(makeAddItemTile(() => openItemModal('needs', null, null)));
+  }
+
   async function playSound(item) {
     if (!item.soundKey) return;
     const url = await getMediaURL(item.soundKey);
@@ -1548,15 +1632,16 @@
     player.play().catch(() => {});
   }
 
-  // ---- Activity log (student taps; offline queue with auto-flush) ----
-  async function enqueueEvent(item) {
-    if (role !== 'student') return;
+  // ---- Activity log (every kid-mode tile tap; offline queue with auto-flush) ----
+  async function enqueueEvent(item, categoryName, subcategoryName) {
     if (!db || !item) return;
     const evt = {
       role,
       itemId: Number.isFinite(item.id) ? item.id : null,
       section: item.section || null,
       label: (item.label || '').slice(0, 200),
+      categoryName: categoryName ? String(categoryName).slice(0, 200) : null,
+      subcategoryName: subcategoryName ? String(subcategoryName).slice(0, 200) : null,
       clientId,
       occurredAt: new Date().toISOString(),
     };
@@ -1611,7 +1696,10 @@
   function setEditMode(on) {
     editMode = on;
     document.body.classList.toggle('edit-mode', on);
-    document.getElementById('login-btn').textContent = on ? 'Logout' : 'Login';
+    const lb = document.getElementById('login-btn');
+    lb.textContent = on ? '🔓' : '🔒';
+    lb.setAttribute('aria-label', on ? 'Logout' : 'Login');
+    lb.setAttribute('title', on ? 'Logout' : 'Login');
     document.getElementById('mode-status').textContent = on ? 'Edit mode' : '';
     applyDisplay();   // re-evaluate label hiding now that editMode changed
     renderAll();
@@ -1630,6 +1718,11 @@
     document.getElementById('login-pass').focus();
   });
   document.getElementById('login-cancel').addEventListener('click', () => loginModal.classList.remove('show'));
+  // Safety: tapping the backdrop dismisses the login modal so a kid who
+  // accidentally opens it isn't trapped.
+  loginModal.addEventListener('click', (e) => {
+    if (e.target === loginModal) loginModal.classList.remove('show');
+  });
   async function attemptLogin() {
     const p = document.getElementById('login-pass').value.trim();
     const errEl = document.getElementById('login-error');
@@ -1859,7 +1952,7 @@
     const cats = await getAllCats(section);
     const cat = cats.find(c => c.id === categoryId);
     document.getElementById('item-modal-title').textContent = item ? 'Edit Item' : 'Add Item';
-    document.getElementById('item-modal-context').textContent = `${section} / ${cat?.label || '(unnamed)'}`;
+    document.getElementById('item-modal-context').textContent = cat ? `${section} / ${cat.label}` : section;
     document.getElementById('item-label').value = item?.label || '';
     document.getElementById('item-image').value = '';
     document.getElementById('item-sound').value = '';
@@ -2587,12 +2680,12 @@
   }
   function populateDisplayModal() {
     document.getElementById('disp-hide-labels').checked = display.hideLabels;
-    document.getElementById('disp-show-people').checked = display.sectionVisible.people;
-    document.getElementById('disp-show-nouns').checked  = display.sectionVisible.nouns;
-    document.getElementById('disp-show-verbs').checked  = display.sectionVisible.verbs;
-    fillAcrossSelect(document.getElementById('disp-across-people'), display.tilesAcross.people);
-    fillAcrossSelect(document.getElementById('disp-across-nouns'),  display.tilesAcross.nouns);
-    fillAcrossSelect(document.getElementById('disp-across-verbs'),  display.tilesAcross.verbs);
+    for (const s of SECTIONS) {
+      const showEl = document.getElementById(`disp-show-${s}`);
+      if (showEl) showEl.checked = display.sectionVisible[s];
+      const acrossEl = document.getElementById(`disp-across-${s}`);
+      if (acrossEl) fillAcrossSelect(acrossEl, display.tilesAcross[s]);
+    }
   }
   function openDisplayModal() { populateDisplayModal(); displayModal.classList.add('show'); }
   function commitDisplay() { saveDisplay(); applyDisplay(); }
@@ -2605,8 +2698,10 @@
   });
   document.getElementById('disp-hide-labels').addEventListener('change', (e) => { display.hideLabels = e.target.checked; commitDisplay(); });
   for (const s of SECTIONS) {
-    document.getElementById(`disp-show-${s}`).addEventListener('change', (e) => { display.sectionVisible[s] = e.target.checked; commitDisplay(); });
-    document.getElementById(`disp-across-${s}`).addEventListener('change', (e) => { display.tilesAcross[s] = clampAcross(e.target.value); commitDisplay(); });
+    const showEl = document.getElementById(`disp-show-${s}`);
+    if (showEl) showEl.addEventListener('change', (e) => { display.sectionVisible[s] = e.target.checked; commitDisplay(); });
+    const acrossEl = document.getElementById(`disp-across-${s}`);
+    if (acrossEl) acrossEl.addEventListener('change', (e) => { display.tilesAcross[s] = clampAcross(e.target.value); commitDisplay(); });
   }
 
   // ---- Organize view (Miller columns) ----
@@ -2617,8 +2712,8 @@
   const organizeOverlay = document.getElementById('organize-overlay');
 
   function openOrganize() {
-    if (!display.sectionVisible[orgSel.section]) {
-      orgSel.section = SECTIONS.find(s => display.sectionVisible[s]) || 'people';
+    if (!MAIN_SECTIONS.includes(orgSel.section) || !display.sectionVisible[orgSel.section]) {
+      orgSel.section = MAIN_SECTIONS.find(s => display.sectionVisible[s]) || 'people';
     }
     organizeOverlay.classList.add('show');
     renderOrganize();
@@ -2669,7 +2764,9 @@
     // -------- Column 1: Sections --------
     const secBody = document.getElementById('org-col-sec');
     secBody.innerHTML = '';
-    for (const s of SECTIONS) {
+    // Organize view manages the category tree; the flat "needs" strip is edited
+    // inline from the main view, so we skip it here.
+    for (const s of MAIN_SECTIONS) {
       const row = makeOrgRow({
         kind: 'section',
         entity: null,
@@ -2961,16 +3058,6 @@
     const ti = arr.findIndex(x => x.id === beforeId);
     if (ti < 0) arr.push(moved); else arr.splice(ti, 0, moved);
   }
-
-  // ---- Role picker wiring ----
-  const roleSelect = document.getElementById('role-select');
-  roleSelect.value = role;
-  roleSelect.addEventListener('change', (e) => {
-    const v = e.target.value;
-    if (!VALID_ROLES.includes(v)) return;
-    role = v;
-    localStorage.setItem(ROLE_KEY, role);
-  });
 
   // Init
   (async () => {

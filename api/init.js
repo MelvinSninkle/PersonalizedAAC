@@ -53,8 +53,9 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS items_section_idx  ON items(section)`;
     await db`CREATE INDEX IF NOT EXISTS items_category_idx ON items(category_id)`;
 
-    // Activity log — student/teacher/parent button taps. No FK to items so
-    // history survives item deletes; we snapshot the label at log time.
+    // Activity log — kid-mode button taps. No FK to items so history
+    // survives item deletes; label / category / subcategory are
+    // snapshotted at log time for stable analytics.
     await db`
       CREATE TABLE IF NOT EXISTS events (
         id BIGSERIAL PRIMARY KEY,
@@ -62,11 +63,15 @@ export default async function handler(req, res) {
         item_id BIGINT,
         section TEXT,
         label TEXT,
+        category_name TEXT,
+        subcategory_name TEXT,
         client_id TEXT,
         occurred_at TIMESTAMPTZ NOT NULL,
         received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await db`ALTER TABLE events ADD COLUMN IF NOT EXISTS category_name TEXT`;
+    await db`ALTER TABLE events ADD COLUMN IF NOT EXISTS subcategory_name TEXT`;
     await db`CREATE INDEX IF NOT EXISTS events_role_idx          ON events(role)`;
     await db`CREATE INDEX IF NOT EXISTS events_occurred_at_idx   ON events(occurred_at)`;
     await db`CREATE INDEX IF NOT EXISTS events_item_idx          ON events(item_id)`;
