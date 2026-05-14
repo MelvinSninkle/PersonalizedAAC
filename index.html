@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Fletcher's World</title>
+<!-- iOS PWA: when added to the home screen this launches full-screen with no Safari chrome.
+     Pair with Guided Access (Settings → Accessibility → Guided Access) to actually lock the
+     device to this app — there's no in-app way to prevent exiting on iOS. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fletcher's World">
+<meta name="theme-color" content="#ff1493">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
@@ -29,11 +37,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 20px;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 20px 12px;
     background: #ff1493;
     color: white;
     box-shadow: 0 2px 6px rgba(0,0,0,.15);
-    height: 64px;
+    box-sizing: border-box;
+    min-height: 64px;
   }
   header h1 {
     margin: 0;
@@ -95,15 +104,25 @@
      section tiles-across, set in JS via --items-cols. */
   .needs-section {
     background: white;
-    border-top: 4px solid #ff1493;
+    border-top: 4px solid #ffd400;   /* yellow accent — Fletcher's other favorite */
     box-shadow: 0 -1px 3px rgba(0,0,0,.08);
     display: flex; flex-direction: column;
   }
+  /* Stay one row tall; overflow scrolls sideways. Tile width = container/N
+     where N = --needs-cols, set in JS to the sum of visible main sections. */
   .needs-section .items-grid {
-    flex: 0 0 auto;          /* don't take all remaining space */
-    overflow-y: visible;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex: 0 0 auto;
     padding: 10px 12px;
     gap: 10px;
+  }
+  .needs-section .items-grid > * {
+    flex: 0 0 calc((100% - (var(--needs-cols, 4) - 1) * 10px) / var(--needs-cols, 4));
   }
 
   .aac-section {
@@ -1040,8 +1059,12 @@
       if (sectionEl) sectionEl.style.display = display.sectionVisible[s] ? '' : 'none';
       const itemsEl = document.getElementById(`items-${s}`);
       if (itemsEl) {
-        const n = s === 'needs' ? needsColCount() : display.tilesAcross[s];
-        itemsEl.style.setProperty('--items-cols', `repeat(${n}, 1fr)`);
+        if (s === 'needs') {
+          // Plain count: the needs strip uses flex with calc-based tile widths.
+          itemsEl.style.setProperty('--needs-cols', needsColCount());
+        } else {
+          itemsEl.style.setProperty('--items-cols', `repeat(${display.tilesAcross[s]}, 1fr)`);
+        }
       }
     }
   }
@@ -1600,7 +1623,7 @@
     const itemsEl = document.getElementById('items-needs');
     if (!itemsEl) return;
     itemsEl.innerHTML = '';
-    itemsEl.style.setProperty('--items-cols', `repeat(${needsColCount()}, 1fr)`);
+    itemsEl.style.setProperty('--needs-cols', needsColCount());
 
     items.forEach(it => {
       const tile = makeTile({
@@ -1709,8 +1732,8 @@
   const loginModal = document.getElementById('login-modal');
   document.getElementById('login-btn').addEventListener('click', () => {
     if (editMode) { setEditMode(false); return; }
-    // If we already have a stored token, just toggle edit mode on without prompting.
-    if (authToken) { setEditMode(true); return; }
+    // Always prompt for the password — no shortcut even if a token is stored
+    // on this device. Stops the kid from sliding into edit mode accidentally.
     document.getElementById('login-user').value = '';
     document.getElementById('login-pass').value = '';
     document.getElementById('login-error').textContent = '';
