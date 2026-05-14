@@ -41,6 +41,8 @@ export default async function handler(req, res) {
       itemId: Number.isFinite(e.itemId) ? Math.trunc(e.itemId) : null,
       section: typeof e.section === 'string' ? e.section.slice(0, 32) : null,
       label: typeof e.label === 'string' ? e.label.slice(0, 200) : null,
+      categoryName: typeof e.categoryName === 'string' ? e.categoryName.slice(0, 200) : null,
+      subcategoryName: typeof e.subcategoryName === 'string' ? e.subcategoryName.slice(0, 200) : null,
       clientId: typeof e.clientId === 'string' ? e.clientId.slice(0, 64) : null,
       occurredAt,
     });
@@ -55,8 +57,8 @@ export default async function handler(req, res) {
     // Sequential INSERTs keep this simple; bulk volume is tiny (a few taps/sec at most).
     for (const r of rows) {
       await db`
-        INSERT INTO events (role, item_id, section, label, client_id, occurred_at)
-        VALUES (${r.role}, ${r.itemId}, ${r.section}, ${r.label}, ${r.clientId}, ${r.occurredAt})
+        INSERT INTO events (role, item_id, section, label, category_name, subcategory_name, client_id, occurred_at)
+        VALUES (${r.role}, ${r.itemId}, ${r.section}, ${r.label}, ${r.categoryName}, ${r.subcategoryName}, ${r.clientId}, ${r.occurredAt})
       `;
     }
     res.status(200).json({ ok: true, count: rows.length });
