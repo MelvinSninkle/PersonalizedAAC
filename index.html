@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Fletcher's World</title>
 <!-- iOS PWA: when added to the home screen this launches full-screen with no Safari chrome.
      Pair with Guided Access (Settings → Accessibility → Guided Access) to actually lock the
@@ -27,6 +27,10 @@
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
+    /* Disable pinch-zoom + double-tap-zoom so a stray Fletcher gesture can't
+       resize the page out from under him. Panning (vertical/horizontal
+       scroll) still works. Belt-and-suspenders with the viewport meta. */
+    touch-action: pan-x pan-y;
   }
   body { display: flex; flex-direction: column; min-height: 0; }
   header { flex: 0 0 auto; }
@@ -103,8 +107,8 @@
      columns and spans the full width. Column count = sum of the visible
      section tiles-across, set in JS via --items-cols. */
   .needs-section {
-    background: white;
-    border-top: 4px solid #ffd400;   /* yellow accent — Fletcher's other favorite */
+    background: var(--bg-needs, #ffd400);   /* golden yellow — overridable */
+    border-top: 4px solid rgba(0,0,0,.15);  /* neutral edge so it works with any color */
     box-shadow: 0 -1px 3px rgba(0,0,0,.08);
     display: flex; flex-direction: column;
   }
@@ -133,6 +137,12 @@
     flex-direction: column;
     min-height: 0;
   }
+  /* Color-code sections so Fletcher's eye learns each band by hue.
+     Defaults below are overridable from the Display Settings panel
+     (parent picks color → CSS vars set on :root override these). */
+  .aac-section[data-section="people"] { background: var(--bg-people, #fce4ec); }
+  .aac-section[data-section="verbs"]  { background: var(--bg-verbs,  #fce4ec); }
+  .aac-section[data-section="nouns"]  { background: var(--bg-nouns,  #fff59d); }
   .aac-section h2 {
     margin: 0;
     padding: 12px 16px;
@@ -172,8 +182,9 @@
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
-    background: #f7f9fc;
-    border-bottom: 1px solid #eef1f6;
+    /* Slight tint over whatever section bg we're on (works for pink + white). */
+    background: rgba(0,0,0,.035);
+    border-bottom: 1px solid rgba(0,0,0,.06);
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -957,6 +968,13 @@
       <span>Nouns</span><select id="disp-across-nouns" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
       <span>Verbs</span><select id="disp-across-verbs" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
     </div>
+    <label style="margin-top:18px;">Section colors</label>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-top:6px;">
+      <span>People</span><input type="color" id="disp-color-people" style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
+      <span>Nouns</span><input type="color"  id="disp-color-nouns"  style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
+      <span>Verbs</span><input type="color"  id="disp-color-verbs"  style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
+      <span>Needs</span><input type="color"  id="disp-color-needs"  style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
+    </div>
     <div class="button-row">
       <button class="secondary" id="display-reset">Reset to defaults</button>
       <button class="primary" id="display-done">Done</button>
@@ -1002,6 +1020,15 @@
   const SECTIONS = ['people', 'nouns', 'verbs', 'needs'];
   // Sections that participate in the main 3-column grid (excludes the flat "needs" strip).
   const MAIN_SECTIONS = ['people', 'nouns', 'verbs'];
+  // Hardcoded for now — when we add the proper login flow this becomes the
+  // logged-in child's id. All API requests scope reads/writes by it.
+  const CHILD_ID = 'fletcher';
+
+  // Block iOS pinch-zoom (in addition to the viewport meta + touch-action CSS)
+  // so a stray two-finger gesture from Fletcher can't shrink the page.
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(ev, (e) => e.preventDefault());
+  }
   const TOKEN_KEY = 'aacToken';
   const DISPLAY_KEY = 'aacDisplay';
   const ACROSS_MIN = 1, ACROSS_MAX = 8;
@@ -1012,8 +1039,18 @@
     sectionVisible: { people: true, nouns: true, verbs: true, needs: true },
     // 'needs' has no own tilesAcross — it's computed as the sum of the visible main sections.
     tilesAcross: { people: 2, nouns: 4, verbs: 3 },
+    // Per-section background colors — overridable from the Display panel.
+    sectionColors: {
+      people: '#fce4ec',
+      nouns:  '#fff59d',
+      verbs:  '#fce4ec',
+      needs:  '#ffd400',
+    },
   };
   let display = structuredClone(DISPLAY_DEFAULTS);
+  function sanitizeColor(v, fallback) {
+    return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : fallback;
+  }
   function loadDisplay() {
     try {
       const raw = JSON.parse(localStorage.getItem(DISPLAY_KEY) || '{}');
@@ -1029,6 +1066,12 @@
           people: clampAcross(raw.tilesAcross?.people ?? DISPLAY_DEFAULTS.tilesAcross.people),
           nouns:  clampAcross(raw.tilesAcross?.nouns  ?? DISPLAY_DEFAULTS.tilesAcross.nouns),
           verbs:  clampAcross(raw.tilesAcross?.verbs  ?? DISPLAY_DEFAULTS.tilesAcross.verbs),
+        },
+        sectionColors: {
+          people: sanitizeColor(raw.sectionColors?.people, DISPLAY_DEFAULTS.sectionColors.people),
+          nouns:  sanitizeColor(raw.sectionColors?.nouns,  DISPLAY_DEFAULTS.sectionColors.nouns),
+          verbs:  sanitizeColor(raw.sectionColors?.verbs,  DISPLAY_DEFAULTS.sectionColors.verbs),
+          needs:  sanitizeColor(raw.sectionColors?.needs,  DISPLAY_DEFAULTS.sectionColors.needs),
         },
       };
     } catch (_) { display = structuredClone(DISPLAY_DEFAULTS); }
@@ -1046,7 +1089,7 @@
       .reduce((sum, s) => sum + (display.tilesAcross[s] || 0), 0);
     return Math.max(1, n);
   }
-  // Applies the chrome-level bits (label hiding, section visibility, column counts).
+  // Applies the chrome-level bits (label hiding, section visibility, column counts, colors).
   function applyDisplay() {
     // Labels always show in edit mode so the parent can see what they're editing.
     document.body.classList.toggle('hide-labels', display.hideLabels && !editMode);
@@ -1054,6 +1097,10 @@
       .filter(s => display.sectionVisible[s])
       .map(s => `${display.tilesAcross[s]}fr`);
     document.querySelector('main').style.setProperty('--main-cols', visibleFrs.join(' ') || '1fr');
+    // Section background colors via CSS custom properties on :root.
+    for (const s of SECTIONS) {
+      document.documentElement.style.setProperty(`--bg-${s}`, display.sectionColors[s]);
+    }
     for (const s of SECTIONS) {
       const sectionEl = document.querySelector(`.aac-section[data-section="${s}"]`);
       if (sectionEl) sectionEl.style.display = display.sectionVisible[s] ? '' : 'none';
@@ -1437,6 +1484,22 @@
     return cur || null;
   }
 
+  // DFS walk from `rootId` returning the first category id that has at least
+  // one item — including rootId itself. Children visited in order. Returns
+  // null if nothing in the subtree has items.
+  function findFirstWithItems(cats, items, rootId) {
+    const hasItems = (id) => items.some(it => it.categoryId === id);
+    if (hasItems(rootId)) return rootId;
+    const children = cats
+      .filter(c => c.parentId === rootId)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    for (const child of children) {
+      const found = findFirstWithItems(cats, items, child.id);
+      if (found != null) return found;
+    }
+    return null;
+  }
+
   function descendantCatIds(cats, rootId) {
     const out = [];
     const stack = [rootId];
@@ -1465,8 +1528,22 @@
       activeCategoryId[section] = topCats[0]?.id ?? null;
     }
 
-    const activeId = activeCategoryId[section];
-    const activeCat = activeId != null ? cats.find(c => c.id === activeId) : null;
+    let activeId = activeCategoryId[section];
+    let activeCat = activeId != null ? cats.find(c => c.id === activeId) : null;
+
+    // Kid mode: if the active category has no items of its own, jump to the
+    // first descendant (in display order) that does, so Fletcher can't tap
+    // his way to a blank screen. Edit mode keeps the literal selection so
+    // the parent can navigate to empty categories to add things.
+    if (!editMode && activeCat) {
+      const found = findFirstWithItems(cats, items, activeId);
+      if (found != null && found !== activeId) {
+        activeId = found;
+        activeCat = cats.find(c => c.id === activeId);
+        activeCategoryId[section] = activeId;
+      }
+    }
+
     const topAncestor = activeCat ? findTopAncestor(cats, activeCat.id) : null;
     const topAncestorId = topAncestor?.id ?? null;
 
@@ -1666,6 +1743,7 @@
       categoryName: categoryName ? String(categoryName).slice(0, 200) : null,
       subcategoryName: subcategoryName ? String(subcategoryName).slice(0, 200) : null,
       clientId,
+      childId: CHILD_ID,
       occurredAt: new Date().toISOString(),
     };
     try { await reqPromise(tx(EVENTS, 'readwrite').add(evt)); } catch (_) { return; }
@@ -1757,7 +1835,7 @@
     submit.textContent = 'Verifying…';
     try {
       // Validate token by hitting an auth-gated endpoint
-      const r = await fetch('/api/sync', { headers: { Authorization: 'Bearer ' + p } });
+      const r = await fetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID), { headers: { Authorization: 'Bearer ' + p } });
       if (r.status === 401) { errEl.textContent = 'Invalid token'; return; }
       if (!r.ok) { errEl.textContent = `Server error: ${r.status}`; return; }
       const data = await r.json();
@@ -1861,6 +1939,7 @@
         section, label, parentId: parentId ?? null, order: order ?? Date.now(),
         imageKey: up?.key || null,
         keepAspect: !!keepAspect,
+        childId: CHILD_ID,
       }),
     });
     if (up) await cacheBlob(up.key, up.blob);
@@ -1870,13 +1949,13 @@
 
   async function serverUpdateCategory(old, { label, parentId, image, keepAspect, order }) {
     const up = await uploadIfBlob('image', image, 'cat-image');
-    const body = {};
+    const body = { childId: CHILD_ID };
     if (label !== undefined) body.label = label;
     if (parentId !== undefined) body.parentId = parentId;
     if (order !== undefined) body.order = order;
     if (keepAspect !== undefined) body.keepAspect = !!keepAspect;
     if (up) { body.imageKey = up.key; }
-    const saved = await apiJSON('/api/categories?id=' + old.id, {
+    const saved = await apiJSON('/api/categories?id=' + old.id + '&childId=' + encodeURIComponent(CHILD_ID), {
       method: 'PUT',
       body: JSON.stringify(body),
     });
@@ -1888,7 +1967,7 @@
   }
 
   async function serverDeleteCategory(catId, section) {
-    const result = await apiJSON('/api/categories?id=' + catId, { method: 'DELETE' });
+    const result = await apiJSON('/api/categories?id=' + catId + '&childId=' + encodeURIComponent(CHILD_ID), { method: 'DELETE' });
     const ids = result.deletedCategoryIds || [catId];
     const idSet = new Set(ids);
     // Mirror the cascade locally + drop their cached blobs
@@ -1918,6 +1997,7 @@
         imageKey: upImg?.key || null,
         soundKey: upSnd?.key || null,
         keepAspect: !!keepAspect,
+        childId: CHILD_ID,
       }),
     });
     if (upImg) await cacheBlob(upImg.key, upImg.blob);
@@ -1929,7 +2009,7 @@
   async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
-    const body = {};
+    const body = { childId: CHILD_ID };
     if (label !== undefined) body.label = label;
     if (categoryId !== undefined) body.categoryId = categoryId;
     if (order !== undefined) body.order = order;
@@ -1937,7 +2017,7 @@
     if (keepAspect !== undefined) body.keepAspect = !!keepAspect;
     if (upImg) { body.imageKey = upImg.key; }
     if (upSnd) { body.soundKey = upSnd.key; }
-    const saved = await apiJSON('/api/items?id=' + old.id, {
+    const saved = await apiJSON('/api/items?id=' + old.id + '&childId=' + encodeURIComponent(CHILD_ID), {
       method: 'PUT',
       body: JSON.stringify(body),
     });
@@ -1952,7 +2032,7 @@
   async function serverDeleteItem(itemId) {
     let stale;
     try { stale = await reqPromise(tx(ITEMS).get(itemId)); } catch (_) {}
-    await apiJSON('/api/items?id=' + itemId, { method: 'DELETE' });
+    await apiJSON('/api/items?id=' + itemId + '&childId=' + encodeURIComponent(CHILD_ID), { method: 'DELETE' });
     if (stale) { revokeMediaURL(stale.imageKey); revokeMediaURL(stale.soundKey); }
     await deleteItemDB(itemId);
   }
@@ -2708,6 +2788,8 @@
       if (showEl) showEl.checked = display.sectionVisible[s];
       const acrossEl = document.getElementById(`disp-across-${s}`);
       if (acrossEl) fillAcrossSelect(acrossEl, display.tilesAcross[s]);
+      const colorEl = document.getElementById(`disp-color-${s}`);
+      if (colorEl) colorEl.value = display.sectionColors[s];
     }
   }
   function openDisplayModal() { populateDisplayModal(); displayModal.classList.add('show'); }
@@ -2725,6 +2807,11 @@
     if (showEl) showEl.addEventListener('change', (e) => { display.sectionVisible[s] = e.target.checked; commitDisplay(); });
     const acrossEl = document.getElementById(`disp-across-${s}`);
     if (acrossEl) acrossEl.addEventListener('change', (e) => { display.tilesAcross[s] = clampAcross(e.target.value); commitDisplay(); });
+    const colorEl = document.getElementById(`disp-color-${s}`);
+    if (colorEl) colorEl.addEventListener('input', (e) => {
+      display.sectionColors[s] = sanitizeColor(e.target.value, display.sectionColors[s]);
+      commitDisplay();   // live preview as the parent drags through the picker
+    });
   }
 
   // ---- Organize view (Miller columns) ----
@@ -3096,7 +3183,7 @@
       flushEvents().catch(() => {});   // drain any taps queued from a previous offline session
       if (authToken) {
         try {
-          const r = await apiFetch('/api/sync');
+          const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
           if (r.ok) {
             const data = await r.json();
             await hydrateFromServer(data);
