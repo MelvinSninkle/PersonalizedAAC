@@ -44,6 +44,9 @@ export default async function handler(req, res) {
       categoryName: typeof e.categoryName === 'string' ? e.categoryName.slice(0, 200) : null,
       subcategoryName: typeof e.subcategoryName === 'string' ? e.subcategoryName.slice(0, 200) : null,
       clientId: typeof e.clientId === 'string' ? e.clientId.slice(0, 64) : null,
+      childId: (typeof e.childId === 'string' && e.childId) ? e.childId.slice(0, 64)
+             : (typeof body.childId === 'string' && body.childId) ? body.childId.slice(0, 64)
+             : 'fletcher',
       occurredAt,
     });
   }
@@ -57,8 +60,8 @@ export default async function handler(req, res) {
     // Sequential INSERTs keep this simple; bulk volume is tiny (a few taps/sec at most).
     for (const r of rows) {
       await db`
-        INSERT INTO events (role, item_id, section, label, category_name, subcategory_name, client_id, occurred_at)
-        VALUES (${r.role}, ${r.itemId}, ${r.section}, ${r.label}, ${r.categoryName}, ${r.subcategoryName}, ${r.clientId}, ${r.occurredAt})
+        INSERT INTO events (role, item_id, section, label, category_name, subcategory_name, client_id, child_id, occurred_at)
+        VALUES (${r.role}, ${r.itemId}, ${r.section}, ${r.label}, ${r.categoryName}, ${r.subcategoryName}, ${r.clientId}, ${r.childId}, ${r.occurredAt})
       `;
     }
     res.status(200).json({ ok: true, count: rows.length });

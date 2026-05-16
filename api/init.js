@@ -30,8 +30,10 @@ export default async function handler(req, res) {
       )
     `;
     await db`ALTER TABLE categories ADD COLUMN IF NOT EXISTS keep_aspect BOOLEAN NOT NULL DEFAULT FALSE`;
+    await db`ALTER TABLE categories ADD COLUMN IF NOT EXISTS child_id TEXT NOT NULL DEFAULT 'fletcher'`;
     await db`CREATE INDEX IF NOT EXISTS categories_section_idx ON categories(section)`;
     await db`CREATE INDEX IF NOT EXISTS categories_parent_idx  ON categories(parent_id)`;
+    await db`CREATE INDEX IF NOT EXISTS categories_child_idx   ON categories(child_id)`;
 
     await db`
       CREATE TABLE IF NOT EXISTS items (
@@ -50,8 +52,10 @@ export default async function handler(req, res) {
       )
     `;
     await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS keep_aspect BOOLEAN NOT NULL DEFAULT FALSE`;
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS child_id TEXT NOT NULL DEFAULT 'fletcher'`;
     await db`CREATE INDEX IF NOT EXISTS items_section_idx  ON items(section)`;
     await db`CREATE INDEX IF NOT EXISTS items_category_idx ON items(category_id)`;
+    await db`CREATE INDEX IF NOT EXISTS items_child_idx    ON items(child_id)`;
 
     // Activity log — kid-mode button taps. No FK to items so history
     // survives item deletes; label / category / subcategory are
@@ -72,9 +76,11 @@ export default async function handler(req, res) {
     `;
     await db`ALTER TABLE events ADD COLUMN IF NOT EXISTS category_name TEXT`;
     await db`ALTER TABLE events ADD COLUMN IF NOT EXISTS subcategory_name TEXT`;
+    await db`ALTER TABLE events ADD COLUMN IF NOT EXISTS child_id TEXT NOT NULL DEFAULT 'fletcher'`;
     await db`CREATE INDEX IF NOT EXISTS events_role_idx          ON events(role)`;
     await db`CREATE INDEX IF NOT EXISTS events_occurred_at_idx   ON events(occurred_at)`;
     await db`CREATE INDEX IF NOT EXISTS events_item_idx          ON events(item_id)`;
+    await db`CREATE INDEX IF NOT EXISTS events_child_idx         ON events(child_id)`;
 
     res.status(200).json({ ok: true });
   } catch (err) {

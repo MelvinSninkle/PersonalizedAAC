@@ -13,10 +13,12 @@ export default async function handler(req, res) {
     return;
   }
 
+  const childId = String((req.query && req.query.childId) || 'fletcher').slice(0, 64);
+
   try {
     const db = sql();
-    const cats = await db`SELECT * FROM categories ORDER BY display_order, id`;
-    const items = await db`SELECT * FROM items ORDER BY display_order, id`;
+    const cats = await db`SELECT * FROM categories WHERE child_id = ${childId} ORDER BY display_order, id`;
+    const items = await db`SELECT * FROM items     WHERE child_id = ${childId} ORDER BY display_order, id`;
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
       categories: cats.map(rowToCategory),
