@@ -82,6 +82,65 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS events_item_idx          ON events(item_id)`;
     await db`CREATE INDEX IF NOT EXISTS events_child_idx         ON events(child_id)`;
 
+    // ---- Taxonomy workbench (Section 17 of the PRD) ----
+    // Canonical library of tile prompts, separate from any one child's instance.
+    // Edited via /admin/taxonomy; consumed by AI image generation in a later chunk.
+    await db`
+      CREATE TABLE IF NOT EXISTS taxonomy (
+        id TEXT PRIMARY KEY,
+        column_name TEXT NOT NULL,
+        category TEXT,
+        subcategory TEXT,
+        label TEXT NOT NULL,
+        pronunciation TEXT,
+        prompt_template TEXT NOT NULL,
+        subject_mode TEXT NOT NULL,
+        parent_photo_behavior TEXT NOT NULL,
+        phase TEXT NOT NULL DEFAULT 'v1_core',
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        archived BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_by TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_by TEXT,
+        published_at TIMESTAMPTZ
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_column_idx   ON taxonomy(column_name)`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_phase_idx    ON taxonomy(phase)`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_status_idx   ON taxonomy(status)`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_archived_idx ON taxonomy(archived)`;
+
+    // Point-in-time snapshots so any bulk op or restore is itself reversible.
+    await db`
+      CREATE TABLE IF NOT EXISTS taxonomy_snapshots (
+        id BIGSERIAL PRIMARY KEY,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_by TEXT,
+        label TEXT,
+        note TEXT,
+        row_count INTEGER NOT NULL,
+        payload JSONB NOT NULL
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_snapshots_created_idx ON taxonomy_snapshots(created_at DESC)`;
+
+    // Write-only audit trail. Filterable, retained indefinitely.
+    await db`
+      CREATE TABLE IF NOT EXISTS taxonomy_audit (
+        id BIGSERIAL PRIMARY KEY,
+        ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        actor TEXT,
+        action TEXT NOT NULL,
+        row_ids TEXT[],
+        summary TEXT,
+        note TEXT
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_audit_ts_idx     ON taxonomy_audit(ts DESC)`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_audit_action_idx ON taxonomy_audit(action)`;
+
     res.status(200).json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Init failed', detail: String(err.message || err) });

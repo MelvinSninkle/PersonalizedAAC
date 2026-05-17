@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1200, initial-scale=1">
+<title>Taxonomy — Fletcher's World</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<!-- Tabulator: vanilla-JS virtualized table. Handles thousands of rows. -->
+<link href="https://unpkg.com/tabulator-tables@6.2.5/dist/css/tabulator_simple.min.css" rel="stylesheet">
+<script src="https://unpkg.com/tabulator-tables@6.2.5/dist/js/tabulator.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6fa; color: #222; }
+  body { display: flex; flex-direction: column; min-height: 0; height: 100vh; }
+  header {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px;
+    background: #2c3e50; color: white;
+    box-shadow: 0 2px 6px rgba(0,0,0,.15);
+  }
+  header h1 {
+    margin: 0; font-size: 22px; font-weight: 600;
+    font-family: 'Fredoka', ui-rounded, system-ui, sans-serif;
+  }
+  header .right { display: flex; gap: 8px; align-items: center; }
+  header button, header a.btn {
+    background: #4a90e2; color: white; border: none;
+    border-radius: 6px; padding: 8px 14px; font-size: 14px; font-weight: 600;
+    cursor: pointer; text-decoration: none; display: inline-block;
+  }
+  header button:hover, header a.btn:hover { background: #3a7bc8; }
+  header button.secondary { background: #557fa3; }
+  header button.secondary:hover { background: #406285; }
+  header .stat { font-size: 13px; opacity: .85; margin-right: 8px; }
+
+  .toolbar {
+    flex: 0 0 auto;
+    display: flex; gap: 10px; flex-wrap: wrap;
+    padding: 10px 16px; background: white; border-bottom: 1px solid #e2e6ec;
+    align-items: center;
+  }
+  .toolbar label { font-size: 12px; color: #557fa3; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+  .toolbar input[type="search"], .toolbar select {
+    padding: 6px 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px;
+    background: white;
+  }
+  .toolbar input[type="search"] { min-width: 220px; }
+  .toolbar .spacer { flex: 1; }
+
+  main { flex: 1; min-height: 0; padding: 12px 16px; }
+  #grid { height: 100%; }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    display: none; align-items: center; justify-content: center;
+    z-index: 100; padding: 20px;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: white; border-radius: 10px; padding: 22px;
+    max-width: 720px; width: 100%;
+    max-height: 90vh; overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,.3);
+  }
+  .modal h3 { margin: 0 0 14px; font-size: 18px; }
+  .modal label { display: block; margin: 12px 0 4px; font-weight: 600; font-size: 13px; color: #444; }
+  .modal input[type="text"], .modal select, .modal textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px;
+    font-size: 14px; font-family: inherit;
+  }
+  .modal textarea { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; min-height: 120px; resize: vertical; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .button-row { display: flex; gap: 10px; margin-top: 18px; }
+  .button-row button {
+    padding: 10px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .button-row .primary { background: #4a90e2; color: white; }
+  .button-row .primary:hover { background: #3a7bc8; }
+  .button-row .secondary { background: #e0e3e8; color: #333; }
+  .button-row .secondary:hover { background: #cfd4db; }
+  .button-row .danger { background: #c94f5f; color: white; margin-right: auto; }
+  .button-row .danger:hover { background: #b3404e; }
+  .error { color: #c94f5f; font-size: 13px; min-height: 16px; margin-top: 8px; }
+  .help { font-size: 12px; color: #777; margin-top: 4px; }
+  .status-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
+  .status-pill.draft     { background: #fef3c7; color: #92400e; }
+  .status-pill.published { background: #d1fae5; color: #065f46; }
+  .status-pill.archived  { background: #e5e7eb; color: #4b5563; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📚 Taxonomy</h1>
+  <div class="right">
+    <span class="stat" id="stat">—</span>
+    <button class="secondary" id="btn-new">+ New row</button>
+    <a class="btn secondary" href="/">← Back to app</a>
+  </div>
+</header>
+
+<div class="toolbar">
+  <label for="filter-search">Search</label>
+  <input type="search" id="filter-search" placeholder="id, label, prompt…">
+
+  <label for="filter-column">Column</label>
+  <select id="filter-column">
+    <option value="">All</option>
+    <option>People</option>
+    <option>Nouns</option>
+    <option>Verbs</option>
+    <option>Needs</option>
+  </select>
+
+  <label for="filter-mode">Subject mode</label>
+  <select id="filter-mode">
+    <option value="">All</option>
+    <option value="child_as_subject">child_as_subject</option>
+    <option value="object">object</option>
+    <option value="person">person</option>
+    <option value="concept">concept</option>
+  </select>
+
+  <label for="filter-phase">Phase</label>
+  <select id="filter-phase">
+    <option value="">All</option>
+    <option value="v1_core">v1_core</option>
+    <option value="v1_extended">v1_extended</option>
+    <option value="v2">v2</option>
+    <option value="later">later</option>
+  </select>
+
+  <label for="filter-status">Status</label>
+  <select id="filter-status">
+    <option value="">All non-archived</option>
+    <option value="draft">draft</option>
+    <option value="published">published</option>
+    <option value="archived">archived only</option>
+    <option value="all">EVERYTHING (incl. archived)</option>
+  </select>
+
+  <div class="spacer"></div>
+</div>
+
+<main>
+  <div id="grid"></div>
+</main>
+
+<!-- Row edit modal -->
+<div class="modal-backdrop" id="row-modal">
+  <div class="modal">
+    <h3 id="row-modal-title">New row</h3>
+    <div class="row3">
+      <div>
+        <label for="f-id">id</label>
+        <input type="text" id="f-id" placeholder="e.g. needs.yes">
+      </div>
+      <div>
+        <label for="f-column">column</label>
+        <select id="f-column">
+          <option>People</option><option>Nouns</option><option>Verbs</option><option>Needs</option>
+        </select>
+      </div>
+      <div>
+        <label for="f-phase">phase</label>
+        <select id="f-phase">
+          <option value="v1_core">v1_core</option>
+          <option value="v1_extended">v1_extended</option>
+          <option value="v2">v2</option>
+          <option value="later">later</option>
+        </select>
+      </div>
+    </div>
+    <div class="row3">
+      <div>
+        <label for="f-category">category</label>
+        <input type="text" id="f-category">
+      </div>
+      <div>
+        <label for="f-subcategory">subcategory</label>
+        <input type="text" id="f-subcategory">
+      </div>
+      <div>
+        <label for="f-label">label</label>
+        <input type="text" id="f-label" placeholder="e.g. yes">
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label for="f-subject">subject_mode</label>
+        <select id="f-subject">
+          <option value="child_as_subject">child_as_subject</option>
+          <option value="object">object</option>
+          <option value="person">person</option>
+          <option value="concept">concept</option>
+        </select>
+      </div>
+      <div>
+        <label for="f-parent">parent_photo_behavior</label>
+        <select id="f-parent">
+          <option value="override">override</option>
+          <option value="supplement">supplement</option>
+          <option value="none">none</option>
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label for="f-pron">pronunciation (TTS override)</label>
+        <input type="text" id="f-pron" placeholder="e.g. Cheery-ohs">
+      </div>
+      <div>
+        <label for="f-status">status</label>
+        <select id="f-status">
+          <option value="draft">draft</option>
+          <option value="published">published</option>
+        </select>
+        <div class="help">Drafts are invisible to production generation.</div>
+      </div>
+    </div>
+    <label for="f-prompt">prompt_template</label>
+    <textarea id="f-prompt" placeholder="A {style} illustration of {reference} ..."></textarea>
+    <div class="help">Variables: <code>{style}</code>, <code>{color}</code>, <code>{reference}</code>, <code>{parent_photo}</code>.</div>
+    <label for="f-notes">notes</label>
+    <textarea id="f-notes" style="min-height: 60px;"></textarea>
+
+    <div class="error" id="row-error"></div>
+
+    <div class="button-row">
+      <button class="danger" id="row-delete" style="display:none;">Delete</button>
+      <button class="secondary" id="row-cancel">Cancel</button>
+      <button class="primary" id="row-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const TOKEN_KEY = 'aacToken';
+  const token = localStorage.getItem(TOKEN_KEY) || '';
+  if (!token) {
+    document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">No admin token found. <a href="/">Log in on the main app first</a>, then come back here.</div>';
+    return;
+  }
+
+  async function api(path, opts = {}) {
+    const headers = { ...(opts.headers || {}), Authorization: 'Bearer ' + token };
+    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(opts.body);
+    }
+    const r = await fetch(path, { ...opts, headers });
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(`${r.status}: ${t.slice(0, 200)}`);
+    }
+    return r.json();
+  }
+
+  let allRows = [];
+  let table;
+
+  function statusBadge(value) {
+    if (!value) return '';
+    return `<span class="status-pill ${value}">${value}</span>`;
+  }
+
+  async function loadRows() {
+    const { rows } = await api('/api/admin/taxonomy');
+    allRows = rows;
+    document.getElementById('stat').textContent = `${rows.length} rows`;
+    if (table) { table.replaceData(rows); applyFilters(); }
+  }
+
+  function applyFilters() {
+    if (!table) return;
+    const search = document.getElementById('filter-search').value.trim().toLowerCase();
+    const col    = document.getElementById('filter-column').value;
+    const mode   = document.getElementById('filter-mode').value;
+    const phase  = document.getElementById('filter-phase').value;
+    const status = document.getElementById('filter-status').value;
+    table.setFilter((row) => {
+      if (col && row.column !== col) return false;
+      if (mode && row.subjectMode !== mode) return false;
+      if (phase && row.phase !== phase) return false;
+      if (status === 'all') { /* show everything */ }
+      else if (status === 'archived') { if (!row.archived) return false; }
+      else if (status === '') { if (row.archived) return false; }
+      else { if (row.status !== status || row.archived) return false; }
+      if (search) {
+        const hay = (row.id + ' ' + (row.label||'') + ' ' + (row.promptTemplate||'') + ' ' + (row.category||'') + ' ' + (row.subcategory||'')).toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+      return true;
+    });
+  }
+
+  // ---- Modal ----
+  const modal = document.getElementById('row-modal');
+  let editing = null;   // null when creating
+
+  function openModal(row) {
+    editing = row || null;
+    document.getElementById('row-modal-title').textContent = row ? `Edit · ${row.id}` : 'New row';
+    document.getElementById('f-id').value           = row?.id || '';
+    document.getElementById('f-id').disabled        = false;   // allow rename
+    document.getElementById('f-column').value       = row?.column || 'Nouns';
+    document.getElementById('f-phase').value        = row?.phase || 'v1_core';
+    document.getElementById('f-category').value     = row?.category || '';
+    document.getElementById('f-subcategory').value  = row?.subcategory || '';
+    document.getElementById('f-label').value        = row?.label || '';
+    document.getElementById('f-subject').value      = row?.subjectMode || 'object';
+    document.getElementById('f-parent').value       = row?.parentPhotoBehavior || 'none';
+    document.getElementById('f-pron').value         = row?.pronunciation || '';
+    document.getElementById('f-status').value       = row?.status || 'draft';
+    document.getElementById('f-prompt').value       = row?.promptTemplate || '';
+    document.getElementById('f-notes').value        = row?.notes || '';
+    document.getElementById('row-delete').style.display = row ? 'inline-block' : 'none';
+    document.getElementById('row-error').textContent = '';
+    modal.classList.add('show');
+  }
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('show'); });
+  document.getElementById('row-cancel').addEventListener('click', () => modal.classList.remove('show'));
+  document.getElementById('btn-new').addEventListener('click', () => openModal(null));
+
+  document.getElementById('row-save').addEventListener('click', async () => {
+    const err = document.getElementById('row-error');
+    err.textContent = '';
+    const newId = document.getElementById('f-id').value.trim();
+    const body = {
+      id: newId,
+      column: document.getElementById('f-column').value,
+      category: document.getElementById('f-category').value.trim() || null,
+      subcategory: document.getElementById('f-subcategory').value.trim() || null,
+      label: document.getElementById('f-label').value.trim(),
+      pronunciation: document.getElementById('f-pron').value.trim() || null,
+      promptTemplate: document.getElementById('f-prompt').value,
+      subjectMode: document.getElementById('f-subject').value,
+      parentPhotoBehavior: document.getElementById('f-parent').value,
+      phase: document.getElementById('f-phase').value,
+      status: document.getElementById('f-status').value,
+      notes: document.getElementById('f-notes').value.trim() || null,
+    };
+    try {
+      if (editing) {
+        if (newId !== editing.id) {
+          const ok = confirm(`Rename id ${editing.id} → ${newId}? Any downstream references will break.`);
+          if (!ok) return;
+        }
+        await api('/api/admin/taxonomy?id=' + encodeURIComponent(editing.id), { method: 'PUT', body });
+      } else {
+        await api('/api/admin/taxonomy', { method: 'POST', body });
+      }
+      modal.classList.remove('show');
+      await loadRows();
+    } catch (e) {
+      err.textContent = e.message || String(e);
+    }
+  });
+
+  document.getElementById('row-delete').addEventListener('click', async () => {
+    if (!editing) return;
+    if (!confirm(`Delete ${editing.id}? This cannot be undone (yet — snapshots land in the next push).`)) return;
+    try {
+      await api('/api/admin/taxonomy?id=' + encodeURIComponent(editing.id), { method: 'DELETE' });
+      modal.classList.remove('show');
+      await loadRows();
+    } catch (e) {
+      document.getElementById('row-error').textContent = e.message || String(e);
+    }
+  });
+
+  // ---- Table ----
+  table = new Tabulator('#grid', {
+    layout: 'fitColumns',
+    height: '100%',
+    placeholder: 'No taxonomy rows yet. Click "+ New row" to add one.',
+    initialSort: [
+      { column: 'column', dir: 'asc' },
+      { column: 'category', dir: 'asc' },
+      { column: 'subcategory', dir: 'asc' },
+      { column: 'label', dir: 'asc' },
+    ],
+    columns: [
+      { title: 'id',            field: 'id',                  widthGrow: 2, headerSort: true },
+      { title: 'column',        field: 'column',              width: 90,  headerSort: true },
+      { title: 'category',      field: 'category',            widthGrow: 1, headerSort: true },
+      { title: 'subcategory',   field: 'subcategory',         widthGrow: 1, headerSort: true },
+      { title: 'label',         field: 'label',               widthGrow: 1, headerSort: true },
+      { title: 'subject',       field: 'subjectMode',         width: 145, headerSort: true },
+      { title: 'parent_photo',  field: 'parentPhotoBehavior', width: 115, headerSort: true },
+      { title: 'phase',         field: 'phase',               width: 105, headerSort: true },
+      { title: 'status',        field: 'status',              width: 100, headerSort: true,
+        formatter: (cell) => {
+          const row = cell.getRow().getData();
+          if (row.archived) return statusBadge('archived');
+          return statusBadge(cell.getValue());
+        } },
+      { title: 'updated',       field: 'updatedAt',           width: 165, headerSort: true,
+        formatter: (cell) => cell.getValue() ? new Date(cell.getValue()).toLocaleString() : '' },
+    ],
+  });
+  table.on('rowClick', (e, row) => openModal(row.getData()));
+
+  for (const id of ['filter-search','filter-column','filter-mode','filter-phase','filter-status']) {
+    document.getElementById(id).addEventListener('input', applyFilters);
+    document.getElementById(id).addEventListener('change', applyFilters);
+  }
+
+  loadRows().catch((e) => {
+    document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif;color:#c94f5f;">Failed to load: ${e.message || e}</div>`;
+  });
+})();
+</script>
+</body>
+</html>
