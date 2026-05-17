@@ -10,6 +10,10 @@
 <!-- Tabulator: vanilla-JS virtualized table. Handles thousands of rows. -->
 <link href="https://unpkg.com/tabulator-tables@6.2.5/dist/css/tabulator_simple.min.css" rel="stylesheet">
 <script src="https://unpkg.com/tabulator-tables@6.2.5/dist/js/tabulator.min.js"></script>
+<!-- CSV/TSV parsing (lenient on the client, strict on the server). -->
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<!-- XLSX parsing for spreadsheet imports / exports. -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6fa; color: #222; }
@@ -91,6 +95,63 @@
   .status-pill.draft     { background: #fef3c7; color: #92400e; }
   .status-pill.published { background: #d1fae5; color: #065f46; }
   .status-pill.archived  { background: #e5e7eb; color: #4b5563; }
+
+  /* Export dropdown menu */
+  .menu-wrap { position: relative; }
+  .menu {
+    position: absolute; right: 0; top: calc(100% + 6px);
+    background: white; color: #222;
+    border: 1px solid #cfd4db;
+    border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.18);
+    padding: 6px; min-width: 220px;
+    display: none; z-index: 50;
+  }
+  .menu.show { display: block; }
+  .menu button {
+    display: block; width: 100%; text-align: left;
+    background: transparent; color: #222; border: none;
+    padding: 8px 10px; font-size: 13px; cursor: pointer; border-radius: 4px;
+  }
+  .menu button:hover { background: #eef3fa; }
+
+  /* Wide modal for the import preview */
+  .modal.wide { max-width: 1100px; }
+  .import-preview {
+    margin-top: 12px; max-height: 320px; overflow: auto;
+    border: 1px solid #e2e6ec; border-radius: 6px;
+  }
+  .import-preview table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .import-preview th, .import-preview td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #eef1f6; }
+  .import-preview th { background: #f7f9fc; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; color: #557fa3; }
+  .import-preview tr.row-err  { background: #fee2e2; }
+  .import-preview tr.row-warn { background: #fef3c7; }
+  .import-preview tr.row-update { background: #dbeafe; }
+  .import-preview .badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+  .import-preview .badge.new    { background: #d1fae5; color: #065f46; }
+  .import-preview .badge.update { background: #dbeafe; color: #1e40af; }
+  .import-preview .badge.skip   { background: #e5e7eb; color: #374151; }
+  .import-preview .badge.error  { background: #fecaca; color: #991b1b; }
+  .import-summary {
+    display: flex; flex-wrap: wrap; gap: 16px; padding: 10px 0;
+    font-size: 13px; color: #444;
+  }
+  .import-summary span strong { font-size: 16px; }
+
+  /* Snapshots list */
+  .snap-list { margin-top: 12px; border: 1px solid #e2e6ec; border-radius: 6px; max-height: 380px; overflow: auto; }
+  .snap-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 10px 12px; border-bottom: 1px solid #eef1f6; align-items: center; }
+  .snap-row:last-child { border-bottom: none; }
+  .snap-row .meta { font-size: 11px; color: #557fa3; }
+  .snap-row .label { font-weight: 600; }
+  .snap-row .note { color: #555; font-size: 12px; margin-top: 2px; }
+  .snap-row button {
+    padding: 6px 10px; font-size: 12px; border: none; border-radius: 5px;
+    font-weight: 600; cursor: pointer;
+  }
+  .snap-row .restore { background: #4a90e2; color: white; }
+  .snap-row .restore:hover { background: #3a7bc8; }
+  .snap-row .delete { background: #fee2e2; color: #991b1b; }
+  .snap-row .delete:hover { background: #fecaca; }
 </style>
 </head>
 <body>
@@ -100,6 +161,18 @@
   <div class="right">
     <span class="stat" id="stat">—</span>
     <button class="secondary" id="btn-new">+ New row</button>
+    <button class="secondary" id="btn-import">Import…</button>
+    <div class="menu-wrap">
+      <button class="secondary" id="btn-export">Export ▾</button>
+      <div class="menu" id="export-menu">
+        <button data-fmt="csv">CSV (round-trip)</button>
+        <button data-fmt="xlsx">XLSX</button>
+        <button data-fmt="json">JSON (full fidelity)</button>
+        <button data-fmt="md-labels">Markdown — labels only</button>
+        <button data-fmt="md-full">Markdown — labels + prompts</button>
+      </div>
+    </div>
+    <button class="secondary" id="btn-snapshots">Snapshots</button>
     <a class="btn secondary" href="/">← Back to app</a>
   </div>
 </header>
@@ -235,6 +308,89 @@
       <button class="danger" id="row-delete" style="display:none;">Delete</button>
       <button class="secondary" id="row-cancel">Cancel</button>
       <button class="primary" id="row-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import modal -->
+<div class="modal-backdrop" id="import-modal">
+  <div class="modal wide">
+    <h3>Import rows</h3>
+    <div class="help">
+      Accepts CSV, TSV, or XLSX. Required columns: <code>id</code>, <code>column</code>, <code>label</code>,
+      <code>subject_mode</code>, <code>parent_photo_behavior</code>, <code>prompt_template</code>.
+      Optional: <code>category</code>, <code>subcategory</code>, <code>pronunciation</code>, <code>phase</code>, <code>status</code>, <code>notes</code>.
+      Aliases: <code>name→label</code>, <code>mode→subject_mode</code>, <code>behavior→parent_photo_behavior</code>, <code>prompt→prompt_template</code>.
+    </div>
+    <label for="import-paste">Paste CSV or TSV</label>
+    <textarea id="import-paste" placeholder="id,column,label,subject_mode,parent_photo_behavior,prompt_template
+needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} ..."></textarea>
+    <label>…or upload a file</label>
+    <input type="file" id="import-file" accept=".csv,.tsv,.xlsx">
+    <div id="import-sheet-pick" style="display:none;margin-top:6px;">
+      <label for="import-sheet">Worksheet</label>
+      <select id="import-sheet"></select>
+    </div>
+
+    <div class="row3" style="margin-top:14px;">
+      <div>
+        <label for="import-strategy">Conflict resolution</label>
+        <select id="import-strategy">
+          <option value="skip">Skip rows whose id already exists</option>
+          <option value="overwrite">Overwrite existing rows</option>
+        </select>
+      </div>
+      <div>
+        <label for="import-status">Initial status for NEW rows</label>
+        <select id="import-status">
+          <option value="draft">draft (recommended)</option>
+          <option value="published">published</option>
+        </select>
+      </div>
+      <div>
+        <label for="import-snapshot-label">Pre-import snapshot label</label>
+        <input type="text" id="import-snapshot-label" placeholder="auto: pre-import-…">
+      </div>
+    </div>
+
+    <div class="import-summary" id="import-summary"></div>
+    <div class="import-preview" id="import-preview"></div>
+
+    <div class="error" id="import-error"></div>
+
+    <div class="button-row">
+      <button class="secondary" id="import-cancel">Cancel</button>
+      <button class="primary"   id="import-commit" disabled>Import 0 rows</button>
+    </div>
+  </div>
+</div>
+
+<!-- Snapshots modal -->
+<div class="modal-backdrop" id="snapshots-modal">
+  <div class="modal">
+    <h3>Snapshots</h3>
+    <div class="help">Every import auto-creates a snapshot. Snapshots are immutable; restoring one auto-creates a pre-restore snapshot first.</div>
+
+    <div class="row2" style="margin-top:14px;">
+      <div>
+        <label for="snap-label">Label</label>
+        <input type="text" id="snap-label" placeholder="e.g. v1-launch-candidate">
+      </div>
+      <div>
+        <label for="snap-note">Note</label>
+        <input type="text" id="snap-note" placeholder="What state is this capturing?">
+      </div>
+    </div>
+    <div class="button-row" style="margin-top:8px;">
+      <button class="primary" id="snap-create">Save snapshot of current state</button>
+    </div>
+
+    <div class="snap-list" id="snap-list">Loading…</div>
+
+    <div class="error" id="snapshot-error"></div>
+
+    <div class="button-row">
+      <button class="secondary" id="snapshots-close">Close</button>
     </div>
   </div>
 </div>
@@ -411,6 +567,396 @@
     document.getElementById(id).addEventListener('input', applyFilters);
     document.getElementById(id).addEventListener('change', applyFilters);
   }
+
+  // ---- Import ----
+  const VALID_COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs']);
+  const VALID_SUBJECT_MODES = new Set(['child_as_subject', 'object', 'person', 'concept']);
+  const VALID_PARENT_PHOTO = new Set(['override', 'supplement', 'none']);
+  const VALID_PHASES = new Set(['v1_core', 'v1_extended', 'v2', 'later']);
+  const VALID_STATUS = new Set(['draft', 'published']);
+  const ID_PATTERN = /^[a-z0-9_]+(\.[a-z0-9_]+)*$/;
+  const PROMPT_TOKENS = ['{style}', '{color}', '{reference}', '{parent_photo}'];
+
+  // Normalize a raw header to a canonical field name. Aliases per Section 17.6.
+  function normalizeHeader(h) {
+    const k = String(h || '').trim().toLowerCase().replace(/\s+/g, '_');
+    if (k === 'name') return 'label';
+    if (k === 'mode') return 'subject_mode';
+    if (k === 'behavior') return 'parent_photo_behavior';
+    if (k === 'prompt') return 'prompt_template';
+    return k;
+  }
+  // Map snake_case headers from the import file into the camelCase field names
+  // the server expects.
+  function rowToCamel(rawRow) {
+    const out = {};
+    for (const k of Object.keys(rawRow)) {
+      const v = typeof rawRow[k] === 'string' ? rawRow[k].trim() : rawRow[k];
+      const norm = normalizeHeader(k);
+      switch (norm) {
+        case 'id':                    out.id = v; break;
+        case 'column':                out.column = v; break;
+        case 'category':              out.category = v || null; break;
+        case 'subcategory':           out.subcategory = v || null; break;
+        case 'label':                 out.label = v; break;
+        case 'pronunciation':         out.pronunciation = v || null; break;
+        case 'prompt_template':       out.promptTemplate = v; break;
+        case 'subject_mode':          out.subjectMode = v; break;
+        case 'parent_photo_behavior': out.parentPhotoBehavior = v; break;
+        case 'phase':                 out.phase = v || undefined; break;
+        case 'status':                out.status = v || undefined; break;
+        case 'notes':                 out.notes = v || null; break;
+        case 'archived':              out.archived = /^(true|1|yes)$/i.test(String(v)); break;
+        default: /* ignore unknown columns */ break;
+      }
+    }
+    return out;
+  }
+
+  function validateRow(r, existingIds) {
+    const errors = [];
+    const warnings = [];
+    if (!r.id || !ID_PATTERN.test(r.id))                errors.push('id pattern');
+    if (!VALID_COLUMNS.has(r.column))                   errors.push('column');
+    if (!r.label || !String(r.label).trim())            errors.push('label');
+    if (!r.promptTemplate || !String(r.promptTemplate).trim()) errors.push('promptTemplate');
+    if (!VALID_SUBJECT_MODES.has(r.subjectMode))        errors.push('subjectMode');
+    if (!VALID_PARENT_PHOTO.has(r.parentPhotoBehavior)) errors.push('parentPhotoBehavior');
+    if (r.phase && !VALID_PHASES.has(r.phase))          errors.push('phase');
+    if (r.status && !VALID_STATUS.has(r.status))        errors.push('status');
+    if (r.promptTemplate && !PROMPT_TOKENS.some(t => r.promptTemplate.includes(t))) {
+      warnings.push('no variable tokens in prompt_template');
+    }
+    const collision = !!(r.id && existingIds.has(r.id));
+    return { errors, warnings, collision };
+  }
+
+  function parseCSVText(text) {
+    // PapaParse auto-detects the delimiter on text input.
+    const out = Papa.parse(text, { header: true, skipEmptyLines: true, transformHeader: (h) => h });
+    if (out.errors && out.errors.length) {
+      // Surface only the first parse error to keep the UI quiet; data row errors
+      // come through the per-row validation step.
+      const fatal = out.errors.find(e => e.type === 'Delimiter' || e.type === 'Quotes');
+      if (fatal) throw new Error(`CSV parse: ${fatal.message}`);
+    }
+    return out.data;
+  }
+
+  let importParsedRows = [];
+  function refreshImportPreview() {
+    const existingIds = new Set(allRows.map(r => r.id));
+    const previewEl  = document.getElementById('import-preview');
+    const summaryEl  = document.getElementById('import-summary');
+    const commitBtn  = document.getElementById('import-commit');
+    const strategy   = document.getElementById('import-strategy').value;
+
+    let okNew = 0, okUpdate = 0, willSkip = 0, errs = 0;
+    const rowsHTML = importParsedRows.map((row, i) => {
+      const camel = row._camel;
+      const v = validateRow(camel, existingIds);
+      let cls = '';
+      let badge;
+      if (v.errors.length) { cls = 'row-err'; badge = `<span class="badge error">error</span>`; errs++; }
+      else if (v.collision && strategy === 'skip')      { cls = ''; badge = `<span class="badge skip">skip</span>`; willSkip++; }
+      else if (v.collision && strategy === 'overwrite') { cls = 'row-update'; badge = `<span class="badge update">update</span>`; okUpdate++; }
+      else                                              { cls = ''; badge = `<span class="badge new">new</span>`; okNew++; }
+      if (v.warnings.length && !v.errors.length) cls = cls || 'row-warn';
+      row._action = v.errors.length ? 'error' : (v.collision && strategy === 'skip' ? 'skip' : (v.collision ? 'update' : 'new'));
+      row._issue = v.errors.length ? v.errors.join(', ') : v.warnings.join(', ');
+      return `<tr class="${cls}">
+        <td>${i + 1}</td>
+        <td>${badge}</td>
+        <td><code>${escapeHtml(camel.id || '')}</code></td>
+        <td>${escapeHtml(camel.column || '')}</td>
+        <td>${escapeHtml(camel.label || '')}</td>
+        <td>${escapeHtml(camel.subjectMode || '')}</td>
+        <td>${escapeHtml(row._issue || '')}</td>
+      </tr>`;
+    }).join('');
+
+    previewEl.innerHTML = `
+      <table>
+        <thead><tr><th>#</th><th>action</th><th>id</th><th>column</th><th>label</th><th>subject_mode</th><th>issues</th></tr></thead>
+        <tbody>${rowsHTML}</tbody>
+      </table>
+    `;
+    const willImport = okNew + okUpdate;
+    summaryEl.innerHTML = `
+      <span><strong>${importParsedRows.length}</strong> parsed</span>
+      <span><strong>${okNew}</strong> new</span>
+      <span><strong>${okUpdate}</strong> will update</span>
+      <span><strong>${willSkip}</strong> skipped (collision)</span>
+      <span><strong>${errs}</strong> errors (will not import)</span>
+    `;
+    commitBtn.disabled = willImport === 0;
+    commitBtn.textContent = `Import ${willImport} rows`;
+  }
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+  function setParsedFromArray(raw) {
+    importParsedRows = raw.map((row) => ({ ...row, _camel: rowToCamel(row) }));
+    refreshImportPreview();
+  }
+
+  function openImport() {
+    document.getElementById('import-paste').value = '';
+    document.getElementById('import-file').value = '';
+    document.getElementById('import-sheet-pick').style.display = 'none';
+    document.getElementById('import-sheet').innerHTML = '';
+    document.getElementById('import-snapshot-label').value = '';
+    document.getElementById('import-error').textContent = '';
+    importParsedRows = [];
+    refreshImportPreview();
+    document.getElementById('import-modal').classList.add('show');
+  }
+  document.getElementById('btn-import').addEventListener('click', openImport);
+  document.getElementById('import-cancel').addEventListener('click', () => document.getElementById('import-modal').classList.remove('show'));
+  document.getElementById('import-modal').addEventListener('click', (e) => { if (e.target.id === 'import-modal') e.currentTarget.classList.remove('show'); });
+
+  document.getElementById('import-paste').addEventListener('input', (e) => {
+    const text = e.target.value.trim();
+    if (!text) { importParsedRows = []; refreshImportPreview(); return; }
+    try { setParsedFromArray(parseCSVText(text)); }
+    catch (err) { document.getElementById('import-error').textContent = err.message; }
+  });
+
+  let lastWorkbook = null;
+  document.getElementById('import-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    document.getElementById('import-error').textContent = '';
+    try {
+      if (ext === 'csv' || ext === 'tsv') {
+        const text = await file.text();
+        setParsedFromArray(parseCSVText(text));
+      } else if (ext === 'xlsx') {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        lastWorkbook = wb;
+        const sheets = wb.SheetNames;
+        const sheetPick = document.getElementById('import-sheet-pick');
+        const sheetSel  = document.getElementById('import-sheet');
+        sheetSel.innerHTML = sheets.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+        sheetPick.style.display = sheets.length > 1 ? '' : 'none';
+        const apply = () => {
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetSel.value], { defval: '' });
+          setParsedFromArray(rows);
+        };
+        sheetSel.onchange = apply;
+        apply();
+      } else {
+        throw new Error('Unsupported file type — use .csv, .tsv, or .xlsx');
+      }
+    } catch (err) {
+      document.getElementById('import-error').textContent = err.message;
+    }
+  });
+  document.getElementById('import-strategy').addEventListener('change', refreshImportPreview);
+
+  document.getElementById('import-commit').addEventListener('click', async () => {
+    const errEl = document.getElementById('import-error');
+    errEl.textContent = '';
+    const strategy = document.getElementById('import-strategy').value;
+    const defaultStatus = document.getElementById('import-status').value;
+    const snapshotLabel = document.getElementById('import-snapshot-label').value.trim() || null;
+    const rowsToSend = importParsedRows
+      .filter(r => r._action !== 'error' && !(r._action === 'skip'))
+      .map(r => r._camel);
+    if (!rowsToSend.length) { errEl.textContent = 'Nothing to import'; return; }
+    const btn = document.getElementById('import-commit');
+    const prev = btn.textContent; btn.disabled = true; btn.textContent = 'Importing…';
+    try {
+      const result = await api('/api/admin/taxonomy-bulk', {
+        method: 'POST',
+        body: { rows: rowsToSend, strategy, defaultStatus, snapshotLabel },
+      });
+      document.getElementById('import-modal').classList.remove('show');
+      await loadRows();
+      alert(`Imported. ${result.inserted} new, ${result.updated} updated, ${result.skipped} skipped, ${result.errors.length} errors.\nSnapshot: ${result.snapshotLabel}`);
+    } catch (e) {
+      errEl.textContent = e.message || String(e);
+    } finally {
+      btn.textContent = prev; btn.disabled = false;
+    }
+  });
+
+  // ---- Snapshots ----
+  function renderSnapshots(snaps) {
+    const list = document.getElementById('snap-list');
+    if (!snaps.length) { list.innerHTML = '<div style="padding:16px;color:#888;font-size:13px;">No snapshots yet.</div>'; return; }
+    list.innerHTML = snaps.map(s => `
+      <div class="snap-row" data-id="${s.id}">
+        <div>
+          <div class="label">${escapeHtml(s.label || '(no label)')}</div>
+          ${s.note ? `<div class="note">${escapeHtml(s.note)}</div>` : ''}
+          <div class="meta">#${s.id} · ${s.rowCount} rows · ${new Date(s.createdAt).toLocaleString()}</div>
+        </div>
+        <button class="restore" data-action="restore">Restore</button>
+        <button class="delete"  data-action="delete">Delete</button>
+      </div>
+    `).join('');
+  }
+  async function openSnapshots() {
+    document.getElementById('snap-label').value = '';
+    document.getElementById('snap-note').value  = '';
+    document.getElementById('snapshot-error').textContent = '';
+    document.getElementById('snap-list').textContent = 'Loading…';
+    document.getElementById('snapshots-modal').classList.add('show');
+    try {
+      const { snapshots } = await api('/api/admin/taxonomy-snapshots');
+      renderSnapshots(snapshots);
+    } catch (e) {
+      document.getElementById('snap-list').textContent = 'Failed to load: ' + (e.message || e);
+    }
+  }
+  document.getElementById('btn-snapshots').addEventListener('click', openSnapshots);
+  document.getElementById('snapshots-close').addEventListener('click', () => document.getElementById('snapshots-modal').classList.remove('show'));
+  document.getElementById('snapshots-modal').addEventListener('click', (e) => { if (e.target.id === 'snapshots-modal') e.currentTarget.classList.remove('show'); });
+
+  document.getElementById('snap-create').addEventListener('click', async () => {
+    const errEl = document.getElementById('snapshot-error');
+    errEl.textContent = '';
+    try {
+      await api('/api/admin/taxonomy-snapshots', {
+        method: 'POST',
+        body: {
+          label: document.getElementById('snap-label').value.trim() || null,
+          note:  document.getElementById('snap-note').value.trim() || null,
+        },
+      });
+      const { snapshots } = await api('/api/admin/taxonomy-snapshots');
+      renderSnapshots(snapshots);
+      document.getElementById('snap-label').value = '';
+      document.getElementById('snap-note').value  = '';
+    } catch (e) { errEl.textContent = e.message || String(e); }
+  });
+  document.getElementById('snap-list').addEventListener('click', async (e) => {
+    const action = e.target.dataset.action;
+    if (!action) return;
+    const row = e.target.closest('.snap-row');
+    const id = parseInt(row.dataset.id, 10);
+    const errEl = document.getElementById('snapshot-error');
+    errEl.textContent = '';
+    try {
+      if (action === 'restore') {
+        if (!confirm(`Restore snapshot #${id}? This replaces the entire taxonomy. A pre-restore snapshot is created automatically.`)) return;
+        const result = await api('/api/admin/taxonomy-snapshots?action=restore&id=' + id, { method: 'POST' });
+        await loadRows();
+        const { snapshots } = await api('/api/admin/taxonomy-snapshots');
+        renderSnapshots(snapshots);
+        alert(`Restored ${result.restored} rows.\nPre-restore snapshot: ${result.preRestoreSnapshot}`);
+      } else if (action === 'delete') {
+        if (!confirm(`Delete snapshot #${id}? Cannot be undone.`)) return;
+        await api('/api/admin/taxonomy-snapshots?id=' + id, { method: 'DELETE' });
+        const { snapshots } = await api('/api/admin/taxonomy-snapshots');
+        renderSnapshots(snapshots);
+      }
+    } catch (err) { errEl.textContent = err.message || String(err); }
+  });
+
+  // ---- Export ----
+  // Pure client-side; the rows are already in memory so we can format what
+  // the user actually sees (after filters) without a server round-trip.
+  function visibleRowsForExport() {
+    const visible = table.getRows('active').map(r => r.getData());
+    return visible.length ? visible : allRows;
+  }
+  function download(filename, content, mime) {
+    const blob = content instanceof Blob ? content : new Blob([content], { type: mime || 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function tsStamp() { return new Date().toISOString().replace(/[:.]/g, '-'); }
+  function exportCSV(rows) {
+    const cols = ['id','column','category','subcategory','label','pronunciation',
+                  'subject_mode','parent_photo_behavior','phase','status','notes','prompt_template'];
+    const data = rows.map(r => ({
+      id: r.id, column: r.column, category: r.category, subcategory: r.subcategory,
+      label: r.label, pronunciation: r.pronunciation,
+      subject_mode: r.subjectMode, parent_photo_behavior: r.parentPhotoBehavior,
+      phase: r.phase, status: r.status, notes: r.notes,
+      prompt_template: r.promptTemplate,
+    }));
+    const csv = Papa.unparse(data, { columns: cols });
+    download(`taxonomy-${tsStamp()}.csv`, csv, 'text/csv;charset=utf-8');
+  }
+  function exportXLSX(rows) {
+    const wb = XLSX.utils.book_new();
+    const data = rows.map(r => ({
+      id: r.id, column: r.column, category: r.category, subcategory: r.subcategory,
+      label: r.label, pronunciation: r.pronunciation,
+      subject_mode: r.subjectMode, parent_photo_behavior: r.parentPhotoBehavior,
+      phase: r.phase, status: r.status, notes: r.notes,
+      prompt_template: r.promptTemplate,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Taxonomy');
+    XLSX.writeFile(wb, `taxonomy-${tsStamp()}.xlsx`);
+  }
+  function exportJSON(rows) {
+    download(`taxonomy-${tsStamp()}.json`,
+      JSON.stringify({ exportedAt: new Date().toISOString(), rowCount: rows.length, rows }, null, 2),
+      'application/json');
+  }
+  function exportMarkdown(rows, includePrompts) {
+    // Group by column → category → subcategory.
+    const tree = {};
+    for (const r of rows) {
+      const col = r.column || '(no column)';
+      const cat = r.category || '(no category)';
+      const sub = r.subcategory || '(no subcategory)';
+      tree[col] = tree[col] || {};
+      tree[col][cat] = tree[col][cat] || {};
+      tree[col][cat][sub] = tree[col][cat][sub] || [];
+      tree[col][cat][sub].push(r);
+    }
+    const out = [];
+    for (const col of Object.keys(tree).sort()) {
+      out.push(`# ${col}`);
+      for (const cat of Object.keys(tree[col]).sort()) {
+        out.push(`## ${cat}`);
+        for (const sub of Object.keys(tree[col][cat]).sort()) {
+          if (sub !== '(no subcategory)') out.push(`### ${sub}`);
+          for (const r of tree[col][cat][sub].sort((a,b) => (a.label||'').localeCompare(b.label||''))) {
+            const tags = [r.subjectMode, r.parentPhotoBehavior, r.phase].filter(Boolean).join(', ');
+            out.push(`- **${r.label}** \`${r.id}\` [${tags}]`);
+            if (includePrompts && r.promptTemplate) {
+              out.push('  ```');
+              out.push('  ' + r.promptTemplate.split('\n').join('\n  '));
+              out.push('  ```');
+            }
+          }
+        }
+      }
+      out.push('');
+    }
+    download(`taxonomy-${tsStamp()}.md`, out.join('\n'), 'text/markdown');
+  }
+
+  // Export menu toggle + actions
+  const exportBtn = document.getElementById('btn-export');
+  const exportMenu = document.getElementById('export-menu');
+  exportBtn.addEventListener('click', (e) => { e.stopPropagation(); exportMenu.classList.toggle('show'); });
+  document.addEventListener('click', () => exportMenu.classList.remove('show'));
+  exportMenu.addEventListener('click', (e) => {
+    const fmt = e.target.dataset.fmt; if (!fmt) return;
+    const rows = visibleRowsForExport();
+    if (!rows.length) { alert('Nothing to export.'); return; }
+    try {
+      if (fmt === 'csv')      exportCSV(rows);
+      else if (fmt === 'xlsx') exportXLSX(rows);
+      else if (fmt === 'json') exportJSON(rows);
+      else if (fmt === 'md-labels') exportMarkdown(rows, false);
+      else if (fmt === 'md-full')   exportMarkdown(rows, true);
+    } catch (err) {
+      alert('Export failed: ' + (err.message || err));
+    }
+    exportMenu.classList.remove('show');
+  });
 
   loadRows().catch((e) => {
     document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif;color:#c94f5f;">Failed to load: ${e.message || e}</div>`;
