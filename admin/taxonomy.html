@@ -152,6 +152,26 @@
   .snap-row .restore:hover { background: #3a7bc8; }
   .snap-row .delete { background: #fee2e2; color: #991b1b; }
   .snap-row .delete:hover { background: #fecaca; }
+  .snap-row .diff   { background: #f0f9ff; color: #0c4a6e; }
+  .snap-row .diff:hover { background: #e0f2fe; }
+
+  /* Audit log table */
+  .audit-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .audit-table th, .audit-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #eef1f6; vertical-align: top; }
+  .audit-table th { background: #f7f9fc; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; color: #557fa3; position: sticky; top: 0; }
+  .audit-table td.action { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; }
+  .audit-table td.ids    { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px; color: #557fa3; max-width: 280px; overflow-wrap: anywhere; }
+  .audit-scroll { max-height: 60vh; overflow: auto; border: 1px solid #e2e6ec; border-radius: 6px; }
+
+  /* Diff modal */
+  .diff-group { margin-top: 14px; }
+  .diff-group h4 { margin: 0 0 6px; font-size: 13px; color: #557fa3; text-transform: uppercase; letter-spacing: .3px; }
+  .diff-group ul { margin: 0; padding-left: 16px; max-height: 200px; overflow: auto; }
+  .diff-group li { font-size: 13px; padding: 2px 0; }
+  .diff-group li code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; }
+  .diff-group .fields { color: #6b7280; font-size: 11px; }
+  .diff-totals { display: flex; gap: 16px; padding: 8px 0; font-size: 13px; }
+  .diff-totals strong { font-size: 16px; }
 </style>
 </head>
 <body>
@@ -172,7 +192,24 @@
         <button data-fmt="md-full">Markdown — labels + prompts</button>
       </div>
     </div>
+    <div class="menu-wrap">
+      <button class="secondary" id="btn-bulk" disabled>Bulk action ▾</button>
+      <div class="menu" id="bulk-menu">
+        <button data-act="set-status" data-val="published">Publish selected</button>
+        <button data-act="set-status" data-val="draft">Move to draft</button>
+        <button data-act="set-archived" data-val="true">Archive</button>
+        <button data-act="set-archived" data-val="false">Unarchive</button>
+        <div style="border-top: 1px solid #eef1f6; margin: 4px 0;"></div>
+        <button data-act="set-phase" data-val="v1_core">Set phase → v1_core</button>
+        <button data-act="set-phase" data-val="v1_extended">Set phase → v1_extended</button>
+        <button data-act="set-phase" data-val="v2">Set phase → v2</button>
+        <button data-act="set-phase" data-val="later">Set phase → later</button>
+        <div style="border-top: 1px solid #eef1f6; margin: 4px 0;"></div>
+        <button data-act="delete" style="color: #991b1b;">Delete selected…</button>
+      </div>
+    </div>
     <button class="secondary" id="btn-snapshots">Snapshots</button>
+    <button class="secondary" id="btn-audit">Audit log</button>
     <a class="btn secondary" href="/">← Back to app</a>
   </div>
 </header>
@@ -365,6 +402,71 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
   </div>
 </div>
 
+<!-- Audit log modal -->
+<div class="modal-backdrop" id="audit-modal">
+  <div class="modal wide">
+    <h3>Audit log</h3>
+    <div class="row3">
+      <div>
+        <label for="audit-action">Action</label>
+        <select id="audit-action">
+          <option value="">All</option>
+          <option value="create">create</option>
+          <option value="update">update</option>
+          <option value="publish">publish</option>
+          <option value="delete">delete</option>
+          <option value="import">import</option>
+          <option value="snapshot">snapshot</option>
+          <option value="snapshot-delete">snapshot-delete</option>
+          <option value="restore">restore</option>
+          <option value="bulk-set-status">bulk-set-status</option>
+          <option value="bulk-set-phase">bulk-set-phase</option>
+          <option value="bulk-set-archived">bulk-set-archived</option>
+          <option value="bulk-delete">bulk-delete</option>
+        </select>
+      </div>
+      <div>
+        <label for="audit-since">Since</label>
+        <input type="date" id="audit-since">
+      </div>
+      <div>
+        <label for="audit-until">Until</label>
+        <input type="date" id="audit-until">
+      </div>
+    </div>
+    <label for="audit-q">Search summary / note / id</label>
+    <input type="text" id="audit-q" placeholder="anything…">
+
+    <div class="audit-scroll" style="margin-top:14px;">
+      <table class="audit-table">
+        <thead>
+          <tr><th>when</th><th>action</th><th>summary</th><th>note</th><th>row ids</th></tr>
+        </thead>
+        <tbody id="audit-body"></tbody>
+      </table>
+    </div>
+
+    <div class="error" id="audit-error"></div>
+    <div class="button-row">
+      <button class="secondary" id="audit-close">Close</button>
+      <button class="primary"   id="audit-reload">Reload</button>
+    </div>
+  </div>
+</div>
+
+<!-- Snapshot diff modal -->
+<div class="modal-backdrop" id="diff-modal">
+  <div class="modal">
+    <h3 id="diff-title">Diff vs snapshot</h3>
+    <div class="help" id="diff-meta">—</div>
+    <div class="diff-totals" id="diff-totals"></div>
+    <div id="diff-body">Loading…</div>
+    <div class="button-row">
+      <button class="secondary" id="diff-close">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Snapshots modal -->
 <div class="modal-backdrop" id="snapshots-modal">
   <div class="modal">
@@ -536,6 +638,8 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     layout: 'fitColumns',
     height: '100%',
     placeholder: 'No taxonomy rows yet. Click "+ New row" to add one.',
+    selectableRows: true,
+    selectableRowsRangeMode: 'click',
     initialSort: [
       { column: 'column', dir: 'asc' },
       { column: 'category', dir: 'asc' },
@@ -543,6 +647,8 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       { column: 'label', dir: 'asc' },
     ],
     columns: [
+      { formatter: 'rowSelection', titleFormatter: 'rowSelection', headerSort: false, width: 36,
+        cellClick: (e) => e.stopPropagation() },
       { title: 'id',            field: 'id',                  widthGrow: 2, headerSort: true },
       { title: 'column',        field: 'column',              width: 90,  headerSort: true },
       { title: 'category',      field: 'category',            widthGrow: 1, headerSort: true },
@@ -561,7 +667,16 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
         formatter: (cell) => cell.getValue() ? new Date(cell.getValue()).toLocaleString() : '' },
     ],
   });
-  table.on('rowClick', (e, row) => openModal(row.getData()));
+  table.on('rowClick', (e, row) => {
+    // Don't open the editor when the click was on the selection checkbox cell.
+    if (e.target.closest('.tabulator-cell:first-child')) return;
+    openModal(row.getData());
+  });
+  table.on('rowSelectionChanged', (data) => {
+    const btn = document.getElementById('btn-bulk');
+    btn.disabled = !data.length;
+    btn.textContent = data.length ? `Bulk action (${data.length}) ▾` : 'Bulk action ▾';
+  });
 
   for (const id of ['filter-search','filter-column','filter-mode','filter-phase','filter-status']) {
     document.getElementById(id).addEventListener('input', applyFilters);
@@ -786,12 +901,13 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     const list = document.getElementById('snap-list');
     if (!snaps.length) { list.innerHTML = '<div style="padding:16px;color:#888;font-size:13px;">No snapshots yet.</div>'; return; }
     list.innerHTML = snaps.map(s => `
-      <div class="snap-row" data-id="${s.id}">
+      <div class="snap-row" data-id="${s.id}" style="grid-template-columns: 1fr auto auto auto;">
         <div>
           <div class="label">${escapeHtml(s.label || '(no label)')}</div>
           ${s.note ? `<div class="note">${escapeHtml(s.note)}</div>` : ''}
           <div class="meta">#${s.id} · ${s.rowCount} rows · ${new Date(s.createdAt).toLocaleString()}</div>
         </div>
+        <button class="diff"    data-action="diff">Diff</button>
         <button class="restore" data-action="restore">Restore</button>
         <button class="delete"  data-action="delete">Delete</button>
       </div>
@@ -851,6 +967,26 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
         await api('/api/admin/taxonomy-snapshots?id=' + id, { method: 'DELETE' });
         const { snapshots } = await api('/api/admin/taxonomy-snapshots');
         renderSnapshots(snapshots);
+      } else if (action === 'diff') {
+        const diff = await api('/api/admin/taxonomy-snapshots?id=' + id + '&diff=1');
+        document.getElementById('diff-title').textContent =
+          `Current vs snapshot #${diff.snapshotId}`;
+        document.getElementById('diff-meta').textContent =
+          `${diff.snapshotLabel || '(no label)'} · ${new Date(diff.snapshotCreatedAt).toLocaleString()}`;
+        document.getElementById('diff-totals').innerHTML = `
+          <span>added: <strong>${diff.totals.added}</strong></span>
+          <span>changed: <strong>${diff.totals.changed}</strong></span>
+          <span>removed: <strong>${diff.totals.removed}</strong></span>
+        `;
+        const grp = (title, items, renderItem) => items.length
+          ? `<div class="diff-group"><h4>${title}</h4><ul>${items.map(renderItem).join('')}</ul></div>`
+          : '';
+        document.getElementById('diff-body').innerHTML =
+          grp('Added since snapshot', diff.added,   (r) => `<li><code>${escapeHtml(r.id)}</code> — ${escapeHtml(r.label || '')} <span class="fields">(${escapeHtml(r.column || '')})</span></li>`) +
+          grp('Changed',               diff.changed, (r) => `<li><code>${escapeHtml(r.id)}</code> — ${escapeHtml(r.label || '')} <span class="fields">${escapeHtml(r.fields.join(', '))}</span></li>`) +
+          grp('Removed since snapshot', diff.removed, (r) => `<li><code>${escapeHtml(r.id)}</code> — ${escapeHtml(r.label || '')} <span class="fields">(${escapeHtml(r.column || '')})</span></li>`) ||
+          '<div style="padding:14px;color:#888;">No differences — current state matches this snapshot.</div>';
+        document.getElementById('diff-modal').classList.add('show');
       }
     } catch (err) { errEl.textContent = err.message || String(err); }
   });
@@ -957,6 +1093,83 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     }
     exportMenu.classList.remove('show');
   });
+
+  // ---- Bulk actions on selected rows ----
+  const bulkBtn = document.getElementById('btn-bulk');
+  const bulkMenu = document.getElementById('bulk-menu');
+  bulkBtn.addEventListener('click', (e) => {
+    if (bulkBtn.disabled) return;
+    e.stopPropagation();
+    bulkMenu.classList.toggle('show');
+  });
+  document.addEventListener('click', () => bulkMenu.classList.remove('show'));
+  bulkMenu.addEventListener('click', async (e) => {
+    const act = e.target.dataset.act; if (!act) return;
+    const value = e.target.dataset.val;
+    const selected = table.getSelectedRows().map(r => r.getData().id);
+    bulkMenu.classList.remove('show');
+    if (!selected.length) return;
+    if (act === 'delete' && !confirm(`Delete ${selected.length} row(s)? This cannot be undone unless you restore from a snapshot.`)) return;
+    let body = { ids: selected, action: act };
+    if (act === 'set-status' || act === 'set-phase') body.value = value;
+    if (act === 'set-archived') body.value = value === 'true';
+    try {
+      const r = await api('/api/admin/taxonomy-bulkop', { method: 'POST', body });
+      await loadRows();
+      const msg = `Applied to ${r.affected} of ${selected.length} row(s).` +
+        (r.snapshotLabel ? `\nPre-op snapshot: ${r.snapshotLabel}` : '');
+      alert(msg);
+    } catch (err) {
+      alert('Bulk op failed: ' + (err.message || err));
+    }
+  });
+
+  // ---- Audit log ----
+  function renderAudit(entries) {
+    const body = document.getElementById('audit-body');
+    if (!entries.length) { body.innerHTML = '<tr><td colspan="5" style="padding:16px;color:#888;">No matching audit entries.</td></tr>'; return; }
+    body.innerHTML = entries.map(e => `
+      <tr>
+        <td>${new Date(e.ts).toLocaleString()}</td>
+        <td class="action">${escapeHtml(e.action)}</td>
+        <td>${escapeHtml(e.summary || '')}</td>
+        <td>${escapeHtml(e.note || '')}</td>
+        <td class="ids">${(e.rowIds || []).map(escapeHtml).join(', ')}</td>
+      </tr>
+    `).join('');
+  }
+  async function loadAudit() {
+    const errEl = document.getElementById('audit-error');
+    errEl.textContent = '';
+    const action = document.getElementById('audit-action').value;
+    const since  = document.getElementById('audit-since').value;
+    const until  = document.getElementById('audit-until').value;
+    const q      = document.getElementById('audit-q').value.trim();
+    const params = new URLSearchParams();
+    if (action) params.set('action', action);
+    if (since)  params.set('since', new Date(since + 'T00:00:00').toISOString());
+    if (until)  params.set('until', new Date(until + 'T23:59:59').toISOString());
+    if (q)      params.set('q', q);
+    try {
+      const { entries } = await api('/api/admin/taxonomy-audit?' + params.toString());
+      renderAudit(entries);
+    } catch (e) { errEl.textContent = e.message || String(e); }
+  }
+  document.getElementById('btn-audit').addEventListener('click', () => {
+    document.getElementById('audit-modal').classList.add('show');
+    loadAudit();
+  });
+  document.getElementById('audit-close').addEventListener('click', () => document.getElementById('audit-modal').classList.remove('show'));
+  document.getElementById('audit-modal').addEventListener('click', (e) => { if (e.target.id === 'audit-modal') e.currentTarget.classList.remove('show'); });
+  document.getElementById('audit-reload').addEventListener('click', loadAudit);
+  for (const id of ['audit-action','audit-since','audit-until','audit-q']) {
+    document.getElementById(id).addEventListener('change', loadAudit);
+  }
+
+  // ---- Snapshot diff modal close handlers (the actual diff load is wired
+  // into the snapshot list's click handler above, alongside restore/delete).
+  document.getElementById('diff-close').addEventListener('click', () => document.getElementById('diff-modal').classList.remove('show'));
+  document.getElementById('diff-modal').addEventListener('click', (e) => { if (e.target.id === 'diff-modal') e.currentTarget.classList.remove('show'); });
 
   loadRows().catch((e) => {
     document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif;color:#c94f5f;">Failed to load: ${e.message || e}</div>`;
