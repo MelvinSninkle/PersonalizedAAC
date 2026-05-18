@@ -4,3 +4,4 @@ Sounds/
 *.json
 !package.json
 !package-lock.json
+!vercel.json
