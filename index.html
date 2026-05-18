@@ -2,38 +2,483 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My World</title>
-<style>
-  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fce4ec; color: #222; display: flex; align-items: center; justify-content: center; height: 100vh; }
-  .card { background: white; padding: 36px 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.08); max-width: 480px; text-align: center; }
-  h1 { margin: 0 0 8px; font-size: 28px; }
-  p { margin: 0 0 18px; color: #555; }
-  a { color: #ad1457; font-weight: 600; }
-</style>
-</head>
-<body>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My World — Tap to Talk</title>
+<meta name="theme-color" content="#ff1493">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!--
-  Temporary redirect stub. The real landing page lands in the next commit.
-  Anyone whose device already has a child slug (the Fletcher iPad, etc.) gets
-  bounced straight to their app so the home-screen tile keeps working through
-  the URL restructure.
+  Existing-device shortcut. Anyone with a stored child slug — the Fletcher
+  iPad, the parent's laptop after they've logged into the app — gets bounced
+  to /u/<slug> before the landing page even paints. Everyone else (first-time
+  visitor) sees the marketing page below.
 -->
 <script>
   (function () {
     var slug = localStorage.getItem('aacChildSlug');
-    // Legacy fallback: if there's no slug yet but the device has an admin token,
-    // it's the existing Fletcher iPad coming from before this restructure.
     if (!slug && localStorage.getItem('aacToken')) slug = 'fletcherpeterson';
-    if (slug) {
-      location.replace('/u/' + encodeURIComponent(slug));
-    }
+    if (slug) location.replace('/u/' + encodeURIComponent(slug));
   })();
 </script>
-<div class="card">
-  <h1>My World</h1>
-  <p>Tap to talk. Coming soon.</p>
-  <p><a href="/u/fletcherpeterson">Demo →</a></p>
-</div>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1f2937; background: #fff7fb; line-height: 1.55; }
+  body { overflow-x: hidden; }
+  a { color: #c2185b; text-decoration: none; font-weight: 600; }
+  a:hover { text-decoration: underline; }
+
+  /* Brand type — Fredoka for the rounded, kid-friendly headline voice. */
+  .brand-type { font-family: 'Fredoka', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif; }
+
+  /* Top navigation strip */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px;
+    background: rgba(255,255,255,.94);
+    backdrop-filter: saturate(180%) blur(8px);
+    -webkit-backdrop-filter: saturate(180%) blur(8px);
+    border-bottom: 1px solid #fce4ec;
+  }
+  nav .logo { font-family: 'Fredoka', ui-rounded, system-ui, sans-serif; font-size: 22px; font-weight: 700; color: #ad1457; }
+  nav .nav-links { display: flex; gap: 18px; align-items: center; font-size: 14px; }
+  nav .nav-links a { color: #6b7280; font-weight: 500; }
+  nav .nav-links a.cta { background: #ff1493; color: white; padding: 8px 16px; border-radius: 999px; }
+  nav .nav-links a.cta:hover { background: #c2185b; text-decoration: none; }
+
+  /* Generic CTA buttons */
+  .btn {
+    display: inline-block;
+    padding: 14px 26px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 15px;
+    cursor: pointer;
+    border: none;
+    text-decoration: none;
+    transition: transform .08s ease, background .15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); text-decoration: none; }
+  .btn.primary   { background: #ff1493; color: white; }
+  .btn.primary:hover   { background: #c2185b; }
+  .btn.secondary { background: white; color: #c2185b; border: 2px solid #fce4ec; }
+  .btn.secondary:hover { border-color: #ff1493; }
+
+  /* Section frame */
+  section { padding: 80px 28px; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .eyebrow { color: #c2185b; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; font-size: 12px; margin-bottom: 12px; }
+  h1 { font-family: 'Fredoka', ui-rounded, system-ui, sans-serif; font-size: 56px; line-height: 1.05; margin: 0 0 20px; letter-spacing: -0.01em; }
+  h2 { font-family: 'Fredoka', ui-rounded, system-ui, sans-serif; font-size: 38px; line-height: 1.15; margin: 0 0 16px; }
+  h3 { font-family: 'Fredoka', ui-rounded, system-ui, sans-serif; font-size: 20px; margin: 0 0 8px; }
+  .lead { font-size: 19px; color: #4b5563; max-width: 620px; }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(180deg, #fff7fb 0%, #fce4ec 100%);
+    padding-top: 64px;
+  }
+  .hero .wrap { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; }
+  .hero .ctas { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
+  .hero .tiny { font-size: 13px; color: #6b7280; margin-top: 14px; }
+
+  /* Placeholder image slot — the boxes that will hold real marketing imagery later. */
+  .img-slot {
+    background: repeating-linear-gradient(
+      135deg,
+      #fce4ec 0,
+      #fce4ec 10px,
+      #fdd2e0 10px,
+      #fdd2e0 20px
+    );
+    border: 2px dashed #f48fb1;
+    border-radius: 18px;
+    color: #ad1457;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+    padding: 24px;
+    font-weight: 600;
+    aspect-ratio: 4 / 3;
+  }
+  .img-slot.tall   { aspect-ratio: 3 / 4; }
+  .img-slot.square { aspect-ratio: 1 / 1; }
+  .img-slot.wide   { aspect-ratio: 16 / 9; }
+  .img-slot .ph-label { display: block; font-size: 12px; color: #c2185b; opacity: .8; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 6px; }
+
+  /* How it works */
+  .how .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 40px; }
+  .how .card { display: flex; flex-direction: column; gap: 14px; }
+  .how .step { font-family: 'Fredoka', ui-rounded, system-ui, sans-serif; color: #ff1493; font-size: 14px; font-weight: 700; letter-spacing: .1em; }
+
+  /* Try-it section (style picker + tile slots) */
+  .try { background: white; border-top: 1px solid #fce4ec; border-bottom: 1px solid #fce4ec; }
+  .style-picker {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    margin: 24px 0 36px;
+  }
+  .style-chip {
+    background: #fff7fb; color: #4b5563;
+    border: 2px solid #fce4ec; padding: 10px 18px;
+    border-radius: 999px; font-weight: 600; font-size: 14px;
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  .style-chip:hover { border-color: #f48fb1; }
+  .style-chip.active { background: #ff1493; color: white; border-color: #ff1493; }
+  .tile-grid {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px;
+  }
+  .tile-grid .img-slot {
+    aspect-ratio: 1 / 1;
+    padding: 10px;
+    font-size: 12px;
+    text-align: center;
+  }
+  .tile-grid .img-slot .label-row {
+    display: block; font-size: 14px; font-weight: 700; color: #ad1457; margin-top: 4px;
+  }
+
+  /* Why section — bigger statements with paired image slots */
+  .why .row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 56px;
+    margin-bottom: 80px; align-items: center;
+  }
+  .why .row:nth-child(even) > .copy { order: 2; }
+  .why .row:last-child { margin-bottom: 0; }
+
+  /* Pricing */
+  .pricing { background: linear-gradient(180deg, #fff7fb 0%, white 100%); }
+  .price-card {
+    max-width: 480px; margin: 32px auto 0;
+    background: white;
+    border: 2px solid #fce4ec;
+    border-radius: 24px;
+    padding: 40px 36px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(255,20,147,.08);
+  }
+  .price-card .price {
+    font-family: 'Fredoka', ui-rounded, system-ui, sans-serif;
+    font-size: 64px; font-weight: 700; color: #1f2937;
+    line-height: 1;
+  }
+  .price-card .price .per { font-size: 18px; font-weight: 500; color: #6b7280; }
+  .price-card ul { text-align: left; list-style: none; padding: 0; margin: 24px 0 28px; }
+  .price-card li { padding: 8px 0; padding-left: 28px; position: relative; color: #4b5563; }
+  .price-card li::before {
+    content: '✓'; position: absolute; left: 0; top: 8px;
+    color: #ff1493; font-weight: 800;
+  }
+  .price-card .tiny { font-size: 12px; color: #9ca3af; margin-top: 8px; }
+
+  /* Signup section */
+  .signup { background: #ad1457; color: white; text-align: center; }
+  .signup h2 { color: white; }
+  .signup .lead { color: #fce4ec; margin: 0 auto 32px; }
+  .signup form {
+    max-width: 520px; margin: 0 auto;
+    display: flex; gap: 10px; flex-wrap: wrap;
+    justify-content: center;
+  }
+  .signup input[type=email] {
+    flex: 1; min-width: 240px;
+    padding: 14px 18px; border-radius: 999px; border: none;
+    font-size: 15px; color: #1f2937;
+  }
+  .signup .btn.primary { background: #ffd400; color: #1f2937; }
+  .signup .btn.primary:hover { background: #facc15; }
+  .signup .msg { margin-top: 16px; font-size: 14px; min-height: 20px; color: #fce4ec; }
+  .signup .msg.success { color: #ffd400; font-weight: 700; }
+
+  footer {
+    background: #1f2937; color: #9ca3af;
+    padding: 36px 28px; font-size: 13px; text-align: center;
+  }
+  footer .brand { font-family: 'Fredoka', ui-rounded, system-ui, sans-serif; color: white; font-weight: 700; }
+
+  @media (max-width: 900px) {
+    h1 { font-size: 40px; }
+    h2 { font-size: 30px; }
+    section { padding: 56px 22px; }
+    .hero .wrap { grid-template-columns: 1fr; }
+    .how .cards { grid-template-columns: 1fr; }
+    .why .row { grid-template-columns: 1fr; gap: 32px; }
+    .why .row:nth-child(even) > .copy { order: 0; }
+    .tile-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">🌍 My World</div>
+  <div class="nav-links">
+    <a href="#how">How it works</a>
+    <a href="#try">Try it</a>
+    <a href="#pricing">Pricing</a>
+    <a class="cta" href="#signup">Get early access</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">An AAC app for children with autism</div>
+      <h1 class="brand-type">My World:<br>Tap to Talk.</h1>
+      <p class="lead">
+        Most AAC apps make a child learn abstract symbols before they can communicate.
+        <strong>My World</strong> flips it — your child's actual food, toys, people, and home
+        <em>become</em> their vocabulary, rendered in the animation style they love.
+      </p>
+      <div class="ctas">
+        <a class="btn primary" href="#signup">Get early access · $99/mo</a>
+        <a class="btn secondary" href="#try">See how it works</a>
+      </div>
+      <p class="tiny">14-day free trial when we launch. No card required.</p>
+    </div>
+    <div class="img-slot wide">
+      <div>
+        <span class="ph-label">Marketing image · hero</span>
+        Tablet held by a child showing My World on screen
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="how" id="how">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2>Three steps. The vocabulary belongs to your child.</h2>
+    <p class="lead">No clinical-looking icons your child has to memorize. No six-month insurance battle. Just photographs of their world, transformed into a style they want to look at.</p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="img-slot">
+          <div>
+            <span class="ph-label">Image · step 1</span>
+            Parent taking a photo of a snack
+          </div>
+        </div>
+        <div class="step">Step 01</div>
+        <h3>Photograph it.</h3>
+        <p>Snap a photo of anything your child uses every day — a favorite snack, their toothbrush, Grandma. One tap from the parent app.</p>
+      </div>
+      <div class="card">
+        <div class="img-slot">
+          <div>
+            <span class="ph-label">Image · step 2</span>
+            Side-by-side: raw photo and stylized tile
+          </div>
+        </div>
+        <div class="step">Step 02</div>
+        <h3>We transform it.</h3>
+        <p>The photo is restyled into the animation your child loves — Pixar, watercolor, anime — and tinted with their favorite color. Same object, recognizable, beautiful.</p>
+      </div>
+      <div class="card">
+        <div class="img-slot">
+          <div>
+            <span class="ph-label">Image · step 3</span>
+            Child tapping tiles on the tablet
+          </div>
+        </div>
+        <div class="step">Step 03</div>
+        <h3>They communicate.</h3>
+        <p>The tile lands on their tablet within seconds, in the same position forever. They tap. The word speaks. The world they recognize is the words they have.</p>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 48px;">
+      <a class="btn primary" href="#signup">Get early access · $99/mo</a>
+    </div>
+  </div>
+</section>
+
+<section class="try" id="try">
+  <div class="wrap">
+    <div class="eyebrow">Try the look</div>
+    <h2>Pick your child's style.</h2>
+    <p class="lead">During onboarding, you pick the animation style your child responds to. Every tile in their world is rendered in that style, with your child as the recognizable character anchor.</p>
+
+    <div class="style-picker" id="style-picker">
+      <button class="style-chip active" data-style="Pixar 3D animation">Pixar 3D</button>
+      <button class="style-chip" data-style="anime">Anime</button>
+      <button class="style-chip" data-style="watercolor">Watercolor</button>
+      <button class="style-chip" data-style="claymation">Claymation</button>
+      <button class="style-chip" data-style="hand-drawn cartoon">Hand-drawn</button>
+      <button class="style-chip" data-style="photo-realistic illustration">Photo-realistic</button>
+    </div>
+
+    <div class="tile-grid" id="tile-grid">
+      <div class="img-slot square"><div><span class="ph-label">Tile preview</span><span class="label-row">yes</span><span class="style-label"></span></div></div>
+      <div class="img-slot square"><div><span class="ph-label">Tile preview</span><span class="label-row">no</span><span class="style-label"></span></div></div>
+      <div class="img-slot square"><div><span class="ph-label">Tile preview</span><span class="label-row">more</span><span class="style-label"></span></div></div>
+      <div class="img-slot square"><div><span class="ph-label">Tile preview</span><span class="label-row">help</span><span class="style-label"></span></div></div>
+      <div class="img-slot square"><div><span class="ph-label">Tile preview</span><span class="label-row">Mom</span><span class="style-label"></span></div></div>
+      <div class="img-slot square"><div><span class="ph-label">Tile preview</span><span class="label-row">snack</span><span class="style-label"></span></div></div>
+    </div>
+
+    <div style="text-align: center; margin-top: 48px;">
+      <a class="btn primary" href="#signup">Generate my child's tiles · $99/mo</a>
+      <p style="margin-top: 12px; font-size: 13px; color: #6b7280;">We'll email you when early access opens.</p>
+    </div>
+  </div>
+</section>
+
+<section class="why">
+  <div class="wrap">
+
+    <div class="row">
+      <div class="copy">
+        <div class="eyebrow">Modeling loop</div>
+        <h2>You can talk back, from your phone.</h2>
+        <p class="lead">When your child says something through their tablet, you can respond from your phone — in the same vocabulary. Each tile lights up on their screen in sequence, then your sentence speaks aloud in your own voice. They learn the construction of language, not just the words.</p>
+        <a class="btn secondary" href="#signup" style="margin-top: 20px;">Join the waitlist</a>
+      </div>
+      <div class="img-slot wide">
+        <div>
+          <span class="ph-label">Image · modeling loop</span>
+          Phone composing a sentence → tablet tiles lighting up
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="img-slot wide">
+        <div>
+          <span class="ph-label">Image · room walk</span>
+          Parent doing a "room walk" — photographing the kitchen pantry
+        </div>
+      </div>
+      <div class="copy">
+        <div class="eyebrow">The room walk</div>
+        <h2>Photograph one room. Get dozens of tiles.</h2>
+        <p class="lead">Walk through your kitchen with the parent app open. Take five photos. The system identifies the foods, drinks, dishes, and snacks your child actually uses, and transforms each one into a tile in their style. The vocabulary that takes other apps months to build appears in an afternoon.</p>
+        <a class="btn secondary" href="#signup" style="margin-top: 20px;">Get early access · $99/mo</a>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="copy">
+        <div class="eyebrow">Built for trust</div>
+        <h2>Your child's photos don't leave your account.</h2>
+        <p class="lead">Per-family encryption. The image generation provider operates on zero-retention terms. The full room photo deletes the moment you confirm. No advertising — ever. No data sold. Parents and SLPs come together to use this for one child at a time; we built it that way on purpose.</p>
+      </div>
+      <div class="img-slot wide">
+        <div>
+          <span class="ph-label">Image · privacy posture</span>
+          Visual of family encryption / data scope
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="pricing" id="pricing">
+  <div class="wrap" style="text-align: center;">
+    <div class="eyebrow">Pricing</div>
+    <h2>Simple, family-first pricing.</h2>
+    <p class="lead" style="margin: 0 auto;">No insurance battles. No clinical hardware bundle. One subscription for the whole family.</p>
+
+    <div class="price-card">
+      <div class="price">$99<span class="per">/month</span></div>
+      <p style="color: #6b7280; margin-top: 8px;">One family. One child profile.</p>
+      <ul>
+        <li>Unlimited custom tiles photographed from your child's world</li>
+        <li>AI image generation in your child's chosen art style</li>
+        <li>Parent phone app with the modeling loop (talk back from your phone)</li>
+        <li>Voice cloning (opt-in, with documented consent)</li>
+        <li>SLP collaboration — invite their speech therapist to push activities</li>
+        <li>Existing tiles stay working forever, even if the subscription lapses</li>
+      </ul>
+      <a class="btn primary" href="#signup" style="width: 100%;">Get early access</a>
+      <p class="tiny">14-day free trial at launch. Cancel anytime.</p>
+    </div>
+  </div>
+</section>
+
+<section class="signup" id="signup">
+  <div class="wrap">
+    <div class="eyebrow" style="color: #ffd400;">Get early access</div>
+    <h2>We'll email you when your child's world is ready.</h2>
+    <p class="lead">$99/month at launch. Early-access families get the first onboarding sessions, priority support, and the right to lock in trial pricing.</p>
+
+    <form id="waitlist-form" novalidate>
+      <input type="email" name="email" id="waitlist-email" placeholder="parent@example.com" required autocomplete="email">
+      <button type="submit" class="btn primary">Notify me</button>
+    </form>
+    <div class="msg" id="waitlist-msg"></div>
+  </div>
+</section>
+
+<footer>
+  <p><span class="brand">My World</span> · A privately-held AAC tool for children with autism.</p>
+  <p style="margin-top: 6px;">Coming soon. © Andrew Peterson.</p>
+</footer>
+
+<script>
+(() => {
+  // ---- Style picker drives the placeholder labels on the tile slots ----
+  // Wires the chip group so the slots reflect the currently chosen style. The
+  // real product generates an image per slot here; this surface previews
+  // intent only.
+  const picker = document.getElementById('style-picker');
+  const grid = document.getElementById('tile-grid');
+  function setStyle(name) {
+    picker.querySelectorAll('.style-chip').forEach(c => c.classList.toggle('active', c.dataset.style === name));
+    grid.querySelectorAll('.style-label').forEach(el => {
+      el.textContent = name ? '· ' + name : '';
+      el.style.display = 'block';
+      el.style.fontSize = '11px';
+      el.style.color = '#9ca3af';
+      el.style.marginTop = '4px';
+    });
+  }
+  picker.addEventListener('click', (e) => {
+    const chip = e.target.closest('.style-chip');
+    if (!chip) return;
+    setStyle(chip.dataset.style);
+  });
+  // Initialize so the slots show the default style on first paint.
+  setStyle(picker.querySelector('.style-chip.active').dataset.style);
+
+  // ---- Waitlist form ----
+  const form = document.getElementById('waitlist-form');
+  const msg  = document.getElementById('waitlist-msg');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    msg.classList.remove('success');
+    const email = document.getElementById('waitlist-email').value.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      msg.textContent = 'Please enter a valid email address.';
+      return;
+    }
+    const style = picker.querySelector('.style-chip.active')?.dataset.style || null;
+    const btn = form.querySelector('button');
+    const prev = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const r = await fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, style, source: 'landing' }),
+      });
+      if (!r.ok) {
+        const detail = await r.json().catch(() => ({}));
+        throw new Error(detail.error || ('Status ' + r.status));
+      }
+      msg.textContent = 'You’re on the list. We’ll be in touch.';
+      msg.classList.add('success');
+      form.reset();
+    } catch (err) {
+      msg.textContent = 'Something went wrong: ' + (err.message || err);
+    } finally {
+      btn.disabled = false; btn.textContent = prev;
+    }
+  });
+})();
+</script>
+
 </body>
 </html>
