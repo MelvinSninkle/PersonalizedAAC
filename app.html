@@ -168,15 +168,17 @@
   .tab-strip {
     flex: 0 0 auto;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 8px;
     padding: 10px;
     border-bottom: 2px solid #eef1f6;
-    max-height: 34%;
-    overflow-y: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
   }
+  .tab-strip > * { flex: 0 0 auto; }
   .tab-strip::-webkit-scrollbar { width: 0; height: 0; display: none; }
   .tab-strip .tile-wrap.category { width: 64px; }
   body.hide-labels .tab-strip .tile-wrap.category { width: 56px; }
@@ -464,22 +466,6 @@
       0 4px 10px rgba(74,144,226,.35);
   }
   .tile-wrap.category.active .tile-label { color: #1f4878; }
-  .tile-wrap.category .cycle-badge {
-    position: absolute;
-    bottom: 6px;
-    right: 6px;
-    width: 26px;
-    height: 26px;
-    background: rgba(255,255,255,.92);
-    color: #1f4878;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    box-shadow: 0 1px 2px rgba(0,0,0,.25);
-    pointer-events: none;
-  }
 
   .pin-badge {
     position: absolute;
@@ -517,7 +503,6 @@
   body.edit-mode .edit-badge { display: flex; }
   .edit-badge:hover { background: white; }
   .tab-strip .edit-badge { width: 20px; height: 20px; font-size: 11px; top: 2px; left: 2px; }
-  .tab-strip .cycle-badge { width: 18px; height: 18px; font-size: 11px; bottom: 3px; right: 3px; }
   .tab-strip .tile-wrap.category .tile-square { border-width: 2px; border-radius: 10px; }
 
   .tile-add {
@@ -1350,7 +1335,7 @@
     });
   }
 
-  function makeTile({ kind, id, imageKey, keepAspect, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
+  function makeTile({ kind, id, imageKey, keepAspect, label, isCategory, isActive, pinned, onClick, onEdit }) {
     const wrap = document.createElement('div');
     wrap.className = 'tile-wrap'
       + (isCategory ? ' category' : '')
@@ -1365,12 +1350,6 @@
       pin.className = 'pin-badge';
       pin.textContent = '★';
       sq.appendChild(pin);
-    }
-    if (isCategory && showCycleBadge) {
-      const cyc = document.createElement('div');
-      cyc.className = 'cycle-badge';
-      cyc.textContent = '↻';
-      sq.appendChild(cyc);
     }
     if (onEdit) {
       const eb = document.createElement('div');
@@ -1570,48 +1549,27 @@
     const topAncestor = activeCat ? findTopAncestor(cats, activeCat.id) : null;
     const topAncestorId = topAncestor?.id ?? null;
 
-    // -------- Category chip strip --------
+    // -------- Category chip strip (every section: a horizontal scroll) --------
+    // All top-level categories show as draggable chips; a tap selects one.
+    // (People used to be a single tap-to-cycle slot — removed for consistency.)
     const tabsEl = document.getElementById(`tabs-${section}`);
     tabsEl.innerHTML = '';
 
-    if (section === 'people') {
-      // People keeps a single cycling slot (kids see one face at a time).
-      if (topCats.length === 0) {
-        tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
-      } else {
-        const tabCat = topAncestor || topCats[0];
-        const canCycle = topCats.length > 1;
-        tabsEl.appendChild(makeTile({
-          kind: 'c', id: tabCat.id, imageKey: tabCat.imageKey, keepAspect: tabCat.keepAspect,
-          label: tabCat.label, isCategory: true, isActive: true, showCycleBadge: canCycle,
-          onClick: () => {
-            if (!canCycle) return;
-            const idx = topCats.findIndex(c => c.id === topAncestorId);
-            activeCategoryId[section] = topCats[(idx + 1) % topCats.length].id;
-            renderSection(section);
-          },
-          onEdit: () => openCatModal(section, tabCat),
-        }));
-        tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
-      }
-    } else {
-      // Nouns / Verbs: every top-level category as a small, draggable chip.
-      topCats.forEach(cat => {
-        const isActive = cat.id === topAncestorId;
-        const tile = makeTile({
-          kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
-          label: cat.label, isCategory: true, isActive,
-          onClick: () => { activeCategoryId[section] = cat.id; renderSection(section); },
-          onEdit: () => openCatModal(section, cat),
-        });
-        tile.dataset.dragKind = 'cat-top';
-        tile.dataset.entityId = cat.id;
-        tile.dataset.section = section;
-        if (editMode) attachDrag(tile);
-        tabsEl.appendChild(tile);
+    topCats.forEach(cat => {
+      const isActive = cat.id === topAncestorId;
+      const tile = makeTile({
+        kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
+        label: cat.label, isCategory: true, isActive,
+        onClick: () => { activeCategoryId[section] = cat.id; renderSection(section); },
+        onEdit: () => openCatModal(section, cat),
       });
-      tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
-    }
+      tile.dataset.dragKind = 'cat-top';
+      tile.dataset.entityId = cat.id;
+      tile.dataset.section = section;
+      if (editMode) attachDrag(tile);
+      tabsEl.appendChild(tile);
+    });
+    tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
 
     // -------- Subcategory line (children of the active category) --------
     const subsEl = document.getElementById(`subs-${section}`);
