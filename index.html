@@ -80,6 +80,13 @@
     padding-top: 64px;
   }
   .hero .wrap { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; }
+  .hero .wrap.hero-banner-wrap { display: block; text-align: center; }
+  .hero-banner {
+    width: 100%; max-width: 1100px; height: auto; display: block; margin: 0 auto;
+    border-radius: 24px; box-shadow: 0 18px 54px rgba(255,20,147,.14);
+  }
+  .hero-lead { margin: 32px auto 0; max-width: 720px; }
+  .hero-ctas { justify-content: center; }
   .hero .ctas { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
   .hero .tiny { font-size: 13px; color: #6b7280; margin-top: 14px; }
 
@@ -126,17 +133,13 @@
   }
   .style-chip:hover { border-color: #f48fb1; }
   .style-chip.active { background: #ff1493; color: white; border-color: #ff1493; }
-  .tile-grid {
-    display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px;
+  .style-showcase { margin: 0; }
+  .style-showcase img {
+    width: 100%; max-width: 940px; height: auto; display: block; margin: 0 auto;
+    border-radius: 18px; box-shadow: 0 14px 44px rgba(0,0,0,.10);
   }
-  .tile-grid .img-slot {
-    aspect-ratio: 1 / 1;
-    padding: 10px;
-    font-size: 12px;
-    text-align: center;
-  }
-  .tile-grid .img-slot .label-row {
-    display: block; font-size: 14px; font-weight: 700; color: #ad1457; margin-top: 4px;
+  .style-showcase figcaption {
+    text-align: center; margin-top: 16px; color: #6b7280; font-size: 14px;
   }
 
   /* Why section — bigger statements with paired image slots */
@@ -205,7 +208,6 @@
     .how .cards { grid-template-columns: 1fr; }
     .why .row { grid-template-columns: 1fr; gap: 32px; }
     .why .row:nth-child(even) > .copy { order: 0; }
-    .tile-grid { grid-template-columns: repeat(3, 1fr); }
   }
 </style>
 </head>
@@ -222,27 +224,19 @@
 </nav>
 
 <section class="hero">
-  <div class="wrap">
-    <div>
-      <div class="eyebrow">An AAC app for children with autism</div>
-      <h1 class="brand-type">My World:<br>Tap to Talk.</h1>
-      <p class="lead">
-        Most AAC apps make a child learn abstract symbols before they can communicate.
-        <strong>My World</strong> flips it — your child's actual food, toys, people, and home
-        <em>become</em> their vocabulary, rendered in the animation style they love.
-      </p>
-      <div class="ctas">
-        <a class="btn primary" href="#signup">Get early access · $99/mo</a>
-        <a class="btn secondary" href="#try">See how it works</a>
-      </div>
-      <p class="tiny">14-day free trial when we launch. No card required.</p>
+  <div class="wrap hero-banner-wrap">
+    <img class="hero-banner" src="/styles/banner.jpg" width="1600" height="533"
+         alt="My World: Tap and Talk — personalized communication from your child's world, shown on a tablet a child is using.">
+    <p class="lead hero-lead">
+      Most AAC apps make a child learn abstract symbols before they can communicate.
+      <strong>My World</strong> flips it — your child's actual food, toys, people, and home
+      <em>become</em> their vocabulary, rendered in the style they love.
+    </p>
+    <div class="ctas hero-ctas">
+      <a class="btn primary" href="#signup">Get early access · $99/mo</a>
+      <a class="btn secondary" href="#try">See how it works</a>
     </div>
-    <div class="img-slot wide">
-      <div>
-        <span class="ph-label">Marketing image · hero</span>
-        Tablet held by a child showing My World on screen
-      </div>
-    </div>
+    <p class="tiny">14-day free trial when we launch. No card required.</p>
   </div>
 </section>
 
@@ -298,25 +292,25 @@
   <div class="wrap">
     <div class="eyebrow">Try the look</div>
     <h2>Pick your child's style.</h2>
-    <p class="lead">During onboarding, you pick the animation style your child responds to. Every tile in their world is rendered in that style, with your child as the recognizable character anchor.</p>
+    <p class="lead">During onboarding, you choose the style your child responds to. Every tile in their world is rendered that way, with your child as the recognizable anchor. Here are real examples in five of the styles families can pick.</p>
 
     <div class="style-picker" id="style-picker">
-      <button class="style-chip active" data-style="Pixar 3D animation">Pixar 3D</button>
-      <button class="style-chip" data-style="anime">Anime</button>
-      <button class="style-chip" data-style="watercolor">Watercolor</button>
-      <button class="style-chip" data-style="claymation">Claymation</button>
-      <button class="style-chip" data-style="hand-drawn cartoon">Hand-drawn</button>
-      <button class="style-chip" data-style="photo-realistic illustration">Photo-realistic</button>
+      <button class="style-chip active" data-style="3D animated" data-img="/styles/style-3d.jpg"
+        data-caption="3D Animated — bright, dimensional characters, like a still from an animated film.">3D Animated</button>
+      <button class="style-chip" data-style="picture book" data-img="/styles/style-picturebook.jpg"
+        data-caption="Picture Book — clean, flat illustration with friendly outlines.">Picture Book</button>
+      <button class="style-chip" data-style="watercolor" data-img="/styles/style-watercolor.jpg"
+        data-caption="Watercolor — soft, painterly washes in vivid color.">Watercolor</button>
+      <button class="style-chip" data-style="soft storybook" data-img="/styles/style-soft.jpg"
+        data-caption="Soft Storybook — gentle, muted tones for a calm, cozy feel.">Soft Storybook</button>
+      <button class="style-chip" data-style="felted" data-img="/styles/style-felted.jpg"
+        data-caption="Felted — warm, tactile needle-felt textures you almost want to touch.">Felted</button>
     </div>
 
-    <div class="tile-grid" id="tile-grid">
-      <div class="img-slot square"><div><span class="ph-label">Tile preview</span><span class="label-row">yes</span><span class="style-label"></span></div></div>
-      <div class="img-slot square"><div><span class="ph-label">Tile preview</span><span class="label-row">no</span><span class="style-label"></span></div></div>
-      <div class="img-slot square"><div><span class="ph-label">Tile preview</span><span class="label-row">more</span><span class="style-label"></span></div></div>
-      <div class="img-slot square"><div><span class="ph-label">Tile preview</span><span class="label-row">help</span><span class="style-label"></span></div></div>
-      <div class="img-slot square"><div><span class="ph-label">Tile preview</span><span class="label-row">Mom</span><span class="style-label"></span></div></div>
-      <div class="img-slot square"><div><span class="ph-label">Tile preview</span><span class="label-row">snack</span><span class="style-label"></span></div></div>
-    </div>
+    <figure class="style-showcase">
+      <img id="style-img" src="/styles/style-3d.jpg" alt="Example tiles rendered in the selected style">
+      <figcaption id="style-caption">3D Animated — bright, dimensional characters, like a still from an animated film.</figcaption>
+    </figure>
 
     <div style="text-align: center; margin-top: 48px;">
       <a class="btn primary" href="#signup">Generate my child's tiles · $99/mo</a>
@@ -419,29 +413,21 @@
 
 <script>
 (() => {
-  // ---- Style picker drives the placeholder labels on the tile slots ----
-  // Wires the chip group so the slots reflect the currently chosen style. The
-  // real product generates an image per slot here; this surface previews
-  // intent only.
+  // ---- Style picker swaps the showcase reference image ----
   const picker = document.getElementById('style-picker');
-  const grid = document.getElementById('tile-grid');
-  function setStyle(name) {
-    picker.querySelectorAll('.style-chip').forEach(c => c.classList.toggle('active', c.dataset.style === name));
-    grid.querySelectorAll('.style-label').forEach(el => {
-      el.textContent = name ? '· ' + name : '';
-      el.style.display = 'block';
-      el.style.fontSize = '11px';
-      el.style.color = '#9ca3af';
-      el.style.marginTop = '4px';
-    });
+  const styleImg = document.getElementById('style-img');
+  const styleCaption = document.getElementById('style-caption');
+  // Preload so switching is instant.
+  picker.querySelectorAll('.style-chip[data-img]').forEach(c => { new Image().src = c.dataset.img; });
+  function setStyle(chip) {
+    picker.querySelectorAll('.style-chip').forEach(c => c.classList.toggle('active', c === chip));
+    if (chip.dataset.img) styleImg.src = chip.dataset.img;
+    if (chip.dataset.caption) styleCaption.textContent = chip.dataset.caption;
   }
   picker.addEventListener('click', (e) => {
     const chip = e.target.closest('.style-chip');
-    if (!chip) return;
-    setStyle(chip.dataset.style);
+    if (chip) setStyle(chip);
   });
-  // Initialize so the slots show the default style on first paint.
-  setStyle(picker.querySelector('.style-chip.active').dataset.style);
 
   // ---- Waitlist form ----
   const form = document.getElementById('waitlist-form');
