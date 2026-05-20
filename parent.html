@@ -146,6 +146,8 @@
   .ins-x { margin-left: auto; border: none; background: none; font-size: 22px; line-height: 1; color: var(--faint); cursor: pointer; padding: 2px 6px; }
   .ins-x:hover { color: var(--ink); }
   .ins-sub { font-size: 12px; color: var(--faint); margin: 6px 0 8px; }
+  .ins-badge { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-size: 10px; font-weight: 700;
+    padding: 2px 7px; border-radius: 999px; margin-left: 6px; text-transform: uppercase; letter-spacing: .04em; }
   .ins-chart svg { width: 100%; max-width: 640px; height: auto; display: block; }
   .ins-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12px; color: var(--muted); }
   .ins-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
@@ -189,8 +191,9 @@
     <div class="ins-head">
       <span class="ins-title fred">📈 Fletcher's progress</span>
       <div class="ins-tabs" role="tablist">
-        <button class="ins-tab active" data-tab="games">Games</button>
-        <button class="ins-tab" data-tab="use">Use</button>
+        <button class="ins-tab active" data-tab="use">Use</button>
+        <button class="ins-tab" data-tab="time">Time</button>
+        <button class="ins-tab" data-tab="games">Games</button>
       </div>
       <button class="ins-x" id="ins-x" title="Hide charts" aria-label="Hide charts">×</button>
     </div>
@@ -282,7 +285,7 @@
   <div class="panel" style="padding:8px 14px;">
     <table>
       <thead><tr><th>Date</th><th>Mode</th><th>Category</th><th>Result</th><th>Length</th></tr></thead>
-      <tbody>
+      <tbody id="recent-body">
         <tr><td>May 20</td><td><span class="chip game">Self-Paced Game</span></td><td>Animals</td><td><span class="pill-acc hi">8 / 10</span></td><td>6 min</td></tr>
         <tr><td>May 19</td><td><span class="chip game">Facilitated</span></td><td>Body Parts</td><td><span class="pill-acc hi">12 / 14</span></td><td>20 min</td></tr>
         <tr><td>May 18</td><td><span class="chip slide">Learn Slideshow</span></td><td>Foods</td><td>—</td><td>12 min</td></tr>
@@ -308,6 +311,17 @@
       <button class="btn ghost">Upload custom animation</button>
     </div>
     <div class="note">Default animation: <strong>yellow flowers bursting</strong> 🌼 across the screen. Celebrations are the only place audio + animation reward Fletcher directly — no mode ever shows a wrong-answer cue.</div>
+  </div>
+
+  <!-- REFERENCE IMAGES — steer how AI tiles are generated from a photo -->
+  <div class="section-label">Reference images for AI tiles</div>
+  <div class="panel">
+    <h2>Style &amp; subject references</h2>
+    <p class="hint">These guide how a new tile is generated from a photo — e.g. a sample of the art style you like, or a clear picture of your child. The most recent few are used each time you make a tile.</p>
+    <div id="ref-grid" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;"></div>
+    <input type="file" id="ref-file" accept="image/*" style="display:none;">
+    <button class="btn primary" id="ref-add">＋ Add reference image</button>
+    <div id="ref-msg" style="font-size:13px;color:var(--muted);margin-top:10px;min-height:18px;"></div>
   </div>
 </div>
 
@@ -362,6 +376,15 @@
         { name: 'Colors',   color: '#ef4444', daily: false, data: [5, 6, 6, 7, 7, 8, 9] },
       ],
     },
+    time: {
+      sub: 'Minutes per week. Total use is all the time Fletcher spends in the app; passive learning is time in the Learn and Exposure slideshows.',
+      max: 200, unit: ' min', collapseStarred: false,
+      star: () => false, starLabel: '',
+      list: [
+        { name: 'Total use',        color: '#0ea5e9', data: [70, 95, 115, 130, 150, 168, 180] },
+        { name: 'Passive learning', color: '#a855f7', data: [20, 28, 35, 40, 48, 52, 58] },
+      ],
+    },
   };
   const W = 340, H = 200, PADL = 22, PADR = 10, PADT = 12, PADB = 22;
   function renderChart(key) {
@@ -382,7 +405,7 @@
     });
     WEEKS.forEach((w, i) => { svg += `<text x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="#9ca3af">${w}</text>`; });
     document.getElementById('ins-svg').innerHTML = svg;
-    document.getElementById('ins-sub').textContent = cfg.sub;
+    document.getElementById('ins-sub').innerHTML = cfg.sub + (cfg.sample ? ' <span class="ins-badge">sample</span>' : '');
     document.getElementById('ins-legend').innerHTML = drawn.map(s =>
       `<span class="lg"><i style="background:${s.color}"></i>${s.name} <b>${s.data[n - 1]}${cfg.unit}</b></span>`).join('');
     const starred = cfg.list.filter(cfg.star);
@@ -390,27 +413,73 @@
       ? `<span class="lbl">${cfg.starLabel}</span>` + starred.map(s => `<span class="ins-star">⭐ ${s.name}</span>`).join('')
       : '';
   }
+  SERIES.use.sample = SERIES.games.sample = SERIES.time.sample = true;
+  let currentTab = 'use';
   document.querySelectorAll('.ins-tab').forEach(t => t.addEventListener('click', () => {
     document.querySelectorAll('.ins-tab').forEach(x => x.classList.toggle('active', x === t));
-    renderChart(t.dataset.tab);
+    currentTab = t.dataset.tab;
+    renderChart(currentTab);
   }));
-  renderChart('games');
+  renderChart('use');
   // Dismiss is per-visit only — no persistence, so it returns on next launch.
   const insights = document.getElementById('insights'), restore = document.getElementById('ins-restore');
   document.getElementById('ins-x').addEventListener('click', () => { insights.style.display = 'none'; restore.classList.add('show'); });
   restore.addEventListener('click', () => { insights.style.display = ''; restore.classList.remove('show'); });
 
-  // ---- Mastery bars (sample data) ----
-  const mastery = [
+  // ---- Mastery bars ----
+  const SAMPLE_MASTERY = [
     ['Colors', 92], ['Animals', 84], ['Body Parts', 88], ['Foods', 71],
     ['Feelings', 58], ['Actions', 66], ['People', 95], ['Vehicles', 79],
   ];
-  document.getElementById('mastery').innerHTML = mastery.map(([name, pct]) => `
+  function renderMastery(list) {
+    document.getElementById('mastery').innerHTML = list.map(([name, pct]) => `
     <div class="bar-row">
       <span>${name}</span>
       <span class="bar-track"><span class="bar-fill" style="width:${pct}%"></span></span>
       <span class="pct">${pct}%</span>
     </div>`).join('');
+  }
+  renderMastery(SAMPLE_MASTERY);
+
+  // ---- Wire to live analytics (real where data exists; sample otherwise) ----
+  const COLORS = { 'People':'#f59e0b','Colors':'#ef4444','Body Parts':'#10b981','Animals':'#3b82f6','Foods':'#8b5cf6','Feelings':'#ec4899','Actions':'#06b6d4','Vehicles':'#14b8a6','Total use':'#0ea5e9','Passive learning':'#a855f7' };
+  const PALETTE = ['#ff1493','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#06b6d4','#ec4899'];
+  const colorFor = (name, i) => COLORS[name] || PALETTE[i % PALETTE.length];
+  function renderRecent(rows) {
+    const tb = document.getElementById('recent-body');
+    if (!tb) return;
+    const chipFor = m => /Game|Facilitated/.test(m) ? 'game' : (/Exposure/.test(m) ? 'expo' : 'slide');
+    tb.innerHTML = rows.map(r =>
+      `<tr><td>${r.date}</td><td><span class="chip ${chipFor(r.mode)}">${r.mode}</span></td><td>${r.category}</td><td>${r.result === '—' ? '—' : '<span class="pill-acc hi">' + r.result + '</span>'}</td><td>${r.length}</td></tr>`).join('');
+  }
+  function applyAnalytics(a) {
+    if (a.use && a.use.series && a.use.series.length) {
+      SERIES.use.list = a.use.series.map((s, i) => ({ name: s.name, color: colorFor(s.name, i), daily: !!s.daily, data: s.data }));
+      SERIES.use.sample = false;
+    }
+    if (a.games && a.games.series && a.games.series.length) {
+      SERIES.games.list = a.games.series.map((s, i) => ({ name: s.name, color: colorFor(s.name, i), data: s.data }));
+      SERIES.games.sample = false;
+    }
+    if (a.time && a.time.series && a.time.series.length) {
+      SERIES.time.list = a.time.series.map((s, i) => ({ name: s.name, color: colorFor(s.name, i), data: s.data }));
+      SERIES.time.sample = false;
+    }
+    if (a.mastery && a.mastery.length) renderMastery(a.mastery.map(m => [m.name, m.pct]));
+    if (a.recentSessions && a.recentSessions.length) renderRecent(a.recentSessions);
+  }
+  (async () => {
+    // Uses the login session cookie automatically; falls back to the legacy
+    // admin token if one happens to be stored. Empty/401 → keep sample data.
+    try {
+      const tok = localStorage.getItem('aacToken');
+      const headers = tok ? { Authorization: 'Bearer ' + tok } : {};
+      const r = await fetch('/api/analytics?childId=' + encodeURIComponent(slug), { headers, credentials: 'same-origin' });
+      if (!r.ok) return;
+      applyAnalytics(await r.json());
+      renderChart(currentTab);
+    } catch (_) { /* keep sample data */ }
+  })();
 
   // ---- Mode config modal (mockup) ----
   const CATS = ['Colors','Animals','Body Parts','Foods','Feelings','Actions','People','Vehicles'];
@@ -471,6 +540,68 @@
     goBtn.textContent = 'Sent to tablet ✓';
     setTimeout(() => { closeModal(); }, 750);
   });
+
+  // ---- Reference images (steer AI tile generation) ----
+  const refGrid = document.getElementById('ref-grid');
+  const refMsg = document.getElementById('ref-msg');
+  const refFile = document.getElementById('ref-file');
+  function refMsgSet(t, err) { refMsg.textContent = t; refMsg.style.color = err ? '#dc2626' : '#6b7280'; }
+  async function downscale(file, max = 1024, quality = 0.85) {
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+      const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+      const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+      if (bmp.close) bmp.close();
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', quality));
+      return (blob && blob.size < file.size) ? blob : file;
+    } catch (_) { return file; }
+  }
+  function renderRefs(list) {
+    refGrid.innerHTML = list.length ? list.map(ref => `
+      <div style="position:relative;width:96px;">
+        <img src="/api/media?key=${encodeURIComponent(ref.blob_key)}" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:12px;border:1px solid #fce4ec;">
+        <button data-del="${ref.id}" title="Remove" style="position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;border:none;background:#dc2626;color:#fff;cursor:pointer;font-weight:700;line-height:1;">×</button>
+      </div>`).join('') : '<div style="font-size:13px;color:#9ca3af;">No reference images yet.</div>';
+  }
+  async function loadRefs() {
+    try {
+      const r = await fetch('/api/reference-images?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) { if (r.status === 403) refMsgSet('Sign in as a parent or admin to manage references.'); return; }
+      const d = await r.json();
+      renderRefs(d.references || []);
+    } catch (_) { /* ignore */ }
+  }
+  refGrid.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-del]'); if (!b) return;
+    if (!confirm('Remove this reference image?')) return;
+    try {
+      const r = await fetch('/api/reference-images?id=' + b.dataset.del, { method: 'DELETE', credentials: 'same-origin' });
+      if (!r.ok) throw new Error('Delete failed');
+      loadRefs();
+    } catch (err) { refMsgSet('Could not remove: ' + (err.message || err), true); }
+  });
+  document.getElementById('ref-add').addEventListener('click', () => refFile.click());
+  refFile.addEventListener('change', async (e) => {
+    const file = e.target.files[0]; e.target.value = '';
+    if (!file) return;
+    refMsgSet('Uploading…');
+    try {
+      const blob = await downscale(file);
+      const up = await fetch('/api/upload?kind=ref&ext=jpg', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
+      const upd = await up.json().catch(() => ({}));
+      if (!up.ok) throw new Error(upd.error || ('upload ' + up.status));
+      const add = await fetch('/api/reference-images', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ childId: slug, blobKey: upd.key, label: file.name.slice(0, 120) }),
+      });
+      if (!add.ok) { const d = await add.json().catch(() => ({})); throw new Error(d.error || ('save ' + add.status)); }
+      refMsgSet('Added.');
+      loadRefs();
+    } catch (err) { refMsgSet('Upload failed: ' + (err.message || err), true); }
+  });
+  loadRefs();
 })();
 </script>
 </body>

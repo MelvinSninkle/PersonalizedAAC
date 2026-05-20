@@ -12,6 +12,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Fletcher's World">
 <meta name="theme-color" content="#ff1493">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
@@ -168,15 +170,17 @@
   .tab-strip {
     flex: 0 0 auto;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 8px;
     padding: 10px;
     border-bottom: 2px solid #eef1f6;
-    max-height: 34%;
-    overflow-y: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
   }
+  .tab-strip > * { flex: 0 0 auto; }
   .tab-strip::-webkit-scrollbar { width: 0; height: 0; display: none; }
   .tab-strip .tile-wrap.category { width: 64px; }
   body.hide-labels .tab-strip .tile-wrap.category { width: 56px; }
@@ -464,22 +468,6 @@
       0 4px 10px rgba(74,144,226,.35);
   }
   .tile-wrap.category.active .tile-label { color: #1f4878; }
-  .tile-wrap.category .cycle-badge {
-    position: absolute;
-    bottom: 6px;
-    right: 6px;
-    width: 26px;
-    height: 26px;
-    background: rgba(255,255,255,.92);
-    color: #1f4878;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    box-shadow: 0 1px 2px rgba(0,0,0,.25);
-    pointer-events: none;
-  }
 
   .pin-badge {
     position: absolute;
@@ -517,7 +505,6 @@
   body.edit-mode .edit-badge { display: flex; }
   .edit-badge:hover { background: white; }
   .tab-strip .edit-badge { width: 20px; height: 20px; font-size: 11px; top: 2px; left: 2px; }
-  .tab-strip .cycle-badge { width: 18px; height: 18px; font-size: 11px; bottom: 3px; right: 3px; }
   .tab-strip .tile-wrap.category .tile-square { border-width: 2px; border-radius: 10px; }
 
   .tile-add {
@@ -824,15 +811,15 @@
 
 <div class="modal-backdrop" id="login-modal">
   <div class="modal">
-    <h3>Login</h3>
-    <div style="font-size:13px;color:#666;margin-bottom:8px;">Paste your admin token. Your browser will remember it.</div>
-    <label for="login-pass">Admin Token</label>
-    <input type="password" id="login-pass" autocomplete="off">
+    <h3 id="login-title">Unlock editing</h3>
+    <div id="login-desc" style="font-size:13px;color:#666;margin-bottom:8px;">Enter your account password to make changes.</div>
+    <label for="login-pass" id="login-label">Your password</label>
+    <input type="password" id="login-pass" autocomplete="current-password">
     <input type="hidden" id="login-user" value="admin">
     <div class="error" id="login-error"></div>
     <div class="button-row">
       <button class="secondary" id="login-cancel">Cancel</button>
-      <button class="primary" id="login-submit">Login</button>
+      <button class="primary" id="login-submit">Unlock</button>
     </div>
   </div>
 </div>
@@ -843,6 +830,25 @@
     <div id="item-modal-context" style="font-size:13px;color:#666;margin-bottom:8px;"></div>
     <label for="item-label">Label</label>
     <input type="text" id="item-label" autocomplete="off" placeholder="e.g. Mom">
+
+    <!-- AI tile: snap a photo, auto-generate the stylized artwork + the voice. -->
+    <div id="magic-box" style="border:1px solid #f3c6dd;background:#fff5fa;border-radius:10px;padding:12px;margin:12px 0;">
+      <div style="font-weight:700;color:#ad1457;margin-bottom:4px;">✨ Make a tile from a photo</div>
+      <div style="font-size:12px;color:#666;margin-bottom:8px;">Type a label above, pick a style, then snap a photo — we'll create the artwork and the voice automatically.</div>
+      <label for="item-style" style="margin-top:0;">Art style</label>
+      <select id="item-style" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+        <option value="Pixar-style 3D animated render">3D Animated</option>
+        <option value="flat picture-book illustration">Picture Book</option>
+        <option value="soft watercolor illustration">Watercolor</option>
+        <option value="gentle soft storybook illustration">Soft Storybook</option>
+        <option value="needle-felted wool craft">Felted</option>
+      </select>
+      <input type="file" id="item-photo-capture" accept="image/*" capture="environment" style="display:none;">
+      <button type="button" id="item-magic" style="margin-top:10px;width:100%;padding:12px;border:none;border-radius:8px;background:#ff1493;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">📷 Take photo &amp; make tile</button>
+      <div class="file-status" id="item-magic-status" style="margin-top:8px;">—</div>
+      <img id="item-magic-preview" alt="" style="display:none;width:100%;max-width:200px;border-radius:10px;margin-top:8px;">
+    </div>
+
     <label for="item-image">Image</label>
     <input type="file" id="item-image" accept="image/*">
     <div class="file-status" id="item-image-status">No image selected</div>
@@ -1142,6 +1148,17 @@
   let db = null;
   let editMode = false;
   let authToken = localStorage.getItem(TOKEN_KEY) || '';
+  let sessionUser = null;   // { email, role, slug } from /api/auth/me, or null
+  let loginMode = 'password';
+
+  // Who's logged in on this device. Editing is gated to admin/parent roles.
+  async function loadSession() {
+    try {
+      const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      if (r.ok) { const d = await r.json(); sessionUser = (d && d.user) || null; }
+    } catch (_) { sessionUser = null; }
+  }
+  function canEdit() { return !!sessionUser && (sessionUser.role === 'admin' || sessionUser.role === 'parent'); }
   const objectURLs = new Map();
   const activeCategoryId = { people: null, nouns: null, verbs: null };
 
@@ -1350,7 +1367,7 @@
     });
   }
 
-  function makeTile({ kind, id, imageKey, keepAspect, label, isCategory, isActive, showCycleBadge, pinned, onClick, onEdit }) {
+  function makeTile({ kind, id, imageKey, keepAspect, label, isCategory, isActive, pinned, onClick, onEdit }) {
     const wrap = document.createElement('div');
     wrap.className = 'tile-wrap'
       + (isCategory ? ' category' : '')
@@ -1365,12 +1382,6 @@
       pin.className = 'pin-badge';
       pin.textContent = '★';
       sq.appendChild(pin);
-    }
-    if (isCategory && showCycleBadge) {
-      const cyc = document.createElement('div');
-      cyc.className = 'cycle-badge';
-      cyc.textContent = '↻';
-      sq.appendChild(cyc);
     }
     if (onEdit) {
       const eb = document.createElement('div');
@@ -1570,48 +1581,27 @@
     const topAncestor = activeCat ? findTopAncestor(cats, activeCat.id) : null;
     const topAncestorId = topAncestor?.id ?? null;
 
-    // -------- Category chip strip --------
+    // -------- Category chip strip (every section: a horizontal scroll) --------
+    // All top-level categories show as draggable chips; a tap selects one.
+    // (People used to be a single tap-to-cycle slot — removed for consistency.)
     const tabsEl = document.getElementById(`tabs-${section}`);
     tabsEl.innerHTML = '';
 
-    if (section === 'people') {
-      // People keeps a single cycling slot (kids see one face at a time).
-      if (topCats.length === 0) {
-        tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
-      } else {
-        const tabCat = topAncestor || topCats[0];
-        const canCycle = topCats.length > 1;
-        tabsEl.appendChild(makeTile({
-          kind: 'c', id: tabCat.id, imageKey: tabCat.imageKey, keepAspect: tabCat.keepAspect,
-          label: tabCat.label, isCategory: true, isActive: true, showCycleBadge: canCycle,
-          onClick: () => {
-            if (!canCycle) return;
-            const idx = topCats.findIndex(c => c.id === topAncestorId);
-            activeCategoryId[section] = topCats[(idx + 1) % topCats.length].id;
-            renderSection(section);
-          },
-          onEdit: () => openCatModal(section, tabCat),
-        }));
-        tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
-      }
-    } else {
-      // Nouns / Verbs: every top-level category as a small, draggable chip.
-      topCats.forEach(cat => {
-        const isActive = cat.id === topAncestorId;
-        const tile = makeTile({
-          kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
-          label: cat.label, isCategory: true, isActive,
-          onClick: () => { activeCategoryId[section] = cat.id; renderSection(section); },
-          onEdit: () => openCatModal(section, cat),
-        });
-        tile.dataset.dragKind = 'cat-top';
-        tile.dataset.entityId = cat.id;
-        tile.dataset.section = section;
-        if (editMode) attachDrag(tile);
-        tabsEl.appendChild(tile);
+    topCats.forEach(cat => {
+      const isActive = cat.id === topAncestorId;
+      const tile = makeTile({
+        kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
+        label: cat.label, isCategory: true, isActive,
+        onClick: () => { activeCategoryId[section] = cat.id; renderSection(section); },
+        onEdit: () => openCatModal(section, cat),
       });
-      tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
-    }
+      tile.dataset.dragKind = 'cat-top';
+      tile.dataset.entityId = cat.id;
+      tile.dataset.section = section;
+      if (editMode) attachDrag(tile);
+      tabsEl.appendChild(tile);
+    });
+    tabsEl.appendChild(makeAddCatTile(() => openCatModal(section, null)));
 
     // -------- Subcategory line (children of the active category) --------
     const subsEl = document.getElementById(`subs-${section}`);
@@ -1833,9 +1823,28 @@
   const loginModal = document.getElementById('login-modal');
   document.getElementById('login-btn').addEventListener('click', () => {
     if (editMode) { setEditMode(false); return; }
-    // Always prompt for the password — no shortcut even if a token is stored
-    // on this device. Stops the kid from sliding into edit mode accidentally.
-    document.getElementById('login-user').value = '';
+    // A non-editor role (e.g. therapist) can't make structural changes.
+    if (sessionUser && !canEdit()) {
+      const ms = document.getElementById('mode-status');
+      ms.textContent = 'Editing is for parents';
+      setTimeout(() => { if (!editMode) ms.textContent = ''; }, 2500);
+      return;
+    }
+    // Editor role → re-enter the account password (still guards against a kid
+    // sliding into edit mode). No session at all → fall back to the admin token.
+    loginMode = sessionUser ? 'password' : 'token';
+    const title = document.getElementById('login-title');
+    const desc = document.getElementById('login-desc');
+    const label = document.getElementById('login-label');
+    if (loginMode === 'password') {
+      title.textContent = 'Unlock editing';
+      desc.textContent = 'Enter your account password to make changes.';
+      label.textContent = 'Your password';
+    } else {
+      title.textContent = 'Login';
+      desc.textContent = 'Paste your admin token.';
+      label.textContent = 'Admin token';
+    }
     document.getElementById('login-pass').value = '';
     document.getElementById('login-error').textContent = '';
     loginModal.classList.add('show');
@@ -1848,34 +1857,47 @@
     if (e.target === loginModal) loginModal.classList.remove('show');
   });
   async function attemptLogin() {
-    const p = document.getElementById('login-pass').value.trim();
+    const p = document.getElementById('login-pass').value;   // don't trim — passwords may have spaces
     const errEl = document.getElementById('login-error');
     errEl.textContent = '';
-    if (!p) { errEl.textContent = 'Token required'; return; }
+    if (!p) { errEl.textContent = loginMode === 'password' ? 'Password required' : 'Token required'; return; }
     const submit = document.getElementById('login-submit');
     submit.disabled = true;
     const prev = submit.textContent;
     submit.textContent = 'Verifying…';
     try {
-      // Validate token by hitting an auth-gated endpoint
-      const r = await fetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID), { headers: { Authorization: 'Bearer ' + p } });
-      if (r.status === 401) { errEl.textContent = 'Invalid token'; return; }
-      if (!r.ok) { errEl.textContent = `Server error: ${r.status}`; return; }
-      const data = await r.json();
-      authToken = p;
-      localStorage.setItem(TOKEN_KEY, p);
+      if (loginMode === 'password') {
+        // Re-verify the logged-in user's password against their account.
+        const r = await fetch('/api/auth/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: sessionUser.email, password: p }),
+        });
+        if (r.status === 401) { errEl.textContent = 'Incorrect password'; return; }
+        if (!r.ok) { errEl.textContent = `Server error: ${r.status}`; return; }
+      } else {
+        // Legacy fallback: validate an admin token against an auth-gated route.
+        const tok = p.trim();
+        const r = await fetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID), { headers: { Authorization: 'Bearer ' + tok } });
+        if (r.status === 401) { errEl.textContent = 'Invalid token'; return; }
+        if (!r.ok) { errEl.textContent = `Server error: ${r.status}`; return; }
+        authToken = tok;
+        localStorage.setItem(TOKEN_KEY, tok);
+      }
       loginModal.classList.remove('show');
       setEditMode(true);
-      // Hydrate IndexedDB if it's empty
-      const existingCats = await (async () => {
-        let total = 0;
-        for (const s of SECTIONS) total += (await getAllCats(s)).length;
-        return total;
-      })();
-      if (existingCats === 0 && (data.categories.length || data.items.length)) {
-        await hydrateFromServer(data);
-        await renderAll();
-      }
+      // Hydrate IndexedDB if it's still empty (server is canonical).
+      try {
+        const sr = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
+        if (sr.ok) {
+          const data = await sr.json();
+          let total = 0;
+          for (const s of SECTIONS) total += (await getAllCats(s)).length;
+          if (total === 0 && (data.categories.length || data.items.length)) {
+            await hydrateFromServer(data);
+            await renderAll();
+          }
+        }
+      } catch (_) { /* offline — keep cached */ }
     } catch (err) {
       errEl.textContent = 'Login failed: ' + (err.message || err);
     } finally {
@@ -2097,6 +2119,14 @@
     document.getElementById('item-pin').checked = !!item?.pinned;
     document.getElementById('item-delete').style.display = item ? 'block' : 'none';
 
+    // AI-tile section: restore the last-used style, clear status/preview.
+    const styleSel = document.getElementById('item-style');
+    const savedStyle = localStorage.getItem('aacStyle');
+    if (savedStyle) { for (const o of styleSel.options) { if (o.value === savedStyle) { styleSel.value = savedStyle; break; } } }
+    document.getElementById('item-magic-status').textContent = '—';
+    const mp = document.getElementById('item-magic-preview');
+    mp.style.display = 'none'; mp.removeAttribute('src');
+
     itemModal.classList.add('show');
   }
 
@@ -2158,6 +2188,67 @@
     } finally {
       btn.disabled = false;
       btn.textContent = prevText;
+    }
+  });
+
+  // ---- AI tile: photo → stylized artwork + voice, in one tap ----
+  document.getElementById('item-style').addEventListener('change', (e) => {
+    try { localStorage.setItem('aacStyle', e.target.value); } catch (_) {}
+  });
+  document.getElementById('item-magic').addEventListener('click', () => {
+    const errEl = document.getElementById('item-error');
+    errEl.textContent = '';
+    const label = document.getElementById('item-label').value.trim();
+    if (!label) { errEl.textContent = 'Type a label first'; document.getElementById('item-label').focus(); return; }
+    document.getElementById('item-photo-capture').click();
+  });
+  document.getElementById('item-photo-capture').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const label = document.getElementById('item-label').value.trim();
+    const style = document.getElementById('item-style').value;
+    const phrase = document.getElementById('item-phrase').value.trim() || label;
+    const errEl = document.getElementById('item-error');
+    const statusEl = document.getElementById('item-magic-status');
+    const btn = document.getElementById('item-magic');
+    const preview = document.getElementById('item-magic-preview');
+    errEl.textContent = '';
+    btn.disabled = true;
+    const prevText = btn.textContent;
+    btn.textContent = 'Working…';
+    try {
+      // 1) Stylize the photo into the chosen art style.
+      statusEl.textContent = '🎨 Creating the artwork… (this can take ~20–40s)';
+      const photo = await compressImage(file);
+      const ir = await apiFetch('/api/generate-image?label=' + encodeURIComponent(label) + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(CHILD_ID), {
+        method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo,
+      });
+      if (!ir.ok) { const d = await ir.text(); throw new Error('Image — ' + d.slice(0, 200)); }
+      pendingImage = await ir.blob();
+      const purl = URL.createObjectURL(pendingImage);
+      preview.src = purl; preview.style.display = 'block';
+      preview.addEventListener('load', () => URL.revokeObjectURL(purl), { once: true });
+      const ist = document.getElementById('item-image-status');
+      ist.textContent = 'AI image ready'; ist.className = 'file-status has-file';
+
+      // 2) Generate the voice from the phrase (defaults to the label).
+      statusEl.textContent = '🔊 Recording the voice…';
+      const tr = await apiFetch('/api/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: phrase, emotion: document.getElementById('item-emotion').value }),
+      });
+      if (!tr.ok) { const d = await tr.text(); throw new Error('Voice — ' + d.slice(0, 200)); }
+      pendingSound = await tr.blob();
+      const sst = document.getElementById('item-sound-status');
+      sst.textContent = 'AI voice ready'; sst.className = 'file-status has-file';
+
+      statusEl.textContent = '✅ Ready — review and tap Save.';
+    } catch (err) {
+      statusEl.textContent = '—';
+      errEl.textContent = 'Could not make the tile: ' + (err.message || err);
+    } finally {
+      btn.disabled = false; btn.textContent = prevText;
     }
   });
 
@@ -3197,6 +3288,7 @@
     try {
       loadDisplay();
       applyDisplay();
+      await loadSession();   // who's logged in (drives edit-mode availability)
       db = await openDB();
       await migrateLegacyItems();
       // Paint immediately from whatever's cached locally so the app feels instant,
@@ -3204,21 +3296,26 @@
       // files stay lazy — fetched on demand and cached by their storage key.
       await renderAll();
       flushEvents().catch(() => {});   // drain any taps queued from a previous offline session
-      if (authToken) {
-        try {
-          const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
-          if (r.ok) {
-            const data = await r.json();
-            await hydrateFromServer(data);
-            await renderAll();
-          }
-        } catch (_) { /* offline — keep whatever was cached locally */ }
-      }
+      // Refresh from the server using the login session (cookie) or a stored token.
+      try {
+        const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
+        if (r.ok) {
+          const data = await r.json();
+          await hydrateFromServer(data);
+          await renderAll();
+        }
+      } catch (_) { /* offline or not authed — keep whatever was cached locally */ }
     } catch (err) {
       document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif;">Failed to open storage: ${err.message}<br><br>Try opening this file in Chrome.</div>`;
     }
   })();
 })();
+</script>
+<script>
+  // Register the PWA service worker so the app shell works offline.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+  }
 </script>
 </body>
 </html>

@@ -2,14 +2,15 @@
 // Body: { email, style?, note?, source? }
 // Inserts a row into the `waitlist` table. Returns { ok: true }.
 //
-// Unlike the other admin endpoints, this one is intentionally open — it's
-// the public-facing form submission. The site-wide HTTP Basic Auth still
-// gates the page that contains the form during the preview phase.
+// POST is intentionally open — it's the public-facing form submission. GET is
+// admin-only (bearer token) so the admin hub can review signups.
+import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default async function handler(req, res) {
+  if (req.method === 'GET') return list(req, res);
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -45,5 +46,23 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Save failed', detail: String(err.message || err) });
+  }
+}
+
+async function list(req, res) {
+  const auth = await checkAuth(req);
+  if (!auth.ok) {
+    res.status(auth.status).json({ error: auth.error });
+    return;
+  }
+  try {
+    const db = sql();
+    const rows = await db`
+      SELECT id, email, style, note, source, created_at
+      FROM waitlist ORDER BY created_at DESC LIMIT 500`;
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).json({ waitlist: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Load failed', detail: String(err.message || err) });
   }
 }

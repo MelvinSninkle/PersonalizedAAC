@@ -8,9 +8,13 @@ export default async function handler(req, res) {
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
-  const auth = checkAuth(req);
+  const auth = await checkAuth(req);
   if (!auth.ok) {
     res.status(auth.status).json({ error: auth.error });
+    return;
+  }
+  if (auth.user.role !== 'admin') {
+    res.status(403).json({ error: 'Admins only' });
     return;
   }
 
@@ -81,6 +85,99 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS events_occurred_at_idx   ON events(occurred_at)`;
     await db`CREATE INDEX IF NOT EXISTS events_item_idx          ON events(item_id)`;
     await db`CREATE INDEX IF NOT EXISTS events_child_idx         ON events(child_id)`;
+
+    // ---- User accounts (login flow) ----
+    // email + scrypt password hash + role. reset_token/reset_expires support a
+    // password-reset flow (email delivery wired later).
+    await db`
+      CREATE TABLE IF NOT EXISTS users (
+        id BIGSERIAL PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'parent',
+        child_slug TEXT,
+        reset_token TEXT,
+        reset_expires TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_login_at TIMESTAMPTZ
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS users_role_idx        ON users(role)`;
+    await db`CREATE INDEX IF NOT EXISTS users_reset_token_idx ON users(reset_token)`;
+
+    // ---- Learning sessions + game attempts (Interactive Modes PRD v1.0) ----
+    // A `session` is one run of any mode (game / slideshow / celebration) or a
+    // free-communication "use" window. `game_attempts` are the per-item results
+    // inside a scored game. Together they feed the parent/therapist dashboards.
+    await db`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL DEFAULT 'fletcherpeterson',
+        mode TEXT NOT NULL,
+        category TEXT,
+        facilitator TEXT,
+        started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ended_at TIMESTAMPTZ,
+        correct_count INTEGER NOT NULL DEFAULT 0,
+        item_count INTEGER NOT NULL DEFAULT 0,
+        notes TEXT
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS sessions_child_idx   ON sessions(child_id)`;
+    await db`CREATE INDEX IF NOT EXISTS sessions_started_idx ON sessions(started_at DESC)`;
+    await db`CREATE INDEX IF NOT EXISTS sessions_mode_idx    ON sessions(mode)`;
+
+    await db`
+      CREATE TABLE IF NOT EXISTS game_attempts (
+        id BIGSERIAL PRIMARY KEY,
+        session_id BIGINT REFERENCES sessions(id) ON DELETE CASCADE,
+        child_id TEXT NOT NULL DEFAULT 'fletcherpeterson',
+        category TEXT,
+        label TEXT,
+        item_id BIGINT,
+        correct BOOLEAN NOT NULL DEFAULT FALSE,
+        input_method TEXT,
+        misses INTEGER NOT NULL DEFAULT 0,
+        occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS game_attempts_child_idx    ON game_attempts(child_id)`;
+    await db`CREATE INDEX IF NOT EXISTS game_attempts_session_idx  ON game_attempts(session_id)`;
+    await db`CREATE INDEX IF NOT EXISTS game_attempts_occurred_idx ON game_attempts(occurred_at)`;
+    await db`CREATE INDEX IF NOT EXISTS game_attempts_category_idx ON game_attempts(category)`;
+
+    // ---- AI image generation: cost/volume log + per-child reference images ----
+    await db`
+      CREATE TABLE IF NOT EXISTS image_generations (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT,
+        actor_email TEXT,
+        actor_role TEXT,
+        label TEXT,
+        style TEXT,
+        prompt TEXT,
+        reference_keys TEXT[],
+        size TEXT,
+        input_tokens INTEGER,
+        output_tokens INTEGER,
+        cost_cents NUMERIC(12,4),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS image_generations_child_idx   ON image_generations(child_id)`;
+    await db`CREATE INDEX IF NOT EXISTS image_generations_actor_idx   ON image_generations(actor_email)`;
+    await db`CREATE INDEX IF NOT EXISTS image_generations_created_idx ON image_generations(created_at DESC)`;
+
+    await db`
+      CREATE TABLE IF NOT EXISTS reference_images (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL,
+        blob_key TEXT NOT NULL,
+        label TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS reference_images_child_idx ON reference_images(child_id)`;
 
     // ---- Taxonomy workbench (Section 17 of the PRD) ----
     // Canonical library of tile prompts, separate from any one child's instance.
