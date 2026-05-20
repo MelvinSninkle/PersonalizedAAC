@@ -13,9 +13,13 @@
   iPad, the parent's laptop after they've logged into the app — gets bounced
   to /u/<slug> before the landing page even paints. Everyone else (first-time
   visitor) sees the marketing page below.
+
+  Escape hatch: /?home always shows the landing page, even on a device that
+  has used the app — so the marketing site can be reviewed without incognito.
 -->
 <script>
   (function () {
+    if (new URLSearchParams(location.search).has('home')) return;
     var slug = localStorage.getItem('aacChildSlug');
     if (!slug && localStorage.getItem('aacToken')) slug = 'fletcherpeterson';
     if (slug) location.replace('/u/' + encodeURIComponent(slug));
