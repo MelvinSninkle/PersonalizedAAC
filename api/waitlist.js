@@ -50,7 +50,7 @@ export default async function handler(req, res) {
 }
 
 async function list(req, res) {
-  const auth = checkAuth(req);
+  const auth = await checkAuth(req);
   if (!auth.ok) {
     res.status(auth.status).json({ error: auth.error });
     return;

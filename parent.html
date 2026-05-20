@@ -458,10 +458,12 @@
     if (a.recentSessions && a.recentSessions.length) renderRecent(a.recentSessions);
   }
   (async () => {
-    const tok = localStorage.getItem('aacToken');
-    if (!tok) return; // not signed in on this device → keep sample data
+    // Uses the login session cookie automatically; falls back to the legacy
+    // admin token if one happens to be stored. Empty/401 → keep sample data.
     try {
-      const r = await fetch('/api/analytics?childId=' + encodeURIComponent(slug), { headers: { Authorization: 'Bearer ' + tok } });
+      const tok = localStorage.getItem('aacToken');
+      const headers = tok ? { Authorization: 'Bearer ' + tok } : {};
+      const r = await fetch('/api/analytics?childId=' + encodeURIComponent(slug), { headers, credentials: 'same-origin' });
       if (!r.ok) return;
       applyAnalytics(await r.json());
       renderChart(currentTab);

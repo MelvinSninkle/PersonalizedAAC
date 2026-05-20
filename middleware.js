@@ -1,44 +1,33 @@
-// Vercel Edge Middleware — site-wide HTTP Basic Auth while the preview is
-// private. Set SITE_PASSWORD on the Vercel project env to enable it.
+// Vercel Edge Middleware — gates every page behind a real login session.
+// A valid signed `mw_session` cookie (issued by /api/auth/login) lets the
+// request through; anything else is redirected to /login. This replaced the
+// old site-wide HTTP Basic Auth.
 //
-// /api/* is intentionally excluded. The API endpoints already have their own
-// admin-bearer-token gate, and basic auth would collide with their
-// Authorization header (the browser caches Basic creds, but our fetch() calls
-// set Authorization: Bearer explicitly — only one wins). Keeping the API
-// outside this gate lets the iPad's bearer-authenticated calls keep working
-// unchanged.
+// /api/* is excluded (the API does its own auth and must stay reachable for
+// login itself), as are /login, /reset, and the PWA assets (manifest, service
+// worker, icons) so the installed app and Add-to-Home-Screen work cleanly.
+import { verifySession, parseCookies, cookieName } from './lib/session.js';
 
 export const config = {
-  // Match everything except /api/*, favicon, robots, and the (non-sensitive)
-  // PWA assets — the manifest, service worker, and icons must load without the
-  // Basic Auth prompt or "Add to Home Screen" / offline install breaks.
-  matcher: ['/((?!api/|favicon\\.ico|robots\\.txt|manifest\\.webmanifest|sw\\.js|icons/).*)'],
+  matcher: ['/((?!api/|login|reset|favicon\\.ico|robots\\.txt|manifest\\.webmanifest|sw\\.js|icons/).*)'],
 };
 
-export default function middleware(req) {
-  const expected = process.env.SITE_PASSWORD;
-  // Fail closed if not configured — better than accidentally shipping a public
-  // preview because someone forgot to set the env var.
-  if (!expected) {
-    return new Response('Preview gate misconfigured: SITE_PASSWORD env var not set on Vercel.', {
+export default async function middleware(req) {
+  const secret = process.env.SESSION_SECRET;
+  // Fail closed if not configured — better than accidentally exposing content.
+  if (!secret) {
+    return new Response('Login gate misconfigured: SESSION_SECRET env var not set on Vercel.', {
       status: 503,
       headers: { 'content-type': 'text/plain' },
     });
   }
-  const auth = req.headers.get('authorization');
-  if (auth && auth.startsWith('Basic ')) {
-    try {
-      const decoded = atob(auth.slice(6));
-      const sep = decoded.indexOf(':');
-      const pass = sep < 0 ? decoded : decoded.slice(sep + 1);
-      if (pass === expected) return;   // pass through to the static asset / function
-    } catch (_) { /* fall through */ }
-  }
-  return new Response('Authentication required.', {
-    status: 401,
-    headers: {
-      'WWW-Authenticate': 'Basic realm="My World preview"',
-      'content-type': 'text/plain',
-    },
-  });
+
+  const cookies = parseCookies(req.headers.get('cookie') || '');
+  const token = cookies[cookieName()];
+  const session = token ? await verifySession(token, secret) : null;
+  if (session) return; // authenticated → pass through
+
+  const url = new URL(req.url);
+  const next = encodeURIComponent(url.pathname + url.search);
+  return new Response(null, { status: 302, headers: { Location: `/login?next=${next}` } });
 }

@@ -10,7 +10,7 @@ import { sql } from '../_lib/db.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') { res.status(405).json({ error: 'Method not allowed' }); return; }
-  const auth = checkAuth(req);
+  const auth = await checkAuth(req);
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
 
   const actions = typeof req.query.action === 'string' && req.query.action

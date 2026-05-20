@@ -8,9 +8,13 @@ export default async function handler(req, res) {
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
-  const auth = checkAuth(req);
+  const auth = await checkAuth(req);
   if (!auth.ok) {
     res.status(auth.status).json({ error: auth.error });
+    return;
+  }
+  if (auth.user.role !== 'admin') {
+    res.status(403).json({ error: 'Admins only' });
     return;
   }
 
@@ -81,6 +85,25 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS events_occurred_at_idx   ON events(occurred_at)`;
     await db`CREATE INDEX IF NOT EXISTS events_item_idx          ON events(item_id)`;
     await db`CREATE INDEX IF NOT EXISTS events_child_idx         ON events(child_id)`;
+
+    // ---- User accounts (login flow) ----
+    // email + scrypt password hash + role. reset_token/reset_expires support a
+    // password-reset flow (email delivery wired later).
+    await db`
+      CREATE TABLE IF NOT EXISTS users (
+        id BIGSERIAL PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'parent',
+        child_slug TEXT,
+        reset_token TEXT,
+        reset_expires TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_login_at TIMESTAMPTZ
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS users_role_idx        ON users(role)`;
+    await db`CREATE INDEX IF NOT EXISTS users_reset_token_idx ON users(reset_token)`;
 
     // ---- Learning sessions + game attempts (Interactive Modes PRD v1.0) ----
     // A `session` is one run of any mode (game / slideshow / celebration) or a

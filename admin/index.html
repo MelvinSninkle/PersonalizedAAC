@@ -186,7 +186,9 @@
 
   // ---- auth ----
   function token() { return localStorage.getItem(tokenKey) || ''; }
-  function showLogin(msg) { $('login-err').textContent = msg || ''; $('scrim').classList.add('open'); $('token-in').focus(); }
+  // The page is already behind the login session gate, so an unauthenticated
+  // state here means the session lapsed — send them to the real login.
+  function showLogin() { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); }
   function hideLogin() { $('scrim').classList.remove('open'); }
   $('token-go').addEventListener('click', () => {
     const t = $('token-in').value.trim();
@@ -195,7 +197,10 @@
     hideLogin(); boot();
   });
   $('token-in').addEventListener('keydown', e => { if (e.key === 'Enter') $('token-go').click(); });
-  $('logout').addEventListener('click', e => { e.preventDefault(); localStorage.removeItem(tokenKey); showLogin('Logged out.'); });
+  $('logout').addEventListener('click', e => {
+    e.preventDefault(); localStorage.removeItem(tokenKey);
+    fetch('/api/auth/logout', { method: 'POST' }).finally(() => location.href = '/login');
+  });
 
   async function api(path, opts = {}) {
     const r = await fetch(path, {
@@ -394,8 +399,11 @@
   });
 
   // ---- boot ----
+  // Reachable only with a valid login session (the Edge middleware enforces it),
+  // so just boot — API calls authorize via the session cookie. A stale session
+  // surfaces as a 401 in api(), which redirects to /login.
   function boot() { syncLinks(); loadContent(); }
-  if (token()) boot(); else showLogin();
+  boot();
 })();
 </script>
 </body>
