@@ -830,6 +830,25 @@
     <div id="item-modal-context" style="font-size:13px;color:#666;margin-bottom:8px;"></div>
     <label for="item-label">Label</label>
     <input type="text" id="item-label" autocomplete="off" placeholder="e.g. Mom">
+
+    <!-- AI tile: snap a photo, auto-generate the stylized artwork + the voice. -->
+    <div id="magic-box" style="border:1px solid #f3c6dd;background:#fff5fa;border-radius:10px;padding:12px;margin:12px 0;">
+      <div style="font-weight:700;color:#ad1457;margin-bottom:4px;">✨ Make a tile from a photo</div>
+      <div style="font-size:12px;color:#666;margin-bottom:8px;">Type a label above, pick a style, then snap a photo — we'll create the artwork and the voice automatically.</div>
+      <label for="item-style" style="margin-top:0;">Art style</label>
+      <select id="item-style" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+        <option value="Pixar-style 3D animated render">3D Animated</option>
+        <option value="flat picture-book illustration">Picture Book</option>
+        <option value="soft watercolor illustration">Watercolor</option>
+        <option value="gentle soft storybook illustration">Soft Storybook</option>
+        <option value="needle-felted wool craft">Felted</option>
+      </select>
+      <input type="file" id="item-photo-capture" accept="image/*" capture="environment" style="display:none;">
+      <button type="button" id="item-magic" style="margin-top:10px;width:100%;padding:12px;border:none;border-radius:8px;background:#ff1493;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">📷 Take photo &amp; make tile</button>
+      <div class="file-status" id="item-magic-status" style="margin-top:8px;">—</div>
+      <img id="item-magic-preview" alt="" style="display:none;width:100%;max-width:200px;border-radius:10px;margin-top:8px;">
+    </div>
+
     <label for="item-image">Image</label>
     <input type="file" id="item-image" accept="image/*">
     <div class="file-status" id="item-image-status">No image selected</div>
@@ -2100,6 +2119,14 @@
     document.getElementById('item-pin').checked = !!item?.pinned;
     document.getElementById('item-delete').style.display = item ? 'block' : 'none';
 
+    // AI-tile section: restore the last-used style, clear status/preview.
+    const styleSel = document.getElementById('item-style');
+    const savedStyle = localStorage.getItem('aacStyle');
+    if (savedStyle) { for (const o of styleSel.options) { if (o.value === savedStyle) { styleSel.value = savedStyle; break; } } }
+    document.getElementById('item-magic-status').textContent = '—';
+    const mp = document.getElementById('item-magic-preview');
+    mp.style.display = 'none'; mp.removeAttribute('src');
+
     itemModal.classList.add('show');
   }
 
@@ -2161,6 +2188,67 @@
     } finally {
       btn.disabled = false;
       btn.textContent = prevText;
+    }
+  });
+
+  // ---- AI tile: photo → stylized artwork + voice, in one tap ----
+  document.getElementById('item-style').addEventListener('change', (e) => {
+    try { localStorage.setItem('aacStyle', e.target.value); } catch (_) {}
+  });
+  document.getElementById('item-magic').addEventListener('click', () => {
+    const errEl = document.getElementById('item-error');
+    errEl.textContent = '';
+    const label = document.getElementById('item-label').value.trim();
+    if (!label) { errEl.textContent = 'Type a label first'; document.getElementById('item-label').focus(); return; }
+    document.getElementById('item-photo-capture').click();
+  });
+  document.getElementById('item-photo-capture').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const label = document.getElementById('item-label').value.trim();
+    const style = document.getElementById('item-style').value;
+    const phrase = document.getElementById('item-phrase').value.trim() || label;
+    const errEl = document.getElementById('item-error');
+    const statusEl = document.getElementById('item-magic-status');
+    const btn = document.getElementById('item-magic');
+    const preview = document.getElementById('item-magic-preview');
+    errEl.textContent = '';
+    btn.disabled = true;
+    const prevText = btn.textContent;
+    btn.textContent = 'Working…';
+    try {
+      // 1) Stylize the photo into the chosen art style.
+      statusEl.textContent = '🎨 Creating the artwork… (this can take ~20–40s)';
+      const photo = await compressImage(file);
+      const ir = await apiFetch('/api/generate-image?label=' + encodeURIComponent(label) + '&style=' + encodeURIComponent(style), {
+        method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo,
+      });
+      if (!ir.ok) { const d = await ir.text(); throw new Error('Image — ' + d.slice(0, 200)); }
+      pendingImage = await ir.blob();
+      const purl = URL.createObjectURL(pendingImage);
+      preview.src = purl; preview.style.display = 'block';
+      preview.addEventListener('load', () => URL.revokeObjectURL(purl), { once: true });
+      const ist = document.getElementById('item-image-status');
+      ist.textContent = 'AI image ready'; ist.className = 'file-status has-file';
+
+      // 2) Generate the voice from the phrase (defaults to the label).
+      statusEl.textContent = '🔊 Recording the voice…';
+      const tr = await apiFetch('/api/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: phrase, emotion: document.getElementById('item-emotion').value }),
+      });
+      if (!tr.ok) { const d = await tr.text(); throw new Error('Voice — ' + d.slice(0, 200)); }
+      pendingSound = await tr.blob();
+      const sst = document.getElementById('item-sound-status');
+      sst.textContent = 'AI voice ready'; sst.className = 'file-status has-file';
+
+      statusEl.textContent = '✅ Ready — review and tap Save.';
+    } catch (err) {
+      statusEl.textContent = '—';
+      errEl.textContent = 'Could not make the tile: ' + (err.message || err);
+    } finally {
+      btn.disabled = false; btn.textContent = prevText;
     }
   });
 
