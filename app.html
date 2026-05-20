@@ -811,15 +811,15 @@
 
 <div class="modal-backdrop" id="login-modal">
   <div class="modal">
-    <h3>Login</h3>
-    <div style="font-size:13px;color:#666;margin-bottom:8px;">Paste your admin token. Your browser will remember it.</div>
-    <label for="login-pass">Admin Token</label>
-    <input type="password" id="login-pass" autocomplete="off">
+    <h3 id="login-title">Unlock editing</h3>
+    <div id="login-desc" style="font-size:13px;color:#666;margin-bottom:8px;">Enter your account password to make changes.</div>
+    <label for="login-pass" id="login-label">Your password</label>
+    <input type="password" id="login-pass" autocomplete="current-password">
     <input type="hidden" id="login-user" value="admin">
     <div class="error" id="login-error"></div>
     <div class="button-row">
       <button class="secondary" id="login-cancel">Cancel</button>
-      <button class="primary" id="login-submit">Login</button>
+      <button class="primary" id="login-submit">Unlock</button>
     </div>
   </div>
 </div>
@@ -1129,6 +1129,17 @@
   let db = null;
   let editMode = false;
   let authToken = localStorage.getItem(TOKEN_KEY) || '';
+  let sessionUser = null;   // { email, role, slug } from /api/auth/me, or null
+  let loginMode = 'password';
+
+  // Who's logged in on this device. Editing is gated to admin/parent roles.
+  async function loadSession() {
+    try {
+      const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      if (r.ok) { const d = await r.json(); sessionUser = (d && d.user) || null; }
+    } catch (_) { sessionUser = null; }
+  }
+  function canEdit() { return !!sessionUser && (sessionUser.role === 'admin' || sessionUser.role === 'parent'); }
   const objectURLs = new Map();
   const activeCategoryId = { people: null, nouns: null, verbs: null };
 
@@ -1793,9 +1804,28 @@
   const loginModal = document.getElementById('login-modal');
   document.getElementById('login-btn').addEventListener('click', () => {
     if (editMode) { setEditMode(false); return; }
-    // Always prompt for the password — no shortcut even if a token is stored
-    // on this device. Stops the kid from sliding into edit mode accidentally.
-    document.getElementById('login-user').value = '';
+    // A non-editor role (e.g. therapist) can't make structural changes.
+    if (sessionUser && !canEdit()) {
+      const ms = document.getElementById('mode-status');
+      ms.textContent = 'Editing is for parents';
+      setTimeout(() => { if (!editMode) ms.textContent = ''; }, 2500);
+      return;
+    }
+    // Editor role → re-enter the account password (still guards against a kid
+    // sliding into edit mode). No session at all → fall back to the admin token.
+    loginMode = sessionUser ? 'password' : 'token';
+    const title = document.getElementById('login-title');
+    const desc = document.getElementById('login-desc');
+    const label = document.getElementById('login-label');
+    if (loginMode === 'password') {
+      title.textContent = 'Unlock editing';
+      desc.textContent = 'Enter your account password to make changes.';
+      label.textContent = 'Your password';
+    } else {
+      title.textContent = 'Login';
+      desc.textContent = 'Paste your admin token.';
+      label.textContent = 'Admin token';
+    }
     document.getElementById('login-pass').value = '';
     document.getElementById('login-error').textContent = '';
     loginModal.classList.add('show');
@@ -1808,34 +1838,47 @@
     if (e.target === loginModal) loginModal.classList.remove('show');
   });
   async function attemptLogin() {
-    const p = document.getElementById('login-pass').value.trim();
+    const p = document.getElementById('login-pass').value;   // don't trim — passwords may have spaces
     const errEl = document.getElementById('login-error');
     errEl.textContent = '';
-    if (!p) { errEl.textContent = 'Token required'; return; }
+    if (!p) { errEl.textContent = loginMode === 'password' ? 'Password required' : 'Token required'; return; }
     const submit = document.getElementById('login-submit');
     submit.disabled = true;
     const prev = submit.textContent;
     submit.textContent = 'Verifying…';
     try {
-      // Validate token by hitting an auth-gated endpoint
-      const r = await fetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID), { headers: { Authorization: 'Bearer ' + p } });
-      if (r.status === 401) { errEl.textContent = 'Invalid token'; return; }
-      if (!r.ok) { errEl.textContent = `Server error: ${r.status}`; return; }
-      const data = await r.json();
-      authToken = p;
-      localStorage.setItem(TOKEN_KEY, p);
+      if (loginMode === 'password') {
+        // Re-verify the logged-in user's password against their account.
+        const r = await fetch('/api/auth/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: sessionUser.email, password: p }),
+        });
+        if (r.status === 401) { errEl.textContent = 'Incorrect password'; return; }
+        if (!r.ok) { errEl.textContent = `Server error: ${r.status}`; return; }
+      } else {
+        // Legacy fallback: validate an admin token against an auth-gated route.
+        const tok = p.trim();
+        const r = await fetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID), { headers: { Authorization: 'Bearer ' + tok } });
+        if (r.status === 401) { errEl.textContent = 'Invalid token'; return; }
+        if (!r.ok) { errEl.textContent = `Server error: ${r.status}`; return; }
+        authToken = tok;
+        localStorage.setItem(TOKEN_KEY, tok);
+      }
       loginModal.classList.remove('show');
       setEditMode(true);
-      // Hydrate IndexedDB if it's empty
-      const existingCats = await (async () => {
-        let total = 0;
-        for (const s of SECTIONS) total += (await getAllCats(s)).length;
-        return total;
-      })();
-      if (existingCats === 0 && (data.categories.length || data.items.length)) {
-        await hydrateFromServer(data);
-        await renderAll();
-      }
+      // Hydrate IndexedDB if it's still empty (server is canonical).
+      try {
+        const sr = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
+        if (sr.ok) {
+          const data = await sr.json();
+          let total = 0;
+          for (const s of SECTIONS) total += (await getAllCats(s)).length;
+          if (total === 0 && (data.categories.length || data.items.length)) {
+            await hydrateFromServer(data);
+            await renderAll();
+          }
+        }
+      } catch (_) { /* offline — keep cached */ }
     } catch (err) {
       errEl.textContent = 'Login failed: ' + (err.message || err);
     } finally {
@@ -3157,6 +3200,7 @@
     try {
       loadDisplay();
       applyDisplay();
+      await loadSession();   // who's logged in (drives edit-mode availability)
       db = await openDB();
       await migrateLegacyItems();
       // Paint immediately from whatever's cached locally so the app feels instant,
@@ -3164,16 +3208,15 @@
       // files stay lazy — fetched on demand and cached by their storage key.
       await renderAll();
       flushEvents().catch(() => {});   // drain any taps queued from a previous offline session
-      if (authToken) {
-        try {
-          const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
-          if (r.ok) {
-            const data = await r.json();
-            await hydrateFromServer(data);
-            await renderAll();
-          }
-        } catch (_) { /* offline — keep whatever was cached locally */ }
-      }
+      // Refresh from the server using the login session (cookie) or a stored token.
+      try {
+        const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
+        if (r.ok) {
+          const data = await r.json();
+          await hydrateFromServer(data);
+          await renderAll();
+        }
+      } catch (_) { /* offline or not authed — keep whatever was cached locally */ }
     } catch (err) {
       document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif;">Failed to open storage: ${err.message}<br><br>Try opening this file in Chrome.</div>`;
     }
