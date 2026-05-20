@@ -9,8 +9,10 @@
 // unchanged.
 
 export const config = {
-  // Match everything except /api/*, favicon, robots.
-  matcher: ['/((?!api/|favicon\\.ico|robots\\.txt).*)'],
+  // Match everything except /api/*, favicon, robots, and the (non-sensitive)
+  // PWA assets — the manifest, service worker, and icons must load without the
+  // Basic Auth prompt or "Add to Home Screen" / offline install breaks.
+  matcher: ['/((?!api/|favicon\\.ico|robots\\.txt|manifest\\.webmanifest|sw\\.js|icons/).*)'],
 };
 
 export default function middleware(req) {
