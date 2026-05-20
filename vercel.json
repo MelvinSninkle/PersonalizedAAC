@@ -1,5 +1,7 @@
 {
   "rewrites": [
-    { "source": "/u/:slug", "destination": "/app.html" }
+    { "source": "/u/:slug", "destination": "/app.html" },
+    { "source": "/parent/:slug", "destination": "/parent.html" },
+    { "source": "/therapist/:slug", "destination": "/therapist.html" }
   ]
 }

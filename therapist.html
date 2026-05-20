@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Therapist View — My World</title>
+<meta name="theme-color" content="#ad1457">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--
+  THERAPIST VIEW — visual mockup with sample data.
+  This is the facilitator remote control for Mode 2 (PRD v1.0): the therapist
+  drives a matching session from their phone while Fletcher's tablet shows the
+  game. Marking a verbal/physical response correct here counts the same as a
+  tap on the tablet. Layout is phone-first. No backend / sync is wired yet.
+-->
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --pink: #ff1493; --pink-deep: #ad1457; --pink-mid: #c2185b;
+    --ink: #1f2937; --muted: #6b7280; --faint: #9ca3af;
+    --line: #fce4ec; --bg: #fdf2f8; --card: #ffffff;
+    --good: #16a34a; --good-bg: #ecfdf5; --warn: #f59e0b; --yellow: #ffd400;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.5; }
+  .fred { font-family: 'Fredoka', ui-rounded, system-ui, sans-serif; }
+  a { color: var(--pink-mid); text-decoration: none; }
+
+  header.top {
+    position: sticky; top: 0; z-index: 40;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 13px 18px; background: rgba(255,255,255,.96);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+  }
+  header.top .brand { font-family: 'Fredoka', system-ui; font-weight: 700; color: var(--pink-deep); font-size: 17px; }
+  header.top .brand small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
+  .device-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+    background: var(--good-bg); color: #047857; border: 1px solid #a7f3d0; padding: 5px 10px; border-radius: 999px; }
+  .device-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); animation: pulse 1.8s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 #16a34a55; } 50% { box-shadow: 0 0 0 5px #16a34a00; } }
+
+  .wrap { max-width: 720px; margin: 0 auto; padding: 18px 16px 60px; }
+  .section-label { font-family: 'Fredoka', system-ui; font-weight: 600; font-size: 12px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--pink); margin: 26px 0 12px; }
+
+  /* Live session control — the centerpiece */
+  .stage { background: linear-gradient(180deg,#fff,#fff7fb); border: 1px solid var(--line);
+    border-radius: 22px; padding: 22px; box-shadow: 0 12px 40px rgba(255,20,147,.08); }
+  .stage .target-cap { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .target { display: flex; align-items: center; gap: 16px; margin: 12px 0 6px; }
+  .target .thumb { width: 84px; height: 84px; border-radius: 18px; flex: none;
+    background: repeating-linear-gradient(135deg,#fce4ec 0,#fce4ec 9px,#fdd2e0 9px,#fdd2e0 18px);
+    display: grid; place-items: center; font-size: 34px; }
+  .target .word { font-family: 'Fredoka', system-ui; font-size: 40px; font-weight: 700; line-height: 1; }
+  .target .word small { display: block; font-size: 13px; color: var(--muted); font-weight: 500; letter-spacing: .04em; }
+  .progress-line { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .progress-line b { color: var(--ink); }
+
+  /* Mark-correct buttons */
+  .marks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; }
+  .mark { border: 1px solid #bbf7d0; background: var(--good-bg); color: #047857; border-radius: 14px;
+    padding: 14px 8px; cursor: pointer; font: inherit; font-weight: 700; font-size: 13px; text-align: center;
+    display: flex; flex-direction: column; gap: 6px; align-items: center; transition: transform .06s ease; }
+  .mark:active { transform: scale(.97); }
+  .mark .ic { font-size: 22px; }
+  .row-controls { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 10px; margin-top: 10px; }
+  .ctl { border: none; border-radius: 14px; padding: 14px; cursor: pointer; font: inherit; font-weight: 700; font-size: 14px; }
+  .ctl.skip { background: #fff0f6; color: var(--pink-deep); }
+  .ctl.next { background: #eef2ff; color: #4338ca; }
+  .ctl.end { background: var(--ink); color: #fff; }
+
+  .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin-top: 14px; font-size: 14px; }
+  .toggle .desc { color: var(--muted); font-size: 12px; }
+  .switch { position: relative; width: 46px; height: 26px; flex: none; }
+  .switch input { display: none; }
+  .switch span { position: absolute; inset: 0; background: var(--pink); border-radius: 999px; transition: .2s; }
+  .switch span::after { content: ''; position: absolute; width: 20px; height: 20px; border-radius: 50%; background: #fff; top: 3px; left: 23px; transition: .2s; }
+  .switch input:not(:checked) + span { background: #d1d5db; }
+  .switch input:not(:checked) + span::after { left: 3px; }
+
+  /* Session queue */
+  .queue { display: flex; flex-direction: column; gap: 8px; }
+  .q-item { display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 14px; font-size: 14px; }
+  .q-item .q-ic { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 15px; flex: none; }
+  .q-item.done { color: var(--muted); }
+  .q-item.done .q-ic { background: var(--good-bg); }
+  .q-item.cur { border-color: var(--pink); box-shadow: 0 0 0 3px #ff149318; }
+  .q-item.cur .q-ic { background: #fff0f6; }
+  .q-item.todo .q-ic { background: #f3f4f6; }
+  .q-item .via { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--faint); }
+  .q-item .via.tap { color: #1d4ed8; } .q-item .via.verbal { color: #047857; } .q-item .via.object { color: #6d28d9; }
+
+  /* Tally */
+  .tally { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .tally .t { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; text-align: center; }
+  .tally .t .n { font-family: 'Fredoka', system-ui; font-size: 26px; font-weight: 700; }
+  .tally .t .k { font-size: 12px; color: var(--muted); }
+
+  /* Setup + panels */
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
+  .panel h2 { font-size: 15px; margin: 0 0 4px; }
+  .panel .hint { font-size: 12px; color: var(--faint); margin: 0 0 14px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .field select { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+  .checks { display: flex; flex-wrap: wrap; gap: 8px; }
+  .checks label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+    background: #fff7fb; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  textarea { width: 100%; min-height: 80px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; font: inherit; resize: vertical; }
+
+  /* mastery bars */
+  .bars { display: flex; flex-direction: column; gap: 11px; }
+  .bar-row { display: grid; grid-template-columns: 92px 1fr 40px; gap: 10px; align-items: center; font-size: 13px; }
+  .bar-track { background: #f3e8ee; border-radius: 999px; height: 11px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg,#ff8ec6,var(--pink)); }
+  .bar-row .pct { text-align: right; font-weight: 600; color: var(--muted); }
+
+  .note { font-size: 12.5px; color: var(--faint); background: #fff; border: 1px dashed var(--line);
+    border-radius: 12px; padding: 12px 14px; margin-top: 14px; }
+  .btn { border: none; cursor: pointer; font-weight: 600; font-size: 14px; border-radius: 999px; padding: 11px 18px; font-family: inherit; }
+  .btn.primary { background: var(--pink); color: #fff; width: 100%; }
+  .role-link { font-size: 13px; color: var(--muted); }
+
+  @media (min-width: 720px) { .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand fred">Fletcher's World <small>Therapist · facilitator view</small></div>
+  <span class="device-pill"><span class="dot"></span> Connected</span>
+</header>
+
+<div class="wrap">
+
+  <!-- LIVE SESSION -->
+  <div class="section-label">Live session · Body Parts</div>
+  <div class="stage">
+    <div class="target-cap">Current target on Fletcher's tablet</div>
+    <div class="target">
+      <div class="thumb">👃</div>
+      <div class="word fred">nose<small>3 picture choices shown</small></div>
+    </div>
+    <div class="progress-line">Item <b>7</b> of <b>14</b> · <b>5</b> correct · session <b>11:42</b></div>
+
+    <div class="marks">
+      <button class="mark"><span class="ic">👆</span>Tapped it</button>
+      <button class="mark"><span class="ic">🗣️</span>Said it</button>
+      <button class="mark"><span class="ic">🧸</span>Showed object</button>
+    </div>
+    <div class="row-controls">
+      <button class="ctl skip">Skip</button>
+      <button class="ctl next">Next →</button>
+      <button class="ctl end">End &amp; celebrate</button>
+    </div>
+
+    <div class="toggle">
+      <div><div>Fletcher can tap independently</div><div class="desc">Phone control is additive — either input counts as correct.</div></div>
+      <label class="switch"><input type="checkbox" checked><span></span></label>
+    </div>
+    <div class="note">No wrong-answer cue is ever shown. On a miss the correct tile wiggles, then glows, then the app moves on silently — exactly as in the self-paced game.</div>
+  </div>
+
+  <!-- TALLY -->
+  <div class="section-label">This session</div>
+  <div class="tally">
+    <div class="t"><div class="n">5/7</div><div class="k">Correct so far</div></div>
+    <div class="t"><div class="n">71%</div><div class="k">Accuracy</div></div>
+    <div class="t"><div class="n">11:42</div><div class="k">Elapsed</div></div>
+  </div>
+
+  <!-- QUEUE -->
+  <div class="section-label">Item queue</div>
+  <div class="queue">
+    <div class="q-item done"><span class="q-ic">✓</span> ear <span class="via tap">tapped</span></div>
+    <div class="q-item done"><span class="q-ic">✓</span> hand <span class="via object">object</span></div>
+    <div class="q-item done"><span class="q-ic">✓</span> foot <span class="via verbal">said it</span></div>
+    <div class="q-item done"><span class="q-ic">✓</span> eye <span class="via tap">tapped</span></div>
+    <div class="q-item done"><span class="q-ic">✓</span> mouth <span class="via verbal">said it</span></div>
+    <div class="q-item done"><span class="q-ic">↪</span> knee <span class="via">skipped</span></div>
+    <div class="q-item cur"><span class="q-ic">●</span> <b>nose</b> <span class="via">on screen now</span></div>
+    <div class="q-item todo"><span class="q-ic">○</span> hair</div>
+    <div class="q-item todo"><span class="q-ic">○</span> arm</div>
+    <div class="q-item todo"><span class="q-ic">○</span> tummy</div>
+  </div>
+
+  <!-- SETUP (collapsible feel) -->
+  <div class="section-label">Set up a new session</div>
+  <div class="panel">
+    <h2>Pick what to focus on</h2>
+    <p class="hint">Choose a category and the specific items for this visit. Fletcher's tablet updates instantly.</p>
+    <div class="field"><label>Category</label>
+      <select><option>Body Parts</option><option>Animals</option><option>Foods</option><option>Feelings</option><option>Colors</option><option>Actions</option></select>
+    </div>
+    <div class="field"><label>Items</label>
+      <div class="checks">
+        <label><input type="checkbox" checked> nose</label><label><input type="checkbox" checked> ear</label>
+        <label><input type="checkbox" checked> hand</label><label><input type="checkbox" checked> foot</label>
+        <label><input type="checkbox"> eye</label><label><input type="checkbox"> mouth</label>
+        <label><input type="checkbox"> knee</label><label><input type="checkbox"> hair</label>
+      </div>
+    </div>
+    <div class="field"><label>Background music</label>
+      <select><option>Calm piano (default)</option><option>Soft acoustic</option><option>Silence</option></select>
+    </div>
+    <button class="btn primary">Start on Fletcher's tablet</button>
+  </div>
+
+  <!-- ANALYTICS shared with parent -->
+  <div class="section-label">Progress (shared with parent)</div>
+  <div class="two">
+    <div class="panel">
+      <h2>Mastery by category</h2>
+      <p class="hint">Rolling 30-day accuracy. Counts taps, verbal, and object responses equally.</p>
+      <div class="bars" id="mastery"></div>
+    </div>
+    <div class="panel">
+      <h2>Session notes</h2>
+      <p class="hint">Private to the care team — never shown to Fletcher.</p>
+      <textarea placeholder="e.g. Strong on body parts via physical objects; emerging on 'knee'. Try pairing verbal + object next visit."></textarea>
+      <button class="btn primary" style="margin-top:10px;">Save note to session</button>
+      <div class="note">Notes attach to the session record so you and Andrew see the same longitudinal history. <a href="#" id="to-parent">Open parent dashboard →</a></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const m = location.pathname.match(/^\/therapist\/([^\/]+)/);
+  const slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';
+  document.getElementById('to-parent').href = '/parent/' + encodeURIComponent(slug);
+
+  const mastery = [
+    ['Body Parts', 88], ['Animals', 84], ['Colors', 92],
+    ['Foods', 71], ['Feelings', 58], ['Actions', 66],
+  ];
+  document.getElementById('mastery').innerHTML = mastery.map(([name, pct]) => `
+    <div class="bar-row">
+      <span>${name}</span>
+      <span class="bar-track"><span class="bar-fill" style="width:${pct}%"></span></span>
+      <span class="pct">${pct}%</span>
+    </div>`).join('');
+
+  // Mark/skip/next give light tactile feedback (mockup only).
+  document.querySelectorAll('.mark, .ctl').forEach(b => {
+    b.addEventListener('click', () => {
+      const t = b.textContent; b.style.opacity = '.6';
+      setTimeout(() => { b.style.opacity = '1'; }, 250);
+    });
+  });
+})();
+</script>
+</body>
+</html>
