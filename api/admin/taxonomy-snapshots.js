@@ -43,6 +43,35 @@ async function read(req, res, db) {
   if (id) {
     const rows = await db`SELECT * FROM taxonomy_snapshots WHERE id = ${id}`;
     if (!rows.length) { res.status(404).json({ error: 'Not found' }); return; }
+    // diff=1 → compare snapshot's payload to the current taxonomy and
+    // return added / removed / changed id lists with per-row before+after.
+    if (req.query.diff) {
+      const cur = await db`SELECT * FROM taxonomy ORDER BY id`;
+      const snap = Array.isArray(rows[0].payload) ? rows[0].payload : [];
+      const curById  = new Map(cur.map(r => [r.id, r]));
+      const snapById = new Map(snap.map(r => [r.id, r]));
+      // Fields to compare; anything else (timestamps, audit columns) we ignore.
+      const compareFields = ['column_name','category','subcategory','label','pronunciation',
+        'prompt_template','subject_mode','parent_photo_behavior','phase','status','archived','notes'];
+      const added = [], removed = [], changed = [];
+      for (const [rid, row] of curById) {
+        if (!snapById.has(rid)) { added.push({ id: rid, label: row.label, column: row.column_name }); continue; }
+        const old = snapById.get(rid);
+        const diffs = compareFields.filter(f => String(row[f] ?? '') !== String(old[f] ?? ''));
+        if (diffs.length) changed.push({ id: rid, label: row.label, fields: diffs });
+      }
+      for (const [rid, row] of snapById) {
+        if (!curById.has(rid)) removed.push({ id: rid, label: row.label, column: row.column_name });
+      }
+      res.status(200).json({
+        snapshotId: id,
+        snapshotLabel: rows[0].label,
+        snapshotCreatedAt: rows[0].created_at,
+        added, removed, changed,
+        totals: { added: added.length, removed: removed.length, changed: changed.length },
+      });
+      return;
+    }
     res.status(200).json(snapshotOut(rows[0], !!req.query.full));
     return;
   }

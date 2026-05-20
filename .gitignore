@@ -1,6 +1,8 @@
 .claude/
+node_modules/
 Images/
 Sounds/
 *.json
 !package.json
 !package-lock.json
+!vercel.json

@@ -141,6 +141,20 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS taxonomy_audit_ts_idx     ON taxonomy_audit(ts DESC)`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_audit_action_idx ON taxonomy_audit(action)`;
 
+    // ---- Landing-page email capture ----
+    await db`
+      CREATE TABLE IF NOT EXISTS waitlist (
+        id BIGSERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        style TEXT,
+        note TEXT,
+        source TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS waitlist_email_idx   ON waitlist(email)`;
+    await db`CREATE INDEX IF NOT EXISTS waitlist_created_idx ON waitlist(created_at DESC)`;
+
     res.status(200).json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Init failed', detail: String(err.message || err) });
