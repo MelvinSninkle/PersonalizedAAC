@@ -189,8 +189,9 @@
     <div class="ins-head">
       <span class="ins-title fred">📈 Fletcher's progress</span>
       <div class="ins-tabs" role="tablist">
-        <button class="ins-tab active" data-tab="games">Games</button>
-        <button class="ins-tab" data-tab="use">Use</button>
+        <button class="ins-tab active" data-tab="use">Use</button>
+        <button class="ins-tab" data-tab="time">Time</button>
+        <button class="ins-tab" data-tab="games">Games</button>
       </div>
       <button class="ins-x" id="ins-x" title="Hide charts" aria-label="Hide charts">×</button>
     </div>
@@ -362,6 +363,15 @@
         { name: 'Colors',   color: '#ef4444', daily: false, data: [5, 6, 6, 7, 7, 8, 9] },
       ],
     },
+    time: {
+      sub: 'Minutes per week. Total use is all the time Fletcher spends in the app; passive learning is time in the Learn and Exposure slideshows.',
+      max: 200, unit: ' min', collapseStarred: false,
+      star: () => false, starLabel: '',
+      list: [
+        { name: 'Total use',        color: '#0ea5e9', data: [70, 95, 115, 130, 150, 168, 180] },
+        { name: 'Passive learning', color: '#a855f7', data: [20, 28, 35, 40, 48, 52, 58] },
+      ],
+    },
   };
   const W = 340, H = 200, PADL = 22, PADR = 10, PADT = 12, PADB = 22;
   function renderChart(key) {
@@ -394,7 +404,7 @@
     document.querySelectorAll('.ins-tab').forEach(x => x.classList.toggle('active', x === t));
     renderChart(t.dataset.tab);
   }));
-  renderChart('games');
+  renderChart('use');
   // Dismiss is per-visit only — no persistence, so it returns on next launch.
   const insights = document.getElementById('insights'), restore = document.getElementById('ins-restore');
   document.getElementById('ins-x').addEventListener('click', () => { insights.style.display = 'none'; restore.classList.add('show'); });
