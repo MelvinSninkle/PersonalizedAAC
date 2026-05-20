@@ -136,10 +136,39 @@
   .modal .foot { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
   .modal .x { float: right; border: none; background: none; font-size: 22px; cursor: pointer; color: var(--faint); line-height: 1; }
 
+  /* Insights — tabbed, color-coded progress chart pinned at the top. */
+  .insights { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px 16px; }
+  .ins-head { display: flex; align-items: center; gap: 10px; }
+  .ins-title { font-size: 15px; font-weight: 700; }
+  .ins-tabs { display: flex; gap: 4px; margin-left: 6px; background: #fdeef5; padding: 4px; border-radius: 999px; }
+  .ins-tab { border: none; background: none; font: inherit; font-weight: 600; font-size: 13px; color: var(--muted); padding: 6px 16px; border-radius: 999px; cursor: pointer; }
+  .ins-tab.active { background: #fff; color: var(--pink-deep); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .ins-x { margin-left: auto; border: none; background: none; font-size: 22px; line-height: 1; color: var(--faint); cursor: pointer; padding: 2px 6px; }
+  .ins-x:hover { color: var(--ink); }
+  .ins-sub { font-size: 12px; color: var(--faint); margin: 6px 0 8px; }
+  .ins-chart svg { width: 100%; max-width: 640px; height: auto; display: block; }
+  .ins-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .ins-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
+  .ins-legend .lg i { width: 11px; height: 11px; border-radius: 3px; }
+  .ins-legend .lg b { color: var(--ink); }
+  .ins-stars { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .ins-stars:empty { display: none; }
+  .ins-stars .lbl { width: 100%; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); }
+  .ins-star { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: #926b00;
+    background: linear-gradient(180deg,#fffbeb,#fef3c7); border: 1px solid #fde68a; border-radius: 999px; padding: 5px 12px; }
+  .ins-restore { display: none; width: 100%; border: 1px solid var(--line); background: #fff; color: var(--pink-deep);
+    font: inherit; font-weight: 600; font-size: 13px; padding: 11px; border-radius: 14px; cursor: pointer; }
+  .ins-restore.show { display: block; }
+
   @media (max-width: 860px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
     .modes { grid-template-columns: 1fr; }
     .grid2 { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .ins-head { flex-wrap: wrap; }
+    .ins-x { order: 2; }
+    .ins-tabs { order: 3; margin-left: 0; width: 100%; justify-content: center; }
   }
 </style>
 </head>
@@ -154,7 +183,25 @@
 </header>
 
 <div class="wrap">
-  <h1 class="page-title fred">Hi Andrew 👋</h1>
+
+  <!-- PROGRESS CHARTS — pinned at top, tabbed, dismissable (reloads each visit) -->
+  <section class="insights" id="insights">
+    <div class="ins-head">
+      <span class="ins-title fred">📈 Fletcher's progress</span>
+      <div class="ins-tabs" role="tablist">
+        <button class="ins-tab active" data-tab="games">Games</button>
+        <button class="ins-tab" data-tab="use">Use</button>
+      </div>
+      <button class="ins-x" id="ins-x" title="Hide charts" aria-label="Hide charts">×</button>
+    </div>
+    <p class="ins-sub" id="ins-sub"></p>
+    <div class="ins-chart"><svg id="ins-svg" viewBox="0 0 340 200" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Progress over time by category"></svg></div>
+    <div class="ins-legend" id="ins-legend"></div>
+    <div class="ins-stars" id="ins-stars"></div>
+  </section>
+  <button class="ins-restore" id="ins-restore">📈 Show progress charts</button>
+
+  <h1 class="page-title fred" style="margin-top:24px;">Hi Andrew 👋</h1>
   <p class="page-sub">Here's how <strong id="child-name">Fletcher</strong> is doing. Start a learning mode below, or review progress. <em>Fletcher never sees this screen.</em></p>
 
   <!-- OVERVIEW -->
@@ -222,47 +269,12 @@
     </div>
   </div>
 
-  <!-- ANALYTICS -->
-  <div class="section-label">Progress over time</div>
-  <div class="grid2">
-    <div class="panel chart">
-      <h2>Matching accuracy by week</h2>
-      <p class="hint">Correct first-try matches ÷ items shown. Misses are never shown to Fletcher.</p>
-      <svg viewBox="0 0 560 230" role="img" aria-label="Line chart of weekly accuracy trending upward from 62% to 84%">
-        <!-- gridlines -->
-        <g stroke="#f1e3ea" stroke-width="1">
-          <line x1="40" y1="20"  x2="550" y2="20"/>
-          <line x1="40" y1="65"  x2="550" y2="65"/>
-          <line x1="40" y1="110" x2="550" y2="110"/>
-          <line x1="40" y1="155" x2="550" y2="155"/>
-          <line x1="40" y1="200" x2="550" y2="200"/>
-        </g>
-        <g fill="#9ca3af" font-size="11" font-family="sans-serif">
-          <text x="10" y="24">100</text><text x="16" y="114">50</text><text x="22" y="204">0</text>
-        </g>
-        <!-- area + line: weeks at x = 40,125,210,295,380,465,550 ; y = 200-(val*1.8) -->
-        <polyline fill="none" stroke="#ff1493" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
-          points="40,88.4 125,77.6 210,72.2 295,65 380,56 465,59.6 550,48.8"/>
-        <polygon fill="#ff149315"
-          points="40,88.4 125,77.6 210,72.2 295,65 380,56 465,59.6 550,48.8 550,200 40,200"/>
-        <g fill="#ff1493">
-          <circle cx="40"  cy="88.4" r="4"/><circle cx="125" cy="77.6" r="4"/><circle cx="210" cy="72.2" r="4"/>
-          <circle cx="295" cy="65"   r="4"/><circle cx="380" cy="56"   r="4"/><circle cx="465" cy="59.6" r="4"/>
-          <circle cx="550" cy="48.8" r="4"/>
-        </g>
-        <g fill="#9ca3af" font-size="10" font-family="sans-serif" text-anchor="middle">
-          <text x="40" y="220">W1</text><text x="125" y="220">W2</text><text x="210" y="220">W3</text>
-          <text x="295" y="220">W4</text><text x="380" y="220">W5</text><text x="465" y="220">W6</text><text x="550" y="220">W7</text>
-        </g>
-      </svg>
-      <div class="legend"><span><i style="background:#ff1493"></i>Accuracy</span><span>62% → <strong style="color:#16a34a">84%</strong> over 7 weeks</span></div>
-    </div>
-
-    <div class="panel">
-      <h2>Mastery by category</h2>
-      <p class="hint">Rolling accuracy across the last 30 days.</p>
-      <div class="bars" id="mastery"></div>
-    </div>
+  <!-- CURRENT MASTERY -->
+  <div class="section-label">Current mastery</div>
+  <div class="panel">
+    <h2>Accuracy by category · last 30 days</h2>
+    <p class="hint">Where Fletcher is right now. The trend over time is in the chart pinned at the top.</p>
+    <div class="bars" id="mastery"></div>
   </div>
 
   <!-- RECENT SESSIONS -->
@@ -321,6 +333,72 @@
   const pretty = slug.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase()) || 'Fletcher';
   document.getElementById('child-name').textContent = pretty;
   document.getElementById('to-therapist').href = '/therapist/' + encodeURIComponent(slug);
+
+  // ---- Progress charts: tabbed, color-coded, gold-star for mastered ----
+  const WEEKS = ['6w','5w','4w','3w','2w','1w','now'];
+  const SERIES = {
+    games: {
+      sub: 'First-try matching accuracy by category. Mastered categories (100%) drop to a gold star below to keep the lines readable.',
+      max: 100, unit: '%', collapseStarred: true,
+      star: s => s.data[s.data.length - 1] >= 100, starLabel: 'Mastered · 100%',
+      list: [
+        { name: 'People',     color: '#f59e0b', data: [90, 92, 94, 96, 98, 100, 100] },
+        { name: 'Colors',     color: '#ef4444', data: [78, 84, 90, 94, 98, 100, 100] },
+        { name: 'Body Parts', color: '#10b981', data: [62, 68, 74, 80, 84, 86, 88] },
+        { name: 'Animals',    color: '#3b82f6', data: [55, 62, 70, 74, 80, 82, 84] },
+        { name: 'Foods',      color: '#8b5cf6', data: [40, 48, 55, 60, 64, 68, 71] },
+        { name: 'Feelings',   color: '#ec4899', data: [30, 38, 44, 48, 52, 55, 58] },
+      ],
+    },
+    use: {
+      sub: 'How often Fletcher communicates with each category on his own (taps per week). A gold star means he reached for it every day this week.',
+      max: 40, unit: '/wk', collapseStarred: false,
+      star: s => s.daily, starLabel: 'Used every day this week',
+      list: [
+        { name: 'Foods',    color: '#8b5cf6', daily: true,  data: [18, 22, 25, 28, 30, 33, 36] },
+        { name: 'People',   color: '#f59e0b', daily: true,  data: [12, 14, 16, 19, 22, 24, 27] },
+        { name: 'Actions',  color: '#06b6d4', daily: false, data: [8, 10, 12, 13, 15, 16, 18] },
+        { name: 'Feelings', color: '#ec4899', daily: false, data: [3, 4, 6, 7, 8, 10, 12] },
+        { name: 'Colors',   color: '#ef4444', daily: false, data: [5, 6, 6, 7, 7, 8, 9] },
+      ],
+    },
+  };
+  const W = 340, H = 200, PADL = 22, PADR = 10, PADT = 12, PADB = 22;
+  function renderChart(key) {
+    const cfg = SERIES[key], n = WEEKS.length;
+    const X = i => PADL + (i / (n - 1)) * (W - PADL - PADR);
+    const Y = v => PADT + (1 - v / cfg.max) * (H - PADT - PADB);
+    const drawn = cfg.collapseStarred ? cfg.list.filter(s => !cfg.star(s)) : cfg.list;
+    let svg = '';
+    [0, cfg.max / 2, cfg.max].forEach(val => {
+      const y = Y(val).toFixed(1);
+      svg += `<line x1="${PADL}" y1="${y}" x2="${W - PADR}" y2="${y}" stroke="#f1e3ea"/>`;
+      svg += `<text x="${PADL - 4}" y="${(+y + 3).toFixed(1)}" text-anchor="end" font-size="8" fill="#9ca3af">${Math.round(val)}</text>`;
+    });
+    drawn.forEach(s => {
+      const pts = s.data.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+      svg += `<polyline fill="none" stroke="${s.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${pts}"/>`;
+      svg += `<circle cx="${X(n - 1).toFixed(1)}" cy="${Y(s.data[n - 1]).toFixed(1)}" r="3" fill="${s.color}"/>`;
+    });
+    WEEKS.forEach((w, i) => { svg += `<text x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="#9ca3af">${w}</text>`; });
+    document.getElementById('ins-svg').innerHTML = svg;
+    document.getElementById('ins-sub').textContent = cfg.sub;
+    document.getElementById('ins-legend').innerHTML = drawn.map(s =>
+      `<span class="lg"><i style="background:${s.color}"></i>${s.name} <b>${s.data[n - 1]}${cfg.unit}</b></span>`).join('');
+    const starred = cfg.list.filter(cfg.star);
+    document.getElementById('ins-stars').innerHTML = starred.length
+      ? `<span class="lbl">${cfg.starLabel}</span>` + starred.map(s => `<span class="ins-star">⭐ ${s.name}</span>`).join('')
+      : '';
+  }
+  document.querySelectorAll('.ins-tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.ins-tab').forEach(x => x.classList.toggle('active', x === t));
+    renderChart(t.dataset.tab);
+  }));
+  renderChart('games');
+  // Dismiss is per-visit only — no persistence, so it returns on next launch.
+  const insights = document.getElementById('insights'), restore = document.getElementById('ins-restore');
+  document.getElementById('ins-x').addEventListener('click', () => { insights.style.display = 'none'; restore.classList.add('show'); });
+  restore.addEventListener('click', () => { insights.style.display = ''; restore.classList.remove('show'); });
 
   // ---- Mastery bars (sample data) ----
   const mastery = [

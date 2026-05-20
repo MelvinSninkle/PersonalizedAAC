@@ -125,6 +125,35 @@
   .btn.primary { background: var(--pink); color: #fff; width: 100%; }
   .role-link { font-size: 13px; color: var(--muted); }
 
+  /* Insights — tabbed, color-coded progress chart pinned at the top. */
+  .insights { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px 16px; }
+  .ins-head { display: flex; align-items: center; gap: 10px; }
+  .ins-title { font-size: 15px; font-weight: 700; }
+  .ins-tabs { display: flex; gap: 4px; margin-left: 6px; background: #fdeef5; padding: 4px; border-radius: 999px; }
+  .ins-tab { border: none; background: none; font: inherit; font-weight: 600; font-size: 13px; color: var(--muted); padding: 6px 16px; border-radius: 999px; cursor: pointer; }
+  .ins-tab.active { background: #fff; color: var(--pink-deep); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .ins-x { margin-left: auto; border: none; background: none; font-size: 22px; line-height: 1; color: var(--faint); cursor: pointer; padding: 2px 6px; }
+  .ins-x:hover { color: var(--ink); }
+  .ins-sub { font-size: 12px; color: var(--faint); margin: 6px 0 8px; }
+  .ins-chart svg { width: 100%; max-width: 640px; height: auto; display: block; margin: 0 auto; }
+  .ins-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .ins-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
+  .ins-legend .lg i { width: 11px; height: 11px; border-radius: 3px; }
+  .ins-legend .lg b { color: var(--ink); }
+  .ins-stars { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .ins-stars:empty { display: none; }
+  .ins-stars .lbl { width: 100%; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); }
+  .ins-star { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: #926b00;
+    background: linear-gradient(180deg,#fffbeb,#fef3c7); border: 1px solid #fde68a; border-radius: 999px; padding: 5px 12px; }
+  .ins-restore { display: none; width: 100%; border: 1px solid var(--line); background: #fff; color: var(--pink-deep);
+    font: inherit; font-weight: 600; font-size: 13px; padding: 11px; border-radius: 14px; cursor: pointer; }
+  .ins-restore.show { display: block; }
+  @media (max-width: 560px) {
+    .ins-head { flex-wrap: wrap; }
+    .ins-x { order: 2; }
+    .ins-tabs { order: 3; margin-left: 0; width: 100%; justify-content: center; }
+  }
+
   @media (min-width: 720px) { .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; } }
 </style>
 </head>
@@ -136,6 +165,23 @@
 </header>
 
 <div class="wrap">
+
+  <!-- PROGRESS CHARTS — pinned at top, tabbed, dismissable (reloads each visit) -->
+  <section class="insights" id="insights">
+    <div class="ins-head">
+      <span class="ins-title fred">📈 Fletcher's progress</span>
+      <div class="ins-tabs" role="tablist">
+        <button class="ins-tab active" data-tab="games">Games</button>
+        <button class="ins-tab" data-tab="use">Use</button>
+      </div>
+      <button class="ins-x" id="ins-x" title="Hide charts" aria-label="Hide charts">×</button>
+    </div>
+    <p class="ins-sub" id="ins-sub"></p>
+    <div class="ins-chart"><svg id="ins-svg" viewBox="0 0 340 200" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Progress over time by category"></svg></div>
+    <div class="ins-legend" id="ins-legend"></div>
+    <div class="ins-stars" id="ins-stars"></div>
+  </section>
+  <button class="ins-restore" id="ins-restore">📈 Show progress charts</button>
 
   <!-- LIVE SESSION -->
   <div class="section-label">Live session · Body Parts</div>
@@ -233,6 +279,71 @@
   const m = location.pathname.match(/^\/therapist\/([^\/]+)/);
   const slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';
   document.getElementById('to-parent').href = '/parent/' + encodeURIComponent(slug);
+
+  // ---- Progress charts: tabbed, color-coded, gold-star for mastered ----
+  const WEEKS = ['6w','5w','4w','3w','2w','1w','now'];
+  const SERIES = {
+    games: {
+      sub: 'First-try matching accuracy by category — taps, verbal, and object responses count equally. Mastered categories (100%) drop to a gold star below.',
+      max: 100, unit: '%', collapseStarred: true,
+      star: s => s.data[s.data.length - 1] >= 100, starLabel: 'Mastered · 100%',
+      list: [
+        { name: 'People',     color: '#f59e0b', data: [90, 92, 94, 96, 98, 100, 100] },
+        { name: 'Colors',     color: '#ef4444', data: [78, 84, 90, 94, 98, 100, 100] },
+        { name: 'Body Parts', color: '#10b981', data: [62, 68, 74, 80, 84, 86, 88] },
+        { name: 'Animals',    color: '#3b82f6', data: [55, 62, 70, 74, 80, 82, 84] },
+        { name: 'Foods',      color: '#8b5cf6', data: [40, 48, 55, 60, 64, 68, 71] },
+        { name: 'Feelings',   color: '#ec4899', data: [30, 38, 44, 48, 52, 55, 58] },
+      ],
+    },
+    use: {
+      sub: 'How often Fletcher communicates with each category on his own (taps per week). A gold star means he reached for it every day this week.',
+      max: 40, unit: '/wk', collapseStarred: false,
+      star: s => s.daily, starLabel: 'Used every day this week',
+      list: [
+        { name: 'Foods',    color: '#8b5cf6', daily: true,  data: [18, 22, 25, 28, 30, 33, 36] },
+        { name: 'People',   color: '#f59e0b', daily: true,  data: [12, 14, 16, 19, 22, 24, 27] },
+        { name: 'Actions',  color: '#06b6d4', daily: false, data: [8, 10, 12, 13, 15, 16, 18] },
+        { name: 'Feelings', color: '#ec4899', daily: false, data: [3, 4, 6, 7, 8, 10, 12] },
+        { name: 'Colors',   color: '#ef4444', daily: false, data: [5, 6, 6, 7, 7, 8, 9] },
+      ],
+    },
+  };
+  const W = 340, H = 200, PADL = 22, PADR = 10, PADT = 12, PADB = 22;
+  function renderChart(key) {
+    const cfg = SERIES[key], n = WEEKS.length;
+    const X = i => PADL + (i / (n - 1)) * (W - PADL - PADR);
+    const Y = v => PADT + (1 - v / cfg.max) * (H - PADT - PADB);
+    const drawn = cfg.collapseStarred ? cfg.list.filter(s => !cfg.star(s)) : cfg.list;
+    let svg = '';
+    [0, cfg.max / 2, cfg.max].forEach(val => {
+      const y = Y(val).toFixed(1);
+      svg += `<line x1="${PADL}" y1="${y}" x2="${W - PADR}" y2="${y}" stroke="#f1e3ea"/>`;
+      svg += `<text x="${PADL - 4}" y="${(+y + 3).toFixed(1)}" text-anchor="end" font-size="8" fill="#9ca3af">${Math.round(val)}</text>`;
+    });
+    drawn.forEach(s => {
+      const pts = s.data.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+      svg += `<polyline fill="none" stroke="${s.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${pts}"/>`;
+      svg += `<circle cx="${X(n - 1).toFixed(1)}" cy="${Y(s.data[n - 1]).toFixed(1)}" r="3" fill="${s.color}"/>`;
+    });
+    WEEKS.forEach((w, i) => { svg += `<text x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="#9ca3af">${w}</text>`; });
+    document.getElementById('ins-svg').innerHTML = svg;
+    document.getElementById('ins-sub').textContent = cfg.sub;
+    document.getElementById('ins-legend').innerHTML = drawn.map(s =>
+      `<span class="lg"><i style="background:${s.color}"></i>${s.name} <b>${s.data[n - 1]}${cfg.unit}</b></span>`).join('');
+    const starred = cfg.list.filter(cfg.star);
+    document.getElementById('ins-stars').innerHTML = starred.length
+      ? `<span class="lbl">${cfg.starLabel}</span>` + starred.map(s => `<span class="ins-star">⭐ ${s.name}</span>`).join('')
+      : '';
+  }
+  document.querySelectorAll('.ins-tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.ins-tab').forEach(x => x.classList.toggle('active', x === t));
+    renderChart(t.dataset.tab);
+  }));
+  renderChart('games');
+  const insights = document.getElementById('insights'), restore = document.getElementById('ins-restore');
+  document.getElementById('ins-x').addEventListener('click', () => { insights.style.display = 'none'; restore.classList.add('show'); });
+  restore.addEventListener('click', () => { insights.style.display = ''; restore.classList.remove('show'); });
 
   const mastery = [
     ['Body Parts', 88], ['Animals', 84], ['Colors', 92],
