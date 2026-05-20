@@ -312,6 +312,17 @@
     </div>
     <div class="note">Default animation: <strong>yellow flowers bursting</strong> 🌼 across the screen. Celebrations are the only place audio + animation reward Fletcher directly — no mode ever shows a wrong-answer cue.</div>
   </div>
+
+  <!-- REFERENCE IMAGES — steer how AI tiles are generated from a photo -->
+  <div class="section-label">Reference images for AI tiles</div>
+  <div class="panel">
+    <h2>Style &amp; subject references</h2>
+    <p class="hint">These guide how a new tile is generated from a photo — e.g. a sample of the art style you like, or a clear picture of your child. The most recent few are used each time you make a tile.</p>
+    <div id="ref-grid" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;"></div>
+    <input type="file" id="ref-file" accept="image/*" style="display:none;">
+    <button class="btn primary" id="ref-add">＋ Add reference image</button>
+    <div id="ref-msg" style="font-size:13px;color:var(--muted);margin-top:10px;min-height:18px;"></div>
+  </div>
 </div>
 
 <!-- CONFIG MODAL -->
@@ -529,6 +540,68 @@
     goBtn.textContent = 'Sent to tablet ✓';
     setTimeout(() => { closeModal(); }, 750);
   });
+
+  // ---- Reference images (steer AI tile generation) ----
+  const refGrid = document.getElementById('ref-grid');
+  const refMsg = document.getElementById('ref-msg');
+  const refFile = document.getElementById('ref-file');
+  function refMsgSet(t, err) { refMsg.textContent = t; refMsg.style.color = err ? '#dc2626' : '#6b7280'; }
+  async function downscale(file, max = 1024, quality = 0.85) {
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+      const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+      const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+      if (bmp.close) bmp.close();
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', quality));
+      return (blob && blob.size < file.size) ? blob : file;
+    } catch (_) { return file; }
+  }
+  function renderRefs(list) {
+    refGrid.innerHTML = list.length ? list.map(ref => `
+      <div style="position:relative;width:96px;">
+        <img src="/api/media?key=${encodeURIComponent(ref.blob_key)}" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:12px;border:1px solid #fce4ec;">
+        <button data-del="${ref.id}" title="Remove" style="position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;border:none;background:#dc2626;color:#fff;cursor:pointer;font-weight:700;line-height:1;">×</button>
+      </div>`).join('') : '<div style="font-size:13px;color:#9ca3af;">No reference images yet.</div>';
+  }
+  async function loadRefs() {
+    try {
+      const r = await fetch('/api/reference-images?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) { if (r.status === 403) refMsgSet('Sign in as a parent or admin to manage references.'); return; }
+      const d = await r.json();
+      renderRefs(d.references || []);
+    } catch (_) { /* ignore */ }
+  }
+  refGrid.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-del]'); if (!b) return;
+    if (!confirm('Remove this reference image?')) return;
+    try {
+      const r = await fetch('/api/reference-images?id=' + b.dataset.del, { method: 'DELETE', credentials: 'same-origin' });
+      if (!r.ok) throw new Error('Delete failed');
+      loadRefs();
+    } catch (err) { refMsgSet('Could not remove: ' + (err.message || err), true); }
+  });
+  document.getElementById('ref-add').addEventListener('click', () => refFile.click());
+  refFile.addEventListener('change', async (e) => {
+    const file = e.target.files[0]; e.target.value = '';
+    if (!file) return;
+    refMsgSet('Uploading…');
+    try {
+      const blob = await downscale(file);
+      const up = await fetch('/api/upload?kind=ref&ext=jpg', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
+      const upd = await up.json().catch(() => ({}));
+      if (!up.ok) throw new Error(upd.error || ('upload ' + up.status));
+      const add = await fetch('/api/reference-images', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ childId: slug, blobKey: upd.key, label: file.name.slice(0, 120) }),
+      });
+      if (!add.ok) { const d = await add.json().catch(() => ({})); throw new Error(d.error || ('save ' + add.status)); }
+      refMsgSet('Added.');
+      loadRefs();
+    } catch (err) { refMsgSet('Upload failed: ' + (err.message || err), true); }
+  });
+  loadRefs();
 })();
 </script>
 </body>

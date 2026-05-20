@@ -2221,7 +2221,7 @@
       // 1) Stylize the photo into the chosen art style.
       statusEl.textContent = '🎨 Creating the artwork… (this can take ~20–40s)';
       const photo = await compressImage(file);
-      const ir = await apiFetch('/api/generate-image?label=' + encodeURIComponent(label) + '&style=' + encodeURIComponent(style), {
+      const ir = await apiFetch('/api/generate-image?label=' + encodeURIComponent(label) + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(CHILD_ID), {
         method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo,
       });
       if (!ir.ok) { const d = await ir.text(); throw new Error('Image — ' + d.slice(0, 200)); }

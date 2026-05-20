@@ -146,6 +146,39 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS game_attempts_occurred_idx ON game_attempts(occurred_at)`;
     await db`CREATE INDEX IF NOT EXISTS game_attempts_category_idx ON game_attempts(category)`;
 
+    // ---- AI image generation: cost/volume log + per-child reference images ----
+    await db`
+      CREATE TABLE IF NOT EXISTS image_generations (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT,
+        actor_email TEXT,
+        actor_role TEXT,
+        label TEXT,
+        style TEXT,
+        prompt TEXT,
+        reference_keys TEXT[],
+        size TEXT,
+        input_tokens INTEGER,
+        output_tokens INTEGER,
+        cost_cents NUMERIC(12,4),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS image_generations_child_idx   ON image_generations(child_id)`;
+    await db`CREATE INDEX IF NOT EXISTS image_generations_actor_idx   ON image_generations(actor_email)`;
+    await db`CREATE INDEX IF NOT EXISTS image_generations_created_idx ON image_generations(created_at DESC)`;
+
+    await db`
+      CREATE TABLE IF NOT EXISTS reference_images (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL,
+        blob_key TEXT NOT NULL,
+        label TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS reference_images_child_idx ON reference_images(child_id)`;
+
     // ---- Taxonomy workbench (Section 17 of the PRD) ----
     // Canonical library of tile prompts, separate from any one child's instance.
     // Edited via /admin/taxonomy; consumed by AI image generation in a later chunk.

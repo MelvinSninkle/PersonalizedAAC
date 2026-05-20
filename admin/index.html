@@ -101,6 +101,7 @@
 <div class="tabs">
   <button class="tab active" data-panel="content">Content &amp; layout</button>
   <button class="tab" data-panel="taxonomy">Taxonomy</button>
+  <button class="tab" data-panel="usage">Usage &amp; cost</button>
   <button class="tab" data-panel="tools">Tools</button>
 </div>
 
@@ -120,6 +121,28 @@
     <p style="font-size:13px;color:var(--muted);">The canonical library of tile prompts, separate from any one child's tiles.
       <a href="/admin/taxonomy.html" target="_blank">Open full screen ↗</a></p>
     <iframe id="tax-frame" data-src="/admin/taxonomy.html" title="Taxonomy workbench"></iframe>
+  </section>
+
+  <!-- USAGE & COST -->
+  <section class="panel" id="panel-usage">
+    <div class="toolbar">
+      <button class="btn ghost" id="usage-reload">↻ Reload</button>
+      <span class="status" id="usage-status"></span>
+    </div>
+    <div class="tool">
+      <h3>AI image cost</h3>
+      <p>Estimated from the model's token usage for each generated tile.</p>
+      <div id="usage-overall" style="display:flex;gap:12px;flex-wrap:wrap;"></div>
+    </div>
+    <div class="tool">
+      <h3>By account</h3>
+      <div id="usage-accounts"></div>
+    </div>
+    <div class="tool">
+      <h3>Recent generations</h3>
+      <p>Newest first. Expand a row to see the exact prompt and the reference images used.</p>
+      <div id="usage-recent"></div>
+    </div>
   </section>
 
   <!-- TOOLS -->
@@ -220,7 +243,39 @@
     if (t.dataset.panel === 'taxonomy') {
       const f = $('tax-frame'); if (!f.src) f.src = f.dataset.src; // lazy-load
     }
+    if (t.dataset.panel === 'usage') loadUsage();
   }));
+
+  // ---- usage & cost ----
+  const cents = (c) => '$' + (Number(c || 0) / 100).toFixed(2);
+  async function loadUsage() {
+    const status = $('usage-status'); status.textContent = 'Loading…'; status.className = 'status';
+    try {
+      const d = await api('/api/usage');
+      $('usage-overall').innerHTML = [
+        ['Images · all time', d.overall.count],
+        ['Cost · all time', cents(d.overall.costCents)],
+        ['Images · this month', d.overall.monthCount],
+        ['Cost · this month', cents(d.overall.monthCostCents)],
+      ].map(([k, v]) => `<div style="min-width:128px;background:#fff0f6;border:1px solid var(--line);border-radius:12px;padding:12px 14px;">
+          <div style="font-size:24px;font-weight:700;color:var(--ink);">${v}</div>
+          <div style="font-size:12px;color:var(--muted);">${k}</div></div>`).join('');
+      $('usage-accounts').innerHTML = d.perAccount.length
+        ? `<table><thead><tr><th>Account</th><th>Images</th><th>Cost</th></tr></thead><tbody>` +
+          d.perAccount.map(a => `<tr><td>${esc(a.account)}</td><td>${a.count}</td><td>${cents(a.costCents)}</td></tr>`).join('') + `</tbody></table>`
+        : '<p style="font-size:13px;color:var(--muted)">No generations yet.</p>';
+      $('usage-recent').innerHTML = d.recent.length
+        ? d.recent.map(r => `<details style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+            <summary style="cursor:pointer;font-size:13px;"><strong>${esc(r.label || '(no label)')}</strong> · ${esc(r.style || '')} · ${cents(r.costCents)} · ${esc(r.actor)} · ${new Date(r.createdAt).toLocaleString()}</summary>
+            <div style="font-size:12px;color:var(--muted);margin-top:8px;white-space:pre-wrap;">${esc(r.prompt || '')}</div>
+            ${r.referenceKeys && r.referenceKeys.length ? `<div style="font-size:12px;margin-top:8px;">References: ${r.referenceKeys.map(esc).join(', ')}</div>` : ''}
+            <div style="font-size:11px;color:var(--faint);margin-top:6px;">tokens in/out: ${r.inputTokens ?? '—'} / ${r.outputTokens ?? '—'} · child: ${esc(r.childId || '')}</div>
+          </details>`).join('')
+        : '<p style="font-size:13px;color:var(--muted)">No generations yet.</p>';
+      status.textContent = '';
+    } catch (err) { status.textContent = err.message; status.className = 'status err'; }
+  }
+  $('usage-reload').addEventListener('click', loadUsage);
 
   // ---- content tree ----
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
