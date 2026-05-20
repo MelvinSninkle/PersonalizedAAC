@@ -35,7 +35,7 @@ export default function middleware(req) {
   return new Response('Authentication required.', {
     status: 401,
     headers: {
-      'WWW-Authenticate': 'Basic realm="My World — preview"',
+      'WWW-Authenticate': 'Basic realm="My World preview"',
       'content-type': 'text/plain',
     },
   });
