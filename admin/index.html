@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Admin · My World</title>
+<meta name="theme-color" content="#ad1457">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--
+  ADMIN HUB — the single place to control how a child's world is laid out.
+  Three areas:
+   • Content & layout — sections → categories → subcategories → items, wired to
+     /api/sync (read) and /api/categories + /api/items (write). Reorder, rename,
+     add, delete. This is the structural editing that used to live in the kid app.
+   • Taxonomy — the canonical tile-prompt workbench (admin/taxonomy.html).
+   • Tools — run migrations, view the waitlist, wipe all content.
+  Everything is gated by the shared ADMIN_TOKEN bearer (stored as aacToken so a
+  single login works across the app and admin).
+-->
+<style>
+  * { box-sizing: border-box; }
+  :root { --pink:#ff1493; --pink-deep:#ad1457; --pink-mid:#c2185b; --ink:#1f2937; --muted:#6b7280;
+    --faint:#9ca3af; --line:#fce4ec; --bg:#fdf2f8; --card:#fff; --danger:#dc2626; }
+  html,body { margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.5; }
+  .fred { font-family:'Fredoka',ui-rounded,system-ui,sans-serif; }
+  a { color:var(--pink-mid); }
+  header.top { position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:12px 20px; background:rgba(255,255,255,.96); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+  header .brand { font-family:'Fredoka',system-ui; font-weight:700; color:var(--pink-deep); font-size:19px; }
+  header .child { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); }
+  header .child input { width:160px; padding:6px 10px; border:1px solid var(--line); border-radius:8px; font:inherit; }
+  header .spacer { flex:1; }
+  header .links { display:flex; gap:12px; font-size:13px; }
+  .tabs { display:flex; gap:6px; padding:10px 20px 0; }
+  .tab { border:none; background:none; font:inherit; font-weight:600; font-size:14px; color:var(--muted);
+    padding:9px 16px; border-radius:10px 10px 0 0; cursor:pointer; }
+  .tab.active { background:#fff; color:var(--pink-deep); border:1px solid var(--line); border-bottom:none; }
+  .wrap { max-width:980px; margin:0 auto; padding:18px 20px 70px; }
+  .panel { display:none; } .panel.active { display:block; }
+  .btn { border:none; cursor:pointer; font:inherit; font-weight:600; font-size:13px; border-radius:9px; padding:8px 14px; background:var(--pink); color:#fff; }
+  .btn:hover { background:var(--pink-mid); }
+  .btn.ghost { background:#fff0f6; color:var(--pink-deep); }
+  .btn.tiny { padding:4px 8px; font-size:12px; border-radius:7px; }
+  .btn.danger { background:var(--danger); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .status { font-size:13px; color:var(--muted); margin-left:8px; }
+  .status.err { color:var(--danger); }
+
+  /* Content tree */
+  .toolbar { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+  .section { background:var(--card); border:1px solid var(--line); border-radius:14px; margin-bottom:16px; overflow:hidden; }
+  .section > h2 { margin:0; padding:12px 16px; font-size:14px; letter-spacing:.04em; text-transform:uppercase; color:var(--pink-deep);
+    background:#fff0f6; display:flex; align-items:center; justify-content:space-between; }
+  .cat { border-top:1px solid var(--line); padding:10px 14px; }
+  .row { display:flex; align-items:center; gap:8px; }
+  .row .grip { color:var(--faint); font-size:13px; }
+  .row .name { font-weight:600; }
+  .row .name.item { font-weight:500; }
+  .row .acts { margin-left:auto; display:flex; gap:5px; opacity:.85; }
+  .sub { margin:8px 0 4px 22px; padding-left:12px; border-left:2px solid var(--line); }
+  .items { margin:6px 0 2px 22px; }
+  .item-row { padding:5px 0; }
+  .empty { color:var(--faint); font-size:13px; font-style:italic; padding:6px 0 6px 22px; }
+  .count { font-size:12px; color:var(--faint); font-weight:500; }
+
+  /* Tools */
+  .tool { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:16px; }
+  .tool h3 { margin:0 0 4px; font-size:16px; }
+  .tool p { margin:0 0 12px; font-size:13px; color:var(--muted); }
+  .tool.danger { border-color:#fecaca; background:#fff5f5; }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); }
+  iframe { width:100%; height:78vh; border:1px solid var(--line); border-radius:12px; background:#fff; }
+  pre.out { background:#1f2937; color:#d1fae5; padding:12px 14px; border-radius:10px; font-size:12px; overflow:auto; margin-top:10px; white-space:pre-wrap; }
+
+  /* Login overlay */
+  .scrim { position:fixed; inset:0; background:rgba(31,41,55,.5); display:none; place-items:center; z-index:100; padding:20px; }
+  .scrim.open { display:grid; }
+  .login { background:#fff; border-radius:18px; padding:26px; max-width:380px; width:100%; }
+  .login h2 { margin:0 0 6px; font-size:20px; }
+  .login p { margin:0 0 16px; font-size:13px; color:var(--muted); }
+  .login input { width:100%; padding:11px 13px; border:1px solid var(--line); border-radius:10px; font:inherit; margin-bottom:12px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <span class="brand fred">🌍 Admin</span>
+  <label class="child">Child <input id="child" placeholder="fletcherpeterson"></label>
+  <span class="spacer"></span>
+  <div class="links">
+    <a id="lnk-app" href="#" target="_blank">Kid app ↗</a>
+    <a id="lnk-parent" href="#" target="_blank">Parent ↗</a>
+    <a id="lnk-therapist" href="#" target="_blank">Therapist ↗</a>
+    <a href="#" id="logout">Log out</a>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" data-panel="content">Content &amp; layout</button>
+  <button class="tab" data-panel="taxonomy">Taxonomy</button>
+  <button class="tab" data-panel="tools">Tools</button>
+</div>
+
+<div class="wrap">
+  <!-- CONTENT -->
+  <section class="panel active" id="panel-content">
+    <div class="toolbar">
+      <button class="btn ghost" id="reload">↻ Reload</button>
+      <span class="count" id="content-count"></span>
+      <span class="status" id="content-status"></span>
+    </div>
+    <div id="tree"></div>
+  </section>
+
+  <!-- TAXONOMY -->
+  <section class="panel" id="panel-taxonomy">
+    <p style="font-size:13px;color:var(--muted);">The canonical library of tile prompts, separate from any one child's tiles.
+      <a href="/admin/taxonomy.html" target="_blank">Open full screen ↗</a></p>
+    <iframe id="tax-frame" data-src="/admin/taxonomy.html" title="Taxonomy workbench"></iframe>
+  </section>
+
+  <!-- TOOLS -->
+  <section class="panel" id="panel-tools">
+    <div class="tool">
+      <h3>Run database migrations</h3>
+      <p>Creates any missing tables and columns. Safe to run repeatedly (idempotent).</p>
+      <button class="btn" id="run-init">Run /api/init</button>
+      <pre class="out" id="init-out" hidden></pre>
+    </div>
+
+    <div class="tool">
+      <h3>Waitlist signups</h3>
+      <p>Emails captured from the landing page.</p>
+      <button class="btn ghost" id="load-waitlist">Load waitlist</button>
+      <div id="waitlist-out"></div>
+    </div>
+
+    <div class="tool danger">
+      <h3 style="color:var(--danger)">Wipe all content</h3>
+      <p>Deletes every blob and truncates <strong>categories</strong> and <strong>items</strong>. This cannot be undone.
+        Type <code>WIPE</code> to confirm.</p>
+      <div class="row" style="gap:8px;">
+        <input id="wipe-confirm" placeholder="WIPE" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:120px;">
+        <button class="btn danger" id="run-wipe" disabled>Wipe everything</button>
+      </div>
+      <pre class="out" id="wipe-out" hidden></pre>
+    </div>
+  </section>
+</div>
+
+<!-- LOGIN -->
+<div class="scrim" id="scrim">
+  <div class="login">
+    <h2 class="fred">Admin sign-in</h2>
+    <p>Paste your admin token. Your browser will remember it.</p>
+    <input id="token-in" type="password" placeholder="Admin token" autocomplete="current-password">
+    <button class="btn" id="token-go" style="width:100%;">Continue</button>
+    <p id="login-err" class="status err" style="margin-top:10px;"></p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const SECTIONS = ['people', 'nouns', 'verbs'];
+  const $ = id => document.getElementById(id);
+  const tokenKey = 'aacToken';
+  const childKey = 'aacAdminChild';
+
+  let CATS = [], ITEMS = [];
+
+  // ---- child + links ----
+  const childEl = $('child');
+  childEl.value = localStorage.getItem(childKey) || 'fletcherpeterson';
+  function child() { return childEl.value.trim() || 'fletcherpeterson'; }
+  function syncLinks() {
+    const c = encodeURIComponent(child());
+    $('lnk-app').href = '/u/' + c;
+    $('lnk-parent').href = '/parent/' + c;
+    $('lnk-therapist').href = '/therapist/' + c;
+  }
+  childEl.addEventListener('change', () => { localStorage.setItem(childKey, child()); syncLinks(); loadContent(); });
+  syncLinks();
+
+  // ---- auth ----
+  function token() { return localStorage.getItem(tokenKey) || ''; }
+  function showLogin(msg) { $('login-err').textContent = msg || ''; $('scrim').classList.add('open'); $('token-in').focus(); }
+  function hideLogin() { $('scrim').classList.remove('open'); }
+  $('token-go').addEventListener('click', () => {
+    const t = $('token-in').value.trim();
+    if (!t) { $('login-err').textContent = 'Token required.'; return; }
+    localStorage.setItem(tokenKey, t);
+    hideLogin(); boot();
+  });
+  $('token-in').addEventListener('keydown', e => { if (e.key === 'Enter') $('token-go').click(); });
+  $('logout').addEventListener('click', e => { e.preventDefault(); localStorage.removeItem(tokenKey); showLogin('Logged out.'); });
+
+  async function api(path, opts = {}) {
+    const r = await fetch(path, {
+      ...opts,
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token(), ...(opts.headers || {}) },
+    });
+    if (r.status === 401) { showLogin('That token was rejected.'); throw new Error('Unauthorized'); }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    return data;
+  }
+
+  // ---- tabs ----
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + t.dataset.panel));
+    if (t.dataset.panel === 'taxonomy') {
+      const f = $('tax-frame'); if (!f.src) f.src = f.dataset.src; // lazy-load
+    }
+  }));
+
+  // ---- content tree ----
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  const byOrder = (a, b) => (a.order - b.order) || (a.id - b.id);
+
+  async function loadContent() {
+    $('content-status').textContent = 'Loading…';
+    $('content-status').className = 'status';
+    try {
+      const data = await api('/api/sync?childId=' + encodeURIComponent(child()));
+      CATS = data.categories || [];
+      ITEMS = data.items || [];
+      renderTree();
+      $('content-count').textContent = `${CATS.length} categories · ${ITEMS.length} items`;
+      $('content-status').textContent = '';
+    } catch (err) {
+      $('content-status').textContent = err.message;
+      $('content-status').className = 'status err';
+    }
+  }
+
+  function actBtns(type, id) {
+    return `<span class="acts">
+      <button class="btn ghost tiny" data-act="up" data-type="${type}" data-id="${id}" title="Move up">↑</button>
+      <button class="btn ghost tiny" data-act="down" data-type="${type}" data-id="${id}" title="Move down">↓</button>
+      <button class="btn ghost tiny" data-act="rename" data-type="${type}" data-id="${id}" title="Rename">✎</button>
+      <button class="btn ghost tiny" data-act="del" data-type="${type}" data-id="${id}" title="Delete">✕</button>
+    </span>`;
+  }
+
+  function renderItems(parentCatId) {
+    const items = ITEMS.filter(i => i.categoryId === parentCatId).sort(byOrder);
+    if (!items.length) return '<div class="empty">No tiles yet.</div>';
+    return `<div class="items">` + items.map(i => `
+      <div class="row item-row">
+        <span class="grip">▦</span>
+        <span class="name item">${esc(i.label)}</span>
+        ${actBtns('item', i.id)}
+      </div>`).join('') + `</div>`;
+  }
+
+  function renderTree() {
+    $('tree').innerHTML = SECTIONS.map(sec => {
+      const topCats = CATS.filter(c => c.section === sec && c.parentId == null).sort(byOrder);
+      const body = topCats.length ? topCats.map(cat => {
+        const subs = CATS.filter(c => c.parentId === cat.id).sort(byOrder);
+        return `<div class="cat">
+          <div class="row">
+            <span class="grip">▤</span>
+            <span class="name">${esc(cat.label)}</span>
+            ${actBtns('cat', cat.id)}
+          </div>
+          ${renderItems(cat.id)}
+          ${subs.map(s => `
+            <div class="sub">
+              <div class="row">
+                <span class="grip">↳</span>
+                <span class="name">${esc(s.label)}</span>
+                <span class="acts">
+                  <button class="btn ghost tiny" data-act="add-item" data-cat="${s.id}" data-section="${sec}">+ tile</button>
+                  <button class="btn ghost tiny" data-act="up" data-type="cat" data-id="${s.id}">↑</button>
+                  <button class="btn ghost tiny" data-act="down" data-type="cat" data-id="${s.id}">↓</button>
+                  <button class="btn ghost tiny" data-act="rename" data-type="cat" data-id="${s.id}">✎</button>
+                  <button class="btn ghost tiny" data-act="del" data-type="cat" data-id="${s.id}">✕</button>
+                </span>
+              </div>
+              ${renderItems(s.id)}
+            </div>`).join('')}
+          <div style="margin:8px 0 2px 22px;">
+            <button class="btn ghost tiny" data-act="add-item" data-cat="${cat.id}" data-section="${sec}">+ tile</button>
+            <button class="btn ghost tiny" data-act="add-sub" data-cat="${cat.id}" data-section="${sec}">+ subcategory</button>
+          </div>
+        </div>`;
+      }).join('') : '<div class="empty">No categories in this section.</div>';
+      return `<div class="section">
+        <h2>${sec}
+          <button class="btn tiny" data-act="add-cat" data-section="${sec}">+ Category</button>
+        </h2>
+        ${body}
+      </div>`;
+    }).join('');
+  }
+
+  // ---- mutations ----
+  function siblings(type, id) {
+    if (type === 'item') {
+      const it = ITEMS.find(i => i.id === id);
+      return ITEMS.filter(i => i.categoryId === it.categoryId).sort(byOrder);
+    }
+    const c = CATS.find(x => x.id === id);
+    return CATS.filter(x => x.section === c.section && x.parentId === c.parentId).sort(byOrder);
+  }
+
+  async function move(type, id, dir) {
+    const sibs = siblings(type, id);
+    const i = sibs.findIndex(s => s.id === id);
+    const j = i + (dir === 'up' ? -1 : 1);
+    if (j < 0 || j >= sibs.length) return;
+    const a = sibs[i], b = sibs[j];
+    const ep = type === 'item' ? '/api/items' : '/api/categories';
+    await api(ep + '?id=' + a.id, { method: 'PUT', body: JSON.stringify({ order: b.order, childId: child() }) });
+    await api(ep + '?id=' + b.id, { method: 'PUT', body: JSON.stringify({ order: a.order, childId: child() }) });
+    await loadContent();
+  }
+
+  async function handleAct(act, el) {
+    const id = el.dataset.id ? Number(el.dataset.id) : null;
+    const type = el.dataset.type;
+    try {
+      if (act === 'add-cat') {
+        const label = prompt('New category name in "' + el.dataset.section + '":');
+        if (!label) return;
+        await api('/api/categories', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, label: label.trim(), childId: child() }) });
+      } else if (act === 'add-sub') {
+        const label = prompt('New subcategory name:');
+        if (!label) return;
+        await api('/api/categories', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, label: label.trim(), parentId: Number(el.dataset.cat), childId: child() }) });
+      } else if (act === 'add-item') {
+        const label = prompt('New tile label:');
+        if (!label) return;
+        await api('/api/items', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, categoryId: Number(el.dataset.cat), label: label.trim(), childId: child() }) });
+      } else if (act === 'rename') {
+        const ep = type === 'item' ? ITEMS : CATS;
+        const cur = ep.find(x => x.id === id);
+        const label = prompt('Rename:', cur ? cur.label : '');
+        if (!label) return;
+        await api((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id, { method: 'PUT', body: JSON.stringify({ label: label.trim(), childId: child() }) });
+      } else if (act === 'del') {
+        const ep = type === 'item' ? ITEMS : CATS;
+        const cur = ep.find(x => x.id === id);
+        const what = type === 'item' ? 'tile' : 'category (and everything under it)';
+        if (!confirm('Delete ' + what + ' "' + (cur ? cur.label : id) + '"?')) return;
+        await api((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id + '&childId=' + encodeURIComponent(child()), { method: 'DELETE' });
+      } else if (act === 'up' || act === 'down') {
+        return move(type, id, act);
+      }
+      await loadContent();
+    } catch (err) {
+      $('content-status').textContent = err.message;
+      $('content-status').className = 'status err';
+    }
+  }
+
+  $('tree').addEventListener('click', e => {
+    const el = e.target.closest('[data-act]');
+    if (el) handleAct(el.dataset.act, el);
+  });
+  $('reload').addEventListener('click', loadContent);
+
+  // ---- tools ----
+  $('run-init').addEventListener('click', async () => {
+    const out = $('init-out'); out.hidden = false; out.textContent = 'Running…';
+    try { out.textContent = JSON.stringify(await api('/api/init', { method: 'POST' }), null, 2); }
+    catch (err) { out.textContent = 'Error: ' + err.message; }
+  });
+
+  $('load-waitlist').addEventListener('click', async () => {
+    const out = $('waitlist-out'); out.innerHTML = 'Loading…';
+    try {
+      const data = await api('/api/waitlist');
+      const rows = data.waitlist || [];
+      out.innerHTML = rows.length ? `<table><thead><tr><th>Email</th><th>Style</th><th>Source</th><th>When</th></tr></thead><tbody>` +
+        rows.map(r => `<tr><td>${esc(r.email)}</td><td>${esc(r.style)}</td><td>${esc(r.source)}</td><td>${esc(new Date(r.created_at).toLocaleString())}</td></tr>`).join('') +
+        `</tbody></table>` : '<p style="font-size:13px;color:var(--muted)">No signups yet.</p>';
+    } catch (err) { out.innerHTML = '<p class="status err">' + esc(err.message) + '</p>'; }
+  });
+
+  const wipeConfirm = $('wipe-confirm'), runWipe = $('run-wipe');
+  wipeConfirm.addEventListener('input', () => { runWipe.disabled = wipeConfirm.value !== 'WIPE'; });
+  runWipe.addEventListener('click', async () => {
+    if (wipeConfirm.value !== 'WIPE') return;
+    if (!confirm('Really wipe ALL content and blobs? This cannot be undone.')) return;
+    const out = $('wipe-out'); out.hidden = false; out.textContent = 'Wiping…';
+    try { out.textContent = JSON.stringify(await api('/api/wipe', { method: 'POST' }), null, 2); wipeConfirm.value = ''; runWipe.disabled = true; loadContent(); }
+    catch (err) { out.textContent = 'Error: ' + err.message; }
+  });
+
+  // ---- boot ----
+  function boot() { syncLinks(); loadContent(); }
+  if (token()) boot(); else showLogin();
+})();
+</script>
+</body>
+</html>

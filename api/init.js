@@ -82,6 +82,47 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS events_item_idx          ON events(item_id)`;
     await db`CREATE INDEX IF NOT EXISTS events_child_idx         ON events(child_id)`;
 
+    // ---- Learning sessions + game attempts (Interactive Modes PRD v1.0) ----
+    // A `session` is one run of any mode (game / slideshow / celebration) or a
+    // free-communication "use" window. `game_attempts` are the per-item results
+    // inside a scored game. Together they feed the parent/therapist dashboards.
+    await db`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL DEFAULT 'fletcherpeterson',
+        mode TEXT NOT NULL,
+        category TEXT,
+        facilitator TEXT,
+        started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ended_at TIMESTAMPTZ,
+        correct_count INTEGER NOT NULL DEFAULT 0,
+        item_count INTEGER NOT NULL DEFAULT 0,
+        notes TEXT
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS sessions_child_idx   ON sessions(child_id)`;
+    await db`CREATE INDEX IF NOT EXISTS sessions_started_idx ON sessions(started_at DESC)`;
+    await db`CREATE INDEX IF NOT EXISTS sessions_mode_idx    ON sessions(mode)`;
+
+    await db`
+      CREATE TABLE IF NOT EXISTS game_attempts (
+        id BIGSERIAL PRIMARY KEY,
+        session_id BIGINT REFERENCES sessions(id) ON DELETE CASCADE,
+        child_id TEXT NOT NULL DEFAULT 'fletcherpeterson',
+        category TEXT,
+        label TEXT,
+        item_id BIGINT,
+        correct BOOLEAN NOT NULL DEFAULT FALSE,
+        input_method TEXT,
+        misses INTEGER NOT NULL DEFAULT 0,
+        occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS game_attempts_child_idx    ON game_attempts(child_id)`;
+    await db`CREATE INDEX IF NOT EXISTS game_attempts_session_idx  ON game_attempts(session_id)`;
+    await db`CREATE INDEX IF NOT EXISTS game_attempts_occurred_idx ON game_attempts(occurred_at)`;
+    await db`CREATE INDEX IF NOT EXISTS game_attempts_category_idx ON game_attempts(category)`;
+
     // ---- Taxonomy workbench (Section 17 of the PRD) ----
     // Canonical library of tile prompts, separate from any one child's instance.
     // Edited via /admin/taxonomy; consumed by AI image generation in a later chunk.
