@@ -1739,7 +1739,10 @@
   }
 
   async function renderAll() {
-    for (const s of SECTIONS) await renderSection(s);
+    // Resilient: one section failing must never blank the whole board.
+    for (const s of SECTIONS) {
+      try { await renderSection(s); } catch (err) { console.error('renderSection failed:', s, err); }
+    }
   }
 
   // The "needs" strip is flat: no categories, items with categoryId=null,
@@ -1945,32 +1948,34 @@
   document.getElementById('login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
 
   async function hydrateFromServer(data) {
-    // Clear any leftover local data, then write the server snapshot.
-    // Image/sound bytes are NOT downloaded here — they're fetched lazily on first display/play.
+    // Clear + write the whole server snapshot in ONE transaction. Writing each
+    // tile as its own transaction floods iOS Safari's IndexedDB and can stall
+    // or abort, leaving the board blank — especially on a fresh device with no
+    // cache. Image/sound bytes are cached separately (lazy + precache).
     await new Promise((res, rej) => {
       const t = db.transaction([ITEMS, CATS], 'readwrite');
-      t.objectStore(ITEMS).clear();
-      t.objectStore(CATS).clear();
+      const catsStore = t.objectStore(CATS);
+      const itemsStore = t.objectStore(ITEMS);
+      catsStore.clear();
+      itemsStore.clear();
+      for (const c of (data.categories || [])) {
+        catsStore.put({
+          id: c.id, section: c.section, label: c.label,
+          parentId: c.parentId, order: c.order,
+          imageKey: c.imageKey, keepAspect: !!c.keepAspect,
+        });
+      }
+      for (const it of (data.items || [])) {
+        itemsStore.put({
+          id: it.id, section: it.section, categoryId: it.categoryId, label: it.label,
+          order: it.order, pinned: !!it.pinned,
+          imageKey: it.imageKey, soundKey: it.soundKey, keepAspect: !!it.keepAspect,
+        });
+      }
       t.oncomplete = () => res();
       t.onerror = () => rej(t.error);
+      t.onabort = () => rej(t.error || new Error('hydrate transaction aborted'));
     });
-    for (const c of data.categories) {
-      await putCat({
-        id: c.id, section: c.section, label: c.label,
-        parentId: c.parentId, order: c.order,
-        imageKey: c.imageKey,
-        keepAspect: !!c.keepAspect,
-      });
-    }
-    for (const it of data.items) {
-      await putItem({
-        id: it.id, section: it.section, categoryId: it.categoryId, label: it.label,
-        order: it.order, pinned: !!it.pinned,
-        imageKey: it.imageKey,
-        soundKey: it.soundKey,
-        keepAspect: !!it.keepAspect,
-      });
-    }
   }
 
   // Eagerly pull EVERY tile's picture + voice into the offline cache, so Fletcher
@@ -1981,6 +1986,7 @@
   async function precacheAllMedia() {
     if (_precaching) return;
     _precaching = true;
+    await new Promise(r => setTimeout(r, 1500));   // let the board paint + settle first
     try {
       const keys = new Set();
       for (const s of SECTIONS) {
@@ -3669,7 +3675,7 @@
             await renderAll();
           }
         }
-      } catch (_) { /* offline or not authed — keep whatever was cached locally */ }
+      } catch (err) { console.error('sync/hydrate failed:', err); /* keep whatever was cached locally */ }
       // Warm the full media cache (pictures + voices) for offline use.
       if (navigator.onLine !== false) precacheAllMedia();
     } catch (err) {
