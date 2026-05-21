@@ -1,20 +1,13 @@
-// GET /api/analytics?childId=X — read-only aggregates for the parent &
-// therapist dashboards. Auth-gated with the shared admin bearer token.
+// GET /api/analytics?childId=X&bucket=day|week|month — read-only aggregates
+// for the parent & therapist dashboards.
 //
-// Returns weekly series (7 buckets, oldest → newest) for:
-//   use   — taps per category from the event log (real today)
-//   games — first-try matching accuracy per category (from game_attempts)
-//   time  — total vs. passive-mode minutes (from sessions)
-// plus current 30-day mastery and the most recent sessions.
-//
-// Every section is wrapped so a missing table or empty data yields [] rather
-// than failing the whole request — the dashboards fall back to sample data
-// for any series that comes back empty.
+// Buckets default to DAY (last 14 days) so early data isn't distorted by
+// weekly compression; week (8) and month (6) views are available once there's
+// more history. Returns per-bucket series for use / games / time, plus current
+// 30-day mastery and recent sessions. Each section degrades to [] on error.
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
 
-const WEEKS = ['6w', '5w', '4w', '3w', '2w', '1w', 'now'];
-const WEEK_SECS = 604800;
 const MODE_LABEL = {
   self_paced: 'Self-Paced Game',
   facilitated: 'Facilitated',
@@ -24,8 +17,17 @@ const MODE_LABEL = {
   use: 'Free use',
 };
 
-const zeros = () => [0, 0, 0, 0, 0, 0, 0];
-const idx = (bucket) => 6 - bucket; // bucket 0 = this week → last array slot
+const GRAN = {
+  day:   { secs: 86400,   n: 14, unit: 'd' },
+  week:  { secs: 604800,  n: 8,  unit: 'w' },
+  month: { secs: 2629746, n: 6,  unit: 'mo' },
+};
+
+function labelsFor(n, unit) {
+  const out = [];
+  for (let i = 0; i < n; i++) { const ago = n - 1 - i; out.push(ago === 0 ? 'now' : ago + unit); }
+  return out;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -38,19 +40,24 @@ export default async function handler(req, res) {
     return;
   }
   const childId = String((req.query && req.query.childId) || 'fletcherpeterson').slice(0, 64);
+  const bucket = GRAN[req.query && req.query.bucket] ? req.query.bucket : 'day';
+  const G = GRAN[bucket];
+  const N = G.n, SECS = G.secs, SPAN = SECS * N;
+  const zeros = () => new Array(N).fill(0);
+  const idx = (b) => (N - 1) - b; // bucket 0 = current period → last slot
   const db = sql();
 
-  const out = { weeks: WEEKS, use: { series: [] }, games: { series: [] }, time: { series: [] }, mastery: [], recentSessions: [] };
+  const out = { bucket, labels: labelsFor(N, G.unit), use: { series: [] }, games: { series: [] }, time: { series: [] }, mastery: [], recentSessions: [] };
 
-  // ---- USE: taps per category per week ----
+  // ---- USE: taps per category per bucket ----
   try {
     const rows = await db`
       SELECT category_name AS name,
-             floor(extract(epoch from (now() - occurred_at)) / ${WEEK_SECS})::int AS bucket,
+             floor(extract(epoch from (now() - occurred_at)) / ${SECS})::int AS bucket,
              count(*)::int AS n
       FROM events
       WHERE child_id = ${childId} AND role = 'student' AND category_name IS NOT NULL
-        AND occurred_at >= now() - interval '49 days'
+        AND occurred_at >= now() - ${SPAN} * interval '1 second'
       GROUP BY 1, 2`;
     const daily = await db`
       SELECT category_name AS name, count(distinct date_trunc('day', occurred_at))::int AS days
@@ -62,38 +69,38 @@ export default async function handler(req, res) {
     const byCat = new Map();
     for (const r of rows) {
       const b = Number(r.bucket);
-      if (b < 0 || b > 6) continue;
+      if (b < 0 || b >= N) continue;
       if (!byCat.has(r.name)) byCat.set(r.name, zeros());
       byCat.get(r.name)[idx(b)] = Number(r.n);
     }
     out.use.series = [...byCat.entries()]
       .map(([name, data]) => ({ name, data, daily: !!dailyMap.get(name) }))
-      .sort((a, b) => b.data[6] - a.data[6]);
+      .sort((a, b) => b.data[N - 1] - a.data[N - 1]);
   } catch (_) { /* table may not exist yet */ }
 
-  // ---- GAMES: weekly accuracy per category (carry-forward fill) ----
+  // ---- GAMES: accuracy per category per bucket (carry-forward fill) ----
   try {
     const rows = await db`
       SELECT category AS name,
-             floor(extract(epoch from (now() - occurred_at)) / ${WEEK_SECS})::int AS bucket,
+             floor(extract(epoch from (now() - occurred_at)) / ${SECS})::int AS bucket,
              count(*)::int AS total,
              sum(case when correct then 1 else 0 end)::int AS ok
       FROM game_attempts
       WHERE child_id = ${childId} AND category IS NOT NULL
-        AND occurred_at >= now() - interval '49 days'
+        AND occurred_at >= now() - ${SPAN} * interval '1 second'
       GROUP BY 1, 2`;
     const byCat = new Map();
     for (const r of rows) {
       const b = Number(r.bucket);
-      if (b < 0 || b > 6) continue;
-      if (!byCat.has(r.name)) byCat.set(r.name, Array(7).fill(null));
+      if (b < 0 || b >= N) continue;
+      if (!byCat.has(r.name)) byCat.set(r.name, new Array(N).fill(null));
       byCat.get(r.name)[idx(b)] = Math.round((Number(r.ok) / Number(r.total)) * 100);
     }
     out.games.series = [...byCat.entries()].map(([name, raw]) => {
       const data = []; let last = 0;
-      for (let i = 0; i < 7; i++) { if (raw[i] != null) last = raw[i]; data.push(last); }
+      for (let i = 0; i < N; i++) { if (raw[i] != null) last = raw[i]; data.push(last); }
       return { name, data };
-    }).sort((a, b) => b.data[6] - a.data[6]);
+    }).sort((a, b) => b.data[N - 1] - a.data[N - 1]);
   } catch (_) { /* */ }
 
   // ---- MASTERY: current 30-day accuracy per category ----
@@ -108,21 +115,21 @@ export default async function handler(req, res) {
       .sort((a, b) => b.pct - a.pct);
   } catch (_) { /* */ }
 
-  // ---- TIME: total vs passive minutes per week ----
+  // ---- TIME: total vs passive minutes per bucket ----
   try {
     const rows = await db`
-      SELECT floor(extract(epoch from (now() - started_at)) / ${WEEK_SECS})::int AS bucket,
+      SELECT floor(extract(epoch from (now() - started_at)) / ${SECS})::int AS bucket,
              sum(extract(epoch from (coalesce(ended_at, started_at) - started_at)))::float AS secs,
              sum(case when mode in ('learn_slideshow','exposure_slideshow')
                       then extract(epoch from (coalesce(ended_at, started_at) - started_at)) else 0 end)::float AS passive
       FROM sessions
-      WHERE child_id = ${childId} AND started_at >= now() - interval '49 days'
+      WHERE child_id = ${childId} AND started_at >= now() - ${SPAN} * interval '1 second'
       GROUP BY 1`;
     const total = zeros(), passive = zeros();
     let any = false;
     for (const r of rows) {
       const b = Number(r.bucket);
-      if (b < 0 || b > 6) continue;
+      if (b < 0 || b >= N) continue;
       any = true;
       total[idx(b)] = Math.round(Number(r.secs) / 60);
       passive[idx(b)] = Math.round(Number(r.passive) / 60);
