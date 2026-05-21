@@ -301,7 +301,7 @@
     },
     use: {
       sub: 'How often Fletcher communicates with each category on his own (taps per week). A gold star means he reached for it every day this week.',
-      max: 40, unit: '/wk', collapseStarred: false,
+      max: 40, unit: '/wk', collapseStarred: false, dynamicMax: true,
       star: s => s.daily, starLabel: 'Used every day this week',
       list: [
         { name: 'Foods',    color: '#8b5cf6', daily: true,  data: [18, 22, 25, 28, 30, 33, 36] },
@@ -313,7 +313,7 @@
     },
     time: {
       sub: 'Minutes per week. Total use is all the time Fletcher spends in the app; passive learning is time in the Learn and Exposure slideshows.',
-      max: 200, unit: ' min', collapseStarred: false,
+      max: 200, unit: ' min', collapseStarred: false, dynamicMax: true,
       star: () => false, starLabel: '',
       list: [
         { name: 'Total use',        color: '#0ea5e9', data: [70, 95, 115, 130, 150, 168, 180] },
@@ -321,14 +321,23 @@
       ],
     },
   };
+  function niceMax(v) {
+    if (v <= 10) return Math.max(2, Math.ceil(v / 2) * 2);
+    const mag = Math.pow(10, Math.floor(Math.log10(v)));
+    for (const s of [1, 2, 2.5, 5, 10]) { if (v <= s * mag) return s * mag; }
+    return 10 * mag;
+  }
   const W = 340, H = 200, PADL = 22, PADR = 10, PADT = 12, PADB = 22;
   function renderChart(key) {
     const cfg = SERIES[key], n = WEEKS.length;
+    let drawn = cfg.collapseStarred ? cfg.list.filter(s => !cfg.star(s)) : cfg.list.slice();
+    // Keep it legible: plot at most the 8 busiest categories (stars use the full set).
+    if (drawn.length > 8) drawn = drawn.slice().sort((a, b) => b.data[6] - a.data[6]).slice(0, 8);
+    const max = cfg.dynamicMax ? niceMax(Math.max(1, ...drawn.map(s => Math.max(...s.data)))) : cfg.max;
     const X = i => PADL + (i / (n - 1)) * (W - PADL - PADR);
-    const Y = v => PADT + (1 - v / cfg.max) * (H - PADT - PADB);
-    const drawn = cfg.collapseStarred ? cfg.list.filter(s => !cfg.star(s)) : cfg.list;
+    const Y = v => PADT + (1 - v / max) * (H - PADT - PADB);
     let svg = '';
-    [0, cfg.max / 2, cfg.max].forEach(val => {
+    [0, max / 2, max].forEach(val => {
       const y = Y(val).toFixed(1);
       svg += `<line x1="${PADL}" y1="${y}" x2="${W - PADR}" y2="${y}" stroke="#f1e3ea"/>`;
       svg += `<text x="${PADL - 4}" y="${(+y + 3).toFixed(1)}" text-anchor="end" font-size="8" fill="#9ca3af">${Math.round(val)}</text>`;
