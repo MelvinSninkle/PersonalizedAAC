@@ -9,7 +9,7 @@
 import { verifySession, parseCookies, cookieName } from './lib/session.js';
 
 export const config = {
-  matcher: ['/((?!api/|login|reset|favicon\\.ico|robots\\.txt|manifest\\.webmanifest|sw\\.js|icons/).*)'],
+  matcher: ['/((?!api/|login|reset|favicon\\.ico|robots\\.txt|manifest\\.webmanifest|sw\\.js|icons/|audio/).*)'],
 };
 
 export default async function middleware(req) {
