@@ -3639,12 +3639,17 @@
       await renderAll();
       flushEvents().catch(() => {});   // drain any taps queued from a previous offline session
       // Refresh from the server using the login session (cookie) or a stored token.
+      // Only replace the local copy when the server actually has content — an
+      // empty response (e.g. wrong child_id, or a hiccup) must never wipe the
+      // pictures cached on this device.
       try {
         const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
         if (r.ok) {
           const data = await r.json();
-          await hydrateFromServer(data);
-          await renderAll();
+          if ((data.categories && data.categories.length) || (data.items && data.items.length)) {
+            await hydrateFromServer(data);
+            await renderAll();
+          }
         }
       } catch (_) { /* offline or not authed — keep whatever was cached locally */ }
     } catch (err) {
