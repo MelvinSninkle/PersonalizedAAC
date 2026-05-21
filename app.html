@@ -754,6 +754,39 @@
     .organize-overlay .org-columns { flex-direction: column; }
     .organize-overlay .org-col { min-width: 0; min-height: 120px; }
   }
+
+  /* ===== Game mode ===== */
+  #game-overlay { position: fixed; inset: 0; z-index: 2000; display: none; flex-direction: column;
+    background: radial-gradient(circle at 50% 28%, #ffffff, #ffe6f3); }
+  #game-overlay.show { display: flex; }
+  .game-top { display: flex; align-items: center; justify-content: center; padding: 16px; position: relative; min-height: 76px; }
+  .game-prompt-btn { display: inline-flex; align-items: center; gap: 10px; background: #fff; border: 3px solid #ff1493;
+    color: #ad1457; font-family: 'Fredoka', ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: clamp(20px, 4vw, 32px);
+    padding: 12px 26px; border-radius: 999px; cursor: pointer; box-shadow: 0 6px 20px rgba(255,20,147,.22); }
+  .game-prompt-btn .spk { font-size: 1.1em; }
+  .game-progress { position: absolute; top: 24px; left: 20px; font-family: 'Fredoka', ui-rounded, system-ui, sans-serif; color: #d6a8c6; font-weight: 600; font-size: 15px; }
+  .game-exit { position: absolute; top: 16px; right: 18px; width: 46px; height: 46px; border-radius: 50%;
+    border: none; background: rgba(0,0,0,.05); color: #c9b5c1; font-size: 20px; cursor: pointer; }
+  .game-grid { flex: 1; display: grid; gap: clamp(12px, 3vw, 28px); padding: clamp(12px, 3vw, 30px);
+    align-content: center; justify-items: center; grid-template-columns: repeat(2, 1fr); }
+  .game-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .game-choice { width: 100%; max-width: 320px; aspect-ratio: 1; border-radius: 28px; border: 5px solid #fff;
+    background: #fff center/cover no-repeat; box-shadow: 0 8px 28px rgba(0,0,0,.12); cursor: pointer; transition: transform .12s ease; }
+  .game-choice:active { transform: scale(.97); }
+  @keyframes g-wiggle { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-11px)} 40%{transform:translateX(11px)} 60%{transform:translateX(-7px)} 80%{transform:translateX(7px)} }
+  @keyframes g-glow { 0%,100%{box-shadow:0 8px 28px rgba(0,0,0,.12)} 50%{box-shadow:0 0 0 8px #ffd400,0 0 34px 8px rgba(255,212,0,.7)} }
+  @keyframes g-pop { 0%{transform:scale(1)} 40%{transform:scale(1.12)} 100%{transform:scale(1)} }
+  .game-choice.wiggle { animation: g-wiggle .5s ease; }
+  .game-choice.glow { animation: g-glow 1.1s ease infinite; border-color: #ffd400; }
+  .game-choice.correct { animation: g-pop .5s ease; border-color: #16a34a; }
+  .game-choice.dim { opacity: .35; }
+  #game-celebrate { position: fixed; inset: 0; z-index: 2100; display: none; align-items: center; justify-content: center;
+    flex-direction: column; background: radial-gradient(circle at 50% 40%, #fffbe6, #ffe6f3); overflow: hidden; }
+  #game-celebrate.show { display: flex; }
+  #game-celebrate .msg { font-family: 'Fredoka', ui-rounded, system-ui, sans-serif; font-weight: 700; color: #ad1457;
+    font-size: clamp(28px, 6vw, 56px); text-align: center; padding: 0 24px; z-index: 2; }
+  .flower { position: absolute; font-size: clamp(28px, 5vw, 52px); animation: g-flower 2.6s ease-in forwards; pointer-events: none; }
+  @keyframes g-flower { 0%{transform:translateY(0) scale(.4) rotate(0); opacity:0} 15%{opacity:1} 100%{transform:translateY(-120vh) scale(1.1) rotate(360deg); opacity:0} }
 </style>
 </head>
 <body>
@@ -762,6 +795,9 @@
   <h1>Fletcher's World</h1>
   <div class="right">
     <span class="status" id="mode-status"></span>
+    <button id="play-btn" class="edit-only">🎮 Play</button>
+    <button id="remote-btn" class="edit-only">📡 Remote</button>
+    <button id="rewards-btn" class="edit-only">🎁 Rewards</button>
     <button id="organize-btn" class="edit-only">📁 Organize</button>
     <button id="display-btn" class="edit-only">⚙ Display</button>
     <button id="export-btn" class="edit-only">Export</button>
@@ -3283,6 +3319,312 @@
     if (ti < 0) arr.push(moved); else arr.splice(ti, 0, moved);
   }
 
+  // ===== Game mode (self-paced matching; shared runtime for all games) =====
+  const GAME_KEY = 'aacGameSettings';
+  const DEFAULT_REWARDS = ["Hooray, Fletcher! I'm so proud of you!", "You did it, buddy!", "Way to go, Fletcher!"];
+  function gameSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem(GAME_KEY) || '{}');
+      return {
+        phrases: Array.isArray(s.phrases) && s.phrases.length ? s.phrases : DEFAULT_REWARDS,
+        music: typeof s.music === 'string' ? s.music : '/audio/color-tap-learn.mp3',
+        choices: s.choices || 3,
+      };
+    } catch (_) { return { phrases: DEFAULT_REWARDS, music: '/audio/color-tap-learn.mp3', choices: 3 }; }
+  }
+  function saveGameSettings(patch) {
+    const next = { ...gameSettings(), ...patch };
+    try { localStorage.setItem(GAME_KEY, JSON.stringify(next)); } catch (_) {}
+    return next;
+  }
+
+  // Reward audio: cache TTS by phrase so cheers play instantly and offline.
+  async function rewardAudioURL(text) {
+    const key = 'tts:' + text;
+    if (objectURLs.has(key)) return objectURLs.get(key);
+    let blob = null;
+    try { blob = await reqPromise(tx(BLOBS).get(key)); } catch (_) {}
+    if (!blob) {
+      try {
+        const r = await apiFetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, emotion: 'excited' }) });
+        if (r.ok) { blob = await r.blob(); cacheBlob(key, blob); }
+      } catch (_) {}
+    }
+    if (!blob) return null;
+    const url = URL.createObjectURL(blob); objectURLs.set(key, url); return url;
+  }
+
+  // Soft success chime via WebAudio (no asset needed). Misses make no sound.
+  let _actx = null;
+  function chime() {
+    try {
+      _actx = _actx || new (window.AudioContext || window.webkitAudioContext)();
+      const t = _actx.currentTime;
+      [523.25, 783.99].forEach((f, i) => {
+        const o = _actx.createOscillator(), g = _actx.createGain();
+        o.type = 'sine'; o.frequency.value = f; o.connect(g); g.connect(_actx.destination);
+        const s = t + i * 0.12;
+        g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.22, s + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, s + 0.35);
+        o.start(s); o.stop(s + 0.36);
+      });
+    } catch (_) {}
+  }
+
+  const G = { queue: [], i: 0, misses: 0, target: null, settings: null, attempts: [], session: null, locked: false,
+              facilitated: false, standby: false, poll: null, liveSeq: 0 };
+  const gMusic = () => document.getElementById('game-music');
+  const gVoice = () => document.getElementById('game-voice');
+  function gShuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  async function gatherPlayable(scope) {
+    const secs = scope === 'all' ? MAIN_SECTIONS : [scope];
+    const items = [];
+    for (const s of secs) items.push(...await getAllItems(s));
+    return items.filter(it => it.imageKey && it.label);   // need a picture to match against
+  }
+
+  async function startGame(scope, choices, opts = {}) {
+    const s = gameSettings();
+    G.settings = { ...s, choices };
+    const items = await gatherPlayable(scope);
+    if (items.length < choices) {
+      const msg = 'Add at least ' + choices + ' tiles (with pictures) here first.';
+      const errEl = document.getElementById('game-setup-error'); if (errEl) errEl.textContent = msg;
+      if (opts.facilitated) publishState({ status: 'error', message: msg });
+      return;
+    }
+    G.facilitated = !!opts.facilitated; G.standby = false;
+    G.queue = gShuffle(items.slice()); G.i = 0; G.attempts = []; G.locked = false;
+    G.session = { mode: G.facilitated ? 'facilitated' : 'self_paced', category: scope, startedAt: new Date().toISOString() };
+    document.getElementById('game-setup').classList.remove('show');
+    document.getElementById('game-overlay').classList.add('show');
+    const m = gMusic();
+    if (s.music) { m.src = s.music; m.volume = 0.45; m.play().catch(() => {}); } else { m.pause(); }
+    if (G.facilitated && !G.poll) startPolling();
+    nextRound();
+  }
+
+  function buildChoices(target) {
+    const n = G.settings.choices;
+    const pool = G.queue.filter(x => x.id !== target.id);
+    const same = pool.filter(x => x.categoryId === target.categoryId);
+    const sect = pool.filter(x => x.section === target.section);
+    const ranked = [...gShuffle(same), ...gShuffle(sect), ...gShuffle(pool)];
+    const seen = new Set([target.id]); const picked = [];
+    for (const x of ranked) { if (picked.length >= n - 1) break; if (!seen.has(x.id)) { seen.add(x.id); picked.push(x); } }
+    return gShuffle([target, ...picked]);
+  }
+
+  async function nextRound() {
+    G.misses = 0; G.locked = false;
+    if (G.i >= G.queue.length) return endGame();
+    const target = G.queue[G.i]; G.target = target;
+    const choices = buildChoices(target);
+    const grid = document.getElementById('game-grid');
+    grid.className = 'game-grid' + (G.settings.choices >= 3 ? ' cols-3' : '');
+    grid.innerHTML = '';
+    document.getElementById('game-prompt').style.display = '';
+    document.getElementById('game-progress').textContent = (G.i + 1) + ' / ' + G.queue.length;
+    document.getElementById('game-prompt-label').textContent = 'Listen';
+    for (const c of choices) {
+      const el = document.createElement('button');
+      el.className = 'game-choice'; el.dataset.id = c.id;
+      const url = await getMediaURL(c.imageKey); if (url) el.style.backgroundImage = `url("${url}")`;
+      el.addEventListener('click', () => onPick(el, c));
+      grid.appendChild(el);
+    }
+    playPrompt();
+    publishState();
+  }
+
+  async function playPrompt() {
+    const t = G.target; if (!t || !t.soundKey) return;
+    const url = await getMediaURL(t.soundKey);
+    if (url) { const v = gVoice(); v.src = url; v.currentTime = 0; v.play().catch(() => {}); }
+  }
+
+  function logAttempt(correct) {
+    G.attempts.push({ category: G.target.section, label: G.target.label, itemId: G.target.id, correct, inputMethod: 'tap', misses: G.misses, occurredAt: new Date().toISOString() });
+  }
+
+  function onPick(el, choice) {
+    if (G.locked) return;
+    if (choice.id === G.target.id) {
+      G.locked = true;
+      el.classList.add('correct');
+      document.querySelectorAll('.game-choice').forEach(x => { if (x !== el) x.classList.add('dim'); });
+      chime();
+      logAttempt(G.misses === 0);
+      publishState();
+      setTimeout(() => { G.i++; nextRound(); }, 950);
+    } else {
+      // No negative feedback — escalate a hint on the CORRECT tile instead.
+      G.misses++;
+      const correctEl = [...document.querySelectorAll('.game-choice')].find(x => Number(x.dataset.id) === G.target.id);
+      if (G.misses === 1 && correctEl) { correctEl.classList.remove('wiggle'); void correctEl.offsetWidth; correctEl.classList.add('wiggle'); }
+      else if (G.misses === 2 && correctEl) { correctEl.classList.add('glow'); }
+      else if (G.misses >= 3) { G.locked = true; logAttempt(false); setTimeout(() => { G.i++; nextRound(); }, 700); }
+    }
+  }
+
+  function spawnFlowers(container) {
+    container.querySelectorAll('.flower').forEach(f => f.remove());
+    for (let i = 0; i < 18; i++) {
+      const f = document.createElement('div'); f.className = 'flower'; f.textContent = '🌼';
+      f.style.left = (Math.random() * 100) + 'vw'; f.style.animationDelay = (Math.random() * 1.2) + 's';
+      container.appendChild(f);
+    }
+  }
+
+  async function endGame() {
+    document.getElementById('game-overlay').classList.remove('show');
+    const cel = document.getElementById('game-celebrate'); cel.classList.add('show');
+    const phrases = G.settings.phrases;
+    const phrase = phrases[Math.floor(Math.random() * phrases.length)] || 'Hooray!';
+    document.getElementById('game-celebrate-msg').textContent = phrase;
+    spawnFlowers(cel);
+    const url = await rewardAudioURL(phrase);
+    if (url) { const v = gVoice(); v.src = url; v.play().catch(() => {}); }
+    publishState({ status: 'ended' });
+    logSession();
+    setTimeout(stopGame, 4400);
+  }
+
+  function stopGame() {
+    document.getElementById('game-overlay').classList.remove('show');
+    document.getElementById('game-celebrate').classList.remove('show');
+    const m = gMusic(); m.pause(); try { m.currentTime = 0; } catch (_) {}
+    gVoice().pause();
+    if (G.facilitated) publishState({ status: 'idle' });
+    stopPolling();
+    G.facilitated = false; G.standby = false; G.target = null;
+  }
+
+  // ---- Facilitated mode: phone (therapist) ↔ tablet over /api/live ----
+  async function publishState(extra) {
+    if (!G.facilitated) return;
+    const status = (extra && extra.status) || (G.standby ? 'standby' : 'running');
+    const payload = {
+      target: G.target ? { id: G.target.id, label: G.target.label, imageKey: G.target.imageKey } : null,
+      i: G.i, total: G.queue.length, correctCount: G.attempts.filter(a => a.correct).length,
+      ...(extra || {}),
+    };
+    try {
+      await apiFetch('/api/live?childId=' + encodeURIComponent(CHILD_ID), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'state', status, payload }),
+      });
+    } catch (_) {}
+  }
+  function startPolling() { if (G.poll) return; G.poll = setInterval(pollLive, 1200); }
+  function stopPolling() { if (G.poll) { clearInterval(G.poll); G.poll = null; } }
+  async function pollLive() {
+    // Heartbeat so the phone always sees a fresh "Connected" status.
+    G.tick = (G.tick || 0) + 1;
+    if (G.tick % 3 === 0) publishState();
+    try {
+      const r = await apiFetch('/api/live?childId=' + encodeURIComponent(CHILD_ID));
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.cmd && Number(d.cmd.seq) > G.liveSeq) { G.liveSeq = Number(d.cmd.seq); applyCmd(d.cmd); }
+    } catch (_) {}
+  }
+  function applyCmd(cmd) {
+    const a = cmd.action;
+    if (a === 'end') { if (G.standby) stopGame(); else if (!G.locked) { G.locked = true; endGame(); } return; }
+    if (a === 'start') {
+      if (G.standby) { G.standby = false; startGame(cmd.scope || 'all', cmd.choices || 3, { facilitated: true }); }
+      return;
+    }
+    if (G.standby || G.locked || !G.target) return;
+    if (a === 'mark') markRemote(cmd.method || 'tap');
+    else if (a === 'skip' || a === 'next') { G.locked = true; setTimeout(() => { G.i++; nextRound(); }, 250); }
+  }
+  function markRemote(method) {
+    if (G.locked || !G.target) return;
+    G.locked = true;
+    const correctEl = [...document.querySelectorAll('.game-choice')].find(x => Number(x.dataset.id) === G.target.id);
+    if (correctEl) { correctEl.classList.add('correct'); document.querySelectorAll('.game-choice').forEach(x => { if (x !== correctEl) x.classList.add('dim'); }); }
+    chime();
+    G.attempts.push({ category: G.target.section, label: G.target.label, itemId: G.target.id, correct: G.misses === 0, inputMethod: method, misses: G.misses, occurredAt: new Date().toISOString() });
+    publishState();
+    setTimeout(() => { G.i++; nextRound(); }, 950);
+  }
+  function enterStandby() {
+    G.facilitated = true; G.standby = true; G.liveSeq = 0; G.attempts = []; G.target = null;
+    document.getElementById('game-overlay').classList.add('show');
+    document.getElementById('game-prompt').style.display = 'none';
+    document.getElementById('game-progress').textContent = '';
+    document.getElementById('game-grid').className = 'game-grid';
+    document.getElementById('game-grid').innerHTML = '<div style="font-family:\'Fredoka\',ui-rounded,system-ui,sans-serif;color:#ad1457;font-size:clamp(22px,5vw,40px);text-align:center;line-height:1.4;">Waiting for the therapist…<br><span style="font-size:.5em;color:#c9a0bb;">She can start the game from her phone.</span></div>';
+    publishState({ status: 'standby' });
+    startPolling();
+  }
+
+  async function logSession() {
+    if (!G.session || !G.attempts.length) return;
+    const correct = G.attempts.filter(a => a.correct).length;
+    const payload = {
+      childId: CHILD_ID, mode: G.session.mode, category: G.session.category,
+      startedAt: G.session.startedAt, endedAt: new Date().toISOString(),
+      correctCount: correct, itemCount: G.attempts.length, attempts: G.attempts,
+    };
+    try { await apiFetch('/api/game-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); } catch (_) {}
+  }
+
+  // ---- Game UI wiring ----
+  document.getElementById('play-btn').addEventListener('click', () => {
+    document.getElementById('game-setup-error').textContent = '';
+    document.getElementById('game-choices').value = String(gameSettings().choices);
+    document.getElementById('game-setup').classList.add('show');
+  });
+  document.getElementById('game-setup-cancel').addEventListener('click', () => document.getElementById('game-setup').classList.remove('show'));
+  document.getElementById('game-setup-start').addEventListener('click', () => {
+    const scope = document.getElementById('game-scope').value;
+    const choices = parseInt(document.getElementById('game-choices').value, 10) || 3;
+    saveGameSettings({ choices });
+    startGame(scope, choices);
+  });
+  document.getElementById('game-prompt').addEventListener('click', playPrompt);
+  document.getElementById('remote-btn').addEventListener('click', enterStandby);
+
+  // Exit needs a long-press so a child can't tap out of the game.
+  let exitTimer = null;
+  const exitBtn = document.getElementById('game-exit');
+  const startExit = () => { exitTimer = setTimeout(stopGame, 1200); };
+  const cancelExit = () => { if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; } };
+  exitBtn.addEventListener('mousedown', startExit);
+  exitBtn.addEventListener('touchstart', startExit, { passive: true });
+  ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(e => exitBtn.addEventListener(e, cancelExit));
+
+  // Rewards modal
+  document.getElementById('rewards-btn').addEventListener('click', () => {
+    const s = gameSettings();
+    document.getElementById('rewards-phrases').value = s.phrases.join('\n');
+    document.getElementById('rewards-music').value = s.music;
+    document.getElementById('rewards-error').textContent = '';
+    document.getElementById('rewards-modal').classList.add('show');
+  });
+  document.getElementById('rewards-cancel').addEventListener('click', () => document.getElementById('rewards-modal').classList.remove('show'));
+  document.getElementById('rewards-test').addEventListener('click', async () => {
+    const lines = document.getElementById('rewards-phrases').value.split('\n').map(x => x.trim()).filter(Boolean);
+    const phrase = lines[0] || DEFAULT_REWARDS[0];
+    const btn = document.getElementById('rewards-test'); btn.disabled = true; const prev = btn.textContent; btn.textContent = '…';
+    const url = await rewardAudioURL(phrase);
+    if (url) { const v = gVoice(); v.src = url; v.play().catch(() => {}); }
+    else document.getElementById('rewards-error').textContent = 'Could not record (check connection).';
+    btn.disabled = false; btn.textContent = prev;
+  });
+  document.getElementById('rewards-save').addEventListener('click', async () => {
+    const lines = document.getElementById('rewards-phrases').value.split('\n').map(x => x.trim()).filter(Boolean);
+    const phrases = lines.length ? lines.slice(0, 12) : DEFAULT_REWARDS;
+    saveGameSettings({ phrases, music: document.getElementById('rewards-music').value });
+    const btn = document.getElementById('rewards-save'); btn.disabled = true; const prev = btn.textContent; btn.textContent = 'Saving…';
+    for (const ph of phrases) { await rewardAudioURL(ph); }   // pre-cache in your voice for offline
+    btn.disabled = false; btn.textContent = prev;
+    document.getElementById('rewards-modal').classList.remove('show');
+  });
+
   // Init
   (async () => {
     try {
@@ -3317,5 +3659,64 @@
     window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
   }
 </script>
+<!-- Game setup -->
+<div class="modal-backdrop" id="game-setup">
+  <div class="modal">
+    <h3>Start a game</h3>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">Self-paced matching: Fletcher hears a word and taps the matching picture. There are no wrong-answer sounds — ever.</div>
+    <label for="game-scope">What to practice</label>
+    <select id="game-scope" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
+      <option value="all" selected>Everything</option>
+      <option value="people">People</option>
+      <option value="nouns">Nouns</option>
+      <option value="verbs">Verbs</option>
+    </select>
+    <label for="game-choices">Choices per round</label>
+    <select id="game-choices" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
+      <option value="2">2 (easier)</option><option value="3" selected>3</option><option value="4">4</option>
+    </select>
+    <div class="error" id="game-setup-error"></div>
+    <div class="button-row">
+      <button class="secondary" id="game-setup-cancel">Cancel</button>
+      <button class="primary" id="game-setup-start">Start</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rewards & music -->
+<div class="modal-backdrop" id="rewards-modal">
+  <div class="modal">
+    <h3>🎁 Rewards &amp; music</h3>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">When Fletcher finishes, flowers burst and he hears one of these cheers in your voice. Type the phrases you want — we record them in your voice and save them so they work offline.</div>
+    <label for="rewards-phrases">Cheer phrases (one per line)</label>
+    <textarea id="rewards-phrases" rows="5" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;"></textarea>
+    <label for="rewards-music">Background music</label>
+    <select id="rewards-music" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
+      <option value="/audio/color-tap-learn.mp3">Color Tap (playful)</option>
+      <option value="/audio/clockwork-kaleidoscope.mp3">Clockwork Kaleidoscope (calm)</option>
+      <option value="">No music</option>
+    </select>
+    <div style="margin-top:10px;"><button type="button" class="secondary" id="rewards-test">▶ Test a cheer</button></div>
+    <div class="error" id="rewards-error"></div>
+    <div class="button-row">
+      <button class="secondary" id="rewards-cancel">Cancel</button>
+      <button class="primary" id="rewards-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Game runtime -->
+<div id="game-overlay">
+  <div class="game-top">
+    <div class="game-progress" id="game-progress"></div>
+    <button class="game-prompt-btn" id="game-prompt"><span class="spk">🔊</span><span id="game-prompt-label">Listen</span></button>
+    <button class="game-exit" id="game-exit" title="Hold to exit">✕</button>
+  </div>
+  <div class="game-grid" id="game-grid"></div>
+</div>
+<div id="game-celebrate"><div class="msg" id="game-celebrate-msg">Hooray!</div></div>
+<audio id="game-music" loop preload="none"></audio>
+<audio id="game-voice" preload="none"></audio>
+
 </body>
 </html>
