@@ -4,7 +4,7 @@
 // taps are queued offline by the app — so this SW deliberately stays out of
 // the way of /api/* (always network) and only caches the static shell + fonts.
 
-const CACHE = 'myworld-shell-v3';
+const CACHE = 'myworld-shell-v4';
 const SHELL = [
   '/app.html',
   '/manifest.webmanifest',

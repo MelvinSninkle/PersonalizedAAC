@@ -791,6 +791,28 @@
 </head>
 <body>
 
+<script>
+  // Catch-all error banner — fires even if the main script crashes before it
+  // can draw its own status (iPad has no console to inspect).
+  window.__bootErr = function (msg) {
+    var el = document.getElementById('boot-banner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'boot-banner';
+      el.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;font:12px -apple-system,system-ui,sans-serif;padding:9px 13px;border-radius:10px;background:#fde2e2;color:#9b1c1c;white-space:pre-wrap;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+      (document.body || document.documentElement).appendChild(el);
+      el.addEventListener('click', function () { el.remove(); });
+    }
+    el.textContent = String(msg) + '   (tap to dismiss)';
+  };
+  window.addEventListener('error', function (e) {
+    window.__bootErr('JS error: ' + (e.message || (e.error && e.error.message) || 'unknown') + (e.filename ? (' @ ' + String(e.filename).split('/').pop() + ':' + e.lineno) : ''));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    window.__bootErr('Promise error: ' + ((e.reason && e.reason.message) || e.reason || 'unknown'));
+  });
+</script>
+
 <header>
   <h1>Fletcher's World</h1>
   <div class="right">
@@ -3667,6 +3689,7 @@
   // Init
   (async () => {
     let step = 'start';
+    const watchdog = setTimeout(() => bootBanner('Still loading… stuck at "' + step + '". On the iPad, delete the app icon and re-add it; or open a private window.', true), 7000);
     try {
       step = 'display'; loadDisplay(); applyDisplay();
       step = 'session'; try { await loadSession(); } catch (e) { console.error('session', e); }
@@ -3695,9 +3718,11 @@
         console.error('sync/hydrate failed:', err);
         bootBanner('Sync error at "' + step + '": ' + (err.message || err), true);
       }
+      clearTimeout(watchdog);
       // Warm the full media cache (pictures + voices) for offline use.
       if (navigator.onLine !== false) precacheAllMedia();
     } catch (err) {
+      clearTimeout(watchdog);
       bootBanner('Load error at "' + step + '": ' + (err.message || err), true);
     }
   })();
