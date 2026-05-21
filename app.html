@@ -3649,37 +3649,56 @@
     document.getElementById('rewards-modal').classList.remove('show');
   });
 
+  // On-screen boot status so failures are visible without a console (iPad has none).
+  function bootBanner(text, isError) {
+    let el = document.getElementById('boot-banner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'boot-banner';
+      el.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;font:12px -apple-system,system-ui,sans-serif;padding:9px 13px;border-radius:10px;white-space:pre-wrap;box-shadow:0 4px 16px rgba(0,0,0,.2);';
+      el.addEventListener('click', () => el.remove());
+      document.body.appendChild(el);
+    }
+    el.style.background = isError ? '#fde2e2' : '#e7f5ff';
+    el.style.color = isError ? '#9b1c1c' : '#0b4a6f';
+    el.textContent = text + '   (tap to dismiss)';
+  }
+
   // Init
   (async () => {
+    let step = 'start';
     try {
-      loadDisplay();
-      applyDisplay();
-      await loadSession();   // who's logged in (drives edit-mode availability)
-      db = await openDB();
-      await migrateLegacyItems();
-      // Paint immediately from whatever's cached locally so the app feels instant,
-      // then refresh the structure from the server (which is canonical). Media
-      // files stay lazy — fetched on demand and cached by their storage key.
-      await renderAll();
-      flushEvents().catch(() => {});   // drain any taps queued from a previous offline session
-      // Refresh from the server using the login session (cookie) or a stored token.
-      // Only replace the local copy when the server actually has content — an
-      // empty response (e.g. wrong child_id, or a hiccup) must never wipe the
-      // pictures cached on this device.
+      step = 'display'; loadDisplay(); applyDisplay();
+      step = 'session'; try { await loadSession(); } catch (e) { console.error('session', e); }
+      step = 'open-db'; db = await openDB();
+      step = 'migrate'; await migrateLegacyItems();
+      step = 'render-local'; await renderAll();   // paint instantly from cache (if any)
+      flushEvents().catch(() => {});
+      // Refresh from the server. Only replace local when the server has content,
+      // so an empty/failed response never wipes the cached pictures.
+      step = 'sync';
       try {
         const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
         if (r.ok) {
           const data = await r.json();
-          if ((data.categories && data.categories.length) || (data.items && data.items.length)) {
-            await hydrateFromServer(data);
-            await renderAll();
-          }
+          const nc = (data.categories || []).length, ni = (data.items || []).length;
+          if (nc || ni) { step = 'hydrate'; await hydrateFromServer(data); step = 'render-server'; await renderAll(); }
+          const localCats = (await getAllCats('people')).length + (await getAllCats('nouns')).length + (await getAllCats('verbs')).length;
+          const note = `Loaded: server ${nc} categories / ${ni} tiles · on device ${localCats} categories`;
+          const broken = (nc > 0 && localCats === 0);
+          bootBanner(note, broken);
+          if (!broken) setTimeout(() => { const b = document.getElementById('boot-banner'); if (b) b.remove(); }, 3500);
+        } else {
+          bootBanner('Sync HTTP ' + r.status + ' — could not load from server.', true);
         }
-      } catch (err) { console.error('sync/hydrate failed:', err); /* keep whatever was cached locally */ }
+      } catch (err) {
+        console.error('sync/hydrate failed:', err);
+        bootBanner('Sync error at "' + step + '": ' + (err.message || err), true);
+      }
       // Warm the full media cache (pictures + voices) for offline use.
       if (navigator.onLine !== false) precacheAllMedia();
     } catch (err) {
-      document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif;">Failed to open storage: ${err.message}<br><br>Try opening this file in Chrome.</div>`;
+      bootBanner('Load error at "' + step + '": ' + (err.message || err), true);
     }
   })();
 })();
