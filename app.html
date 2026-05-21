@@ -796,6 +796,7 @@
   <div class="right">
     <span class="status" id="mode-status"></span>
     <button id="play-btn" class="edit-only">🎮 Play</button>
+    <button id="remote-btn" class="edit-only">📡 Remote</button>
     <button id="rewards-btn" class="edit-only">🎁 Rewards</button>
     <button id="organize-btn" class="edit-only">📁 Organize</button>
     <button id="display-btn" class="edit-only">⚙ Display</button>
@@ -3369,7 +3370,8 @@
     } catch (_) {}
   }
 
-  const G = { queue: [], i: 0, misses: 0, target: null, settings: null, attempts: [], session: null, locked: false };
+  const G = { queue: [], i: 0, misses: 0, target: null, settings: null, attempts: [], session: null, locked: false,
+              facilitated: false, standby: false, poll: null, liveSeq: 0 };
   const gMusic = () => document.getElementById('game-music');
   const gVoice = () => document.getElementById('game-voice');
   function gShuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -3381,17 +3383,24 @@
     return items.filter(it => it.imageKey && it.label);   // need a picture to match against
   }
 
-  async function startGame(scope, choices) {
+  async function startGame(scope, choices, opts = {}) {
     const s = gameSettings();
     G.settings = { ...s, choices };
     const items = await gatherPlayable(scope);
-    if (items.length < choices) { document.getElementById('game-setup-error').textContent = 'Add at least ' + choices + ' tiles (with pictures) here first.'; return; }
+    if (items.length < choices) {
+      const msg = 'Add at least ' + choices + ' tiles (with pictures) here first.';
+      const errEl = document.getElementById('game-setup-error'); if (errEl) errEl.textContent = msg;
+      if (opts.facilitated) publishState({ status: 'error', message: msg });
+      return;
+    }
+    G.facilitated = !!opts.facilitated; G.standby = false;
     G.queue = gShuffle(items.slice()); G.i = 0; G.attempts = []; G.locked = false;
-    G.session = { mode: 'self_paced', category: scope, startedAt: new Date().toISOString() };
+    G.session = { mode: G.facilitated ? 'facilitated' : 'self_paced', category: scope, startedAt: new Date().toISOString() };
     document.getElementById('game-setup').classList.remove('show');
     document.getElementById('game-overlay').classList.add('show');
     const m = gMusic();
     if (s.music) { m.src = s.music; m.volume = 0.45; m.play().catch(() => {}); } else { m.pause(); }
+    if (G.facilitated && !G.poll) startPolling();
     nextRound();
   }
 
@@ -3414,6 +3423,7 @@
     const grid = document.getElementById('game-grid');
     grid.className = 'game-grid' + (G.settings.choices >= 3 ? ' cols-3' : '');
     grid.innerHTML = '';
+    document.getElementById('game-prompt').style.display = '';
     document.getElementById('game-progress').textContent = (G.i + 1) + ' / ' + G.queue.length;
     document.getElementById('game-prompt-label').textContent = 'Listen';
     for (const c of choices) {
@@ -3424,6 +3434,7 @@
       grid.appendChild(el);
     }
     playPrompt();
+    publishState();
   }
 
   async function playPrompt() {
@@ -3444,6 +3455,7 @@
       document.querySelectorAll('.game-choice').forEach(x => { if (x !== el) x.classList.add('dim'); });
       chime();
       logAttempt(G.misses === 0);
+      publishState();
       setTimeout(() => { G.i++; nextRound(); }, 950);
     } else {
       // No negative feedback — escalate a hint on the CORRECT tile instead.
@@ -3473,6 +3485,7 @@
     spawnFlowers(cel);
     const url = await rewardAudioURL(phrase);
     if (url) { const v = gVoice(); v.src = url; v.play().catch(() => {}); }
+    publishState({ status: 'ended' });
     logSession();
     setTimeout(stopGame, 4400);
   }
@@ -3482,6 +3495,70 @@
     document.getElementById('game-celebrate').classList.remove('show');
     const m = gMusic(); m.pause(); try { m.currentTime = 0; } catch (_) {}
     gVoice().pause();
+    if (G.facilitated) publishState({ status: 'idle' });
+    stopPolling();
+    G.facilitated = false; G.standby = false; G.target = null;
+  }
+
+  // ---- Facilitated mode: phone (therapist) ↔ tablet over /api/live ----
+  async function publishState(extra) {
+    if (!G.facilitated) return;
+    const status = (extra && extra.status) || (G.standby ? 'standby' : 'running');
+    const payload = {
+      target: G.target ? { id: G.target.id, label: G.target.label, imageKey: G.target.imageKey } : null,
+      i: G.i, total: G.queue.length, correctCount: G.attempts.filter(a => a.correct).length,
+      ...(extra || {}),
+    };
+    try {
+      await apiFetch('/api/live?childId=' + encodeURIComponent(CHILD_ID), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'state', status, payload }),
+      });
+    } catch (_) {}
+  }
+  function startPolling() { if (G.poll) return; G.poll = setInterval(pollLive, 1200); }
+  function stopPolling() { if (G.poll) { clearInterval(G.poll); G.poll = null; } }
+  async function pollLive() {
+    // Heartbeat so the phone always sees a fresh "Connected" status.
+    G.tick = (G.tick || 0) + 1;
+    if (G.tick % 3 === 0) publishState();
+    try {
+      const r = await apiFetch('/api/live?childId=' + encodeURIComponent(CHILD_ID));
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.cmd && Number(d.cmd.seq) > G.liveSeq) { G.liveSeq = Number(d.cmd.seq); applyCmd(d.cmd); }
+    } catch (_) {}
+  }
+  function applyCmd(cmd) {
+    const a = cmd.action;
+    if (a === 'end') { if (G.standby) stopGame(); else if (!G.locked) { G.locked = true; endGame(); } return; }
+    if (a === 'start') {
+      if (G.standby) { G.standby = false; startGame(cmd.scope || 'all', cmd.choices || 3, { facilitated: true }); }
+      return;
+    }
+    if (G.standby || G.locked || !G.target) return;
+    if (a === 'mark') markRemote(cmd.method || 'tap');
+    else if (a === 'skip' || a === 'next') { G.locked = true; setTimeout(() => { G.i++; nextRound(); }, 250); }
+  }
+  function markRemote(method) {
+    if (G.locked || !G.target) return;
+    G.locked = true;
+    const correctEl = [...document.querySelectorAll('.game-choice')].find(x => Number(x.dataset.id) === G.target.id);
+    if (correctEl) { correctEl.classList.add('correct'); document.querySelectorAll('.game-choice').forEach(x => { if (x !== correctEl) x.classList.add('dim'); }); }
+    chime();
+    G.attempts.push({ category: G.target.section, label: G.target.label, itemId: G.target.id, correct: G.misses === 0, inputMethod: method, misses: G.misses, occurredAt: new Date().toISOString() });
+    publishState();
+    setTimeout(() => { G.i++; nextRound(); }, 950);
+  }
+  function enterStandby() {
+    G.facilitated = true; G.standby = true; G.liveSeq = 0; G.attempts = []; G.target = null;
+    document.getElementById('game-overlay').classList.add('show');
+    document.getElementById('game-prompt').style.display = 'none';
+    document.getElementById('game-progress').textContent = '';
+    document.getElementById('game-grid').className = 'game-grid';
+    document.getElementById('game-grid').innerHTML = '<div style="font-family:\'Fredoka\',ui-rounded,system-ui,sans-serif;color:#ad1457;font-size:clamp(22px,5vw,40px);text-align:center;line-height:1.4;">Waiting for the therapist…<br><span style="font-size:.5em;color:#c9a0bb;">She can start the game from her phone.</span></div>';
+    publishState({ status: 'standby' });
+    startPolling();
   }
 
   async function logSession() {
@@ -3509,6 +3586,7 @@
     startGame(scope, choices);
   });
   document.getElementById('game-prompt').addEventListener('click', playPrompt);
+  document.getElementById('remote-btn').addEventListener('click', enterStandby);
 
   // Exit needs a long-press so a child can't tap out of the game.
   let exitTimer = null;

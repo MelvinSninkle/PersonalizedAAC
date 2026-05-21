@@ -167,7 +167,7 @@
 
 <header class="top">
   <div class="brand fred">Fletcher's World <small>Therapist · facilitator view</small></div>
-  <span class="device-pill"><span class="dot"></span> Connected</span>
+  <span class="device-pill" id="live-pill"><span class="dot"></span> Waiting for tablet</span>
 </header>
 
 <div class="wrap">
@@ -196,24 +196,24 @@
   <button class="ins-restore" id="ins-restore">📈 Show progress charts</button>
 
   <!-- LIVE SESSION -->
-  <div class="section-label">Live session · Body Parts</div>
+  <div class="section-label">Live session</div>
   <div class="stage">
     <div class="target-cap">Current target on Fletcher's tablet</div>
     <div class="target">
-      <div class="thumb">👃</div>
-      <div class="word fred">nose<small>3 picture choices shown</small></div>
+      <div class="thumb" id="live-thumb">🎯</div>
+      <div class="word fred" id="live-word">—<small id="live-sub">not started</small></div>
     </div>
-    <div class="progress-line">Item <b>7</b> of <b>14</b> · <b>5</b> correct · session <b>11:42</b></div>
+    <div class="progress-line" id="live-progress">No live session yet.</div>
 
     <div class="marks">
-      <button class="mark"><span class="ic">👆</span>Tapped it</button>
-      <button class="mark"><span class="ic">🗣️</span>Said it</button>
-      <button class="mark"><span class="ic">🧸</span>Showed object</button>
+      <button class="mark" data-method="tap"><span class="ic">👆</span>Tapped it</button>
+      <button class="mark" data-method="verbal"><span class="ic">🗣️</span>Said it</button>
+      <button class="mark" data-method="object"><span class="ic">🧸</span>Showed object</button>
     </div>
     <div class="row-controls">
-      <button class="ctl skip">Skip</button>
-      <button class="ctl next">Next →</button>
-      <button class="ctl end">End &amp; celebrate</button>
+      <button class="ctl skip" id="live-skip">Skip</button>
+      <button class="ctl next" id="live-next">Next →</button>
+      <button class="ctl end" id="live-end">End &amp; celebrate</button>
     </div>
 
     <div class="toggle">
@@ -251,21 +251,19 @@
   <div class="panel">
     <h2>Pick what to focus on</h2>
     <p class="hint">Choose a category and the specific items for this visit. Fletcher's tablet updates instantly.</p>
-    <div class="field"><label>Category</label>
-      <select><option>Body Parts</option><option>Animals</option><option>Foods</option><option>Feelings</option><option>Colors</option><option>Actions</option></select>
+    <p class="hint">First, on Fletcher's tablet tap <strong>📡 Remote</strong> (in edit mode) so it's listening. Then choose what to practice and start it from here.</p>
+    <div class="field"><label>What to practice</label>
+      <select id="live-cat">
+        <option value="all">Everything</option>
+        <option value="people">People</option>
+        <option value="nouns">Nouns</option>
+        <option value="verbs">Verbs</option>
+      </select>
     </div>
-    <div class="field"><label>Items</label>
-      <div class="checks">
-        <label><input type="checkbox" checked> nose</label><label><input type="checkbox" checked> ear</label>
-        <label><input type="checkbox" checked> hand</label><label><input type="checkbox" checked> foot</label>
-        <label><input type="checkbox"> eye</label><label><input type="checkbox"> mouth</label>
-        <label><input type="checkbox"> knee</label><label><input type="checkbox"> hair</label>
-      </div>
+    <div class="field"><label>Choices per round</label>
+      <select id="live-choices"><option value="2">2 (easier)</option><option value="3" selected>3</option><option value="4">4</option></select>
     </div>
-    <div class="field"><label>Background music</label>
-      <select><option>Calm piano (default)</option><option>Soft acoustic</option><option>Silence</option></select>
-    </div>
-    <button class="btn primary">Start on Fletcher's tablet</button>
+    <button class="btn primary" id="live-start">Start on Fletcher's tablet</button>
   </div>
 
   <!-- ANALYTICS shared with parent -->
@@ -439,12 +437,59 @@
   })();
   loadAnalytics();
 
-  // Mark/skip/next give light tactile feedback (mockup only).
+  // Light tactile feedback on the control buttons.
   document.querySelectorAll('.mark, .ctl').forEach(b => {
-    b.addEventListener('click', () => {
-      const t = b.textContent; b.style.opacity = '.6';
-      setTimeout(() => { b.style.opacity = '1'; }, 250);
-    });
+    b.addEventListener('click', () => { b.style.opacity = '.6'; setTimeout(() => { b.style.opacity = '1'; }, 250); });
+  });
+
+  // ---- Live facilitator control (polls /api/live; phone → tablet over the cloud) ----
+  async function liveGet() {
+    try { const r = await fetch('/api/live?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' }); return r.ok ? await r.json() : null; }
+    catch (_) { return null; }
+  }
+  async function liveCmd(action, extra) {
+    try {
+      await fetch('/api/live?childId=' + encodeURIComponent(slug), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ kind: 'cmd', action, ...(extra || {}) }),
+      });
+    } catch (_) {}
+  }
+  function renderLive(d) {
+    const pill = document.getElementById('live-pill');
+    const word = document.getElementById('live-word'), sub = document.getElementById('live-sub');
+    const thumb = document.getElementById('live-thumb'), prog = document.getElementById('live-progress');
+    const live = d && d.age != null && d.age < 8 && d.status && d.status !== 'idle';
+    pill.innerHTML = '<span class="dot"></span> ' + (live ? 'Connected' : 'Waiting for tablet');
+    pill.style.opacity = live ? '1' : '.6';
+    const p = d && d.payload;
+    const setWord = (txt) => { if (word.childNodes[0]) word.childNodes[0].nodeValue = txt; };
+    if (p && p.target) {
+      setWord(p.target.label || '—');
+      sub.textContent = d.status === 'ended' ? 'finished 🎉' : 'on screen now';
+      thumb.innerHTML = p.target.imageKey
+        ? '<img src="/api/media?key=' + encodeURIComponent(p.target.imageKey) + '" style="width:100%;height:100%;object-fit:cover;border-radius:18px;">'
+        : '🎯';
+      prog.innerHTML = 'Item <b>' + ((p.i || 0) + 1) + '</b> of <b>' + (p.total || '—') + '</b> · <b>' + (p.correctCount || 0) + '</b> correct';
+    } else if (d && d.status === 'standby') {
+      setWord('Ready'); sub.textContent = 'waiting to start'; thumb.innerHTML = '🎯';
+      prog.textContent = 'Tablet is listening — tap Start below.';
+    } else {
+      setWord('—'); sub.textContent = 'not started'; thumb.innerHTML = '🎯';
+      prog.textContent = 'On the tablet, tap 📡 Remote (edit mode), then Start here.';
+    }
+  }
+  async function pollLiveTherapist() { renderLive(await liveGet()); }
+  setInterval(pollLiveTherapist, 1500); pollLiveTherapist();
+
+  document.querySelectorAll('.mark').forEach(b => b.addEventListener('click', () => liveCmd('mark', { method: b.dataset.method })));
+  document.getElementById('live-skip').addEventListener('click', () => liveCmd('skip'));
+  document.getElementById('live-next').addEventListener('click', () => liveCmd('next'));
+  document.getElementById('live-end').addEventListener('click', () => liveCmd('end'));
+  document.getElementById('live-start').addEventListener('click', () => {
+    const scope = document.getElementById('live-cat').value || 'all';
+    const choices = parseInt(document.getElementById('live-choices').value, 10) || 3;
+    liveCmd('start', { scope, choices });
   });
 })();
 </script>

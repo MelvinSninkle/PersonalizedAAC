@@ -179,6 +179,19 @@ export default async function handler(req, res) {
     `;
     await db`CREATE INDEX IF NOT EXISTS reference_images_child_idx ON reference_images(child_id)`;
 
+    // ---- Live session room (facilitator phone ↔ tablet, polled) ----
+    await db`
+      CREATE TABLE IF NOT EXISTS live_sessions (
+        child_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'idle',
+        payload JSONB,
+        cmd JSONB,
+        cmd_seq INTEGER NOT NULL DEFAULT 0,
+        state_seq INTEGER NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+
     // ---- Taxonomy workbench (Section 17 of the PRD) ----
     // Canonical library of tile prompts, separate from any one child's instance.
     // Edited via /admin/taxonomy; consumed by AI image generation in a later chunk.
