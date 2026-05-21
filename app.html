@@ -1083,6 +1083,65 @@
 
 <audio id="audio-player" preload="auto"></audio>
 
+<!-- Game setup -->
+<div class="modal-backdrop" id="game-setup">
+  <div class="modal">
+    <h3>Start a game</h3>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">Self-paced matching: Fletcher hears a word and taps the matching picture. There are no wrong-answer sounds — ever.</div>
+    <label for="game-scope">What to practice</label>
+    <select id="game-scope" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
+      <option value="all" selected>Everything</option>
+      <option value="people">People</option>
+      <option value="nouns">Nouns</option>
+      <option value="verbs">Verbs</option>
+    </select>
+    <label for="game-choices">Choices per round</label>
+    <select id="game-choices" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
+      <option value="2">2 (easier)</option><option value="3" selected>3</option><option value="4">4</option>
+    </select>
+    <div class="error" id="game-setup-error"></div>
+    <div class="button-row">
+      <button class="secondary" id="game-setup-cancel">Cancel</button>
+      <button class="primary" id="game-setup-start">Start</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rewards & music -->
+<div class="modal-backdrop" id="rewards-modal">
+  <div class="modal">
+    <h3>🎁 Rewards &amp; music</h3>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">When Fletcher finishes, flowers burst and he hears one of these cheers in your voice. Type the phrases you want — we record them in your voice and save them so they work offline.</div>
+    <label for="rewards-phrases">Cheer phrases (one per line)</label>
+    <textarea id="rewards-phrases" rows="5" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;"></textarea>
+    <label for="rewards-music">Background music</label>
+    <select id="rewards-music" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
+      <option value="/audio/color-tap-learn.mp3">Color Tap (playful)</option>
+      <option value="/audio/clockwork-kaleidoscope.mp3">Clockwork Kaleidoscope (calm)</option>
+      <option value="">No music</option>
+    </select>
+    <div style="margin-top:10px;"><button type="button" class="secondary" id="rewards-test">▶ Test a cheer</button></div>
+    <div class="error" id="rewards-error"></div>
+    <div class="button-row">
+      <button class="secondary" id="rewards-cancel">Cancel</button>
+      <button class="primary" id="rewards-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Game runtime -->
+<div id="game-overlay">
+  <div class="game-top">
+    <div class="game-progress" id="game-progress"></div>
+    <button class="game-prompt-btn" id="game-prompt"><span class="spk">🔊</span><span id="game-prompt-label">Listen</span></button>
+    <button class="game-exit" id="game-exit" title="Hold to exit">✕</button>
+  </div>
+  <div class="game-grid" id="game-grid"></div>
+</div>
+<div id="game-celebrate"><div class="msg" id="game-celebrate-msg">Hooray!</div></div>
+<audio id="game-music" loop preload="none"></audio>
+<audio id="game-voice" preload="none"></audio>
+
 <script>
 (() => {
   const DB_NAME = 'fletcher_aac';
@@ -3734,64 +3793,7 @@
     window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
   }
 </script>
-<!-- Game setup -->
-<div class="modal-backdrop" id="game-setup">
-  <div class="modal">
-    <h3>Start a game</h3>
-    <div style="font-size:13px;color:#666;margin-bottom:8px;">Self-paced matching: Fletcher hears a word and taps the matching picture. There are no wrong-answer sounds — ever.</div>
-    <label for="game-scope">What to practice</label>
-    <select id="game-scope" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
-      <option value="all" selected>Everything</option>
-      <option value="people">People</option>
-      <option value="nouns">Nouns</option>
-      <option value="verbs">Verbs</option>
-    </select>
-    <label for="game-choices">Choices per round</label>
-    <select id="game-choices" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
-      <option value="2">2 (easier)</option><option value="3" selected>3</option><option value="4">4</option>
-    </select>
-    <div class="error" id="game-setup-error"></div>
-    <div class="button-row">
-      <button class="secondary" id="game-setup-cancel">Cancel</button>
-      <button class="primary" id="game-setup-start">Start</button>
-    </div>
-  </div>
-</div>
-
-<!-- Rewards & music -->
-<div class="modal-backdrop" id="rewards-modal">
-  <div class="modal">
-    <h3>🎁 Rewards &amp; music</h3>
-    <div style="font-size:13px;color:#666;margin-bottom:8px;">When Fletcher finishes, flowers burst and he hears one of these cheers in your voice. Type the phrases you want — we record them in your voice and save them so they work offline.</div>
-    <label for="rewards-phrases">Cheer phrases (one per line)</label>
-    <textarea id="rewards-phrases" rows="5" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;"></textarea>
-    <label for="rewards-music">Background music</label>
-    <select id="rewards-music" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
-      <option value="/audio/color-tap-learn.mp3">Color Tap (playful)</option>
-      <option value="/audio/clockwork-kaleidoscope.mp3">Clockwork Kaleidoscope (calm)</option>
-      <option value="">No music</option>
-    </select>
-    <div style="margin-top:10px;"><button type="button" class="secondary" id="rewards-test">▶ Test a cheer</button></div>
-    <div class="error" id="rewards-error"></div>
-    <div class="button-row">
-      <button class="secondary" id="rewards-cancel">Cancel</button>
-      <button class="primary" id="rewards-save">Save</button>
-    </div>
-  </div>
-</div>
-
-<!-- Game runtime -->
-<div id="game-overlay">
-  <div class="game-top">
-    <div class="game-progress" id="game-progress"></div>
-    <button class="game-prompt-btn" id="game-prompt"><span class="spk">🔊</span><span id="game-prompt-label">Listen</span></button>
-    <button class="game-exit" id="game-exit" title="Hold to exit">✕</button>
-  </div>
-  <div class="game-grid" id="game-grid"></div>
-</div>
-<div id="game-celebrate"><div class="msg" id="game-celebrate-msg">Hooray!</div></div>
-<audio id="game-music" loop preload="none"></audio>
-<audio id="game-voice" preload="none"></audio>
+<!-- (Game / rewards markup lives above the main <script> so it exists when wired.) -->
 
 </body>
 </html>
