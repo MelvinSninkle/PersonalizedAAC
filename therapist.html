@@ -137,6 +137,10 @@
   .ins-sub { font-size: 12px; color: var(--faint); margin: 6px 0 8px; }
   .ins-badge { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-size: 10px; font-weight: 700;
     padding: 2px 7px; border-radius: 999px; margin-left: 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .ins-gran { display: flex; gap: 4px; justify-content: flex-end; margin: 0 0 6px; }
+  .ins-gran button { border: 1px solid var(--line); background: #fff; color: var(--muted); font: inherit;
+    font-size: 11px; font-weight: 600; padding: 3px 11px; border-radius: 999px; cursor: pointer; }
+  .ins-gran button.active { background: var(--pink); color: #fff; border-color: var(--pink); }
   .ins-chart svg { width: 100%; max-width: 640px; height: auto; display: block; margin: 0 auto; }
   .ins-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12px; color: var(--muted); }
   .ins-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
@@ -180,6 +184,11 @@
       <button class="ins-x" id="ins-x" title="Hide charts" aria-label="Hide charts">×</button>
     </div>
     <p class="ins-sub" id="ins-sub"></p>
+    <div class="ins-gran" id="ins-gran">
+      <button data-gran="day">Day</button>
+      <button data-gran="week">Week</button>
+      <button data-gran="month">Month</button>
+    </div>
     <div class="ins-chart"><svg id="ins-svg" viewBox="0 0 340 200" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Progress over time by category"></svg></div>
     <div class="ins-legend" id="ins-legend"></div>
     <div class="ins-stars" id="ins-stars"></div>
@@ -288,7 +297,7 @@
   const SERIES = {
     games: {
       sub: 'First-try matching accuracy by category — taps, verbal, and object responses count equally. Mastered categories (100%) drop to a gold star below.',
-      max: 100, unit: '%', collapseStarred: true,
+      max: 100, unit: '%', collapseStarred: true, labels: WEEKS,
       star: s => s.data[s.data.length - 1] >= 100, starLabel: 'Mastered · 100%',
       list: [
         { name: 'People',     color: '#f59e0b', data: [90, 92, 94, 96, 98, 100, 100] },
@@ -300,8 +309,8 @@
       ],
     },
     use: {
-      sub: 'How often Fletcher communicates with each category on his own (taps per week). A gold star means he reached for it every day this week.',
-      max: 40, unit: '/wk', collapseStarred: false, dynamicMax: true,
+      sub: 'How often Fletcher communicates with each category on his own (taps per period). A gold star means he reached for it every day this week.',
+      max: 40, unit: '', collapseStarred: false, dynamicMax: true, labels: WEEKS,
       star: s => s.daily, starLabel: 'Used every day this week',
       list: [
         { name: 'Foods',    color: '#8b5cf6', daily: true,  data: [18, 22, 25, 28, 30, 33, 36] },
@@ -313,7 +322,7 @@
     },
     time: {
       sub: 'Minutes per week. Total use is all the time Fletcher spends in the app; passive learning is time in the Learn and Exposure slideshows.',
-      max: 200, unit: ' min', collapseStarred: false, dynamicMax: true,
+      max: 200, unit: ' min', collapseStarred: false, dynamicMax: true, labels: WEEKS,
       star: () => false, starLabel: '',
       list: [
         { name: 'Total use',        color: '#0ea5e9', data: [70, 95, 115, 130, 150, 168, 180] },
@@ -329,10 +338,12 @@
   }
   const W = 340, H = 200, PADL = 22, PADR = 10, PADT = 12, PADB = 22;
   function renderChart(key) {
-    const cfg = SERIES[key], n = WEEKS.length;
+    const cfg = SERIES[key];
+    const labels = cfg.labels || WEEKS;
+    const n = labels.length;
     let drawn = cfg.collapseStarred ? cfg.list.filter(s => !cfg.star(s)) : cfg.list.slice();
     // Keep it legible: plot at most the 8 busiest categories (stars use the full set).
-    if (drawn.length > 8) drawn = drawn.slice().sort((a, b) => b.data[6] - a.data[6]).slice(0, 8);
+    if (drawn.length > 8) drawn = drawn.slice().sort((a, b) => b.data[n - 1] - a.data[n - 1]).slice(0, 8);
     const max = cfg.dynamicMax ? niceMax(Math.max(1, ...drawn.map(s => Math.max(...s.data)))) : cfg.max;
     const X = i => PADL + (i / (n - 1)) * (W - PADL - PADR);
     const Y = v => PADT + (1 - v / max) * (H - PADT - PADB);
@@ -347,7 +358,8 @@
       svg += `<polyline fill="none" stroke="${s.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${pts}"/>`;
       svg += `<circle cx="${X(n - 1).toFixed(1)}" cy="${Y(s.data[n - 1]).toFixed(1)}" r="3" fill="${s.color}"/>`;
     });
-    WEEKS.forEach((w, i) => { svg += `<text x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="#9ca3af">${w}</text>`; });
+    const step = n <= 8 ? 1 : Math.ceil(n / 7);
+    labels.forEach((w, i) => { if (i % step === 0 || i === n - 1) svg += `<text x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="#9ca3af">${w}</text>`; });
     document.getElementById('ins-svg').innerHTML = svg;
     document.getElementById('ins-sub').innerHTML = cfg.sub + (cfg.sample ? ' <span class="ins-badge">sample</span>' : '');
     document.getElementById('ins-legend').innerHTML = drawn.map(s =>
@@ -388,32 +400,44 @@
   const PALETTE = ['#ff1493','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#06b6d4','#ec4899'];
   const colorFor = (name, i) => COLORS[name] || PALETTE[i % PALETTE.length];
   function applyAnalytics(a) {
+    const labels = a.labels || WEEKS;
     if (a.use && a.use.series && a.use.series.length) {
       SERIES.use.list = a.use.series.map((s, i) => ({ name: s.name, color: colorFor(s.name, i), daily: !!s.daily, data: s.data }));
-      SERIES.use.sample = false;
+      SERIES.use.labels = labels; SERIES.use.sample = false;
     }
     if (a.games && a.games.series && a.games.series.length) {
       SERIES.games.list = a.games.series.map((s, i) => ({ name: s.name, color: colorFor(s.name, i), data: s.data }));
-      SERIES.games.sample = false;
+      SERIES.games.labels = labels; SERIES.games.sample = false;
     }
     if (a.time && a.time.series && a.time.series.length) {
       SERIES.time.list = a.time.series.map((s, i) => ({ name: s.name, color: colorFor(s.name, i), data: s.data }));
-      SERIES.time.sample = false;
+      SERIES.time.labels = labels; SERIES.time.sample = false;
     }
     if (a.mastery && a.mastery.length) renderMastery(a.mastery.map(m => [m.name, m.pct]));
   }
-  (async () => {
-    // Uses the login session cookie automatically; falls back to the legacy
-    // admin token if one happens to be stored. Empty/401 → keep sample data.
+  // Granularity (day/week/month). Uses the session cookie; empty/401 → sample.
+  let gran = localStorage.getItem('aacGran') || 'day';
+  async function loadAnalytics() {
     try {
       const tok = localStorage.getItem('aacToken');
       const headers = tok ? { Authorization: 'Bearer ' + tok } : {};
-      const r = await fetch('/api/analytics?childId=' + encodeURIComponent(slug), { headers, credentials: 'same-origin' });
+      const r = await fetch('/api/analytics?childId=' + encodeURIComponent(slug) + '&bucket=' + gran, { headers, credentials: 'same-origin' });
       if (!r.ok) return;
       applyAnalytics(await r.json());
       renderChart(currentTab);
     } catch (_) { /* keep sample data */ }
+  }
+  (function initGran() {
+    const wrap = document.getElementById('ins-gran');
+    wrap.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.gran === gran));
+    wrap.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-gran]'); if (!b) return;
+      gran = b.dataset.gran; try { localStorage.setItem('aacGran', gran); } catch (_) {}
+      wrap.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+      loadAnalytics();
+    });
   })();
+  loadAnalytics();
 
   // Mark/skip/next give light tactile feedback (mockup only).
   document.querySelectorAll('.mark, .ctl').forEach(b => {
