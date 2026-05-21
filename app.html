@@ -1841,7 +1841,7 @@
       flushing = false;
     }
   }
-  window.addEventListener('online', () => flushEvents().catch(() => {}));
+  window.addEventListener('online', () => { flushEvents().catch(() => {}); precacheAllMedia(); });
 
   function setEditMode(on) {
     editMode = on;
@@ -1971,6 +1971,24 @@
         keepAspect: !!it.keepAspect,
       });
     }
+  }
+
+  // Eagerly pull EVERY tile's picture + voice into the offline cache, so Fletcher
+  // is never left tapping a silent or blank tile (especially offline, e.g. at
+  // therapy). getMediaBlob is a no-op for keys already cached. Runs in the
+  // background; never blocks the UI.
+  let _precaching = false;
+  async function precacheAllMedia() {
+    if (_precaching) return;
+    _precaching = true;
+    try {
+      const keys = new Set();
+      for (const s of SECTIONS) {
+        for (const c of await getAllCats(s)) { if (c.imageKey) keys.add(c.imageKey); }
+        for (const it of await getAllItems(s)) { if (it.imageKey) keys.add(it.imageKey); if (it.soundKey) keys.add(it.soundKey); }
+      }
+      for (const k of keys) { try { await getMediaBlob(k); } catch (_) {} }
+    } catch (_) {} finally { _precaching = false; }
   }
 
   // Downscale + re-encode an image before upload: ≤512px longest side, JPEG q0.85.
@@ -3652,6 +3670,8 @@
           }
         }
       } catch (_) { /* offline or not authed — keep whatever was cached locally */ }
+      // Warm the full media cache (pictures + voices) for offline use.
+      if (navigator.onLine !== false) precacheAllMedia();
     } catch (err) {
       document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif;">Failed to open storage: ${err.message}<br><br>Try opening this file in Chrome.</div>`;
     }
