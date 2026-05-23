@@ -3504,7 +3504,7 @@
   }
 
   const G = { queue: [], i: 0, misses: 0, target: null, settings: null, attempts: [], session: null, locked: false,
-              facilitated: false, standby: false, poll: null, liveSeq: 0, limitTimer: null, ended: false };
+              facilitated: false, standby: false, poll: null, liveSeq: 0, limitTimer: null, ended: false, running: false };
   const gMusic = () => document.getElementById('game-music');
   const gVoice = () => document.getElementById('game-voice');
   function gShuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -3526,14 +3526,13 @@
       if (opts.facilitated) publishState({ status: 'error', message: msg });
       return;
     }
-    G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false;
+    G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true;
     G.queue = gShuffle(items.slice()); G.i = 0; G.attempts = []; G.locked = false;
     G.session = { mode: G.facilitated ? 'facilitated' : 'self_paced', category: scope, startedAt: new Date().toISOString() };
     document.getElementById('game-setup').classList.remove('show');
     document.getElementById('game-overlay').classList.add('show');
     const m = gMusic();
     if (s.music) { m.src = s.music; m.volume = 0.45; m.play().catch(() => {}); } else { m.pause(); }
-    if (G.facilitated && !G.poll) startPolling();
     // Auto-end after the parent-chosen time limit (default 15 min; 0 = no limit).
     if (G.limitTimer) { clearTimeout(G.limitTimer); G.limitTimer = null; }
     const limitMin = Number.isFinite(opts.limitMin) ? opts.limitMin : s.limitMin;
@@ -3636,8 +3635,8 @@
     document.getElementById('game-celebrate').classList.remove('show');
     const m = gMusic(); m.pause(); try { m.currentTime = 0; } catch (_) {}
     gVoice().pause();
+    G.running = false;
     if (G.facilitated) publishState({ status: 'idle' });
-    stopPolling();
     G.facilitated = false; G.standby = false; G.target = null;
   }
 
@@ -3657,27 +3656,45 @@
       });
     } catch (_) {}
   }
-  function startPolling() { if (G.poll) return; G.poll = setInterval(pollLive, 1200); }
-  function stopPolling() { if (G.poll) { clearInterval(G.poll); G.poll = null; } }
-  async function pollLive() {
-    // Heartbeat so the phone always sees a fresh "Connected" status.
-    G.tick = (G.tick || 0) + 1;
-    if (G.tick % 3 === 0) publishState();
+  // Always-on listener: the kid app polls for remote commands the whole time
+  // it's open, so an adult can start/drive a game from their phone with nothing
+  // tapped on the iPad. Polls faster while a game is live, slower when idle.
+  let _liveActive = false;
+  function startLiveListener() {
+    if (_liveActive) return;
+    _liveActive = true;
+    const tick = async () => {
+      try {
+        const r = await apiFetch('/api/live?childId=' + encodeURIComponent(CHILD_ID));
+        if (r.ok) {
+          const d = await r.json();
+          if (d.cmd && Number(d.cmd.seq) > G.liveSeq) { G.liveSeq = Number(d.cmd.seq); applyCmd(d.cmd); }
+        }
+      } catch (_) {}
+      // Heartbeat so the phone shows the tablet as "Connected".
+      G.tick = (G.tick || 0) + 1;
+      if (G.tick % 2 === 0) { if (G.running && G.facilitated) publishState(); else if (!G.running) publishReady(); }
+      setTimeout(tick, G.running ? 1000 : 2500);
+    };
+    tick();
+  }
+  async function publishReady() {
     try {
-      const r = await apiFetch('/api/live?childId=' + encodeURIComponent(CHILD_ID));
-      if (!r.ok) return;
-      const d = await r.json();
-      if (d.cmd && Number(d.cmd.seq) > G.liveSeq) { G.liveSeq = Number(d.cmd.seq); applyCmd(d.cmd); }
+      await apiFetch('/api/live?childId=' + encodeURIComponent(CHILD_ID), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'state', status: 'ready', payload: { target: null, total: 0, correctCount: 0 } }),
+      });
     } catch (_) {}
   }
   function applyCmd(cmd) {
     const a = cmd.action;
-    if (a === 'end') { if (G.standby) stopGame(); else if (!G.locked) { G.locked = true; endGame(); } return; }
     if (a === 'start') {
-      if (G.standby) { G.standby = false; startGame(cmd.scope || 'all', cmd.choices || 3, { facilitated: true }); }
+      // Start a phone-driven game from anywhere — even if the iPad is just on the board.
+      if (!G.running) startGame(cmd.scope || 'all', cmd.choices || 3, { facilitated: true });
       return;
     }
-    if (G.standby || G.locked || !G.target) return;
+    if (a === 'end') { if (G.running && !G.ended) endGame(); else stopGame(); return; }
+    if (!G.running || G.locked || !G.target) return;
     if (a === 'mark') markRemote(cmd.method || 'tap');
     else if (a === 'skip' || a === 'next') { G.locked = true; setTimeout(() => { G.i++; nextRound(); }, 250); }
   }
@@ -3692,14 +3709,13 @@
     setTimeout(() => { G.i++; nextRound(); }, 950);
   }
   function enterStandby() {
-    G.facilitated = true; G.standby = true; G.liveSeq = 0; G.attempts = []; G.target = null;
+    G.facilitated = true; G.standby = true; G.attempts = []; G.target = null;
     document.getElementById('game-overlay').classList.add('show');
     document.getElementById('game-prompt').style.display = 'none';
     document.getElementById('game-progress').textContent = '';
     document.getElementById('game-grid').className = 'game-grid';
     document.getElementById('game-grid').innerHTML = '<div style="font-family:\'Fredoka\',ui-rounded,system-ui,sans-serif;color:#ad1457;font-size:clamp(22px,5vw,40px);text-align:center;line-height:1.4;">Waiting for the therapist…<br><span style="font-size:.5em;color:#c9a0bb;">She can start the game from her phone.</span></div>';
     publishState({ status: 'standby' });
-    startPolling();
   }
 
   async function logSession() {
@@ -3819,6 +3835,8 @@
       clearTimeout(watchdog);
       // Warm the full media cache (pictures + voices) for offline use.
       if (navigator.onLine !== false) precacheAllMedia();
+      // Listen for remote (phone) game commands the whole time the app is open.
+      startLiveListener();
     } catch (err) {
       clearTimeout(watchdog);
       bootBanner('Load error at "' + step + '": ' + (err.message || err), true);
