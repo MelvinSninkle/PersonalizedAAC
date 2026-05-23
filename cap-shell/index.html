@@ -14,7 +14,9 @@
 </head>
 <body>
   <!-- Capacitor loads the live site (server.url). This local page only shows if
-       the device is offline the very first launch, before anything is cached. -->
+       the device is offline the very first launch, before anything is cached.
+       NOTE: this folder must NOT be named "public" — Vercel would treat that as
+       the whole site's output directory and 404 everything else. -->
   <div>
     <h1>🌍 My World</h1>
     <p>Connecting… please make sure the iPad is online the first time you open the app.</p>
