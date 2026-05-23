@@ -3751,7 +3751,10 @@
     const a = cmd.action;
     if (a === 'start') {
       // Start a phone-driven game from anywhere — even if the iPad is just on the board.
-      if (!G.running) startGame(cmd.scope || 'all', cmd.choices || 3, { facilitated: true });
+      if (!G.running) {
+        const range = (cmd.from || cmd.to) ? { from: cmd.from || 0, to: cmd.to || 0 } : null;
+        startGame(cmd.scope || 'all', cmd.choices || 3, { facilitated: true, range });
+      }
       return;
     }
     if (a === 'end') { if (G.running && !G.ended) endGame(); else stopGame(); return; }

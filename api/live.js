@@ -49,8 +49,10 @@ export default async function handler(req, res) {
         const cmdObj = {
           action: String(b.action || '').slice(0, 16),
           method: typeof b.method === 'string' ? b.method.slice(0, 16) : null,
-          scope: typeof b.scope === 'string' ? b.scope.slice(0, 16) : null,
+          scope: typeof b.scope === 'string' ? b.scope.slice(0, 32) : null,
           choices: Number.isFinite(b.choices) ? b.choices : null,
+          from: Number.isFinite(b.from) ? b.from : null,
+          to: Number.isFinite(b.to) ? b.to : null,
           ts: Date.now(),
         };
         const json = JSON.stringify(cmdObj);
