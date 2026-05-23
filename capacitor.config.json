@@ -1,0 +1,12 @@
+{
+  "appId": "io.andrewpeterson.myworld",
+  "appName": "My World",
+  "webDir": "public",
+  "server": {
+    "url": "https://aac.andrewpeterson.io/u/fletcherpeterson",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "always"
+  }
+}

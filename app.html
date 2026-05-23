@@ -28,11 +28,19 @@
     color: #222;
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;     /* iOS needs the prefix — stops drag-to-select */
+    -ms-user-select: none;
     user-select: none;
+    -webkit-touch-callout: none;   /* no long-press magnifier / copy / save menu */
+    overscroll-behavior: none;     /* no rubber-band / pull-to-refresh */
     /* Disable pinch-zoom + double-tap-zoom so a stray Fletcher gesture can't
        resize the page out from under him. Panning (vertical/horizontal
        scroll) still works. Belt-and-suspenders with the viewport meta. */
     touch-action: pan-x pan-y;
+  }
+  /* The parent still needs to type and select inside edit-mode fields. */
+  input, textarea, select, [contenteditable="true"] {
+    -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
   }
   body { display: flex; flex-direction: column; min-height: 0; }
   header { flex: 0 0 auto; }
@@ -2063,18 +2071,29 @@
   // is never left tapping a silent or blank tile (especially offline, e.g. at
   // therapy). getMediaBlob is a no-op for keys already cached. Runs in the
   // background; never blocks the UI.
+  // Run async work over a list with limited concurrency (faster than serial,
+  // gentler than firing everything at once).
+  async function runPool(items, worker, concurrency = 6) {
+    let i = 0;
+    const next = async () => { while (i < items.length) { const it = items[i++]; try { await worker(it); } catch (_) {} } };
+    await Promise.all(Array.from({ length: Math.min(concurrency, items.length || 1) }, next));
+  }
   let _precaching = false;
   async function precacheAllMedia() {
     if (_precaching) return;
     _precaching = true;
-    await new Promise(r => setTimeout(r, 1500));   // let the board paint + settle first
+    await new Promise(r => setTimeout(r, 700));   // let the board paint first
     try {
-      const keys = new Set();
+      const sounds = [], images = [];
       for (const s of SECTIONS) {
-        for (const c of await getAllCats(s)) { if (c.imageKey) keys.add(c.imageKey); }
-        for (const it of await getAllItems(s)) { if (it.imageKey) keys.add(it.imageKey); if (it.soundKey) keys.add(it.soundKey); }
+        for (const c of await getAllCats(s)) { if (c.imageKey) images.push(c.imageKey); }
+        for (const it of await getAllItems(s)) { if (it.imageKey) images.push(it.imageKey); if (it.soundKey) sounds.push(it.soundKey); }
       }
-      for (const k of keys) { try { await getMediaBlob(k); } catch (_) {} }
+      // Sounds FIRST, and create their object URLs now (getMediaURL, not just
+      // getMediaBlob) so a tap plays instantly — no fetch or IndexedDB read on click.
+      await runPool([...new Set(sounds)], (k) => getMediaURL(k), 6);
+      // Then images: cache the bytes (visible tiles create their own URLs on render).
+      await runPool([...new Set(images)], (k) => getMediaBlob(k), 6);
     } catch (_) {} finally { _precaching = false; }
   }
 
