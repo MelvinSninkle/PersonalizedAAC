@@ -28,11 +28,19 @@
     color: #222;
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;     /* iOS needs the prefix — stops drag-to-select */
+    -ms-user-select: none;
     user-select: none;
+    -webkit-touch-callout: none;   /* no long-press magnifier / copy / save menu */
+    overscroll-behavior: none;     /* no rubber-band / pull-to-refresh */
     /* Disable pinch-zoom + double-tap-zoom so a stray Fletcher gesture can't
        resize the page out from under him. Panning (vertical/horizontal
        scroll) still works. Belt-and-suspenders with the viewport meta. */
     touch-action: pan-x pan-y;
+  }
+  /* The parent still needs to type and select inside edit-mode fields. */
+  input, textarea, select, [contenteditable="true"] {
+    -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
   }
   body { display: flex; flex-direction: column; min-height: 0; }
   header { flex: 0 0 auto; }
