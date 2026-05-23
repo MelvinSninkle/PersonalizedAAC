@@ -3594,12 +3594,14 @@
       publishState();
       setTimeout(() => { G.i++; nextRound(); }, 950);
     } else {
-      // No negative feedback — escalate a hint on the CORRECT tile instead.
+      // No negative feedback — escalate a hint on the CORRECT tile instead,
+      // and repeat the word so he hears what he's looking for again.
       G.misses++;
       const correctEl = [...document.querySelectorAll('.game-choice')].find(x => Number(x.dataset.id) === G.target.id);
       if (G.misses === 1 && correctEl) { correctEl.classList.remove('wiggle'); void correctEl.offsetWidth; correctEl.classList.add('wiggle'); }
       else if (G.misses === 2 && correctEl) { correctEl.classList.add('glow'); }
       else if (G.misses >= 3) { G.locked = true; logAttempt(false); setTimeout(() => { G.i++; nextRound(); }, 700); }
+      if (G.misses < 3) playPrompt();   // replay the target word on each wrong try
     }
   }
 
