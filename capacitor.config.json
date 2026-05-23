@@ -1,7 +1,7 @@
 {
   "appId": "io.andrewpeterson.myworld",
   "appName": "My World",
-  "webDir": "public",
+  "webDir": "cap-shell",
   "server": {
     "url": "https://aac.andrewpeterson.io/u/fletcherpeterson",
     "cleartext": false
