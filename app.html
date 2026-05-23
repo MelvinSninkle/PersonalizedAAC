@@ -1107,6 +1107,14 @@
     <select id="game-choices" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
       <option value="2">2 (easier)</option><option value="3" selected>3</option><option value="4">4</option>
     </select>
+    <label for="game-limit">Time limit</label>
+    <select id="game-limit" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
+      <option value="15" selected>15 minutes</option>
+      <option value="30">30 minutes</option>
+      <option value="45">45 minutes</option>
+      <option value="60">60 minutes</option>
+      <option value="0">No limit (I'll end it)</option>
+    </select>
     <div class="error" id="game-setup-error"></div>
     <div class="button-row">
       <button class="secondary" id="game-setup-cancel">Cancel</button>
@@ -3453,8 +3461,9 @@
         phrases: Array.isArray(s.phrases) && s.phrases.length ? s.phrases : DEFAULT_REWARDS,
         music: typeof s.music === 'string' ? s.music : '/audio/color-tap-learn.mp3',
         choices: s.choices || 3,
+        limitMin: Number.isFinite(s.limitMin) ? s.limitMin : 15,
       };
-    } catch (_) { return { phrases: DEFAULT_REWARDS, music: '/audio/color-tap-learn.mp3', choices: 3 }; }
+    } catch (_) { return { phrases: DEFAULT_REWARDS, music: '/audio/color-tap-learn.mp3', choices: 3, limitMin: 15 }; }
   }
   function saveGameSettings(patch) {
     const next = { ...gameSettings(), ...patch };
@@ -3495,7 +3504,7 @@
   }
 
   const G = { queue: [], i: 0, misses: 0, target: null, settings: null, attempts: [], session: null, locked: false,
-              facilitated: false, standby: false, poll: null, liveSeq: 0 };
+              facilitated: false, standby: false, poll: null, liveSeq: 0, limitTimer: null, ended: false };
   const gMusic = () => document.getElementById('game-music');
   const gVoice = () => document.getElementById('game-voice');
   function gShuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -3517,7 +3526,7 @@
       if (opts.facilitated) publishState({ status: 'error', message: msg });
       return;
     }
-    G.facilitated = !!opts.facilitated; G.standby = false;
+    G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false;
     G.queue = gShuffle(items.slice()); G.i = 0; G.attempts = []; G.locked = false;
     G.session = { mode: G.facilitated ? 'facilitated' : 'self_paced', category: scope, startedAt: new Date().toISOString() };
     document.getElementById('game-setup').classList.remove('show');
@@ -3525,6 +3534,10 @@
     const m = gMusic();
     if (s.music) { m.src = s.music; m.volume = 0.45; m.play().catch(() => {}); } else { m.pause(); }
     if (G.facilitated && !G.poll) startPolling();
+    // Auto-end after the parent-chosen time limit (default 15 min; 0 = no limit).
+    if (G.limitTimer) { clearTimeout(G.limitTimer); G.limitTimer = null; }
+    const limitMin = Number.isFinite(opts.limitMin) ? opts.limitMin : s.limitMin;
+    if (limitMin > 0) G.limitTimer = setTimeout(() => { if (!G.ended) endGame(); }, limitMin * 60000);
     nextRound();
   }
 
@@ -3601,6 +3614,9 @@
   }
 
   async function endGame() {
+    if (G.ended) return;          // idempotent — queue-exhaust, timeout, or phone "End" can all call this
+    G.ended = true;
+    if (G.limitTimer) { clearTimeout(G.limitTimer); G.limitTimer = null; }
     document.getElementById('game-overlay').classList.remove('show');
     const cel = document.getElementById('game-celebrate'); cel.classList.add('show');
     const phrases = G.settings.phrases;
@@ -3615,6 +3631,7 @@
   }
 
   function stopGame() {
+    if (G.limitTimer) { clearTimeout(G.limitTimer); G.limitTimer = null; }
     document.getElementById('game-overlay').classList.remove('show');
     document.getElementById('game-celebrate').classList.remove('show');
     const m = gMusic(); m.pause(); try { m.currentTime = 0; } catch (_) {}
@@ -3699,15 +3716,18 @@
   // ---- Game UI wiring ----
   document.getElementById('play-btn').addEventListener('click', () => {
     document.getElementById('game-setup-error').textContent = '';
-    document.getElementById('game-choices').value = String(gameSettings().choices);
+    const cur = gameSettings();
+    document.getElementById('game-choices').value = String(cur.choices);
+    document.getElementById('game-limit').value = String(cur.limitMin);
     document.getElementById('game-setup').classList.add('show');
   });
   document.getElementById('game-setup-cancel').addEventListener('click', () => document.getElementById('game-setup').classList.remove('show'));
   document.getElementById('game-setup-start').addEventListener('click', () => {
     const scope = document.getElementById('game-scope').value;
     const choices = parseInt(document.getElementById('game-choices').value, 10) || 3;
-    saveGameSettings({ choices });
-    startGame(scope, choices);
+    const limitMin = parseInt(document.getElementById('game-limit').value, 10);
+    saveGameSettings({ choices, limitMin: Number.isFinite(limitMin) ? limitMin : 15 });
+    startGame(scope, choices, { limitMin });
   });
   document.getElementById('game-prompt').addEventListener('click', playPrompt);
   document.getElementById('remote-btn').addEventListener('click', enterStandby);
