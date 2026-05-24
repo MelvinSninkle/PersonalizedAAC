@@ -1,8 +1,8 @@
-// POST /api/onboard-subject?childId=&style=&role=child|parent  — raw photo bytes.
-// Stylizes a person (child or parent) in the chosen style, stores it, and saves
-// it as a per-child REFERENCE image (the subject anchor the rest of the
-// onboarding renders will use). Returns { key } so the page can show it.
-// Synchronous on purpose — this is the calibration gate before the walk-through.
+// POST /api/onboard-subject?childId=&style=&role=child|parent&name=&pronunciation=
+// Raw photo bytes in the body. Stylizes the person, stores it, saves it as a
+// per-child REFERENCE image (subject anchor), and — when a name is given —
+// generates a voice and creates/updates a People tile for them (the child is
+// pinned). Returns { key, itemId }. Synchronous: this is the onboarding gate.
 import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
@@ -18,14 +18,30 @@ async function uploadBytes(kind, ext, buffer, contentType) {
   return pathname;
 }
 
+async function ttsBytes(text) {
+  const key = process.env.Fletchers_AAC_Device;
+  if (!key) return null;
+  const voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
+  const modelId = process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
+  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
+    method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+    body: JSON.stringify({ text, model_id: modelId }),
+  });
+  if (!r.ok) return null;
+  return Buffer.from(await r.arrayBuffer());
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
   const auth = await checkAuth(req);
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
 
-  const childId = String((req.query && req.query.childId) || 'fletcherpeterson').slice(0, 64);
-  const style = String((req.query && req.query.style) || '').slice(0, 80);
-  const role = (req.query && req.query.role) === 'parent' ? 'parent' : 'child';
+  const q = req.query || {};
+  const childId = String(q.childId || 'fletcherpeterson').slice(0, 64);
+  const style = String(q.style || '').slice(0, 80);
+  const role = q.role === 'parent' ? 'parent' : 'child';
+  const name = String(q.name || '').slice(0, 200).trim();
+  const pronunciation = String(q.pronunciation || '').slice(0, 200).trim();
 
   let buffer;
   try {
@@ -37,6 +53,7 @@ export default async function handler(req, res) {
   const contentType = req.headers['content-type'] || 'image/jpeg';
 
   try {
+    // 1) Stylize the person.
     let key;
     const apiKey = process.env.OPENAI_API_KEY;
     if (apiKey && style) {
@@ -52,18 +69,50 @@ export default async function handler(req, res) {
       if (!b64) { res.status(502).json({ error: 'No image returned' }); return; }
       key = await uploadBytes('refimage', 'png', Buffer.from(b64, 'base64'), 'image/png');
     } else {
-      key = await uploadBytes('refimage', 'jpg', buffer, contentType);   // no style → keep original
+      key = await uploadBytes('refimage', 'jpg', buffer, contentType);
     }
 
     const db = sql();
+    // 2) Save as a reference image (subject anchor for later renders).
     await db`
       CREATE TABLE IF NOT EXISTS reference_images (
         id BIGSERIAL PRIMARY KEY, child_id TEXT NOT NULL, blob_key TEXT NOT NULL,
         label TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`;
     await db`INSERT INTO reference_images (child_id, blob_key, label) VALUES (${childId}, ${key}, ${role})`;
+
+    // 3) Make them a People tile (with voice). Child is pinned; the family
+    //    category chip gets the child's face.
+    let itemId = null;
+    if (name) {
+      let soundKey = null;
+      try { const mp3 = await ttsBytes(pronunciation || name); if (mp3) soundKey = await uploadBytes('itemsound', 'mp3', mp3, 'audio/mpeg'); } catch (_) {}
+
+      const fam = await db`SELECT id, image_key FROM categories WHERE child_id = ${childId} AND section = 'people' AND parent_id IS NULL AND lower(label) = 'family' LIMIT 1`;
+      let catId;
+      if (fam.length) {
+        catId = fam[0].id;
+        if (role === 'child' && !fam[0].image_key) await db`UPDATE categories SET image_key = ${key}, updated_at = NOW() WHERE id = ${catId}`;
+      } else {
+        const c = await db`INSERT INTO categories (section, label, parent_id, image_key, keep_aspect, display_order, child_id, updated_at)
+          VALUES ('people', 'Family', NULL, ${role === 'child' ? key : null}, FALSE, 0, ${childId}, NOW()) RETURNING id`;
+        catId = c[0].id;
+      }
+
+      const pinned = role === 'child';
+      const existing = await db`SELECT id FROM items WHERE child_id = ${childId} AND section = 'people' AND lower(label) = lower(${name}) LIMIT 1`;
+      if (existing.length) {
+        await db`UPDATE items SET image_key = ${key}, sound_key = ${soundKey}, category_id = ${catId}, pinned = ${pinned}, updated_at = NOW() WHERE id = ${existing[0].id}`;
+        itemId = Number(existing[0].id);
+      } else {
+        const it = await db`INSERT INTO items (section, category_id, label, image_key, sound_key, keep_aspect, display_order, pinned, child_id, updated_at)
+          VALUES ('people', ${catId}, ${name}, ${key}, ${soundKey}, FALSE, ${Date.now()}, ${pinned}, ${childId}, NOW()) RETURNING id`;
+        itemId = Number(it[0].id);
+      }
+    }
+
     res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json({ ok: true, key });
+    res.status(200).json({ ok: true, key, itemId });
   } catch (err) {
     res.status(502).json({ error: 'Subject render failed', detail: String(err.message || err) });
   }

@@ -75,13 +75,15 @@
     <div class="subjects">
       <div class="subj">
         <div class="thumb" id="child-thumb">Tap to add the child's photo</div>
-        <div class="name" id="child-label">The child</div>
-        <button class="btn ghost tiny" id="child-take">📸 Take / choose</button>
+        <input id="child-name-input" type="text" placeholder="Name (e.g. Fletcher)" style="margin-top:8px;">
+        <input id="child-pron-input" type="text" placeholder="Say it as… (optional)" style="margin-top:6px;font-size:12px;color:#666;">
+        <button class="btn ghost tiny" id="child-take" style="margin-top:6px;">📸 Take / choose</button>
       </div>
       <div class="subj">
         <div class="thumb" id="parent-thumb">Tap to add a grown-up's photo</div>
-        <div class="name">A grown-up</div>
-        <button class="btn ghost tiny" id="parent-take">📸 Take / choose</button>
+        <input id="parent-name-input" type="text" placeholder="Name (e.g. Mom)" style="margin-top:8px;">
+        <input id="parent-pron-input" type="text" placeholder="Say it as… (optional)" style="margin-top:6px;font-size:12px;color:#666;">
+        <button class="btn ghost tiny" id="parent-take" style="margin-top:6px;">📸 Take / choose</button>
       </div>
     </div>
     <div id="ob-a-msg" style="font-size:13px;color:var(--muted);min-height:18px;margin-bottom:10px;"></div>
@@ -116,7 +118,8 @@
   const m = location.pathname.match(/^\/onboard\/([^\/]+)/);
   const slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';
   const pretty = (slug.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase())) || 'Fletcher';
-  $('child-name').textContent = pretty; $('child-name-2').textContent = pretty; $('child-label').textContent = pretty;
+  $('child-name').textContent = pretty; $('child-name-2').textContent = pretty;
+  $('child-name-input').value = pretty;
   try { const ss = localStorage.getItem('aacStyle'); if (ss) for (const o of $('ob-style').options) if (o.value === ss) { $('ob-style').value = ss; break; } } catch (_) {}
   $('ob-style').addEventListener('change', () => { try { localStorage.setItem('aacStyle', $('ob-style').value); } catch (_) {} });
 
@@ -136,22 +139,27 @@
   const done = { child: false, parent: false };
   function updateGate() { $('ob-continue').disabled = !(done.child && done.parent); }
   async function renderSubject(role, file) {
-    const thumb = $(role + '-thumb');
+    const nameEl = $(role + '-name-input');
+    const name = (nameEl.value || '').trim();
     const msg = $('ob-a-msg');
+    if (!name) { msg.textContent = 'Type a name first.'; nameEl.focus(); return; }
+    const pron = ($(role + '-pron-input').value || '').trim();
+    const thumb = $(role + '-thumb');
     thumb.innerHTML = '<div class="spin"></div>';
-    msg.textContent = 'Making ' + (role === 'child' ? pretty : 'the grown-up') + ' in your style… (about 30 seconds)';
+    msg.textContent = 'Making ' + name + ' in your style… (about 30 seconds)';
     try {
       const blob = await downscale(file);
-      const r = await fetch('/api/onboard-subject?childId=' + encodeURIComponent(slug) + '&style=' + encodeURIComponent($('ob-style').value) + '&role=' + role,
-        { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
+      const qs = '?childId=' + encodeURIComponent(slug) + '&style=' + encodeURIComponent($('ob-style').value) +
+        '&role=' + role + '&name=' + encodeURIComponent(name) + '&pronunciation=' + encodeURIComponent(pron);
+      const r = await fetch('/api/onboard-subject' + qs, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
       const { key } = await r.json();
       thumb.innerHTML = '<img src="/api/media?key=' + encodeURIComponent(key) + '" alt="">';
       done[role] = true; updateGate();
-      msg.textContent = (done.child && done.parent) ? '✅ Looks good? Continue below — or re-tap a photo to redo.' : '';
+      msg.textContent = (done.child && done.parent) ? '✅ Both added as tiles. Continue below — or re-tap a photo to redo.' : (name + ' added as a tile ✓');
     } catch (err) {
       thumb.textContent = 'Tap to try again';
-      msg.textContent = 'Could not render: ' + (err.message || err);
+      msg.textContent = 'Could not make ' + name + ': ' + (err.message || err);
     }
   }
   $('child-take').addEventListener('click', () => $('child-input').click());
