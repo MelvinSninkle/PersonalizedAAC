@@ -116,10 +116,25 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const m = location.pathname.match(/^\/onboard\/([^\/]+)/);
-  const slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';
-  const pretty = (slug.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase())) || 'Fletcher';
-  $('child-name').textContent = pretty; $('child-name-2').textContent = pretty;
-  $('child-name-input').value = pretty;
+  let slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';   // fallback slug for API calls if /me is unavailable
+  let pretty = 'your child';
+  let nameResolved = !!m;   // a path slug is trusted; otherwise wait for the session before naming the child
+  function applyName() {
+    const next = nameResolved ? ((slug.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase())) || 'your child') : 'your child';
+    $('child-name').textContent = next; $('child-name-2').textContent = next;
+    const inp = $('child-name-input');
+    if (!inp.value || inp.value === pretty) inp.value = (next === 'your child') ? '' : next;
+    pretty = next;
+  }
+  applyName();
+  // No slug in the URL (clinic parents arrive at plain /onboard): resolve the
+  // child from the logged-in session, then refresh the name + category options.
+  if (!m) {
+    fetch('/api/auth/me', { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { const s = d && d.user && d.user.slug; if (s) { slug = s; nameResolved = true; applyName(); loadCategories(); } })
+      .catch(() => {});
+  }
   try { const ss = localStorage.getItem('aacStyle'); if (ss) for (const o of $('ob-style').options) if (o.value === ss) { $('ob-style').value = ss; break; } } catch (_) {}
   $('ob-style').addEventListener('change', () => { try { localStorage.setItem('aacStyle', $('ob-style').value); } catch (_) {} });
 
