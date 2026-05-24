@@ -270,6 +270,20 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS taxonomy_audit_ts_idx     ON taxonomy_audit(ts DESC)`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_audit_action_idx ON taxonomy_audit(action)`;
 
+    // ---- Private-preview invite codes (redeemed at /welcome via /api/invite) ----
+    await db`
+      CREATE TABLE IF NOT EXISTS invite_codes (
+        id BIGSERIAL PRIMARY KEY,
+        code TEXT NOT NULL UNIQUE,
+        label TEXT,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        uses INTEGER NOT NULL DEFAULT 0,
+        last_used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS invite_codes_active_idx ON invite_codes(active)`;
+
     // ---- Landing-page email capture ----
     await db`
       CREATE TABLE IF NOT EXISTS waitlist (

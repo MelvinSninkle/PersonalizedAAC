@@ -1,13 +1,15 @@
 // Vercel Edge Middleware — two layers of gating:
 //
-//   1. Private-preview invite gate. When INVITE_CODE is set, every page first
-//      requires a valid signed `mw_invite` cookie (issued by /api/invite after
-//      the visitor types the invite code on /welcome). No cookie → /welcome.
-//      If INVITE_CODE is unset the gate is off, so nobody gets locked out.
+//   1. Private-preview invite gate. Visitors who are NOT logged in must first
+//      present a valid signed `mw_invite` cookie (issued by /api/invite after
+//      they type a code on /welcome). The codes are managed from the admin and
+//      stored in the DB; this middleware only verifies the signed cookie, so it
+//      never touches the DB. A logged-in session bypasses the gate entirely —
+//      that's also how the admin gets in to create the first codes.
 //
-//   2. Login session. The home/landing page (`/`) is public so we can point
-//      everyone there; the app, dashboards, admin and onboarding still require a
-//      valid `mw_session` cookie (issued by /api/auth/login) → /login otherwise.
+//   2. Login session. Once past the gate, the home/landing page (`/`) is public
+//      so we can point everyone there; the app, dashboards, admin and onboarding
+//      still require a valid `mw_session` cookie → /login otherwise.
 //
 // /api/*, /login, /reset, /welcome and the static/PWA assets are excluded from
 // the matcher entirely so the gate pages, login and Add-to-Home-Screen work.
@@ -36,24 +38,24 @@ export default async function middleware(req) {
   const url = new URL(req.url);
   const cookies = parseCookies(req.headers.get('cookie') || '');
 
-  // 1) Invite gate (only enforced when INVITE_CODE is configured).
-  if (process.env.INVITE_CODE) {
-    const invToken = cookies[INVITE_COOKIE];
-    const invite = invToken ? await verifySession(invToken, secret) : null;
-    if (!invite || !invite.inv) {
-      const next = encodeURIComponent(url.pathname + url.search);
-      return new Response(null, { status: 302, headers: { Location: `/welcome?next=${next}` } });
-    }
-  }
-
-  // 2) The home/landing page is public — send everyone here.
-  if (isPublicPage(url.pathname)) return;
-
-  // 3) Everything else needs a real login session.
+  // Logged-in users bypass the invite gate entirely (and reach the admin to
+  // create codes, so the gate can never lock everyone out).
   const token = cookies[cookieName()];
   const session = token ? await verifySession(token, secret) : null;
-  if (session) return; // authenticated → pass through
+  if (session) return;
 
+  // Anonymous visitors must clear the private-preview invite gate first.
+  const invToken = cookies[INVITE_COOKIE];
+  const invite = invToken ? await verifySession(invToken, secret) : null;
+  if (!invite || !invite.inv) {
+    const next = encodeURIComponent(url.pathname + url.search);
+    return new Response(null, { status: 302, headers: { Location: `/welcome?next=${next}` } });
+  }
+
+  // Past the gate but not logged in: the home/landing page is public.
+  if (isPublicPage(url.pathname)) return;
+
+  // Anything else still needs a real login session.
   const next = encodeURIComponent(url.pathname + url.search);
   return new Response(null, { status: 302, headers: { Location: `/login?next=${next}` } });
 }

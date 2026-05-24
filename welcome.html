@@ -27,7 +27,8 @@
   button:hover { background:var(--pink-deep); }
   button:disabled { opacity:.55; cursor:default; }
   .msg { font-size:13px; margin-top:14px; min-height:18px; color:var(--danger); }
-  .foot { margin-top:18px; font-size:12px; color:var(--muted); }
+  .foot { margin-top:14px; font-size:12px; color:var(--muted); }
+  .foot a { color:var(--pink-deep); font-weight:600; }
 </style>
 </head>
 <body>
@@ -42,6 +43,7 @@
       <button type="submit" id="go">Enter →</button>
     </form>
     <div class="msg" id="msg"></div>
+    <p class="foot">Already have an account? <a href="/login">Sign in</a> — no code needed.</p>
     <p class="foot">Don't have a code? Ask your clinic or the My World team.</p>
   </div>
 </div>
