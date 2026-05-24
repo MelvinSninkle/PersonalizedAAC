@@ -68,6 +68,8 @@
   .btn.primary:hover   { background: #c2185b; }
   .btn.secondary { background: white; color: #c2185b; border: 2px solid #fce4ec; }
   .btn.secondary:hover { border-color: #ff1493; }
+  a.member-cta { color: #c2185b; font-weight: 600; text-decoration: none; border-bottom: 1px dashed #f3a8cd; }
+  a.member-cta:hover { color: #ff1493; border-bottom-style: solid; }
 
   /* Section frame */
   section { padding: 80px 28px; }
@@ -241,6 +243,7 @@
       <a class="btn secondary" href="#try">See how it works</a>
     </div>
     <p class="tiny">14-day free trial when we launch. No card required.</p>
+    <p class="tiny">Already set up with your clinic? <a class="member-cta" href="/onboard">Set up your child's board →</a></p>
   </div>
 </section>
 
@@ -352,7 +355,10 @@
         <div class="eyebrow">The room walk</div>
         <h2>Photograph one room. Get dozens of tiles.</h2>
         <p class="lead">Walk through your kitchen with the parent app open. Take five photos. The system identifies the foods, drinks, dishes, and snacks your child actually uses, and transforms each one into a tile in their style. The vocabulary that takes other apps months to build appears in an afternoon.</p>
-        <a class="btn secondary" href="#signup" style="margin-top: 20px;">Get early access · $99/mo</a>
+        <div style="margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap;">
+          <a class="btn primary" href="/onboard">Start your room walk →</a>
+          <a class="btn secondary" href="#signup">Get early access · $99/mo</a>
+        </div>
       </div>
     </div>
 
@@ -413,6 +419,7 @@
 <footer>
   <p><span class="brand">My World</span> · A privately-held AAC tool for children with autism.</p>
   <p style="margin-top: 6px;">Coming soon. © Andrew Peterson.</p>
+  <p style="margin-top: 10px;">Clinic family with an account? <a class="member-cta" href="/onboard">Set up your child's board →</a> · <a class="member-cta" href="/login">Sign in</a></p>
 </footer>
 
 <script>

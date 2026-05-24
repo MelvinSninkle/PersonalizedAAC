@@ -992,6 +992,19 @@
     </div>
     <input type="file" id="bulk-folder-input" accept="image/*" webkitdirectory directory style="display:none;">
     <div style="font-size:12px;color:#888;margin-top:6px;">Click ★ on a row to use that image as the category icon (defaults to the first image).</div>
+    <div style="margin-top:10px;border:1px solid #f3c6dd;background:#fff5fa;border-radius:10px;padding:10px;">
+      <label for="bulk-style" style="margin-top:0;font-weight:700;color:#ad1457;">✨ AI art style</label>
+      <select id="bulk-style" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+        <option value="Pixar-style 3D animated render">3D Animated</option>
+        <option value="flat picture-book illustration">Picture Book</option>
+        <option value="soft watercolor illustration">Watercolor</option>
+        <option value="gentle soft storybook illustration">Soft Storybook</option>
+        <option value="needle-felted wool craft">Felted</option>
+        <option value="">Keep original photos (just name them)</option>
+      </select>
+      <button type="button" id="bulk-ai" style="margin-top:8px;width:100%;padding:11px;border:none;border-radius:8px;background:#ff1493;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">✨ AI: name, pronounce &amp; make art for all</button>
+      <div style="font-size:12px;color:#888;margin-top:6px;">Fills each name + pronunciation automatically and (unless "keep original") turns the photos into art. You can still edit anything before saving.</div>
+    </div>
     <div class="checkbox-row" style="margin-top:10px;">
       <input type="checkbox" id="bulk-tts" checked>
       <label for="bulk-tts">Generate audio for each item from its name</label>
@@ -1099,13 +1112,26 @@
     <label for="game-scope">What to practice</label>
     <select id="game-scope" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
       <option value="all" selected>Everything</option>
-      <option value="people">People</option>
-      <option value="nouns">Nouns</option>
-      <option value="verbs">Verbs</option>
     </select>
+    <div id="game-range-row" style="display:none;margin-top:10px;">
+      <label>Limit to a range (optional) — e.g. Numbers 1 to 20</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="game-from" type="number" min="1" inputmode="numeric" placeholder="from #" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
+        <span style="color:#888;">to</span>
+        <input id="game-to" type="number" min="1" inputmode="numeric" placeholder="to #" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
+      </div>
+    </div>
     <label for="game-choices">Choices per round</label>
     <select id="game-choices" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
       <option value="2">2 (easier)</option><option value="3" selected>3</option><option value="4">4</option>
+    </select>
+    <label for="game-limit">Time limit</label>
+    <select id="game-limit" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
+      <option value="15" selected>15 minutes</option>
+      <option value="30">30 minutes</option>
+      <option value="45">45 minutes</option>
+      <option value="60">60 minutes</option>
+      <option value="0">No limit (I'll end it)</option>
     </select>
     <div class="error" id="game-setup-error"></div>
     <div class="button-row">
@@ -1813,8 +1839,7 @@
         label: it.label, pinned: it.pinned,
         onClick: () => {
           if (editMode) { openItemModal(section, activeId, it); return; }
-          enqueueEvent(it, tapCategoryName, tapSubcategoryName);
-          if (it.soundKey) playSound(it);
+          tapSpeak(it, tapCategoryName, tapSubcategoryName);
         },
         onEdit: () => openItemModal(section, activeId, it),
       });
@@ -1849,8 +1874,7 @@
         label: it.label, pinned: false,
         onClick: () => {
           if (editMode) { openItemModal('needs', null, it); return; }
-          enqueueEvent(it, null, null);   // needs items have no category path
-          if (it.soundKey) playSound(it);
+          tapSpeak(it, null, null);   // needs items have no category path
         },
         onEdit: () => openItemModal('needs', null, it),
       });
@@ -1863,14 +1887,37 @@
     itemsEl.appendChild(makeAddItemTile(() => openItemModal('needs', null, null)));
   }
 
+  // While a tile's word is playing, ignore further taps — no half-spoken words
+  // and no runaway queue if a child spams the buttons.
+  let speaking = false;
+  let speakTimer = null;
+  function tapSpeak(item, categoryName, subcategoryName) {
+    if (speaking) return;
+    enqueueEvent(item, categoryName, subcategoryName);
+    playSound(item);   // playSound sets and clears `speaking`
+  }
   async function playSound(item) {
     if (!item.soundKey) return;
-    const url = await getMediaURL(item.soundKey);
-    if (!url) return;
+    speaking = true;
     const player = document.getElementById('audio-player');
+    const release = () => {
+      speaking = false;
+      player.removeEventListener('ended', release);
+      player.removeEventListener('error', release);
+      if (speakTimer) { clearTimeout(speakTimer); speakTimer = null; }
+    };
+    const url = await getMediaURL(item.soundKey);
+    if (!url) { release(); return; }
     player.src = url;
     player.currentTime = 0;
-    player.play().catch(() => {});
+    player.addEventListener('ended', release);
+    player.addEventListener('error', release);
+    try {
+      await player.play();
+      const dur = (isFinite(player.duration) && player.duration > 0) ? player.duration : 3;
+      if (speakTimer) clearTimeout(speakTimer);
+      speakTimer = setTimeout(release, (dur + 1) * 1000);   // safety net if 'ended' never fires
+    } catch (_) { release(); }
   }
 
   // ---- Activity log (every kid-mode tile tap; offline queue with auto-flush) ----
@@ -2649,10 +2696,21 @@
       });
       const img = document.createElement('img');
       img.src = it.previewUrl;
+      const mid = document.createElement('div');
+      mid.style.cssText = 'flex:1;display:flex;flex-direction:column;gap:4px;min-width:0;';
       const input = document.createElement('input');
       input.type = 'text';
       input.value = it.label;
+      input.placeholder = 'Name';
       input.addEventListener('input', (e) => { bulkItems[idx].label = e.target.value; });
+      const pron = document.createElement('input');
+      pron.type = 'text';
+      pron.value = it.pronunciation || '';
+      pron.placeholder = 'Say it as… (optional)';
+      pron.style.cssText = 'font-size:12px;color:#666;';
+      pron.addEventListener('input', (e) => { bulkItems[idx].pronunciation = e.target.value; });
+      mid.appendChild(input);
+      mid.appendChild(pron);
       const rm = document.createElement('button');
       rm.type = 'button';
       rm.className = 'row-remove';
@@ -2666,7 +2724,7 @@
       });
       row.appendChild(star);
       row.appendChild(img);
-      row.appendChild(input);
+      row.appendChild(mid);
       row.appendChild(rm);
       list.appendChild(row);
     });
@@ -2686,6 +2744,7 @@
       bulkItems.push({
         file,
         label: filenameToLabel(file.name),
+        pronunciation: '',
         previewUrl: URL.createObjectURL(file),
       });
       added++;
@@ -2716,6 +2775,8 @@
     document.getElementById('bulk-tts').checked = true;
     document.getElementById('bulk-emotion').value = 'default';
     document.getElementById('bulk-keep-aspect').checked = false;
+    const ss = localStorage.getItem('aacStyle');
+    if (ss) { const styleSel = document.getElementById('bulk-style'); for (const o of styleSel.options) { if (o.value === ss) { styleSel.value = ss; break; } } }
     document.getElementById('bulk-progress').textContent = '';
     document.getElementById('bulk-error').textContent = '';
     renderBulkList();
@@ -2749,6 +2810,39 @@
   document.getElementById('bulk-cancel').addEventListener('click', () => {
     clearBulkPreviews();
     bulkModal.classList.remove('show');
+  });
+
+  // ✨ One-tap: for every photo, suggest a name + pronunciation and (optionally)
+  // turn it into art — filling the editable rows so the parent can glance + Save.
+  document.getElementById('bulk-ai').addEventListener('click', async () => {
+    const errEl = document.getElementById('bulk-error');
+    const prog = document.getElementById('bulk-progress');
+    const btn = document.getElementById('bulk-ai');
+    errEl.textContent = '';
+    if (!bulkItems.length) { errEl.textContent = 'Add some photos first.'; return; }
+    const style = document.getElementById('bulk-style').value;
+    btn.disabled = true; const prev = btn.textContent;
+    for (let i = 0; i < bulkItems.length; i++) {
+      const it = bulkItems[i];
+      btn.textContent = 'Working…';
+      prog.textContent = `AI ${i + 1} of ${bulkItems.length}…`;
+      try {
+        const photo = await compressImage(it.file);
+        try {
+          const dr = await apiFetch('/api/describe-image', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
+          if (dr.ok) { const d = await dr.json(); if (d.label) it.label = d.label; if (d.pronunciation) it.pronunciation = d.pronunciation; }
+        } catch (_) {}
+        if (style) {
+          try {
+            const ir = await apiFetch('/api/generate-image?label=' + encodeURIComponent(it.label || '') + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(CHILD_ID), { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
+            if (ir.ok) { const blob = await ir.blob(); URL.revokeObjectURL(it.previewUrl); it.file = blob; it.previewUrl = URL.createObjectURL(blob); }
+          } catch (_) {}
+        }
+        renderBulkList();
+      } catch (_) {}
+    }
+    prog.textContent = '✅ AI done — review the names and Save.';
+    btn.disabled = false; btn.textContent = prev;
   });
 
   document.getElementById('bulk-save').addEventListener('click', async () => {
@@ -2803,7 +2897,7 @@
           const r = await apiFetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: it.label.trim(), emotion }),
+            body: JSON.stringify({ text: (it.pronunciation && it.pronunciation.trim()) || it.label.trim(), emotion }),
           });
           if (!r.ok) {
             const detail = await r.text();
@@ -3453,8 +3547,9 @@
         phrases: Array.isArray(s.phrases) && s.phrases.length ? s.phrases : DEFAULT_REWARDS,
         music: typeof s.music === 'string' ? s.music : '/audio/color-tap-learn.mp3',
         choices: s.choices || 3,
+        limitMin: Number.isFinite(s.limitMin) ? s.limitMin : 15,
       };
-    } catch (_) { return { phrases: DEFAULT_REWARDS, music: '/audio/color-tap-learn.mp3', choices: 3 }; }
+    } catch (_) { return { phrases: DEFAULT_REWARDS, music: '/audio/color-tap-learn.mp3', choices: 3, limitMin: 15 }; }
   }
   function saveGameSettings(patch) {
     const next = { ...gameSettings(), ...patch };
@@ -3495,36 +3590,72 @@
   }
 
   const G = { queue: [], i: 0, misses: 0, target: null, settings: null, attempts: [], session: null, locked: false,
-              facilitated: false, standby: false, poll: null, liveSeq: 0 };
+              facilitated: false, standby: false, poll: null, liveSeq: 0, limitTimer: null, ended: false, running: false };
   const gMusic = () => document.getElementById('game-music');
   const gVoice = () => document.getElementById('game-voice');
   function gShuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
-  async function gatherPlayable(scope) {
+  async function gatherPlayable(scope, range) {
+    // A specific category/subcategory (e.g. Numbers) — optionally sliced to a range.
+    if (scope && scope.startsWith('cat:')) {
+      const id = Number(scope.slice(4));
+      let items = [];
+      for (const s of MAIN_SECTIONS) (await getAllItems(s)).forEach(i => { if (i.categoryId === id) items.push(i); });
+      items = items.filter(i => i.imageKey && i.label).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      if (range && (range.from || range.to)) {
+        const from = Math.max(1, range.from || 1) - 1;
+        const to = (range.to && range.to > 0) ? range.to : items.length;
+        items = items.slice(from, to);
+      }
+      return items;
+    }
     const secs = scope === 'all' ? MAIN_SECTIONS : [scope];
     const items = [];
     for (const s of secs) items.push(...await getAllItems(s));
     return items.filter(it => it.imageKey && it.label);   // need a picture to match against
   }
+  // Build the scope dropdown from the actual tree so a parent can drill into a category.
+  async function populateGameScope() {
+    const sel = document.getElementById('game-scope');
+    sel.innerHTML = '';
+    const add = (parent, value, text) => { const o = document.createElement('option'); o.value = value; o.textContent = text; parent.appendChild(o); };
+    add(sel, 'all', 'Everything');
+    for (const s of MAIN_SECTIONS) {
+      const cats = await getAllCats(s);
+      if (!cats.length) continue;
+      const og = document.createElement('optgroup'); og.label = s[0].toUpperCase() + s.slice(1);
+      add(og, s, 'All ' + s);
+      const tops = cats.filter(c => c.parentId == null).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      for (const t of tops) {
+        add(og, 'cat:' + t.id, '— ' + t.label);
+        const subs = cats.filter(c => c.parentId === t.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        for (const sub of subs) add(og, 'cat:' + sub.id, '— — ' + sub.label);
+      }
+      sel.appendChild(og);
+    }
+  }
 
   async function startGame(scope, choices, opts = {}) {
     const s = gameSettings();
     G.settings = { ...s, choices };
-    const items = await gatherPlayable(scope);
+    const items = await gatherPlayable(scope, opts.range);
     if (items.length < choices) {
       const msg = 'Add at least ' + choices + ' tiles (with pictures) here first.';
       const errEl = document.getElementById('game-setup-error'); if (errEl) errEl.textContent = msg;
       if (opts.facilitated) publishState({ status: 'error', message: msg });
       return;
     }
-    G.facilitated = !!opts.facilitated; G.standby = false;
+    G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true;
     G.queue = gShuffle(items.slice()); G.i = 0; G.attempts = []; G.locked = false;
     G.session = { mode: G.facilitated ? 'facilitated' : 'self_paced', category: scope, startedAt: new Date().toISOString() };
     document.getElementById('game-setup').classList.remove('show');
     document.getElementById('game-overlay').classList.add('show');
     const m = gMusic();
     if (s.music) { m.src = s.music; m.volume = 0.45; m.play().catch(() => {}); } else { m.pause(); }
-    if (G.facilitated && !G.poll) startPolling();
+    // Auto-end after the parent-chosen time limit (default 15 min; 0 = no limit).
+    if (G.limitTimer) { clearTimeout(G.limitTimer); G.limitTimer = null; }
+    const limitMin = Number.isFinite(opts.limitMin) ? opts.limitMin : s.limitMin;
+    if (limitMin > 0) G.limitTimer = setTimeout(() => { if (!G.ended) endGame(); }, limitMin * 60000);
     nextRound();
   }
 
@@ -3582,12 +3713,14 @@
       publishState();
       setTimeout(() => { G.i++; nextRound(); }, 950);
     } else {
-      // No negative feedback — escalate a hint on the CORRECT tile instead.
+      // No negative feedback — escalate a hint on the CORRECT tile instead,
+      // and repeat the word so he hears what he's looking for again.
       G.misses++;
       const correctEl = [...document.querySelectorAll('.game-choice')].find(x => Number(x.dataset.id) === G.target.id);
       if (G.misses === 1 && correctEl) { correctEl.classList.remove('wiggle'); void correctEl.offsetWidth; correctEl.classList.add('wiggle'); }
       else if (G.misses === 2 && correctEl) { correctEl.classList.add('glow'); }
       else if (G.misses >= 3) { G.locked = true; logAttempt(false); setTimeout(() => { G.i++; nextRound(); }, 700); }
+      if (G.misses < 3) playPrompt();   // replay the target word on each wrong try
     }
   }
 
@@ -3601,6 +3734,9 @@
   }
 
   async function endGame() {
+    if (G.ended) return;          // idempotent — queue-exhaust, timeout, or phone "End" can all call this
+    G.ended = true;
+    if (G.limitTimer) { clearTimeout(G.limitTimer); G.limitTimer = null; }
     document.getElementById('game-overlay').classList.remove('show');
     const cel = document.getElementById('game-celebrate'); cel.classList.add('show');
     const phrases = G.settings.phrases;
@@ -3615,12 +3751,13 @@
   }
 
   function stopGame() {
+    if (G.limitTimer) { clearTimeout(G.limitTimer); G.limitTimer = null; }
     document.getElementById('game-overlay').classList.remove('show');
     document.getElementById('game-celebrate').classList.remove('show');
     const m = gMusic(); m.pause(); try { m.currentTime = 0; } catch (_) {}
     gVoice().pause();
+    G.running = false;
     if (G.facilitated) publishState({ status: 'idle' });
-    stopPolling();
     G.facilitated = false; G.standby = false; G.target = null;
   }
 
@@ -3640,27 +3777,48 @@
       });
     } catch (_) {}
   }
-  function startPolling() { if (G.poll) return; G.poll = setInterval(pollLive, 1200); }
-  function stopPolling() { if (G.poll) { clearInterval(G.poll); G.poll = null; } }
-  async function pollLive() {
-    // Heartbeat so the phone always sees a fresh "Connected" status.
-    G.tick = (G.tick || 0) + 1;
-    if (G.tick % 3 === 0) publishState();
+  // Always-on listener: the kid app polls for remote commands the whole time
+  // it's open, so an adult can start/drive a game from their phone with nothing
+  // tapped on the iPad. Polls faster while a game is live, slower when idle.
+  let _liveActive = false;
+  function startLiveListener() {
+    if (_liveActive) return;
+    _liveActive = true;
+    const tick = async () => {
+      try {
+        const r = await apiFetch('/api/live?childId=' + encodeURIComponent(CHILD_ID));
+        if (r.ok) {
+          const d = await r.json();
+          if (d.cmd && Number(d.cmd.seq) > G.liveSeq) { G.liveSeq = Number(d.cmd.seq); applyCmd(d.cmd); }
+        }
+      } catch (_) {}
+      // Heartbeat so the phone shows the tablet as "Connected".
+      G.tick = (G.tick || 0) + 1;
+      if (G.tick % 2 === 0) { if (G.running && G.facilitated) publishState(); else if (!G.running) publishReady(); }
+      setTimeout(tick, G.running ? 1000 : 2500);
+    };
+    tick();
+  }
+  async function publishReady() {
     try {
-      const r = await apiFetch('/api/live?childId=' + encodeURIComponent(CHILD_ID));
-      if (!r.ok) return;
-      const d = await r.json();
-      if (d.cmd && Number(d.cmd.seq) > G.liveSeq) { G.liveSeq = Number(d.cmd.seq); applyCmd(d.cmd); }
+      await apiFetch('/api/live?childId=' + encodeURIComponent(CHILD_ID), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'state', status: 'ready', payload: { target: null, total: 0, correctCount: 0 } }),
+      });
     } catch (_) {}
   }
   function applyCmd(cmd) {
     const a = cmd.action;
-    if (a === 'end') { if (G.standby) stopGame(); else if (!G.locked) { G.locked = true; endGame(); } return; }
     if (a === 'start') {
-      if (G.standby) { G.standby = false; startGame(cmd.scope || 'all', cmd.choices || 3, { facilitated: true }); }
+      // Start a phone-driven game from anywhere — even if the iPad is just on the board.
+      if (!G.running) {
+        const range = (cmd.from || cmd.to) ? { from: cmd.from || 0, to: cmd.to || 0 } : null;
+        startGame(cmd.scope || 'all', cmd.choices || 3, { facilitated: true, range });
+      }
       return;
     }
-    if (G.standby || G.locked || !G.target) return;
+    if (a === 'end') { if (G.running && !G.ended) endGame(); else stopGame(); return; }
+    if (!G.running || G.locked || !G.target) return;
     if (a === 'mark') markRemote(cmd.method || 'tap');
     else if (a === 'skip' || a === 'next') { G.locked = true; setTimeout(() => { G.i++; nextRound(); }, 250); }
   }
@@ -3675,14 +3833,13 @@
     setTimeout(() => { G.i++; nextRound(); }, 950);
   }
   function enterStandby() {
-    G.facilitated = true; G.standby = true; G.liveSeq = 0; G.attempts = []; G.target = null;
+    G.facilitated = true; G.standby = true; G.attempts = []; G.target = null;
     document.getElementById('game-overlay').classList.add('show');
     document.getElementById('game-prompt').style.display = 'none';
     document.getElementById('game-progress').textContent = '';
     document.getElementById('game-grid').className = 'game-grid';
     document.getElementById('game-grid').innerHTML = '<div style="font-family:\'Fredoka\',ui-rounded,system-ui,sans-serif;color:#ad1457;font-size:clamp(22px,5vw,40px);text-align:center;line-height:1.4;">Waiting for the therapist…<br><span style="font-size:.5em;color:#c9a0bb;">She can start the game from her phone.</span></div>';
     publishState({ status: 'standby' });
-    startPolling();
   }
 
   async function logSession() {
@@ -3697,17 +3854,33 @@
   }
 
   // ---- Game UI wiring ----
-  document.getElementById('play-btn').addEventListener('click', () => {
+  document.getElementById('play-btn').addEventListener('click', async () => {
     document.getElementById('game-setup-error').textContent = '';
-    document.getElementById('game-choices').value = String(gameSettings().choices);
+    const cur = gameSettings();
+    await populateGameScope();
+    document.getElementById('game-choices').value = String(cur.choices);
+    document.getElementById('game-limit').value = String(cur.limitMin);
+    document.getElementById('game-range-row').style.display = 'none';
+    document.getElementById('game-from').value = '';
+    document.getElementById('game-to').value = '';
     document.getElementById('game-setup').classList.add('show');
+  });
+  document.getElementById('game-scope').addEventListener('change', (e) => {
+    document.getElementById('game-range-row').style.display = e.target.value.startsWith('cat:') ? 'block' : 'none';
   });
   document.getElementById('game-setup-cancel').addEventListener('click', () => document.getElementById('game-setup').classList.remove('show'));
   document.getElementById('game-setup-start').addEventListener('click', () => {
     const scope = document.getElementById('game-scope').value;
     const choices = parseInt(document.getElementById('game-choices').value, 10) || 3;
-    saveGameSettings({ choices });
-    startGame(scope, choices);
+    const limitMin = parseInt(document.getElementById('game-limit').value, 10);
+    let range = null;
+    if (scope.startsWith('cat:')) {
+      const from = parseInt(document.getElementById('game-from').value, 10);
+      const to = parseInt(document.getElementById('game-to').value, 10);
+      if (Number.isFinite(from) || Number.isFinite(to)) range = { from: Number.isFinite(from) ? from : 0, to: Number.isFinite(to) ? to : 0 };
+    }
+    saveGameSettings({ choices, limitMin: Number.isFinite(limitMin) ? limitMin : 15 });
+    startGame(scope, choices, { limitMin, range });
   });
   document.getElementById('game-prompt').addEventListener('click', playPrompt);
   document.getElementById('remote-btn').addEventListener('click', enterStandby);
@@ -3799,6 +3972,8 @@
       clearTimeout(watchdog);
       // Warm the full media cache (pictures + voices) for offline use.
       if (navigator.onLine !== false) precacheAllMedia();
+      // Listen for remote (phone) game commands the whole time the app is open.
+      startLiveListener();
     } catch (err) {
       clearTimeout(watchdog);
       bootBanner('Load error at "' + step + '": ' + (err.message || err), true);

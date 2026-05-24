@@ -33,6 +33,11 @@
   details summary { cursor:pointer; font-size:12px; color:var(--muted); }
   details .hint { font-size:12px; color:var(--muted); margin:8px 0 12px; }
   .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .cta-band { margin-top:20px; border-top:1px solid var(--line); padding-top:18px; text-align:center; }
+  .cta-band p { font-size:13px; color:var(--muted); margin:0 0 12px; }
+  .cta-band a.cta { display:inline-block; text-decoration:none; background:#fff; color:var(--pink-deep);
+    border:2px solid var(--pink); border-radius:999px; padding:11px 20px; font-weight:700; font-size:14px; }
+  .cta-band a.cta:hover { background:var(--pink); color:#fff; }
 </style>
 </head>
 <body>
@@ -52,6 +57,12 @@
     <div class="msg" id="msg"></div>
     <div class="links">
       <a id="show-forgot">Forgot password?</a>
+    </div>
+
+    <!-- New-parent CTA: walk through the house, build the board in minutes -->
+    <div class="cta-band">
+      <p>New to My World? Set up your child's board in about five minutes.</p>
+      <a class="cta" href="/onboard">📸 Set up your child's board →</a>
     </div>
 
     <!-- Forgot password -->

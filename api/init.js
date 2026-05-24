@@ -192,6 +192,25 @@ export default async function handler(req, res) {
       )
     `;
 
+    // ---- Onboarding capture queue (snap now, render in the background, review later) ----
+    await db`
+      CREATE TABLE IF NOT EXISTS pending_tiles (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'queued',
+        style TEXT,
+        label TEXT,
+        pronunciation TEXT,
+        source_key TEXT,
+        image_key TEXT,
+        sound_key TEXT,
+        error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS pending_tiles_child_idx ON pending_tiles(child_id, status)`;
+
     // ---- Taxonomy workbench (Section 17 of the PRD) ----
     // Canonical library of tile prompts, separate from any one child's instance.
     // Edited via /admin/taxonomy; consumed by AI image generation in a later chunk.
@@ -250,6 +269,20 @@ export default async function handler(req, res) {
     `;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_audit_ts_idx     ON taxonomy_audit(ts DESC)`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_audit_action_idx ON taxonomy_audit(action)`;
+
+    // ---- Private-preview invite codes (redeemed at /welcome via /api/invite) ----
+    await db`
+      CREATE TABLE IF NOT EXISTS invite_codes (
+        id BIGSERIAL PRIMARY KEY,
+        code TEXT NOT NULL UNIQUE,
+        label TEXT,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        uses INTEGER NOT NULL DEFAULT 0,
+        last_used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS invite_codes_active_idx ON invite_codes(active)`;
 
     // ---- Landing-page email capture ----
     await db`

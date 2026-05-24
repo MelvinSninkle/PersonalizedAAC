@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Set up tiles · My World</title>
+<meta name="theme-color" content="#ff1493">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<!--
+  Onboarding. STEP 1 (gate): capture the child + a parent and render them in the
+  chosen style — confirms the look and seeds them as reference images the rest
+  of the renders use. STEP 2: walk the house snapping photos; each renders in the
+  background and the review list fills in. Nothing goes live until approved.
+-->
+<style>
+  * { box-sizing: border-box; }
+  :root { --pink:#ff1493; --pink-deep:#ad1457; --ink:#1f2937; --muted:#6b7280; --faint:#9ca3af; --line:#fce4ec; --bg:#fdf2f8; --good:#16a34a; --danger:#dc2626; }
+  html,body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.5; }
+  .fred { font-family:'Fredoka',ui-rounded,system-ui,sans-serif; }
+  header { position:sticky; top:0; z-index:10; background:rgba(255,255,255,.96); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); padding:14px 18px; }
+  header .brand { font-family:'Fredoka',system-ui; font-weight:700; color:var(--pink-deep); font-size:19px; }
+  header .sub { font-size:13px; color:var(--muted); }
+  .wrap { max-width:760px; margin:0 auto; padding:18px; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:16px; }
+  .panel h3 { margin:0 0 4px; }
+  .panel p.note { font-size:13px; color:var(--muted); margin:0 0 12px; }
+  label { display:block; font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px; }
+  select, input[type=text] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; }
+  .btn { border:none; cursor:pointer; font:inherit; font-weight:700; border-radius:999px; padding:13px 18px; background:var(--pink); color:#fff; font-size:15px; }
+  .btn:hover { background:var(--pink-deep); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .btn.ghost { background:#fff0f6; color:var(--pink-deep); }
+  .btn.tiny { padding:8px 13px; font-size:13px; }
+  .btn.ok { background:var(--good); }
+  .btn.no { background:#fff0f0; color:var(--danger); }
+  .subjects { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:14px 0; }
+  .subj { text-align:center; }
+  .subj .thumb { width:100%; aspect-ratio:1; border-radius:14px; border:2px dashed #f3c6dd; background:#fff7fb center/cover no-repeat; display:grid; place-items:center; color:var(--faint); font-size:13px; padding:10px; cursor:pointer; overflow:hidden; }
+  .subj .thumb img { width:100%; height:100%; object-fit:cover; }
+  .subj .name { font-weight:700; color:var(--pink-deep); margin:8px 0 6px; }
+  .capture-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  .count { font-family:'Fredoka',system-ui; font-weight:700; color:var(--pink-deep); font-size:15px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
+  .card { border:1px solid var(--line); border-radius:14px; padding:12px; background:#fff; }
+  .card .thumb { width:100%; aspect-ratio:1; border-radius:10px; background:#fff7fb center/cover no-repeat; display:grid; place-items:center; color:var(--faint); font-size:13px; text-align:center; overflow:hidden; }
+  .card .thumb img { width:100%; height:100%; object-fit:cover; }
+  .card input[type=text] { margin-top:8px; }
+  .card .pron { font-size:12px; color:#666; }
+  .card .row { display:flex; gap:8px; margin-top:8px; }
+  .card .row .btn { flex:1; }
+  .empty { color:var(--faint); font-size:14px; text-align:center; padding:24px; }
+  .spin { width:26px; height:26px; border:3px solid #fce4ec; border-top-color:var(--pink); border-radius:50%; animation:spin .9s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand fred">🌍 Set up <span id="child-name">Fletcher</span>'s tiles</div>
+  <div class="sub">First we make the people, then you walk the house snapping photos.</div>
+</header>
+<div class="wrap">
+
+  <!-- STEP 1 — style + the people (gate) -->
+  <div class="panel" id="ob-phase-a">
+    <h3 class="fred">Step 1 · The people</h3>
+    <p class="note">Pick a style, then add a photo of <strong id="child-name-2">Fletcher</strong> and one grown-up who's here helping. We'll make them in the style first so you can see how it looks.</p>
+    <label for="ob-style">Art style</label>
+    <select id="ob-style">
+      <option value="Pixar-style 3D animated render">3D Animated</option>
+      <option value="flat picture-book illustration">Picture Book</option>
+      <option value="soft watercolor illustration">Watercolor</option>
+      <option value="gentle soft storybook illustration">Soft Storybook</option>
+      <option value="needle-felted wool craft">Felted</option>
+    </select>
+    <div class="subjects">
+      <div class="subj">
+        <div class="thumb" id="child-thumb">Tap to add the child's photo</div>
+        <input id="child-name-input" type="text" placeholder="Name (e.g. Fletcher)" style="margin-top:8px;">
+        <input id="child-pron-input" type="text" placeholder="Say it as… (optional)" style="margin-top:6px;font-size:12px;color:#666;">
+        <button class="btn ghost tiny" id="child-take" style="margin-top:6px;">📸 Take / choose</button>
+      </div>
+      <div class="subj">
+        <div class="thumb" id="parent-thumb">Tap to add a grown-up's photo</div>
+        <input id="parent-name-input" type="text" placeholder="Name (e.g. Mom)" style="margin-top:8px;">
+        <input id="parent-pron-input" type="text" placeholder="Say it as… (optional)" style="margin-top:6px;font-size:12px;color:#666;">
+        <button class="btn ghost tiny" id="parent-take" style="margin-top:6px;">📸 Take / choose</button>
+      </div>
+    </div>
+    <div id="ob-a-msg" style="font-size:13px;color:var(--muted);min-height:18px;margin-bottom:10px;"></div>
+    <button class="btn" id="ob-continue" disabled>Continue to the walk-through →</button>
+    <input type="file" id="child-input" accept="image/*" capture="user" style="display:none;">
+    <input type="file" id="parent-input" accept="image/*" capture="user" style="display:none;">
+  </div>
+
+  <!-- STEP 2 — walk the house -->
+  <div id="ob-phase-b" style="display:none;">
+    <div class="panel">
+      <h3 class="fred">Step 2 · Walk the house</h3>
+      <p class="note">Snap anything Fletcher uses. Each one renders in the background — keep moving, then review below.</p>
+      <div class="capture-row">
+        <button class="btn" id="ob-take">📸 Take a photo</button>
+        <button class="btn ghost" id="ob-choose">🖼 Choose photos</button>
+        <span class="count" id="ob-count"></span>
+      </div>
+      <input type="file" id="ob-camera" accept="image/*" capture="environment" style="display:none;">
+      <input type="file" id="ob-library" accept="image/*" multiple style="display:none;">
+    </div>
+    <h3 class="fred" style="margin:6px 2px;">Review</h3>
+    <div class="cards" id="ob-cards"><div class="empty">No photos yet — snap one above to begin.</div></div>
+  </div>
+</div>
+
+<audio id="ob-audio" preload="none"></audio>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const m = location.pathname.match(/^\/onboard\/([^\/]+)/);
+  let slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';   // fallback slug for API calls if /me is unavailable
+  let pretty = 'your child';
+  let nameResolved = !!m;   // a path slug is trusted; otherwise wait for the session before naming the child
+  function applyName() {
+    const next = nameResolved ? ((slug.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase())) || 'your child') : 'your child';
+    $('child-name').textContent = next; $('child-name-2').textContent = next;
+    const inp = $('child-name-input');
+    if (!inp.value || inp.value === pretty) inp.value = (next === 'your child') ? '' : next;
+    pretty = next;
+  }
+  applyName();
+  // No slug in the URL (clinic parents arrive at plain /onboard): resolve the
+  // child from the logged-in session, then refresh the name + category options.
+  if (!m) {
+    fetch('/api/auth/me', { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { const s = d && d.user && d.user.slug; if (s) { slug = s; nameResolved = true; applyName(); loadCategories(); } })
+      .catch(() => {});
+  }
+  try { const ss = localStorage.getItem('aacStyle'); if (ss) for (const o of $('ob-style').options) if (o.value === ss) { $('ob-style').value = ss; break; } } catch (_) {}
+  $('ob-style').addEventListener('change', () => { try { localStorage.setItem('aacStyle', $('ob-style').value); } catch (_) {} });
+
+  async function downscale(file, max = 1024, q = 0.85) {
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+      const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(bmp, 0, 0, w, h); if (bmp.close) bmp.close();
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', q));
+      return (blob && blob.size < file.size) ? blob : file;
+    } catch (_) { return file; }
+  }
+
+  // ---- Step 1: the people (gate) ----
+  const done = { child: false, parent: false };
+  function updateGate() { $('ob-continue').disabled = !(done.child && done.parent); }
+  async function renderSubject(role, file) {
+    const nameEl = $(role + '-name-input');
+    const name = (nameEl.value || '').trim();
+    const msg = $('ob-a-msg');
+    if (!name) { msg.textContent = 'Type a name first.'; nameEl.focus(); return; }
+    const pron = ($(role + '-pron-input').value || '').trim();
+    const thumb = $(role + '-thumb');
+    thumb.innerHTML = '<div class="spin"></div>';
+    msg.textContent = 'Making ' + name + ' in your style… (about 30 seconds)';
+    try {
+      const blob = await downscale(file);
+      const qs = '?childId=' + encodeURIComponent(slug) + '&style=' + encodeURIComponent($('ob-style').value) +
+        '&role=' + role + '&name=' + encodeURIComponent(name) + '&pronunciation=' + encodeURIComponent(pron);
+      const r = await fetch('/api/onboard-subject' + qs, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
+      const { key } = await r.json();
+      thumb.innerHTML = '<img src="/api/media?key=' + encodeURIComponent(key) + '" alt="">';
+      done[role] = true; updateGate();
+      msg.textContent = (done.child && done.parent) ? '✅ Both added as tiles. Continue below — or re-tap a photo to redo.' : (name + ' added as a tile ✓');
+    } catch (err) {
+      thumb.textContent = 'Tap to try again';
+      msg.textContent = 'Could not make ' + name + ': ' + (err.message || err);
+    }
+  }
+  $('child-take').addEventListener('click', () => $('child-input').click());
+  $('parent-take').addEventListener('click', () => $('parent-input').click());
+  $('child-thumb').addEventListener('click', () => $('child-input').click());
+  $('parent-thumb').addEventListener('click', () => $('parent-input').click());
+  $('child-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) renderSubject('child', f); });
+  $('parent-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) renderSubject('parent', f); });
+
+  let pollTimer = null;
+  $('ob-continue').addEventListener('click', () => {
+    $('ob-phase-b').style.display = 'block';
+    $('ob-phase-b').scrollIntoView({ behavior: 'smooth' });
+    if (!pollTimer) { poll(); pollTimer = setInterval(poll, 3000); }
+  });
+
+  // ---- Step 2: walk-through capture ----
+  let snapped = 0;
+  const setCount = () => { $('ob-count').textContent = snapped ? snapped + ' sent' : ''; };
+  async function queuePhoto(file) {
+    const style = $('ob-style').value;
+    const blob = await downscale(file);
+    snapped++; setCount();
+    fetch('/api/pending?childId=' + encodeURIComponent(slug) + '&style=' + encodeURIComponent(style),
+      { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' })
+      .then(() => poll()).catch(() => {});
+  }
+  $('ob-take').addEventListener('click', () => $('ob-camera').click());
+  $('ob-choose').addEventListener('click', () => $('ob-library').click());
+  $('ob-camera').addEventListener('change', async (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) await queuePhoto(f); });
+  $('ob-library').addEventListener('change', async (e) => { const files = Array.from(e.target.files || []); e.target.value = ''; for (const f of files) await queuePhoto(f); });
+
+  // ---- Category options for approving ----
+  let CAT_OPTS = [];
+  async function loadCategories() {
+    try {
+      const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const cats = (await r.json()).categories || [];
+      const opts = [];
+      for (const s of ['people', 'nouns', 'verbs']) {
+        const secCats = cats.filter(c => c.section === s);
+        opts.push({ value: s + ':', text: 'All ' + s + ' (no category)' });
+        const tops = secCats.filter(c => c.parentId == null).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        for (const t of tops) {
+          opts.push({ value: s + ':' + t.id, text: s + ' — ' + t.label });
+          const subs = secCats.filter(c => c.parentId === t.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          for (const sub of subs) opts.push({ value: s + ':' + sub.id, text: s + ' — ' + t.label + ' / ' + sub.label });
+        }
+      }
+      CAT_OPTS = opts;
+    } catch (_) {}
+  }
+
+  // ---- Review queue ----
+  const seen = new Map();
+  const cardsEl = $('ob-cards');
+  function catSelect() {
+    const sel = document.createElement('select');
+    for (const o of CAT_OPTS) { const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.text; sel.appendChild(opt); }
+    return sel;
+  }
+  function buildCard(d) {
+    const card = document.createElement('div'); card.className = 'card'; card.dataset.id = d.id;
+    const thumb = document.createElement('div'); thumb.className = 'thumb';
+    if (d.status === 'ready' && d.image_key) { const img = document.createElement('img'); img.src = '/api/media?key=' + encodeURIComponent(d.image_key); thumb.appendChild(img); }
+    else if (d.status === 'failed') thumb.textContent = '⚠️ Could not render';
+    else { const s = document.createElement('div'); s.className = 'spin'; thumb.appendChild(s); }
+    card.appendChild(thumb);
+    if (d.status === 'ready') {
+      const name = document.createElement('input'); name.type = 'text'; name.value = d.label || ''; name.placeholder = 'Name'; card.appendChild(name);
+      const pron = document.createElement('input'); pron.type = 'text'; pron.className = 'pron'; pron.value = d.pronunciation || ''; pron.placeholder = 'Say it as… (optional)'; pron.style.marginTop = '6px'; card.appendChild(pron);
+      const cat = catSelect(); cat.style.marginTop = '6px'; card.appendChild(cat);
+      const row = document.createElement('div'); row.className = 'row';
+      const play = document.createElement('button'); play.className = 'btn ghost tiny'; play.textContent = '🔊'; play.style.flex = '0 0 auto';
+      play.addEventListener('click', () => { if (d.sound_key) { const a = $('ob-audio'); a.src = '/api/media?key=' + encodeURIComponent(d.sound_key); a.play().catch(() => {}); } });
+      const approve = document.createElement('button'); approve.className = 'btn ok tiny'; approve.textContent = '✓ Approve';
+      const reject = document.createElement('button'); reject.className = 'btn no tiny'; reject.textContent = '✕';
+      approve.addEventListener('click', async () => {
+        const v = cat.value.split(':'); const section = v[0]; const catId = v[1] ? parseInt(v[1], 10) : null;
+        if (!name.value.trim()) { name.focus(); return; }
+        approve.disabled = true; approve.textContent = '…';
+        try {
+          const r = await fetch('/api/pending-approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+            body: JSON.stringify({ id: d.id, childId: slug, section, categoryId: catId, label: name.value.trim(), pronunciation: pron.value.trim() }) });
+          if (r.ok) { card.remove(); seen.delete(String(d.id)); } else { approve.disabled = false; approve.textContent = '✓ Approve'; }
+        } catch (_) { approve.disabled = false; approve.textContent = '✓ Approve'; }
+      });
+      reject.addEventListener('click', () => rejectDraft(d.id, card));
+      row.appendChild(play); row.appendChild(approve); row.appendChild(reject); card.appendChild(row);
+    } else {
+      const status = document.createElement('div'); status.style.cssText = 'text-align:center;font-size:13px;color:var(--muted);margin-top:8px;';
+      status.textContent = d.status === 'failed' ? (d.error || 'Failed') : 'Rendering…';
+      card.appendChild(status);
+      if (d.status === 'failed') { const reject = document.createElement('button'); reject.className = 'btn no tiny'; reject.style.cssText = 'margin-top:8px;width:100%;'; reject.textContent = 'Remove'; reject.addEventListener('click', () => rejectDraft(d.id, card)); card.appendChild(reject); }
+    }
+    return card;
+  }
+  async function rejectDraft(id, card) {
+    try { await fetch('/api/pending?childId=' + encodeURIComponent(slug) + '&id=' + id, { method: 'DELETE', credentials: 'same-origin' }); } catch (_) {}
+    card.remove(); seen.delete(String(id));
+  }
+  async function poll() {
+    let list;
+    try { const r = await fetch('/api/pending?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' }); if (!r.ok) return; list = (await r.json()).pending || []; }
+    catch (_) { return; }
+    const empty = cardsEl.querySelector('.empty'); if (empty && list.length) empty.remove();
+    const ids = new Set(list.map(d => String(d.id)));
+    for (const d of list) {
+      const key = String(d.id);
+      if (!seen.has(key)) { cardsEl.appendChild(buildCard(d)); seen.set(key, d.status); }
+      else if (seen.get(key) !== d.status) { const old = cardsEl.querySelector('.card[data-id="' + d.id + '"]'); const fresh = buildCard(d); if (old) old.replaceWith(fresh); else cardsEl.appendChild(fresh); seen.set(key, d.status); }
+    }
+    for (const key of [...seen.keys()]) { if (!ids.has(key)) { const el = cardsEl.querySelector('.card[data-id="' + key + '"]'); if (el) el.remove(); seen.delete(key); } }
+    if (!cardsEl.children.length) cardsEl.innerHTML = '<div class="empty">No photos yet — snap one above to begin.</div>';
+  }
+
+  loadCategories();
+})();
+</script>
+</body>
+</html>

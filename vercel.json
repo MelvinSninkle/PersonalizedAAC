@@ -4,6 +4,9 @@
     { "source": "/parent/:slug", "destination": "/parent.html" },
     { "source": "/therapist/:slug", "destination": "/therapist.html" },
     { "source": "/login", "destination": "/login.html" },
-    { "source": "/reset", "destination": "/reset.html" }
+    { "source": "/reset", "destination": "/reset.html" },
+    { "source": "/welcome", "destination": "/welcome.html" },
+    { "source": "/onboard/:slug", "destination": "/onboard.html" },
+    { "source": "/onboard", "destination": "/onboard.html" }
   ]
 }
