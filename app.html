@@ -992,6 +992,19 @@
     </div>
     <input type="file" id="bulk-folder-input" accept="image/*" webkitdirectory directory style="display:none;">
     <div style="font-size:12px;color:#888;margin-top:6px;">Click ★ on a row to use that image as the category icon (defaults to the first image).</div>
+    <div style="margin-top:10px;border:1px solid #f3c6dd;background:#fff5fa;border-radius:10px;padding:10px;">
+      <label for="bulk-style" style="margin-top:0;font-weight:700;color:#ad1457;">✨ AI art style</label>
+      <select id="bulk-style" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+        <option value="Pixar-style 3D animated render">3D Animated</option>
+        <option value="flat picture-book illustration">Picture Book</option>
+        <option value="soft watercolor illustration">Watercolor</option>
+        <option value="gentle soft storybook illustration">Soft Storybook</option>
+        <option value="needle-felted wool craft">Felted</option>
+        <option value="">Keep original photos (just name them)</option>
+      </select>
+      <button type="button" id="bulk-ai" style="margin-top:8px;width:100%;padding:11px;border:none;border-radius:8px;background:#ff1493;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">✨ AI: name, pronounce &amp; make art for all</button>
+      <div style="font-size:12px;color:#888;margin-top:6px;">Fills each name + pronunciation automatically and (unless "keep original") turns the photos into art. You can still edit anything before saving.</div>
+    </div>
     <div class="checkbox-row" style="margin-top:10px;">
       <input type="checkbox" id="bulk-tts" checked>
       <label for="bulk-tts">Generate audio for each item from its name</label>
@@ -2683,10 +2696,21 @@
       });
       const img = document.createElement('img');
       img.src = it.previewUrl;
+      const mid = document.createElement('div');
+      mid.style.cssText = 'flex:1;display:flex;flex-direction:column;gap:4px;min-width:0;';
       const input = document.createElement('input');
       input.type = 'text';
       input.value = it.label;
+      input.placeholder = 'Name';
       input.addEventListener('input', (e) => { bulkItems[idx].label = e.target.value; });
+      const pron = document.createElement('input');
+      pron.type = 'text';
+      pron.value = it.pronunciation || '';
+      pron.placeholder = 'Say it as… (optional)';
+      pron.style.cssText = 'font-size:12px;color:#666;';
+      pron.addEventListener('input', (e) => { bulkItems[idx].pronunciation = e.target.value; });
+      mid.appendChild(input);
+      mid.appendChild(pron);
       const rm = document.createElement('button');
       rm.type = 'button';
       rm.className = 'row-remove';
@@ -2700,7 +2724,7 @@
       });
       row.appendChild(star);
       row.appendChild(img);
-      row.appendChild(input);
+      row.appendChild(mid);
       row.appendChild(rm);
       list.appendChild(row);
     });
@@ -2720,6 +2744,7 @@
       bulkItems.push({
         file,
         label: filenameToLabel(file.name),
+        pronunciation: '',
         previewUrl: URL.createObjectURL(file),
       });
       added++;
@@ -2750,6 +2775,8 @@
     document.getElementById('bulk-tts').checked = true;
     document.getElementById('bulk-emotion').value = 'default';
     document.getElementById('bulk-keep-aspect').checked = false;
+    const ss = localStorage.getItem('aacStyle');
+    if (ss) { const styleSel = document.getElementById('bulk-style'); for (const o of styleSel.options) { if (o.value === ss) { styleSel.value = ss; break; } } }
     document.getElementById('bulk-progress').textContent = '';
     document.getElementById('bulk-error').textContent = '';
     renderBulkList();
@@ -2783,6 +2810,39 @@
   document.getElementById('bulk-cancel').addEventListener('click', () => {
     clearBulkPreviews();
     bulkModal.classList.remove('show');
+  });
+
+  // ✨ One-tap: for every photo, suggest a name + pronunciation and (optionally)
+  // turn it into art — filling the editable rows so the parent can glance + Save.
+  document.getElementById('bulk-ai').addEventListener('click', async () => {
+    const errEl = document.getElementById('bulk-error');
+    const prog = document.getElementById('bulk-progress');
+    const btn = document.getElementById('bulk-ai');
+    errEl.textContent = '';
+    if (!bulkItems.length) { errEl.textContent = 'Add some photos first.'; return; }
+    const style = document.getElementById('bulk-style').value;
+    btn.disabled = true; const prev = btn.textContent;
+    for (let i = 0; i < bulkItems.length; i++) {
+      const it = bulkItems[i];
+      btn.textContent = 'Working…';
+      prog.textContent = `AI ${i + 1} of ${bulkItems.length}…`;
+      try {
+        const photo = await compressImage(it.file);
+        try {
+          const dr = await apiFetch('/api/describe-image', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
+          if (dr.ok) { const d = await dr.json(); if (d.label) it.label = d.label; if (d.pronunciation) it.pronunciation = d.pronunciation; }
+        } catch (_) {}
+        if (style) {
+          try {
+            const ir = await apiFetch('/api/generate-image?label=' + encodeURIComponent(it.label || '') + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(CHILD_ID), { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
+            if (ir.ok) { const blob = await ir.blob(); URL.revokeObjectURL(it.previewUrl); it.file = blob; it.previewUrl = URL.createObjectURL(blob); }
+          } catch (_) {}
+        }
+        renderBulkList();
+      } catch (_) {}
+    }
+    prog.textContent = '✅ AI done — review the names and Save.';
+    btn.disabled = false; btn.textContent = prev;
   });
 
   document.getElementById('bulk-save').addEventListener('click', async () => {
@@ -2837,7 +2897,7 @@
           const r = await apiFetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: it.label.trim(), emotion }),
+            body: JSON.stringify({ text: (it.pronunciation && it.pronunciation.trim()) || it.label.trim(), emotion }),
           });
           if (!r.ok) {
             const detail = await r.text();
