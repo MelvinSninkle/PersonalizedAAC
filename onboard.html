@@ -7,11 +7,10 @@
 <meta name="theme-color" content="#ff1493">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <!--
-  Onboarding capture + review. Snap photos as you walk the house; each upload
-  returns instantly and the server renders the name, pronunciation, art, and
-  voice in the background. The review list below fills in as drafts finish —
-  reviewing the early ones gives the later ones time to render. Nothing goes
-  live until you tap Approve.
+  Onboarding. STEP 1 (gate): capture the child + a parent and render them in the
+  chosen style — confirms the look and seeds them as reference images the rest
+  of the renders use. STEP 2: walk the house snapping photos; each renders in the
+  background and the review list fills in. Nothing goes live until approved.
 -->
 <style>
   * { box-sizing: border-box; }
@@ -23,14 +22,22 @@
   header .sub { font-size:13px; color:var(--muted); }
   .wrap { max-width:760px; margin:0 auto; padding:18px; }
   .panel { background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:16px; }
+  .panel h3 { margin:0 0 4px; }
+  .panel p.note { font-size:13px; color:var(--muted); margin:0 0 12px; }
   label { display:block; font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px; }
   select, input[type=text] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; }
   .btn { border:none; cursor:pointer; font:inherit; font-weight:700; border-radius:999px; padding:13px 18px; background:var(--pink); color:#fff; font-size:15px; }
   .btn:hover { background:var(--pink-deep); }
+  .btn:disabled { opacity:.5; cursor:default; }
   .btn.ghost { background:#fff0f6; color:var(--pink-deep); }
   .btn.tiny { padding:8px 13px; font-size:13px; }
   .btn.ok { background:var(--good); }
   .btn.no { background:#fff0f0; color:var(--danger); }
+  .subjects { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:14px 0; }
+  .subj { text-align:center; }
+  .subj .thumb { width:100%; aspect-ratio:1; border-radius:14px; border:2px dashed #f3c6dd; background:#fff7fb center/cover no-repeat; display:grid; place-items:center; color:var(--faint); font-size:13px; padding:10px; cursor:pointer; overflow:hidden; }
+  .subj .thumb img { width:100%; height:100%; object-fit:cover; }
+  .subj .name { font-weight:700; color:var(--pink-deep); margin:8px 0 6px; }
   .capture-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
   .count { font-family:'Fredoka',system-ui; font-weight:700; color:var(--pink-deep); font-size:15px; }
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
@@ -42,37 +49,63 @@
   .card .row { display:flex; gap:8px; margin-top:8px; }
   .card .row .btn { flex:1; }
   .empty { color:var(--faint); font-size:14px; text-align:center; padding:24px; }
-  .spin { width:26px; height:26px; border:3px solid #fce4ec; border-top-color:var(--pink); border-radius:50%; animation:spin 0.9s linear infinite; }
+  .spin { width:26px; height:26px; border:3px solid #fce4ec; border-top-color:var(--pink); border-radius:50%; animation:spin .9s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
 </style>
 </head>
 <body>
 <header>
   <div class="brand fred">🌍 Set up <span id="child-name">Fletcher</span>'s tiles</div>
-  <div class="sub">Snap as you walk — names, art, and voice render in the background. Approve what looks right.</div>
+  <div class="sub">First we make the people, then you walk the house snapping photos.</div>
 </header>
 <div class="wrap">
-  <div class="panel">
-    <label for="ob-style">Art style for new photos</label>
+
+  <!-- STEP 1 — style + the people (gate) -->
+  <div class="panel" id="ob-phase-a">
+    <h3 class="fred">Step 1 · The people</h3>
+    <p class="note">Pick a style, then add a photo of <strong id="child-name-2">Fletcher</strong> and one grown-up who's here helping. We'll make them in the style first so you can see how it looks.</p>
+    <label for="ob-style">Art style</label>
     <select id="ob-style">
       <option value="Pixar-style 3D animated render">3D Animated</option>
       <option value="flat picture-book illustration">Picture Book</option>
       <option value="soft watercolor illustration">Watercolor</option>
       <option value="gentle soft storybook illustration">Soft Storybook</option>
       <option value="needle-felted wool craft">Felted</option>
-      <option value="">Keep original photos (just name them)</option>
     </select>
-    <div class="capture-row">
-      <button class="btn" id="ob-take">📸 Take a photo</button>
-      <button class="btn ghost" id="ob-choose">🖼 Choose photos</button>
-      <span class="count" id="ob-count"></span>
+    <div class="subjects">
+      <div class="subj">
+        <div class="thumb" id="child-thumb">Tap to add the child's photo</div>
+        <div class="name" id="child-label">The child</div>
+        <button class="btn ghost tiny" id="child-take">📸 Take / choose</button>
+      </div>
+      <div class="subj">
+        <div class="thumb" id="parent-thumb">Tap to add a grown-up's photo</div>
+        <div class="name">A grown-up</div>
+        <button class="btn ghost tiny" id="parent-take">📸 Take / choose</button>
+      </div>
     </div>
-    <input type="file" id="ob-camera" accept="image/*" capture="environment" style="display:none;">
-    <input type="file" id="ob-library" accept="image/*" multiple style="display:none;">
+    <div id="ob-a-msg" style="font-size:13px;color:var(--muted);min-height:18px;margin-bottom:10px;"></div>
+    <button class="btn" id="ob-continue" disabled>Continue to the walk-through →</button>
+    <input type="file" id="child-input" accept="image/*" capture="user" style="display:none;">
+    <input type="file" id="parent-input" accept="image/*" capture="user" style="display:none;">
   </div>
 
-  <h3 class="fred" style="margin:6px 2px;">Review</h3>
-  <div class="cards" id="ob-cards"><div class="empty">No photos yet — snap one above to begin.</div></div>
+  <!-- STEP 2 — walk the house -->
+  <div id="ob-phase-b" style="display:none;">
+    <div class="panel">
+      <h3 class="fred">Step 2 · Walk the house</h3>
+      <p class="note">Snap anything Fletcher uses. Each one renders in the background — keep moving, then review below.</p>
+      <div class="capture-row">
+        <button class="btn" id="ob-take">📸 Take a photo</button>
+        <button class="btn ghost" id="ob-choose">🖼 Choose photos</button>
+        <span class="count" id="ob-count"></span>
+      </div>
+      <input type="file" id="ob-camera" accept="image/*" capture="environment" style="display:none;">
+      <input type="file" id="ob-library" accept="image/*" multiple style="display:none;">
+    </div>
+    <h3 class="fred" style="margin:6px 2px;">Review</h3>
+    <div class="cards" id="ob-cards"><div class="empty">No photos yet — snap one above to begin.</div></div>
+  </div>
 </div>
 
 <audio id="ob-audio" preload="none"></audio>
@@ -82,12 +115,10 @@
   const $ = (id) => document.getElementById(id);
   const m = location.pathname.match(/^\/onboard\/([^\/]+)/);
   const slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';
-  $('child-name').textContent = (slug.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase())) || 'Fletcher';
+  const pretty = (slug.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase())) || 'Fletcher';
+  $('child-name').textContent = pretty; $('child-name-2').textContent = pretty; $('child-label').textContent = pretty;
   try { const ss = localStorage.getItem('aacStyle'); if (ss) for (const o of $('ob-style').options) if (o.value === ss) { $('ob-style').value = ss; break; } } catch (_) {}
   $('ob-style').addEventListener('change', () => { try { localStorage.setItem('aacStyle', $('ob-style').value); } catch (_) {} });
-
-  let snapped = 0;
-  function setCount() { $('ob-count').textContent = snapped ? snapped + ' sent' : ''; }
 
   async function downscale(file, max = 1024, q = 0.85) {
     try {
@@ -100,11 +131,50 @@
       return (blob && blob.size < file.size) ? blob : file;
     } catch (_) { return file; }
   }
+
+  // ---- Step 1: the people (gate) ----
+  const done = { child: false, parent: false };
+  function updateGate() { $('ob-continue').disabled = !(done.child && done.parent); }
+  async function renderSubject(role, file) {
+    const thumb = $(role + '-thumb');
+    const msg = $('ob-a-msg');
+    thumb.innerHTML = '<div class="spin"></div>';
+    msg.textContent = 'Making ' + (role === 'child' ? pretty : 'the grown-up') + ' in your style… (about 30 seconds)';
+    try {
+      const blob = await downscale(file);
+      const r = await fetch('/api/onboard-subject?childId=' + encodeURIComponent(slug) + '&style=' + encodeURIComponent($('ob-style').value) + '&role=' + role,
+        { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
+      const { key } = await r.json();
+      thumb.innerHTML = '<img src="/api/media?key=' + encodeURIComponent(key) + '" alt="">';
+      done[role] = true; updateGate();
+      msg.textContent = (done.child && done.parent) ? '✅ Looks good? Continue below — or re-tap a photo to redo.' : '';
+    } catch (err) {
+      thumb.textContent = 'Tap to try again';
+      msg.textContent = 'Could not render: ' + (err.message || err);
+    }
+  }
+  $('child-take').addEventListener('click', () => $('child-input').click());
+  $('parent-take').addEventListener('click', () => $('parent-input').click());
+  $('child-thumb').addEventListener('click', () => $('child-input').click());
+  $('parent-thumb').addEventListener('click', () => $('parent-input').click());
+  $('child-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) renderSubject('child', f); });
+  $('parent-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) renderSubject('parent', f); });
+
+  let pollTimer = null;
+  $('ob-continue').addEventListener('click', () => {
+    $('ob-phase-b').style.display = 'block';
+    $('ob-phase-b').scrollIntoView({ behavior: 'smooth' });
+    if (!pollTimer) { poll(); pollTimer = setInterval(poll, 3000); }
+  });
+
+  // ---- Step 2: walk-through capture ----
+  let snapped = 0;
+  const setCount = () => { $('ob-count').textContent = snapped ? snapped + ' sent' : ''; };
   async function queuePhoto(file) {
     const style = $('ob-style').value;
     const blob = await downscale(file);
     snapped++; setCount();
-    // Fire and forget — the server renders in the background; the review list polls.
     fetch('/api/pending?childId=' + encodeURIComponent(slug) + '&style=' + encodeURIComponent(style),
       { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' })
       .then(() => poll()).catch(() => {});
@@ -114,8 +184,8 @@
   $('ob-camera').addEventListener('change', async (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) await queuePhoto(f); });
   $('ob-library').addEventListener('change', async (e) => { const files = Array.from(e.target.files || []); e.target.value = ''; for (const f of files) await queuePhoto(f); });
 
-  // ---- Category options (for assigning each approved tile) ----
-  let CAT_OPTS = [];   // [{value:'nouns:9', text:'Nouns — Numbers', section, catId}]
+  // ---- Category options for approving ----
+  let CAT_OPTS = [];
   async function loadCategories() {
     try {
       const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
@@ -124,12 +194,12 @@
       const opts = [];
       for (const s of ['people', 'nouns', 'verbs']) {
         const secCats = cats.filter(c => c.section === s);
-        opts.push({ value: s + ':', text: 'All ' + s + ' (no category)', section: s, catId: null });
+        opts.push({ value: s + ':', text: 'All ' + s + ' (no category)' });
         const tops = secCats.filter(c => c.parentId == null).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         for (const t of tops) {
-          opts.push({ value: s + ':' + t.id, text: s + ' — ' + t.label, section: s, catId: t.id });
+          opts.push({ value: s + ':' + t.id, text: s + ' — ' + t.label });
           const subs = secCats.filter(c => c.parentId === t.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-          for (const sub of subs) opts.push({ value: s + ':' + sub.id, text: s + ' — ' + t.label + ' / ' + sub.label, section: s, catId: sub.id });
+          for (const sub of subs) opts.push({ value: s + ':' + sub.id, text: s + ' — ' + t.label + ' / ' + sub.label });
         }
       }
       CAT_OPTS = opts;
@@ -137,9 +207,8 @@
   }
 
   // ---- Review queue ----
-  const seen = new Map();   // id -> status currently rendered (so we don't clobber edits)
+  const seen = new Map();
   const cardsEl = $('ob-cards');
-
   function catSelect() {
     const sel = document.createElement('select');
     for (const o of CAT_OPTS) { const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.text; sel.appendChild(opt); }
@@ -148,12 +217,10 @@
   function buildCard(d) {
     const card = document.createElement('div'); card.className = 'card'; card.dataset.id = d.id;
     const thumb = document.createElement('div'); thumb.className = 'thumb';
-    if (d.status === 'ready' && d.image_key) {
-      const img = document.createElement('img'); img.src = '/api/media?key=' + encodeURIComponent(d.image_key); thumb.appendChild(img);
-    } else if (d.status === 'failed') { thumb.textContent = '⚠️ Could not render'; }
+    if (d.status === 'ready' && d.image_key) { const img = document.createElement('img'); img.src = '/api/media?key=' + encodeURIComponent(d.image_key); thumb.appendChild(img); }
+    else if (d.status === 'failed') thumb.textContent = '⚠️ Could not render';
     else { const s = document.createElement('div'); s.className = 'spin'; thumb.appendChild(s); }
     card.appendChild(thumb);
-
     if (d.status === 'ready') {
       const name = document.createElement('input'); name.type = 'text'; name.value = d.label || ''; name.placeholder = 'Name'; card.appendChild(name);
       const pron = document.createElement('input'); pron.type = 'text'; pron.className = 'pron'; pron.value = d.pronunciation || ''; pron.placeholder = 'Say it as… (optional)'; pron.style.marginTop = '6px'; card.appendChild(pron);
@@ -187,7 +254,6 @@
     try { await fetch('/api/pending?childId=' + encodeURIComponent(slug) + '&id=' + id, { method: 'DELETE', credentials: 'same-origin' }); } catch (_) {}
     card.remove(); seen.delete(String(id));
   }
-
   async function poll() {
     let list;
     try { const r = await fetch('/api/pending?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' }); if (!r.ok) return; list = (await r.json()).pending || []; }
@@ -197,21 +263,13 @@
     for (const d of list) {
       const key = String(d.id);
       if (!seen.has(key)) { cardsEl.appendChild(buildCard(d)); seen.set(key, d.status); }
-      else if (seen.get(key) !== d.status) {
-        const old = cardsEl.querySelector('.card[data-id="' + d.id + '"]');
-        const fresh = buildCard(d);
-        if (old) old.replaceWith(fresh); else cardsEl.appendChild(fresh);
-        seen.set(key, d.status);
-      }
+      else if (seen.get(key) !== d.status) { const old = cardsEl.querySelector('.card[data-id="' + d.id + '"]'); const fresh = buildCard(d); if (old) old.replaceWith(fresh); else cardsEl.appendChild(fresh); seen.set(key, d.status); }
     }
-    // drop cards for drafts that vanished (approved elsewhere)
     for (const key of [...seen.keys()]) { if (!ids.has(key)) { const el = cardsEl.querySelector('.card[data-id="' + key + '"]'); if (el) el.remove(); seen.delete(key); } }
     if (!cardsEl.children.length) cardsEl.innerHTML = '<div class="empty">No photos yet — snap one above to begin.</div>';
   }
 
   loadCategories();
-  poll();
-  setInterval(poll, 3000);
 })();
 </script>
 </body>
