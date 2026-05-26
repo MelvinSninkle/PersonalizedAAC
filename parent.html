@@ -352,6 +352,10 @@
       <label style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Message / invitation
         <input id="sch-prompt" type="text" maxlength="200" placeholder="Do you need to use the potty?" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
       </label>
+      <label style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Picture (optional — shown on the board with the prompt)
+        <select id="sch-image" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;"><option value="">No picture</option></select>
+      </label>
+      <img id="sch-image-preview" alt="" style="display:none;width:84px;height:84px;object-fit:cover;border-radius:12px;margin-top:8px;border:1px solid var(--line);">
       <label id="sch-scope-row" style="display:none;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Game focus
         <select id="sch-scope" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;"></select>
       </label>
@@ -819,18 +823,29 @@
     document.getElementById('sch-start').value = s.start || '15:30';
     document.getElementById('sch-end').value = s.end || '19:00';
     document.getElementById('sch-enabled').checked = s.enabled !== false;
+    const imgSel = document.getElementById('sch-image');
+    if (s.imageKey && imgSel && !Array.from(imgSel.options).some(o => o.value === s.imageKey)) { const o = document.createElement('option'); o.value = s.imageKey; o.textContent = 'Current picture'; imgSel.appendChild(o); }
+    if (imgSel) imgSel.value = s.imageKey || '';
+    updateSchedPreview();
     buildDays(Array.isArray(s.days) ? s.days : null);
     document.getElementById('sch-delete').style.display = schEditIndex >= 0 ? 'block' : 'none';
     syncSchedRows();
     document.getElementById('sched-editor').style.display = 'block';
   }
   function closeSchedEditor() { const e = document.getElementById('sched-editor'); if (e) e.style.display = 'none'; schEditIndex = -1; }
+  function updateSchedPreview() {
+    const sel = document.getElementById('sch-image'), pv = document.getElementById('sch-image-preview');
+    if (!sel || !pv) return;
+    if (sel.value) { pv.src = '/api/media?key=' + encodeURIComponent(sel.value); pv.style.display = 'block'; }
+    else { pv.removeAttribute('src'); pv.style.display = 'none'; }
+  }
   async function loadSchedScopes() {
     const sel = document.getElementById('sch-scope'); if (!sel) return;
     try {
       const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
       if (!r.ok) return;
-      const cats = (await r.json()).categories || [];
+      const data = await r.json();
+      const cats = data.categories || [], items = data.items || [];
       const opts = [['all', 'Everything']];
       for (const sname of ['people', 'nouns', 'verbs']) {
         const sc = cats.filter(c => c.section === sname); if (!sc.length) continue;
@@ -839,6 +854,13 @@
         for (const t of tops) { opts.push(['cat:' + t.id, '— ' + t.label]); for (const sub of sc.filter(c => c.parentId === t.id)) opts.push(['cat:' + sub.id, '— — ' + sub.label]); }
       }
       sel.innerHTML = opts.map(([v, t]) => '<option value="' + v + '">' + schEsc(t) + '</option>').join('');
+      // Picture picker — every tile that has an image.
+      const imgSel = document.getElementById('sch-image');
+      if (imgSel) {
+        const iopts = ['<option value="">No picture</option>'];
+        for (const it of items) { if (it.imageKey && it.label) iopts.push('<option value="' + schEsc(it.imageKey) + '">' + schEsc((it.section ? it.section + ' — ' : '') + it.label) + '</option>'); }
+        imgSel.innerHTML = iopts.join('');
+      }
     } catch (_) {}
   }
   const schedAddBtn = document.getElementById('sched-add');
@@ -847,6 +869,7 @@
     document.getElementById('sch-cancel').addEventListener('click', closeSchedEditor);
     document.getElementById('sch-type').addEventListener('change', syncSchedRows);
     document.getElementById('sch-timing').addEventListener('change', syncSchedRows);
+    document.getElementById('sch-image').addEventListener('change', updateSchedPreview);
     document.getElementById('sch-save').addEventListener('click', async () => {
       const type = document.getElementById('sch-type').value;
       const timing = document.getElementById('sch-timing').value;
@@ -859,6 +882,8 @@
         start: document.getElementById('sch-start').value || '',
         end: document.getElementById('sch-end').value || '',
       };
+      const imageKey = document.getElementById('sch-image').value || '';
+      if (imageKey) sch.imageKey = imageKey;
       if (type === 'game') sch.scope = document.getElementById('sch-scope').value || 'all';
       if (timing === 'interval') sch.intervalMin = Math.max(1, parseInt(document.getElementById('sch-interval').value, 10) || 45);
       else sch.times = document.getElementById('sch-times').value.split(',').map(x => x.trim()).filter(x => /^\d{1,2}:\d{2}$/.test(x)).slice(0, 12);

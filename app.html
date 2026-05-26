@@ -3602,11 +3602,18 @@
     }
     return true;
   }
-  function schedToast(text) {
+  function schedToast(text, imageKey) {
     const t = document.createElement('div');
-    t.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:2400;background:#ad1457;color:#fff;font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:20px;padding:14px 22px;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.25);max-width:90%;text-align:center;';
-    t.textContent = text; document.body.appendChild(t);
-    setTimeout(() => { t.style.transition = 'opacity .5s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 500); }, 6000);
+    t.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:2400;background:#ad1457;color:#fff;font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:20px;padding:16px 22px;border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.25);max-width:90%;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px;';
+    if (imageKey) {
+      const img = document.createElement('img');
+      img.style.cssText = 'width:130px;height:130px;object-fit:cover;border-radius:16px;background:#fff;';
+      getMediaURL(imageKey).then(u => { if (u) img.src = u; }).catch(() => {});
+      t.appendChild(img);
+    }
+    const span = document.createElement('div'); span.textContent = text; t.appendChild(span);
+    document.body.appendChild(t);
+    setTimeout(() => { t.style.transition = 'opacity .5s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 500); }, 7000);
   }
   function schedGameNudge(s, text) {
     if (document.getElementById('sched-nudge')) return;
@@ -3614,6 +3621,12 @@
     o.style.cssText = 'position:fixed;inset:0;z-index:2500;display:flex;align-items:center;justify-content:center;background:rgba(173,20,87,.35);backdrop-filter:blur(4px);';
     const card = document.createElement('div');
     card.style.cssText = 'background:#fff;border-radius:24px;padding:28px 26px;max-width:380px;width:86%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);';
+    if (s.imageKey) {
+      const img = document.createElement('img');
+      img.style.cssText = 'width:150px;height:150px;object-fit:cover;border-radius:18px;margin-bottom:16px;background:#fce4ec;';
+      getMediaURL(s.imageKey).then(u => { if (u) img.src = u; }).catch(() => {});
+      card.appendChild(img);
+    }
     const h = document.createElement('div'); h.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-size:24px;font-weight:700;color:#ad1457;margin-bottom:18px;'; h.textContent = text;
     const play = document.createElement('button'); play.textContent = '▶ Play'; play.style.cssText = 'border:none;border-radius:999px;background:#ff1493;color:#fff;font-weight:700;font-size:20px;padding:14px 30px;cursor:pointer;margin:0 6px;';
     const later = document.createElement('button'); later.textContent = 'Not now'; later.style.cssText = 'border:none;border-radius:999px;background:#eee;color:#555;font-weight:600;font-size:16px;padding:14px 20px;cursor:pointer;margin:0 6px;';
@@ -3627,7 +3640,7 @@
     if (G.running || speaking) return;
     const text = (s.prompt || '').trim() || (s.type === 'game' ? "Let's do a game!" : 'Time for a check-in.');
     if (s.type === 'game') { schedGameNudge(s, text); return; }
-    schedToast(text);
+    schedToast(text, s.imageKey);
     try { const u = await rewardAudioURL(text); if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } } catch (_) {}
   }
   function schedulerTick() {
