@@ -309,18 +309,30 @@
   <!-- CELEBRATIONS -->
   <div class="section-label">Your voice · celebrations</div>
   <div class="panel">
-    <h2>Recorded cheers in your voice</h2>
-    <p class="hint">Plays at the end of a session so it feels like you're there — even when you're not.</p>
-    <div class="cels">
-      <div class="cel"><button class="play">▶</button><div class="meta"><div class="ph">"Hooray, Fletcher! I'm so proud of you!"</div><div class="as">Default · all sessions</div></div><div class="wave">0:03</div></div>
-      <div class="cel"><button class="play">▶</button><div class="meta"><div class="ph">"You did it, buddy!"</div><div class="as">Assigned to · Self-Paced Game</div></div><div class="wave">0:02</div></div>
-      <div class="cel"><button class="play">▶</button><div class="meta"><div class="ph">"Way to go, Fletcher!"</div><div class="as">Assigned to · milestone: 100 matches</div></div><div class="wave">0:02</div></div>
-    </div>
-    <div class="actions" style="display:flex; gap:8px; margin-top:14px;">
-      <button class="btn primary">＋ Record a new cheer</button>
-      <button class="btn ghost">Upload custom animation</button>
+    <h2>Reward cheers &amp; game music</h2>
+    <p class="hint">Spoken in your child's voice during and after a game. Edit these and they apply to games on this device.</p>
+    <label for="cheer-phrases" style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin:6px 0;">Cheer phrases (one per line)</label>
+    <textarea id="cheer-phrases" rows="5" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;"></textarea>
+    <label for="cheer-music" style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin:12px 0 6px;">Background music during games</label>
+    <select id="cheer-music" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;">
+      <option value="/audio/color-tap-learn.mp3">Color Tap (playful)</option>
+      <option value="/audio/clockwork-kaleidoscope.mp3">Clockwork Kaleidoscope (calm)</option>
+      <option value="">No music</option>
+    </select>
+    <div class="actions" style="display:flex; gap:8px; margin-top:14px; align-items:center;">
+      <button class="btn primary" id="cheer-save">Save rewards</button>
+      <span id="cheer-msg" style="font-size:13px;color:var(--muted);"></span>
     </div>
     <div class="note">Default animation: <strong>yellow flowers bursting</strong> 🌼 across the screen. Celebrations are the only place audio + animation reward Fletcher directly — no mode ever shows a wrong-answer cue.</div>
+  </div>
+
+  <!-- BACKUP -->
+  <div class="section-label">Backup</div>
+  <div class="panel">
+    <h2>Download a backup</h2>
+    <p class="hint">Saves all of this child's categories, tiles, images and sounds to one file you can keep safe.</p>
+    <button class="btn primary" id="backup-export">⬇ Download backup (.json)</button>
+    <span id="backup-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
   </div>
 
   <!-- REFERENCE IMAGES — steer how AI tiles are generated from a photo -->
@@ -636,6 +648,80 @@
     } catch (err) { refMsgSet('Upload failed: ' + (err.message || err), true); }
   });
   loadRefs();
+
+  // ---- Reward cheers + game music (shared with the kid app via same-origin localStorage) ----
+  const CHEER_KEY = 'aacGameSettings';
+  const DEFAULT_CHEERS = ["Hooray! I'm so proud of you!", "You did it!", "Way to go!"];
+  function readCheers() {
+    try {
+      const s = JSON.parse(localStorage.getItem(CHEER_KEY) || '{}');
+      return {
+        ...s,
+        phrases: Array.isArray(s.phrases) && s.phrases.length ? s.phrases : DEFAULT_CHEERS,
+        music: typeof s.music === 'string' ? s.music : '/audio/color-tap-learn.mp3',
+      };
+    } catch (_) { return { phrases: DEFAULT_CHEERS, music: '/audio/color-tap-learn.mp3' }; }
+  }
+  (function initCheers() {
+    const s = readCheers();
+    const ta = document.getElementById('cheer-phrases'); if (ta) ta.value = s.phrases.join('\n');
+    const mu = document.getElementById('cheer-music'); if (mu) mu.value = s.music;
+  })();
+  const cheerSave = document.getElementById('cheer-save');
+  if (cheerSave) cheerSave.addEventListener('click', () => {
+    const lines = document.getElementById('cheer-phrases').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 12);
+    const next = { ...readCheers(), phrases: lines.length ? lines : DEFAULT_CHEERS, music: document.getElementById('cheer-music').value };
+    try { localStorage.setItem(CHEER_KEY, JSON.stringify(next)); } catch (_) {}
+    const msg = document.getElementById('cheer-msg');
+    if (msg) { msg.textContent = 'Saved ✓'; setTimeout(() => { msg.textContent = ''; }, 2500); }
+  });
+
+  // ---- Backup export (inlines image/sound bytes; compatible with the kid app's import) ----
+  const backupBtn = document.getElementById('backup-export');
+  if (backupBtn) backupBtn.addEventListener('click', async () => {
+    const msg = document.getElementById('backup-msg');
+    const setMsg = (t) => { if (msg) msg.textContent = t; };
+    backupBtn.disabled = true; const prev = backupBtn.textContent; backupBtn.textContent = 'Preparing…';
+    try {
+      const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('sync ' + r.status);
+      const data = await r.json();
+      const cats = data.categories || [], items = data.items || [];
+      const cache = new Map();
+      async function inline(key) {
+        if (!key) return null;
+        if (cache.has(key)) return cache.get(key);
+        try {
+          const br = await fetch('/api/media?key=' + encodeURIComponent(key), { credentials: 'same-origin' });
+          if (!br.ok) { cache.set(key, null); return null; }
+          const blob = await br.blob();
+          const durl = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(null); fr.readAsDataURL(blob); });
+          cache.set(key, durl); return durl;
+        } catch (_) { cache.set(key, null); return null; }
+      }
+      const out = { version: 1, exportedAt: new Date().toISOString(), categories: [], items: [] };
+      let done = 0; const total = cats.length + items.length;
+      for (const c of cats) {
+        const exp = { id: c.id, section: c.section, label: c.label, order: c.order ?? 0, parentId: c.parentId ?? null, keepAspect: !!c.keepAspect };
+        const img = await inline(c.imageKey); if (img) exp.image = img;
+        out.categories.push(exp); setMsg('Preparing… ' + (++done) + '/' + total);
+      }
+      for (const it of items) {
+        const exp = { id: it.id, section: it.section, categoryId: it.categoryId, label: it.label, order: it.order ?? 0, pinned: !!it.pinned, keepAspect: !!it.keepAspect };
+        const img = await inline(it.imageKey); if (img) exp.image = img;
+        const snd = await inline(it.soundKey); if (snd) exp.sound = snd;
+        out.items.push(exp); setMsg('Preparing… ' + (++done) + '/' + total);
+      }
+      const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      a.download = slug + '-aac-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setMsg('Downloaded ✓');
+    } catch (err) { setMsg('Backup failed: ' + (err.message || err)); }
+    backupBtn.disabled = false; backupBtn.textContent = prev;
+  });
 })();
 </script>
 </body>
