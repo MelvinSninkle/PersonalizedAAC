@@ -326,6 +326,66 @@
     <div class="note">Default animation: <strong>yellow flowers bursting</strong> 🌼 across the screen. Celebrations are the only place audio + animation reward Fletcher directly — no mode ever shows a wrong-answer cue.</div>
   </div>
 
+  <!-- SCHEDULED PROMPTS -->
+  <div class="section-label">Scheduled prompts</div>
+  <div class="panel">
+    <h2>Timed games &amp; reminders</h2>
+    <p class="hint">The board can speak a reminder (e.g. "Do you need the potty?") or invite a game on a schedule — only during the active hours you choose, so nothing fires at school. These run while the iPad is awake and showing the board.</p>
+    <div id="sched-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
+    <button class="btn primary" id="sched-add">＋ Add a prompt</button>
+    <span id="sched-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
+    <div id="sched-editor" style="display:none;border-top:1px solid var(--line);margin-top:16px;padding-top:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <label style="font-size:13px;font-weight:600;color:var(--ink);">Type
+          <select id="sch-type" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
+            <option value="reminder">Reminder (speaks a message)</option>
+            <option value="game">Game invitation</option>
+          </select>
+        </label>
+        <label style="font-size:13px;font-weight:600;color:var(--ink);">Timing
+          <select id="sch-timing" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
+            <option value="interval">Every N minutes</option>
+            <option value="times">At specific times</option>
+          </select>
+        </label>
+      </div>
+      <label style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Message / invitation
+        <input id="sch-prompt" type="text" maxlength="200" placeholder="Do you need to use the potty?" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
+      </label>
+      <label id="sch-scope-row" style="display:none;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Game focus
+        <select id="sch-scope" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;"></select>
+      </label>
+      <div id="sch-interval-row" style="margin-top:12px;">
+        <label style="font-size:13px;font-weight:600;color:var(--ink);">Every
+          <input id="sch-interval" type="number" min="1" value="45" style="width:90px;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin:0 6px;"> minutes
+        </label>
+      </div>
+      <div id="sch-times-row" style="display:none;margin-top:12px;">
+        <label style="display:block;font-size:13px;font-weight:600;color:var(--ink);">At times (24-hour, comma-separated)
+          <input id="sch-times" type="text" placeholder="16:00, 17:30, 19:00" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
+        </label>
+      </div>
+      <div style="margin-top:12px;font-size:13px;font-weight:600;color:var(--ink);">Active days</div>
+      <div id="sch-days" style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+        <label style="font-size:13px;font-weight:600;color:var(--ink);">Active from
+          <input id="sch-start" type="time" value="15:30" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
+        </label>
+        <label style="font-size:13px;font-weight:600;color:var(--ink);">Active until
+          <input id="sch-end" type="time" value="19:00" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
+        </label>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;font-weight:600;color:var(--ink);">
+        <input id="sch-enabled" type="checkbox" checked> Enabled
+      </label>
+      <div style="display:flex;gap:8px;margin-top:16px;align-items:center;">
+        <button class="btn primary" id="sch-save">Save prompt</button>
+        <button class="btn ghost" id="sch-cancel">Cancel</button>
+        <button class="btn ghost" id="sch-delete" style="display:none;margin-left:auto;color:#dc2626;">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <!-- BACKUP -->
   <div class="section-label">Backup</div>
   <div class="panel">
@@ -677,6 +737,18 @@
       if (r.ok) { const d = await r.json(); childSettings = (d && d.settings && typeof d.settings === 'object') ? d.settings : {}; }
     } catch (_) {}
     applyCheersUI();
+    renderSchedList();
+  }
+  async function saveSettingsToServer(okMsg, msgElId) {
+    const msg = msgElId ? document.getElementById(msgElId) : null;
+    if (msg) msg.textContent = 'Saving…';
+    try {
+      const r = await fetch('/api/child-settings?childId=' + encodeURIComponent(slug), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ settings: childSettings }),
+      });
+      if (msg) { msg.textContent = r.ok ? (okMsg || 'Saved ✓') : 'Save failed'; setTimeout(() => { msg.textContent = ''; }, 3000); }
+    } catch (_) { if (msg) { msg.textContent = 'Offline — not saved'; setTimeout(() => { msg.textContent = ''; }, 3000); } }
   }
   loadChildSettings();
   const cheerSave = document.getElementById('cheer-save');
@@ -694,6 +766,118 @@
       if (msg) { msg.textContent = r.ok ? 'Saved ✓ — syncs to the iPad' : 'Saved on this device only'; setTimeout(() => { msg.textContent = ''; }, 3000); }
     } catch (_) { if (msg) { msg.textContent = 'Saved on this device only'; setTimeout(() => { msg.textContent = ''; }, 3000); } }
   });
+
+  // ---- Scheduled prompts (timed reminders + game invitations) ----
+  const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  let schEditIndex = -1;
+  function schedList() { return Array.isArray(childSettings.schedules) ? childSettings.schedules : []; }
+  function schEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function schedSummary(s) {
+    const when = s.timing === 'times' ? ('at ' + (s.times || []).join(', ')) : ('every ' + (s.intervalMin || 45) + ' min');
+    const days = (Array.isArray(s.days) && s.days.length) ? s.days.map(d => DOW[d]).join(' ') : 'every day';
+    const win = (s.start && s.end) ? (s.start + '–' + s.end) : 'any time';
+    return (s.type === 'game' ? '🎮 Game' : '🗣 Reminder') + ' · ' + when + ' · ' + days + ' · ' + win;
+  }
+  function renderSchedList() {
+    const list = document.getElementById('sched-list'); if (!list) return;
+    const arr = schedList();
+    if (!arr.length) { list.innerHTML = '<div style="font-size:13px;color:var(--faint);">No scheduled prompts yet.</div>'; return; }
+    list.innerHTML = '';
+    arr.forEach((s, i) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;' + (s.enabled === false ? 'opacity:.5;' : '');
+      const txt = document.createElement('div'); txt.style.cssText = 'flex:1;min-width:0;';
+      txt.innerHTML = '<div style="font-weight:600;font-size:14px;">' + schEsc(s.prompt || '(no message)') + '</div><div style="font-size:12px;color:var(--muted);">' + schEsc(schedSummary(s)) + '</div>';
+      const edit = document.createElement('button'); edit.className = 'btn ghost'; edit.textContent = 'Edit'; edit.addEventListener('click', () => openSchedEditor(i));
+      row.appendChild(txt); row.appendChild(edit); list.appendChild(row);
+    });
+  }
+  function buildDays(selected) {
+    const wrap = document.getElementById('sch-days'); if (!wrap) return; wrap.innerHTML = '';
+    DOW.forEach((d, i) => {
+      const lab = document.createElement('label'); lab.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:8px;padding:5px 8px;cursor:pointer;';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = i; cb.checked = !selected || selected.includes(i);
+      lab.appendChild(cb); lab.appendChild(document.createTextNode(d)); wrap.appendChild(lab);
+    });
+  }
+  function getSchedDays() { return Array.from(document.querySelectorAll('#sch-days input:checked')).map(c => Number(c.value)); }
+  function syncSchedRows() {
+    document.getElementById('sch-scope-row').style.display = document.getElementById('sch-type').value === 'game' ? 'block' : 'none';
+    const timing = document.getElementById('sch-timing').value;
+    document.getElementById('sch-interval-row').style.display = timing === 'interval' ? 'block' : 'none';
+    document.getElementById('sch-times-row').style.display = timing === 'times' ? 'block' : 'none';
+  }
+  function openSchedEditor(index) {
+    schEditIndex = (typeof index === 'number') ? index : -1;
+    const s = schEditIndex >= 0 ? schedList()[schEditIndex] : { type: 'reminder', timing: 'interval', intervalMin: 45, prompt: '', days: [1, 2, 3, 4, 5], start: '15:30', end: '19:00', enabled: true, scope: 'all' };
+    document.getElementById('sch-type').value = s.type || 'reminder';
+    document.getElementById('sch-timing').value = s.timing || 'interval';
+    document.getElementById('sch-prompt').value = s.prompt || '';
+    document.getElementById('sch-scope').value = s.scope || 'all';
+    document.getElementById('sch-interval').value = s.intervalMin || 45;
+    document.getElementById('sch-times').value = (s.times || []).join(', ');
+    document.getElementById('sch-start').value = s.start || '15:30';
+    document.getElementById('sch-end').value = s.end || '19:00';
+    document.getElementById('sch-enabled').checked = s.enabled !== false;
+    buildDays(Array.isArray(s.days) ? s.days : null);
+    document.getElementById('sch-delete').style.display = schEditIndex >= 0 ? 'block' : 'none';
+    syncSchedRows();
+    document.getElementById('sched-editor').style.display = 'block';
+  }
+  function closeSchedEditor() { const e = document.getElementById('sched-editor'); if (e) e.style.display = 'none'; schEditIndex = -1; }
+  async function loadSchedScopes() {
+    const sel = document.getElementById('sch-scope'); if (!sel) return;
+    try {
+      const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const cats = (await r.json()).categories || [];
+      const opts = [['all', 'Everything']];
+      for (const sname of ['people', 'nouns', 'verbs']) {
+        const sc = cats.filter(c => c.section === sname); if (!sc.length) continue;
+        opts.push([sname, 'All ' + sname]);
+        const tops = sc.filter(c => c.parentId == null).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        for (const t of tops) { opts.push(['cat:' + t.id, '— ' + t.label]); for (const sub of sc.filter(c => c.parentId === t.id)) opts.push(['cat:' + sub.id, '— — ' + sub.label]); }
+      }
+      sel.innerHTML = opts.map(([v, t]) => '<option value="' + v + '">' + schEsc(t) + '</option>').join('');
+    } catch (_) {}
+  }
+  const schedAddBtn = document.getElementById('sched-add');
+  if (schedAddBtn) {
+    schedAddBtn.addEventListener('click', () => openSchedEditor(-1));
+    document.getElementById('sch-cancel').addEventListener('click', closeSchedEditor);
+    document.getElementById('sch-type').addEventListener('change', syncSchedRows);
+    document.getElementById('sch-timing').addEventListener('change', syncSchedRows);
+    document.getElementById('sch-save').addEventListener('click', async () => {
+      const type = document.getElementById('sch-type').value;
+      const timing = document.getElementById('sch-timing').value;
+      const prev = schEditIndex >= 0 ? schedList()[schEditIndex] : null;
+      const sch = {
+        id: (prev && prev.id) || ('s' + Date.now()),
+        enabled: document.getElementById('sch-enabled').checked,
+        type, prompt: document.getElementById('sch-prompt').value.trim().slice(0, 200), timing,
+        days: getSchedDays(),
+        start: document.getElementById('sch-start').value || '',
+        end: document.getElementById('sch-end').value || '',
+      };
+      if (type === 'game') sch.scope = document.getElementById('sch-scope').value || 'all';
+      if (timing === 'interval') sch.intervalMin = Math.max(1, parseInt(document.getElementById('sch-interval').value, 10) || 45);
+      else sch.times = document.getElementById('sch-times').value.split(',').map(x => x.trim()).filter(x => /^\d{1,2}:\d{2}$/.test(x)).slice(0, 12);
+      const arr = schedList().slice();
+      if (schEditIndex >= 0) arr[schEditIndex] = sch; else arr.push(sch);
+      childSettings = { ...childSettings, schedules: arr };
+      renderSchedList(); closeSchedEditor();
+      await saveSettingsToServer('Schedule saved ✓ — syncs to the iPad', 'sched-msg');
+    });
+    document.getElementById('sch-delete').addEventListener('click', async () => {
+      if (schEditIndex < 0) return closeSchedEditor();
+      if (!confirm('Delete this scheduled prompt?')) return;
+      const arr = schedList().slice(); arr.splice(schEditIndex, 1);
+      childSettings = { ...childSettings, schedules: arr };
+      renderSchedList(); closeSchedEditor();
+      await saveSettingsToServer('Deleted ✓', 'sched-msg');
+    });
+    loadSchedScopes();
+  }
 
   // ---- Backup export (inlines image/sound bytes; compatible with the kid app's import) ----
   const backupBtn = document.getElementById('backup-export');

@@ -3564,21 +3564,97 @@
     return next;
   }
 
-  // Pull reward phrases/music the parent set (often from their phone) into this
-  // device's game settings, so the game uses the latest cheers. Fully guarded —
-  // any failure leaves the existing local settings untouched.
-  async function syncRewardsFromServer() {
+  // Per-child settings the parent set (often from their phone): reward cheers/music
+  // and scheduled prompts. Fetched on boot + refreshed periodically. Fully guarded —
+  // any failure leaves existing local settings untouched.
+  let SCHEDULES = [];
+  async function syncChildSettings() {
     try {
       const r = await apiFetch('/api/child-settings?childId=' + encodeURIComponent(CHILD_ID));
       if (!r.ok) return;
       const d = await r.json();
-      const rw = d && d.settings && d.settings.rewards;
-      if (!rw) return;
-      const patch = {};
-      if (Array.isArray(rw.phrases) && rw.phrases.length) patch.phrases = rw.phrases.slice(0, 12);
-      if (typeof rw.music === 'string') patch.music = rw.music;
-      if (Object.keys(patch).length) saveGameSettings(patch);
+      const s = (d && d.settings) || {};
+      const rw = s.rewards;
+      if (rw) {
+        const patch = {};
+        if (Array.isArray(rw.phrases) && rw.phrases.length) patch.phrases = rw.phrases.slice(0, 12);
+        if (typeof rw.music === 'string') patch.music = rw.music;
+        if (Object.keys(patch).length) saveGameSettings(patch);
+      }
+      SCHEDULES = Array.isArray(s.schedules) ? s.schedules : [];
     } catch (_) {}
+  }
+
+  // ---- Scheduled prompts: timed reminders + gentle game invitations ----
+  // Run while the board is open + awake. Never interrupt a game or an utterance.
+  const SCHED_FIRED_KEY = 'aacSchedFired';
+  function schedFired() { try { return JSON.parse(localStorage.getItem(SCHED_FIRED_KEY) || '{}'); } catch (_) { return {}; } }
+  function setSchedFired(o) { try { localStorage.setItem(SCHED_FIRED_KEY, JSON.stringify(o)); } catch (_) {} }
+  function schedPad(n) { return String(n).padStart(2, '0'); }
+  function schedInWindow(s, now) {
+    if (Array.isArray(s.days) && s.days.length && !s.days.includes(now.getDay())) return false;
+    const toMin = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+    const cur = now.getHours() * 60 + now.getMinutes();
+    const a = toMin(s.start), b = toMin(s.end);
+    if (a != null && b != null) {
+      if (a <= b) { if (cur < a || cur > b) return false; }
+      else { if (cur < a && cur > b) return false; }   // window wraps midnight
+    }
+    return true;
+  }
+  function schedToast(text) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:2400;background:#ad1457;color:#fff;font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:20px;padding:14px 22px;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.25);max-width:90%;text-align:center;';
+    t.textContent = text; document.body.appendChild(t);
+    setTimeout(() => { t.style.transition = 'opacity .5s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 500); }, 6000);
+  }
+  function schedGameNudge(s, text) {
+    if (document.getElementById('sched-nudge')) return;
+    const o = document.createElement('div'); o.id = 'sched-nudge';
+    o.style.cssText = 'position:fixed;inset:0;z-index:2500;display:flex;align-items:center;justify-content:center;background:rgba(173,20,87,.35);backdrop-filter:blur(4px);';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:24px;padding:28px 26px;max-width:380px;width:86%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);';
+    const h = document.createElement('div'); h.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-size:24px;font-weight:700;color:#ad1457;margin-bottom:18px;'; h.textContent = text;
+    const play = document.createElement('button'); play.textContent = '▶ Play'; play.style.cssText = 'border:none;border-radius:999px;background:#ff1493;color:#fff;font-weight:700;font-size:20px;padding:14px 30px;cursor:pointer;margin:0 6px;';
+    const later = document.createElement('button'); later.textContent = 'Not now'; later.style.cssText = 'border:none;border-radius:999px;background:#eee;color:#555;font-weight:600;font-size:16px;padding:14px 20px;cursor:pointer;margin:0 6px;';
+    play.addEventListener('click', () => { o.remove(); const ch = (gameSettings().choices) || 3; startGame(s.scope || 'all', ch, {}); });
+    later.addEventListener('click', () => o.remove());
+    card.appendChild(h); card.appendChild(play); card.appendChild(later); o.appendChild(card); document.body.appendChild(o);
+    rewardAudioURL(text).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {});
+    setTimeout(() => { const el = document.getElementById('sched-nudge'); if (el) el.remove(); }, 60000);
+  }
+  async function schedFire(s) {
+    if (G.running || speaking) return;
+    const text = (s.prompt || '').trim() || (s.type === 'game' ? "Let's do a game!" : 'Time for a check-in.');
+    if (s.type === 'game') { schedGameNudge(s, text); return; }
+    schedToast(text);
+    try { const u = await rewardAudioURL(text); if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } } catch (_) {}
+  }
+  function schedulerTick() {
+    if (!SCHEDULES.length || G.running) return;
+    const now = new Date(); const fired = schedFired(); let changed = false;
+    for (const s of SCHEDULES) {
+      if (!s || s.enabled === false || !schedInWindow(s, now)) continue;
+      const id = s.id || (s.type + '|' + (s.prompt || ''));
+      if (s.timing === 'times' && Array.isArray(s.times)) {
+        const hhmm = schedPad(now.getHours()) + ':' + schedPad(now.getMinutes());
+        if (s.times.includes(hhmm)) {
+          const k = 'T|' + id + '|' + hhmm, today = now.toISOString().slice(0, 10);
+          if (fired[k] !== today) { fired[k] = today; changed = true; schedFire(s); }
+        }
+      } else {
+        const k = 'I|' + id;
+        if (fired[k] === undefined) { fired[k] = now.getTime(); changed = true; continue; }   // arm; first fire one interval later
+        const ms = Math.max(1, Number(s.intervalMin) || 45) * 60000;
+        if (now.getTime() - Number(fired[k]) >= ms) { fired[k] = now.getTime(); changed = true; schedFire(s); }
+      }
+    }
+    if (changed) setSchedFired(fired);
+  }
+  function startScheduler() {
+    try { schedulerTick(); } catch (_) {}
+    setInterval(() => { try { schedulerTick(); } catch (_) {} }, 60000);
+    setInterval(() => { syncChildSettings().catch(() => {}); }, 300000);
   }
 
   // Reward audio: cache TTS by phrase so cheers play instantly and offline.
@@ -3998,8 +4074,9 @@
       if (navigator.onLine !== false) precacheAllMedia();
       // Listen for remote (phone) game commands the whole time the app is open.
       startLiveListener();
-      // Pick up reward cheers/music the parent set (e.g. from their phone).
-      syncRewardsFromServer();
+      // Pick up reward cheers/music + scheduled prompts the parent set (e.g. from
+      // their phone), then run the timed-prompt scheduler while the board is open.
+      syncChildSettings().then(() => { try { startScheduler(); } catch (_) {} });
     } catch (err) {
       clearTimeout(watchdog);
       bootBanner('Load error at "' + step + '": ' + (err.message || err), true);
