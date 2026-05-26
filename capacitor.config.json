@@ -4,6 +4,7 @@
   "webDir": "cap-shell",
   "server": {
     "url": "https://aac.andrewpeterson.io/u/fletcherpeterson",
+    "allowNavigation": ["aac.andrewpeterson.io"],
     "cleartext": false
   },
   "ios": {
