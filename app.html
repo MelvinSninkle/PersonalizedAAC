@@ -3564,6 +3564,23 @@
     return next;
   }
 
+  // Pull reward phrases/music the parent set (often from their phone) into this
+  // device's game settings, so the game uses the latest cheers. Fully guarded —
+  // any failure leaves the existing local settings untouched.
+  async function syncRewardsFromServer() {
+    try {
+      const r = await apiFetch('/api/child-settings?childId=' + encodeURIComponent(CHILD_ID));
+      if (!r.ok) return;
+      const d = await r.json();
+      const rw = d && d.settings && d.settings.rewards;
+      if (!rw) return;
+      const patch = {};
+      if (Array.isArray(rw.phrases) && rw.phrases.length) patch.phrases = rw.phrases.slice(0, 12);
+      if (typeof rw.music === 'string') patch.music = rw.music;
+      if (Object.keys(patch).length) saveGameSettings(patch);
+    } catch (_) {}
+  }
+
   // Reward audio: cache TTS by phrase so cheers play instantly and offline.
   async function rewardAudioURL(text) {
     const key = 'tts:' + text;
@@ -3981,6 +3998,8 @@
       if (navigator.onLine !== false) precacheAllMedia();
       // Listen for remote (phone) game commands the whole time the app is open.
       startLiveListener();
+      // Pick up reward cheers/music the parent set (e.g. from their phone).
+      syncRewardsFromServer();
     } catch (err) {
       clearTimeout(watchdog);
       bootBanner('Load error at "' + step + '": ' + (err.message || err), true);

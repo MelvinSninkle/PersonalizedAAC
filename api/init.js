@@ -284,6 +284,15 @@ export default async function handler(req, res) {
     `;
     await db`CREATE INDEX IF NOT EXISTS invite_codes_active_idx ON invite_codes(active)`;
 
+    // ---- Per-child settings (reward cheers/music + scheduled prompts); parent writes, kid app reads ----
+    await db`
+      CREATE TABLE IF NOT EXISTS child_settings (
+        child_id TEXT PRIMARY KEY,
+        settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+
     // ---- Landing-page email capture ----
     await db`
       CREATE TABLE IF NOT EXISTS waitlist (

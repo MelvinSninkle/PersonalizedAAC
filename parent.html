@@ -652,28 +652,47 @@
   // ---- Reward cheers + game music (shared with the kid app via same-origin localStorage) ----
   const CHEER_KEY = 'aacGameSettings';
   const DEFAULT_CHEERS = ["Hooray! I'm so proud of you!", "You did it!", "Way to go!"];
-  function readCheers() {
-    try {
-      const s = JSON.parse(localStorage.getItem(CHEER_KEY) || '{}');
-      return {
-        ...s,
-        phrases: Array.isArray(s.phrases) && s.phrases.length ? s.phrases : DEFAULT_CHEERS,
-        music: typeof s.music === 'string' ? s.music : '/audio/color-tap-learn.mp3',
-      };
-    } catch (_) { return { phrases: DEFAULT_CHEERS, music: '/audio/color-tap-learn.mp3' }; }
+  // Full per-child settings (rewards + future scheduled prompts). The server is
+  // the source of truth so edits from a phone reach the iPad; localStorage is a
+  // same-device fallback that also keeps this device's kid app in sync.
+  let childSettings = {};
+  function localCheers() {
+    try { const s = JSON.parse(localStorage.getItem(CHEER_KEY) || '{}'); return { phrases: s.phrases, music: s.music }; }
+    catch (_) { return {}; }
   }
-  (function initCheers() {
-    const s = readCheers();
-    const ta = document.getElementById('cheer-phrases'); if (ta) ta.value = s.phrases.join('\n');
-    const mu = document.getElementById('cheer-music'); if (mu) mu.value = s.music;
-  })();
+  function applyCheersUI() {
+    const rw = childSettings.rewards || {};
+    const loc = localCheers();
+    const phrases = (Array.isArray(rw.phrases) && rw.phrases.length) ? rw.phrases
+      : (Array.isArray(loc.phrases) && loc.phrases.length ? loc.phrases : DEFAULT_CHEERS);
+    const music = (typeof rw.music === 'string') ? rw.music
+      : (typeof loc.music === 'string' ? loc.music : '/audio/color-tap-learn.mp3');
+    const ta = document.getElementById('cheer-phrases'); if (ta) ta.value = phrases.join('\n');
+    const mu = document.getElementById('cheer-music'); if (mu) mu.value = music;
+    try { const cur = JSON.parse(localStorage.getItem(CHEER_KEY) || '{}'); localStorage.setItem(CHEER_KEY, JSON.stringify({ ...cur, phrases, music })); } catch (_) {}
+  }
+  async function loadChildSettings() {
+    try {
+      const r = await fetch('/api/child-settings?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (r.ok) { const d = await r.json(); childSettings = (d && d.settings && typeof d.settings === 'object') ? d.settings : {}; }
+    } catch (_) {}
+    applyCheersUI();
+  }
+  loadChildSettings();
   const cheerSave = document.getElementById('cheer-save');
-  if (cheerSave) cheerSave.addEventListener('click', () => {
+  if (cheerSave) cheerSave.addEventListener('click', async () => {
     const lines = document.getElementById('cheer-phrases').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 12);
-    const next = { ...readCheers(), phrases: lines.length ? lines : DEFAULT_CHEERS, music: document.getElementById('cheer-music').value };
-    try { localStorage.setItem(CHEER_KEY, JSON.stringify(next)); } catch (_) {}
-    const msg = document.getElementById('cheer-msg');
-    if (msg) { msg.textContent = 'Saved ✓'; setTimeout(() => { msg.textContent = ''; }, 2500); }
+    const rewards = { phrases: lines.length ? lines : DEFAULT_CHEERS, music: document.getElementById('cheer-music').value };
+    childSettings = { ...childSettings, rewards };
+    try { const cur = JSON.parse(localStorage.getItem(CHEER_KEY) || '{}'); localStorage.setItem(CHEER_KEY, JSON.stringify({ ...cur, ...rewards })); } catch (_) {}
+    const msg = document.getElementById('cheer-msg'); if (msg) msg.textContent = 'Saving…';
+    try {
+      const r = await fetch('/api/child-settings?childId=' + encodeURIComponent(slug), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ settings: childSettings }),
+      });
+      if (msg) { msg.textContent = r.ok ? 'Saved ✓ — syncs to the iPad' : 'Saved on this device only'; setTimeout(() => { msg.textContent = ''; }, 3000); }
+    } catch (_) { if (msg) { msg.textContent = 'Saved on this device only'; setTimeout(() => { msg.textContent = ''; }, 3000); } }
   });
 
   // ---- Backup export (inlines image/sound bytes; compatible with the kid app's import) ----
