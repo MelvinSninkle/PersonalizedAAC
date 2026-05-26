@@ -826,13 +826,16 @@
   <div class="right">
     <span class="status" id="mode-status"></span>
     <button id="play-btn" class="edit-only">🎮 Play</button>
-    <button id="remote-btn" class="edit-only">📡 Remote</button>
-    <button id="rewards-btn" class="edit-only">🎁 Rewards</button>
-    <button id="organize-btn" class="edit-only">📁 Organize</button>
+    <button id="parent-btn" class="edit-only">👪 Parent view</button>
+    <button id="therapist-btn" class="edit-only">🩺 Therapist view</button>
     <button id="display-btn" class="edit-only">⚙ Display</button>
-    <button id="export-btn" class="edit-only">Export</button>
-    <button id="import-btn" class="edit-only">Import</button>
-    <button id="wipe-btn" class="edit-only">Wipe All</button>
+    <!-- Power tools moved to Admin / Therapist view; kept in the DOM (hidden) so handlers don't break. -->
+    <button id="remote-btn" class="edit-only" style="display:none">📡 Remote</button>
+    <button id="rewards-btn" class="edit-only" style="display:none">🎁 Rewards</button>
+    <button id="organize-btn" class="edit-only" style="display:none">📁 Organize</button>
+    <button id="export-btn" class="edit-only" style="display:none">Export</button>
+    <button id="import-btn" class="edit-only" style="display:none">Import</button>
+    <button id="wipe-btn" class="edit-only" style="display:none">Wipe All</button>
     <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
     <button id="login-btn" aria-label="Login" title="Login">🔒</button>
   </div>
@@ -3163,6 +3166,10 @@
   function openDisplayModal() { populateDisplayModal(); displayModal.classList.add('show'); }
   function commitDisplay() { saveDisplay(); applyDisplay(); }
   document.getElementById('display-btn').addEventListener('click', openDisplayModal);
+  // Quick switch to the parent / therapist dashboards for the current child.
+  // The signed-in session carries over; role-based access is enforced server-side.
+  document.getElementById('parent-btn').addEventListener('click', () => { window.location.href = '/parent/' + encodeURIComponent(CHILD_ID); });
+  document.getElementById('therapist-btn').addEventListener('click', () => { window.location.href = '/therapist/' + encodeURIComponent(CHILD_ID); });
   document.getElementById('display-done').addEventListener('click', () => displayModal.classList.remove('show'));
   document.getElementById('display-reset').addEventListener('click', () => {
     display = structuredClone(DISPLAY_DEFAULTS);
