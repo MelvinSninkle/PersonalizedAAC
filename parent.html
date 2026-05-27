@@ -974,6 +974,23 @@
   const ansReload = document.getElementById('answers-reload'); if (ansReload) ansReload.addEventListener('click', loadAnswers);
   loadAnswers();
 
+  // ---- Register this device for push (native parent app only; no-op in a browser) ----
+  // The server tags the token with the signed-in role, and only parent/admin
+  // tokens are ever pushed — so the therapist never receives notifications.
+  (function registerPush() {
+    try {
+      const Cap = window.Capacitor;
+      const PN = Cap && Cap.Plugins && Cap.Plugins.PushNotifications;
+      if (!PN) return;
+      PN.addListener('registration', (t) => {
+        const token = t && t.value; if (!token) return;
+        fetch('/api/push-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ token, childId: slug, platform: 'ios' }) }).catch(() => {});
+      });
+      PN.addListener('registrationError', () => {});
+      PN.requestPermissions().then((p) => { if (p && p.receive === 'granted') PN.register(); }).catch(() => {});
+    } catch (_) {}
+  })();
+
   // ---- Backup export (inlines image/sound bytes; compatible with the kid app's import) ----
   const backupBtn = document.getElementById('backup-export');
   if (backupBtn) backupBtn.addEventListener('click', async () => {
