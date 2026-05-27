@@ -177,6 +177,33 @@
     .ins-x { order: 2; }
     .ins-tabs { order: 3; margin-left: 0; width: 100%; justify-content: center; }
   }
+  /* Organize: drag-to-move rows */
+  .org-drag-row { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:10px; }
+  .org-drag-row.dragging { opacity:.4; }
+  .org-drag-row.drop-into { outline:2px solid var(--pink); outline-offset:-2px; background:#fff0f6; }
+  .org-drag-row.drop-before { box-shadow: inset 0 3px 0 var(--pink); }
+  .org-drag-row.drop-after { box-shadow: inset 0 -3px 0 var(--pink); }
+  .org-grip { cursor:grab; color:var(--faint); font-size:17px; touch-action:none; padding:2px 4px; flex:0 0 auto; }
+  .org-thumb { width:34px; height:34px; border-radius:8px; background:#fce4ec center/cover no-repeat; flex:0 0 auto; }
+  .org-ghost { position:fixed; z-index:4000; pointer-events:none; background:#fff; border:2px solid var(--pink); border-radius:10px;
+    padding:6px 10px; font-weight:600; font-size:14px; box-shadow:0 12px 34px rgba(0,0,0,.28); display:flex; align-items:center; gap:8px; opacity:.96; max-width:220px; }
+  /* Organize: full-screen workspace */
+  #org-page { position:fixed; inset:0; z-index:2000; background:var(--bg); display:none; flex-direction:column; }
+  #org-page.open { display:flex; }
+  .org-page-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 18px; background:#fff; border-bottom:1px solid var(--line); flex:0 0 auto; }
+  .org-page-head strong { color:var(--pink-deep); font-size:18px; }
+  .org-page-body { flex:1 1 auto; overflow:auto; -webkit-overflow-scrolling:touch; padding:16px 18px 40px; }
+  .org-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; align-items:start; }
+  .org-grid > div { margin-bottom:0 !important; }
+  .saved-row { display:flex; flex-wrap:wrap; margin-bottom:6px; }
+  .saved-chip { display:inline-flex; align-items:center; background:#fff; border:1px solid var(--line); border-radius:999px; margin:0 8px 8px 0; overflow:hidden; }
+  .saved-go { border:none; background:var(--pink); color:#fff; font:inherit; font-weight:600; padding:8px 14px; cursor:pointer; }
+  .saved-go:hover { background:var(--pink-mid); }
+  .saved-del { border:none; background:transparent; color:var(--faint); font-size:15px; cursor:pointer; padding:6px 11px; }
+  .saved-del:hover { color:var(--pink-deep); }
+  .rb-step { display:flex; align-items:center; justify-content:space-between; gap:8px; background:#fff7fb; border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:6px; font-size:14px; }
+  .rb-step button { border:none; background:transparent; color:var(--faint); font-size:15px; cursor:pointer; padding:2px 6px; }
+  .hint { color:var(--muted); font-size:12.5px; line-height:1.45; }
 </style>
 </head>
 <body>
@@ -224,6 +251,14 @@
     <div class="stat"><div class="n">84%</div><div class="k">Avg. matching accuracy</div><div class="trend up">▲ 6 pts</div></div>
     <div class="stat"><div class="n">147</div><div class="k">Items practiced</div><div class="trend up">▲ 22</div></div>
     <div class="stat"><div class="n">38<span style="font-size:16px"> min</span></div><div class="k">Exposure / slideshow time</div><div class="trend flat">— steady</div></div>
+  </div>
+
+  <!-- PLAY REQUEST BANNER -->
+  <div id="play-banner" style="display:none; align-items:center; gap:12px; background:#ecfdf5; border:1px solid #6ee7b7; border-radius:14px; padding:13px 16px; margin:18px 0 0;">
+    <span style="font-size:22px;">🎮</span>
+    <strong style="flex:1; color:#065f46; font-size:15px;">Fletcher wants to play!</strong>
+    <button class="btn primary" id="play-banner-go">Choose a game</button>
+    <button id="play-banner-x" aria-label="Dismiss" style="border:none; background:transparent; color:#6b7280; font-size:18px; cursor:pointer;">✕</button>
   </div>
 
   <!-- MODE LAUNCHER -->
@@ -274,13 +309,14 @@
         <button class="btn ghost" data-config="Celebration">Configure</button>
       </div>
     </div>
-    <div class="mode" style="background:#fffdf5; border-style:dashed;">
-      <div class="icon" style="background:#fef9c3;">➕</div><span class="tag" style="color:var(--faint)">Coming soon</span>
+    <div class="mode" style="background:#fffdf5;">
+      <div class="icon" style="background:#fef9c3;">➕</div><span class="tag">Mode 6 · Routine</span>
       <h3>Routine Builder</h3>
       <p>Chain modes into a saved routine — e.g. warm-up slideshow → game → celebration.</p>
-      <div class="actions"><button class="btn ghost" disabled style="opacity:.6; cursor:default;">On the roadmap</button></div>
+      <div class="actions"><button class="btn primary" id="rb-open">Build a routine</button></div>
     </div>
   </div>
+  <div id="saved-launch" style="margin-top:6px;"></div>
 
   <!-- CURRENT MASTERY -->
   <div class="section-label">Current mastery</div>
@@ -422,12 +458,24 @@
   <div class="section-label">Organize the board</div>
   <div class="panel">
     <h2>Categories &amp; tiles</h2>
-    <p class="hint">Reorder, rename, add or remove the categories and tiles on your child's board.</p>
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
-      <button class="btn ghost" id="org-reload">↻ Reload</button>
+    <p class="hint">Drag tiles and categories to rearrange your child's board — like moving files between folders. Opens as a full-screen workspace.</p>
+    <button class="btn primary" id="org-open">⤢ Open the organizer</button>
+  </div>
+
+  <!-- ORGANIZE — full-screen workspace -->
+  <div id="org-page">
+    <div class="org-page-head">
+      <strong>Organize the board</strong>
       <span id="org-status" style="font-size:13px;color:var(--muted);"></span>
+      <span style="margin-left:auto;display:flex;gap:8px;">
+        <button class="btn ghost" id="org-reload">↻ Reload</button>
+        <button class="btn" id="org-close">✕ Close</button>
+      </span>
     </div>
-    <div id="org-tree"></div>
+    <div id="org-scroll" class="org-page-body">
+      <p class="hint" style="margin:0 0 12px;">Grab the <strong>⠿</strong> handle to move a tile or category. Drop onto a category to file a tile inside it, or between rows to reorder. Drag near the top or bottom edge to scroll while holding.</p>
+      <div id="org-tree"></div>
+    </div>
   </div>
 
   <!-- BACKUP -->
@@ -460,7 +508,36 @@
     <div id="modal-body"></div>
     <div class="foot">
       <button class="btn ghost" id="modal-cancel">Cancel</button>
+      <button class="btn ghost" id="modal-save">Save</button>
       <button class="btn primary" id="modal-go">Start session</button>
+    </div>
+  </div>
+</div>
+
+<!-- ROUTINE BUILDER MODAL -->
+<div class="scrim" id="rb-scrim">
+  <div class="modal" style="max-width:520px;">
+    <button class="x" id="rb-x" aria-label="Close">×</button>
+    <h3 class="fred">Routine Builder</h3>
+    <p class="sub">Chain modes into one tap — they run in order on Fletcher's tablet.</p>
+    <div class="field"><label>Routine name</label><input id="rb-name" type="text" placeholder="e.g. Morning warm-up" maxlength="40"></div>
+    <div class="field"><label>Steps</label><div id="rb-steps"></div></div>
+    <div style="border:1px dashed var(--line); border-radius:12px; padding:12px; margin-bottom:4px;">
+      <div class="field" style="margin-bottom:8px;"><label>Add a step</label>
+        <select id="rb-mode">
+          <option value="learn_slideshow">Learn Slideshow</option>
+          <option value="exposure_slideshow">Exposure Slideshow</option>
+          <option value="self_paced">Matching Game</option>
+          <option value="celebration">Celebration</option>
+        </select>
+      </div>
+      <div id="rb-stepcfg"></div>
+      <button class="btn ghost" id="rb-add" style="width:100%;">+ Add step</button>
+    </div>
+    <div class="foot">
+      <button class="btn ghost" id="rb-cancel">Cancel</button>
+      <button class="btn ghost" id="rb-run">Run now</button>
+      <button class="btn primary" id="rb-save">Save routine</button>
     </div>
   </div>
 </div>
@@ -631,52 +708,93 @@
   })();
   loadAnalytics();
 
-  // ---- Mode config modal (mockup) ----
-  const CATS = ['Colors','Animals','Body Parts','Foods','Feelings','Actions','People','Vehicles'];
+  // ---- Mode launcher — starts a real session on Fletcher's tablet over /api/live ----
   const scrim = document.getElementById('scrim');
   const title = document.getElementById('modal-title');
   const sub   = document.getElementById('modal-sub');
   const body  = document.getElementById('modal-body');
   const goBtn = document.getElementById('modal-go');
+  const MODE_KEY = {
+    'Self-Paced Matching Game': 'self_paced', 'Facilitated Matching Game': 'facilitated',
+    'Learn Slideshow': 'learn_slideshow', 'Exposure Slideshow': 'exposure_slideshow', 'Celebration': 'celebration',
+  };
+  const SECT_LABEL = { people: 'People', nouns: 'Nouns', verbs: 'Verbs' };
+  let LAUNCH_CATS = [];
+  async function loadLaunchCats() {
+    try {
+      const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (r.ok) { const d = await r.json(); LAUNCH_CATS = (d.categories || []).filter(c => c.parentId == null); }
+    } catch (_) {}
+  }
+  loadLaunchCats();
 
-  function catChecks() {
-    return `<div class="field"><label>Categories (queue in order)</label><div class="checks">${
-      CATS.map((c,i) => `<label><input type="checkbox" ${i<3?'checked':''}> ${c}</label>`).join('')
-    }</div></div>`;
+  function catChecks(opts = {}) {
+    if (!LAUNCH_CATS.length) return `<div class="field"><label>${opts.label || 'Categories'}</label><p class="hint" style="margin:0;">No categories loaded yet — the session will use everything on the board.</p></div>`;
+    let n = 0;
+    const rows = ['people', 'nouns', 'verbs'].map(sec => {
+      const cats = LAUNCH_CATS.filter(c => c.section === sec).sort((a, b) => (a.order - b.order) || (a.id - b.id));
+      if (!cats.length) return '';
+      return `<div style="font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;margin:8px 0 2px;">${SECT_LABEL[sec] || sec}</div>` +
+        cats.map(c => `<label><input type="checkbox" class="lc-cat" data-scope="cat:${c.id}" ${n++ < 3 ? 'checked' : ''}> ${schEsc(c.label)}</label>`).join('');
+    }).join('');
+    return `<div class="field"><label>${opts.label || 'Categories (queue in order)'}</label><div class="checks">${rows}</div></div>`;
   }
   function musicField() {
-    return `<div class="field"><label>Background music</label><select>
-      <option>Calm piano (default)</option><option>Soft acoustic</option><option>Lo-fi</option><option>Silence</option>
+    return `<div class="field"><label>Background music</label><select id="lc-music">
+      <option value="/audio/color-tap-learn.mp3">Color Tap (playful)</option>
+      <option value="/audio/clockwork-kaleidoscope.mp3">Clockwork Kaleidoscope (calm)</option>
+      <option value="">No music</option>
     </select></div>`;
   }
+  const choicesField = () => `<div class="field"><label>Choices per item</label><select id="lc-choices"><option value="3">3 (target + 2 distractors)</option><option value="2">2 (easier)</option><option value="4">4</option></select></div>`;
+  const limitField = () => `<div class="field"><label>Time limit</label><select id="lc-limit"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15" selected>15 minutes</option><option value="0">Until I stop it</option></select></div>`;
+  const secsField = () => `<div class="field"><label>Seconds per image</label><select id="lc-secs"><option value="4">4s</option><option value="5" selected>5s</option><option value="6">6s</option><option value="8">8s</option></select></div>`;
   const FORMS = {
-    'Self-Paced Matching Game': () => catChecks() +
-      `<div class="field"><label>Choices per item</label><select><option>3 (target + 2 distractors)</option><option>2</option><option>4</option></select></div>` +
-      `<div class="field"><label>Items before auto-advancing category</label><select><option>10</option><option>5</option><option>Exhaust category</option></select></div>` + musicField(),
-    'Facilitated Matching Game': () => catChecks() +
-      `<div class="field"><label>Who's facilitating?</label><select><option>Therapist (their phone)</option><option>You (this phone)</option></select></div>` +
-      `<div class="field"><label>Let Fletcher also tap independently</label><select><option>Yes — additive</option><option>No — facilitator only</option></select></div>` + musicField(),
-    'Learn Slideshow': () => catChecks() +
-      `<div class="field"><label>Time limit</label><select><option>5 minutes</option><option>10 minutes</option><option>15 minutes</option><option>Until I stop it</option></select></div>` +
-      `<div class="field"><label>Seconds per image</label><select><option>4s</option><option>6s</option><option>8s</option></select></div>` + musicField(),
-    'Exposure Slideshow': () =>
-      `<div class="field"><label>Exposure set</label><select><option>New Foods</option><option>Textures</option><option>Places &amp; Environments</option></select></div>` +
-      `<div class="field"><label>Affirming label style</label><select><option>First-person ("I can smell a strawberry")</option><option>Plain label</option></select></div>` +
-      `<div class="field"><label>Time limit</label><select><option>5 minutes</option><option>8 minutes</option><option>Until I stop it</option></select></div>` + musicField(),
-    'Celebration': () =>
-      `<div class="field"><label>Cheer (your voice)</label><select><option>"Hooray, Fletcher! I'm so proud of you!"</option><option>"You did it, buddy!"</option><option>"Way to go, Fletcher!"</option></select></div>` +
-      `<div class="field"><label>Animation</label><select><option>Yellow flowers bursting 🌼</option><option>Confetti</option><option>Custom upload</option></select></div>`,
+    'Self-Paced Matching Game': () => catChecks() + choicesField() + limitField() + musicField(),
+    'Facilitated Matching Game': () => catChecks({ label: 'Category' }) + choicesField() +
+      `<p class="hint" style="margin:0 0 10px;">Starting here puts the tablet in facilitated mode; drive it from the therapist phone view.</p>` + musicField(),
+    'Learn Slideshow': () => catChecks() + secsField() + limitField() + musicField(),
+    'Exposure Slideshow': () => catChecks() + secsField() + limitField() +
+      `<p class="hint" style="margin:0 0 10px;">Labels are spoken gently, first-person ("I can see a …").</p>` + musicField(),
+    'Celebration': () => `<p class="hint" style="margin:0 0 6px;">Plays the flowers + your recorded cheer on the tablet right now. Edit the cheer & music under "Reward cheers & game music" below.</p>`,
   };
 
   function openModal(mode, launch) {
     title.textContent = (launch ? 'Start · ' : 'Configure · ') + mode;
-    sub.textContent = 'Mockup — nothing is saved yet. This is the shape of the real setup.';
+    sub.textContent = "Runs live on Fletcher's tablet — it must be open on the board.";
     body.innerHTML = (FORMS[mode] || (() => catChecks() + musicField()))();
-    goBtn.textContent = mode === 'Celebration' ? 'Play on tablet' : 'Start session';
-    goBtn.dataset.mode = mode;
+    goBtn.textContent = mode === 'Celebration' ? 'Play on tablet' : 'Start on tablet';
+    goBtn.dataset.modeName = mode;
+    goBtn.disabled = false;
     scrim.classList.add('open');
   }
   function closeModal() { scrim.classList.remove('open'); }
+
+  async function tabletOnline() {
+    try {
+      const r = await fetch('/api/live?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return false;
+      const d = await r.json();
+      return d.age != null && d.age < 10;
+    } catch (_) { return false; }
+  }
+  function buildLaunchCmd(modeName) {
+    const mode = MODE_KEY[modeName] || 'self_paced';
+    const cmd = { kind: 'cmd', action: 'start', mode };
+    const scopes = [...body.querySelectorAll('.lc-cat:checked')].map(c => c.dataset.scope);
+    const musicEl = body.querySelector('#lc-music'); if (musicEl) cmd.music = musicEl.value;
+    const limEl = body.querySelector('#lc-limit'); if (limEl) { const v = parseInt(limEl.value, 10); if (Number.isFinite(v)) cmd.limitMin = v; }
+    if (mode === 'self_paced' || mode === 'facilitated') {
+      const ch = body.querySelector('#lc-choices'); cmd.choices = ch ? (parseInt(ch.value, 10) || 3) : 3;
+      if (mode === 'self_paced' && scopes.length > 1) cmd.scopes = scopes;
+      else cmd.scope = scopes[0] || 'all';
+    } else if (mode === 'learn_slideshow' || mode === 'exposure_slideshow') {
+      cmd.scope = scopes.length === 1 ? scopes[0] : 'all';
+      const sc = body.querySelector('#lc-secs'); cmd.secondsPerImage = sc ? (parseInt(sc.value, 10) || 5) : 5;
+      cmd.labelStyle = mode === 'exposure_slideshow' ? 'first_person' : 'plain';
+    }
+    return cmd;
+  }
 
   document.getElementById('modes').addEventListener('click', (e) => {
     const c = e.target.closest('[data-config]'); const l = e.target.closest('[data-launch]');
@@ -686,10 +804,195 @@
   document.getElementById('modal-x').addEventListener('click', closeModal);
   document.getElementById('modal-cancel').addEventListener('click', closeModal);
   scrim.addEventListener('click', (e) => { if (e.target === scrim) closeModal(); });
-  goBtn.addEventListener('click', () => {
-    goBtn.textContent = 'Sent to tablet ✓';
-    setTimeout(() => { closeModal(); }, 750);
+  goBtn.addEventListener('click', async () => {
+    const modeName = goBtn.dataset.modeName;
+    const orig = goBtn.textContent;
+    goBtn.disabled = true; goBtn.textContent = 'Sending…';
+    const online = await tabletOnline();
+    let ok = false;
+    try {
+      const r = await fetch('/api/live?childId=' + encodeURIComponent(slug), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify(buildLaunchCmd(modeName)),
+      });
+      ok = r.ok;
+    } catch (_) {}
+    if (!ok) { sub.textContent = 'Could not reach the server — try again.'; goBtn.textContent = orig; goBtn.disabled = false; return; }
+    if (online) { goBtn.textContent = 'Started on tablet ✓'; setTimeout(() => { closeModal(); goBtn.textContent = orig; }, 1400); }
+    else { goBtn.textContent = orig; goBtn.disabled = false; sub.textContent = "⚠ Fletcher's tablet isn't on the board right now. Open his app, then tap again."; }
   });
+
+  // ---- Saved games (presets) + routines — stored in child settings, re-launch in one tap ----
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function sendCmd(cmd) {
+    return fetch('/api/live?childId=' + encodeURIComponent(slug), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify(cmd),
+    }).then(r => r.ok).catch(() => false);
+  }
+  function toast(msg) {
+    let t = document.getElementById('mini-toast');
+    if (!t) {
+      t = document.createElement('div'); t.id = 'mini-toast';
+      t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:88vw;text-align:center;background:#1f2937;color:#fff;padding:11px 18px;border-radius:14px;font-size:14px;z-index:200;box-shadow:0 10px 30px rgba(0,0,0,.25);opacity:0;transition:opacity .2s;';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg; t.style.opacity = '1';
+    clearTimeout(t._h); t._h = setTimeout(() => { t.style.opacity = '0'; }, 2800);
+  }
+  async function launchSaved(cmd) {
+    const online = await tabletOnline();
+    const ok = await sendCmd(cmd);
+    if (!ok) toast('Could not reach the server — try again.');
+    else if (online) toast("Started on Fletcher's tablet ✓");
+    else toast("Sent — but the tablet isn't on the board. Open his app, then tap again.");
+  }
+
+  function renderSaved() {
+    const wrap = document.getElementById('saved-launch'); if (!wrap) return;
+    const presets = childSettings.gamePresets || [];
+    const routines = childSettings.routines || [];
+    let html = '';
+    if (presets.length) html += '<div class="section-label">Saved games</div><div class="saved-row">' + presets.map(p => savedChip('p', p.id, p.name)).join('') + '</div>';
+    if (routines.length) html += '<div class="section-label">Saved routines</div><div class="saved-row">' + routines.map(r => savedChip('r', r.id, r.name + ' · ' + (r.steps ? r.steps.length : 0) + ((r.steps && r.steps.length === 1) ? ' step' : ' steps'))).join('') + '</div>';
+    wrap.innerHTML = html;
+  }
+  function savedChip(type, id, label) {
+    return '<span class="saved-chip"><button class="saved-go" data-run="' + type + ':' + id + '">▶ ' + schEsc(label) + '</button>'
+      + '<button class="saved-del" data-del="' + type + ':' + id + '" aria-label="Delete">✕</button></span>';
+  }
+  document.getElementById('saved-launch').addEventListener('click', async (e) => {
+    const run = e.target.closest('[data-run]'); const del = e.target.closest('[data-del]');
+    if (run) {
+      const [type, id] = run.dataset.run.split(':');
+      if (type === 'p') { const p = (childSettings.gamePresets || []).find(x => x.id === id); if (p) launchSaved(p.cmd); }
+      else { const r = (childSettings.routines || []).find(x => x.id === id); if (r) launchSaved({ kind: 'cmd', action: 'start', steps: r.steps }); }
+    } else if (del) {
+      const [type, id] = del.dataset.del.split(':');
+      if (!confirm('Delete this saved ' + (type === 'p' ? 'game' : 'routine') + '?')) return;
+      if (type === 'p') childSettings.gamePresets = (childSettings.gamePresets || []).filter(x => x.id !== id);
+      else childSettings.routines = (childSettings.routines || []).filter(x => x.id !== id);
+      renderSaved(); saveSettingsToServer('Removed');
+    }
+  });
+  document.getElementById('modal-save').addEventListener('click', async () => {
+    const modeName = goBtn.dataset.modeName; if (!modeName) return;
+    const def = modeName.replace(' Game', '').replace('Matching', 'Match');
+    const name = (prompt('Name this saved game:', def) || '').trim(); if (!name) return;
+    childSettings.gamePresets = childSettings.gamePresets || [];
+    childSettings.gamePresets.push({ id: uid(), name: name.slice(0, 40), modeName, cmd: buildLaunchCmd(modeName) });
+    renderSaved(); await saveSettingsToServer();
+    sub.textContent = 'Saved as "' + name + '" ✓ — find it under Saved games.';
+  });
+
+  // ---- Routine Builder ----
+  const rbScrim = document.getElementById('rb-scrim');
+  let rbSteps = [];
+  const RB_MODE_LABEL = { learn_slideshow: 'Learn Slideshow', exposure_slideshow: 'Exposure Slideshow', self_paced: 'Matching Game', celebration: 'Celebration' };
+  function rbScopeLabel(scope) {
+    if (!scope || scope === 'all') return 'Everything';
+    if (scope.indexOf('cat:') === 0) { const c = LAUNCH_CATS.find(x => ('cat:' + x.id) === scope); return c ? c.label : 'Category'; }
+    return scope;
+  }
+  function rbCatSelect() {
+    const opts = ['<option value="all">Everything</option>'].concat(
+      ['people', 'nouns', 'verbs'].reduce((acc, sec) => acc.concat(
+        LAUNCH_CATS.filter(c => c.section === sec).sort((a, b) => (a.order - b.order) || (a.id - b.id)).map(c => '<option value="cat:' + c.id + '">' + schEsc(c.label) + '</option>')
+      ), [])
+    ).join('');
+    return '<select id="rb-cat">' + opts + '</select>';
+  }
+  function rbStepCfg() {
+    const mode = document.getElementById('rb-mode').value;
+    const box = document.getElementById('rb-stepcfg');
+    if (mode === 'celebration') { box.innerHTML = '<p class="hint" style="margin:2px 0 10px;">Plays the flowers + your recorded cheer.</p>'; return; }
+    let html = '<div class="field" style="margin-bottom:8px;"><label>Category</label>' + rbCatSelect() + '</div>';
+    if (mode === 'self_paced') html += '<div class="field" style="margin-bottom:8px;"><label>Choices</label><select id="rb-choices"><option value="3">3</option><option value="2">2</option><option value="4">4</option></select></div>';
+    else html += '<div class="field" style="margin-bottom:8px;"><label>Seconds per image</label><select id="rb-secs"><option value="4">4s</option><option value="5" selected>5s</option><option value="6">6s</option><option value="8">8s</option></select></div>';
+    html += '<div class="field" style="margin-bottom:8px;"><label>Duration (minutes)</label><select id="rb-mins"><option value="2">2</option><option value="3" selected>3</option><option value="5">5</option><option value="10">10</option></select></div>';
+    box.innerHTML = html;
+  }
+  function rbRenderSteps() {
+    const el = document.getElementById('rb-steps');
+    if (!rbSteps.length) { el.innerHTML = '<p class="hint" style="margin:0 0 6px;">No steps yet — add one below.</p>'; return; }
+    el.innerHTML = rbSteps.map((s, i) => {
+      const bits = [RB_MODE_LABEL[s.mode] || s.mode];
+      if (s.mode !== 'celebration') { bits.push(rbScopeLabel(s.scope)); if (s.limitMin) bits.push(s.limitMin + ' min'); }
+      return '<div class="rb-step"><span>' + (i + 1) + '. ' + schEsc(bits.join(' · ')) + '</span><button data-rmstep="' + i + '" aria-label="Remove">✕</button></div>';
+    }).join('');
+  }
+  function openRoutineBuilder() {
+    rbSteps = [];
+    document.getElementById('rb-name').value = '';
+    document.getElementById('rb-mode').value = 'learn_slideshow';
+    rbStepCfg(); rbRenderSteps();
+    rbScrim.classList.add('open');
+  }
+  function closeRoutineBuilder() { rbScrim.classList.remove('open'); }
+  document.getElementById('rb-open').addEventListener('click', openRoutineBuilder);
+  document.getElementById('rb-mode').addEventListener('change', rbStepCfg);
+  document.getElementById('rb-add').addEventListener('click', () => {
+    const mode = document.getElementById('rb-mode').value;
+    const music = (document.getElementById('cheer-music') || {}).value || '';
+    const step = { mode, music };
+    if (mode !== 'celebration') {
+      const cat = document.getElementById('rb-cat'); step.scope = cat ? cat.value : 'all';
+      const mins = document.getElementById('rb-mins'); step.limitMin = mins ? parseInt(mins.value, 10) : 3;
+      if (mode === 'self_paced') { const ch = document.getElementById('rb-choices'); step.choices = ch ? parseInt(ch.value, 10) : 3; }
+      else { const sc = document.getElementById('rb-secs'); step.secondsPerImage = sc ? parseInt(sc.value, 10) : 5; }
+    }
+    rbSteps.push(step); rbRenderSteps();
+  });
+  document.getElementById('rb-steps').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-rmstep]'); if (!b) return;
+    rbSteps.splice(parseInt(b.dataset.rmstep, 10), 1); rbRenderSteps();
+  });
+  document.getElementById('rb-save').addEventListener('click', async () => {
+    const name = (document.getElementById('rb-name').value || '').trim();
+    if (!name) { document.getElementById('rb-name').focus(); return; }
+    if (!rbSteps.length) { toast('Add at least one step first.'); return; }
+    childSettings.routines = childSettings.routines || [];
+    childSettings.routines.push({ id: uid(), name: name.slice(0, 40), steps: rbSteps.slice() });
+    renderSaved(); await saveSettingsToServer();
+    closeRoutineBuilder(); toast('Routine saved ✓');
+  });
+  document.getElementById('rb-run').addEventListener('click', () => {
+    if (!rbSteps.length) { toast('Add at least one step first.'); return; }
+    launchSaved({ kind: 'cmd', action: 'start', steps: rbSteps.slice() });
+  });
+  document.getElementById('rb-x').addEventListener('click', closeRoutineBuilder);
+  document.getElementById('rb-cancel').addEventListener('click', closeRoutineBuilder);
+  rbScrim.addEventListener('click', (e) => { if (e.target === rbScrim) closeRoutineBuilder(); });
+
+  // ---- "Fletcher wants to play" — poll for his board ping, show a banner ----
+  const playBanner = document.getElementById('play-banner');
+  let _seenPlayReq = 0;
+  try { _seenPlayReq = parseInt(localStorage.getItem('aacSeenPlayReq') || '0', 10) || 0; } catch (_) {}
+  async function pollPlayRequest() {
+    try {
+      const r = await fetch('/api/play-request?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d.at) return;
+      const ts = new Date(d.at).getTime();
+      if ((d.ageSec == null || d.ageSec < 180) && ts > _seenPlayReq) {
+        playBanner.dataset.ts = String(ts);
+        playBanner.style.display = 'flex';
+      }
+    } catch (_) {}
+  }
+  function dismissPlayBanner() {
+    _seenPlayReq = parseInt(playBanner.dataset.ts || '0', 10) || Date.now();
+    try { localStorage.setItem('aacSeenPlayReq', String(_seenPlayReq)); } catch (_) {}
+    playBanner.style.display = 'none';
+  }
+  document.getElementById('play-banner-x').addEventListener('click', dismissPlayBanner);
+  document.getElementById('play-banner-go').addEventListener('click', () => {
+    dismissPlayBanner();
+    document.getElementById('modes').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  pollPlayRequest();
+  setInterval(pollPlayRequest, 20000);
 
   // ---- Reference images (steer AI tile generation) ----
   const refGrid = document.getElementById('ref-grid');
@@ -782,6 +1085,7 @@
     } catch (_) {}
     applyCheersUI();
     renderSchedList();
+    renderSaved();
     const grp = document.getElementById('game-results-push'); if (grp) grp.checked = !!childSettings.gameResultsPush;
   }
   async function saveSettingsToServer(okMsg, msgElId) {
@@ -1013,7 +1317,7 @@
     saveSettingsToServer(grpToggle.checked ? 'Game alerts on ✓' : 'Game alerts off', 'sched-msg');
   });
 
-  // ---- Organize the board (categories + tiles), parent-editable ----
+  // ---- Organize the board (drag the image tiles to move/reorder; like folders) ----
   const ORG_SECTIONS = ['people', 'nouns', 'verbs'];
   let ORG_CATS = [], ORG_ITEMS = [];
   const orgByOrder = (a, b) => (a.order - b.order) || (a.id - b.id);
@@ -1032,45 +1336,38 @@
       renderOrgTree(); st.textContent = ORG_CATS.length + ' categories · ' + ORG_ITEMS.length + ' tiles';
     } catch (err) { st.textContent = err.message; }
   }
-  function orgActs(type, id) {
+  function orgBtns(type, id) {
     return '<span style="margin-left:auto;display:inline-flex;gap:4px;">' +
-      '<button class="btn ghost" data-org="up" data-type="' + type + '" data-id="' + id + '">↑</button>' +
-      '<button class="btn ghost" data-org="down" data-type="' + type + '" data-id="' + id + '">↓</button>' +
       '<button class="btn ghost" data-org="rename" data-type="' + type + '" data-id="' + id + '">✎</button>' +
       '<button class="btn ghost" data-org="del" data-type="' + type + '" data-id="' + id + '">✕</button></span>';
   }
-  function orgItems(catId) {
+  function orgThumb(imageKey) {
+    return imageKey ? '<span class="org-thumb" style="background-image:url(/api/media?key=' + encodeURIComponent(imageKey) + ')"></span>' : '';
+  }
+  function orgItemsHTML(catId) {
     const items = ORG_ITEMS.filter(i => i.categoryId === catId).sort(orgByOrder);
-    if (!items.length) return '<div style="font-size:12px;color:var(--faint);margin:4px 0 4px 18px;">No tiles.</div>';
-    return items.map(i => '<div style="display:flex;align-items:center;gap:6px;margin:3px 0 3px 18px;font-size:14px;"><span>▦</span><span>' + schEsc(i.label) + '</span>' + orgActs('item', i.id) + '</div>').join('');
+    if (!items.length) return '<div style="font-size:12px;color:var(--faint);margin:2px 0 2px 22px;">No tiles — drag one here.</div>';
+    return items.map(i => '<div class="org-drag-row" data-type="item" data-id="' + i.id + '" data-cat="' + i.categoryId + '" style="margin-left:18px;">' +
+      '<span class="org-grip">⠿</span>' + orgThumb(i.imageKey) + '<span style="flex:1;font-size:14px;">' + schEsc(i.label) + '</span>' + orgBtns('item', i.id) + '</div>').join('');
   }
   function renderOrgTree() {
     const el = document.getElementById('org-tree'); if (!el) return;
-    el.innerHTML = ORG_SECTIONS.map(sec => {
+    el.innerHTML = '<div class="org-grid">' + ORG_SECTIONS.map(sec => {
       const tops = ORG_CATS.filter(c => c.section === sec && c.parentId == null).sort(orgByOrder);
       const body = tops.length ? tops.map(cat => {
         const subs = ORG_CATS.filter(c => c.parentId === cat.id).sort(orgByOrder);
-        return '<div style="border-top:1px solid var(--line);padding:8px 0;">' +
-          '<div style="display:flex;align-items:center;gap:6px;font-weight:600;"><span>▤</span><span>' + schEsc(cat.label) + '</span>' + orgActs('cat', cat.id) + '</div>' +
-          orgItems(cat.id) +
-          subs.map(s => '<div style="margin-left:18px;border-left:2px solid var(--line);padding-left:10px;margin-top:4px;"><div style="display:flex;align-items:center;gap:6px;font-size:14px;"><span>↳</span><span>' + schEsc(s.label) + '</span>' + orgActs('cat', s.id) + '</div>' + orgItems(s.id) + '<div style="margin:4px 0 2px 18px;"><button class="btn ghost" data-org="add-item" data-cat="' + s.id + '" data-section="' + sec + '">+ tile</button></div></div>').join('') +
-          '<div style="margin:6px 0 2px 18px;"><button class="btn ghost" data-org="add-item" data-cat="' + cat.id + '" data-section="' + sec + '">+ tile</button> <button class="btn ghost" data-org="add-sub" data-cat="' + cat.id + '" data-section="' + sec + '">+ subcategory</button></div>' +
+        return '<div style="border-top:1px solid var(--line);padding:6px 0;">' +
+          '<div class="org-drag-row" data-type="cat" data-id="' + cat.id + '" data-parent="" data-section="' + sec + '" style="font-weight:600;"><span class="org-grip">⠿</span>' + orgThumb(cat.imageKey) + '<span style="flex:1;">' + schEsc(cat.label) + '</span>' + orgBtns('cat', cat.id) + '</div>' +
+          orgItemsHTML(cat.id) +
+          subs.map(s => '<div style="margin-left:18px;border-left:2px solid var(--line);padding-left:8px;margin-top:4px;">' +
+            '<div class="org-drag-row" data-type="cat" data-id="' + s.id + '" data-parent="' + cat.id + '" data-section="' + sec + '" style="font-size:14px;"><span class="org-grip">⠿</span><span style="margin-right:2px;">↳</span>' + orgThumb(s.imageKey) + '<span style="flex:1;">' + schEsc(s.label) + '</span>' + orgBtns('cat', s.id) + '</div>' +
+            orgItemsHTML(s.id) +
+            '<div style="margin:4px 0 2px 22px;"><button class="btn ghost" data-org="add-item" data-cat="' + s.id + '" data-section="' + sec + '">+ tile</button></div></div>').join('') +
+          '<div style="margin:6px 0 2px 22px;"><button class="btn ghost" data-org="add-item" data-cat="' + cat.id + '" data-section="' + sec + '">+ tile</button> <button class="btn ghost" data-org="add-sub" data-cat="' + cat.id + '" data-section="' + sec + '">+ subcategory</button></div>' +
           '</div>';
       }).join('') : '<div style="font-size:12px;color:var(--faint);padding:6px 0;">No categories.</div>';
       return '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden;"><div style="padding:10px 14px;background:#fff0f6;font-weight:700;color:var(--pink-deep);text-transform:uppercase;font-size:13px;display:flex;justify-content:space-between;align-items:center;">' + sec + '<button class="btn" data-org="add-cat" data-section="' + sec + '">+ Category</button></div><div style="padding:6px 14px;">' + body + '</div></div>';
-    }).join('');
-  }
-  function orgSiblings(type, id) {
-    if (type === 'item') { const it = ORG_ITEMS.find(i => i.id === id); return ORG_ITEMS.filter(i => i.categoryId === it.categoryId).sort(orgByOrder); }
-    const c = ORG_CATS.find(x => x.id === id); return ORG_CATS.filter(x => x.section === c.section && x.parentId === c.parentId).sort(orgByOrder);
-  }
-  async function orgMove(type, id, dir) {
-    const sibs = orgSiblings(type, id); const i = sibs.findIndex(s => s.id === id); const j = i + (dir === 'up' ? -1 : 1);
-    if (j < 0 || j >= sibs.length) return;
-    const a = sibs[i], b = sibs[j]; const ep = type === 'item' ? '/api/items' : '/api/categories';
-    await orgApi(ep + '?id=' + a.id, { method: 'PUT', body: JSON.stringify({ order: b.order, childId: slug }) });
-    await orgApi(ep + '?id=' + b.id, { method: 'PUT', body: JSON.stringify({ order: a.order, childId: slug }) });
-    await loadOrg();
+    }).join('') + '</div>';
   }
   async function orgAct(act, el) {
     const id = el.dataset.id ? Number(el.dataset.id) : null, type = el.dataset.type;
@@ -1080,15 +1377,127 @@
       else if (act === 'add-item') { const l = prompt('New tile label:'); if (!l) return; await orgApi('/api/items', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, categoryId: Number(el.dataset.cat), label: l.trim(), childId: slug }) }); }
       else if (act === 'rename') { const arr = type === 'item' ? ORG_ITEMS : ORG_CATS; const cur = arr.find(x => x.id === id); const l = prompt('Rename:', cur ? cur.label : ''); if (!l) return; await orgApi((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id, { method: 'PUT', body: JSON.stringify({ label: l.trim(), childId: slug }) }); }
       else if (act === 'del') { const arr = type === 'item' ? ORG_ITEMS : ORG_CATS; const cur = arr.find(x => x.id === id); if (!confirm('Delete "' + (cur ? cur.label : id) + '"' + (type === 'cat' ? ' and everything under it' : '') + '?')) return; await orgApi((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id + '&childId=' + encodeURIComponent(slug), { method: 'DELETE' }); }
-      else if (act === 'up' || act === 'down') { return orgMove(type, id, act); }
       await loadOrg();
     } catch (err) { const st = document.getElementById('org-status'); if (st) st.textContent = err.message; }
+  }
+
+  // Renumber a sibling group sequentially; apply a parent change to the dragged row.
+  async function orgRenumber(ep, orderedIds, draggedId, patch) {
+    for (let k = 0; k < orderedIds.length; k++) {
+      const body = { order: k, childId: slug };
+      if (orderedIds[k] === draggedId) Object.assign(body, patch);
+      await orgApi(ep + '?id=' + orderedIds[k], { method: 'PUT', body: JSON.stringify(body) });
+    }
+  }
+  async function orgApplyDrop(dragType, dragId, t, zone) {
+    const targetType = t.type, targetId = Number(t.id);
+    if (dragId === targetId) return;
+    const di = dragType === 'item' ? ORG_ITEMS.find(i => i.id === dragId) : null;
+    if (dragType === 'item') {
+      if (targetType === 'cat' && zone === 'into') {
+        const tc = ORG_CATS.find(c => c.id === targetId); if (!tc || !di || tc.section !== di.section) return;   // stay within the section
+        const ids = ORG_ITEMS.filter(i => i.categoryId === targetId).sort(orgByOrder).map(i => i.id).filter(id => id !== dragId).concat(dragId);
+        await orgRenumber('/api/items', ids, dragId, { categoryId: targetId });
+      } else if (targetType === 'item') {
+        const ti = ORG_ITEMS.find(i => i.id === targetId); if (!ti || !di || ti.section !== di.section) return;
+        const destCat = ti.categoryId;
+        const ids = ORG_ITEMS.filter(i => i.categoryId === destCat).sort(orgByOrder).map(i => i.id).filter(id => id !== dragId);
+        let idx = ids.indexOf(targetId); if (zone === 'after') idx += 1;
+        ids.splice(idx, 0, dragId);
+        await orgRenumber('/api/items', ids, dragId, { categoryId: destCat });
+      } else return;
+    } else if (dragType === 'cat') {
+      const dc = ORG_CATS.find(c => c.id === dragId), tc = ORG_CATS.find(c => c.id === targetId);
+      if (!dc || !tc || tc.section !== dc.section) return;
+      const dragHasSubs = ORG_CATS.some(c => c.parentId === dragId);
+      if (zone === 'into' && tc.parentId == null && !dragHasSubs) {
+        const ids = ORG_CATS.filter(c => c.parentId === targetId).sort(orgByOrder).map(c => c.id).filter(id => id !== dragId).concat(dragId);
+        await orgRenumber('/api/categories', ids, dragId, { parentId: targetId });
+      } else {
+        const destParent = tc.parentId ?? null;
+        const ids = ORG_CATS.filter(c => c.section === tc.section && (c.parentId ?? null) === destParent).sort(orgByOrder).map(c => c.id).filter(id => id !== dragId);
+        let idx = ids.indexOf(targetId); if (zone === 'after') idx += 1;
+        ids.splice(idx, 0, dragId);
+        await orgRenumber('/api/categories', ids, dragId, (destParent !== (dc.parentId ?? null)) ? { parentId: destParent } : {});
+      }
+    }
+    await loadOrg();
+  }
+
+  // Pointer-based drag (works on mouse + touch). Drag starts from the grip handle.
+  let orgDrag = null;
+  function orgClearDrops() { document.querySelectorAll('.drop-into,.drop-before,.drop-after').forEach(r => r.classList.remove('drop-into', 'drop-before', 'drop-after')); }
+  function orgZone(row, y) {
+    const r = row.getBoundingClientRect(), rel = (y - r.top) / r.height;
+    if (row.dataset.type === 'cat' && rel > 0.3 && rel < 0.7) return 'into';
+    return rel < 0.5 ? 'before' : 'after';
+  }
+  function orgDown(e) {
+    const grip = e.target.closest && e.target.closest('.org-grip'); if (!grip) return;
+    const row = grip.closest('.org-drag-row'); if (!row) return;
+    e.preventDefault();
+    orgDrag = { type: row.dataset.type, id: Number(row.dataset.id), el: row, sx: e.clientX, sy: e.clientY, started: false, ghost: null, target: null, zone: null };
+  }
+  function orgUpdateTarget(x, y) {
+    orgClearDrops();
+    const under = document.elementFromPoint(x, y);
+    const row = under && under.closest ? under.closest('.org-drag-row') : null;
+    if (row && row !== orgDrag.el) {
+      const z = orgZone(row, y);
+      row.classList.add(z === 'into' ? 'drop-into' : (z === 'before' ? 'drop-before' : 'drop-after'));
+      orgDrag.target = row; orgDrag.zone = z;
+    } else { orgDrag.target = null; orgDrag.zone = null; }
+  }
+  function orgAutoScroll() {     // scroll the workspace when dragging near its top/bottom edge
+    if (!orgDrag || !orgDrag.started) return;
+    const sc = document.getElementById('org-scroll'), y = orgDrag.lastY;
+    if (sc) {
+      const r = sc.getBoundingClientRect(), edge = 80, step = 18;
+      if (y < r.top + edge) sc.scrollTop -= step * Math.min(1, (r.top + edge - y) / edge);
+      else if (y > r.bottom - edge) sc.scrollTop += step * Math.min(1, (y - (r.bottom - edge)) / edge);
+      orgUpdateTarget(orgDrag.lastX, y);
+    }
+    orgDrag.raf = requestAnimationFrame(orgAutoScroll);
+  }
+  function orgMoveEvt(e) {
+    if (!orgDrag) return;
+    if (!orgDrag.started) {
+      if (Math.hypot(e.clientX - orgDrag.sx, e.clientY - orgDrag.sy) < 8) return;
+      orgDrag.started = true; orgDrag.el.classList.add('dragging');
+      const g = document.createElement('div'); g.className = 'org-ghost';
+      const lab = orgDrag.el.querySelector('span:nth-last-child(2)'); g.textContent = lab ? lab.textContent : 'Moving…';
+      document.body.appendChild(g); orgDrag.ghost = g;
+      orgDrag.raf = requestAnimationFrame(orgAutoScroll);
+    }
+    e.preventDefault();
+    orgDrag.lastX = e.clientX; orgDrag.lastY = e.clientY;
+    orgDrag.ghost.style.left = (e.clientX + 12) + 'px'; orgDrag.ghost.style.top = (e.clientY + 12) + 'px';
+    orgUpdateTarget(e.clientX, e.clientY);
+  }
+  async function orgUp() {
+    if (!orgDrag) return;
+    const d = orgDrag; orgDrag = null;
+    if (d.raf) cancelAnimationFrame(d.raf);
+    if (d.ghost) d.ghost.remove();
+    d.el.classList.remove('dragging'); orgClearDrops();
+    if (!d.started || !d.target) return;
+    try { await orgApplyDrop(d.type, d.id, d.target.dataset, d.zone); }
+    catch (err) { const st = document.getElementById('org-status'); if (st) st.textContent = (err.message || err); }
   }
   const orgTree = document.getElementById('org-tree');
   if (orgTree) {
     orgTree.addEventListener('click', (e) => { const el = e.target.closest('[data-org]'); if (el) orgAct(el.dataset.org, el); });
+    orgTree.addEventListener('pointerdown', orgDown);
+    document.addEventListener('pointermove', orgMoveEvt, { passive: false });
+    document.addEventListener('pointerup', orgUp);
+    document.addEventListener('pointercancel', orgUp);
     const orgReload = document.getElementById('org-reload'); if (orgReload) orgReload.addEventListener('click', loadOrg);
-    loadOrg();
+    const orgPage = document.getElementById('org-page'), orgOpenBtn = document.getElementById('org-open'), orgCloseBtn = document.getElementById('org-close');
+    let orgLoaded = false;
+    if (orgOpenBtn && orgPage) {
+      orgOpenBtn.addEventListener('click', () => { orgPage.classList.add('open'); document.body.style.overflow = 'hidden'; if (!orgLoaded) { orgLoaded = true; loadOrg(); } });
+      if (orgCloseBtn) orgCloseBtn.addEventListener('click', () => { orgPage.classList.remove('open'); document.body.style.overflow = ''; });
+    }
   }
 
   // ---- Backup export (inlines image/sound bytes; compatible with the kid app's import) ----
