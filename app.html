@@ -3636,10 +3636,46 @@
     rewardAudioURL(text).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {});
     setTimeout(() => { const el = document.getElementById('sched-nudge'); if (el) el.remove(); }, 60000);
   }
+  function schedQuestion(s, text) {
+    if (document.getElementById('sched-nudge')) return;
+    const o = document.createElement('div'); o.id = 'sched-nudge';
+    o.style.cssText = 'position:fixed;inset:0;z-index:2500;display:flex;align-items:center;justify-content:center;background:rgba(173,20,87,.4);backdrop-filter:blur(4px);';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:24px;padding:28px 26px;max-width:460px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);';
+    if (s.imageKey) {
+      const img = document.createElement('img');
+      img.style.cssText = 'width:150px;height:150px;object-fit:cover;border-radius:18px;margin-bottom:16px;background:#fce4ec;';
+      getMediaURL(s.imageKey).then(u => { if (u) img.src = u; }).catch(() => {});
+      card.appendChild(img);
+    }
+    const h = document.createElement('div'); h.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-size:24px;font-weight:700;color:#ad1457;margin-bottom:20px;'; h.textContent = text; card.appendChild(h);
+    const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:14px;justify-content:center;flex-wrap:wrap;';
+    let responses = Array.isArray(s.responses) ? s.responses.filter(r => r && (r.label || r.imageKey)) : [];
+    if (!responses.length) responses = [{ label: 'Yes' }, { label: 'No' }];
+    let answered = false;
+    responses.forEach(resp => {
+      const btn = document.createElement('button');
+      btn.style.cssText = 'border:3px solid #fce4ec;border-radius:20px;background:#fff;cursor:pointer;padding:14px;display:flex;flex-direction:column;align-items:center;gap:8px;min-width:118px;';
+      if (resp.imageKey) { const ri = document.createElement('img'); ri.style.cssText = 'width:96px;height:96px;object-fit:cover;border-radius:14px;'; getMediaURL(resp.imageKey).then(u => { if (u) ri.src = u; }).catch(() => {}); btn.appendChild(ri); }
+      const rl = document.createElement('div'); rl.textContent = resp.label || ''; rl.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:18px;color:#1f2937;'; btn.appendChild(rl);
+      btn.addEventListener('click', () => {
+        if (answered) return; answered = true;
+        o.remove();
+        if (resp.label) rewardAudioURL(resp.label).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {});
+        apiFetch('/api/interactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ childId: CHILD_ID, kind: 'question', prompt: text, response: resp.label || '', scheduleId: s.id || '' }) }).catch(() => {});
+      });
+      row.appendChild(btn);
+    });
+    card.appendChild(row); o.appendChild(card); document.body.appendChild(o);
+    rewardAudioURL(text).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {});
+    const dur = Math.max(5, Number(s.durationSec) || 60) * 1000;
+    setTimeout(() => { const el = document.getElementById('sched-nudge'); if (el) el.remove(); }, dur);
+  }
   async function schedFire(s) {
     if (G.running || speaking) return;
-    const text = (s.prompt || '').trim() || (s.type === 'game' ? "Let's do a game!" : 'Time for a check-in.');
+    const text = (s.prompt || '').trim() || (s.type === 'game' ? "Let's do a game!" : (s.type === 'question' ? 'A quick question.' : 'Time for a check-in.'));
     if (s.type === 'game') { schedGameNudge(s, text); return; }
+    if (s.type === 'question') { schedQuestion(s, text); return; }
     schedToast(text, s.imageKey);
     try { const u = await rewardAudioURL(text); if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } } catch (_) {}
   }
