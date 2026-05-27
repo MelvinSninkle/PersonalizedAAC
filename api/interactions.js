@@ -4,6 +4,7 @@
 //   GET  ?childId=&limit=   → recent answers, newest first (parent dashboard)
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { apnsConfigured, sendToTokens } from './_lib/apns.js';
 
 async function ensureTable(db) {
   await db`
@@ -39,7 +40,16 @@ export default async function handler(req, res) {
         INSERT INTO interaction_log (child_id, kind, prompt, response, schedule_id)
         VALUES (${cid}, ${kind}, ${prompt}, ${response}, ${scheduleId})
         RETURNING id, created_at`;
-      // Phase C: send the parent a push notification here.
+      // Push the parent with the answer (only parent/admin tokens; best effort).
+      try {
+        if (apnsConfigured() && kind === 'question') {
+          const toks = await db`SELECT token FROM push_tokens WHERE child_id = ${cid} AND role IN ('parent','admin')`;
+          if (toks.length) {
+            const name = (cid.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase())) || 'Your child';
+            await sendToTokens(toks.map(t => t.token), { title: name + ' answered', body: ((prompt ? prompt + ' → ' : '') + (response || '')).slice(0, 178), data: { kind: 'question' } });
+          }
+        }
+      } catch (_) {}
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ ok: true, id: Number(rows[0].id) });
     } catch (err) { res.status(500).json({ error: 'Log failed', detail: String(err.message || err) }); }

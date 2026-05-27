@@ -307,6 +307,19 @@ export default async function handler(req, res) {
     `;
     await db`CREATE INDEX IF NOT EXISTS interaction_log_child_idx ON interaction_log(child_id, created_at DESC)`;
 
+    // ---- Device push tokens (self-hosted APNs); only parent-role tokens are pushed ----
+    await db`
+      CREATE TABLE IF NOT EXISTS push_tokens (
+        token TEXT PRIMARY KEY,
+        child_id TEXT,
+        role TEXT,
+        platform TEXT DEFAULT 'ios',
+        user_email TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS push_tokens_child_role_idx ON push_tokens(child_id, role)`;
+
     // ---- Landing-page email capture ----
     await db`
       CREATE TABLE IF NOT EXISTS waitlist (

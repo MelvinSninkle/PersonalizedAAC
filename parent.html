@@ -334,6 +334,9 @@
     <div id="sched-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
     <button class="btn primary" id="sched-add">＋ Add a prompt</button>
     <span id="sched-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--ink);">
+      <input type="checkbox" id="game-results-push"> Notify my phone with game results from these auto-games
+    </label>
     <div id="sched-editor" style="display:none;border-top:1px solid var(--line);margin-top:16px;padding-top:16px;">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <label style="font-size:13px;font-weight:600;color:var(--ink);">Type
@@ -413,6 +416,18 @@
     <p class="hint">Responses to questions like the bathroom and hunger checks. Live push alerts to your phone are coming next.</p>
     <div id="answers-list" style="display:flex;flex-direction:column;gap:8px;"></div>
     <button class="btn ghost" id="answers-reload" style="margin-top:10px;">↻ Refresh</button>
+  </div>
+
+  <!-- ORGANIZE -->
+  <div class="section-label">Organize the board</div>
+  <div class="panel">
+    <h2>Categories &amp; tiles</h2>
+    <p class="hint">Reorder, rename, add or remove the categories and tiles on your child's board.</p>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+      <button class="btn ghost" id="org-reload">↻ Reload</button>
+      <span id="org-status" style="font-size:13px;color:var(--muted);"></span>
+    </div>
+    <div id="org-tree"></div>
   </div>
 
   <!-- BACKUP -->
@@ -767,6 +782,7 @@
     } catch (_) {}
     applyCheersUI();
     renderSchedList();
+    const grp = document.getElementById('game-results-push'); if (grp) grp.checked = !!childSettings.gameResultsPush;
   }
   async function saveSettingsToServer(okMsg, msgElId) {
     const msg = msgElId ? document.getElementById(msgElId) : null;
@@ -973,6 +989,107 @@
   }
   const ansReload = document.getElementById('answers-reload'); if (ansReload) ansReload.addEventListener('click', loadAnswers);
   loadAnswers();
+
+  // ---- Register this device for push (native parent app only; no-op in a browser) ----
+  // The server tags the token with the signed-in role, and only parent/admin
+  // tokens are ever pushed — so the therapist never receives notifications.
+  (function registerPush() {
+    try {
+      const Cap = window.Capacitor;
+      const PN = Cap && Cap.Plugins && Cap.Plugins.PushNotifications;
+      if (!PN) return;
+      PN.addListener('registration', (t) => {
+        const token = t && t.value; if (!token) return;
+        fetch('/api/push-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ token, childId: slug, platform: 'ios' }) }).catch(() => {});
+      });
+      PN.addListener('registrationError', () => {});
+      PN.requestPermissions().then((p) => { if (p && p.receive === 'granted') PN.register(); }).catch(() => {});
+    } catch (_) {}
+  })();
+
+  const grpToggle = document.getElementById('game-results-push');
+  if (grpToggle) grpToggle.addEventListener('change', () => {
+    childSettings = { ...childSettings, gameResultsPush: grpToggle.checked };
+    saveSettingsToServer(grpToggle.checked ? 'Game alerts on ✓' : 'Game alerts off', 'sched-msg');
+  });
+
+  // ---- Organize the board (categories + tiles), parent-editable ----
+  const ORG_SECTIONS = ['people', 'nouns', 'verbs'];
+  let ORG_CATS = [], ORG_ITEMS = [];
+  const orgByOrder = (a, b) => (a.order - b.order) || (a.id - b.id);
+  async function orgApi(path, opts = {}) {
+    const r = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) }, credentials: 'same-origin' });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    return data;
+  }
+  async function loadOrg() {
+    const st = document.getElementById('org-status'); if (!st) return;
+    st.textContent = 'Loading…';
+    try {
+      const d = await orgApi('/api/sync?childId=' + encodeURIComponent(slug));
+      ORG_CATS = d.categories || []; ORG_ITEMS = d.items || [];
+      renderOrgTree(); st.textContent = ORG_CATS.length + ' categories · ' + ORG_ITEMS.length + ' tiles';
+    } catch (err) { st.textContent = err.message; }
+  }
+  function orgActs(type, id) {
+    return '<span style="margin-left:auto;display:inline-flex;gap:4px;">' +
+      '<button class="btn ghost" data-org="up" data-type="' + type + '" data-id="' + id + '">↑</button>' +
+      '<button class="btn ghost" data-org="down" data-type="' + type + '" data-id="' + id + '">↓</button>' +
+      '<button class="btn ghost" data-org="rename" data-type="' + type + '" data-id="' + id + '">✎</button>' +
+      '<button class="btn ghost" data-org="del" data-type="' + type + '" data-id="' + id + '">✕</button></span>';
+  }
+  function orgItems(catId) {
+    const items = ORG_ITEMS.filter(i => i.categoryId === catId).sort(orgByOrder);
+    if (!items.length) return '<div style="font-size:12px;color:var(--faint);margin:4px 0 4px 18px;">No tiles.</div>';
+    return items.map(i => '<div style="display:flex;align-items:center;gap:6px;margin:3px 0 3px 18px;font-size:14px;"><span>▦</span><span>' + schEsc(i.label) + '</span>' + orgActs('item', i.id) + '</div>').join('');
+  }
+  function renderOrgTree() {
+    const el = document.getElementById('org-tree'); if (!el) return;
+    el.innerHTML = ORG_SECTIONS.map(sec => {
+      const tops = ORG_CATS.filter(c => c.section === sec && c.parentId == null).sort(orgByOrder);
+      const body = tops.length ? tops.map(cat => {
+        const subs = ORG_CATS.filter(c => c.parentId === cat.id).sort(orgByOrder);
+        return '<div style="border-top:1px solid var(--line);padding:8px 0;">' +
+          '<div style="display:flex;align-items:center;gap:6px;font-weight:600;"><span>▤</span><span>' + schEsc(cat.label) + '</span>' + orgActs('cat', cat.id) + '</div>' +
+          orgItems(cat.id) +
+          subs.map(s => '<div style="margin-left:18px;border-left:2px solid var(--line);padding-left:10px;margin-top:4px;"><div style="display:flex;align-items:center;gap:6px;font-size:14px;"><span>↳</span><span>' + schEsc(s.label) + '</span>' + orgActs('cat', s.id) + '</div>' + orgItems(s.id) + '<div style="margin:4px 0 2px 18px;"><button class="btn ghost" data-org="add-item" data-cat="' + s.id + '" data-section="' + sec + '">+ tile</button></div></div>').join('') +
+          '<div style="margin:6px 0 2px 18px;"><button class="btn ghost" data-org="add-item" data-cat="' + cat.id + '" data-section="' + sec + '">+ tile</button> <button class="btn ghost" data-org="add-sub" data-cat="' + cat.id + '" data-section="' + sec + '">+ subcategory</button></div>' +
+          '</div>';
+      }).join('') : '<div style="font-size:12px;color:var(--faint);padding:6px 0;">No categories.</div>';
+      return '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden;"><div style="padding:10px 14px;background:#fff0f6;font-weight:700;color:var(--pink-deep);text-transform:uppercase;font-size:13px;display:flex;justify-content:space-between;align-items:center;">' + sec + '<button class="btn" data-org="add-cat" data-section="' + sec + '">+ Category</button></div><div style="padding:6px 14px;">' + body + '</div></div>';
+    }).join('');
+  }
+  function orgSiblings(type, id) {
+    if (type === 'item') { const it = ORG_ITEMS.find(i => i.id === id); return ORG_ITEMS.filter(i => i.categoryId === it.categoryId).sort(orgByOrder); }
+    const c = ORG_CATS.find(x => x.id === id); return ORG_CATS.filter(x => x.section === c.section && x.parentId === c.parentId).sort(orgByOrder);
+  }
+  async function orgMove(type, id, dir) {
+    const sibs = orgSiblings(type, id); const i = sibs.findIndex(s => s.id === id); const j = i + (dir === 'up' ? -1 : 1);
+    if (j < 0 || j >= sibs.length) return;
+    const a = sibs[i], b = sibs[j]; const ep = type === 'item' ? '/api/items' : '/api/categories';
+    await orgApi(ep + '?id=' + a.id, { method: 'PUT', body: JSON.stringify({ order: b.order, childId: slug }) });
+    await orgApi(ep + '?id=' + b.id, { method: 'PUT', body: JSON.stringify({ order: a.order, childId: slug }) });
+    await loadOrg();
+  }
+  async function orgAct(act, el) {
+    const id = el.dataset.id ? Number(el.dataset.id) : null, type = el.dataset.type;
+    try {
+      if (act === 'add-cat') { const l = prompt('New category in "' + el.dataset.section + '":'); if (!l) return; await orgApi('/api/categories', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, label: l.trim(), childId: slug }) }); }
+      else if (act === 'add-sub') { const l = prompt('New subcategory:'); if (!l) return; await orgApi('/api/categories', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, label: l.trim(), parentId: Number(el.dataset.cat), childId: slug }) }); }
+      else if (act === 'add-item') { const l = prompt('New tile label:'); if (!l) return; await orgApi('/api/items', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, categoryId: Number(el.dataset.cat), label: l.trim(), childId: slug }) }); }
+      else if (act === 'rename') { const arr = type === 'item' ? ORG_ITEMS : ORG_CATS; const cur = arr.find(x => x.id === id); const l = prompt('Rename:', cur ? cur.label : ''); if (!l) return; await orgApi((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id, { method: 'PUT', body: JSON.stringify({ label: l.trim(), childId: slug }) }); }
+      else if (act === 'del') { const arr = type === 'item' ? ORG_ITEMS : ORG_CATS; const cur = arr.find(x => x.id === id); if (!confirm('Delete "' + (cur ? cur.label : id) + '"' + (type === 'cat' ? ' and everything under it' : '') + '?')) return; await orgApi((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id + '&childId=' + encodeURIComponent(slug), { method: 'DELETE' }); }
+      else if (act === 'up' || act === 'down') { return orgMove(type, id, act); }
+      await loadOrg();
+    } catch (err) { const st = document.getElementById('org-status'); if (st) st.textContent = err.message; }
+  }
+  const orgTree = document.getElementById('org-tree');
+  if (orgTree) {
+    orgTree.addEventListener('click', (e) => { const el = e.target.closest('[data-org]'); if (el) orgAct(el.dataset.org, el); });
+    const orgReload = document.getElementById('org-reload'); if (orgReload) orgReload.addEventListener('click', loadOrg);
+    loadOrg();
+  }
 
   // ---- Backup export (inlines image/sound bytes; compatible with the kid app's import) ----
   const backupBtn = document.getElementById('backup-export');

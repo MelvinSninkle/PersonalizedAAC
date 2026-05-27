@@ -4012,7 +4012,7 @@
     const payload = {
       childId: CHILD_ID, mode: G.session.mode, category: G.session.category,
       startedAt: G.session.startedAt, endedAt: new Date().toISOString(),
-      correctCount: correct, itemCount: G.attempts.length, attempts: G.attempts,
+      correctCount: correct, itemCount: G.attempts.length, attempts: G.attempts, auto: !!G.sequence,
     };
     try { await apiFetch('/api/game-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); } catch (_) {}
   }

@@ -3,6 +3,7 @@
 // the client (a failed log never blocks gameplay).
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { apnsConfigured, sendToTokens } from './_lib/apns.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -44,6 +45,21 @@ export default async function handler(req, res) {
                 ${Number.isFinite(a.misses) ? a.misses : 0},
                 ${typeof a.occurredAt === 'string' ? a.occurredAt : new Date().toISOString()})`;
     }
+    // For auto-games (scheduled), push the score to opted-in parents — best effort.
+    try {
+      if (b.auto && apnsConfigured()) {
+        const setRows = await db`SELECT settings FROM child_settings WHERE child_id = ${childId}`;
+        const opted = setRows.length && setRows[0].settings && setRows[0].settings.gameResultsPush;
+        if (opted) {
+          const toks = await db`SELECT token FROM push_tokens WHERE child_id = ${childId} AND role IN ('parent','admin')`;
+          if (toks.length) {
+            const name = (childId.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase())) || 'Your child';
+            const cat = (category && !String(category).startsWith('cat:')) ? (' · ' + category) : '';
+            await sendToTokens(toks.map(t => t.token), { title: name + ' finished a game', body: (name + ' scored ' + correctCount + '/' + itemCount + cat).slice(0, 178), data: { kind: 'game' } });
+          }
+        }
+      }
+    } catch (_) {}
     res.status(200).json({ ok: true, sessionId: Number(sid), attempts: attempts.length });
   } catch (err) {
     res.status(500).json({ error: 'Log failed', detail: String(err.message || err) });
