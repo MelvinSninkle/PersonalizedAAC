@@ -195,6 +195,12 @@
   .org-page-body { flex:1 1 auto; overflow:auto; -webkit-overflow-scrolling:touch; padding:16px 18px 40px; }
   .org-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; align-items:start; }
   .org-grid > div { margin-bottom:0 !important; }
+  .org-caret { cursor:pointer; border:none; background:transparent; color:var(--muted); font-size:13px; padding:2px 5px; flex:0 0 auto; line-height:1; border-radius:6px; }
+  .org-caret:hover { background:#fff0f6; }
+  .org-count { font-size:11px; color:var(--faint); font-weight:700; background:#fff0f6; border-radius:999px; padding:2px 9px; margin:0 2px; flex:0 0 auto; }
+  .org-check { width:17px; height:17px; flex:0 0 auto; cursor:pointer; accent-color:var(--pink); margin:0; }
+  .org-drag-row.org-sel { background:#fff0f6; outline:1px solid var(--pink); outline-offset:-1px; }
+  #org-selbar { align-items:center; gap:8px; font-size:13px; color:var(--pink-deep); font-weight:600; }
   .saved-row { display:flex; flex-wrap:wrap; margin-bottom:6px; }
   .saved-chip { display:inline-flex; align-items:center; background:#fff; border:1px solid var(--line); border-radius:999px; margin:0 8px 8px 0; overflow:hidden; }
   .saved-go { border:none; background:var(--pink); color:#fff; font:inherit; font-weight:600; padding:8px 14px; cursor:pointer; }
@@ -467,13 +473,15 @@
     <div class="org-page-head">
       <strong>Organize the board</strong>
       <span id="org-status" style="font-size:13px;color:var(--muted);"></span>
+      <span id="org-selbar" style="display:none;"><span class="n">0</span>&nbsp;tiles selected · drag any one to move them together <button class="btn ghost" id="org-selclear">Clear</button></span>
       <span style="margin-left:auto;display:flex;gap:8px;">
+        <button class="btn ghost" id="org-collapse-all">⊟ Collapse all</button>
         <button class="btn ghost" id="org-reload">↻ Reload</button>
         <button class="btn" id="org-close">✕ Close</button>
       </span>
     </div>
     <div id="org-scroll" class="org-page-body">
-      <p class="hint" style="margin:0 0 12px;">Grab the <strong>⠿</strong> handle to move a tile or category. Drop onto a category to file a tile inside it, or between rows to reorder. Drag near the top or bottom edge to scroll while holding.</p>
+      <p class="hint" style="margin:0 0 12px;">Grab the <strong>⠿</strong> handle to move a tile or category. Drop onto a category to file a tile inside it, or between rows to reorder. Tap a category's <strong>▾</strong> to collapse it. Tick several tiles to select them, then drag any one to move them together.</p>
       <div id="org-tree"></div>
     </div>
   </div>
@@ -1321,6 +1329,19 @@
   const ORG_SECTIONS = ['people', 'nouns', 'verbs'];
   let ORG_CATS = [], ORG_ITEMS = [];
   const orgByOrder = (a, b) => (a.order - b.order) || (a.id - b.id);
+  const orgSelected = new Set();                 // item ids ticked for a multi-move
+  let orgCollapsed = new Set();                   // collapsed top-level category ids (persisted)
+  try { orgCollapsed = new Set(JSON.parse(localStorage.getItem('aacOrgCollapsed') || '[]')); } catch (_) {}
+  function saveCollapsed() { try { localStorage.setItem('aacOrgCollapsed', JSON.stringify([...orgCollapsed])); } catch (_) {} }
+  function orgCatCount(catId) {
+    const subIds = ORG_CATS.filter(c => c.parentId === catId).map(c => c.id);
+    return ORG_ITEMS.filter(i => i.categoryId === catId || subIds.includes(i.categoryId)).length;
+  }
+  function orgUpdateSelbar() {
+    const bar = document.getElementById('org-selbar'); if (!bar) return;
+    bar.style.display = orgSelected.size ? 'inline-flex' : 'none';
+    const n = bar.querySelector('.n'); if (n) n.textContent = String(orgSelected.size);
+  }
   async function orgApi(path, opts = {}) {
     const r = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) }, credentials: 'same-origin' });
     const data = await r.json().catch(() => ({}));
@@ -1347,8 +1368,12 @@
   function orgItemsHTML(catId) {
     const items = ORG_ITEMS.filter(i => i.categoryId === catId).sort(orgByOrder);
     if (!items.length) return '<div style="font-size:12px;color:var(--faint);margin:2px 0 2px 22px;">No tiles — drag one here.</div>';
-    return items.map(i => '<div class="org-drag-row" data-type="item" data-id="' + i.id + '" data-cat="' + i.categoryId + '" style="margin-left:18px;">' +
-      '<span class="org-grip">⠿</span>' + orgThumb(i.imageKey) + '<span style="flex:1;font-size:14px;">' + schEsc(i.label) + '</span>' + orgBtns('item', i.id) + '</div>').join('');
+    return items.map(i => {
+      const sel = orgSelected.has(i.id);
+      return '<div class="org-drag-row' + (sel ? ' org-sel' : '') + '" data-type="item" data-id="' + i.id + '" data-cat="' + i.categoryId + '" style="margin-left:18px;">' +
+        '<input type="checkbox" class="org-check" data-id="' + i.id + '"' + (sel ? ' checked' : '') + ' aria-label="Select tile">' +
+        '<span class="org-grip">⠿</span>' + orgThumb(i.imageKey) + '<span style="flex:1;font-size:14px;">' + schEsc(i.label) + '</span>' + orgBtns('item', i.id) + '</div>';
+    }).join('');
   }
   function renderOrgTree() {
     const el = document.getElementById('org-tree'); if (!el) return;
@@ -1356,14 +1381,20 @@
       const tops = ORG_CATS.filter(c => c.section === sec && c.parentId == null).sort(orgByOrder);
       const body = tops.length ? tops.map(cat => {
         const subs = ORG_CATS.filter(c => c.parentId === cat.id).sort(orgByOrder);
-        return '<div style="border-top:1px solid var(--line);padding:6px 0;">' +
-          '<div class="org-drag-row" data-type="cat" data-id="' + cat.id + '" data-parent="" data-section="' + sec + '" style="font-weight:600;"><span class="org-grip">⠿</span>' + orgThumb(cat.imageKey) + '<span style="flex:1;">' + schEsc(cat.label) + '</span>' + orgBtns('cat', cat.id) + '</div>' +
-          orgItemsHTML(cat.id) +
-          subs.map(s => '<div style="margin-left:18px;border-left:2px solid var(--line);padding-left:8px;margin-top:4px;">' +
-            '<div class="org-drag-row" data-type="cat" data-id="' + s.id + '" data-parent="' + cat.id + '" data-section="' + sec + '" style="font-size:14px;"><span class="org-grip">⠿</span><span style="margin-right:2px;">↳</span>' + orgThumb(s.imageKey) + '<span style="flex:1;">' + schEsc(s.label) + '</span>' + orgBtns('cat', s.id) + '</div>' +
-            orgItemsHTML(s.id) +
-            '<div style="margin:4px 0 2px 22px;"><button class="btn ghost" data-org="add-item" data-cat="' + s.id + '" data-section="' + sec + '">+ tile</button></div></div>').join('') +
-          '<div style="margin:6px 0 2px 22px;"><button class="btn ghost" data-org="add-item" data-cat="' + cat.id + '" data-section="' + sec + '">+ tile</button> <button class="btn ghost" data-org="add-sub" data-cat="' + cat.id + '" data-section="' + sec + '">+ subcategory</button></div>' +
+        const collapsed = orgCollapsed.has(cat.id);
+        return '<div class="org-cat" data-cat-wrap="' + cat.id + '" style="border-top:1px solid var(--line);padding:6px 0;">' +
+          '<div class="org-drag-row" data-type="cat" data-id="' + cat.id + '" data-parent="" data-section="' + sec + '" style="font-weight:600;">' +
+            '<button class="org-caret" data-org="collapse" data-id="' + cat.id + '" aria-label="Collapse">' + (collapsed ? '▸' : '▾') + '</button>' +
+            '<span class="org-grip">⠿</span>' + orgThumb(cat.imageKey) + '<span style="flex:1;">' + schEsc(cat.label) + '</span>' +
+            '<span class="org-count">' + orgCatCount(cat.id) + '</span>' + orgBtns('cat', cat.id) + '</div>' +
+          '<div class="org-cat-body" data-cat-body="' + cat.id + '"' + (collapsed ? ' style="display:none;"' : '') + '>' +
+            orgItemsHTML(cat.id) +
+            subs.map(s => '<div style="margin-left:18px;border-left:2px solid var(--line);padding-left:8px;margin-top:4px;">' +
+              '<div class="org-drag-row" data-type="cat" data-id="' + s.id + '" data-parent="' + cat.id + '" data-section="' + sec + '" style="font-size:14px;"><span class="org-grip">⠿</span><span style="margin-right:2px;">↳</span>' + orgThumb(s.imageKey) + '<span style="flex:1;">' + schEsc(s.label) + '</span>' + orgBtns('cat', s.id) + '</div>' +
+              orgItemsHTML(s.id) +
+              '<div style="margin:4px 0 2px 22px;"><button class="btn ghost" data-org="add-item" data-cat="' + s.id + '" data-section="' + sec + '">+ tile</button></div></div>').join('') +
+            '<div style="margin:6px 0 2px 22px;"><button class="btn ghost" data-org="add-item" data-cat="' + cat.id + '" data-section="' + sec + '">+ tile</button> <button class="btn ghost" data-org="add-sub" data-cat="' + cat.id + '" data-section="' + sec + '">+ subcategory</button></div>' +
+          '</div>' +
           '</div>';
       }).join('') : '<div style="font-size:12px;color:var(--faint);padding:6px 0;">No categories.</div>';
       return '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden;"><div style="padding:10px 14px;background:#fff0f6;font-weight:700;color:var(--pink-deep);text-transform:uppercase;font-size:13px;display:flex;justify-content:space-between;align-items:center;">' + sec + '<button class="btn" data-org="add-cat" data-section="' + sec + '">+ Category</button></div><div style="padding:6px 14px;">' + body + '</div></div>';
@@ -1371,6 +1402,17 @@
   }
   async function orgAct(act, el) {
     const id = el.dataset.id ? Number(el.dataset.id) : null, type = el.dataset.type;
+    if (act === 'collapse') {       // local-only: toggle one category's body, no server round-trip
+      if (orgCollapsed.has(id)) orgCollapsed.delete(id); else orgCollapsed.add(id);
+      saveCollapsed();
+      const wrap = document.querySelector('[data-cat-wrap="' + id + '"]');
+      if (wrap) {
+        const collapsed = orgCollapsed.has(id);
+        const cbody = wrap.querySelector('[data-cat-body="' + id + '"]'); if (cbody) cbody.style.display = collapsed ? 'none' : '';
+        const caret = wrap.querySelector('.org-caret'); if (caret) caret.textContent = collapsed ? '▸' : '▾';
+      }
+      return;
+    }
     try {
       if (act === 'add-cat') { const l = prompt('New category in "' + el.dataset.section + '":'); if (!l) return; await orgApi('/api/categories', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, label: l.trim(), childId: slug }) }); }
       else if (act === 'add-sub') { const l = prompt('New subcategory:'); if (!l) return; await orgApi('/api/categories', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, label: l.trim(), parentId: Number(el.dataset.cat), childId: slug }) }); }
@@ -1424,6 +1466,34 @@
     await loadOrg();
   }
 
+  // Renumber a destination category, stamping categoryId onto the items that moved in.
+  async function orgRenumberItemsMulti(orderedIds, movedSet, destCat) {
+    for (let k = 0; k < orderedIds.length; k++) {
+      const body = { order: k, childId: slug };
+      if (movedSet.has(orderedIds[k])) body.categoryId = destCat;
+      await orgApi('/api/items?id=' + orderedIds[k], { method: 'PUT', body: JSON.stringify(body) });
+    }
+  }
+  // Move several selected tiles at once to a category ('into') or around a tile (before/after).
+  async function orgApplyDropItems(dragIds, t, zone) {
+    const targetType = t.type, targetId = Number(t.id);
+    let destCat;
+    if (targetType === 'cat' && zone === 'into') destCat = targetId;
+    else if (targetType === 'item') { const ti = ORG_ITEMS.find(i => i.id === targetId); if (!ti) return; destCat = ti.categoryId; }
+    else return;
+    const destSection = (ORG_CATS.find(c => c.id === destCat) || {}).section;
+    const moving = dragIds.map(id => ORG_ITEMS.find(i => i.id === id)).filter(i => i && i.section === destSection).sort(orgByOrder);
+    if (!moving.length) return;
+    const movingIds = moving.map(i => i.id), movingSet = new Set(movingIds);
+    const ids = ORG_ITEMS.filter(i => i.categoryId === destCat).sort(orgByOrder).map(i => i.id).filter(id => !movingSet.has(id));
+    let idx = ids.length;
+    if (targetType === 'item') { idx = ids.indexOf(targetId); if (idx < 0) idx = ids.length; else if (zone === 'after') idx += 1; }
+    ids.splice(idx, 0, ...movingIds);
+    await orgRenumberItemsMulti(ids, movingSet, destCat);
+    orgSelected.clear(); orgUpdateSelbar();
+    await loadOrg();
+  }
+
   // Pointer-based drag (works on mouse + touch). Drag starts from the grip handle.
   let orgDrag = null;
   function orgClearDrops() { document.querySelectorAll('.drop-into,.drop-before,.drop-after').forEach(r => r.classList.remove('drop-into', 'drop-before', 'drop-after')); }
@@ -1436,7 +1506,10 @@
     const grip = e.target.closest && e.target.closest('.org-grip'); if (!grip) return;
     const row = grip.closest('.org-drag-row'); if (!row) return;
     e.preventDefault();
-    orgDrag = { type: row.dataset.type, id: Number(row.dataset.id), el: row, sx: e.clientX, sy: e.clientY, started: false, ghost: null, target: null, zone: null };
+    const type = row.dataset.type, id = Number(row.dataset.id);
+    // Grabbing a ticked tile while several are selected moves the whole selection.
+    const ids = (type === 'item' && orgSelected.has(id) && orgSelected.size > 1) ? [...orgSelected] : null;
+    orgDrag = { type, id, ids, el: row, sx: e.clientX, sy: e.clientY, started: false, ghost: null, target: null, zone: null };
   }
   function orgUpdateTarget(x, y) {
     orgClearDrops();
@@ -1465,7 +1538,8 @@
       if (Math.hypot(e.clientX - orgDrag.sx, e.clientY - orgDrag.sy) < 8) return;
       orgDrag.started = true; orgDrag.el.classList.add('dragging');
       const g = document.createElement('div'); g.className = 'org-ghost';
-      const lab = orgDrag.el.querySelector('span:nth-last-child(2)'); g.textContent = lab ? lab.textContent : 'Moving…';
+      if (orgDrag.ids) g.textContent = 'Moving ' + orgDrag.ids.length + ' tiles';
+      else { const lab = orgDrag.el.querySelector('span[style*="flex:1"]'); g.textContent = lab ? lab.textContent : 'Moving…'; }
       document.body.appendChild(g); orgDrag.ghost = g;
       orgDrag.raf = requestAnimationFrame(orgAutoScroll);
     }
@@ -1481,17 +1555,39 @@
     if (d.ghost) d.ghost.remove();
     d.el.classList.remove('dragging'); orgClearDrops();
     if (!d.started || !d.target) return;
-    try { await orgApplyDrop(d.type, d.id, d.target.dataset, d.zone); }
-    catch (err) { const st = document.getElementById('org-status'); if (st) st.textContent = (err.message || err); }
+    try {
+      if (d.ids) await orgApplyDropItems(d.ids, d.target.dataset, d.zone);
+      else await orgApplyDrop(d.type, d.id, d.target.dataset, d.zone);
+    } catch (err) { const st = document.getElementById('org-status'); if (st) st.textContent = (err.message || err); }
   }
   const orgTree = document.getElementById('org-tree');
   if (orgTree) {
     orgTree.addEventListener('click', (e) => { const el = e.target.closest('[data-org]'); if (el) orgAct(el.dataset.org, el); });
+    orgTree.addEventListener('change', (e) => {
+      const cb = e.target.closest('.org-check'); if (!cb) return;
+      const iid = Number(cb.dataset.id);
+      if (cb.checked) orgSelected.add(iid); else orgSelected.delete(iid);
+      const row = cb.closest('.org-drag-row'); if (row) row.classList.toggle('org-sel', cb.checked);
+      orgUpdateSelbar();
+    });
     orgTree.addEventListener('pointerdown', orgDown);
     document.addEventListener('pointermove', orgMoveEvt, { passive: false });
     document.addEventListener('pointerup', orgUp);
     document.addEventListener('pointercancel', orgUp);
     const orgReload = document.getElementById('org-reload'); if (orgReload) orgReload.addEventListener('click', loadOrg);
+    const orgSelClear = document.getElementById('org-selclear');
+    if (orgSelClear) orgSelClear.addEventListener('click', () => {
+      orgSelected.clear(); orgUpdateSelbar();
+      orgTree.querySelectorAll('.org-check:checked').forEach(cb => { cb.checked = false; const r = cb.closest('.org-drag-row'); if (r) r.classList.remove('org-sel'); });
+    });
+    const orgCollapseAll = document.getElementById('org-collapse-all');
+    if (orgCollapseAll) orgCollapseAll.addEventListener('click', () => {
+      const tops = ORG_CATS.filter(c => c.parentId == null).map(c => c.id);
+      const allCollapsed = tops.length && tops.every(id => orgCollapsed.has(id));
+      if (allCollapsed) orgCollapsed.clear(); else tops.forEach(id => orgCollapsed.add(id));
+      orgCollapseAll.textContent = allCollapsed ? '⊟ Collapse all' : '⊞ Expand all';
+      saveCollapsed(); renderOrgTree();
+    });
     const orgPage = document.getElementById('org-page'), orgOpenBtn = document.getElementById('org-open'), orgCloseBtn = document.getElementById('org-close');
     let orgLoaded = false;
     if (orgOpenBtn && orgPage) {
