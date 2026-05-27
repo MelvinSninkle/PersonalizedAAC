@@ -3805,6 +3805,7 @@
       const msg = 'Add at least ' + choices + ' tiles (with pictures) here first.';
       const errEl = document.getElementById('game-setup-error'); if (errEl) errEl.textContent = msg;
       if (opts.facilitated) publishState({ status: 'error', message: msg });
+      if (opts.routine) routineNext();   // don't stall a routine on a thin category
       return;
     }
     G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true; G.sequence = !!opts.sequence; G.routine = !!opts.routine;
