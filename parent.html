@@ -661,52 +661,93 @@
   })();
   loadAnalytics();
 
-  // ---- Mode config modal (mockup) ----
-  const CATS = ['Colors','Animals','Body Parts','Foods','Feelings','Actions','People','Vehicles'];
+  // ---- Mode launcher — starts a real session on Fletcher's tablet over /api/live ----
   const scrim = document.getElementById('scrim');
   const title = document.getElementById('modal-title');
   const sub   = document.getElementById('modal-sub');
   const body  = document.getElementById('modal-body');
   const goBtn = document.getElementById('modal-go');
+  const MODE_KEY = {
+    'Self-Paced Matching Game': 'self_paced', 'Facilitated Matching Game': 'facilitated',
+    'Learn Slideshow': 'learn_slideshow', 'Exposure Slideshow': 'exposure_slideshow', 'Celebration': 'celebration',
+  };
+  const SECT_LABEL = { people: 'People', nouns: 'Nouns', verbs: 'Verbs' };
+  let LAUNCH_CATS = [];
+  async function loadLaunchCats() {
+    try {
+      const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (r.ok) { const d = await r.json(); LAUNCH_CATS = (d.categories || []).filter(c => c.parentId == null); }
+    } catch (_) {}
+  }
+  loadLaunchCats();
 
-  function catChecks() {
-    return `<div class="field"><label>Categories (queue in order)</label><div class="checks">${
-      CATS.map((c,i) => `<label><input type="checkbox" ${i<3?'checked':''}> ${c}</label>`).join('')
-    }</div></div>`;
+  function catChecks(opts = {}) {
+    if (!LAUNCH_CATS.length) return `<div class="field"><label>${opts.label || 'Categories'}</label><p class="hint" style="margin:0;">No categories loaded yet — the session will use everything on the board.</p></div>`;
+    let n = 0;
+    const rows = ['people', 'nouns', 'verbs'].map(sec => {
+      const cats = LAUNCH_CATS.filter(c => c.section === sec).sort((a, b) => (a.order - b.order) || (a.id - b.id));
+      if (!cats.length) return '';
+      return `<div style="font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;margin:8px 0 2px;">${SECT_LABEL[sec] || sec}</div>` +
+        cats.map(c => `<label><input type="checkbox" class="lc-cat" data-scope="cat:${c.id}" ${n++ < 3 ? 'checked' : ''}> ${schEsc(c.label)}</label>`).join('');
+    }).join('');
+    return `<div class="field"><label>${opts.label || 'Categories (queue in order)'}</label><div class="checks">${rows}</div></div>`;
   }
   function musicField() {
-    return `<div class="field"><label>Background music</label><select>
-      <option>Calm piano (default)</option><option>Soft acoustic</option><option>Lo-fi</option><option>Silence</option>
+    return `<div class="field"><label>Background music</label><select id="lc-music">
+      <option value="/audio/color-tap-learn.mp3">Color Tap (playful)</option>
+      <option value="/audio/clockwork-kaleidoscope.mp3">Clockwork Kaleidoscope (calm)</option>
+      <option value="">No music</option>
     </select></div>`;
   }
+  const choicesField = () => `<div class="field"><label>Choices per item</label><select id="lc-choices"><option value="3">3 (target + 2 distractors)</option><option value="2">2 (easier)</option><option value="4">4</option></select></div>`;
+  const limitField = () => `<div class="field"><label>Time limit</label><select id="lc-limit"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15" selected>15 minutes</option><option value="0">Until I stop it</option></select></div>`;
+  const secsField = () => `<div class="field"><label>Seconds per image</label><select id="lc-secs"><option value="4">4s</option><option value="5" selected>5s</option><option value="6">6s</option><option value="8">8s</option></select></div>`;
   const FORMS = {
-    'Self-Paced Matching Game': () => catChecks() +
-      `<div class="field"><label>Choices per item</label><select><option>3 (target + 2 distractors)</option><option>2</option><option>4</option></select></div>` +
-      `<div class="field"><label>Items before auto-advancing category</label><select><option>10</option><option>5</option><option>Exhaust category</option></select></div>` + musicField(),
-    'Facilitated Matching Game': () => catChecks() +
-      `<div class="field"><label>Who's facilitating?</label><select><option>Therapist (their phone)</option><option>You (this phone)</option></select></div>` +
-      `<div class="field"><label>Let Fletcher also tap independently</label><select><option>Yes — additive</option><option>No — facilitator only</option></select></div>` + musicField(),
-    'Learn Slideshow': () => catChecks() +
-      `<div class="field"><label>Time limit</label><select><option>5 minutes</option><option>10 minutes</option><option>15 minutes</option><option>Until I stop it</option></select></div>` +
-      `<div class="field"><label>Seconds per image</label><select><option>4s</option><option>6s</option><option>8s</option></select></div>` + musicField(),
-    'Exposure Slideshow': () =>
-      `<div class="field"><label>Exposure set</label><select><option>New Foods</option><option>Textures</option><option>Places &amp; Environments</option></select></div>` +
-      `<div class="field"><label>Affirming label style</label><select><option>First-person ("I can smell a strawberry")</option><option>Plain label</option></select></div>` +
-      `<div class="field"><label>Time limit</label><select><option>5 minutes</option><option>8 minutes</option><option>Until I stop it</option></select></div>` + musicField(),
-    'Celebration': () =>
-      `<div class="field"><label>Cheer (your voice)</label><select><option>"Hooray, Fletcher! I'm so proud of you!"</option><option>"You did it, buddy!"</option><option>"Way to go, Fletcher!"</option></select></div>` +
-      `<div class="field"><label>Animation</label><select><option>Yellow flowers bursting 🌼</option><option>Confetti</option><option>Custom upload</option></select></div>`,
+    'Self-Paced Matching Game': () => catChecks() + choicesField() + limitField() + musicField(),
+    'Facilitated Matching Game': () => catChecks({ label: 'Category' }) + choicesField() +
+      `<p class="hint" style="margin:0 0 10px;">Starting here puts the tablet in facilitated mode; drive it from the therapist phone view.</p>` + musicField(),
+    'Learn Slideshow': () => catChecks() + secsField() + limitField() + musicField(),
+    'Exposure Slideshow': () => catChecks() + secsField() + limitField() +
+      `<p class="hint" style="margin:0 0 10px;">Labels are spoken gently, first-person ("I can see a …").</p>` + musicField(),
+    'Celebration': () => `<p class="hint" style="margin:0 0 6px;">Plays the flowers + your recorded cheer on the tablet right now. Edit the cheer & music under "Reward cheers & game music" below.</p>`,
   };
 
   function openModal(mode, launch) {
     title.textContent = (launch ? 'Start · ' : 'Configure · ') + mode;
-    sub.textContent = 'Mockup — nothing is saved yet. This is the shape of the real setup.';
+    sub.textContent = "Runs live on Fletcher's tablet — it must be open on the board.";
     body.innerHTML = (FORMS[mode] || (() => catChecks() + musicField()))();
-    goBtn.textContent = mode === 'Celebration' ? 'Play on tablet' : 'Start session';
-    goBtn.dataset.mode = mode;
+    goBtn.textContent = mode === 'Celebration' ? 'Play on tablet' : 'Start on tablet';
+    goBtn.dataset.modeName = mode;
+    goBtn.disabled = false;
     scrim.classList.add('open');
   }
   function closeModal() { scrim.classList.remove('open'); }
+
+  async function tabletOnline() {
+    try {
+      const r = await fetch('/api/live?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return false;
+      const d = await r.json();
+      return d.age != null && d.age < 10;
+    } catch (_) { return false; }
+  }
+  function buildLaunchCmd(modeName) {
+    const mode = MODE_KEY[modeName] || 'self_paced';
+    const cmd = { kind: 'cmd', action: 'start', mode };
+    const scopes = [...body.querySelectorAll('.lc-cat:checked')].map(c => c.dataset.scope);
+    const musicEl = body.querySelector('#lc-music'); if (musicEl) cmd.music = musicEl.value;
+    const limEl = body.querySelector('#lc-limit'); if (limEl) { const v = parseInt(limEl.value, 10); if (Number.isFinite(v)) cmd.limitMin = v; }
+    if (mode === 'self_paced' || mode === 'facilitated') {
+      const ch = body.querySelector('#lc-choices'); cmd.choices = ch ? (parseInt(ch.value, 10) || 3) : 3;
+      if (mode === 'self_paced' && scopes.length > 1) cmd.scopes = scopes;
+      else cmd.scope = scopes[0] || 'all';
+    } else if (mode === 'learn_slideshow' || mode === 'exposure_slideshow') {
+      cmd.scope = scopes.length === 1 ? scopes[0] : 'all';
+      const sc = body.querySelector('#lc-secs'); cmd.secondsPerImage = sc ? (parseInt(sc.value, 10) || 5) : 5;
+      cmd.labelStyle = mode === 'exposure_slideshow' ? 'first_person' : 'plain';
+    }
+    return cmd;
+  }
 
   document.getElementById('modes').addEventListener('click', (e) => {
     const c = e.target.closest('[data-config]'); const l = e.target.closest('[data-launch]');
@@ -716,9 +757,22 @@
   document.getElementById('modal-x').addEventListener('click', closeModal);
   document.getElementById('modal-cancel').addEventListener('click', closeModal);
   scrim.addEventListener('click', (e) => { if (e.target === scrim) closeModal(); });
-  goBtn.addEventListener('click', () => {
-    goBtn.textContent = 'Sent to tablet ✓';
-    setTimeout(() => { closeModal(); }, 750);
+  goBtn.addEventListener('click', async () => {
+    const modeName = goBtn.dataset.modeName;
+    const orig = goBtn.textContent;
+    goBtn.disabled = true; goBtn.textContent = 'Sending…';
+    const online = await tabletOnline();
+    let ok = false;
+    try {
+      const r = await fetch('/api/live?childId=' + encodeURIComponent(slug), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify(buildLaunchCmd(modeName)),
+      });
+      ok = r.ok;
+    } catch (_) {}
+    if (!ok) { sub.textContent = 'Could not reach the server — try again.'; goBtn.textContent = orig; goBtn.disabled = false; return; }
+    if (online) { goBtn.textContent = 'Started on tablet ✓'; setTimeout(() => { closeModal(); goBtn.textContent = orig; }, 1400); }
+    else { goBtn.textContent = orig; goBtn.disabled = false; sub.textContent = "⚠ Fletcher's tablet isn't on the board right now. Open his app, then tap again."; }
   });
 
   // ---- Reference images (steer AI tile generation) ----
