@@ -218,7 +218,7 @@
   <div class="brand fred">Fletcher's World <small>Parent dashboard</small></div>
   <div class="right">
     <span class="device-pill"><span class="dot"></span> Tablet · online</span>
-    <span class="role-switch">View as <a href="#" id="to-therapist">Therapist</a></span>
+    <span class="role-switch">View as <a href="#" id="to-therapist">Therapist</a> · <a href="#" id="device-default">Change device default</a></span>
   </div>
 </header>
 
@@ -558,6 +558,14 @@
   const pretty = slug.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase()) || 'Fletcher';
   document.getElementById('child-name').textContent = pretty;
   document.getElementById('to-therapist').href = '/therapist/' + encodeURIComponent(slug);
+  // Re-open the per-device "who uses this device?" chooser on the board.
+  const deviceDefaultLink = document.getElementById('device-default');
+  if (deviceDefaultLink) deviceDefaultLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    try { localStorage.removeItem('aacDeviceRole'); } catch (_) {}
+    try { sessionStorage.removeItem('aacStayBoard'); } catch (_) {}
+    window.location.href = '/u/' + encodeURIComponent(slug);
+  });
 
   // ---- Progress charts: tabbed, color-coded, gold-star for mastered ----
   const WEEKS = ['6w','5w','4w','3w','2w','1w','now'];
