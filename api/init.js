@@ -284,6 +284,29 @@ export default async function handler(req, res) {
     `;
     await db`CREATE INDEX IF NOT EXISTS invite_codes_active_idx ON invite_codes(active)`;
 
+    // ---- Per-child settings (reward cheers/music + scheduled prompts); parent writes, kid app reads ----
+    await db`
+      CREATE TABLE IF NOT EXISTS child_settings (
+        child_id TEXT PRIMARY KEY,
+        settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+
+    // ---- Interactive question answers (bathroom/hunger checks etc.); push hook in Phase C ----
+    await db`
+      CREATE TABLE IF NOT EXISTS interaction_log (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'question',
+        prompt TEXT,
+        response TEXT,
+        schedule_id TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS interaction_log_child_idx ON interaction_log(child_id, created_at DESC)`;
+
     // ---- Landing-page email capture ----
     await db`
       CREATE TABLE IF NOT EXISTS waitlist (

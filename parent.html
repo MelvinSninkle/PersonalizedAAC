@@ -309,18 +309,119 @@
   <!-- CELEBRATIONS -->
   <div class="section-label">Your voice · celebrations</div>
   <div class="panel">
-    <h2>Recorded cheers in your voice</h2>
-    <p class="hint">Plays at the end of a session so it feels like you're there — even when you're not.</p>
-    <div class="cels">
-      <div class="cel"><button class="play">▶</button><div class="meta"><div class="ph">"Hooray, Fletcher! I'm so proud of you!"</div><div class="as">Default · all sessions</div></div><div class="wave">0:03</div></div>
-      <div class="cel"><button class="play">▶</button><div class="meta"><div class="ph">"You did it, buddy!"</div><div class="as">Assigned to · Self-Paced Game</div></div><div class="wave">0:02</div></div>
-      <div class="cel"><button class="play">▶</button><div class="meta"><div class="ph">"Way to go, Fletcher!"</div><div class="as">Assigned to · milestone: 100 matches</div></div><div class="wave">0:02</div></div>
-    </div>
-    <div class="actions" style="display:flex; gap:8px; margin-top:14px;">
-      <button class="btn primary">＋ Record a new cheer</button>
-      <button class="btn ghost">Upload custom animation</button>
+    <h2>Reward cheers &amp; game music</h2>
+    <p class="hint">Spoken in your child's voice during and after a game. Edit these and they apply to games on this device.</p>
+    <label for="cheer-phrases" style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin:6px 0;">Cheer phrases (one per line)</label>
+    <textarea id="cheer-phrases" rows="5" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;"></textarea>
+    <label for="cheer-music" style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin:12px 0 6px;">Background music during games</label>
+    <select id="cheer-music" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;">
+      <option value="/audio/color-tap-learn.mp3">Color Tap (playful)</option>
+      <option value="/audio/clockwork-kaleidoscope.mp3">Clockwork Kaleidoscope (calm)</option>
+      <option value="">No music</option>
+    </select>
+    <div class="actions" style="display:flex; gap:8px; margin-top:14px; align-items:center;">
+      <button class="btn primary" id="cheer-save">Save rewards</button>
+      <span id="cheer-msg" style="font-size:13px;color:var(--muted);"></span>
     </div>
     <div class="note">Default animation: <strong>yellow flowers bursting</strong> 🌼 across the screen. Celebrations are the only place audio + animation reward Fletcher directly — no mode ever shows a wrong-answer cue.</div>
+  </div>
+
+  <!-- SCHEDULED PROMPTS -->
+  <div class="section-label">Scheduled prompts</div>
+  <div class="panel">
+    <h2>Timed games &amp; reminders</h2>
+    <p class="hint">The board can speak a reminder (e.g. "Do you need the potty?") or invite a game on a schedule — only during the active hours you choose, so nothing fires at school. These run while the iPad is awake and showing the board.</p>
+    <div id="sched-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
+    <button class="btn primary" id="sched-add">＋ Add a prompt</button>
+    <span id="sched-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
+    <div id="sched-editor" style="display:none;border-top:1px solid var(--line);margin-top:16px;padding-top:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <label style="font-size:13px;font-weight:600;color:var(--ink);">Type
+          <select id="sch-type" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
+            <option value="reminder">Reminder (speaks a message)</option>
+            <option value="question">Question (with response tiles)</option>
+            <option value="game">Game invitation</option>
+          </select>
+        </label>
+        <label style="font-size:13px;font-weight:600;color:var(--ink);">Timing
+          <select id="sch-timing" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
+            <option value="interval">Every N minutes</option>
+            <option value="times">At specific times</option>
+          </select>
+        </label>
+      </div>
+      <label style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Message / invitation
+        <input id="sch-prompt" type="text" maxlength="200" placeholder="Do you need to use the potty?" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
+      </label>
+      <label style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Picture (optional — shown on the board with the prompt)
+        <select id="sch-image" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;"><option value="">No picture</option></select>
+      </label>
+      <img id="sch-image-preview" alt="" style="display:none;width:84px;height:84px;object-fit:cover;border-radius:12px;margin-top:8px;border:1px solid var(--line);">
+      <div id="sch-question-row" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+          <label style="font-size:13px;font-weight:600;color:var(--ink);">Response A
+            <select id="sch-resp-a" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;"><option value="">— none —</option></select>
+          </label>
+          <label style="font-size:13px;font-weight:600;color:var(--ink);">Response B
+            <select id="sch-resp-b" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;"><option value="">— none —</option></select>
+          </label>
+        </div>
+        <label style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Show the question for
+          <input id="sch-duration" type="number" min="5" value="60" style="width:90px;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin:0 6px;"> seconds
+        </label>
+      </div>
+      <div id="sch-scope-row" style="display:none;margin-top:12px;">
+        <div style="font-size:13px;font-weight:600;color:var(--ink);">Games (played in order — child taps to start each)</div>
+        <div id="sch-games" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;"></div>
+        <button type="button" class="btn ghost" id="sch-add-game" style="margin-top:8px;">＋ Add a game</button>
+      </div>
+      <div id="sch-interval-row" style="margin-top:12px;">
+        <label style="font-size:13px;font-weight:600;color:var(--ink);">Every
+          <input id="sch-interval" type="number" min="1" value="45" style="width:90px;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin:0 6px;"> minutes
+        </label>
+      </div>
+      <div id="sch-times-row" style="display:none;margin-top:12px;">
+        <label style="display:block;font-size:13px;font-weight:600;color:var(--ink);">At times (24-hour, comma-separated)
+          <input id="sch-times" type="text" placeholder="16:00, 17:30, 19:00" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
+        </label>
+      </div>
+      <div style="margin-top:12px;font-size:13px;font-weight:600;color:var(--ink);">Active days</div>
+      <div id="sch-days" style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+        <label style="font-size:13px;font-weight:600;color:var(--ink);">Active from
+          <input id="sch-start" type="time" value="15:30" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
+        </label>
+        <label style="font-size:13px;font-weight:600;color:var(--ink);">Active until
+          <input id="sch-end" type="time" value="19:00" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
+        </label>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;font-weight:600;color:var(--ink);">
+        <input id="sch-enabled" type="checkbox" checked> Enabled
+      </label>
+      <div style="display:flex;gap:8px;margin-top:16px;align-items:center;">
+        <button class="btn primary" id="sch-save">Save prompt</button>
+        <button class="btn ghost" id="sch-cancel">Cancel</button>
+        <button class="btn ghost" id="sch-delete" style="display:none;margin-left:auto;color:#dc2626;">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECENT ANSWERS -->
+  <div class="section-label">Recent answers</div>
+  <div class="panel">
+    <h2>What your child answered</h2>
+    <p class="hint">Responses to questions like the bathroom and hunger checks. Live push alerts to your phone are coming next.</p>
+    <div id="answers-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <button class="btn ghost" id="answers-reload" style="margin-top:10px;">↻ Refresh</button>
+  </div>
+
+  <!-- BACKUP -->
+  <div class="section-label">Backup</div>
+  <div class="panel">
+    <h2>Download a backup</h2>
+    <p class="hint">Saves all of this child's categories, tiles, images and sounds to one file you can keep safe.</p>
+    <button class="btn primary" id="backup-export">⬇ Download backup (.json)</button>
+    <span id="backup-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
   </div>
 
   <!-- REFERENCE IMAGES — steer how AI tiles are generated from a photo -->
@@ -636,6 +737,289 @@
     } catch (err) { refMsgSet('Upload failed: ' + (err.message || err), true); }
   });
   loadRefs();
+
+  // ---- Reward cheers + game music (shared with the kid app via same-origin localStorage) ----
+  const CHEER_KEY = 'aacGameSettings';
+  const DEFAULT_CHEERS = ["Hooray! I'm so proud of you!", "You did it!", "Way to go!"];
+  // Full per-child settings (rewards + future scheduled prompts). The server is
+  // the source of truth so edits from a phone reach the iPad; localStorage is a
+  // same-device fallback that also keeps this device's kid app in sync.
+  let childSettings = {};
+  function localCheers() {
+    try { const s = JSON.parse(localStorage.getItem(CHEER_KEY) || '{}'); return { phrases: s.phrases, music: s.music }; }
+    catch (_) { return {}; }
+  }
+  function applyCheersUI() {
+    const rw = childSettings.rewards || {};
+    const loc = localCheers();
+    const phrases = (Array.isArray(rw.phrases) && rw.phrases.length) ? rw.phrases
+      : (Array.isArray(loc.phrases) && loc.phrases.length ? loc.phrases : DEFAULT_CHEERS);
+    const music = (typeof rw.music === 'string') ? rw.music
+      : (typeof loc.music === 'string' ? loc.music : '/audio/color-tap-learn.mp3');
+    const ta = document.getElementById('cheer-phrases'); if (ta) ta.value = phrases.join('\n');
+    const mu = document.getElementById('cheer-music'); if (mu) mu.value = music;
+    try { const cur = JSON.parse(localStorage.getItem(CHEER_KEY) || '{}'); localStorage.setItem(CHEER_KEY, JSON.stringify({ ...cur, phrases, music })); } catch (_) {}
+  }
+  async function loadChildSettings() {
+    try {
+      const r = await fetch('/api/child-settings?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (r.ok) { const d = await r.json(); childSettings = (d && d.settings && typeof d.settings === 'object') ? d.settings : {}; }
+    } catch (_) {}
+    applyCheersUI();
+    renderSchedList();
+  }
+  async function saveSettingsToServer(okMsg, msgElId) {
+    const msg = msgElId ? document.getElementById(msgElId) : null;
+    if (msg) msg.textContent = 'Saving…';
+    try {
+      const r = await fetch('/api/child-settings?childId=' + encodeURIComponent(slug), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ settings: childSettings }),
+      });
+      if (msg) { msg.textContent = r.ok ? (okMsg || 'Saved ✓') : 'Save failed'; setTimeout(() => { msg.textContent = ''; }, 3000); }
+    } catch (_) { if (msg) { msg.textContent = 'Offline — not saved'; setTimeout(() => { msg.textContent = ''; }, 3000); } }
+  }
+  loadChildSettings();
+  const cheerSave = document.getElementById('cheer-save');
+  if (cheerSave) cheerSave.addEventListener('click', async () => {
+    const lines = document.getElementById('cheer-phrases').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 12);
+    const rewards = { phrases: lines.length ? lines : DEFAULT_CHEERS, music: document.getElementById('cheer-music').value };
+    childSettings = { ...childSettings, rewards };
+    try { const cur = JSON.parse(localStorage.getItem(CHEER_KEY) || '{}'); localStorage.setItem(CHEER_KEY, JSON.stringify({ ...cur, ...rewards })); } catch (_) {}
+    const msg = document.getElementById('cheer-msg'); if (msg) msg.textContent = 'Saving…';
+    try {
+      const r = await fetch('/api/child-settings?childId=' + encodeURIComponent(slug), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ settings: childSettings }),
+      });
+      if (msg) { msg.textContent = r.ok ? 'Saved ✓ — syncs to the iPad' : 'Saved on this device only'; setTimeout(() => { msg.textContent = ''; }, 3000); }
+    } catch (_) { if (msg) { msg.textContent = 'Saved on this device only'; setTimeout(() => { msg.textContent = ''; }, 3000); } }
+  });
+
+  // ---- Scheduled prompts (timed reminders + game invitations) ----
+  const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  let schEditIndex = -1;
+  function schedList() { return Array.isArray(childSettings.schedules) ? childSettings.schedules : []; }
+  function schEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function schedSummary(s) {
+    const when = s.timing === 'times' ? ('at ' + (s.times || []).join(', ')) : ('every ' + (s.intervalMin || 45) + ' min');
+    const days = (Array.isArray(s.days) && s.days.length) ? s.days.map(d => DOW[d]).join(' ') : 'every day';
+    const win = (s.start && s.end) ? (s.start + '–' + s.end) : 'any time';
+    const n = Array.isArray(s.scopes) ? s.scopes.length : 1;
+    const label = s.type === 'game' ? ('🎮 ' + n + ' game' + (n === 1 ? '' : 's')) : (s.type === 'question' ? '❓ Question' : '🗣 Reminder');
+    return label + ' · ' + when + ' · ' + days + ' · ' + win;
+  }
+  function renderSchedList() {
+    const list = document.getElementById('sched-list'); if (!list) return;
+    const arr = schedList();
+    if (!arr.length) { list.innerHTML = '<div style="font-size:13px;color:var(--faint);">No scheduled prompts yet.</div>'; return; }
+    list.innerHTML = '';
+    arr.forEach((s, i) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;' + (s.enabled === false ? 'opacity:.5;' : '');
+      const txt = document.createElement('div'); txt.style.cssText = 'flex:1;min-width:0;';
+      txt.innerHTML = '<div style="font-weight:600;font-size:14px;">' + schEsc(s.prompt || '(no message)') + '</div><div style="font-size:12px;color:var(--muted);">' + schEsc(schedSummary(s)) + '</div>';
+      const edit = document.createElement('button'); edit.className = 'btn ghost'; edit.textContent = 'Edit'; edit.addEventListener('click', () => openSchedEditor(i));
+      row.appendChild(txt); row.appendChild(edit); list.appendChild(row);
+    });
+  }
+  function buildDays(selected) {
+    const wrap = document.getElementById('sch-days'); if (!wrap) return; wrap.innerHTML = '';
+    DOW.forEach((d, i) => {
+      const lab = document.createElement('label'); lab.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:8px;padding:5px 8px;cursor:pointer;';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = i; cb.checked = !selected || selected.includes(i);
+      lab.appendChild(cb); lab.appendChild(document.createTextNode(d)); wrap.appendChild(lab);
+    });
+  }
+  function getSchedDays() { return Array.from(document.querySelectorAll('#sch-days input:checked')).map(c => Number(c.value)); }
+  function syncSchedRows() {
+    const type = document.getElementById('sch-type').value;
+    document.getElementById('sch-scope-row').style.display = type === 'game' ? 'block' : 'none';
+    document.getElementById('sch-question-row').style.display = type === 'question' ? 'block' : 'none';
+    const timing = document.getElementById('sch-timing').value;
+    document.getElementById('sch-interval-row').style.display = timing === 'interval' ? 'block' : 'none';
+    document.getElementById('sch-times-row').style.display = timing === 'times' ? 'block' : 'none';
+  }
+  async function loadAnswers() {
+    const list = document.getElementById('answers-list'); if (!list) return;
+    try {
+      const r = await fetch('/api/interactions?childId=' + encodeURIComponent(slug) + '&limit=20', { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const rows = (await r.json()).interactions || [];
+      list.innerHTML = rows.length
+        ? rows.map(x => '<div style="border:1px solid var(--line);border-radius:12px;padding:10px 12px;"><div style="font-weight:600;font-size:14px;">' + schEsc(x.response || '—') + '</div><div style="font-size:12px;color:var(--muted);">' + schEsc(x.prompt || '') + ' · ' + new Date(x.created_at).toLocaleString() + '</div></div>').join('')
+        : '<div style="font-size:13px;color:var(--faint);">No answers yet.</div>';
+    } catch (_) {}
+  }
+  function openSchedEditor(index) {
+    schEditIndex = (typeof index === 'number') ? index : -1;
+    const s = schEditIndex >= 0 ? schedList()[schEditIndex] : { type: 'reminder', timing: 'interval', intervalMin: 45, prompt: '', days: [1, 2, 3, 4, 5], start: '15:30', end: '19:00', enabled: true, scope: 'all' };
+    document.getElementById('sch-type').value = s.type || 'reminder';
+    document.getElementById('sch-timing').value = s.timing || 'interval';
+    document.getElementById('sch-prompt').value = s.prompt || '';
+    const gamesWrap = document.getElementById('sch-games');
+    if (gamesWrap) { gamesWrap.innerHTML = ''; const scopes = (Array.isArray(s.scopes) && s.scopes.length) ? s.scopes : (s.scope ? [s.scope] : ['all']); scopes.forEach(buildGameRow); }
+    document.getElementById('sch-interval').value = s.intervalMin || 45;
+    document.getElementById('sch-times').value = (s.times || []).join(', ');
+    document.getElementById('sch-start').value = s.start || '15:30';
+    document.getElementById('sch-end').value = s.end || '19:00';
+    document.getElementById('sch-enabled').checked = s.enabled !== false;
+    const imgSel = document.getElementById('sch-image');
+    if (s.imageKey && imgSel && !Array.from(imgSel.options).some(o => o.value === s.imageKey)) { const o = document.createElement('option'); o.value = s.imageKey; o.textContent = 'Current picture'; imgSel.appendChild(o); }
+    if (imgSel) imgSel.value = s.imageKey || '';
+    updateSchedPreview();
+    const resps = Array.isArray(s.responses) ? s.responses : [];
+    [document.getElementById('sch-resp-a'), document.getElementById('sch-resp-b')].forEach((sel, idx) => {
+      if (!sel) return;
+      const rv = resps[idx];
+      if (rv && rv.imageKey && !Array.from(sel.options).some(o => o.value === rv.imageKey)) { const o = document.createElement('option'); o.value = rv.imageKey; o.dataset.label = rv.label || ''; o.textContent = rv.label || 'Tile'; sel.appendChild(o); }
+      sel.value = (rv && rv.imageKey) || '';
+    });
+    document.getElementById('sch-duration').value = s.durationSec || 60;
+    buildDays(Array.isArray(s.days) ? s.days : null);
+    document.getElementById('sch-delete').style.display = schEditIndex >= 0 ? 'block' : 'none';
+    syncSchedRows();
+    document.getElementById('sched-editor').style.display = 'block';
+  }
+  function closeSchedEditor() { const e = document.getElementById('sched-editor'); if (e) e.style.display = 'none'; schEditIndex = -1; }
+  function updateSchedPreview() {
+    const sel = document.getElementById('sch-image'), pv = document.getElementById('sch-image-preview');
+    if (!sel || !pv) return;
+    if (sel.value) { pv.src = '/api/media?key=' + encodeURIComponent(sel.value); pv.style.display = 'block'; }
+    else { pv.removeAttribute('src'); pv.style.display = 'none'; }
+  }
+  let gameScopeOptsHTML = '<option value="all">Everything</option>';
+  function buildGameRow(scopeVal) {
+    const games = document.getElementById('sch-games'); if (!games) return;
+    const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:8px;align-items:center;';
+    const sel = document.createElement('select'); sel.className = 'sch-game-scope';
+    sel.style.cssText = 'flex:1;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;';
+    sel.innerHTML = gameScopeOptsHTML;
+    if (scopeVal && !Array.from(sel.options).some(o => o.value === scopeVal)) { const o = document.createElement('option'); o.value = scopeVal; o.textContent = scopeVal; sel.appendChild(o); }
+    sel.value = scopeVal || 'all';
+    const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'btn ghost'; rm.textContent = '✕'; rm.addEventListener('click', () => row.remove());
+    row.appendChild(sel); row.appendChild(rm); games.appendChild(row);
+  }
+  async function loadSchedScopes() {
+    if (!document.getElementById('sched-editor')) return;
+    try {
+      const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const data = await r.json();
+      const cats = data.categories || [], items = data.items || [];
+      const opts = [['all', 'Everything']];
+      for (const sname of ['people', 'nouns', 'verbs']) {
+        const sc = cats.filter(c => c.section === sname); if (!sc.length) continue;
+        opts.push([sname, 'All ' + sname]);
+        const tops = sc.filter(c => c.parentId == null).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        for (const t of tops) { opts.push(['cat:' + t.id, '— ' + t.label]); for (const sub of sc.filter(c => c.parentId === t.id)) opts.push(['cat:' + sub.id, '— — ' + sub.label]); }
+      }
+      gameScopeOptsHTML = opts.map(([v, t]) => '<option value="' + v + '">' + schEsc(t) + '</option>').join('');
+      document.querySelectorAll('#sch-games .sch-game-scope').forEach(sel => { const cur = sel.value; sel.innerHTML = gameScopeOptsHTML; if (cur && !Array.from(sel.options).some(o => o.value === cur)) { const o = document.createElement('option'); o.value = cur; o.textContent = cur; sel.appendChild(o); } sel.value = cur; });
+      // Tile pickers — every tile that has an image (the question picture + the response tiles).
+      const tiles = items.filter(it => it.imageKey && it.label);
+      const tileOpts = tiles.map(it => '<option value="' + schEsc(it.imageKey) + '" data-label="' + schEsc(it.label) + '">' + schEsc((it.section ? it.section + ' — ' : '') + it.label) + '</option>').join('');
+      const imgSel = document.getElementById('sch-image'); if (imgSel) imgSel.innerHTML = '<option value="">No picture</option>' + tileOpts;
+      const ra = document.getElementById('sch-resp-a'); if (ra) ra.innerHTML = '<option value="">— none —</option>' + tileOpts;
+      const rb = document.getElementById('sch-resp-b'); if (rb) rb.innerHTML = '<option value="">— none —</option>' + tileOpts;
+    } catch (_) {}
+  }
+  const schedAddBtn = document.getElementById('sched-add');
+  if (schedAddBtn) {
+    schedAddBtn.addEventListener('click', () => openSchedEditor(-1));
+    document.getElementById('sch-cancel').addEventListener('click', closeSchedEditor);
+    document.getElementById('sch-type').addEventListener('change', syncSchedRows);
+    document.getElementById('sch-timing').addEventListener('change', syncSchedRows);
+    document.getElementById('sch-image').addEventListener('change', updateSchedPreview);
+    document.getElementById('sch-add-game').addEventListener('click', () => buildGameRow('all'));
+    document.getElementById('sch-save').addEventListener('click', async () => {
+      const type = document.getElementById('sch-type').value;
+      const timing = document.getElementById('sch-timing').value;
+      const prev = schEditIndex >= 0 ? schedList()[schEditIndex] : null;
+      const sch = {
+        id: (prev && prev.id) || ('s' + Date.now()),
+        enabled: document.getElementById('sch-enabled').checked,
+        type, prompt: document.getElementById('sch-prompt').value.trim().slice(0, 200), timing,
+        days: getSchedDays(),
+        start: document.getElementById('sch-start').value || '',
+        end: document.getElementById('sch-end').value || '',
+      };
+      const imageKey = document.getElementById('sch-image').value || '';
+      if (imageKey) sch.imageKey = imageKey;
+      if (type === 'game') { const sc = Array.from(document.querySelectorAll('#sch-games .sch-game-scope')).map(x => x.value).filter(Boolean); sch.scopes = sc.length ? sc : ['all']; }
+      if (type === 'question') {
+        const resps = [];
+        ['sch-resp-a', 'sch-resp-b'].forEach(id => { const sel = document.getElementById(id), o = sel && sel.selectedOptions[0]; if (o && o.value) resps.push({ imageKey: o.value, label: o.dataset.label || '' }); });
+        sch.responses = resps;
+        sch.durationSec = Math.max(5, parseInt(document.getElementById('sch-duration').value, 10) || 60);
+      }
+      if (timing === 'interval') sch.intervalMin = Math.max(1, parseInt(document.getElementById('sch-interval').value, 10) || 45);
+      else sch.times = document.getElementById('sch-times').value.split(',').map(x => x.trim()).filter(x => /^\d{1,2}:\d{2}$/.test(x)).slice(0, 12);
+      const arr = schedList().slice();
+      if (schEditIndex >= 0) arr[schEditIndex] = sch; else arr.push(sch);
+      childSettings = { ...childSettings, schedules: arr };
+      renderSchedList(); closeSchedEditor();
+      await saveSettingsToServer('Schedule saved ✓ — syncs to the iPad', 'sched-msg');
+    });
+    document.getElementById('sch-delete').addEventListener('click', async () => {
+      if (schEditIndex < 0) return closeSchedEditor();
+      if (!confirm('Delete this scheduled prompt?')) return;
+      const arr = schedList().slice(); arr.splice(schEditIndex, 1);
+      childSettings = { ...childSettings, schedules: arr };
+      renderSchedList(); closeSchedEditor();
+      await saveSettingsToServer('Deleted ✓', 'sched-msg');
+    });
+    loadSchedScopes();
+  }
+  const ansReload = document.getElementById('answers-reload'); if (ansReload) ansReload.addEventListener('click', loadAnswers);
+  loadAnswers();
+
+  // ---- Backup export (inlines image/sound bytes; compatible with the kid app's import) ----
+  const backupBtn = document.getElementById('backup-export');
+  if (backupBtn) backupBtn.addEventListener('click', async () => {
+    const msg = document.getElementById('backup-msg');
+    const setMsg = (t) => { if (msg) msg.textContent = t; };
+    backupBtn.disabled = true; const prev = backupBtn.textContent; backupBtn.textContent = 'Preparing…';
+    try {
+      const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('sync ' + r.status);
+      const data = await r.json();
+      const cats = data.categories || [], items = data.items || [];
+      const cache = new Map();
+      async function inline(key) {
+        if (!key) return null;
+        if (cache.has(key)) return cache.get(key);
+        try {
+          const br = await fetch('/api/media?key=' + encodeURIComponent(key), { credentials: 'same-origin' });
+          if (!br.ok) { cache.set(key, null); return null; }
+          const blob = await br.blob();
+          const durl = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(null); fr.readAsDataURL(blob); });
+          cache.set(key, durl); return durl;
+        } catch (_) { cache.set(key, null); return null; }
+      }
+      const out = { version: 1, exportedAt: new Date().toISOString(), categories: [], items: [] };
+      let done = 0; const total = cats.length + items.length;
+      for (const c of cats) {
+        const exp = { id: c.id, section: c.section, label: c.label, order: c.order ?? 0, parentId: c.parentId ?? null, keepAspect: !!c.keepAspect };
+        const img = await inline(c.imageKey); if (img) exp.image = img;
+        out.categories.push(exp); setMsg('Preparing… ' + (++done) + '/' + total);
+      }
+      for (const it of items) {
+        const exp = { id: it.id, section: it.section, categoryId: it.categoryId, label: it.label, order: it.order ?? 0, pinned: !!it.pinned, keepAspect: !!it.keepAspect };
+        const img = await inline(it.imageKey); if (img) exp.image = img;
+        const snd = await inline(it.soundKey); if (snd) exp.sound = snd;
+        out.items.push(exp); setMsg('Preparing… ' + (++done) + '/' + total);
+      }
+      const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      a.download = slug + '-aac-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setMsg('Downloaded ✓');
+    } catch (err) { setMsg('Backup failed: ' + (err.message || err)); }
+    backupBtn.disabled = false; backupBtn.textContent = prev;
+  });
 })();
 </script>
 </body>

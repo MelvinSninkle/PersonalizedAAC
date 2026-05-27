@@ -826,13 +826,16 @@
   <div class="right">
     <span class="status" id="mode-status"></span>
     <button id="play-btn" class="edit-only">🎮 Play</button>
-    <button id="remote-btn" class="edit-only">📡 Remote</button>
-    <button id="rewards-btn" class="edit-only">🎁 Rewards</button>
-    <button id="organize-btn" class="edit-only">📁 Organize</button>
+    <button id="parent-btn" class="edit-only">👪 Parent view</button>
+    <button id="therapist-btn" class="edit-only">🩺 Therapist view</button>
     <button id="display-btn" class="edit-only">⚙ Display</button>
-    <button id="export-btn" class="edit-only">Export</button>
-    <button id="import-btn" class="edit-only">Import</button>
-    <button id="wipe-btn" class="edit-only">Wipe All</button>
+    <!-- Power tools moved to Admin / Therapist view; kept in the DOM (hidden) so handlers don't break. -->
+    <button id="remote-btn" class="edit-only" style="display:none">📡 Remote</button>
+    <button id="rewards-btn" class="edit-only" style="display:none">🎁 Rewards</button>
+    <button id="organize-btn" class="edit-only" style="display:none">📁 Organize</button>
+    <button id="export-btn" class="edit-only" style="display:none">Export</button>
+    <button id="import-btn" class="edit-only" style="display:none">Import</button>
+    <button id="wipe-btn" class="edit-only" style="display:none">Wipe All</button>
     <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
     <button id="login-btn" aria-label="Login" title="Login">🔒</button>
   </div>
@@ -3163,6 +3166,10 @@
   function openDisplayModal() { populateDisplayModal(); displayModal.classList.add('show'); }
   function commitDisplay() { saveDisplay(); applyDisplay(); }
   document.getElementById('display-btn').addEventListener('click', openDisplayModal);
+  // Quick switch to the parent / therapist dashboards for the current child.
+  // The signed-in session carries over; role-based access is enforced server-side.
+  document.getElementById('parent-btn').addEventListener('click', () => { window.location.href = '/parent/' + encodeURIComponent(CHILD_ID); });
+  document.getElementById('therapist-btn').addEventListener('click', () => { window.location.href = '/therapist/' + encodeURIComponent(CHILD_ID); });
   document.getElementById('display-done').addEventListener('click', () => displayModal.classList.remove('show'));
   document.getElementById('display-reset').addEventListener('click', () => {
     display = structuredClone(DISPLAY_DEFAULTS);
@@ -3557,6 +3564,160 @@
     return next;
   }
 
+  // Per-child settings the parent set (often from their phone): reward cheers/music
+  // and scheduled prompts. Fetched on boot + refreshed periodically. Fully guarded —
+  // any failure leaves existing local settings untouched.
+  let SCHEDULES = [];
+  async function syncChildSettings() {
+    try {
+      const r = await apiFetch('/api/child-settings?childId=' + encodeURIComponent(CHILD_ID));
+      if (!r.ok) return;
+      const d = await r.json();
+      const s = (d && d.settings) || {};
+      const rw = s.rewards;
+      if (rw) {
+        const patch = {};
+        if (Array.isArray(rw.phrases) && rw.phrases.length) patch.phrases = rw.phrases.slice(0, 12);
+        if (typeof rw.music === 'string') patch.music = rw.music;
+        if (Object.keys(patch).length) saveGameSettings(patch);
+      }
+      SCHEDULES = Array.isArray(s.schedules) ? s.schedules : [];
+    } catch (_) {}
+  }
+
+  // ---- Scheduled prompts: timed reminders + gentle game invitations ----
+  // Run while the board is open + awake. Never interrupt a game or an utterance.
+  const SCHED_FIRED_KEY = 'aacSchedFired';
+  function schedFired() { try { return JSON.parse(localStorage.getItem(SCHED_FIRED_KEY) || '{}'); } catch (_) { return {}; } }
+  function setSchedFired(o) { try { localStorage.setItem(SCHED_FIRED_KEY, JSON.stringify(o)); } catch (_) {} }
+  function schedPad(n) { return String(n).padStart(2, '0'); }
+  function schedInWindow(s, now) {
+    if (Array.isArray(s.days) && s.days.length && !s.days.includes(now.getDay())) return false;
+    const toMin = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+    const cur = now.getHours() * 60 + now.getMinutes();
+    const a = toMin(s.start), b = toMin(s.end);
+    if (a != null && b != null) {
+      if (a <= b) { if (cur < a || cur > b) return false; }
+      else { if (cur < a && cur > b) return false; }   // window wraps midnight
+    }
+    return true;
+  }
+  function schedToast(text, imageKey) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:2400;background:#ad1457;color:#fff;font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:20px;padding:16px 22px;border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.25);max-width:90%;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px;';
+    if (imageKey) {
+      const img = document.createElement('img');
+      img.style.cssText = 'width:130px;height:130px;object-fit:cover;border-radius:16px;background:#fff;';
+      getMediaURL(imageKey).then(u => { if (u) img.src = u; }).catch(() => {});
+      t.appendChild(img);
+    }
+    const span = document.createElement('div'); span.textContent = text; t.appendChild(span);
+    document.body.appendChild(t);
+    setTimeout(() => { t.style.transition = 'opacity .5s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 500); }, 7000);
+  }
+  // Game sequence: a trigger can run several games in a row, each tap-to-start.
+  let gameSeq = [];
+  function startNextSeqGame() {
+    const sc = gameSeq.shift();
+    if (sc === undefined) return;
+    startGame(sc, (gameSettings().choices) || 3, { sequence: true });
+  }
+  function showGameNudgeCard(text, imageKey) {
+    if (document.getElementById('sched-nudge')) return;
+    const o = document.createElement('div'); o.id = 'sched-nudge';
+    o.style.cssText = 'position:fixed;inset:0;z-index:2500;display:flex;align-items:center;justify-content:center;background:rgba(173,20,87,.35);backdrop-filter:blur(4px);';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:24px;padding:28px 26px;max-width:380px;width:86%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);';
+    if (imageKey) {
+      const img = document.createElement('img');
+      img.style.cssText = 'width:150px;height:150px;object-fit:cover;border-radius:18px;margin-bottom:16px;background:#fce4ec;';
+      getMediaURL(imageKey).then(u => { if (u) img.src = u; }).catch(() => {});
+      card.appendChild(img);
+    }
+    const h = document.createElement('div'); h.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-size:24px;font-weight:700;color:#ad1457;margin-bottom:18px;'; h.textContent = text;
+    const play = document.createElement('button'); play.textContent = '▶ Play'; play.style.cssText = 'border:none;border-radius:999px;background:#ff1493;color:#fff;font-weight:700;font-size:20px;padding:14px 30px;cursor:pointer;margin:0 6px;';
+    const later = document.createElement('button'); later.textContent = 'Not now'; later.style.cssText = 'border:none;border-radius:999px;background:#eee;color:#555;font-weight:600;font-size:16px;padding:14px 20px;cursor:pointer;margin:0 6px;';
+    play.addEventListener('click', () => { o.remove(); startNextSeqGame(); });
+    later.addEventListener('click', () => { gameSeq = []; o.remove(); });
+    card.appendChild(h); card.appendChild(play); card.appendChild(later); o.appendChild(card); document.body.appendChild(o);
+    rewardAudioURL(text).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {});
+    setTimeout(() => { const el = document.getElementById('sched-nudge'); if (el) el.remove(); }, 60000);
+  }
+  function schedGameNudge(s, text) {
+    const scopes = (Array.isArray(s.scopes) && s.scopes.length) ? s.scopes.slice() : [s.scope || 'all'];
+    gameSeq = scopes;
+    showGameNudgeCard(text, s.imageKey);
+  }
+  function schedQuestion(s, text) {
+    if (document.getElementById('sched-nudge')) return;
+    const o = document.createElement('div'); o.id = 'sched-nudge';
+    o.style.cssText = 'position:fixed;inset:0;z-index:2500;display:flex;align-items:center;justify-content:center;background:rgba(173,20,87,.4);backdrop-filter:blur(4px);';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:24px;padding:28px 26px;max-width:460px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);';
+    if (s.imageKey) {
+      const img = document.createElement('img');
+      img.style.cssText = 'width:150px;height:150px;object-fit:cover;border-radius:18px;margin-bottom:16px;background:#fce4ec;';
+      getMediaURL(s.imageKey).then(u => { if (u) img.src = u; }).catch(() => {});
+      card.appendChild(img);
+    }
+    const h = document.createElement('div'); h.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-size:24px;font-weight:700;color:#ad1457;margin-bottom:20px;'; h.textContent = text; card.appendChild(h);
+    const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:14px;justify-content:center;flex-wrap:wrap;';
+    let responses = Array.isArray(s.responses) ? s.responses.filter(r => r && (r.label || r.imageKey)) : [];
+    if (!responses.length) responses = [{ label: 'Yes' }, { label: 'No' }];
+    let answered = false;
+    responses.forEach(resp => {
+      const btn = document.createElement('button');
+      btn.style.cssText = 'border:3px solid #fce4ec;border-radius:20px;background:#fff;cursor:pointer;padding:14px;display:flex;flex-direction:column;align-items:center;gap:8px;min-width:118px;';
+      if (resp.imageKey) { const ri = document.createElement('img'); ri.style.cssText = 'width:96px;height:96px;object-fit:cover;border-radius:14px;'; getMediaURL(resp.imageKey).then(u => { if (u) ri.src = u; }).catch(() => {}); btn.appendChild(ri); }
+      const rl = document.createElement('div'); rl.textContent = resp.label || ''; rl.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:18px;color:#1f2937;'; btn.appendChild(rl);
+      btn.addEventListener('click', () => {
+        if (answered) return; answered = true;
+        o.remove();
+        if (resp.label) rewardAudioURL(resp.label).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {});
+        apiFetch('/api/interactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ childId: CHILD_ID, kind: 'question', prompt: text, response: resp.label || '', scheduleId: s.id || '' }) }).catch(() => {});
+      });
+      row.appendChild(btn);
+    });
+    card.appendChild(row); o.appendChild(card); document.body.appendChild(o);
+    rewardAudioURL(text).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {});
+    const dur = Math.max(5, Number(s.durationSec) || 60) * 1000;
+    setTimeout(() => { const el = document.getElementById('sched-nudge'); if (el) el.remove(); }, dur);
+  }
+  async function schedFire(s) {
+    if (G.running || speaking) return;
+    const text = (s.prompt || '').trim() || (s.type === 'game' ? "Let's do a game!" : (s.type === 'question' ? 'A quick question.' : 'Time for a check-in.'));
+    if (s.type === 'game') { schedGameNudge(s, text); return; }
+    if (s.type === 'question') { schedQuestion(s, text); return; }
+    schedToast(text, s.imageKey);
+    try { const u = await rewardAudioURL(text); if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } } catch (_) {}
+  }
+  function schedulerTick() {
+    if (!SCHEDULES.length || G.running) return;
+    const now = new Date(); const fired = schedFired(); let changed = false;
+    for (const s of SCHEDULES) {
+      if (!s || s.enabled === false || !schedInWindow(s, now)) continue;
+      const id = s.id || (s.type + '|' + (s.prompt || ''));
+      if (s.timing === 'times' && Array.isArray(s.times)) {
+        const hhmm = schedPad(now.getHours()) + ':' + schedPad(now.getMinutes());
+        if (s.times.includes(hhmm)) {
+          const k = 'T|' + id + '|' + hhmm, today = now.toISOString().slice(0, 10);
+          if (fired[k] !== today) { fired[k] = today; changed = true; schedFire(s); }
+        }
+      } else {
+        const k = 'I|' + id;
+        if (fired[k] === undefined) { fired[k] = now.getTime(); changed = true; continue; }   // arm; first fire one interval later
+        const ms = Math.max(1, Number(s.intervalMin) || 45) * 60000;
+        if (now.getTime() - Number(fired[k]) >= ms) { fired[k] = now.getTime(); changed = true; schedFire(s); }
+      }
+    }
+    if (changed) setSchedFired(fired);
+  }
+  function startScheduler() {
+    try { schedulerTick(); } catch (_) {}
+    setInterval(() => { try { schedulerTick(); } catch (_) {} }, 60000);
+    setInterval(() => { syncChildSettings().catch(() => {}); }, 300000);
+  }
+
   // Reward audio: cache TTS by phrase so cheers play instantly and offline.
   async function rewardAudioURL(text) {
     const key = 'tts:' + text;
@@ -3590,7 +3751,7 @@
   }
 
   const G = { queue: [], i: 0, misses: 0, target: null, settings: null, attempts: [], session: null, locked: false,
-              facilitated: false, standby: false, poll: null, liveSeq: 0, limitTimer: null, ended: false, running: false };
+              facilitated: false, standby: false, poll: null, liveSeq: 0, limitTimer: null, ended: false, running: false, sequence: false };
   const gMusic = () => document.getElementById('game-music');
   const gVoice = () => document.getElementById('game-voice');
   function gShuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -3645,7 +3806,7 @@
       if (opts.facilitated) publishState({ status: 'error', message: msg });
       return;
     }
-    G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true;
+    G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true; G.sequence = !!opts.sequence;
     G.queue = gShuffle(items.slice()); G.i = 0; G.attempts = []; G.locked = false;
     G.session = { mode: G.facilitated ? 'facilitated' : 'self_paced', category: scope, startedAt: new Date().toISOString() };
     document.getElementById('game-setup').classList.remove('show');
@@ -3759,6 +3920,9 @@
     G.running = false;
     if (G.facilitated) publishState({ status: 'idle' });
     G.facilitated = false; G.standby = false; G.target = null;
+    const continueSeq = G.sequence && gameSeq.length;
+    G.sequence = false;
+    if (continueSeq) setTimeout(() => showGameNudgeCard("Let's do another game!", null), 700);
   }
 
   // ---- Facilitated mode: phone (therapist) ↔ tablet over /api/live ----
@@ -3974,6 +4138,9 @@
       if (navigator.onLine !== false) precacheAllMedia();
       // Listen for remote (phone) game commands the whole time the app is open.
       startLiveListener();
+      // Pick up reward cheers/music + scheduled prompts the parent set (e.g. from
+      // their phone), then run the timed-prompt scheduler while the board is open.
+      syncChildSettings().then(() => { try { startScheduler(); } catch (_) {} });
     } catch (err) {
       clearTimeout(watchdog);
       bootBanner('Load error at "' + step + '": ' + (err.message || err), true);
