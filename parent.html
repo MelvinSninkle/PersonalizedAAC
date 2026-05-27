@@ -370,9 +370,11 @@
           <input id="sch-duration" type="number" min="5" value="60" style="width:90px;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin:0 6px;"> seconds
         </label>
       </div>
-      <label id="sch-scope-row" style="display:none;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Game focus
-        <select id="sch-scope" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;"></select>
-      </label>
+      <div id="sch-scope-row" style="display:none;margin-top:12px;">
+        <div style="font-size:13px;font-weight:600;color:var(--ink);">Games (played in order — child taps to start each)</div>
+        <div id="sch-games" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;"></div>
+        <button type="button" class="btn ghost" id="sch-add-game" style="margin-top:8px;">＋ Add a game</button>
+      </div>
       <div id="sch-interval-row" style="margin-top:12px;">
         <label style="font-size:13px;font-weight:600;color:var(--ink);">Every
           <input id="sch-interval" type="number" min="1" value="45" style="width:90px;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin:0 6px;"> minutes
@@ -803,7 +805,9 @@
     const when = s.timing === 'times' ? ('at ' + (s.times || []).join(', ')) : ('every ' + (s.intervalMin || 45) + ' min');
     const days = (Array.isArray(s.days) && s.days.length) ? s.days.map(d => DOW[d]).join(' ') : 'every day';
     const win = (s.start && s.end) ? (s.start + '–' + s.end) : 'any time';
-    return (s.type === 'game' ? '🎮 Game' : '🗣 Reminder') + ' · ' + when + ' · ' + days + ' · ' + win;
+    const n = Array.isArray(s.scopes) ? s.scopes.length : 1;
+    const label = s.type === 'game' ? ('🎮 ' + n + ' game' + (n === 1 ? '' : 's')) : (s.type === 'question' ? '❓ Question' : '🗣 Reminder');
+    return label + ' · ' + when + ' · ' + days + ' · ' + win;
   }
   function renderSchedList() {
     const list = document.getElementById('sched-list'); if (!list) return;
@@ -853,7 +857,8 @@
     document.getElementById('sch-type').value = s.type || 'reminder';
     document.getElementById('sch-timing').value = s.timing || 'interval';
     document.getElementById('sch-prompt').value = s.prompt || '';
-    document.getElementById('sch-scope').value = s.scope || 'all';
+    const gamesWrap = document.getElementById('sch-games');
+    if (gamesWrap) { gamesWrap.innerHTML = ''; const scopes = (Array.isArray(s.scopes) && s.scopes.length) ? s.scopes : (s.scope ? [s.scope] : ['all']); scopes.forEach(buildGameRow); }
     document.getElementById('sch-interval').value = s.intervalMin || 45;
     document.getElementById('sch-times').value = (s.times || []).join(', ');
     document.getElementById('sch-start').value = s.start || '15:30';
@@ -883,8 +888,20 @@
     if (sel.value) { pv.src = '/api/media?key=' + encodeURIComponent(sel.value); pv.style.display = 'block'; }
     else { pv.removeAttribute('src'); pv.style.display = 'none'; }
   }
+  let gameScopeOptsHTML = '<option value="all">Everything</option>';
+  function buildGameRow(scopeVal) {
+    const games = document.getElementById('sch-games'); if (!games) return;
+    const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:8px;align-items:center;';
+    const sel = document.createElement('select'); sel.className = 'sch-game-scope';
+    sel.style.cssText = 'flex:1;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;';
+    sel.innerHTML = gameScopeOptsHTML;
+    if (scopeVal && !Array.from(sel.options).some(o => o.value === scopeVal)) { const o = document.createElement('option'); o.value = scopeVal; o.textContent = scopeVal; sel.appendChild(o); }
+    sel.value = scopeVal || 'all';
+    const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'btn ghost'; rm.textContent = '✕'; rm.addEventListener('click', () => row.remove());
+    row.appendChild(sel); row.appendChild(rm); games.appendChild(row);
+  }
   async function loadSchedScopes() {
-    const sel = document.getElementById('sch-scope'); if (!sel) return;
+    if (!document.getElementById('sched-editor')) return;
     try {
       const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
       if (!r.ok) return;
@@ -897,7 +914,8 @@
         const tops = sc.filter(c => c.parentId == null).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         for (const t of tops) { opts.push(['cat:' + t.id, '— ' + t.label]); for (const sub of sc.filter(c => c.parentId === t.id)) opts.push(['cat:' + sub.id, '— — ' + sub.label]); }
       }
-      sel.innerHTML = opts.map(([v, t]) => '<option value="' + v + '">' + schEsc(t) + '</option>').join('');
+      gameScopeOptsHTML = opts.map(([v, t]) => '<option value="' + v + '">' + schEsc(t) + '</option>').join('');
+      document.querySelectorAll('#sch-games .sch-game-scope').forEach(sel => { const cur = sel.value; sel.innerHTML = gameScopeOptsHTML; if (cur && !Array.from(sel.options).some(o => o.value === cur)) { const o = document.createElement('option'); o.value = cur; o.textContent = cur; sel.appendChild(o); } sel.value = cur; });
       // Tile pickers — every tile that has an image (the question picture + the response tiles).
       const tiles = items.filter(it => it.imageKey && it.label);
       const tileOpts = tiles.map(it => '<option value="' + schEsc(it.imageKey) + '" data-label="' + schEsc(it.label) + '">' + schEsc((it.section ? it.section + ' — ' : '') + it.label) + '</option>').join('');
@@ -913,6 +931,7 @@
     document.getElementById('sch-type').addEventListener('change', syncSchedRows);
     document.getElementById('sch-timing').addEventListener('change', syncSchedRows);
     document.getElementById('sch-image').addEventListener('change', updateSchedPreview);
+    document.getElementById('sch-add-game').addEventListener('click', () => buildGameRow('all'));
     document.getElementById('sch-save').addEventListener('click', async () => {
       const type = document.getElementById('sch-type').value;
       const timing = document.getElementById('sch-timing').value;
@@ -927,7 +946,7 @@
       };
       const imageKey = document.getElementById('sch-image').value || '';
       if (imageKey) sch.imageKey = imageKey;
-      if (type === 'game') sch.scope = document.getElementById('sch-scope').value || 'all';
+      if (type === 'game') { const sc = Array.from(document.querySelectorAll('#sch-games .sch-game-scope')).map(x => x.value).filter(Boolean); sch.scopes = sc.length ? sc : ['all']; }
       if (type === 'question') {
         const resps = [];
         ['sch-resp-a', 'sch-resp-b'].forEach(id => { const sel = document.getElementById(id), o = sel && sel.selectedOptions[0]; if (o && o.value) resps.push({ imageKey: o.value, label: o.dataset.label || '' }); });

@@ -3615,26 +3615,38 @@
     document.body.appendChild(t);
     setTimeout(() => { t.style.transition = 'opacity .5s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 500); }, 7000);
   }
-  function schedGameNudge(s, text) {
+  // Game sequence: a trigger can run several games in a row, each tap-to-start.
+  let gameSeq = [];
+  function startNextSeqGame() {
+    const sc = gameSeq.shift();
+    if (sc === undefined) return;
+    startGame(sc, (gameSettings().choices) || 3, { sequence: true });
+  }
+  function showGameNudgeCard(text, imageKey) {
     if (document.getElementById('sched-nudge')) return;
     const o = document.createElement('div'); o.id = 'sched-nudge';
     o.style.cssText = 'position:fixed;inset:0;z-index:2500;display:flex;align-items:center;justify-content:center;background:rgba(173,20,87,.35);backdrop-filter:blur(4px);';
     const card = document.createElement('div');
     card.style.cssText = 'background:#fff;border-radius:24px;padding:28px 26px;max-width:380px;width:86%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);';
-    if (s.imageKey) {
+    if (imageKey) {
       const img = document.createElement('img');
       img.style.cssText = 'width:150px;height:150px;object-fit:cover;border-radius:18px;margin-bottom:16px;background:#fce4ec;';
-      getMediaURL(s.imageKey).then(u => { if (u) img.src = u; }).catch(() => {});
+      getMediaURL(imageKey).then(u => { if (u) img.src = u; }).catch(() => {});
       card.appendChild(img);
     }
     const h = document.createElement('div'); h.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-size:24px;font-weight:700;color:#ad1457;margin-bottom:18px;'; h.textContent = text;
     const play = document.createElement('button'); play.textContent = '▶ Play'; play.style.cssText = 'border:none;border-radius:999px;background:#ff1493;color:#fff;font-weight:700;font-size:20px;padding:14px 30px;cursor:pointer;margin:0 6px;';
     const later = document.createElement('button'); later.textContent = 'Not now'; later.style.cssText = 'border:none;border-radius:999px;background:#eee;color:#555;font-weight:600;font-size:16px;padding:14px 20px;cursor:pointer;margin:0 6px;';
-    play.addEventListener('click', () => { o.remove(); const ch = (gameSettings().choices) || 3; startGame(s.scope || 'all', ch, {}); });
-    later.addEventListener('click', () => o.remove());
+    play.addEventListener('click', () => { o.remove(); startNextSeqGame(); });
+    later.addEventListener('click', () => { gameSeq = []; o.remove(); });
     card.appendChild(h); card.appendChild(play); card.appendChild(later); o.appendChild(card); document.body.appendChild(o);
     rewardAudioURL(text).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {});
     setTimeout(() => { const el = document.getElementById('sched-nudge'); if (el) el.remove(); }, 60000);
+  }
+  function schedGameNudge(s, text) {
+    const scopes = (Array.isArray(s.scopes) && s.scopes.length) ? s.scopes.slice() : [s.scope || 'all'];
+    gameSeq = scopes;
+    showGameNudgeCard(text, s.imageKey);
   }
   function schedQuestion(s, text) {
     if (document.getElementById('sched-nudge')) return;
@@ -3739,7 +3751,7 @@
   }
 
   const G = { queue: [], i: 0, misses: 0, target: null, settings: null, attempts: [], session: null, locked: false,
-              facilitated: false, standby: false, poll: null, liveSeq: 0, limitTimer: null, ended: false, running: false };
+              facilitated: false, standby: false, poll: null, liveSeq: 0, limitTimer: null, ended: false, running: false, sequence: false };
   const gMusic = () => document.getElementById('game-music');
   const gVoice = () => document.getElementById('game-voice');
   function gShuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -3794,7 +3806,7 @@
       if (opts.facilitated) publishState({ status: 'error', message: msg });
       return;
     }
-    G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true;
+    G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true; G.sequence = !!opts.sequence;
     G.queue = gShuffle(items.slice()); G.i = 0; G.attempts = []; G.locked = false;
     G.session = { mode: G.facilitated ? 'facilitated' : 'self_paced', category: scope, startedAt: new Date().toISOString() };
     document.getElementById('game-setup').classList.remove('show');
@@ -3908,6 +3920,9 @@
     G.running = false;
     if (G.facilitated) publishState({ status: 'idle' });
     G.facilitated = false; G.standby = false; G.target = null;
+    const continueSeq = G.sequence && gameSeq.length;
+    G.sequence = false;
+    if (continueSeq) setTimeout(() => showGameNudgeCard("Let's do another game!", null), 700);
   }
 
   // ---- Facilitated mode: phone (therapist) ↔ tablet over /api/live ----
