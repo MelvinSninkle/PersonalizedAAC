@@ -187,6 +187,14 @@
   .org-thumb { width:34px; height:34px; border-radius:8px; background:#fce4ec center/cover no-repeat; flex:0 0 auto; }
   .org-ghost { position:fixed; z-index:4000; pointer-events:none; background:#fff; border:2px solid var(--pink); border-radius:10px;
     padding:6px 10px; font-weight:600; font-size:14px; box-shadow:0 12px 34px rgba(0,0,0,.28); display:flex; align-items:center; gap:8px; opacity:.96; max-width:220px; }
+  /* Organize: full-screen workspace */
+  #org-page { position:fixed; inset:0; z-index:2000; background:var(--bg); display:none; flex-direction:column; }
+  #org-page.open { display:flex; }
+  .org-page-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 18px; background:#fff; border-bottom:1px solid var(--line); flex:0 0 auto; }
+  .org-page-head strong { color:var(--pink-deep); font-size:18px; }
+  .org-page-body { flex:1 1 auto; overflow:auto; -webkit-overflow-scrolling:touch; padding:16px 18px 40px; }
+  .org-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; align-items:start; }
+  .org-grid > div { margin-bottom:0 !important; }
 </style>
 </head>
 <body>
@@ -432,12 +440,24 @@
   <div class="section-label">Organize the board</div>
   <div class="panel">
     <h2>Categories &amp; tiles</h2>
-    <p class="hint">Reorder, rename, add or remove the categories and tiles on your child's board.</p>
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
-      <button class="btn ghost" id="org-reload">↻ Reload</button>
+    <p class="hint">Drag tiles and categories to rearrange your child's board — like moving files between folders. Opens as a full-screen workspace.</p>
+    <button class="btn primary" id="org-open">⤢ Open the organizer</button>
+  </div>
+
+  <!-- ORGANIZE — full-screen workspace -->
+  <div id="org-page">
+    <div class="org-page-head">
+      <strong>Organize the board</strong>
       <span id="org-status" style="font-size:13px;color:var(--muted);"></span>
+      <span style="margin-left:auto;display:flex;gap:8px;">
+        <button class="btn ghost" id="org-reload">↻ Reload</button>
+        <button class="btn" id="org-close">✕ Close</button>
+      </span>
     </div>
-    <div id="org-tree"></div>
+    <div id="org-scroll" class="org-page-body">
+      <p class="hint" style="margin:0 0 12px;">Grab the <strong>⠿</strong> handle to move a tile or category. Drop onto a category to file a tile inside it, or between rows to reorder. Drag near the top or bottom edge to scroll while holding.</p>
+      <div id="org-tree"></div>
+    </div>
   </div>
 
   <!-- BACKUP -->
@@ -1058,7 +1078,7 @@
   }
   function renderOrgTree() {
     const el = document.getElementById('org-tree'); if (!el) return;
-    el.innerHTML = ORG_SECTIONS.map(sec => {
+    el.innerHTML = '<div class="org-grid">' + ORG_SECTIONS.map(sec => {
       const tops = ORG_CATS.filter(c => c.section === sec && c.parentId == null).sort(orgByOrder);
       const body = tops.length ? tops.map(cat => {
         const subs = ORG_CATS.filter(c => c.parentId === cat.id).sort(orgByOrder);
@@ -1073,7 +1093,7 @@
           '</div>';
       }).join('') : '<div style="font-size:12px;color:var(--faint);padding:6px 0;">No categories.</div>';
       return '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden;"><div style="padding:10px 14px;background:#fff0f6;font-weight:700;color:var(--pink-deep);text-transform:uppercase;font-size:13px;display:flex;justify-content:space-between;align-items:center;">' + sec + '<button class="btn" data-org="add-cat" data-section="' + sec + '">+ Category</button></div><div style="padding:6px 14px;">' + body + '</div></div>';
-    }).join('');
+    }).join('') + '</div>';
   }
   async function orgAct(act, el) {
     const id = el.dataset.id ? Number(el.dataset.id) : null, type = el.dataset.type;
@@ -1144,6 +1164,27 @@
     e.preventDefault();
     orgDrag = { type: row.dataset.type, id: Number(row.dataset.id), el: row, sx: e.clientX, sy: e.clientY, started: false, ghost: null, target: null, zone: null };
   }
+  function orgUpdateTarget(x, y) {
+    orgClearDrops();
+    const under = document.elementFromPoint(x, y);
+    const row = under && under.closest ? under.closest('.org-drag-row') : null;
+    if (row && row !== orgDrag.el) {
+      const z = orgZone(row, y);
+      row.classList.add(z === 'into' ? 'drop-into' : (z === 'before' ? 'drop-before' : 'drop-after'));
+      orgDrag.target = row; orgDrag.zone = z;
+    } else { orgDrag.target = null; orgDrag.zone = null; }
+  }
+  function orgAutoScroll() {     // scroll the workspace when dragging near its top/bottom edge
+    if (!orgDrag || !orgDrag.started) return;
+    const sc = document.getElementById('org-scroll'), y = orgDrag.lastY;
+    if (sc) {
+      const r = sc.getBoundingClientRect(), edge = 80, step = 18;
+      if (y < r.top + edge) sc.scrollTop -= step * Math.min(1, (r.top + edge - y) / edge);
+      else if (y > r.bottom - edge) sc.scrollTop += step * Math.min(1, (y - (r.bottom - edge)) / edge);
+      orgUpdateTarget(orgDrag.lastX, y);
+    }
+    orgDrag.raf = requestAnimationFrame(orgAutoScroll);
+  }
   function orgMoveEvt(e) {
     if (!orgDrag) return;
     if (!orgDrag.started) {
@@ -1152,21 +1193,17 @@
       const g = document.createElement('div'); g.className = 'org-ghost';
       const lab = orgDrag.el.querySelector('span:nth-last-child(2)'); g.textContent = lab ? lab.textContent : 'Moving…';
       document.body.appendChild(g); orgDrag.ghost = g;
+      orgDrag.raf = requestAnimationFrame(orgAutoScroll);
     }
     e.preventDefault();
+    orgDrag.lastX = e.clientX; orgDrag.lastY = e.clientY;
     orgDrag.ghost.style.left = (e.clientX + 12) + 'px'; orgDrag.ghost.style.top = (e.clientY + 12) + 'px';
-    orgClearDrops();
-    const under = document.elementFromPoint(e.clientX, e.clientY);
-    const row = under && under.closest ? under.closest('.org-drag-row') : null;
-    if (row && row !== orgDrag.el) {
-      const z = orgZone(row, e.clientY);
-      row.classList.add(z === 'into' ? 'drop-into' : (z === 'before' ? 'drop-before' : 'drop-after'));
-      orgDrag.target = row; orgDrag.zone = z;
-    } else { orgDrag.target = null; orgDrag.zone = null; }
+    orgUpdateTarget(e.clientX, e.clientY);
   }
   async function orgUp() {
     if (!orgDrag) return;
     const d = orgDrag; orgDrag = null;
+    if (d.raf) cancelAnimationFrame(d.raf);
     if (d.ghost) d.ghost.remove();
     d.el.classList.remove('dragging'); orgClearDrops();
     if (!d.started || !d.target) return;
@@ -1181,7 +1218,12 @@
     document.addEventListener('pointerup', orgUp);
     document.addEventListener('pointercancel', orgUp);
     const orgReload = document.getElementById('org-reload'); if (orgReload) orgReload.addEventListener('click', loadOrg);
-    loadOrg();
+    const orgPage = document.getElementById('org-page'), orgOpenBtn = document.getElementById('org-open'), orgCloseBtn = document.getElementById('org-close');
+    let orgLoaded = false;
+    if (orgOpenBtn && orgPage) {
+      orgOpenBtn.addEventListener('click', () => { orgPage.classList.add('open'); document.body.style.overflow = 'hidden'; if (!orgLoaded) { orgLoaded = true; loadOrg(); } });
+      if (orgCloseBtn) orgCloseBtn.addEventListener('click', () => { orgPage.classList.remove('open'); document.body.style.overflow = ''; });
+    }
   }
 
   // ---- Backup export (inlines image/sound bytes; compatible with the kid app's import) ----
