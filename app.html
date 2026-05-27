@@ -4,6 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Fletcher's World</title>
+<script>
+  // Per-device default view: a parent/therapist device opens straight to its
+  // view (set once via the first-run prompt). Runs before render to avoid a
+  // flash of the board. Add #board to the URL to stay on the board this visit.
+  (function () {
+    try {
+      if (location.hash === '#board') sessionStorage.setItem('aacStayBoard', '1');
+      if (sessionStorage.getItem('aacStayBoard') === '1') return;
+      var m = location.pathname.match(/^\/u\/([^\/]+)/);
+      var slug = m ? m[1] : 'fletcherpeterson';
+      var r = localStorage.getItem('aacDeviceRole') || '';
+      if (r === 'parent') location.replace('/parent/' + slug);
+      else if (r === 'therapist') location.replace('/therapist/' + slug);
+    } catch (e) {}
+  })();
+</script>
 <!-- iOS PWA: when added to the home screen this launches full-screen with no Safari chrome.
      Pair with Guided Access (Settings → Accessibility → Guided Access) to actually lock the
      device to this app — there's no in-app way to prevent exiting on iOS. -->
@@ -80,12 +96,21 @@
     background: #ad1457;
     color: white;
     border: none;
-    border-radius: 6px;
-    padding: 10px 18px;
-    font-size: 15px;
+    border-radius: 8px;
+    padding: 0 14px;
+    height: 40px;
+    min-width: 108px;
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    box-sizing: border-box;
   }
+  header button.btn-play-req { background: #16a34a; }
+  header button.btn-play-req:hover { background: #15803d; }
   header button:hover { background: #880e4f; }
   /* Login icon: small + low-contrast so it doesn't distract the kid (and
      so a stray tap isn't tempting). Becomes more visible once the parent
@@ -112,7 +137,7 @@
 
   header button.edit-only { display: none; }
   body.edit-mode header button.edit-only {
-    display: inline-block;
+    display: inline-flex;
     background: #6a1b4d;
   }
   body.edit-mode header button.edit-only:hover { background: #4a0d36; }
@@ -662,9 +687,10 @@
     .tab-strip { gap: 6px; padding: 8px; max-height: none; }
     .tile-label { font-size: 13px; }
     .tile-add { min-height: 56px; }
-    header { padding: 10px 14px; height: 56px; }
+    header { padding: 10px 14px; height: auto; flex-wrap: wrap; row-gap: 8px; }
     header h1 { font-size: 17px; }
-    header button { padding: 8px 12px; font-size: 13px; }
+    header .right { position: static; transform: none; right: auto; top: auto; width: 100%; flex-wrap: wrap; justify-content: center; gap: 8px; }
+    header button { padding: 0 12px; height: 36px; min-width: 96px; font-size: 13px; }
     .modal { padding: 18px; }
     .modal h3 { font-size: 18px; }
   }
@@ -837,7 +863,7 @@
     <button id="import-btn" class="edit-only" style="display:none">Import</button>
     <button id="wipe-btn" class="edit-only" style="display:none">Wipe All</button>
     <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
-    <button id="play-request-btn" title="Tell a grown-up you want to play" style="background:#16a34a;color:#fff;border:none;border-radius:999px;padding:9px 16px;font-weight:700;cursor:pointer;">🙋 Play with me</button>
+    <button id="play-request-btn" class="btn-play-req" title="Tell a grown-up you want to play">🙋 Play with me</button>
     <button id="login-btn" aria-label="Login" title="Login">🔒</button>
   </div>
 </header>
@@ -1074,9 +1100,28 @@
       <span>Verbs</span><input type="color"  id="disp-color-verbs"  style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
       <span>Needs</span><input type="color"  id="disp-color-needs"  style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
     </div>
+    <label style="margin-top:18px;">Default view for this device</label>
+    <div style="font-size:12px;color:#666;margin:4px 0 6px;">When the app opens on this device, go straight to:</div>
+    <select id="disp-device-role" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;width:100%;box-sizing:border-box;">
+      <option value="child">Fletcher's board (this view)</option>
+      <option value="parent">Parent dashboard</option>
+      <option value="therapist">Therapist view</option>
+    </select>
     <div class="button-row">
       <button class="secondary" id="display-reset">Reset to defaults</button>
       <button class="primary" id="display-done">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="role-modal">
+  <div class="modal" style="max-width:430px;">
+    <h3>Who uses this device?</h3>
+    <div style="font-size:14px;color:#666;margin:6px 0 18px;">We'll open straight to the right view next time. You can change this later under ⚙ Display.</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button class="role-pick" data-role="child" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🧒 Fletcher — the communication board</button>
+      <button class="role-pick" data-role="parent" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">👪 Parent — the dashboard</button>
+      <button class="role-pick" data-role="therapist" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🩺 Therapist — the facilitator view</button>
     </div>
   </div>
 </div>
@@ -3171,6 +3216,32 @@
   // The signed-in session carries over; role-based access is enforced server-side.
   document.getElementById('parent-btn').addEventListener('click', () => { window.location.href = '/parent/' + encodeURIComponent(CHILD_ID); });
   document.getElementById('therapist-btn').addEventListener('click', () => { window.location.href = '/therapist/' + encodeURIComponent(CHILD_ID); });
+
+  // ---- Per-device default view (one-time prompt, changeable under Display) ----
+  const DEVICE_ROLE_KEY = 'aacDeviceRole';
+  function getDeviceRole() { try { return localStorage.getItem(DEVICE_ROLE_KEY) || ''; } catch (_) { return ''; } }
+  function setDeviceRole(r) { try { localStorage.setItem(DEVICE_ROLE_KEY, r); } catch (_) {} }
+  function gotoRoleView(r) {
+    if (r === 'parent') location.replace('/parent/' + encodeURIComponent(CHILD_ID));
+    else if (r === 'therapist') location.replace('/therapist/' + encodeURIComponent(CHILD_ID));
+  }
+  (function showRolePromptIfNeeded() {
+    if (getDeviceRole()) return;                        // already chosen on this device
+    const m = document.getElementById('role-modal'); if (!m) return;
+    m.classList.add('show');
+    m.querySelectorAll('.role-pick').forEach(b => b.addEventListener('click', () => {
+      const r = b.dataset.role; setDeviceRole(r); m.classList.remove('show');
+      if (r !== 'child') { try { sessionStorage.removeItem('aacStayBoard'); } catch (_) {} gotoRoleView(r); }
+    }, { once: true }));
+  })();
+  const dispRoleSel = document.getElementById('disp-device-role');
+  if (dispRoleSel) {
+    dispRoleSel.value = getDeviceRole() || 'child';
+    dispRoleSel.addEventListener('change', () => {
+      const r = dispRoleSel.value; setDeviceRole(r);
+      if (r !== 'child') { try { sessionStorage.removeItem('aacStayBoard'); } catch (_) {} gotoRoleView(r); }
+    });
+  }
   document.getElementById('display-done').addEventListener('click', () => displayModal.classList.remove('show'));
   document.getElementById('display-reset').addEventListener('click', () => {
     display = structuredClone(DISPLAY_DEFAULTS);

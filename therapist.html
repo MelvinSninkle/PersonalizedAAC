@@ -167,7 +167,10 @@
 
 <header class="top">
   <div class="brand fred">Fletcher's World <small>Therapist · facilitator view</small></div>
-  <span class="device-pill" id="live-pill"><span class="dot"></span> Waiting for tablet</span>
+  <span style="display:inline-flex;align-items:center;gap:14px;">
+    <span class="device-pill" id="live-pill"><span class="dot"></span> Waiting for tablet</span>
+    <a href="#" id="device-default" style="font-size:13px;font-weight:600;">Change device default</a>
+  </span>
 </header>
 
 <div class="wrap">
@@ -285,12 +288,30 @@
       <div class="note">Notes attach to the session record so you and Andrew see the same longitudinal history. <a href="#" id="to-parent">Open parent dashboard →</a></div>
     </div>
   </div>
+
+  <!-- DAILY SCHEDULE -->
+  <div class="section-label">Daily schedule</div>
+  <div class="panel">
+    <h2>Routine &amp; locations</h2>
+    <div id="daily-schedule"></div>
+  </div>
 </div>
 
+<script src="/schedule-editor.js"></script>
 <script>
 (() => {
   const m = location.pathname.match(/^\/therapist\/([^\/]+)/);
   const slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';
+  const deviceDefaultLink = document.getElementById('device-default');
+  if (deviceDefaultLink) deviceDefaultLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    try { localStorage.removeItem('aacDeviceRole'); } catch (_) {}
+    try { sessionStorage.removeItem('aacStayBoard'); } catch (_) {}
+    window.location.href = '/u/' + encodeURIComponent(slug);
+  });
+  if (window.ScheduleEditor && document.getElementById('daily-schedule')) {
+    ScheduleEditor.mount({ container: 'daily-schedule', slug });
+  }
   document.getElementById('to-parent').href = '/parent/' + encodeURIComponent(slug);
 
   // ---- Progress charts: tabbed, color-coded, gold-star for mastered ----
