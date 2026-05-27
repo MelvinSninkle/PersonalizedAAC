@@ -177,6 +177,16 @@
     .ins-x { order: 2; }
     .ins-tabs { order: 3; margin-left: 0; width: 100%; justify-content: center; }
   }
+  /* Organize: drag-to-move rows */
+  .org-drag-row { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:10px; }
+  .org-drag-row.dragging { opacity:.4; }
+  .org-drag-row.drop-into { outline:2px solid var(--pink); outline-offset:-2px; background:#fff0f6; }
+  .org-drag-row.drop-before { box-shadow: inset 0 3px 0 var(--pink); }
+  .org-drag-row.drop-after { box-shadow: inset 0 -3px 0 var(--pink); }
+  .org-grip { cursor:grab; color:var(--faint); font-size:17px; touch-action:none; padding:2px 4px; flex:0 0 auto; }
+  .org-thumb { width:34px; height:34px; border-radius:8px; background:#fce4ec center/cover no-repeat; flex:0 0 auto; }
+  .org-ghost { position:fixed; z-index:4000; pointer-events:none; background:#fff; border:2px solid var(--pink); border-radius:10px;
+    padding:6px 10px; font-weight:600; font-size:14px; box-shadow:0 12px 34px rgba(0,0,0,.28); display:flex; align-items:center; gap:8px; opacity:.96; max-width:220px; }
 </style>
 </head>
 <body>
@@ -1013,7 +1023,7 @@
     saveSettingsToServer(grpToggle.checked ? 'Game alerts on ✓' : 'Game alerts off', 'sched-msg');
   });
 
-  // ---- Organize the board (categories + tiles), parent-editable ----
+  // ---- Organize the board (drag the image tiles to move/reorder; like folders) ----
   const ORG_SECTIONS = ['people', 'nouns', 'verbs'];
   let ORG_CATS = [], ORG_ITEMS = [];
   const orgByOrder = (a, b) => (a.order - b.order) || (a.id - b.id);
@@ -1032,17 +1042,19 @@
       renderOrgTree(); st.textContent = ORG_CATS.length + ' categories · ' + ORG_ITEMS.length + ' tiles';
     } catch (err) { st.textContent = err.message; }
   }
-  function orgActs(type, id) {
+  function orgBtns(type, id) {
     return '<span style="margin-left:auto;display:inline-flex;gap:4px;">' +
-      '<button class="btn ghost" data-org="up" data-type="' + type + '" data-id="' + id + '">↑</button>' +
-      '<button class="btn ghost" data-org="down" data-type="' + type + '" data-id="' + id + '">↓</button>' +
       '<button class="btn ghost" data-org="rename" data-type="' + type + '" data-id="' + id + '">✎</button>' +
       '<button class="btn ghost" data-org="del" data-type="' + type + '" data-id="' + id + '">✕</button></span>';
   }
-  function orgItems(catId) {
+  function orgThumb(imageKey) {
+    return imageKey ? '<span class="org-thumb" style="background-image:url(/api/media?key=' + encodeURIComponent(imageKey) + ')"></span>' : '';
+  }
+  function orgItemsHTML(catId) {
     const items = ORG_ITEMS.filter(i => i.categoryId === catId).sort(orgByOrder);
-    if (!items.length) return '<div style="font-size:12px;color:var(--faint);margin:4px 0 4px 18px;">No tiles.</div>';
-    return items.map(i => '<div style="display:flex;align-items:center;gap:6px;margin:3px 0 3px 18px;font-size:14px;"><span>▦</span><span>' + schEsc(i.label) + '</span>' + orgActs('item', i.id) + '</div>').join('');
+    if (!items.length) return '<div style="font-size:12px;color:var(--faint);margin:2px 0 2px 22px;">No tiles — drag one here.</div>';
+    return items.map(i => '<div class="org-drag-row" data-type="item" data-id="' + i.id + '" data-cat="' + i.categoryId + '" style="margin-left:18px;">' +
+      '<span class="org-grip">⠿</span>' + orgThumb(i.imageKey) + '<span style="flex:1;font-size:14px;">' + schEsc(i.label) + '</span>' + orgBtns('item', i.id) + '</div>').join('');
   }
   function renderOrgTree() {
     const el = document.getElementById('org-tree'); if (!el) return;
@@ -1050,27 +1062,18 @@
       const tops = ORG_CATS.filter(c => c.section === sec && c.parentId == null).sort(orgByOrder);
       const body = tops.length ? tops.map(cat => {
         const subs = ORG_CATS.filter(c => c.parentId === cat.id).sort(orgByOrder);
-        return '<div style="border-top:1px solid var(--line);padding:8px 0;">' +
-          '<div style="display:flex;align-items:center;gap:6px;font-weight:600;"><span>▤</span><span>' + schEsc(cat.label) + '</span>' + orgActs('cat', cat.id) + '</div>' +
-          orgItems(cat.id) +
-          subs.map(s => '<div style="margin-left:18px;border-left:2px solid var(--line);padding-left:10px;margin-top:4px;"><div style="display:flex;align-items:center;gap:6px;font-size:14px;"><span>↳</span><span>' + schEsc(s.label) + '</span>' + orgActs('cat', s.id) + '</div>' + orgItems(s.id) + '<div style="margin:4px 0 2px 18px;"><button class="btn ghost" data-org="add-item" data-cat="' + s.id + '" data-section="' + sec + '">+ tile</button></div></div>').join('') +
-          '<div style="margin:6px 0 2px 18px;"><button class="btn ghost" data-org="add-item" data-cat="' + cat.id + '" data-section="' + sec + '">+ tile</button> <button class="btn ghost" data-org="add-sub" data-cat="' + cat.id + '" data-section="' + sec + '">+ subcategory</button></div>' +
+        return '<div style="border-top:1px solid var(--line);padding:6px 0;">' +
+          '<div class="org-drag-row" data-type="cat" data-id="' + cat.id + '" data-parent="" data-section="' + sec + '" style="font-weight:600;"><span class="org-grip">⠿</span>' + orgThumb(cat.imageKey) + '<span style="flex:1;">' + schEsc(cat.label) + '</span>' + orgBtns('cat', cat.id) + '</div>' +
+          orgItemsHTML(cat.id) +
+          subs.map(s => '<div style="margin-left:18px;border-left:2px solid var(--line);padding-left:8px;margin-top:4px;">' +
+            '<div class="org-drag-row" data-type="cat" data-id="' + s.id + '" data-parent="' + cat.id + '" data-section="' + sec + '" style="font-size:14px;"><span class="org-grip">⠿</span><span style="margin-right:2px;">↳</span>' + orgThumb(s.imageKey) + '<span style="flex:1;">' + schEsc(s.label) + '</span>' + orgBtns('cat', s.id) + '</div>' +
+            orgItemsHTML(s.id) +
+            '<div style="margin:4px 0 2px 22px;"><button class="btn ghost" data-org="add-item" data-cat="' + s.id + '" data-section="' + sec + '">+ tile</button></div></div>').join('') +
+          '<div style="margin:6px 0 2px 22px;"><button class="btn ghost" data-org="add-item" data-cat="' + cat.id + '" data-section="' + sec + '">+ tile</button> <button class="btn ghost" data-org="add-sub" data-cat="' + cat.id + '" data-section="' + sec + '">+ subcategory</button></div>' +
           '</div>';
       }).join('') : '<div style="font-size:12px;color:var(--faint);padding:6px 0;">No categories.</div>';
       return '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden;"><div style="padding:10px 14px;background:#fff0f6;font-weight:700;color:var(--pink-deep);text-transform:uppercase;font-size:13px;display:flex;justify-content:space-between;align-items:center;">' + sec + '<button class="btn" data-org="add-cat" data-section="' + sec + '">+ Category</button></div><div style="padding:6px 14px;">' + body + '</div></div>';
     }).join('');
-  }
-  function orgSiblings(type, id) {
-    if (type === 'item') { const it = ORG_ITEMS.find(i => i.id === id); return ORG_ITEMS.filter(i => i.categoryId === it.categoryId).sort(orgByOrder); }
-    const c = ORG_CATS.find(x => x.id === id); return ORG_CATS.filter(x => x.section === c.section && x.parentId === c.parentId).sort(orgByOrder);
-  }
-  async function orgMove(type, id, dir) {
-    const sibs = orgSiblings(type, id); const i = sibs.findIndex(s => s.id === id); const j = i + (dir === 'up' ? -1 : 1);
-    if (j < 0 || j >= sibs.length) return;
-    const a = sibs[i], b = sibs[j]; const ep = type === 'item' ? '/api/items' : '/api/categories';
-    await orgApi(ep + '?id=' + a.id, { method: 'PUT', body: JSON.stringify({ order: b.order, childId: slug }) });
-    await orgApi(ep + '?id=' + b.id, { method: 'PUT', body: JSON.stringify({ order: a.order, childId: slug }) });
-    await loadOrg();
   }
   async function orgAct(act, el) {
     const id = el.dataset.id ? Number(el.dataset.id) : null, type = el.dataset.type;
@@ -1080,13 +1083,103 @@
       else if (act === 'add-item') { const l = prompt('New tile label:'); if (!l) return; await orgApi('/api/items', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, categoryId: Number(el.dataset.cat), label: l.trim(), childId: slug }) }); }
       else if (act === 'rename') { const arr = type === 'item' ? ORG_ITEMS : ORG_CATS; const cur = arr.find(x => x.id === id); const l = prompt('Rename:', cur ? cur.label : ''); if (!l) return; await orgApi((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id, { method: 'PUT', body: JSON.stringify({ label: l.trim(), childId: slug }) }); }
       else if (act === 'del') { const arr = type === 'item' ? ORG_ITEMS : ORG_CATS; const cur = arr.find(x => x.id === id); if (!confirm('Delete "' + (cur ? cur.label : id) + '"' + (type === 'cat' ? ' and everything under it' : '') + '?')) return; await orgApi((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id + '&childId=' + encodeURIComponent(slug), { method: 'DELETE' }); }
-      else if (act === 'up' || act === 'down') { return orgMove(type, id, act); }
       await loadOrg();
     } catch (err) { const st = document.getElementById('org-status'); if (st) st.textContent = err.message; }
+  }
+
+  // Renumber a sibling group sequentially; apply a parent change to the dragged row.
+  async function orgRenumber(ep, orderedIds, draggedId, patch) {
+    for (let k = 0; k < orderedIds.length; k++) {
+      const body = { order: k, childId: slug };
+      if (orderedIds[k] === draggedId) Object.assign(body, patch);
+      await orgApi(ep + '?id=' + orderedIds[k], { method: 'PUT', body: JSON.stringify(body) });
+    }
+  }
+  async function orgApplyDrop(dragType, dragId, t, zone) {
+    const targetType = t.type, targetId = Number(t.id);
+    if (dragId === targetId) return;
+    const di = dragType === 'item' ? ORG_ITEMS.find(i => i.id === dragId) : null;
+    if (dragType === 'item') {
+      if (targetType === 'cat' && zone === 'into') {
+        const tc = ORG_CATS.find(c => c.id === targetId); if (!tc || !di || tc.section !== di.section) return;   // stay within the section
+        const ids = ORG_ITEMS.filter(i => i.categoryId === targetId).sort(orgByOrder).map(i => i.id).filter(id => id !== dragId).concat(dragId);
+        await orgRenumber('/api/items', ids, dragId, { categoryId: targetId });
+      } else if (targetType === 'item') {
+        const ti = ORG_ITEMS.find(i => i.id === targetId); if (!ti || !di || ti.section !== di.section) return;
+        const destCat = ti.categoryId;
+        const ids = ORG_ITEMS.filter(i => i.categoryId === destCat).sort(orgByOrder).map(i => i.id).filter(id => id !== dragId);
+        let idx = ids.indexOf(targetId); if (zone === 'after') idx += 1;
+        ids.splice(idx, 0, dragId);
+        await orgRenumber('/api/items', ids, dragId, { categoryId: destCat });
+      } else return;
+    } else if (dragType === 'cat') {
+      const dc = ORG_CATS.find(c => c.id === dragId), tc = ORG_CATS.find(c => c.id === targetId);
+      if (!dc || !tc || tc.section !== dc.section) return;
+      const dragHasSubs = ORG_CATS.some(c => c.parentId === dragId);
+      if (zone === 'into' && tc.parentId == null && !dragHasSubs) {
+        const ids = ORG_CATS.filter(c => c.parentId === targetId).sort(orgByOrder).map(c => c.id).filter(id => id !== dragId).concat(dragId);
+        await orgRenumber('/api/categories', ids, dragId, { parentId: targetId });
+      } else {
+        const destParent = tc.parentId ?? null;
+        const ids = ORG_CATS.filter(c => c.section === tc.section && (c.parentId ?? null) === destParent).sort(orgByOrder).map(c => c.id).filter(id => id !== dragId);
+        let idx = ids.indexOf(targetId); if (zone === 'after') idx += 1;
+        ids.splice(idx, 0, dragId);
+        await orgRenumber('/api/categories', ids, dragId, (destParent !== (dc.parentId ?? null)) ? { parentId: destParent } : {});
+      }
+    }
+    await loadOrg();
+  }
+
+  // Pointer-based drag (works on mouse + touch). Drag starts from the grip handle.
+  let orgDrag = null;
+  function orgClearDrops() { document.querySelectorAll('.drop-into,.drop-before,.drop-after').forEach(r => r.classList.remove('drop-into', 'drop-before', 'drop-after')); }
+  function orgZone(row, y) {
+    const r = row.getBoundingClientRect(), rel = (y - r.top) / r.height;
+    if (row.dataset.type === 'cat' && rel > 0.3 && rel < 0.7) return 'into';
+    return rel < 0.5 ? 'before' : 'after';
+  }
+  function orgDown(e) {
+    const grip = e.target.closest && e.target.closest('.org-grip'); if (!grip) return;
+    const row = grip.closest('.org-drag-row'); if (!row) return;
+    e.preventDefault();
+    orgDrag = { type: row.dataset.type, id: Number(row.dataset.id), el: row, sx: e.clientX, sy: e.clientY, started: false, ghost: null, target: null, zone: null };
+  }
+  function orgMoveEvt(e) {
+    if (!orgDrag) return;
+    if (!orgDrag.started) {
+      if (Math.hypot(e.clientX - orgDrag.sx, e.clientY - orgDrag.sy) < 8) return;
+      orgDrag.started = true; orgDrag.el.classList.add('dragging');
+      const g = document.createElement('div'); g.className = 'org-ghost';
+      const lab = orgDrag.el.querySelector('span:nth-last-child(2)'); g.textContent = lab ? lab.textContent : 'Moving…';
+      document.body.appendChild(g); orgDrag.ghost = g;
+    }
+    e.preventDefault();
+    orgDrag.ghost.style.left = (e.clientX + 12) + 'px'; orgDrag.ghost.style.top = (e.clientY + 12) + 'px';
+    orgClearDrops();
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    const row = under && under.closest ? under.closest('.org-drag-row') : null;
+    if (row && row !== orgDrag.el) {
+      const z = orgZone(row, e.clientY);
+      row.classList.add(z === 'into' ? 'drop-into' : (z === 'before' ? 'drop-before' : 'drop-after'));
+      orgDrag.target = row; orgDrag.zone = z;
+    } else { orgDrag.target = null; orgDrag.zone = null; }
+  }
+  async function orgUp() {
+    if (!orgDrag) return;
+    const d = orgDrag; orgDrag = null;
+    if (d.ghost) d.ghost.remove();
+    d.el.classList.remove('dragging'); orgClearDrops();
+    if (!d.started || !d.target) return;
+    try { await orgApplyDrop(d.type, d.id, d.target.dataset, d.zone); }
+    catch (err) { const st = document.getElementById('org-status'); if (st) st.textContent = (err.message || err); }
   }
   const orgTree = document.getElementById('org-tree');
   if (orgTree) {
     orgTree.addEventListener('click', (e) => { const el = e.target.closest('[data-org]'); if (el) orgAct(el.dataset.org, el); });
+    orgTree.addEventListener('pointerdown', orgDown);
+    document.addEventListener('pointermove', orgMoveEvt, { passive: false });
+    document.addEventListener('pointerup', orgUp);
+    document.addEventListener('pointercancel', orgUp);
     const orgReload = document.getElementById('org-reload'); if (orgReload) orgReload.addEventListener('click', loadOrg);
     loadOrg();
   }
