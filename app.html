@@ -3925,6 +3925,62 @@
     if (continueSeq) setTimeout(() => showGameNudgeCard("Let's do another game!", null), 700);
   }
 
+  // ===== Slideshow modes (Learn / Exposure) — passive, watch-only =====
+  const SLIDE = { running: false, items: [], i: 0, timer: null, limitTimer: null, labelStyle: 'plain' };
+  async function startSlideshow(opts) {
+    if (SLIDE.running || G.running) return;
+    const items = (await gatherPlayable(opts.scope || 'all')).filter(x => x.imageKey && x.label);
+    if (!items.length) return;
+    SLIDE.running = true; SLIDE.items = gShuffle(items.slice()); SLIDE.i = 0;
+    SLIDE.labelStyle = opts.labelStyle === 'first_person' ? 'first_person' : 'plain';
+    let o = document.getElementById('slide-overlay');
+    if (!o) {
+      o = document.createElement('div'); o.id = 'slide-overlay';
+      o.style.cssText = 'position:fixed;inset:0;z-index:2300;background:#0c0c12;display:none;flex-direction:column;align-items:center;justify-content:center;';
+      o.innerHTML = '<img id="slide-img" alt="" style="max-width:92vw;max-height:72vh;object-fit:contain;border-radius:22px;background:#15151d;">'
+        + '<div id="slide-label" style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;color:#fff;font-size:clamp(28px,6vw,64px);font-weight:700;margin-top:26px;text-align:center;padding:0 24px;line-height:1.2;"></div>'
+        + '<button id="slide-stop" aria-label="Stop" style="position:absolute;top:16px;right:16px;width:50px;height:50px;border-radius:50%;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:24px;cursor:pointer;">✕</button>';
+      document.body.appendChild(o);
+      o.querySelector('#slide-stop').addEventListener('click', stopSlideshow);
+    }
+    o.style.display = 'flex';
+    const m = gMusic(), s = gameSettings();
+    if (s.music) { m.src = s.music; m.volume = 0.4; m.loop = true; m.play().catch(() => {}); } else { m.pause(); }
+    const secs = Math.max(2, opts.secondsPerImage || 5);
+    const showOne = async () => {
+      if (!SLIDE.running) return;
+      if (SLIDE.i >= SLIDE.items.length) SLIDE.i = 0;     // loop until time limit / stopped
+      const it = SLIDE.items[SLIDE.i]; SLIDE.i++;
+      const img = document.getElementById('slide-img'), lab = document.getElementById('slide-label');
+      const url = await getMediaURL(it.imageKey); if (url && img) img.src = url;
+      if (lab) lab.textContent = SLIDE.labelStyle === 'first_person' ? ('I can see a ' + it.label) : it.label;
+      if (it.soundKey) { const su = await getMediaURL(it.soundKey); if (su) { const v = gVoice(); v.src = su; v.currentTime = 0; v.play().catch(() => {}); } }
+    };
+    await showOne();
+    SLIDE.timer = setInterval(showOne, secs * 1000);
+    if (opts.limitMin && opts.limitMin > 0) SLIDE.limitTimer = setTimeout(stopSlideshow, opts.limitMin * 60000);
+  }
+  function stopSlideshow() {
+    SLIDE.running = false;
+    if (SLIDE.timer) { clearInterval(SLIDE.timer); SLIDE.timer = null; }
+    if (SLIDE.limitTimer) { clearTimeout(SLIDE.limitTimer); SLIDE.limitTimer = null; }
+    const o = document.getElementById('slide-overlay'); if (o) o.style.display = 'none';
+    const m = gMusic(); m.pause(); m.loop = false; try { m.currentTime = 0; } catch (_) {}
+    gVoice().pause();
+  }
+
+  // Standalone celebration (also used at game end) — flowers + recorded cheer.
+  async function playCelebration() {
+    if (G.running) return;
+    const cel = document.getElementById('game-celebrate'); if (!cel) return;
+    const s = gameSettings(), phrases = s.phrases && s.phrases.length ? s.phrases : DEFAULT_REWARDS;
+    const phrase = phrases[Math.floor(Math.random() * phrases.length)] || 'Hooray!';
+    document.getElementById('game-celebrate-msg').textContent = phrase;
+    cel.classList.add('show'); spawnFlowers(cel);
+    const url = await rewardAudioURL(phrase); if (url) { const v = gVoice(); v.src = url; v.play().catch(() => {}); }
+    setTimeout(() => cel.classList.remove('show'), 4400);
+  }
+
   // ---- Facilitated mode: phone (therapist) ↔ tablet over /api/live ----
   async function publishState(extra) {
     if (!G.facilitated) return;
@@ -3958,7 +4014,7 @@
       } catch (_) {}
       // Heartbeat so the phone shows the tablet as "Connected".
       G.tick = (G.tick || 0) + 1;
-      if (G.tick % 2 === 0) { if (G.running && G.facilitated) publishState(); else if (!G.running) publishReady(); }
+      if (G.tick % 2 === 0) { if (G.running && G.facilitated) publishState(); else publishReady(); }
       setTimeout(tick, G.running ? 1000 : 2500);
     };
     tick();
@@ -3974,14 +4030,30 @@
   function applyCmd(cmd) {
     const a = cmd.action;
     if (a === 'start') {
-      // Start a phone-driven game from anywhere — even if the iPad is just on the board.
-      if (!G.running) {
-        const range = (cmd.from || cmd.to) ? { from: cmd.from || 0, to: cmd.to || 0 } : null;
-        startGame(cmd.scope || 'all', cmd.choices || 3, { facilitated: true, range });
+      // Start a phone-driven activity from anywhere — even if the iPad is just on the board.
+      if (G.running || SLIDE.running) return;        // one activity at a time
+      const mode = cmd.mode || 'facilitated';        // back-compat: therapist sends no mode → facilitated
+      const range = (cmd.from || cmd.to) ? { from: cmd.from || 0, to: cmd.to || 0 } : null;
+      const limitMin = Number.isFinite(cmd.limitMin) ? cmd.limitMin : undefined;
+      if (typeof cmd.music === 'string') saveGameSettings({ music: cmd.music });
+      if (mode === 'learn_slideshow' || mode === 'exposure_slideshow') {
+        startSlideshow({ scope: cmd.scope || 'all', secondsPerImage: cmd.secondsPerImage || 5, limitMin, labelStyle: cmd.labelStyle || (mode === 'exposure_slideshow' ? 'first_person' : 'plain') });
+      } else if (mode === 'celebration') {
+        playCelebration();
+      } else if (Array.isArray(cmd.scopes) && cmd.scopes.length) {
+        saveGameSettings({ choices: cmd.choices || 3, ...(Number.isFinite(cmd.limitMin) ? { limitMin: cmd.limitMin } : {}) });
+        gameSeq = cmd.scopes.slice();                // queued categories → a chain of self-paced games
+        startNextSeqGame();
+      } else {
+        startGame(cmd.scope || 'all', cmd.choices || 3, { facilitated: mode === 'facilitated', range, limitMin });
       }
       return;
     }
-    if (a === 'end') { if (G.running && !G.ended) endGame(); else stopGame(); return; }
+    if (a === 'end') {
+      if (SLIDE.running) { stopSlideshow(); return; }
+      if (G.running && !G.ended) endGame(); else stopGame();
+      return;
+    }
     if (!G.running || G.locked || !G.target) return;
     if (a === 'mark') markRemote(cmd.method || 'tap');
     else if (a === 'skip' || a === 'next') { G.locked = true; setTimeout(() => { G.i++; nextRound(); }, 250); }
