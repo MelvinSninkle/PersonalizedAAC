@@ -45,7 +45,7 @@ async function update(req, res, db) {
   const id = parseInt(req.query.id, 10);
   if (!id) { res.status(400).json({ error: 'id required' }); return; }
   const childId = childIdOf(req);
-  const { label, parentId, imageUrl, imageKey, keepAspect, order } = req.body || {};
+  const { label, parentId, imageUrl, imageKey, keepAspect, order, section, cascade } = req.body || {};
 
   // Load current row so we can know which old blob to delete if image changed
   const current = await db`SELECT * FROM categories WHERE id = ${id} AND child_id = ${childId}`;
@@ -55,6 +55,7 @@ async function update(req, res, db) {
   const rows = await db`
     UPDATE categories SET
       label         = COALESCE(${label ?? null},   label),
+      section       = COALESCE(${section ?? null}, section),
       parent_id     = ${parentId === undefined ? old.parent_id : parentId},
       image_url     = COALESCE(${imageUrl ?? null}, image_url),
       image_key     = COALESCE(${imageKey ?? null}, image_key),
@@ -64,6 +65,27 @@ async function update(req, res, db) {
     WHERE id = ${id} AND child_id = ${childId}
     RETURNING *
   `;
+
+  // Moving a category to another section: carry its whole subtree (subcategories
+  // and every tile within) along, so nothing is left stranded in the old section.
+  if (section && cascade) {
+    await db`
+      WITH RECURSIVE tree AS (
+        SELECT id FROM categories WHERE id = ${id} AND child_id = ${childId}
+        UNION ALL
+        SELECT c.id FROM categories c JOIN tree t ON c.parent_id = t.id WHERE c.child_id = ${childId}
+      )
+      UPDATE categories SET section = ${section}, updated_at = NOW()
+      WHERE id IN (SELECT id FROM tree) AND child_id = ${childId}`;
+    await db`
+      WITH RECURSIVE tree AS (
+        SELECT id FROM categories WHERE id = ${id} AND child_id = ${childId}
+        UNION ALL
+        SELECT c.id FROM categories c JOIN tree t ON c.parent_id = t.id WHERE c.child_id = ${childId}
+      )
+      UPDATE items SET section = ${section}, updated_at = NOW()
+      WHERE category_id IN (SELECT id FROM tree) AND child_id = ${childId}`;
+  }
 
   // Best-effort: if a new image was uploaded, garbage-collect the old blob
   if (imageKey && old.image_key && imageKey !== old.image_key) {

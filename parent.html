@@ -1330,9 +1330,14 @@
   let ORG_CATS = [], ORG_ITEMS = [];
   const orgByOrder = (a, b) => (a.order - b.order) || (a.id - b.id);
   const orgSelected = new Set();                 // item ids ticked for a multi-move
-  let orgCollapsed = new Set();                   // collapsed top-level category ids (persisted)
-  try { orgCollapsed = new Set(JSON.parse(localStorage.getItem('aacOrgCollapsed') || '[]')); } catch (_) {}
-  function saveCollapsed() { try { localStorage.setItem('aacOrgCollapsed', JSON.stringify([...orgCollapsed])); } catch (_) {} }
+  let orgCollapsed = new Set();                   // collapsed top-level category ids
+  let orgCollapseInit = false;                    // collapse everything the first time it loads
+  function orgSyncCollapseLabel() {
+    const b = document.getElementById('org-collapse-all'); if (!b) return;
+    const tops = ORG_CATS.filter(c => c.parentId == null).map(c => c.id);
+    const allCollapsed = tops.length && tops.every(id => orgCollapsed.has(id));
+    b.textContent = allCollapsed ? '⊞ Expand all' : '⊟ Collapse all';
+  }
   function orgCatCount(catId) {
     const subIds = ORG_CATS.filter(c => c.parentId === catId).map(c => c.id);
     return ORG_ITEMS.filter(i => i.categoryId === catId || subIds.includes(i.categoryId)).length;
@@ -1354,6 +1359,7 @@
     try {
       const d = await orgApi('/api/sync?childId=' + encodeURIComponent(slug));
       ORG_CATS = d.categories || []; ORG_ITEMS = d.items || [];
+      if (!orgCollapseInit) { orgCollapseInit = true; orgCollapsed = new Set(ORG_CATS.filter(c => c.parentId == null).map(c => c.id)); }
       renderOrgTree(); st.textContent = ORG_CATS.length + ' categories · ' + ORG_ITEMS.length + ' tiles';
     } catch (err) { st.textContent = err.message; }
   }
@@ -1399,18 +1405,19 @@
       }).join('') : '<div style="font-size:12px;color:var(--faint);padding:6px 0;">No categories.</div>';
       return '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden;"><div style="padding:10px 14px;background:#fff0f6;font-weight:700;color:var(--pink-deep);text-transform:uppercase;font-size:13px;display:flex;justify-content:space-between;align-items:center;">' + sec + '<button class="btn" data-org="add-cat" data-section="' + sec + '">+ Category</button></div><div style="padding:6px 14px;">' + body + '</div></div>';
     }).join('') + '</div>';
+    orgSyncCollapseLabel();
   }
   async function orgAct(act, el) {
     const id = el.dataset.id ? Number(el.dataset.id) : null, type = el.dataset.type;
     if (act === 'collapse') {       // local-only: toggle one category's body, no server round-trip
       if (orgCollapsed.has(id)) orgCollapsed.delete(id); else orgCollapsed.add(id);
-      saveCollapsed();
       const wrap = document.querySelector('[data-cat-wrap="' + id + '"]');
       if (wrap) {
         const collapsed = orgCollapsed.has(id);
         const cbody = wrap.querySelector('[data-cat-body="' + id + '"]'); if (cbody) cbody.style.display = collapsed ? 'none' : '';
         const caret = wrap.querySelector('.org-caret'); if (caret) caret.textContent = collapsed ? '▸' : '▾';
       }
+      orgSyncCollapseLabel();
       return;
     }
     try {
@@ -1437,40 +1444,45 @@
     const di = dragType === 'item' ? ORG_ITEMS.find(i => i.id === dragId) : null;
     if (dragType === 'item') {
       if (targetType === 'cat' && zone === 'into') {
-        const tc = ORG_CATS.find(c => c.id === targetId); if (!tc || !di || tc.section !== di.section) return;   // stay within the section
+        const tc = ORG_CATS.find(c => c.id === targetId); if (!tc || !di) return;
         const ids = ORG_ITEMS.filter(i => i.categoryId === targetId).sort(orgByOrder).map(i => i.id).filter(id => id !== dragId).concat(dragId);
-        await orgRenumber('/api/items', ids, dragId, { categoryId: targetId });
+        const patch = { categoryId: targetId }; if (tc.section !== di.section) patch.section = tc.section;
+        await orgRenumber('/api/items', ids, dragId, patch);
       } else if (targetType === 'item') {
-        const ti = ORG_ITEMS.find(i => i.id === targetId); if (!ti || !di || ti.section !== di.section) return;
+        const ti = ORG_ITEMS.find(i => i.id === targetId); if (!ti || !di) return;
         const destCat = ti.categoryId;
         const ids = ORG_ITEMS.filter(i => i.categoryId === destCat).sort(orgByOrder).map(i => i.id).filter(id => id !== dragId);
         let idx = ids.indexOf(targetId); if (zone === 'after') idx += 1;
         ids.splice(idx, 0, dragId);
-        await orgRenumber('/api/items', ids, dragId, { categoryId: destCat });
+        const patch = { categoryId: destCat }; if (ti.section !== di.section) patch.section = ti.section;
+        await orgRenumber('/api/items', ids, dragId, patch);
       } else return;
     } else if (dragType === 'cat') {
       const dc = ORG_CATS.find(c => c.id === dragId), tc = ORG_CATS.find(c => c.id === targetId);
-      if (!dc || !tc || tc.section !== dc.section) return;
+      if (!dc || !tc) return;
       const dragHasSubs = ORG_CATS.some(c => c.parentId === dragId);
+      const secPatch = (tc.section !== dc.section) ? { section: tc.section, cascade: true } : {};   // carry the whole subtree to the new section
       if (zone === 'into' && tc.parentId == null && !dragHasSubs) {
         const ids = ORG_CATS.filter(c => c.parentId === targetId).sort(orgByOrder).map(c => c.id).filter(id => id !== dragId).concat(dragId);
-        await orgRenumber('/api/categories', ids, dragId, { parentId: targetId });
+        await orgRenumber('/api/categories', ids, dragId, { parentId: targetId, ...secPatch });
       } else {
         const destParent = tc.parentId ?? null;
         const ids = ORG_CATS.filter(c => c.section === tc.section && (c.parentId ?? null) === destParent).sort(orgByOrder).map(c => c.id).filter(id => id !== dragId);
         let idx = ids.indexOf(targetId); if (zone === 'after') idx += 1;
         ids.splice(idx, 0, dragId);
-        await orgRenumber('/api/categories', ids, dragId, (destParent !== (dc.parentId ?? null)) ? { parentId: destParent } : {});
+        const patch = { ...secPatch };
+        if (destParent !== (dc.parentId ?? null)) patch.parentId = destParent;
+        await orgRenumber('/api/categories', ids, dragId, patch);
       }
     }
     await loadOrg();
   }
 
-  // Renumber a destination category, stamping categoryId onto the items that moved in.
-  async function orgRenumberItemsMulti(orderedIds, movedSet, destCat) {
+  // Renumber a destination category, stamping categoryId (and section) onto the items that moved in.
+  async function orgRenumberItemsMulti(orderedIds, movedSet, destCat, destSection) {
     for (let k = 0; k < orderedIds.length; k++) {
       const body = { order: k, childId: slug };
-      if (movedSet.has(orderedIds[k])) body.categoryId = destCat;
+      if (movedSet.has(orderedIds[k])) { body.categoryId = destCat; if (destSection) body.section = destSection; }
       await orgApi('/api/items?id=' + orderedIds[k], { method: 'PUT', body: JSON.stringify(body) });
     }
   }
@@ -1482,14 +1494,14 @@
     else if (targetType === 'item') { const ti = ORG_ITEMS.find(i => i.id === targetId); if (!ti) return; destCat = ti.categoryId; }
     else return;
     const destSection = (ORG_CATS.find(c => c.id === destCat) || {}).section;
-    const moving = dragIds.map(id => ORG_ITEMS.find(i => i.id === id)).filter(i => i && i.section === destSection).sort(orgByOrder);
+    const moving = dragIds.map(id => ORG_ITEMS.find(i => i.id === id)).filter(Boolean).sort(orgByOrder);
     if (!moving.length) return;
     const movingIds = moving.map(i => i.id), movingSet = new Set(movingIds);
     const ids = ORG_ITEMS.filter(i => i.categoryId === destCat).sort(orgByOrder).map(i => i.id).filter(id => !movingSet.has(id));
     let idx = ids.length;
     if (targetType === 'item') { idx = ids.indexOf(targetId); if (idx < 0) idx = ids.length; else if (zone === 'after') idx += 1; }
     ids.splice(idx, 0, ...movingIds);
-    await orgRenumberItemsMulti(ids, movingSet, destCat);
+    await orgRenumberItemsMulti(ids, movingSet, destCat, destSection);
     orgSelected.clear(); orgUpdateSelbar();
     await loadOrg();
   }
@@ -1585,8 +1597,7 @@
       const tops = ORG_CATS.filter(c => c.parentId == null).map(c => c.id);
       const allCollapsed = tops.length && tops.every(id => orgCollapsed.has(id));
       if (allCollapsed) orgCollapsed.clear(); else tops.forEach(id => orgCollapsed.add(id));
-      orgCollapseAll.textContent = allCollapsed ? '⊟ Collapse all' : '⊞ Expand all';
-      saveCollapsed(); renderOrgTree();
+      renderOrgTree();
     });
     const orgPage = document.getElementById('org-page'), orgOpenBtn = document.getElementById('org-open'), orgCloseBtn = document.getElementById('org-close');
     let orgLoaded = false;

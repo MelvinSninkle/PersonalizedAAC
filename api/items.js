@@ -54,7 +54,7 @@ async function update(req, res, db) {
   const id = parseInt(req.query.id, 10);
   if (!id) { res.status(400).json({ error: 'id required' }); return; }
   const childId = childIdOf(req);
-  const { label, categoryId, imageUrl, imageKey, soundUrl, soundKey, keepAspect, order, pinned } = req.body || {};
+  const { label, categoryId, imageUrl, imageKey, soundUrl, soundKey, keepAspect, order, pinned, section } = req.body || {};
 
   const current = await db`SELECT * FROM items WHERE id = ${id} AND child_id = ${childId}`;
   if (!current.length) { res.status(404).json({ error: 'Not found' }); return; }
@@ -63,6 +63,7 @@ async function update(req, res, db) {
   const rows = await db`
     UPDATE items SET
       label         = COALESCE(${label ?? null},      label),
+      section       = COALESCE(${section ?? null},    section),
       category_id   = ${categoryId === undefined ? old.category_id : categoryId},
       image_url     = COALESCE(${imageUrl ?? null},   image_url),
       image_key     = COALESCE(${imageKey ?? null},   image_key),
