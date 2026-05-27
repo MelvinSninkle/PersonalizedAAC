@@ -4009,7 +4009,10 @@
         const r = await apiFetch('/api/live?childId=' + encodeURIComponent(CHILD_ID));
         if (r.ok) {
           const d = await r.json();
-          if (d.cmd && Number(d.cmd.seq) > G.liveSeq) { G.liveSeq = Number(d.cmd.seq); applyCmd(d.cmd); }
+          // Baseline on first poll: ignore any command issued before the board came
+          // online, so a launch only ever runs when the tablet is actually here.
+          if (!G.liveInit) { G.liveInit = true; G.liveSeq = Number(d.cmdSeq) || 0; }
+          else if (d.cmd && Number(d.cmd.seq) > G.liveSeq) { G.liveSeq = Number(d.cmd.seq); applyCmd(d.cmd); }
         }
       } catch (_) {}
       // Heartbeat so the phone shows the tablet as "Connected".
