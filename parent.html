@@ -368,6 +368,13 @@
     <div class="note">Default animation: <strong>yellow flowers bursting</strong> 🌼 across the screen. Celebrations are the only place audio + animation reward Fletcher directly — no mode ever shows a wrong-answer cue.</div>
   </div>
 
+  <!-- DAILY SCHEDULE -->
+  <div class="section-label">Daily schedule</div>
+  <div class="panel">
+    <h2>Routine &amp; locations</h2>
+    <div id="daily-schedule"></div>
+  </div>
+
   <!-- SCHEDULED PROMPTS -->
   <div class="section-label">Scheduled prompts</div>
   <div class="panel">
@@ -550,6 +557,7 @@
   </div>
 </div>
 
+<script src="/schedule-editor.js"></script>
 <script>
 (() => {
   // ---- Child slug from /parent/<slug> ----
@@ -1102,6 +1110,7 @@
     applyCheersUI();
     renderSchedList();
     renderSaved();
+    if (window.__schedEditor) window.__schedEditor.refresh();
     const grp = document.getElementById('game-results-push'); if (grp) grp.checked = !!childSettings.gameResultsPush;
   }
   async function saveSettingsToServer(okMsg, msgElId) {
@@ -1115,6 +1124,9 @@
       if (msg) { msg.textContent = r.ok ? (okMsg || 'Saved ✓') : 'Save failed'; setTimeout(() => { msg.textContent = ''; }, 3000); }
     } catch (_) { if (msg) { msg.textContent = 'Offline — not saved'; setTimeout(() => { msg.textContent = ''; }, 3000); } }
   }
+  window.__schedEditor = (window.ScheduleEditor && document.getElementById('daily-schedule'))
+    ? ScheduleEditor.mount({ container: 'daily-schedule', slug, getSettings: () => childSettings, onSave: () => saveSettingsToServer() })
+    : null;
   loadChildSettings();
   const cheerSave = document.getElementById('cheer-save');
   if (cheerSave) cheerSave.addEventListener('click', async () => {

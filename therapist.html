@@ -288,8 +288,16 @@
       <div class="note">Notes attach to the session record so you and Andrew see the same longitudinal history. <a href="#" id="to-parent">Open parent dashboard →</a></div>
     </div>
   </div>
+
+  <!-- DAILY SCHEDULE -->
+  <div class="section-label">Daily schedule</div>
+  <div class="panel">
+    <h2>Routine &amp; locations</h2>
+    <div id="daily-schedule"></div>
+  </div>
 </div>
 
+<script src="/schedule-editor.js"></script>
 <script>
 (() => {
   const m = location.pathname.match(/^\/therapist\/([^\/]+)/);
@@ -301,6 +309,9 @@
     try { sessionStorage.removeItem('aacStayBoard'); } catch (_) {}
     window.location.href = '/u/' + encodeURIComponent(slug);
   });
+  if (window.ScheduleEditor && document.getElementById('daily-schedule')) {
+    ScheduleEditor.mount({ container: 'daily-schedule', slug });
+  }
   document.getElementById('to-parent').href = '/parent/' + encodeURIComponent(slug);
 
   // ---- Progress charts: tabbed, color-coded, gold-star for mastered ----
