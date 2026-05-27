@@ -195,6 +195,15 @@
   .org-page-body { flex:1 1 auto; overflow:auto; -webkit-overflow-scrolling:touch; padding:16px 18px 40px; }
   .org-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; align-items:start; }
   .org-grid > div { margin-bottom:0 !important; }
+  .saved-row { display:flex; flex-wrap:wrap; margin-bottom:6px; }
+  .saved-chip { display:inline-flex; align-items:center; background:#fff; border:1px solid var(--line); border-radius:999px; margin:0 8px 8px 0; overflow:hidden; }
+  .saved-go { border:none; background:var(--pink); color:#fff; font:inherit; font-weight:600; padding:8px 14px; cursor:pointer; }
+  .saved-go:hover { background:var(--pink-mid); }
+  .saved-del { border:none; background:transparent; color:var(--faint); font-size:15px; cursor:pointer; padding:6px 11px; }
+  .saved-del:hover { color:var(--pink-deep); }
+  .rb-step { display:flex; align-items:center; justify-content:space-between; gap:8px; background:#fff7fb; border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:6px; font-size:14px; }
+  .rb-step button { border:none; background:transparent; color:var(--faint); font-size:15px; cursor:pointer; padding:2px 6px; }
+  .hint { color:var(--muted); font-size:12.5px; line-height:1.45; }
 </style>
 </head>
 <body>
@@ -292,13 +301,14 @@
         <button class="btn ghost" data-config="Celebration">Configure</button>
       </div>
     </div>
-    <div class="mode" style="background:#fffdf5; border-style:dashed;">
-      <div class="icon" style="background:#fef9c3;">➕</div><span class="tag" style="color:var(--faint)">Coming soon</span>
+    <div class="mode" style="background:#fffdf5;">
+      <div class="icon" style="background:#fef9c3;">➕</div><span class="tag">Mode 6 · Routine</span>
       <h3>Routine Builder</h3>
       <p>Chain modes into a saved routine — e.g. warm-up slideshow → game → celebration.</p>
-      <div class="actions"><button class="btn ghost" disabled style="opacity:.6; cursor:default;">On the roadmap</button></div>
+      <div class="actions"><button class="btn primary" id="rb-open">Build a routine</button></div>
     </div>
   </div>
+  <div id="saved-launch" style="margin-top:6px;"></div>
 
   <!-- CURRENT MASTERY -->
   <div class="section-label">Current mastery</div>
@@ -490,7 +500,36 @@
     <div id="modal-body"></div>
     <div class="foot">
       <button class="btn ghost" id="modal-cancel">Cancel</button>
+      <button class="btn ghost" id="modal-save">Save</button>
       <button class="btn primary" id="modal-go">Start session</button>
+    </div>
+  </div>
+</div>
+
+<!-- ROUTINE BUILDER MODAL -->
+<div class="scrim" id="rb-scrim">
+  <div class="modal" style="max-width:520px;">
+    <button class="x" id="rb-x" aria-label="Close">×</button>
+    <h3 class="fred">Routine Builder</h3>
+    <p class="sub">Chain modes into one tap — they run in order on Fletcher's tablet.</p>
+    <div class="field"><label>Routine name</label><input id="rb-name" type="text" placeholder="e.g. Morning warm-up" maxlength="40"></div>
+    <div class="field"><label>Steps</label><div id="rb-steps"></div></div>
+    <div style="border:1px dashed var(--line); border-radius:12px; padding:12px; margin-bottom:4px;">
+      <div class="field" style="margin-bottom:8px;"><label>Add a step</label>
+        <select id="rb-mode">
+          <option value="learn_slideshow">Learn Slideshow</option>
+          <option value="exposure_slideshow">Exposure Slideshow</option>
+          <option value="self_paced">Matching Game</option>
+          <option value="celebration">Celebration</option>
+        </select>
+      </div>
+      <div id="rb-stepcfg"></div>
+      <button class="btn ghost" id="rb-add" style="width:100%;">+ Add step</button>
+    </div>
+    <div class="foot">
+      <button class="btn ghost" id="rb-cancel">Cancel</button>
+      <button class="btn ghost" id="rb-run">Run now</button>
+      <button class="btn primary" id="rb-save">Save routine</button>
     </div>
   </div>
 </div>
@@ -775,6 +814,148 @@
     else { goBtn.textContent = orig; goBtn.disabled = false; sub.textContent = "⚠ Fletcher's tablet isn't on the board right now. Open his app, then tap again."; }
   });
 
+  // ---- Saved games (presets) + routines — stored in child settings, re-launch in one tap ----
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function sendCmd(cmd) {
+    return fetch('/api/live?childId=' + encodeURIComponent(slug), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify(cmd),
+    }).then(r => r.ok).catch(() => false);
+  }
+  function toast(msg) {
+    let t = document.getElementById('mini-toast');
+    if (!t) {
+      t = document.createElement('div'); t.id = 'mini-toast';
+      t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:88vw;text-align:center;background:#1f2937;color:#fff;padding:11px 18px;border-radius:14px;font-size:14px;z-index:200;box-shadow:0 10px 30px rgba(0,0,0,.25);opacity:0;transition:opacity .2s;';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg; t.style.opacity = '1';
+    clearTimeout(t._h); t._h = setTimeout(() => { t.style.opacity = '0'; }, 2800);
+  }
+  async function launchSaved(cmd) {
+    const online = await tabletOnline();
+    const ok = await sendCmd(cmd);
+    if (!ok) toast('Could not reach the server — try again.');
+    else if (online) toast("Started on Fletcher's tablet ✓");
+    else toast("Sent — but the tablet isn't on the board. Open his app, then tap again.");
+  }
+
+  function renderSaved() {
+    const wrap = document.getElementById('saved-launch'); if (!wrap) return;
+    const presets = childSettings.gamePresets || [];
+    const routines = childSettings.routines || [];
+    let html = '';
+    if (presets.length) html += '<div class="section-label">Saved games</div><div class="saved-row">' + presets.map(p => savedChip('p', p.id, p.name)).join('') + '</div>';
+    if (routines.length) html += '<div class="section-label">Saved routines</div><div class="saved-row">' + routines.map(r => savedChip('r', r.id, r.name + ' · ' + (r.steps ? r.steps.length : 0) + ((r.steps && r.steps.length === 1) ? ' step' : ' steps'))).join('') + '</div>';
+    wrap.innerHTML = html;
+  }
+  function savedChip(type, id, label) {
+    return '<span class="saved-chip"><button class="saved-go" data-run="' + type + ':' + id + '">▶ ' + schEsc(label) + '</button>'
+      + '<button class="saved-del" data-del="' + type + ':' + id + '" aria-label="Delete">✕</button></span>';
+  }
+  document.getElementById('saved-launch').addEventListener('click', async (e) => {
+    const run = e.target.closest('[data-run]'); const del = e.target.closest('[data-del]');
+    if (run) {
+      const [type, id] = run.dataset.run.split(':');
+      if (type === 'p') { const p = (childSettings.gamePresets || []).find(x => x.id === id); if (p) launchSaved(p.cmd); }
+      else { const r = (childSettings.routines || []).find(x => x.id === id); if (r) launchSaved({ kind: 'cmd', action: 'start', steps: r.steps }); }
+    } else if (del) {
+      const [type, id] = del.dataset.del.split(':');
+      if (!confirm('Delete this saved ' + (type === 'p' ? 'game' : 'routine') + '?')) return;
+      if (type === 'p') childSettings.gamePresets = (childSettings.gamePresets || []).filter(x => x.id !== id);
+      else childSettings.routines = (childSettings.routines || []).filter(x => x.id !== id);
+      renderSaved(); saveSettingsToServer('Removed');
+    }
+  });
+  document.getElementById('modal-save').addEventListener('click', async () => {
+    const modeName = goBtn.dataset.modeName; if (!modeName) return;
+    const def = modeName.replace(' Game', '').replace('Matching', 'Match');
+    const name = (prompt('Name this saved game:', def) || '').trim(); if (!name) return;
+    childSettings.gamePresets = childSettings.gamePresets || [];
+    childSettings.gamePresets.push({ id: uid(), name: name.slice(0, 40), modeName, cmd: buildLaunchCmd(modeName) });
+    renderSaved(); await saveSettingsToServer();
+    sub.textContent = 'Saved as "' + name + '" ✓ — find it under Saved games.';
+  });
+
+  // ---- Routine Builder ----
+  const rbScrim = document.getElementById('rb-scrim');
+  let rbSteps = [];
+  const RB_MODE_LABEL = { learn_slideshow: 'Learn Slideshow', exposure_slideshow: 'Exposure Slideshow', self_paced: 'Matching Game', celebration: 'Celebration' };
+  function rbScopeLabel(scope) {
+    if (!scope || scope === 'all') return 'Everything';
+    if (scope.indexOf('cat:') === 0) { const c = LAUNCH_CATS.find(x => ('cat:' + x.id) === scope); return c ? c.label : 'Category'; }
+    return scope;
+  }
+  function rbCatSelect() {
+    const opts = ['<option value="all">Everything</option>'].concat(
+      ['people', 'nouns', 'verbs'].reduce((acc, sec) => acc.concat(
+        LAUNCH_CATS.filter(c => c.section === sec).sort((a, b) => (a.order - b.order) || (a.id - b.id)).map(c => '<option value="cat:' + c.id + '">' + schEsc(c.label) + '</option>')
+      ), [])
+    ).join('');
+    return '<select id="rb-cat">' + opts + '</select>';
+  }
+  function rbStepCfg() {
+    const mode = document.getElementById('rb-mode').value;
+    const box = document.getElementById('rb-stepcfg');
+    if (mode === 'celebration') { box.innerHTML = '<p class="hint" style="margin:2px 0 10px;">Plays the flowers + your recorded cheer.</p>'; return; }
+    let html = '<div class="field" style="margin-bottom:8px;"><label>Category</label>' + rbCatSelect() + '</div>';
+    if (mode === 'self_paced') html += '<div class="field" style="margin-bottom:8px;"><label>Choices</label><select id="rb-choices"><option value="3">3</option><option value="2">2</option><option value="4">4</option></select></div>';
+    else html += '<div class="field" style="margin-bottom:8px;"><label>Seconds per image</label><select id="rb-secs"><option value="4">4s</option><option value="5" selected>5s</option><option value="6">6s</option><option value="8">8s</option></select></div>';
+    html += '<div class="field" style="margin-bottom:8px;"><label>Duration (minutes)</label><select id="rb-mins"><option value="2">2</option><option value="3" selected>3</option><option value="5">5</option><option value="10">10</option></select></div>';
+    box.innerHTML = html;
+  }
+  function rbRenderSteps() {
+    const el = document.getElementById('rb-steps');
+    if (!rbSteps.length) { el.innerHTML = '<p class="hint" style="margin:0 0 6px;">No steps yet — add one below.</p>'; return; }
+    el.innerHTML = rbSteps.map((s, i) => {
+      const bits = [RB_MODE_LABEL[s.mode] || s.mode];
+      if (s.mode !== 'celebration') { bits.push(rbScopeLabel(s.scope)); if (s.limitMin) bits.push(s.limitMin + ' min'); }
+      return '<div class="rb-step"><span>' + (i + 1) + '. ' + schEsc(bits.join(' · ')) + '</span><button data-rmstep="' + i + '" aria-label="Remove">✕</button></div>';
+    }).join('');
+  }
+  function openRoutineBuilder() {
+    rbSteps = [];
+    document.getElementById('rb-name').value = '';
+    document.getElementById('rb-mode').value = 'learn_slideshow';
+    rbStepCfg(); rbRenderSteps();
+    rbScrim.classList.add('open');
+  }
+  function closeRoutineBuilder() { rbScrim.classList.remove('open'); }
+  document.getElementById('rb-open').addEventListener('click', openRoutineBuilder);
+  document.getElementById('rb-mode').addEventListener('change', rbStepCfg);
+  document.getElementById('rb-add').addEventListener('click', () => {
+    const mode = document.getElementById('rb-mode').value;
+    const music = (document.getElementById('cheer-music') || {}).value || '';
+    const step = { mode, music };
+    if (mode !== 'celebration') {
+      const cat = document.getElementById('rb-cat'); step.scope = cat ? cat.value : 'all';
+      const mins = document.getElementById('rb-mins'); step.limitMin = mins ? parseInt(mins.value, 10) : 3;
+      if (mode === 'self_paced') { const ch = document.getElementById('rb-choices'); step.choices = ch ? parseInt(ch.value, 10) : 3; }
+      else { const sc = document.getElementById('rb-secs'); step.secondsPerImage = sc ? parseInt(sc.value, 10) : 5; }
+    }
+    rbSteps.push(step); rbRenderSteps();
+  });
+  document.getElementById('rb-steps').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-rmstep]'); if (!b) return;
+    rbSteps.splice(parseInt(b.dataset.rmstep, 10), 1); rbRenderSteps();
+  });
+  document.getElementById('rb-save').addEventListener('click', async () => {
+    const name = (document.getElementById('rb-name').value || '').trim();
+    if (!name) { document.getElementById('rb-name').focus(); return; }
+    if (!rbSteps.length) { toast('Add at least one step first.'); return; }
+    childSettings.routines = childSettings.routines || [];
+    childSettings.routines.push({ id: uid(), name: name.slice(0, 40), steps: rbSteps.slice() });
+    renderSaved(); await saveSettingsToServer();
+    closeRoutineBuilder(); toast('Routine saved ✓');
+  });
+  document.getElementById('rb-run').addEventListener('click', () => {
+    if (!rbSteps.length) { toast('Add at least one step first.'); return; }
+    launchSaved({ kind: 'cmd', action: 'start', steps: rbSteps.slice() });
+  });
+  document.getElementById('rb-x').addEventListener('click', closeRoutineBuilder);
+  document.getElementById('rb-cancel').addEventListener('click', closeRoutineBuilder);
+  rbScrim.addEventListener('click', (e) => { if (e.target === rbScrim) closeRoutineBuilder(); });
+
   // ---- Reference images (steer AI tile generation) ----
   const refGrid = document.getElementById('ref-grid');
   const refMsg = document.getElementById('ref-msg');
@@ -866,6 +1047,7 @@
     } catch (_) {}
     applyCheersUI();
     renderSchedList();
+    renderSaved();
     const grp = document.getElementById('game-results-push'); if (grp) grp.checked = !!childSettings.gameResultsPush;
   }
   async function saveSettingsToServer(okMsg, msgElId) {

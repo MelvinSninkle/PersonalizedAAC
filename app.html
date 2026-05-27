@@ -3751,7 +3751,7 @@
   }
 
   const G = { queue: [], i: 0, misses: 0, target: null, settings: null, attempts: [], session: null, locked: false,
-              facilitated: false, standby: false, poll: null, liveSeq: 0, limitTimer: null, ended: false, running: false, sequence: false };
+              facilitated: false, standby: false, poll: null, liveSeq: 0, limitTimer: null, ended: false, running: false, sequence: false, routine: false };
   const gMusic = () => document.getElementById('game-music');
   const gVoice = () => document.getElementById('game-voice');
   function gShuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -3806,7 +3806,7 @@
       if (opts.facilitated) publishState({ status: 'error', message: msg });
       return;
     }
-    G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true; G.sequence = !!opts.sequence;
+    G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true; G.sequence = !!opts.sequence; G.routine = !!opts.routine;
     G.queue = gShuffle(items.slice()); G.i = 0; G.attempts = []; G.locked = false;
     G.session = { mode: G.facilitated ? 'facilitated' : 'self_paced', category: scope, startedAt: new Date().toISOString() };
     document.getElementById('game-setup').classList.remove('show');
@@ -3922,17 +3922,20 @@
     G.facilitated = false; G.standby = false; G.target = null;
     const continueSeq = G.sequence && gameSeq.length;
     G.sequence = false;
-    if (continueSeq) setTimeout(() => showGameNudgeCard("Let's do another game!", null), 700);
+    const inRoutine = G.routine; G.routine = false;
+    if (inRoutine && ROUTINE.active) routineNext();   // game step finished → next routine step
+    else if (continueSeq) setTimeout(() => showGameNudgeCard("Let's do another game!", null), 700);
   }
 
   // ===== Slideshow modes (Learn / Exposure) — passive, watch-only =====
-  const SLIDE = { running: false, items: [], i: 0, timer: null, limitTimer: null, labelStyle: 'plain' };
+  const SLIDE = { running: false, items: [], i: 0, timer: null, limitTimer: null, labelStyle: 'plain', routine: false };
   async function startSlideshow(opts) {
     if (SLIDE.running || G.running) return;
     const items = (await gatherPlayable(opts.scope || 'all')).filter(x => x.imageKey && x.label);
-    if (!items.length) return;
+    if (!items.length) { if (opts.routine) routineNext(); return; }
     SLIDE.running = true; SLIDE.items = gShuffle(items.slice()); SLIDE.i = 0;
     SLIDE.labelStyle = opts.labelStyle === 'first_person' ? 'first_person' : 'plain';
+    SLIDE.routine = !!opts.routine;
     let o = document.getElementById('slide-overlay');
     if (!o) {
       o = document.createElement('div'); o.id = 'slide-overlay';
@@ -3941,7 +3944,7 @@
         + '<div id="slide-label" style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;color:#fff;font-size:clamp(28px,6vw,64px);font-weight:700;margin-top:26px;text-align:center;padding:0 24px;line-height:1.2;"></div>'
         + '<button id="slide-stop" aria-label="Stop" style="position:absolute;top:16px;right:16px;width:50px;height:50px;border-radius:50%;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:24px;cursor:pointer;">✕</button>';
       document.body.appendChild(o);
-      o.querySelector('#slide-stop').addEventListener('click', stopSlideshow);
+      o.querySelector('#slide-stop').addEventListener('click', () => stopSlideshow({ manual: true }));
     }
     o.style.display = 'flex';
     const m = gMusic(), s = gameSettings();
@@ -3958,19 +3961,23 @@
     };
     await showOne();
     SLIDE.timer = setInterval(showOne, secs * 1000);
-    if (opts.limitMin && opts.limitMin > 0) SLIDE.limitTimer = setTimeout(stopSlideshow, opts.limitMin * 60000);
+    if (opts.limitMin && opts.limitMin > 0) SLIDE.limitTimer = setTimeout(() => stopSlideshow(), opts.limitMin * 60000);
   }
-  function stopSlideshow() {
+  function stopSlideshow(opts = {}) {
+    if (!SLIDE.running) return;
     SLIDE.running = false;
     if (SLIDE.timer) { clearInterval(SLIDE.timer); SLIDE.timer = null; }
     if (SLIDE.limitTimer) { clearTimeout(SLIDE.limitTimer); SLIDE.limitTimer = null; }
     const o = document.getElementById('slide-overlay'); if (o) o.style.display = 'none';
     const m = gMusic(); m.pause(); m.loop = false; try { m.currentTime = 0; } catch (_) {}
     gVoice().pause();
+    const wasRoutine = SLIDE.routine; SLIDE.routine = false;
+    if (opts.manual) abortRoutine();
+    else if (wasRoutine && ROUTINE.active) routineNext();   // time limit reached → next step
   }
 
   // Standalone celebration (also used at game end) — flowers + recorded cheer.
-  async function playCelebration() {
+  async function playCelebration(onDone) {
     if (G.running) return;
     const cel = document.getElementById('game-celebrate'); if (!cel) return;
     const s = gameSettings(), phrases = s.phrases && s.phrases.length ? s.phrases : DEFAULT_REWARDS;
@@ -3978,7 +3985,36 @@
     document.getElementById('game-celebrate-msg').textContent = phrase;
     cel.classList.add('show'); spawnFlowers(cel);
     const url = await rewardAudioURL(phrase); if (url) { const v = gVoice(); v.src = url; v.play().catch(() => {}); }
-    setTimeout(() => cel.classList.remove('show'), 4400);
+    setTimeout(() => { cel.classList.remove('show'); if (typeof onDone === 'function') onDone(); }, 4400);
+  }
+
+  // ===== Routines — chain modes (e.g. slideshow → game → celebration) in order =====
+  const ROUTINE = { active: false, steps: [], i: 0 };
+  function abortRoutine() { ROUTINE.active = false; ROUTINE.steps = []; ROUTINE.i = 0; }
+  function runRoutine(steps) {
+    if (G.running || SLIDE.running) return;
+    ROUTINE.active = true; ROUTINE.steps = (steps || []).slice(0, 12); ROUTINE.i = 0;
+    runRoutineStep();
+  }
+  function routineNext() {
+    if (!ROUTINE.active) return;
+    ROUTINE.i++;
+    if (ROUTINE.i >= ROUTINE.steps.length) { abortRoutine(); return; }
+    setTimeout(runRoutineStep, 900);
+  }
+  function runRoutineStep() {
+    if (!ROUTINE.active) return;
+    const step = ROUTINE.steps[ROUTINE.i] || {};
+    const mode = step.mode || 'self_paced';
+    if (typeof step.music === 'string') saveGameSettings({ music: step.music });
+    if (mode === 'learn_slideshow' || mode === 'exposure_slideshow') {
+      const limitMin = (Number.isFinite(step.limitMin) && step.limitMin > 0) ? step.limitMin : 3;   // need an end so the routine advances
+      startSlideshow({ scope: step.scope || 'all', secondsPerImage: step.secondsPerImage || 5, limitMin, labelStyle: mode === 'exposure_slideshow' ? 'first_person' : 'plain', routine: true });
+    } else if (mode === 'celebration') {
+      playCelebration(() => routineNext());
+    } else {
+      startGame(step.scope || 'all', step.choices || 3, { facilitated: false, limitMin: Number.isFinite(step.limitMin) ? step.limitMin : undefined, routine: true });
+    }
   }
 
   // ---- Facilitated mode: phone (therapist) ↔ tablet over /api/live ----
@@ -4034,7 +4070,8 @@
     const a = cmd.action;
     if (a === 'start') {
       // Start a phone-driven activity from anywhere — even if the iPad is just on the board.
-      if (G.running || SLIDE.running) return;        // one activity at a time
+      if (G.running || SLIDE.running || ROUTINE.active) return;        // one activity at a time
+      if (Array.isArray(cmd.steps) && cmd.steps.length) { runRoutine(cmd.steps); return; }
       const mode = cmd.mode || 'facilitated';        // back-compat: therapist sends no mode → facilitated
       const range = (cmd.from || cmd.to) ? { from: cmd.from || 0, to: cmd.to || 0 } : null;
       const limitMin = Number.isFinite(cmd.limitMin) ? cmd.limitMin : undefined;
@@ -4053,7 +4090,8 @@
       return;
     }
     if (a === 'end') {
-      if (SLIDE.running) { stopSlideshow(); return; }
+      abortRoutine();
+      if (SLIDE.running) { stopSlideshow({ manual: true }); return; }
       if (G.running && !G.ended) endGame(); else stopGame();
       return;
     }
