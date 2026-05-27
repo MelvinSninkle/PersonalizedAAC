@@ -253,6 +253,14 @@
     <div class="stat"><div class="n">38<span style="font-size:16px"> min</span></div><div class="k">Exposure / slideshow time</div><div class="trend flat">— steady</div></div>
   </div>
 
+  <!-- PLAY REQUEST BANNER -->
+  <div id="play-banner" style="display:none; align-items:center; gap:12px; background:#ecfdf5; border:1px solid #6ee7b7; border-radius:14px; padding:13px 16px; margin:18px 0 0;">
+    <span style="font-size:22px;">🎮</span>
+    <strong style="flex:1; color:#065f46; font-size:15px;">Fletcher wants to play!</strong>
+    <button class="btn primary" id="play-banner-go">Choose a game</button>
+    <button id="play-banner-x" aria-label="Dismiss" style="border:none; background:transparent; color:#6b7280; font-size:18px; cursor:pointer;">✕</button>
+  </div>
+
   <!-- MODE LAUNCHER -->
   <div class="section-label">Start a mode</div>
   <div class="modes" id="modes">
@@ -955,6 +963,36 @@
   document.getElementById('rb-x').addEventListener('click', closeRoutineBuilder);
   document.getElementById('rb-cancel').addEventListener('click', closeRoutineBuilder);
   rbScrim.addEventListener('click', (e) => { if (e.target === rbScrim) closeRoutineBuilder(); });
+
+  // ---- "Fletcher wants to play" — poll for his board ping, show a banner ----
+  const playBanner = document.getElementById('play-banner');
+  let _seenPlayReq = 0;
+  try { _seenPlayReq = parseInt(localStorage.getItem('aacSeenPlayReq') || '0', 10) || 0; } catch (_) {}
+  async function pollPlayRequest() {
+    try {
+      const r = await fetch('/api/play-request?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d.at) return;
+      const ts = new Date(d.at).getTime();
+      if ((d.ageSec == null || d.ageSec < 180) && ts > _seenPlayReq) {
+        playBanner.dataset.ts = String(ts);
+        playBanner.style.display = 'flex';
+      }
+    } catch (_) {}
+  }
+  function dismissPlayBanner() {
+    _seenPlayReq = parseInt(playBanner.dataset.ts || '0', 10) || Date.now();
+    try { localStorage.setItem('aacSeenPlayReq', String(_seenPlayReq)); } catch (_) {}
+    playBanner.style.display = 'none';
+  }
+  document.getElementById('play-banner-x').addEventListener('click', dismissPlayBanner);
+  document.getElementById('play-banner-go').addEventListener('click', () => {
+    dismissPlayBanner();
+    document.getElementById('modes').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  pollPlayRequest();
+  setInterval(pollPlayRequest, 20000);
 
   // ---- Reference images (steer AI tile generation) ----
   const refGrid = document.getElementById('ref-grid');

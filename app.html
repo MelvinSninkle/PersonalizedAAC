@@ -837,6 +837,7 @@
     <button id="import-btn" class="edit-only" style="display:none">Import</button>
     <button id="wipe-btn" class="edit-only" style="display:none">Wipe All</button>
     <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
+    <button id="play-request-btn" title="Tell a grown-up you want to play" style="background:#16a34a;color:#fff;border:none;border-radius:999px;padding:9px 16px;font-weight:700;cursor:pointer;">🙋 Play with me</button>
     <button id="login-btn" aria-label="Login" title="Login">🔒</button>
   </div>
 </header>
@@ -4131,6 +4132,19 @@
   }
 
   // ---- Game UI wiring ----
+  // Fletcher's "Play with me" → ping the parent's phone (push) + dashboard banner.
+  let _playReqAt = 0;
+  const playReqBtn = document.getElementById('play-request-btn');
+  if (playReqBtn) playReqBtn.addEventListener('click', async () => {
+    if (Date.now() - _playReqAt < 45000) return;   // gentle cooldown so it can't be spammed
+    _playReqAt = Date.now();
+    const orig = playReqBtn.dataset.label || playReqBtn.textContent;
+    playReqBtn.dataset.label = orig;
+    playReqBtn.textContent = '💌 Told them!';
+    try { await apiFetch('/api/play-request?childId=' + encodeURIComponent(CHILD_ID), { method: 'POST' }); } catch (_) {}
+    setTimeout(() => { playReqBtn.textContent = playReqBtn.dataset.label; }, 4000);
+  });
+
   document.getElementById('play-btn').addEventListener('click', async () => {
     document.getElementById('game-setup-error').textContent = '';
     const cur = gameSettings();
