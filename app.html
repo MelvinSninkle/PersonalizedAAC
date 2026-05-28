@@ -195,8 +195,7 @@
     display: flex; flex-direction: column;
     padding-bottom: 0;
   }
-  /* Needs tiles wider-than-tall so the strip is ~half its previous height. */
-  .needs-section .tile-square { aspect-ratio: 1.5; }
+  /* Needs labels are tight; tiles stay square (.tile-square's default aspect-ratio:1). */
   .needs-section .tile-label { font-size: 11px; padding: 1px 2px 0; min-height: 0; line-height: 1.15; }
   /* Stay one row tall; overflow scrolls sideways. Tile width = container/N
      where N = --needs-cols, set in JS to the sum of visible main sections. */
