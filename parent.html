@@ -557,6 +557,51 @@
   </div>
 </div>
 
+<!-- TILE ADDER MODAL (full experience) -->
+<div class="scrim" id="tile-scrim">
+  <div class="modal" style="max-width:460px;max-height:90vh;overflow:auto;">
+    <button class="x" id="tile-x" aria-label="Close">×</button>
+    <h3 class="fred" id="tile-title">Add a tile</h3>
+    <p class="sub" id="tile-sub"></p>
+    <div class="field"><label>Label</label><input id="tile-label" type="text" maxlength="60" placeholder="e.g. Mom"></div>
+    <div style="border:1px solid #f3c6dd;background:#fff5fa;border-radius:12px;padding:12px;margin-bottom:14px;">
+      <div style="font-weight:700;color:var(--pink-deep);margin-bottom:4px;">✨ Make from a photo</div>
+      <p class="hint" style="margin:0 0 8px;">Type a label, pick a style, then choose a photo — we'll create the artwork.</p>
+      <div class="field" style="margin-bottom:8px;"><label>Art style</label>
+        <select id="tile-style">
+          <option value="Pixar-style 3D animated render">3D Animated</option>
+          <option value="flat picture-book illustration">Picture Book</option>
+          <option value="soft watercolor illustration">Watercolor</option>
+          <option value="gentle soft storybook illustration">Soft Storybook</option>
+          <option value="needle-felted wool craft">Felted</option>
+        </select>
+      </div>
+      <input type="file" id="tile-photo" accept="image/*" capture="environment" style="display:none;">
+      <button class="btn primary" id="tile-magic" style="width:100%;">📷 Choose photo &amp; make it</button>
+      <p class="hint" id="tile-magic-status" style="margin:8px 0 0;">—</p>
+      <img id="tile-preview" alt="" style="display:none;width:100%;max-width:180px;border-radius:12px;margin-top:8px;">
+    </div>
+    <div class="field"><label>Or upload an image</label><input type="file" id="tile-image" accept="image/*"></div>
+    <div id="tile-voice">
+      <label style="display:block;font-size:12px;font-weight:700;color:var(--muted);margin:0 0 6px;text-transform:uppercase;letter-spacing:.04em;">Voice / sound</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select id="tile-emotion" style="flex:1;min-width:120px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;">
+          <option value="default">Default voice</option><option value="happy">Happy</option><option value="sad">Sad</option><option value="excited">Excited</option><option value="calm">Calm</option><option value="whisper">Whisper</option>
+        </select>
+        <button class="btn ghost" id="tile-gen-audio">Generate audio</button>
+      </div>
+      <input type="file" id="tile-sound" accept="audio/*" style="margin-top:8px;width:100%;box-sizing:border-box;">
+      <p class="hint" id="tile-sound-status" style="margin:6px 0 0;">No sound yet</p>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:12px;"><input type="checkbox" id="tile-keep-aspect" style="width:auto;"> Keep original image ratio (don't crop)</label>
+    <p class="hint" id="tile-error" style="color:#dc2626;margin:8px 0 0;"></p>
+    <div class="foot">
+      <button class="btn ghost" id="tile-cancel">Cancel</button>
+      <button class="btn primary" id="tile-save">Save</button>
+    </div>
+  </div>
+</div>
+
 <script src="/schedule-editor.js"></script>
 <script>
 (() => {
@@ -988,6 +1033,120 @@
   document.getElementById('rb-cancel').addEventListener('click', closeRoutineBuilder);
   rbScrim.addEventListener('click', (e) => { if (e.target === rbScrim) closeRoutineBuilder(); });
 
+  // ---- Full adder for tiles, categories, and subcategories (label + AI-from-photo / upload + voice for tiles) ----
+  const tileScrim = document.getElementById('tile-scrim');
+  let tilePendingImage = null, tilePendingSound = null, tileTarget = null;
+  function tileSetErr(t) { const e = document.getElementById('tile-error'); if (e) e.textContent = t || ''; }
+  function openAdder(opts) {
+    const kind = opts.kind || 'item';
+    tileTarget = { kind, section: opts.section, catId: opts.catId || null, parentId: opts.parentId || null };
+    tilePendingImage = null; tilePendingSound = null;
+    const cat = opts.catId ? ORG_CATS.find(c => c.id === opts.catId) : null;
+    const parent = opts.parentId ? ORG_CATS.find(c => c.id === opts.parentId) : null;
+    const sec = SECT_LABEL[opts.section] || opts.section;
+    const title = kind === 'item' ? 'Add a tile' : (kind === 'subcategory' ? 'Add a subcategory' : 'Add a category');
+    const sub = kind === 'item' ? (cat ? sec + ' · ' + cat.label : sec)
+              : kind === 'subcategory' ? (parent ? sec + ' · inside ' + parent.label : sec)
+              : sec;
+    const ph = kind === 'item' ? 'e.g. Mom' : kind === 'subcategory' ? 'e.g. Therapists' : 'e.g. Family';
+    document.getElementById('tile-title').textContent = title;
+    document.getElementById('tile-sub').textContent = sub;
+    document.getElementById('tile-label').placeholder = ph;
+    document.getElementById('tile-save').textContent = kind === 'item' ? 'Save tile' : (kind === 'subcategory' ? 'Save subcategory' : 'Save category');
+    document.getElementById('tile-voice').style.display = (kind === 'item') ? '' : 'none';     // categories don't speak
+    ['tile-label', 'tile-image', 'tile-sound', 'tile-photo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    document.getElementById('tile-keep-aspect').checked = false;
+    const prev = document.getElementById('tile-preview'); prev.style.display = 'none'; prev.removeAttribute('src');
+    document.getElementById('tile-magic-status').textContent = '—';
+    document.getElementById('tile-sound-status').textContent = 'No sound yet';
+    tileSetErr('');
+    try { const st = localStorage.getItem('aacStyle'); if (st) document.getElementById('tile-style').value = st; } catch (_) {}
+    tileScrim.classList.add('open');
+  }
+  function closeTileAdder() { tileScrim.classList.remove('open'); }
+  async function tileUpload(blob, kind, ext, type) {
+    const r = await fetch('/api/upload?kind=' + kind + '&ext=' + ext, { method: 'POST', headers: { 'Content-Type': type }, credentials: 'same-origin', body: blob });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || ('upload ' + r.status));
+    return d.key;
+  }
+  function tileShowPreview(blob) {
+    const prev = document.getElementById('tile-preview'); const u = URL.createObjectURL(blob);
+    prev.src = u; prev.style.display = 'block'; prev.addEventListener('load', () => URL.revokeObjectURL(u), { once: true });
+  }
+  document.getElementById('tile-style').addEventListener('change', (e) => { try { localStorage.setItem('aacStyle', e.target.value); } catch (_) {} });
+  document.getElementById('tile-magic').addEventListener('click', () => {
+    const label = document.getElementById('tile-label').value.trim();
+    if (!label) { tileSetErr('Type a label first'); document.getElementById('tile-label').focus(); return; }
+    tileSetErr(''); document.getElementById('tile-photo').click();
+  });
+  document.getElementById('tile-photo').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+    const label = document.getElementById('tile-label').value.trim();
+    const style = document.getElementById('tile-style').value;
+    const emotion = document.getElementById('tile-emotion').value;
+    const statusEl = document.getElementById('tile-magic-status');
+    const btn = document.getElementById('tile-magic'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Working…';
+    tileSetErr('');
+    try {
+      statusEl.textContent = '🎨 Creating the artwork… (~20–40s)';
+      const photo = await downscale(file, 1024, 0.85);
+      const ir = await fetch('/api/generate-image?label=' + encodeURIComponent(label) + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(slug), { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
+      if (!ir.ok) { const d = await ir.text(); throw new Error('Image — ' + d.slice(0, 160)); }
+      tilePendingImage = await ir.blob(); tileShowPreview(tilePendingImage);
+      statusEl.textContent = '🔊 Making the voice…';
+      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: label, emotion }) });
+      if (tr.ok) { tilePendingSound = await tr.blob(); document.getElementById('tile-sound-status').textContent = 'AI voice ready ✓'; }
+      statusEl.textContent = '✅ Ready — tap Save tile.';
+    } catch (err) { statusEl.textContent = '—'; tileSetErr('Could not make the tile: ' + (err.message || err)); }
+    finally { btn.disabled = false; btn.textContent = pv; }
+  });
+  document.getElementById('tile-image').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    try { tilePendingImage = await downscale(file, 1024, 0.85); tileShowPreview(tilePendingImage); document.getElementById('tile-magic-status').textContent = 'Image selected ✓'; }
+    catch (_) { tileSetErr('Could not read that image'); }
+  });
+  document.getElementById('tile-gen-audio').addEventListener('click', async () => {
+    const label = document.getElementById('tile-label').value.trim();
+    if (!label) { tileSetErr('Type a label first'); return; }
+    const emotion = document.getElementById('tile-emotion').value;
+    const st = document.getElementById('tile-sound-status'); const btn = document.getElementById('tile-gen-audio');
+    btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Generating…'; st.textContent = 'Generating audio…'; tileSetErr('');
+    try {
+      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: label, emotion }) });
+      if (!tr.ok) { const d = await tr.text(); throw new Error(d.slice(0, 160)); }
+      tilePendingSound = await tr.blob(); st.textContent = 'Voice ready ✓';
+      try { const a = new Audio(URL.createObjectURL(tilePendingSound)); a.play().catch(() => {}); } catch (_) {}
+    } catch (err) { st.textContent = 'No sound yet'; tileSetErr('Generate failed: ' + (err.message || err)); }
+    finally { btn.disabled = false; btn.textContent = pv; }
+  });
+  document.getElementById('tile-sound').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) { tilePendingSound = f; document.getElementById('tile-sound-status').textContent = 'Sound selected ✓'; } });
+  document.getElementById('tile-save').addEventListener('click', async () => {
+    const label = document.getElementById('tile-label').value.trim();
+    if (!label) { tileSetErr('Please enter a label'); return; }
+    if (!tilePendingImage) { tileSetErr('Add a picture — make one from a photo or upload an image'); return; }
+    const btn = document.getElementById('tile-save'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Saving…'; tileSetErr('');
+    try {
+      const imageKey = await tileUpload(tilePendingImage, 'image', 'jpg', 'image/jpeg');
+      const keepAspect = document.getElementById('tile-keep-aspect').checked;
+      if (tileTarget.kind === 'item') {
+        let soundKey = null;
+        if (tilePendingSound) { const isWav = (tilePendingSound.type || '').indexOf('wav') >= 0; soundKey = await tileUpload(tilePendingSound, 'sound', isWav ? 'wav' : 'mp3', tilePendingSound.type || 'audio/mpeg'); }
+        await orgApi('/api/items', { method: 'POST', body: JSON.stringify({ section: tileTarget.section, categoryId: tileTarget.catId, label, imageKey, soundKey, keepAspect, childId: slug }) });
+      } else {
+        const body = { section: tileTarget.section, label, imageKey, keepAspect, childId: slug };
+        if (tileTarget.kind === 'subcategory' && tileTarget.parentId) body.parentId = tileTarget.parentId;
+        await orgApi('/api/categories', { method: 'POST', body: JSON.stringify(body) });
+      }
+      closeTileAdder();
+      await loadOrg();
+    } catch (err) { tileSetErr('Save failed: ' + (err.message || err)); }
+    finally { btn.disabled = false; btn.textContent = pv; }
+  });
+  document.getElementById('tile-x').addEventListener('click', closeTileAdder);
+  document.getElementById('tile-cancel').addEventListener('click', closeTileAdder);
+  tileScrim.addEventListener('click', (e) => { if (e.target === tileScrim) closeTileAdder(); });
+
   // ---- "Fletcher wants to play" — poll for his board ping, show a banner ----
   const playBanner = document.getElementById('play-banner');
   let _seenPlayReq = 0;
@@ -1354,8 +1513,8 @@
   let orgCollapseInit = false;                    // collapse everything the first time it loads
   function orgSyncCollapseLabel() {
     const b = document.getElementById('org-collapse-all'); if (!b) return;
-    const tops = ORG_CATS.filter(c => c.parentId == null).map(c => c.id);
-    const allCollapsed = tops.length && tops.every(id => orgCollapsed.has(id));
+    const ids = ORG_CATS.map(c => c.id);
+    const allCollapsed = ids.length && ids.every(id => orgCollapsed.has(id));
     b.textContent = allCollapsed ? '⊞ Expand all' : '⊟ Collapse all';
   }
   function orgCatCount(catId) {
@@ -1379,7 +1538,7 @@
     try {
       const d = await orgApi('/api/sync?childId=' + encodeURIComponent(slug));
       ORG_CATS = d.categories || []; ORG_ITEMS = d.items || [];
-      if (!orgCollapseInit) { orgCollapseInit = true; orgCollapsed = new Set(ORG_CATS.filter(c => c.parentId == null).map(c => c.id)); }
+      if (!orgCollapseInit) { orgCollapseInit = true; orgCollapsed = new Set(ORG_CATS.map(c => c.id)); }
       renderOrgTree(); st.textContent = ORG_CATS.length + ' categories · ' + ORG_ITEMS.length + ' tiles';
     } catch (err) { st.textContent = err.message; }
   }
@@ -1415,10 +1574,17 @@
             '<span class="org-count">' + orgCatCount(cat.id) + '</span>' + orgBtns('cat', cat.id) + '</div>' +
           '<div class="org-cat-body" data-cat-body="' + cat.id + '"' + (collapsed ? ' style="display:none;"' : '') + '>' +
             orgItemsHTML(cat.id) +
-            subs.map(s => '<div style="margin-left:18px;border-left:2px solid var(--line);padding-left:8px;margin-top:4px;">' +
-              '<div class="org-drag-row" data-type="cat" data-id="' + s.id + '" data-parent="' + cat.id + '" data-section="' + sec + '" style="font-size:14px;"><span class="org-grip">⠿</span><span style="margin-right:2px;">↳</span>' + orgThumb(s.imageKey) + '<span style="flex:1;">' + schEsc(s.label) + '</span>' + orgBtns('cat', s.id) + '</div>' +
-              orgItemsHTML(s.id) +
-              '<div style="margin:4px 0 2px 22px;"><button class="btn ghost" data-org="add-item" data-cat="' + s.id + '" data-section="' + sec + '">+ tile</button></div></div>').join('') +
+            subs.map(s => {
+              const scol = orgCollapsed.has(s.id);
+              return '<div class="org-cat" data-cat-wrap="' + s.id + '" style="margin-left:18px;border-left:2px solid var(--line);padding-left:8px;margin-top:4px;">' +
+                '<div class="org-drag-row" data-type="cat" data-id="' + s.id + '" data-parent="' + cat.id + '" data-section="' + sec + '" style="font-size:14px;">' +
+                  '<button class="org-caret" data-org="collapse" data-id="' + s.id + '" aria-label="Collapse">' + (scol ? '▸' : '▾') + '</button>' +
+                  '<span class="org-grip">⠿</span><span style="margin-right:2px;">↳</span>' + orgThumb(s.imageKey) + '<span style="flex:1;">' + schEsc(s.label) + '</span>' +
+                  '<span class="org-count">' + orgCatCount(s.id) + '</span>' + orgBtns('cat', s.id) + '</div>' +
+                '<div class="org-cat-body" data-cat-body="' + s.id + '"' + (scol ? ' style="display:none;"' : '') + '>' +
+                  orgItemsHTML(s.id) +
+                  '<div style="margin:4px 0 2px 22px;"><button class="btn ghost" data-org="add-item" data-cat="' + s.id + '" data-section="' + sec + '">+ tile</button></div></div></div>';
+            }).join('') +
             '<div style="margin:6px 0 2px 22px;"><button class="btn ghost" data-org="add-item" data-cat="' + cat.id + '" data-section="' + sec + '">+ tile</button> <button class="btn ghost" data-org="add-sub" data-cat="' + cat.id + '" data-section="' + sec + '">+ subcategory</button></div>' +
           '</div>' +
           '</div>';
@@ -1440,11 +1606,11 @@
       orgSyncCollapseLabel();
       return;
     }
+    if (act === 'add-item') { openAdder({ kind: 'item', section: el.dataset.section, catId: Number(el.dataset.cat) }); return; }
+    if (act === 'add-cat')  { openAdder({ kind: 'category', section: el.dataset.section }); return; }
+    if (act === 'add-sub')  { openAdder({ kind: 'subcategory', section: el.dataset.section, parentId: Number(el.dataset.cat) }); return; }
     try {
-      if (act === 'add-cat') { const l = prompt('New category in "' + el.dataset.section + '":'); if (!l) return; await orgApi('/api/categories', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, label: l.trim(), childId: slug }) }); }
-      else if (act === 'add-sub') { const l = prompt('New subcategory:'); if (!l) return; await orgApi('/api/categories', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, label: l.trim(), parentId: Number(el.dataset.cat), childId: slug }) }); }
-      else if (act === 'add-item') { const l = prompt('New tile label:'); if (!l) return; await orgApi('/api/items', { method: 'POST', body: JSON.stringify({ section: el.dataset.section, categoryId: Number(el.dataset.cat), label: l.trim(), childId: slug }) }); }
-      else if (act === 'rename') { const arr = type === 'item' ? ORG_ITEMS : ORG_CATS; const cur = arr.find(x => x.id === id); const l = prompt('Rename:', cur ? cur.label : ''); if (!l) return; await orgApi((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id, { method: 'PUT', body: JSON.stringify({ label: l.trim(), childId: slug }) }); }
+      if (act === 'rename') { const arr = type === 'item' ? ORG_ITEMS : ORG_CATS; const cur = arr.find(x => x.id === id); const l = prompt('Rename:', cur ? cur.label : ''); if (!l) return; await orgApi((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id, { method: 'PUT', body: JSON.stringify({ label: l.trim(), childId: slug }) }); }
       else if (act === 'del') { const arr = type === 'item' ? ORG_ITEMS : ORG_CATS; const cur = arr.find(x => x.id === id); if (!confirm('Delete "' + (cur ? cur.label : id) + '"' + (type === 'cat' ? ' and everything under it' : '') + '?')) return; await orgApi((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id + '&childId=' + encodeURIComponent(slug), { method: 'DELETE' }); }
       await loadOrg();
     } catch (err) { const st = document.getElementById('org-status'); if (st) st.textContent = err.message; }
@@ -1614,9 +1780,9 @@
     });
     const orgCollapseAll = document.getElementById('org-collapse-all');
     if (orgCollapseAll) orgCollapseAll.addEventListener('click', () => {
-      const tops = ORG_CATS.filter(c => c.parentId == null).map(c => c.id);
-      const allCollapsed = tops.length && tops.every(id => orgCollapsed.has(id));
-      if (allCollapsed) orgCollapsed.clear(); else tops.forEach(id => orgCollapsed.add(id));
+      const ids = ORG_CATS.map(c => c.id);
+      const allCollapsed = ids.length && ids.every(id => orgCollapsed.has(id));
+      if (allCollapsed) orgCollapsed.clear(); else ids.forEach(id => orgCollapsed.add(id));
       renderOrgTree();
     });
     const orgPage = document.getElementById('org-page'), orgOpenBtn = document.getElementById('org-open'), orgCloseBtn = document.getElementById('org-close');
