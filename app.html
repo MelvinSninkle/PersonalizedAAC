@@ -40,7 +40,7 @@
     padding: 0;
     height: 100%;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #f4f6fa;
+    background: var(--bg-needs, #ffd400);    /* any system-level gap shows yellow, not white */
     color: #222;
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
@@ -65,22 +65,32 @@
   main   { flex: 1 1 auto; min-height: 0; }
   .needs-section { flex: 0 0 auto; }
 
+  /* Kid-mode header: as skinny as possible — Fletcher needs the screen, not the chrome.
+     Edit mode bumps these up to fit the parent's buttons. */
   header {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 8px;
     position: relative;
-    padding: calc(8px + env(safe-area-inset-top, 0px)) 14px 8px;
+    padding: calc(3px + env(safe-area-inset-top, 0px)) 10px 3px;
     background: var(--hdr-bg, #ff1493);
     color: var(--hdr-text, white);
     box-shadow: 0 2px 6px rgba(0,0,0,.15);
     box-sizing: border-box;
-    min-height: 56px;
+    min-height: 0;
   }
+  body.edit-mode header { padding: calc(8px + env(safe-area-inset-top, 0px)) 14px 8px; min-height: 56px; }
   header .hdr-left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-self: start; }
   header .hdr-right { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-self: end; }
-  header .hdr-center { display: flex; align-items: center; gap: 12px; justify-self: center; }
+  header .hdr-center { display: flex; align-items: center; gap: 10px; justify-self: center; }
+  /* Compact Fletcher's-mode bar. */
+  body:not(.edit-mode) header h1 { font-size: 17px; gap: 6px; }
+  body:not(.edit-mode) header .hdr-icon { width: 22px; height: 22px; }
+  body:not(.edit-mode) header button { height: 30px; min-width: 0; padding: 0 11px; font-size: 13px; border-radius: 7px; }
+  body:not(.edit-mode) header #login-btn { width: 24px; height: 24px; padding: 0; font-size: 12px; }
+  /* Edit-mode buttons: smaller than default so they fit one row in the left cluster. */
+  body.edit-mode header button { height: 34px; min-width: 0; padding: 0 12px; font-size: 13px; }
   header h1 {
     margin: 0;
     font-size: 22px;
