@@ -64,34 +64,35 @@
   .needs-section { flex: 0 0 auto; }
 
   header {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    justify-content: center;        /* title centered, side buttons absolutely positioned */
+    gap: 10px;
     position: relative;
-    padding: calc(12px + env(safe-area-inset-top, 0px)) 20px 12px;
-    background: #ff1493;
-    color: white;
+    padding: calc(6px + env(safe-area-inset-top, 0px)) 14px 6px;
+    background: var(--hdr-bg, #ff1493);
+    color: var(--hdr-text, white);
     box-shadow: 0 2px 6px rgba(0,0,0,.15);
     box-sizing: border-box;
-    min-height: 64px;
+    min-height: 50px;
   }
-  header .right {
-    position: absolute;
-    right: 20px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+  header .hdr-left, header .hdr-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  header .hdr-right { justify-content: flex-end; }
   header h1 {
     margin: 0;
-    font-size: 27px;
+    font-size: 22px;
     font-weight: 600;
     letter-spacing: .4px;
     font-family: 'Fredoka', ui-rounded, 'SF Pro Rounded', 'Varela Round', system-ui, sans-serif;
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: inherit;
   }
-  header .status { font-size: 13px; opacity: .85; margin-right: 12px; }
+  header .hdr-icon { width: 30px; height: 30px; object-fit: contain; flex: 0 0 auto; }
+  header .status { font-size: 13px; opacity: .85; }
   header button {
     background: #ad1457;
     color: white;
@@ -151,11 +152,15 @@
   /* Needs strip — Fletcher's most-used words; lives below the three section
      columns and spans the full width. Column count = sum of the visible
      section tiles-across, set in JS via --items-cols. */
-  .needs-section {
-    background: var(--bg-needs, #ffd400);   /* golden yellow — overridable */
-    border-top: 4px solid rgba(0,0,0,.15);  /* neutral edge so it works with any color */
+  /* .aac-section.needs-section beats the generic .aac-section { background:white }
+     so the picker actually wins; also extends the colored bg behind the home
+     indicator and keeps tiles above it. */
+  .aac-section.needs-section {
+    background: var(--bg-needs, #ffd400);
+    border-top: 4px solid rgba(0,0,0,.15);
     box-shadow: 0 -1px 3px rgba(0,0,0,.08);
     display: flex; flex-direction: column;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   /* Stay one row tall; overflow scrolls sideways. Tile width = container/N
      where N = --needs-cols, set in JS to the sum of visible main sections. */
@@ -687,9 +692,9 @@
     .tab-strip { gap: 6px; padding: 8px; max-height: none; }
     .tile-label { font-size: 13px; }
     .tile-add { min-height: 56px; }
-    header { padding: 10px 14px; height: auto; flex-wrap: wrap; row-gap: 8px; }
-    header h1 { font-size: 17px; }
-    header .right { position: static; transform: none; right: auto; top: auto; width: 100%; flex-wrap: wrap; justify-content: center; gap: 8px; }
+    header { padding: calc(4px + env(safe-area-inset-top, 0px)) 10px 4px; min-height: 46px; }
+    header h1 { font-size: 17px; gap: 8px; }
+    header .hdr-icon { width: 26px; height: 26px; }
     header button { padding: 0 12px; height: 36px; min-width: 96px; font-size: 13px; }
     .modal { padding: 18px; }
     .modal h3 { font-size: 18px; }
@@ -848,8 +853,14 @@
 </script>
 
 <header>
-  <h1>Fletcher's World</h1>
-  <div class="right">
+  <div class="hdr-left">
+    <button id="login-btn" aria-label="Login" title="Login">🔒</button>
+  </div>
+  <h1>
+    <img class="hdr-icon" src="/icons/myworld-globe.png" alt="">
+    <span>Fletcher's World</span>
+  </h1>
+  <div class="hdr-right">
     <span class="status" id="mode-status"></span>
     <button id="play-btn" class="edit-only">🎮 Play</button>
     <button id="parent-btn" class="edit-only">👪 Parent view</button>
@@ -864,7 +875,6 @@
     <button id="wipe-btn" class="edit-only" style="display:none">Wipe All</button>
     <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
     <button id="play-request-btn" class="btn-play-req" title="Tell a grown-up you want to play">🙋 Play with me</button>
-    <button id="login-btn" aria-label="Login" title="Login">🔒</button>
   </div>
 </header>
 
@@ -1100,6 +1110,11 @@
       <span>Verbs</span><input type="color"  id="disp-color-verbs"  style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
       <span>Needs</span><input type="color"  id="disp-color-needs"  style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
     </div>
+    <label style="margin-top:18px;">Header colors</label>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-top:6px;">
+      <span>Background</span><input type="color" id="disp-color-header-bg"   style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
+      <span>Text</span>      <input type="color" id="disp-color-header-text" style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
+    </div>
     <label style="margin-top:18px;">Default view for this device</label>
     <div style="font-size:12px;color:#666;margin:4px 0 6px;">When the app opens on this device, go straight to:</div>
     <select id="disp-device-role" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;width:100%;box-sizing:border-box;">
@@ -1275,6 +1290,7 @@
       verbs:  '#fce4ec',
       needs:  '#ffd400',
     },
+    headerColors: { bg: '#ff1493', text: '#ffffff' },
   };
   let display = structuredClone(DISPLAY_DEFAULTS);
   function sanitizeColor(v, fallback) {
@@ -1301,6 +1317,10 @@
           nouns:  sanitizeColor(raw.sectionColors?.nouns,  DISPLAY_DEFAULTS.sectionColors.nouns),
           verbs:  sanitizeColor(raw.sectionColors?.verbs,  DISPLAY_DEFAULTS.sectionColors.verbs),
           needs:  sanitizeColor(raw.sectionColors?.needs,  DISPLAY_DEFAULTS.sectionColors.needs),
+        },
+        headerColors: {
+          bg:   sanitizeColor(raw.headerColors?.bg,   DISPLAY_DEFAULTS.headerColors.bg),
+          text: sanitizeColor(raw.headerColors?.text, DISPLAY_DEFAULTS.headerColors.text),
         },
       };
     } catch (_) { display = structuredClone(DISPLAY_DEFAULTS); }
@@ -1330,6 +1350,9 @@
     for (const s of SECTIONS) {
       document.documentElement.style.setProperty(`--bg-${s}`, display.sectionColors[s]);
     }
+    // Header bar bg + text — also CSS vars; header CSS uses var(--hdr-bg/--hdr-text).
+    document.documentElement.style.setProperty('--hdr-bg', display.headerColors.bg);
+    document.documentElement.style.setProperty('--hdr-text', display.headerColors.text);
     for (const s of SECTIONS) {
       const sectionEl = document.querySelector(`.aac-section[data-section="${s}"]`);
       if (sectionEl) sectionEl.style.display = display.sectionVisible[s] ? '' : 'none';
@@ -3208,6 +3231,8 @@
       const colorEl = document.getElementById(`disp-color-${s}`);
       if (colorEl) colorEl.value = display.sectionColors[s];
     }
+    const hb = document.getElementById('disp-color-header-bg');     if (hb) hb.value = display.headerColors.bg;
+    const ht = document.getElementById('disp-color-header-text');   if (ht) ht.value = display.headerColors.text;
   }
   function openDisplayModal() { populateDisplayModal(); displayModal.classList.add('show'); }
   function commitDisplay() { saveDisplay(); applyDisplay(); }
@@ -3260,6 +3285,10 @@
       commitDisplay();   // live preview as the parent drags through the picker
     });
   }
+  const hdrBgEl = document.getElementById('disp-color-header-bg');
+  if (hdrBgEl) hdrBgEl.addEventListener('input', (e) => { display.headerColors.bg = sanitizeColor(e.target.value, display.headerColors.bg); commitDisplay(); });
+  const hdrTxEl = document.getElementById('disp-color-header-text');
+  if (hdrTxEl) hdrTxEl.addEventListener('input', (e) => { display.headerColors.text = sanitizeColor(e.target.value, display.headerColors.text); commitDisplay(); });
 
   // ---- Organize view (Miller columns) ----
   // Drill state: which section, which top-level cat, which subcategory.
