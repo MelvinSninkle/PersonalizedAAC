@@ -80,7 +80,26 @@
     box-sizing: border-box;
     min-height: 0;
   }
-  body.edit-mode header { padding: calc(8px + env(safe-area-inset-top, 0px)) 14px 8px; min-height: 56px; }
+  /* Edit mode: title row on top, edit buttons in a neat centered row underneath. */
+  body.edit-mode header {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    gap: 6px;
+    padding: calc(6px + env(safe-area-inset-top, 0px)) 12px 8px;
+    min-height: 0;
+  }
+  body.edit-mode header .hdr-center { grid-column: 1; grid-row: 1; justify-self: center; }
+  body.edit-mode header .hdr-left {
+    grid-column: 1; grid-row: 2;
+    justify-self: center;
+    flex-wrap: nowrap;
+    justify-content: center;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  body.edit-mode header .hdr-left::-webkit-scrollbar { display: none; }
+  body.edit-mode header .hdr-right { display: none; }
   header .hdr-left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-self: start; }
   header .hdr-right { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-self: end; }
   header .hdr-center { display: flex; align-items: center; gap: 10px; justify-self: center; }
