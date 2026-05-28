@@ -58,26 +58,29 @@
   input, textarea, select, [contenteditable="true"] {
     -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
   }
-  body { display: flex; flex-direction: column; min-height: 0; }
+  /* Body bg matches the Needs strip color so any residual safe-area gap below
+     the bottom strip blends in instead of showing a white band. */
+  body { display: flex; flex-direction: column; min-height: 0; background: var(--bg-needs, #ffd400); }
   header { flex: 0 0 auto; }
   main   { flex: 1 1 auto; min-height: 0; }
   .needs-section { flex: 0 0 auto; }
 
   header {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     position: relative;
-    padding: calc(6px + env(safe-area-inset-top, 0px)) 14px 6px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 14px 8px;
     background: var(--hdr-bg, #ff1493);
     color: var(--hdr-text, white);
     box-shadow: 0 2px 6px rgba(0,0,0,.15);
     box-sizing: border-box;
-    min-height: 50px;
+    min-height: 56px;
   }
-  header .hdr-left, header .hdr-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  header .hdr-right { justify-content: flex-end; }
+  header .hdr-left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-self: start; }
+  header .hdr-right { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-self: end; }
+  header .hdr-center { display: flex; align-items: center; gap: 12px; justify-self: center; }
   header h1 {
     margin: 0;
     font-size: 22px;
@@ -854,13 +857,6 @@
 
 <header>
   <div class="hdr-left">
-    <button id="login-btn" aria-label="Login" title="Login">🔒</button>
-  </div>
-  <h1>
-    <img class="hdr-icon" src="/icons/myworld-globe.png" alt="">
-    <span>Fletcher's World</span>
-  </h1>
-  <div class="hdr-right">
     <span class="status" id="mode-status"></span>
     <button id="play-btn" class="edit-only">🎮 Play</button>
     <button id="parent-btn" class="edit-only">👪 Parent view</button>
@@ -874,8 +870,16 @@
     <button id="import-btn" class="edit-only" style="display:none">Import</button>
     <button id="wipe-btn" class="edit-only" style="display:none">Wipe All</button>
     <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
+  </div>
+  <div class="hdr-center">
+    <button id="login-btn" aria-label="Login" title="Login">🔒</button>
+    <h1>
+      <img class="hdr-icon" src="/icons/myworld-globe.png" alt="">
+      <span>Fletcher's World</span>
+    </h1>
     <button id="play-request-btn" class="btn-play-req" title="Tell a grown-up you want to play">🙋 Play with me</button>
   </div>
+  <div class="hdr-right"></div>
 </header>
 
 <main>
@@ -3241,6 +3245,25 @@
   // The signed-in session carries over; role-based access is enforced server-side.
   document.getElementById('parent-btn').addEventListener('click', () => { window.location.href = '/parent/' + encodeURIComponent(CHILD_ID); });
   document.getElementById('therapist-btn').addEventListener('click', () => { window.location.href = '/therapist/' + encodeURIComponent(CHILD_ID); });
+
+  // ---- Keep the iOS status bar hidden. Info.plist (UIStatusBarHidden=YES) covers
+  // the initial launch, but native pickers (UIColorPickerViewController, photo
+  // picker, file picker) can leave it visible on dismissal. This re-hides via
+  // the Capacitor StatusBar plugin if installed; it's a no-op otherwise. ----
+  (function keepStatusBarHidden() {
+    function go() {
+      try {
+        const sb = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar;
+        if (sb && typeof sb.hide === 'function') sb.hide();
+      } catch (_) {}
+    }
+    go();
+    document.addEventListener('visibilitychange', go);
+    window.addEventListener('focus', go);
+    window.addEventListener('pageshow', go);
+    // Anything the parent taps in Display can pop a native picker; re-hide after.
+    document.addEventListener('change', (e) => { if (e.target && (e.target.type === 'color' || e.target.type === 'file')) setTimeout(go, 300); }, true);
+  })();
 
   // ---- Per-device default view (one-time prompt, changeable under Display) ----
   const DEVICE_ROLE_KEY = 'aacDeviceRole';
