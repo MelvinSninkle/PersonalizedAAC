@@ -185,16 +185,19 @@
   /* Needs strip — Fletcher's most-used words; lives below the three section
      columns and spans the full width. Column count = sum of the visible
      section tiles-across, set in JS via --items-cols. */
-  /* .aac-section.needs-section beats the generic .aac-section { background:white }
-     so the picker actually wins; also extends the colored bg behind the home
-     indicator and keeps tiles above it. */
+  /* Bottom needs strip — kept as compact as possible. Body bg matches the
+     strip color so dropping border/shadow/safe-area padding doesn't leave
+     a seam, and the strip ends right at the home indicator. */
   .aac-section.needs-section {
     background: var(--bg-needs, #ffd400);
-    border-top: 4px solid rgba(0,0,0,.15);
-    box-shadow: 0 -1px 3px rgba(0,0,0,.08);
+    border-top: none;
+    box-shadow: none;
     display: flex; flex-direction: column;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: 0;
   }
+  /* Needs tiles wider-than-tall so the strip is ~half its previous height. */
+  .needs-section .tile-square { aspect-ratio: 1.5; }
+  .needs-section .tile-label { font-size: 11px; padding: 1px 2px 0; min-height: 0; line-height: 1.15; }
   /* Stay one row tall; overflow scrolls sideways. Tile width = container/N
      where N = --needs-cols, set in JS to the sum of visible main sections. */
   .needs-section .items-grid {
@@ -205,8 +208,8 @@
     overflow-x: auto;
     overflow-y: hidden;
     flex: 0 0 auto;
-    padding: 4px 8px;
-    gap: 8px;
+    padding: 2px 6px;
+    gap: 6px;
   }
   .needs-section .items-grid > * {
     flex: 0 0 calc((100% - (var(--needs-cols, 4) - 1) * 10px) / var(--needs-cols, 4));
