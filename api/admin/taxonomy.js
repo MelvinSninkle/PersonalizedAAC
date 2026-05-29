@@ -26,6 +26,7 @@ function rowOut(r) {
     subjectMode: r.subject_mode,
     parentPhotoBehavior: r.parent_photo_behavior,
     phase: r.phase,
+    core: r.core === undefined || r.core === null ? true : !!r.core,
     notes: r.notes,
     status: r.status,
     archived: !!r.archived,
@@ -76,6 +77,7 @@ function validateRow(body, { partial }) {
   if (body.subcategory !== undefined)   out.subcategory = body.subcategory ? String(body.subcategory).slice(0, 100) : null;
   if (body.pronunciation !== undefined) out.pronunciation = body.pronunciation ? String(body.pronunciation).slice(0, 200) : null;
   if (body.notes !== undefined)         out.notes = body.notes ? String(body.notes).slice(0, 2000) : null;
+  if (body.core !== undefined)          out.core = !!body.core;
   if (body.archived !== undefined)      out.archived = !!body.archived;
   return { ok: errs.length === 0, errors: errs, value: out };
 }
@@ -92,6 +94,7 @@ async function audit(db, action, rowIds, summary, note) {
 export default async function handler(req, res) {
   const auth = await checkAuth(req);
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
+  if (auth.user.role !== 'admin') { res.status(403).json({ error: 'Admins only' }); return; }
 
   try {
     const db = sql();
@@ -127,13 +130,13 @@ async function create(req, res, db) {
   const rows = await db`
     INSERT INTO taxonomy (
       id, column_name, category, subcategory, label, pronunciation,
-      prompt_template, subject_mode, parent_photo_behavior, phase, notes,
+      prompt_template, subject_mode, parent_photo_behavior, phase, core, notes,
       status, archived, created_by, updated_by
     ) VALUES (
       ${value.id}, ${value.column}, ${value.category ?? null}, ${value.subcategory ?? null},
       ${value.label}, ${value.pronunciation ?? null},
       ${value.promptTemplate}, ${value.subjectMode}, ${value.parentPhotoBehavior},
-      ${value.phase ?? 'v1_core'}, ${value.notes ?? null},
+      ${value.phase ?? 'v1_core'}, ${value.core === undefined ? true : value.core}, ${value.notes ?? null},
       ${value.status ?? 'draft'}, ${value.archived ?? false},
       ${ACTOR}, ${ACTOR}
     )
@@ -177,6 +180,7 @@ async function update(req, res, db) {
       subject_mode           = ${value.subjectMode           ?? old.subject_mode},
       parent_photo_behavior  = ${value.parentPhotoBehavior   ?? old.parent_photo_behavior},
       phase                  = ${value.phase                 ?? old.phase},
+      core                   = ${value.core                  !== undefined ? value.core                  : old.core},
       notes                  = ${value.notes                 !== undefined ? value.notes                 : old.notes},
       status                 = ${value.status                ?? old.status},
       archived               = ${value.archived              !== undefined ? value.archived              : old.archived},

@@ -11,12 +11,13 @@ const ACTOR = 'admin';
 const AUTO_SNAPSHOT_THRESHOLD = 50;
 const VALID_STATUS = new Set(['draft', 'published']);
 const VALID_PHASES = new Set(['v1_core', 'v1_extended', 'v2', 'later']);
-const VALID_ACTIONS = new Set(['set-status', 'set-phase', 'set-archived', 'delete']);
+const VALID_ACTIONS = new Set(['set-status', 'set-phase', 'set-archived', 'set-core', 'delete']);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
   const auth = await checkAuth(req);
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
+  if (auth.user.role !== 'admin') { res.status(403).json({ error: 'Admins only' }); return; }
 
   const body = (typeof req.body === 'object' && req.body) || {};
   const ids = Array.isArray(body.ids) ? body.ids.filter(x => typeof x === 'string' && x).slice(0, 5000) : null;
@@ -31,6 +32,7 @@ export default async function handler(req, res) {
   if (action === 'set-phase' && !VALID_PHASES.has(value))
     { res.status(400).json({ error: `value must be one of ${[...VALID_PHASES].join(',')}` }); return; }
   if (action === 'set-archived') value = !!value;
+  if (action === 'set-core') value = !!value;
 
   try {
     const db = sql();
@@ -74,6 +76,14 @@ export default async function handler(req, res) {
       const rows = await db`
         UPDATE taxonomy
         SET archived = ${value}, updated_at = NOW(), updated_by = ${ACTOR}
+        WHERE id = ANY(${ids})
+        RETURNING id
+      `;
+      affected = rows.length;
+    } else if (action === 'set-core') {
+      const rows = await db`
+        UPDATE taxonomy
+        SET core = ${value}, updated_at = NOW(), updated_by = ${ACTOR}
         WHERE id = ANY(${ids})
         RETURNING id
       `;

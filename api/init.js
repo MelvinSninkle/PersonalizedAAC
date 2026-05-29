@@ -240,6 +240,11 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS taxonomy_phase_idx    ON taxonomy(phase)`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_status_idx   ON taxonomy(status)`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_archived_idx ON taxonomy(archived)`;
+    // `core` = part of the baseline board a brand-new child starts with (Level 0).
+    // Non-core concepts/categories grow in later as competence increases. A whole
+    // category/subcategory is "non-core" when its tile rows are flagged non-core.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS core BOOLEAN NOT NULL DEFAULT TRUE`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_core_idx      ON taxonomy(core)`;
 
     // Point-in-time snapshots so any bulk op or restore is itself reversible.
     await db`

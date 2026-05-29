@@ -182,6 +182,7 @@
     <span class="stat" id="stat">—</span>
     <button class="secondary" id="btn-new">+ New row</button>
     <button class="secondary" id="btn-import">Import…</button>
+    <button class="secondary" id="btn-import-board" title="Seed the taxonomy from a child's current live board">Import live board…</button>
     <div class="menu-wrap">
       <button class="secondary" id="btn-export">Export ▾</button>
       <div class="menu" id="export-menu">
@@ -204,6 +205,9 @@
         <button data-act="set-phase" data-val="v1_extended">Set phase → v1_extended</button>
         <button data-act="set-phase" data-val="v2">Set phase → v2</button>
         <button data-act="set-phase" data-val="later">Set phase → later</button>
+        <div style="border-top: 1px solid #eef1f6; margin: 4px 0;"></div>
+        <button data-act="set-core" data-val="true">Mark core ✓</button>
+        <button data-act="set-core" data-val="false">Mark non-core</button>
         <div style="border-top: 1px solid #eef1f6; margin: 4px 0;"></div>
         <button data-act="delete" style="color: #991b1b;">Delete selected…</button>
       </div>
@@ -252,6 +256,13 @@
     <option value="published">published</option>
     <option value="archived">archived only</option>
     <option value="all">EVERYTHING (incl. archived)</option>
+  </select>
+
+  <label for="filter-core">Core</label>
+  <select id="filter-core">
+    <option value="">All</option>
+    <option value="core">Core only</option>
+    <option value="noncore">Non-core only</option>
   </select>
 
   <div class="spacer"></div>
@@ -319,7 +330,7 @@
         </select>
       </div>
     </div>
-    <div class="row2">
+    <div class="row3">
       <div>
         <label for="f-pron">pronunciation (TTS override)</label>
         <input type="text" id="f-pron" placeholder="e.g. Cheery-ohs">
@@ -331,6 +342,14 @@
           <option value="published">published</option>
         </select>
         <div class="help">Drafts are invisible to production generation.</div>
+      </div>
+      <div>
+        <label for="f-core">core</label>
+        <select id="f-core">
+          <option value="true">core (in the Level-0 starter board)</option>
+          <option value="false">non-core (grows in later)</option>
+        </select>
+        <div class="help">A category/subcategory is non-core when its tiles are.</div>
       </div>
     </div>
     <label for="f-prompt">prompt_template</label>
@@ -356,7 +375,7 @@
     <div class="help">
       Accepts CSV, TSV, or XLSX. Required columns: <code>id</code>, <code>column</code>, <code>label</code>,
       <code>subject_mode</code>, <code>parent_photo_behavior</code>, <code>prompt_template</code>.
-      Optional: <code>category</code>, <code>subcategory</code>, <code>pronunciation</code>, <code>phase</code>, <code>status</code>, <code>notes</code>.
+      Optional: <code>category</code>, <code>subcategory</code>, <code>pronunciation</code>, <code>phase</code>, <code>core</code> (true/false, default true), <code>status</code>, <code>notes</code>.
       Aliases: <code>name→label</code>, <code>mode→subject_mode</code>, <code>behavior→parent_photo_behavior</code>, <code>prompt→prompt_template</code>.
     </div>
     <label for="import-paste">Paste CSV or TSV</label>
@@ -542,10 +561,13 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     const mode   = document.getElementById('filter-mode').value;
     const phase  = document.getElementById('filter-phase').value;
     const status = document.getElementById('filter-status').value;
+    const core   = document.getElementById('filter-core').value;
     table.setFilter((row) => {
       if (col && row.column !== col) return false;
       if (mode && row.subjectMode !== mode) return false;
       if (phase && row.phase !== phase) return false;
+      if (core === 'core' && row.core === false) return false;
+      if (core === 'noncore' && row.core !== false) return false;
       if (status === 'all') { /* show everything */ }
       else if (status === 'archived') { if (!row.archived) return false; }
       else if (status === '') { if (row.archived) return false; }
@@ -576,6 +598,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     document.getElementById('f-parent').value       = row?.parentPhotoBehavior || 'none';
     document.getElementById('f-pron').value         = row?.pronunciation || '';
     document.getElementById('f-status').value       = row?.status || 'draft';
+    document.getElementById('f-core').value         = (row && row.core === false) ? 'false' : 'true';
     document.getElementById('f-prompt').value       = row?.promptTemplate || '';
     document.getElementById('f-notes').value        = row?.notes || '';
     document.getElementById('row-delete').style.display = row ? 'inline-block' : 'none';
@@ -602,6 +625,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       parentPhotoBehavior: document.getElementById('f-parent').value,
       phase: document.getElementById('f-phase').value,
       status: document.getElementById('f-status').value,
+      core: document.getElementById('f-core').value === 'true',
       notes: document.getElementById('f-notes').value.trim() || null,
     };
     try {
@@ -657,6 +681,8 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       { title: 'subject',       field: 'subjectMode',         width: 145, headerSort: true },
       { title: 'parent_photo',  field: 'parentPhotoBehavior', width: 115, headerSort: true },
       { title: 'phase',         field: 'phase',               width: 105, headerSort: true },
+      { title: 'core',          field: 'core',                width: 64,  headerSort: true,
+        formatter: (cell) => cell.getValue() === false ? '—' : '✓' },
       { title: 'status',        field: 'status',              width: 100, headerSort: true,
         formatter: (cell) => {
           const row = cell.getRow().getData();
@@ -678,10 +704,24 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     btn.textContent = data.length ? `Bulk action (${data.length}) ▾` : 'Bulk action ▾';
   });
 
-  for (const id of ['filter-search','filter-column','filter-mode','filter-phase','filter-status']) {
+  for (const id of ['filter-search','filter-column','filter-mode','filter-phase','filter-status','filter-core']) {
     document.getElementById(id).addEventListener('input', applyFilters);
     document.getElementById(id).addEventListener('change', applyFilters);
   }
+
+  // ---- Import from a child's live board (seed the taxonomy with "the current one") ----
+  document.getElementById('btn-import-board').addEventListener('click', async () => {
+    const child = prompt("Import which child's live board into the taxonomy as DRAFT rows?", 'fletcherpeterson');
+    if (!child || !child.trim()) return;
+    if (!confirm(`Pull ${child.trim()}'s current board into the taxonomy?\n\nEach tile becomes a DRAFT row with a default prompt you can refine. A snapshot is saved first and existing ids are left untouched.`)) return;
+    try {
+      const r = await api('/api/admin/taxonomy-import-board?childId=' + encodeURIComponent(child.trim()), { method: 'POST' });
+      await loadRows();
+      alert(`Imported ${r.inserted} new draft rows · skipped ${r.skipped} · ${r.errors.length} error(s).\nSnapshot: ${r.snapshotLabel}\n\nThey're tagged status=draft — review prompts, set subject_mode / parent_photo / core, then publish.`);
+    } catch (e) {
+      alert('Board import failed: ' + (e.message || e));
+    }
+  });
 
   // ---- Import ----
   const VALID_COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs']);
@@ -721,6 +761,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
         case 'phase':                 out.phase = v || undefined; break;
         case 'status':                out.status = v || undefined; break;
         case 'notes':                 out.notes = v || null; break;
+        case 'core':                  out.core = !/^(false|0|no|non[-_]?core|n)$/i.test(String(v).trim()); break;
         case 'archived':              out.archived = /^(true|1|yes)$/i.test(String(v)); break;
         default: /* ignore unknown columns */ break;
       }
@@ -1009,12 +1050,12 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
   function tsStamp() { return new Date().toISOString().replace(/[:.]/g, '-'); }
   function exportCSV(rows) {
     const cols = ['id','column','category','subcategory','label','pronunciation',
-                  'subject_mode','parent_photo_behavior','phase','status','notes','prompt_template'];
+                  'subject_mode','parent_photo_behavior','phase','core','status','notes','prompt_template'];
     const data = rows.map(r => ({
       id: r.id, column: r.column, category: r.category, subcategory: r.subcategory,
       label: r.label, pronunciation: r.pronunciation,
       subject_mode: r.subjectMode, parent_photo_behavior: r.parentPhotoBehavior,
-      phase: r.phase, status: r.status, notes: r.notes,
+      phase: r.phase, core: r.core === false ? 'false' : 'true', status: r.status, notes: r.notes,
       prompt_template: r.promptTemplate,
     }));
     const csv = Papa.unparse(data, { columns: cols });
@@ -1026,7 +1067,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       id: r.id, column: r.column, category: r.category, subcategory: r.subcategory,
       label: r.label, pronunciation: r.pronunciation,
       subject_mode: r.subjectMode, parent_photo_behavior: r.parentPhotoBehavior,
-      phase: r.phase, status: r.status, notes: r.notes,
+      phase: r.phase, core: r.core === false ? 'false' : 'true', status: r.status, notes: r.notes,
       prompt_template: r.promptTemplate,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -1113,6 +1154,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     let body = { ids: selected, action: act };
     if (act === 'set-status' || act === 'set-phase') body.value = value;
     if (act === 'set-archived') body.value = value === 'true';
+    if (act === 'set-core') body.value = value === 'true';
     try {
       const r = await api('/api/admin/taxonomy-bulkop', { method: 'POST', body });
       await loadRows();

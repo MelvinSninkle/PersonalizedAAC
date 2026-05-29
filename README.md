@@ -129,6 +129,10 @@ These are not in the repo (the iOS project lives outside it) but should be set o
 <key>UIStatusBarHidden</key><true/>
 <key>UIViewControllerBasedStatusBarAppearance</key><false/>
 <key>UIApplicationSupportsShakeToEdit</key><false/>   <!-- kills "Undo Typing" popup -->
+<!-- REQUIRED for the "make a tile from a photo" camera/library pickers to work in
+     the native app — without these the WKWebView file input silently does nothing: -->
+<key>NSCameraUsageDescription</key><string>Take a photo to make a picture tile.</string>
+<key>NSPhotoLibraryUsageDescription</key><string>Choose a photo to make a picture tile.</string>
 ```
 
 ### `@capacitor/status-bar` plugin
