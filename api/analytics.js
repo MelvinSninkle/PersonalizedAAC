@@ -142,6 +142,19 @@ export default async function handler(req, res) {
 
   // ---- RECENT SESSIONS ----
   try {
+    // Sessions store the raw launch scope as "category" (e.g. "cat:123", "people",
+    // "all"). Resolve it to a human label so the dashboard never shows a bare id.
+    const catMap = new Map();
+    try {
+      const crows = await db`SELECT id, label FROM categories WHERE child_id = ${childId}`;
+      for (const c of crows) catMap.set(String(c.id), c.label);
+    } catch (_) { /* categories table may be empty */ }
+    const SCOPE_LABEL = { all: 'Everything', people: 'People', nouns: 'Nouns', verbs: 'Verbs' };
+    const resolveScope = (scope) => {
+      if (!scope) return '—';
+      if (scope.startsWith('cat:')) return catMap.get(scope.slice(4)) || 'Category';
+      return SCOPE_LABEL[scope] || scope;
+    };
     const rows = await db`
       SELECT mode, category, started_at, ended_at, correct_count, item_count
       FROM sessions WHERE child_id = ${childId}
@@ -152,7 +165,7 @@ export default async function handler(req, res) {
       return {
         date: new Date(r.started_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         mode: MODE_LABEL[r.mode] || r.mode,
-        category: r.category || '—',
+        category: resolveScope(r.category),
         result: scored && r.item_count ? `${r.correct_count} / ${r.item_count}` : '—',
         length: mins ? `${mins} min` : '—',
       };

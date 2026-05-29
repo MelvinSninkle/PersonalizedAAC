@@ -576,7 +576,10 @@
           <option value="needle-felted wool craft">Felted</option>
         </select>
       </div>
-      <input type="file" id="tile-photo" accept="image/*" capture="environment" style="display:none;">
+      <!-- No `capture`: lets iOS offer Take Photo OR Photo Library (camera-only
+           forced too narrow a flow). Native app needs NSCameraUsageDescription +
+           NSPhotoLibraryUsageDescription in Info.plist for either to work. -->
+      <input type="file" id="tile-photo" accept="image/*" style="display:none;">
       <button class="btn primary" id="tile-magic" style="width:100%;">📷 Choose photo &amp; make it</button>
       <p class="hint" id="tile-magic-status" style="margin:8px 0 0;">—</p>
       <img id="tile-preview" alt="" style="display:none;width:100%;max-width:180px;border-radius:12px;margin-top:8px;">
@@ -847,6 +850,29 @@
       return d.age != null && d.age < 10;
     } catch (_) { return false; }
   }
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  // After sending a launch, watch the tablet's live status so we can tell the parent
+  // what actually happened instead of always claiming success. The tablet publishes
+  // 'running' once an activity starts, or 'error' (with a message) if it couldn't —
+  // e.g. the chosen categories had too few picture tiles to play.
+  //   → 'started' | 'error:<msg>' | 'nostart' (online but didn't start) | 'offline'
+  async function confirmStarted() {
+    let sawOnline = false;
+    for (let k = 0; k < 9; k++) {
+      await sleep(700);
+      try {
+        const r = await fetch('/api/live?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+        if (!r.ok) continue;
+        const d = await r.json();
+        if (d.age != null && d.age < 12) sawOnline = true;
+        if (d.status === 'running' || d.status === 'standby') return 'started';
+        if (d.status === 'error') return 'error:' + ((d.payload && d.payload.message) || 'The tablet could not start it.');
+      } catch (_) {}
+    }
+    return sawOnline ? 'nostart' : 'offline';
+  }
+  const NOSTART_MSG = "⚠ The tablet is on the board but didn't start — the chosen categories may not have 3+ picture tiles. Try “Everything”, or add tiles.";
+  const OFFLINE_MSG = "⚠ Fletcher's tablet isn't on the board right now. Open his app, then tap Start again.";
   function buildLaunchCmd(modeName) {
     const mode = MODE_KEY[modeName] || 'self_paced';
     const cmd = { kind: 'cmd', action: 'start', mode };
@@ -877,7 +903,6 @@
     const modeName = goBtn.dataset.modeName;
     const orig = goBtn.textContent;
     goBtn.disabled = true; goBtn.textContent = 'Sending…';
-    const online = await tabletOnline();
     let ok = false;
     try {
       const r = await fetch('/api/live?childId=' + encodeURIComponent(slug), {
@@ -887,8 +912,12 @@
       ok = r.ok;
     } catch (_) {}
     if (!ok) { sub.textContent = 'Could not reach the server — try again.'; goBtn.textContent = orig; goBtn.disabled = false; return; }
-    if (online) { goBtn.textContent = 'Started on tablet ✓'; setTimeout(() => { closeModal(); goBtn.textContent = orig; }, 1400); }
-    else { goBtn.textContent = orig; goBtn.disabled = false; sub.textContent = "⚠ Fletcher's tablet isn't on the board right now. Open his app, then tap again."; }
+    goBtn.textContent = 'Waiting for tablet…';
+    const res = await confirmStarted();
+    if (res === 'started') { goBtn.textContent = 'Started on tablet ✓'; setTimeout(() => { closeModal(); goBtn.textContent = orig; goBtn.disabled = false; }, 1400); }
+    else if (res.startsWith('error:')) { sub.textContent = '⚠ ' + res.slice(6); goBtn.textContent = orig; goBtn.disabled = false; }
+    else if (res === 'nostart') { sub.textContent = NOSTART_MSG; goBtn.textContent = orig; goBtn.disabled = false; }
+    else { sub.textContent = OFFLINE_MSG; goBtn.textContent = orig; goBtn.disabled = false; }
   });
 
   // ---- Saved games (presets) + routines — stored in child settings, re-launch in one tap ----
@@ -910,11 +939,14 @@
     clearTimeout(t._h); t._h = setTimeout(() => { t.style.opacity = '0'; }, 2800);
   }
   async function launchSaved(cmd) {
-    const online = await tabletOnline();
     const ok = await sendCmd(cmd);
-    if (!ok) toast('Could not reach the server — try again.');
-    else if (online) toast("Started on Fletcher's tablet ✓");
-    else toast("Sent — but the tablet isn't on the board. Open his app, then tap again.");
+    if (!ok) { toast('Could not reach the server — try again.'); return; }
+    toast('Sent — waiting for the tablet…');
+    const res = await confirmStarted();
+    if (res === 'started') toast("Started on Fletcher's tablet ✓");
+    else if (res.startsWith('error:')) toast('⚠ ' + res.slice(6));
+    else if (res === 'nostart') toast("Tablet didn't start it — try “Everything” or add more tiles.");
+    else toast("Tablet isn't on the board. Open his app, then try again.");
   }
 
   function renderSaved() {

@@ -985,7 +985,11 @@
         <option value="gentle soft storybook illustration">Soft Storybook</option>
         <option value="needle-felted wool craft">Felted</option>
       </select>
-      <input type="file" id="item-photo-capture" accept="image/*" capture="environment" style="display:none;">
+      <!-- No `capture` attr: iOS then offers Take Photo OR Photo Library, which is
+           more flexible and avoids the forced-rear-camera failures we hit. The
+           NATIVE app still needs NSCameraUsageDescription + NSPhotoLibraryUsageDescription
+           in Info.plist or the OS silently blocks both. -->
+      <input type="file" id="item-photo-capture" accept="image/*" style="display:none;">
       <button type="button" id="item-magic" style="margin-top:10px;width:100%;padding:12px;border:none;border-radius:8px;background:#ff1493;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">📷 Take photo &amp; make tile</button>
       <div class="file-status" id="item-magic-status" style="margin-top:8px;">—</div>
       <img id="item-magic-preview" alt="" style="display:none;width:100%;max-width:200px;border-radius:10px;margin-top:8px;">
@@ -1626,7 +1630,34 @@
     });
   }
 
-  function makeTile({ kind, id, imageKey, keepAspect, label, isCategory, isActive, pinned, onClick, onEdit }) {
+  // Coarse-motor-friendly tap: fire on pointer-up when the finger barely moved,
+  // tolerating the small drift that makes iOS cancel a normal `click` (the "I had
+  // to press twice" problem). A bigger move = an intended scroll, so we don't fire.
+  // Extra simultaneous touches (a resting palm) are ignored. Falls back to click
+  // where Pointer Events aren't available. Used only in kid mode — edit mode keeps
+  // plain click so it doesn't fight the drag-and-drop handlers.
+  const TAP_TOLERANCE = 18;
+  function attachForgivingTap(el, handler) {
+    if (!window.PointerEvent) { el.addEventListener('click', handler); return; }
+    let active = false, pid = null, sx = 0, sy = 0, moved = false;
+    el.addEventListener('pointerdown', (e) => {
+      if (active) return;                                  // ignore extra fingers / palm
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      active = true; pid = e.pointerId; sx = e.clientX; sy = e.clientY; moved = false;
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!active || e.pointerId !== pid) return;
+      if (Math.hypot(e.clientX - sx, e.clientY - sy) > TAP_TOLERANCE) moved = true;   // became a scroll
+    });
+    el.addEventListener('pointerup', (e) => {
+      if (!active || e.pointerId !== pid) return;
+      active = false;
+      if (!moved) handler();
+    });
+    el.addEventListener('pointercancel', (e) => { if (e.pointerId === pid) active = false; });
+  }
+
+  function makeTile({ kind, id, imageKey, keepAspect, label, isCategory, isActive, pinned, onClick, onEdit, forgivingTap }) {
     const wrap = document.createElement('div');
     wrap.className = 'tile-wrap'
       + (isCategory ? ' category' : '')
@@ -1656,7 +1687,10 @@
     lbl.textContent = label || '';
     wrap.appendChild(lbl);
 
-    if (onClick) wrap.addEventListener('click', onClick);
+    if (onClick) {
+      if (forgivingTap) attachForgivingTap(wrap, onClick);
+      else wrap.addEventListener('click', onClick);
+    }
     return wrap;
   }
 
@@ -1850,7 +1884,7 @@
       const isActive = cat.id === topAncestorId;
       const tile = makeTile({
         kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
-        label: cat.label, isCategory: true, isActive,
+        label: cat.label, isCategory: true, isActive, forgivingTap: !editMode,
         onClick: () => { activeCategoryId[section] = cat.id; renderSection(section); },
         onEdit: () => openCatModal(section, cat),
       });
@@ -1891,7 +1925,8 @@
         eb.textContent = '✎';
         eb.addEventListener('click', (e) => { e.stopPropagation(); openCatModal(section, sub); });
         tile.appendChild(eb);
-        tile.addEventListener('click', () => { activeCategoryId[section] = sub.id; renderSection(section); });
+        const subNav = () => { activeCategoryId[section] = sub.id; renderSection(section); };
+        if (editMode) tile.addEventListener('click', subNav); else attachForgivingTap(tile, subNav);
         tile.dataset.dragKind = 'cat-sub';
         tile.dataset.entityId = sub.id;
         tile.dataset.section = section;
@@ -1944,7 +1979,7 @@
     items.filter(i => i.categoryId === activeId).forEach(it => {
       const tile = makeTile({
         kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: it.keepAspect,
-        label: it.label, pinned: it.pinned,
+        label: it.label, pinned: it.pinned, forgivingTap: !editMode,
         onClick: () => {
           if (editMode) { openItemModal(section, activeId, it); return; }
           tapSpeak(it, tapCategoryName, tapSubcategoryName);
@@ -1979,7 +2014,7 @@
     items.forEach(it => {
       const tile = makeTile({
         kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: it.keepAspect,
-        label: it.label, pinned: false,
+        label: it.label, pinned: false, forgivingTap: !editMode,
         onClick: () => {
           if (editMode) { openItemModal('needs', null, it); return; }
           tapSpeak(it, null, null);   // needs items have no category path
@@ -1999,7 +2034,11 @@
   // and no runaway queue if a child spams the buttons.
   let speaking = false;
   let speakTimer = null;
+  let _lastTapAt = 0;
   function tapSpeak(item, categoryName, subcategoryName) {
+    const now = Date.now();
+    if (now - _lastTapAt < 250) return;   // swallow an accidental double-tap / bounce
+    _lastTapAt = now;
     if (speaking) return;
     enqueueEvent(item, categoryName, subcategoryName);
     playSound(item);   // playSound sets and clears `speaking`
@@ -2088,7 +2127,7 @@
       flushing = false;
     }
   }
-  window.addEventListener('online', () => { flushEvents().catch(() => {}); precacheAllMedia(); });
+  window.addEventListener('online', () => { flushEvents().catch(() => {}); resyncIfChanged().catch(() => {}); });
 
   function setEditMode(on) {
     editMode = on;
@@ -2250,6 +2289,39 @@
       // Then images: cache the bytes (visible tiles create their own URLs on render).
       await runPool([...new Set(images)], (k) => getMediaBlob(k), 6);
     } catch (_) {} finally { _precaching = false; }
+  }
+
+  // Keep the kid board (and its offline voice cache) current with what a parent
+  // edits from their phone. The tablet used to sync the tile tree only at boot, so
+  // tiles added/changed remotely — and their voices — never reached an already-open
+  // iPad until a manual reload. This re-pulls /api/sync on a timer (and on focus /
+  // reconnect); when the structure actually changed it re-hydrates, re-renders, and
+  // re-warms the media cache so no tile is ever silent or missing for Fletcher.
+  function structSig(data) {
+    const c = (data.categories || []).map(x => [x.id, x.imageKey || '', x.parentId ?? '', x.order ?? 0, x.label].join(':')).join('|');
+    const i = (data.items || []).map(x => [x.id, x.imageKey || '', x.soundKey || '', x.categoryId ?? '', x.order ?? 0, x.pinned ? 1 : 0, x.label].join(':')).join('|');
+    return c + '#' + i;
+  }
+  let _lastSig = null, _resyncing = false;
+  async function resyncIfChanged() {
+    // Never reshuffle the board out from under an active game/slideshow or a parent
+    // mid-edit; the kid-facing board is what we keep fresh.
+    if (_resyncing || editMode || G.running || SLIDE.running || ROUTINE.active) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    _resyncing = true;
+    try {
+      const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
+      if (!r.ok) return;
+      const data = await r.json();
+      if (!(data.categories || []).length && !(data.items || []).length) return;   // never wipe to empty
+      const sig = structSig(data);
+      if (sig === _lastSig) { precacheAllMedia(); return; }   // unchanged → just keep media warm (retries failures)
+      _lastSig = sig;
+      await hydrateFromServer(data);
+      await renderAll();
+      _precaching = false;                                    // allow a fresh pass to pull any new tiles' voices
+      precacheAllMedia();
+    } catch (_) {} finally { _resyncing = false; }
   }
 
   // Downscale + re-encode an image before upload: ≤512px longest side, JPEG q0.85.
@@ -3960,7 +4032,9 @@
       const msg = 'Add at least ' + choices + ' tiles (with pictures) here first.';
       const errEl = document.getElementById('game-setup-error'); if (errEl) errEl.textContent = msg;
       if (opts.facilitated) publishState({ status: 'error', message: msg });
-      if (opts.routine) routineNext();   // don't stall a routine on a thin category
+      if (opts.sequence) { startNextSeqGame(); return; }   // try the next queued category, don't stall
+      if (opts.routine) { routineNext(); return; }         // don't stall a routine on a thin category
+      publishLive('error', { message: msg });              // tell a phone-launch why nothing happened
       return;
     }
     G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true; G.sequence = !!opts.sequence; G.routine = !!opts.routine;
@@ -3974,6 +4048,9 @@
     if (G.limitTimer) { clearTimeout(G.limitTimer); G.limitTimer = null; }
     const limitMin = Number.isFinite(opts.limitMin) ? opts.limitMin : s.limitMin;
     if (limitMin > 0) G.limitTimer = setTimeout(() => { if (!G.ended) endGame(); }, limitMin * 60000);
+    // Facilitated games publish rich state from nextRound(); self-paced ones still
+    // announce "running" so a remote launcher can confirm the game actually started.
+    if (!G.facilitated) publishLive('running', { mode: G.session.mode, scope });
     nextRound();
   }
 
@@ -4082,6 +4159,7 @@
     const inRoutine = G.routine; G.routine = false;
     if (inRoutine && ROUTINE.active) routineNext();   // game step finished → next routine step
     else if (continueSeq) setTimeout(() => showGameNudgeCard("Let's do another game!", null), 700);
+    else { publishLive('ready'); relockAfterActivity(); }   // fully done → idle + re-lock the board
   }
 
   // ===== Slideshow modes (Learn / Exposure) — passive, watch-only =====
@@ -4089,7 +4167,7 @@
   async function startSlideshow(opts) {
     if (SLIDE.running || G.running) return;
     const items = (await gatherPlayable(opts.scope || 'all')).filter(x => x.imageKey && x.label);
-    if (!items.length) { if (opts.routine) routineNext(); return; }
+    if (!items.length) { if (opts.routine) { routineNext(); return; } publishLive('error', { message: 'No pictures to show here yet.' }); return; }
     SLIDE.running = true; SLIDE.items = gShuffle(items.slice()); SLIDE.i = 0;
     SLIDE.labelStyle = opts.labelStyle === 'first_person' ? 'first_person' : 'plain';
     SLIDE.routine = !!opts.routine;
@@ -4117,6 +4195,7 @@
       if (it.soundKey) { const su = await getMediaURL(it.soundKey); if (su) { const v = gVoice(); v.src = su; v.currentTime = 0; v.play().catch(() => {}); } }
     };
     await showOne();
+    publishLive('running', { mode: 'slideshow' });
     SLIDE.timer = setInterval(showOne, secs * 1000);
     if (opts.limitMin && opts.limitMin > 0) SLIDE.limitTimer = setTimeout(() => stopSlideshow(), opts.limitMin * 60000);
   }
@@ -4129,8 +4208,9 @@
     const m = gMusic(); m.pause(); m.loop = false; try { m.currentTime = 0; } catch (_) {}
     gVoice().pause();
     const wasRoutine = SLIDE.routine; SLIDE.routine = false;
-    if (opts.manual) abortRoutine();
+    if (opts.manual) { abortRoutine(); publishLive('ready'); relockAfterActivity(); }
     else if (wasRoutine && ROUTINE.active) routineNext();   // time limit reached → next step
+    else { publishLive('ready'); relockAfterActivity(); }   // standalone slideshow ended → re-lock
   }
 
   // Standalone celebration (also used at game end) — flowers + recorded cheer.
@@ -4141,8 +4221,13 @@
     const phrase = phrases[Math.floor(Math.random() * phrases.length)] || 'Hooray!';
     document.getElementById('game-celebrate-msg').textContent = phrase;
     cel.classList.add('show'); spawnFlowers(cel);
+    publishLive('running', { mode: 'celebration' });
     const url = await rewardAudioURL(phrase); if (url) { const v = gVoice(); v.src = url; v.play().catch(() => {}); }
-    setTimeout(() => { cel.classList.remove('show'); if (typeof onDone === 'function') onDone(); }, 4400);
+    setTimeout(() => {
+      cel.classList.remove('show');
+      if (typeof onDone === 'function') onDone();
+      else { publishLive('ready'); relockAfterActivity(); }
+    }, 4400);
   }
 
   // ===== Routines — chain modes (e.g. slideshow → game → celebration) in order =====
@@ -4156,7 +4241,7 @@
   function routineNext() {
     if (!ROUTINE.active) return;
     ROUTINE.i++;
-    if (ROUTINE.i >= ROUTINE.steps.length) { abortRoutine(); return; }
+    if (ROUTINE.i >= ROUTINE.steps.length) { abortRoutine(); publishLive('ready'); relockAfterActivity(); return; }
     setTimeout(runRoutineStep, 900);
   }
   function runRoutineStep() {
@@ -4190,6 +4275,25 @@
       });
     } catch (_) {}
   }
+  // Lightweight always-on status publish (running / ready / error). Unlike
+  // publishState (facilitated-only, rich payload) this fires for ANY activity so
+  // the parent's launcher can confirm a remote launch actually started — and show
+  // why it didn't (e.g. a category with too few picture tiles).
+  async function publishLive(status, payload) {
+    try {
+      await apiFetch('/api/live?childId=' + encodeURIComponent(CHILD_ID), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'state', status, payload: payload || {} }),
+      });
+    } catch (_) {}
+  }
+
+  // After any activity (game / slideshow / routine) fully ends, return the board
+  // to its safe LOCKED state. Starting a game on the tablet requires unlocking
+  // (the Play button is edit-only), so without this the board is left editable and
+  // Fletcher can accidentally change or delete tiles. No-op if already locked.
+  function relockAfterActivity() { if (editMode) setEditMode(false); }
+
   // Always-on listener: the kid app polls for remote commands the whole time
   // it's open, so an adult can start/drive a game from their phone with nothing
   // tapped on the iPad. Polls faster while a game is live, slower when idle.
@@ -4210,7 +4314,11 @@
       } catch (_) {}
       // Heartbeat so the phone shows the tablet as "Connected".
       G.tick = (G.tick || 0) + 1;
-      if (G.tick % 2 === 0) { if (G.running && G.facilitated) publishState(); else publishReady(); }
+      if (G.tick % 2 === 0) {
+        if (G.running && G.facilitated) publishState();
+        else if (G.running || SLIDE.running || ROUTINE.active) publishLive('running', {});
+        else publishReady();
+      }
       setTimeout(tick, G.running ? 1000 : 2500);
     };
     tick();
@@ -4225,27 +4333,7 @@
   }
   function applyCmd(cmd) {
     const a = cmd.action;
-    if (a === 'start') {
-      // Start a phone-driven activity from anywhere — even if the iPad is just on the board.
-      if (G.running || SLIDE.running || ROUTINE.active) return;        // one activity at a time
-      if (Array.isArray(cmd.steps) && cmd.steps.length) { runRoutine(cmd.steps); return; }
-      const mode = cmd.mode || 'facilitated';        // back-compat: therapist sends no mode → facilitated
-      const range = (cmd.from || cmd.to) ? { from: cmd.from || 0, to: cmd.to || 0 } : null;
-      const limitMin = Number.isFinite(cmd.limitMin) ? cmd.limitMin : undefined;
-      if (typeof cmd.music === 'string') saveGameSettings({ music: cmd.music });
-      if (mode === 'learn_slideshow' || mode === 'exposure_slideshow') {
-        startSlideshow({ scope: cmd.scope || 'all', secondsPerImage: cmd.secondsPerImage || 5, limitMin, labelStyle: cmd.labelStyle || (mode === 'exposure_slideshow' ? 'first_person' : 'plain') });
-      } else if (mode === 'celebration') {
-        playCelebration();
-      } else if (Array.isArray(cmd.scopes) && cmd.scopes.length) {
-        saveGameSettings({ choices: cmd.choices || 3, ...(Number.isFinite(cmd.limitMin) ? { limitMin: cmd.limitMin } : {}) });
-        gameSeq = cmd.scopes.slice();                // queued categories → a chain of self-paced games
-        startNextSeqGame();
-      } else {
-        startGame(cmd.scope || 'all', cmd.choices || 3, { facilitated: mode === 'facilitated', range, limitMin });
-      }
-      return;
-    }
+    if (a === 'start') { startFromCmd(cmd); return; }
     if (a === 'end') {
       abortRoutine();
       if (SLIDE.running) { stopSlideshow({ manual: true }); return; }
@@ -4255,6 +4343,36 @@
     if (!G.running || G.locked || !G.target) return;
     if (a === 'mark') markRemote(cmd.method || 'tap');
     else if (a === 'skip' || a === 'next') { G.locked = true; setTimeout(() => { G.i++; nextRound(); }, 250); }
+  }
+
+  // Start a phone-driven activity from anywhere — even if the iPad is just on the
+  // board. Crucially, for matching games it first keeps only the scopes that have
+  // enough picture-tiles to actually play, falls back to Everything, and otherwise
+  // reports an error — so a remote launch never silently no-ops on a thin category
+  // (the bug where "Start" on the phone appeared to do nothing).
+  async function startFromCmd(cmd) {
+    if (G.running || SLIDE.running || ROUTINE.active) return;          // one activity at a time
+    if (Array.isArray(cmd.steps) && cmd.steps.length) { runRoutine(cmd.steps); return; }
+    const mode = cmd.mode || 'facilitated';        // back-compat: therapist sends no mode → facilitated
+    const range = (cmd.from || cmd.to) ? { from: cmd.from || 0, to: cmd.to || 0 } : null;
+    const limitMin = Number.isFinite(cmd.limitMin) ? cmd.limitMin : undefined;
+    if (typeof cmd.music === 'string') saveGameSettings({ music: cmd.music });
+    if (mode === 'learn_slideshow' || mode === 'exposure_slideshow') {
+      startSlideshow({ scope: cmd.scope || 'all', secondsPerImage: cmd.secondsPerImage || 5, limitMin, labelStyle: cmd.labelStyle || (mode === 'exposure_slideshow' ? 'first_person' : 'plain') });
+      return;
+    }
+    if (mode === 'celebration') { playCelebration(); return; }
+    // Matching game(s): filter to scopes that can actually be played.
+    const choices = cmd.choices || 3;
+    const wanted = (Array.isArray(cmd.scopes) && cmd.scopes.length) ? cmd.scopes.slice() : [cmd.scope || 'all'];
+    const playable = [];
+    for (const sc of wanted) { try { const its = await gatherPlayable(sc, range); if (its.length >= choices) playable.push(sc); } catch (_) {} }
+    if (!playable.length) { try { const all = await gatherPlayable('all', null); if (all.length >= choices) playable.push('all'); } catch (_) {} }
+    if (!playable.length) { publishLive('error', { message: 'Not enough picture tiles to play a game yet.' }); return; }
+    saveGameSettings({ choices, ...(Number.isFinite(cmd.limitMin) ? { limitMin: cmd.limitMin } : {}) });
+    if (mode === 'facilitated') startGame(playable[0], choices, { facilitated: true, range, limitMin });
+    else if (playable.length > 1) { gameSeq = playable.slice(); startNextSeqGame(); }
+    else startGame(playable[0], choices, { range, limitMin });
   }
   function markRemote(method) {
     if (G.locked || !G.target) return;
@@ -4404,6 +4522,7 @@
           const data = await r.json();
           const nc = (data.categories || []).length, ni = (data.items || []).length;
           if (nc || ni) { step = 'hydrate'; await hydrateFromServer(data); step = 'render-server'; await renderAll(); }
+          try { _lastSig = structSig(data); } catch (_) {}   // baseline for the periodic re-sync below
           const localCats = (await getAllCats('people')).length + (await getAllCats('nouns')).length + (await getAllCats('verbs')).length;
           const note = `Loaded: server ${nc} categories / ${ni} tiles · on device ${localCats} categories`;
           const broken = (nc > 0 && localCats === 0);
@@ -4424,6 +4543,10 @@
       // Pick up reward cheers/music + scheduled prompts the parent set (e.g. from
       // their phone), then run the timed-prompt scheduler while the board is open.
       syncChildSettings().then(() => { try { startScheduler(); } catch (_) {} });
+      // Keep the tile tree + offline voice cache current with phone-side edits:
+      // re-pull every couple of minutes, and whenever the iPad regains focus.
+      setInterval(() => { resyncIfChanged().catch(() => {}); }, 120000);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) resyncIfChanged().catch(() => {}); });
     } catch (err) {
       clearTimeout(watchdog);
       bootBanner('Load error at "' + step + '": ' + (err.message || err), true);
