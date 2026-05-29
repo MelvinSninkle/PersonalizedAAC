@@ -37,6 +37,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
   const auth = await checkAuth(req);
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
+  if (auth.user.role !== 'admin') { res.status(403).json({ error: 'Admins only' }); return; }
 
   const body = (typeof req.body === 'object' && req.body) || {};
   const rows = Array.isArray(body.rows) ? body.rows : null;
@@ -76,6 +77,7 @@ export default async function handler(req, res) {
       if (collision && strategy === 'skip') { skipped++; continue; }
 
       const status = VALID_STATUS.has(r.status) ? r.status : defaultStatus;
+      const core = r.core === undefined ? true : !!r.core;   // default to core unless explicitly false
 
       if (collision) {
         await db`
@@ -89,6 +91,7 @@ export default async function handler(req, res) {
             subject_mode          = ${r.subjectMode},
             parent_photo_behavior = ${r.parentPhotoBehavior},
             phase                 = ${r.phase ?? 'v1_core'},
+            core                  = ${core},
             notes                 = ${r.notes ?? null},
             status                = ${status},
             archived              = ${!!r.archived},
@@ -101,13 +104,13 @@ export default async function handler(req, res) {
         await db`
           INSERT INTO taxonomy (
             id, column_name, category, subcategory, label, pronunciation,
-            prompt_template, subject_mode, parent_photo_behavior, phase, notes,
+            prompt_template, subject_mode, parent_photo_behavior, phase, core, notes,
             status, archived, created_by, updated_by
           ) VALUES (
             ${r.id}, ${r.column}, ${r.category ?? null}, ${r.subcategory ?? null},
             ${r.label}, ${r.pronunciation ?? null},
             ${r.promptTemplate}, ${r.subjectMode}, ${r.parentPhotoBehavior},
-            ${r.phase ?? 'v1_core'}, ${r.notes ?? null},
+            ${r.phase ?? 'v1_core'}, ${core}, ${r.notes ?? null},
             ${status}, ${!!r.archived}, ${ACTOR}, ${ACTOR}
           )
         `;
