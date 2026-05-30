@@ -603,6 +603,7 @@
     <label id="tile-pin-row" style="display:none;align-items:center;gap:8px;font-size:13px;margin-top:10px;"><input type="checkbox" id="tile-pin" style="width:auto;"> Pin to top (e.g. for Fletcher)</label>
     <p class="hint" id="tile-error" style="color:#dc2626;margin:8px 0 0;"></p>
     <div class="foot">
+      <button class="btn ghost" id="tile-delete" style="display:none;color:#dc2626;margin-right:auto;">Delete</button>
       <button class="btn ghost" id="tile-cancel">Cancel</button>
       <button class="btn primary" id="tile-save">Save</button>
     </div>
@@ -1096,12 +1097,18 @@
   function tileSetErr(t) { const e = document.getElementById('tile-error'); if (e) e.textContent = t || ''; }
   function openAdder(opts) {
     const kind = opts.kind || 'item';
-    tileTarget = { kind, section: opts.section, catId: opts.catId || null, parentId: opts.parentId || null };
+    // `existing` (optional) = the row being edited. Same modal serves Add and
+    // Edit, matching the kid-board: re-uses every field so a parent can change
+    // a tile's image, regenerate its voice with a tweaked phrase, toggle pin,
+    // or delete — without a second UI.
+    const existing = opts.existing || null;
+    tileTarget = { kind, section: opts.section, catId: opts.catId || null, parentId: opts.parentId || null, existing };
     tilePendingImage = null; tilePendingSound = null;
     const cat = opts.catId ? ORG_CATS.find(c => c.id === opts.catId) : null;
     const parent = opts.parentId ? ORG_CATS.find(c => c.id === opts.parentId) : null;
     const sec = SECT_LABEL[opts.section] || opts.section;
-    const title = kind === 'item' ? 'Add a tile' : (kind === 'subcategory' ? 'Add a subcategory' : 'Add a category');
+    const verb = existing ? 'Edit' : 'Add';
+    const title = kind === 'item' ? (verb + ' a tile') : (kind === 'subcategory' ? (verb + ' a subcategory') : (verb + ' a category'));
     const sub = kind === 'item' ? (cat ? sec + ' · ' + cat.label : sec)
               : kind === 'subcategory' ? (parent ? sec + ' · inside ' + parent.label : sec)
               : sec;
@@ -1109,18 +1116,37 @@
     document.getElementById('tile-title').textContent = title;
     document.getElementById('tile-sub').textContent = sub;
     document.getElementById('tile-label').placeholder = ph;
-    document.getElementById('tile-save').textContent = kind === 'item' ? 'Save tile' : (kind === 'subcategory' ? 'Save subcategory' : 'Save category');
+    document.getElementById('tile-save').textContent = existing
+      ? 'Save changes'
+      : (kind === 'item' ? 'Save tile' : (kind === 'subcategory' ? 'Save subcategory' : 'Save category'));
     document.getElementById('tile-voice').style.display = (kind === 'item') ? '' : 'none';     // categories don't speak
-    ['tile-label', 'tile-image', 'tile-sound', 'tile-photo', 'tile-phrase'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-    document.getElementById('tile-keep-aspect').checked = false;
+    // File inputs always clear (they reflect pending picks, not existing media);
+    // text fields pre-fill from `existing` when editing, blank when adding.
+    ['tile-image', 'tile-sound', 'tile-photo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    document.getElementById('tile-label').value = existing?.label || '';
+    // Pre-fill phrase with the current label so re-generating audio is a 1-edit flow.
+    document.getElementById('tile-phrase').value = existing?.label || '';
+    document.getElementById('tile-keep-aspect').checked = !!existing?.keepAspect;
     document.getElementById('tile-emotion').value = 'default';
-    document.getElementById('tile-pin').checked = false;
+    document.getElementById('tile-pin').checked = !!existing?.pinned;
     // Pin-to-top only makes sense in the People column (kid-board sorts pinned
     // people first), so hide it everywhere else — same gate as app.html.
     document.getElementById('tile-pin-row').style.display = (kind === 'item' && opts.section === 'people') ? 'flex' : 'none';
-    const prev = document.getElementById('tile-preview'); prev.style.display = 'none'; prev.removeAttribute('src');
-    document.getElementById('tile-magic-status').textContent = '—';
-    document.getElementById('tile-sound-status').textContent = 'No sound yet';
+    // Image preview: show the current image when editing, otherwise blank.
+    const prev = document.getElementById('tile-preview');
+    if (existing?.imageKey) {
+      prev.src = '/api/media?key=' + encodeURIComponent(existing.imageKey);
+      prev.style.display = 'block';
+    } else {
+      prev.style.display = 'none'; prev.removeAttribute('src');
+    }
+    document.getElementById('tile-magic-status').textContent = existing?.imageKey
+      ? 'Current image will be kept — pick a new photo to replace it'
+      : '—';
+    document.getElementById('tile-sound-status').textContent = existing?.soundKey
+      ? 'Current sound will be kept'
+      : 'No sound yet';
+    document.getElementById('tile-delete').style.display = existing ? 'inline-flex' : 'none';
     tileSetErr('');
     try { const st = localStorage.getItem('aacStyle'); if (st) document.getElementById('tile-style').value = st; } catch (_) {}
     tileScrim.classList.add('open');
@@ -1189,27 +1215,60 @@
   document.getElementById('tile-sound').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) { tilePendingSound = f; document.getElementById('tile-sound-status').textContent = 'Sound selected ✓'; } });
   document.getElementById('tile-save').addEventListener('click', async () => {
     const label = document.getElementById('tile-label').value.trim();
+    const existing = tileTarget.existing;
     if (!label) { tileSetErr('Please enter a label'); return; }
-    if (!tilePendingImage) { tileSetErr('Add a picture — make one from a photo or upload an image'); return; }
+    // Image is required on create; on edit, keep the existing one if no new pick.
+    if (!existing && !tilePendingImage) { tileSetErr('Add a picture — make one from a photo or upload an image'); return; }
     const btn = document.getElementById('tile-save'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Saving…'; tileSetErr('');
     try {
-      const imageKey = await tileUpload(tilePendingImage, 'image', 'jpg', 'image/jpeg');
       const keepAspect = document.getElementById('tile-keep-aspect').checked;
+      const newImageKey = tilePendingImage ? await tileUpload(tilePendingImage, 'image', 'jpg', 'image/jpeg') : null;
       if (tileTarget.kind === 'item') {
-        let soundKey = null;
-        if (tilePendingSound) { const isWav = (tilePendingSound.type || '').indexOf('wav') >= 0; soundKey = await tileUpload(tilePendingSound, 'sound', isWav ? 'wav' : 'mp3', tilePendingSound.type || 'audio/mpeg'); }
+        let newSoundKey = null;
+        if (tilePendingSound) { const isWav = (tilePendingSound.type || '').indexOf('wav') >= 0; newSoundKey = await tileUpload(tilePendingSound, 'sound', isWav ? 'wav' : 'mp3', tilePendingSound.type || 'audio/mpeg'); }
         // pinned only applies in People (UI gates the row to that section).
         const pinned = tileTarget.section === 'people' && document.getElementById('tile-pin').checked;
-        await orgApi('/api/items', { method: 'POST', body: JSON.stringify({ section: tileTarget.section, categoryId: tileTarget.catId, label, imageKey, soundKey, keepAspect, pinned, childId: slug }) });
+        if (existing) {
+          // PUT only what's set; api/items uses COALESCE so omitted fields keep their old value.
+          const body = { childId: slug, label, keepAspect };
+          if (newImageKey) body.imageKey = newImageKey;
+          if (newSoundKey) body.soundKey = newSoundKey;
+          if (tileTarget.section === 'people') body.pinned = pinned;
+          await orgApi('/api/items?id=' + existing.id, { method: 'PUT', body: JSON.stringify(body) });
+        } else {
+          await orgApi('/api/items', { method: 'POST', body: JSON.stringify({ section: tileTarget.section, categoryId: tileTarget.catId, label, imageKey: newImageKey, soundKey: newSoundKey, keepAspect, pinned, childId: slug }) });
+        }
       } else {
-        const body = { section: tileTarget.section, label, imageKey, keepAspect, childId: slug };
-        if (tileTarget.kind === 'subcategory' && tileTarget.parentId) body.parentId = tileTarget.parentId;
-        await orgApi('/api/categories', { method: 'POST', body: JSON.stringify(body) });
+        if (existing) {
+          const body = { childId: slug, label, keepAspect };
+          if (newImageKey) body.imageKey = newImageKey;
+          await orgApi('/api/categories?id=' + existing.id, { method: 'PUT', body: JSON.stringify(body) });
+        } else {
+          const body = { section: tileTarget.section, label, imageKey: newImageKey, keepAspect, childId: slug };
+          if (tileTarget.kind === 'subcategory' && tileTarget.parentId) body.parentId = tileTarget.parentId;
+          await orgApi('/api/categories', { method: 'POST', body: JSON.stringify(body) });
+        }
       }
       closeTileAdder();
       await loadOrg();
     } catch (err) { tileSetErr('Save failed: ' + (err.message || err)); }
     finally { btn.disabled = false; btn.textContent = pv; }
+  });
+  // Delete from within the edit modal — destructive op, behind a confirm.
+  // For categories/subcategories the server cascades (subtree + items), so the
+  // confirm copy says so. Quick ✕ in the org tree still works as a shortcut.
+  document.getElementById('tile-delete').addEventListener('click', async () => {
+    const existing = tileTarget.existing; if (!existing) return;
+    const cascade = tileTarget.kind !== 'item';
+    if (!confirm('Delete "' + (existing.label || 'this') + '"' + (cascade ? ' and everything under it' : '') + '?')) return;
+    const btn = document.getElementById('tile-delete'); btn.disabled = true; tileSetErr('');
+    try {
+      const ep = tileTarget.kind === 'item' ? '/api/items' : '/api/categories';
+      await orgApi(ep + '?id=' + existing.id + '&childId=' + encodeURIComponent(slug), { method: 'DELETE' });
+      closeTileAdder();
+      await loadOrg();
+    } catch (err) { tileSetErr('Delete failed: ' + (err.message || err)); }
+    finally { btn.disabled = false; }
   });
   document.getElementById('tile-x').addEventListener('click', closeTileAdder);
   document.getElementById('tile-cancel').addEventListener('click', closeTileAdder);
@@ -1612,8 +1671,8 @@
   }
   function orgBtns(type, id) {
     return '<span style="margin-left:auto;display:inline-flex;gap:4px;">' +
-      '<button class="btn ghost" data-org="rename" data-type="' + type + '" data-id="' + id + '">✎</button>' +
-      '<button class="btn ghost" data-org="del" data-type="' + type + '" data-id="' + id + '">✕</button></span>';
+      '<button class="btn ghost" data-org="edit" data-type="' + type + '" data-id="' + id + '" aria-label="Edit">✎</button>' +
+      '<button class="btn ghost" data-org="del"  data-type="' + type + '" data-id="' + id + '" aria-label="Delete">✕</button></span>';
   }
   function orgThumb(imageKey) {
     return imageKey ? '<span class="org-thumb" style="background-image:url(/api/media?key=' + encodeURIComponent(imageKey) + ')"></span>' : '';
@@ -1677,9 +1736,22 @@
     if (act === 'add-item') { openAdder({ kind: 'item', section: el.dataset.section, catId: Number(el.dataset.cat) }); return; }
     if (act === 'add-cat')  { openAdder({ kind: 'category', section: el.dataset.section }); return; }
     if (act === 'add-sub')  { openAdder({ kind: 'subcategory', section: el.dataset.section, parentId: Number(el.dataset.cat) }); return; }
+    if (act === 'edit') {
+      // Open the same Add modal in Edit mode — pre-fills every field, surfaces
+      // image/sound regeneration + pin + delete. Replaces the old prompt() rename
+      // so all tile mutations live in one place.
+      const arr = type === 'item' ? ORG_ITEMS : ORG_CATS;
+      const existing = arr.find(x => x.id === id); if (!existing) return;
+      if (type === 'item') {
+        openAdder({ kind: 'item', section: existing.section, catId: existing.categoryId, existing });
+      } else {
+        const isSub = existing.parentId != null;
+        openAdder({ kind: isSub ? 'subcategory' : 'category', section: existing.section, parentId: existing.parentId || null, existing });
+      }
+      return;
+    }
     try {
-      if (act === 'rename') { const arr = type === 'item' ? ORG_ITEMS : ORG_CATS; const cur = arr.find(x => x.id === id); const l = prompt('Rename:', cur ? cur.label : ''); if (!l) return; await orgApi((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id, { method: 'PUT', body: JSON.stringify({ label: l.trim(), childId: slug }) }); }
-      else if (act === 'del') { const arr = type === 'item' ? ORG_ITEMS : ORG_CATS; const cur = arr.find(x => x.id === id); if (!confirm('Delete "' + (cur ? cur.label : id) + '"' + (type === 'cat' ? ' and everything under it' : '') + '?')) return; await orgApi((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id + '&childId=' + encodeURIComponent(slug), { method: 'DELETE' }); }
+      if (act === 'del') { const arr = type === 'item' ? ORG_ITEMS : ORG_CATS; const cur = arr.find(x => x.id === id); if (!confirm('Delete "' + (cur ? cur.label : id) + '"' + (type === 'cat' ? ' and everything under it' : '') + '?')) return; await orgApi((type === 'item' ? '/api/items' : '/api/categories') + '?id=' + id + '&childId=' + encodeURIComponent(slug), { method: 'DELETE' }); }
       await loadOrg();
     } catch (err) { const st = document.getElementById('org-status'); if (st) st.textContent = err.message; }
   }
