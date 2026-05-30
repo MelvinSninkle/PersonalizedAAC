@@ -884,7 +884,11 @@
   .game-prompt-btn .spk { font-size: 1.1em; }
   .game-progress { position: absolute; top: 24px; left: 20px; font-family: 'Fredoka', ui-rounded, system-ui, sans-serif; color: #d6a8c6; font-weight: 600; font-size: 15px; }
   .game-exit { position: absolute; top: 16px; right: 18px; width: 46px; height: 46px; border-radius: 50%;
-    border: none; background: rgba(0,0,0,.05); color: #c9b5c1; font-size: 20px; cursor: pointer; }
+    border: none; background: rgba(0,0,0,.05); color: #c9b5c1; font-size: 20px; cursor: pointer;
+    /* body's touch-action:pan-x pan-y lets iOS treat a tiny finger tremor on a
+       small button as the start of a pan and fire touchcancel — killing the
+       long-press timer. Opt this button out so it owns the touch outright. */
+    touch-action: none; }
   .game-grid { flex: 1; display: grid; gap: clamp(12px, 3vw, 28px); padding: clamp(12px, 3vw, 30px);
     align-content: center; justify-items: center; grid-template-columns: repeat(2, 1fr); }
   .game-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
@@ -4501,13 +4505,34 @@
   document.getElementById('remote-btn').addEventListener('click', enterStandby);
 
   // Exit needs a long-press so a child can't tap out of the game.
-  let exitTimer = null;
+  // Pointer Events + setPointerCapture: once a press starts on the button, the
+  // same pointer stays bound to it even if the finger drifts a few pixels —
+  // which it always does on a kid's hold. This replaces the old
+  // mousedown/touchstart pair, where iOS's touchcancel fired on the slightest
+  // tremor and silently killed the timer (the bug the user hit).
+  let exitTimer = null, exitPid = null;
   const exitBtn = document.getElementById('game-exit');
-  const startExit = () => { exitTimer = setTimeout(stopGame, 1200); };
-  const cancelExit = () => { if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; } };
-  exitBtn.addEventListener('mousedown', startExit);
-  exitBtn.addEventListener('touchstart', startExit, { passive: true });
-  ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(e => exitBtn.addEventListener(e, cancelExit));
+  function startExit(e) {
+    if (exitTimer) return;                                  // already counting down
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    exitPid = e.pointerId;
+    try { exitBtn.setPointerCapture(exitPid); } catch (_) {}
+    exitTimer = setTimeout(stopGame, 1200);
+  }
+  function cancelExit() {
+    if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; }
+    if (exitPid != null) { try { exitBtn.releasePointerCapture(exitPid); } catch (_) {} exitPid = null; }
+  }
+  if (window.PointerEvent) {
+    exitBtn.addEventListener('pointerdown', startExit);
+    exitBtn.addEventListener('pointerup', cancelExit);
+    exitBtn.addEventListener('pointercancel', cancelExit);
+  } else {
+    // Legacy fallback for any environment without Pointer Events.
+    exitBtn.addEventListener('mousedown', startExit);
+    exitBtn.addEventListener('touchstart', startExit, { passive: true });
+    ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(e => exitBtn.addEventListener(e, cancelExit));
+  }
 
   // Rewards modal
   document.getElementById('rewards-btn').addEventListener('click', () => {
