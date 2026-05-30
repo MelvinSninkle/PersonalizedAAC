@@ -9,20 +9,22 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!--
-  Existing-device shortcut. Anyone with a stored child slug — the Fletcher
-  iPad, the parent's laptop after they've logged into the app — gets bounced
-  to /u/<slug> before the landing page even paints. Everyone else (first-time
-  visitor) sees the marketing page below.
+  Existing-device shortcut. Only a device explicitly set as "the child's board"
+  (per-device role = child, chosen in the app) is bounced straight to /u/<slug>.
+  Parent / therapist / admin devices land on the landing page so they can reach
+  login, onboarding, dashboards and the admin tools without being yanked into a
+  child's account. The real kid iPad opens via its own /u/<slug> URL anyway.
 
-  Escape hatch: /?home always shows the landing page, even on a device that
-  has used the app — so the marketing site can be reviewed without incognito.
+  Escape hatch: /?home always shows the landing page.
 -->
 <script>
   (function () {
     if (new URLSearchParams(location.search).has('home')) return;
-    var slug = localStorage.getItem('aacChildSlug');
-    if (!slug && localStorage.getItem('aacToken')) slug = 'fletcherpeterson';
-    if (slug) location.replace('/u/' + encodeURIComponent(slug));
+    try {
+      if (localStorage.getItem('aacDeviceRole') !== 'child') return;   // only the kid device auto-opens
+      var slug = localStorage.getItem('aacChildSlug');
+      if (slug) location.replace('/u/' + encodeURIComponent(slug));
+    } catch (e) {}
   })();
 </script>
 <style>

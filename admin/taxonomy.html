@@ -518,20 +518,23 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
 
 <script>
 (() => {
+  // Auth two ways: a signed-in admin SESSION cookie (preferred — just visit
+  // /admin/taxonomy.html while logged in as admin), or the legacy admin bearer
+  // token in localStorage. The endpoints enforce role=admin server-side.
   const TOKEN_KEY = 'aacToken';
   const token = localStorage.getItem(TOKEN_KEY) || '';
-  if (!token) {
-    document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">No admin token found. <a href="/">Log in on the main app first</a>, then come back here.</div>';
-    return;
-  }
 
   async function api(path, opts = {}) {
-    const headers = { ...(opts.headers || {}), Authorization: 'Bearer ' + token };
+    const headers = { ...(opts.headers || {}) };
+    if (token) headers.Authorization = 'Bearer ' + token;
     if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
       headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(opts.body);
     }
-    const r = await fetch(path, { ...opts, headers });
+    const r = await fetch(path, { ...opts, headers, credentials: 'same-origin' });
+    if (r.status === 401 || r.status === 403) {
+      throw new Error(r.status + ': sign in as an admin first — open /login, log in, then return here.');
+    }
     if (!r.ok) {
       const t = await r.text();
       throw new Error(`${r.status}: ${t.slice(0, 200)}`);

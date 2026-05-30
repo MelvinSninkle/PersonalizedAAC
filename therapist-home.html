@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My children · My World</title>
+<meta name="theme-color" content="#ad1457">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  :root { --pink:#ff1493; --pink-deep:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#fce4ec; --bg:#fdf2f8; }
+  html,body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  header { position:sticky; top:0; z-index:10; display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:14px 20px; background:rgba(255,255,255,.95); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+  .brand { font-family:'Fredoka',ui-rounded,system-ui,sans-serif; font-weight:700; color:var(--pink-deep); font-size:19px; }
+  header a { color:var(--pink-deep); font-size:13px; font-weight:600; text-decoration:none; }
+  .wrap { max-width:1000px; margin:0 auto; padding:26px 20px 60px; }
+  h1 { font-family:'Fredoka',system-ui; font-size:26px; margin:6px 0 4px; }
+  .sub { color:var(--muted); margin:0 0 24px; font-size:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:18px; }
+  .child { background:#fff; border:1px solid var(--line); border-radius:18px; padding:16px; text-align:center;
+    text-decoration:none; color:inherit; box-shadow:0 4px 14px rgba(255,20,147,.06); transition:transform .08s ease, box-shadow .15s ease; }
+  .child:hover { transform:translateY(-2px); box-shadow:0 10px 26px rgba(255,20,147,.16); }
+  .child .pic { width:104px; height:104px; margin:0 auto 12px; border-radius:50%; background:#fce4ec center/cover no-repeat;
+    border:3px solid #ffd400; box-shadow:0 2px 8px rgba(0,0,0,.1); display:grid; place-items:center; font-size:42px; color:#d6a8c6; }
+  .child .name { font-family:'Fredoka',system-ui; font-weight:700; font-size:17px; }
+  .child .rel { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:2px; }
+  .empty { background:#fff; border:1px dashed var(--line); border-radius:18px; padding:30px; text-align:center; color:var(--muted); }
+  .empty strong { color:var(--ink); }
+  .msg { color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><img src="/icons/myworld-globe.png" alt="" style="height:1.2em;vertical-align:-3px;margin-right:.15em;">My World</div>
+  <a href="#" id="signout">Sign out</a>
+</header>
+<div class="wrap">
+  <h1>Your children 🧑‍⚕️</h1>
+  <p class="sub">Tap a child to see their progress and run sessions. Boards you build are shared with that child and only you can edit them.</p>
+  <div id="grid" class="grid"><div class="msg">Loading…</div></div>
+</div>
+<script>
+(() => {
+  const grid = document.getElementById('grid');
+  function card(c) {
+    const href = '/therapist/' + encodeURIComponent(c.childId);
+    const pic = c.imageKey
+      ? `<div class="pic" style="background-image:url(/api/media?key=${encodeURIComponent(c.imageKey)})"></div>`
+      : `<div class="pic">🧒</div>`;
+    const rel = c.relation && c.relation !== 'admin' ? `<div class="rel">${c.relation}</div>` : '';
+    return `<a class="child" href="${href}">${pic}<div class="name">${(c.name||'').replace(/[&<>"]/g,'')}</div>${rel}</a>`;
+  }
+  async function load() {
+    try {
+      const r = await fetch('/api/my-children', { credentials: 'same-origin' });
+      if (r.status === 401 || r.status === 403) { location.href = '/login?next=/therapist'; return; }
+      if (!r.ok) { grid.innerHTML = '<div class="empty">Couldn\'t load right now. Please refresh.</div>'; return; }
+      const children = (await r.json()).children || [];
+      if (!children.length) {
+        grid.innerHTML = '<div class="empty"><strong>No children linked yet.</strong><br>Ask a parent to invite you, or send them a request once that\'s available.</div>';
+        return;
+      }
+      grid.innerHTML = children.map(card).join('');
+    } catch (_) {
+      grid.innerHTML = '<div class="empty">Couldn\'t load right now. Please refresh.</div>';
+    }
+  }
+  document.getElementById('signout').addEventListener('click', async (e) => {
+    e.preventDefault();
+    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
+    location.href = '/login';
+  });
+  load();
+})();
+</script>
+</body>
+</html>

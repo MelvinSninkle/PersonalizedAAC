@@ -61,6 +61,14 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS items_category_idx ON items(category_id)`;
     await db`CREATE INDEX IF NOT EXISTS items_child_idx    ON items(child_id)`;
 
+    // Content ownership: NULL = shared/parent board (parent or admin may edit);
+    // a user id = therapist-owned content on a "custom board" that only that
+    // therapist may edit or delete (the child can still see/use it).
+    await db`ALTER TABLE categories ADD COLUMN IF NOT EXISTS owner_user_id BIGINT`;
+    await db`ALTER TABLE items      ADD COLUMN IF NOT EXISTS owner_user_id BIGINT`;
+    await db`CREATE INDEX IF NOT EXISTS categories_owner_idx ON categories(owner_user_id)`;
+    await db`CREATE INDEX IF NOT EXISTS items_owner_idx      ON items(owner_user_id)`;
+
     // Activity log — kid-mode button taps. No FK to items so history
     // survives item deletes; label / category / subcategory are
     // snapshotted at log time for stable analytics.
@@ -104,6 +112,49 @@ export default async function handler(req, res) {
     `;
     await db`CREATE INDEX IF NOT EXISTS users_role_idx        ON users(role)`;
     await db`CREATE INDEX IF NOT EXISTS users_reset_token_idx ON users(reset_token)`;
+
+    // ---- Child access roster (many-to-many) ----
+    // Replaces the single users.child_slug: a therapist can be linked to many
+    // children; a child can have a parent + several therapists. Data endpoints
+    // will scope reads/writes through this (enforcement lands in a follow-up).
+    await db`
+      CREATE TABLE IF NOT EXISTS child_access (
+        id BIGSERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        child_id TEXT NOT NULL,
+        relation TEXT NOT NULL DEFAULT 'therapist',   -- 'parent' | 'therapist'
+        status TEXT NOT NULL DEFAULT 'active',         -- 'active' | 'pending'
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (user_id, child_id)
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS child_access_user_idx  ON child_access(user_id)`;
+    await db`CREATE INDEX IF NOT EXISTS child_access_child_idx ON child_access(child_id)`;
+    // Backfill from the legacy single-child column so existing parents keep access.
+    await db`
+      INSERT INTO child_access (user_id, child_id, relation, status)
+      SELECT id, child_slug, CASE WHEN role = 'therapist' THEN 'therapist' ELSE 'parent' END, 'active'
+      FROM users WHERE child_slug IS NOT NULL
+      ON CONFLICT (user_id, child_id) DO NOTHING
+    `;
+
+    // ---- Parent ↔ therapist handshake: an invite (parent → therapist) or a
+    // request (therapist → parent). Accepting it creates the child_access row. ----
+    await db`
+      CREATE TABLE IF NOT EXISTS access_requests (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL,
+        therapist_user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+        therapist_email TEXT,
+        direction TEXT NOT NULL,                       -- 'invite' | 'request'
+        status TEXT NOT NULL DEFAULT 'pending',        -- 'pending' | 'accepted' | 'declined'
+        created_by BIGINT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        decided_at TIMESTAMPTZ
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS access_requests_child_idx     ON access_requests(child_id, status)`;
+    await db`CREATE INDEX IF NOT EXISTS access_requests_therapist_idx ON access_requests(therapist_user_id, status)`;
 
     // ---- Learning sessions + game attempts (Interactive Modes PRD v1.0) ----
     // A `session` is one run of any mode (game / slideshow / celebration) or a
