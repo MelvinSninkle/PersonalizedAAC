@@ -586,6 +586,9 @@
     </div>
     <div class="field"><label>Or upload an image</label><input type="file" id="tile-image" accept="image/*"></div>
     <div id="tile-voice">
+      <div class="field" style="margin-bottom:10px;"><label>Phrase to speak <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;">(tweak to fix pronunciation, e.g. "Cheery-ohs")</span></label>
+        <input id="tile-phrase" type="text" maxlength="120" placeholder="e.g. Mom is here">
+      </div>
       <label style="display:block;font-size:12px;font-weight:700;color:var(--muted);margin:0 0 6px;text-transform:uppercase;letter-spacing:.04em;">Voice / sound</label>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <select id="tile-emotion" style="flex:1;min-width:120px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;">
@@ -597,6 +600,7 @@
       <p class="hint" id="tile-sound-status" style="margin:6px 0 0;">No sound yet</p>
     </div>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:12px;"><input type="checkbox" id="tile-keep-aspect" style="width:auto;"> Keep original image ratio (don't crop)</label>
+    <label id="tile-pin-row" style="display:none;align-items:center;gap:8px;font-size:13px;margin-top:10px;"><input type="checkbox" id="tile-pin" style="width:auto;"> Pin to top (e.g. for Fletcher)</label>
     <p class="hint" id="tile-error" style="color:#dc2626;margin:8px 0 0;"></p>
     <div class="foot">
       <button class="btn ghost" id="tile-cancel">Cancel</button>
@@ -795,21 +799,42 @@
   async function loadLaunchCats() {
     try {
       const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
-      if (r.ok) { const d = await r.json(); LAUNCH_CATS = (d.categories || []).filter(c => c.parentId == null); }
+      // Load ALL categories (incl. subcats) so the launcher can drill in, matching
+      // the kid-board's hierarchical scope dropdown.
+      if (r.ok) { const d = await r.json(); LAUNCH_CATS = d.categories || []; }
     } catch (_) {}
   }
   loadLaunchCats();
 
-  function catChecks(opts = {}) {
-    if (!LAUNCH_CATS.length) return `<div class="field"><label>${opts.label || 'Categories'}</label><p class="hint" style="margin:0;">No categories loaded yet — the session will use everything on the board.</p></div>`;
-    let n = 0;
-    const rows = ['people', 'nouns', 'verbs'].map(sec => {
-      const cats = LAUNCH_CATS.filter(c => c.section === sec).sort((a, b) => (a.order - b.order) || (a.id - b.id));
-      if (!cats.length) return '';
-      return `<div style="font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;margin:8px 0 2px;">${SECT_LABEL[sec] || sec}</div>` +
-        cats.map(c => `<label><input type="checkbox" class="lc-cat" data-scope="cat:${c.id}" ${n++ < 3 ? 'checked' : ''}> ${schEsc(c.label)}</label>`).join('');
-    }).join('');
-    return `<div class="field"><label>${opts.label || 'Categories (queue in order)'}</label><div class="checks">${rows}</div></div>`;
+  // Hierarchical scope picker — single dropdown, parity with the kid-board's
+  // "What to practice" in app.html. Replaces the old flat checkbox list, which
+  // couldn't drill into subcategories at all. To chain several games in order,
+  // use the Routine Builder above; this launcher is one activity at a time.
+  function catSelect(opts = {}) {
+    if (!LAUNCH_CATS.length) {
+      return `<div class="field"><label>${opts.label || 'What to practice'}</label>
+        <p class="hint" style="margin:0;">No categories loaded yet — the session will use everything on the board.</p>
+        <input type="hidden" id="lc-scope" value="all"></div>`;
+    }
+    let html = `<div class="field"><label>${opts.label || 'What to practice'}</label>
+      <select id="lc-scope" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff;">
+        <option value="all">Everything</option>`;
+    for (const sec of ['people', 'nouns', 'verbs']) {
+      const cats = LAUNCH_CATS.filter(c => c.section === sec);
+      if (!cats.length) continue;
+      html += `<optgroup label="${SECT_LABEL[sec] || sec}"><option value="${sec}">All ${sec}</option>`;
+      const tops = cats.filter(c => c.parentId == null).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      for (const t of tops) {
+        html += `<option value="cat:${t.id}">— ${schEsc(t.label)}</option>`;
+        const subs = cats.filter(c => c.parentId === t.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        for (const sub of subs) html += `<option value="cat:${sub.id}">— — ${schEsc(sub.label)}</option>`;
+      }
+      html += `</optgroup>`;
+    }
+    html += `</select>`;
+    if (opts.chainHint) html += `<p class="hint" style="margin:6px 0 0;">To chain several games in order, use the <strong>Routine Builder</strong> above.</p>`;
+    html += `</div>`;
+    return html;
   }
   function musicField() {
     return `<div class="field"><label>Background music</label><select id="lc-music">
@@ -822,11 +847,11 @@
   const limitField = () => `<div class="field"><label>Time limit</label><select id="lc-limit"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15" selected>15 minutes</option><option value="0">Until I stop it</option></select></div>`;
   const secsField = () => `<div class="field"><label>Seconds per image</label><select id="lc-secs"><option value="4">4s</option><option value="5" selected>5s</option><option value="6">6s</option><option value="8">8s</option></select></div>`;
   const FORMS = {
-    'Self-Paced Matching Game': () => catChecks() + choicesField() + limitField() + musicField(),
-    'Facilitated Matching Game': () => catChecks({ label: 'Category' }) + choicesField() +
+    'Self-Paced Matching Game': () => catSelect({ chainHint: true }) + choicesField() + limitField() + musicField(),
+    'Facilitated Matching Game': () => catSelect() + choicesField() +
       `<p class="hint" style="margin:0 0 10px;">Starting here puts the tablet in facilitated mode; drive it from the therapist phone view.</p>` + musicField(),
-    'Learn Slideshow': () => catChecks() + secsField() + limitField() + musicField(),
-    'Exposure Slideshow': () => catChecks() + secsField() + limitField() +
+    'Learn Slideshow': () => catSelect() + secsField() + limitField() + musicField(),
+    'Exposure Slideshow': () => catSelect() + secsField() + limitField() +
       `<p class="hint" style="margin:0 0 10px;">Labels are spoken gently, first-person ("I can see a …").</p>` + musicField(),
     'Celebration': () => `<p class="hint" style="margin:0 0 6px;">Plays the flowers + your recorded cheer on the tablet right now. Edit the cheer & music under "Reward cheers & game music" below.</p>`,
   };
@@ -834,7 +859,7 @@
   function openModal(mode, launch) {
     title.textContent = (launch ? 'Start · ' : 'Configure · ') + mode;
     sub.textContent = "Runs live on Fletcher's tablet — it must be open on the board.";
-    body.innerHTML = (FORMS[mode] || (() => catChecks() + musicField()))();
+    body.innerHTML = (FORMS[mode] || (() => catSelect() + musicField()))();
     goBtn.textContent = mode === 'Celebration' ? 'Play on tablet' : 'Start on tablet';
     goBtn.dataset.modeName = mode;
     goBtn.disabled = false;
@@ -876,15 +901,15 @@
   function buildLaunchCmd(modeName) {
     const mode = MODE_KEY[modeName] || 'self_paced';
     const cmd = { kind: 'cmd', action: 'start', mode };
-    const scopes = [...body.querySelectorAll('.lc-cat:checked')].map(c => c.dataset.scope);
+    const scopeEl = body.querySelector('#lc-scope');
+    const scope = scopeEl ? scopeEl.value : 'all';
     const musicEl = body.querySelector('#lc-music'); if (musicEl) cmd.music = musicEl.value;
     const limEl = body.querySelector('#lc-limit'); if (limEl) { const v = parseInt(limEl.value, 10); if (Number.isFinite(v)) cmd.limitMin = v; }
     if (mode === 'self_paced' || mode === 'facilitated') {
       const ch = body.querySelector('#lc-choices'); cmd.choices = ch ? (parseInt(ch.value, 10) || 3) : 3;
-      if (mode === 'self_paced' && scopes.length > 1) cmd.scopes = scopes;
-      else cmd.scope = scopes[0] || 'all';
+      cmd.scope = scope;
     } else if (mode === 'learn_slideshow' || mode === 'exposure_slideshow') {
-      cmd.scope = scopes.length === 1 ? scopes[0] : 'all';
+      cmd.scope = scope;
       const sc = body.querySelector('#lc-secs'); cmd.secondsPerImage = sc ? (parseInt(sc.value, 10) || 5) : 5;
       cmd.labelStyle = mode === 'exposure_slideshow' ? 'first_person' : 'plain';
     }
@@ -1086,8 +1111,13 @@
     document.getElementById('tile-label').placeholder = ph;
     document.getElementById('tile-save').textContent = kind === 'item' ? 'Save tile' : (kind === 'subcategory' ? 'Save subcategory' : 'Save category');
     document.getElementById('tile-voice').style.display = (kind === 'item') ? '' : 'none';     // categories don't speak
-    ['tile-label', 'tile-image', 'tile-sound', 'tile-photo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    ['tile-label', 'tile-image', 'tile-sound', 'tile-photo', 'tile-phrase'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     document.getElementById('tile-keep-aspect').checked = false;
+    document.getElementById('tile-emotion').value = 'default';
+    document.getElementById('tile-pin').checked = false;
+    // Pin-to-top only makes sense in the People column (kid-board sorts pinned
+    // people first), so hide it everywhere else — same gate as app.html.
+    document.getElementById('tile-pin-row').style.display = (kind === 'item' && opts.section === 'people') ? 'flex' : 'none';
     const prev = document.getElementById('tile-preview'); prev.style.display = 'none'; prev.removeAttribute('src');
     document.getElementById('tile-magic-status').textContent = '—';
     document.getElementById('tile-sound-status').textContent = 'No sound yet';
@@ -1117,6 +1147,9 @@
     const label = document.getElementById('tile-label').value.trim();
     const style = document.getElementById('tile-style').value;
     const emotion = document.getElementById('tile-emotion').value;
+    // Phrase overrides label for the voice (pronunciation tweaks like "Cheery-ohs"
+    // when the label is "Cheerios"); falls back to the label.
+    const phrase = (document.getElementById('tile-phrase').value || '').trim() || label;
     const statusEl = document.getElementById('tile-magic-status');
     const btn = document.getElementById('tile-magic'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Working…';
     tileSetErr('');
@@ -1127,7 +1160,7 @@
       if (!ir.ok) { const d = await ir.text(); throw new Error('Image — ' + d.slice(0, 160)); }
       tilePendingImage = await ir.blob(); tileShowPreview(tilePendingImage);
       statusEl.textContent = '🔊 Making the voice…';
-      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: label, emotion }) });
+      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: phrase, emotion }) });
       if (tr.ok) { tilePendingSound = await tr.blob(); document.getElementById('tile-sound-status').textContent = 'AI voice ready ✓'; }
       statusEl.textContent = '✅ Ready — tap Save tile.';
     } catch (err) { statusEl.textContent = '—'; tileSetErr('Could not make the tile: ' + (err.message || err)); }
@@ -1141,11 +1174,12 @@
   document.getElementById('tile-gen-audio').addEventListener('click', async () => {
     const label = document.getElementById('tile-label').value.trim();
     if (!label) { tileSetErr('Type a label first'); return; }
+    const phrase = (document.getElementById('tile-phrase').value || '').trim() || label;
     const emotion = document.getElementById('tile-emotion').value;
     const st = document.getElementById('tile-sound-status'); const btn = document.getElementById('tile-gen-audio');
     btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Generating…'; st.textContent = 'Generating audio…'; tileSetErr('');
     try {
-      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: label, emotion }) });
+      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: phrase, emotion }) });
       if (!tr.ok) { const d = await tr.text(); throw new Error(d.slice(0, 160)); }
       tilePendingSound = await tr.blob(); st.textContent = 'Voice ready ✓';
       try { const a = new Audio(URL.createObjectURL(tilePendingSound)); a.play().catch(() => {}); } catch (_) {}
@@ -1164,7 +1198,9 @@
       if (tileTarget.kind === 'item') {
         let soundKey = null;
         if (tilePendingSound) { const isWav = (tilePendingSound.type || '').indexOf('wav') >= 0; soundKey = await tileUpload(tilePendingSound, 'sound', isWav ? 'wav' : 'mp3', tilePendingSound.type || 'audio/mpeg'); }
-        await orgApi('/api/items', { method: 'POST', body: JSON.stringify({ section: tileTarget.section, categoryId: tileTarget.catId, label, imageKey, soundKey, keepAspect, childId: slug }) });
+        // pinned only applies in People (UI gates the row to that section).
+        const pinned = tileTarget.section === 'people' && document.getElementById('tile-pin').checked;
+        await orgApi('/api/items', { method: 'POST', body: JSON.stringify({ section: tileTarget.section, categoryId: tileTarget.catId, label, imageKey, soundKey, keepAspect, pinned, childId: slug }) });
       } else {
         const body = { section: tileTarget.section, label, imageKey, keepAspect, childId: slug };
         if (tileTarget.kind === 'subcategory' && tileTarget.parentId) body.parentId = tileTarget.parentId;
