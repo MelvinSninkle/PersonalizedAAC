@@ -6,20 +6,25 @@ A communication and learning app built for one specific non-verbal toddler who i
 
 ---
 
-## The three views
+## The views
 
 | Path | Audience | What it is |
 |---|---|---|
 | `/u/<slug>` | The child (tablet) | The AAC board itself — People · Nouns · Verbs grid + a Needs strip + the game/slideshow/celebration runtime |
 | `/parent/<slug>` | Parents | Dashboard: analytics, mode launcher, organizer, schedule editor, reward cheers, scheduled prompts, reference images, backup |
-| `/therapist/<slug>` | SLP / facilitator | Live facilitator console (drives a game on the iPad), plus the shared schedule editor and progress view |
+| `/therapist` | SLP / facilitator (multi-child) | Roster home — a grid of child profile portraits for every child the therapist has access to; click one to enter that child's `/therapist/<slug>` |
+| `/therapist/<slug>` | SLP / facilitator (one child) | Live facilitator console (drives a game on the iPad), plus the shared schedule editor and progress view |
+| `/admin/taxonomy.html` | Admin | The canonical word/tile library workbench (curated word list shared across all children) |
 
-All three are protected by a session cookie; an invite-gate (`/welcome`) sits in front of public traffic.
+All views sit behind a session cookie; an invite-gate (`/welcome`) sits in front of anonymous traffic. After login, **no automatic redirect by role** — you land on a launchpad with the surfaces relevant to your role, so you can deliberately go to (e.g.) onboarding or the admin taxonomy instead of being yanked into a specific child's view. The kid iPad still opens its `/u/<slug>` URL directly.
 
-### Per-device default view
+### Per-device default view (the child's iPad)
 
-On first launch, each device asks **"Who uses this device?"** (Child / Parent / Therapist). The choice is stored in `localStorage` (`aacDeviceRole`); a parent/therapist device then **redirects in `<head>`** to its dashboard so there's no flash of the board. Override paths:
-- Add `#board` to any URL to stay on the board for that visit (sets `sessionStorage.aacStayBoard`).
+On the kid iPad, first launch asks **"Who uses this device?"** (Child / Parent / Therapist). When the answer is **child**, the device stores `aacDeviceRole = 'child'` in `localStorage` and `/` auto-bounces to `/u/<slug>` on every visit — that's the locked-in tablet behavior. Parent / therapist / admin devices land on the launchpad and choose where to go.
+
+Override paths:
+- `/?home` always shows the marketing landing page.
+- Add `#board` to any URL to stay on the board for that visit.
 - ⚙ Display → "Default view for this device" changes the saved role on the spot.
 - Parent and Therapist views have a **"Change device default"** link in the header that clears the role and re-opens the chooser.
 
@@ -74,7 +79,7 @@ Step with a too-thin category is skipped instead of stalling.
 The control surface for Andrew:
 
 - **Analytics** — recent sessions, mastery by category, weekly summary.
-- **Start a mode** — six launcher cards (Self-Paced / Facilitated Matching, Learn / Exposure Slideshow, Celebration, Routine Builder) that build a live command and POST it to `/api/live`. Forms use the child's real categories pulled from `/api/sync`. Sends a tablet-online check before launching and tells you to open the tablet if it isn't on the board.
+- **Start a mode** — six launcher cards (Self-Paced / Facilitated Matching, Learn / Exposure Slideshow, Celebration, Routine Builder) that build a live command and POST it to `/api/live`. The scope picker is a **single hierarchical dropdown** (`Everything` / `All <section>` / `— Category` / `— — Subcategory`) — same shape as the kid-board's "What to practice". To chain games in order, use the Routine Builder. After sending, the launcher **waits for the tablet to confirm**: "Started on tablet ✓", or a clear reason it didn't (too few picture tiles in the chosen category, or tablet not on the board).
 - **Saved games** — name a launcher setup and re-launch it in one tap (chip).
 - **Saved routines** — name and re-launch composed multi-mode routines.
 - **Routine Builder** — modal with ordered steps; add a step (mode + category + duration), reorder, save or "Run now".
@@ -85,20 +90,58 @@ The control surface for Andrew:
   - Collapsible top-level categories *and* subcategories (with tile-count badges); whole board opens **fully collapsed**.
   - Drag categories or tiles to reorder / reparent — including **across sections** (the dragged subtree's `section` updates).
   - **Multi-select tiles** via checkbox; drag any one of them to move the whole selection together.
-  - **+ tile / + Category / + subcategory** open the **full creator modal**: label, ✨ AI-from-photo (style picker + photo capture → `/api/generate-image` + `/api/tts` for voice), or upload, plus keep-aspect. Voice section hides for categories.
+  - **✎ on any tile / category / subcategory** opens the **full Add/Edit modal** in edit mode: change label, swap the image (regenerate from a new photo, or upload), regenerate the voice with a tweaked phrase, toggle Pin-to-top, flip keep-aspect, or delete. **+ tile / + Category / + subcategory** open the same modal in add mode. The voice section hides for categories. Add and Edit are the same surface on both the kid board and the parent organizer.
 - **Reference images for AI tile generation** — uploaded photos used as style/subject references for `/api/generate-image`.
 - **Backup** — download a JSON of the entire board with images/audio base64-embedded.
+- **Admin-only**: a `🧬 Taxonomy` link in the top-right opens the workbench at `/admin/taxonomy.html`. Surfaced only when `/api/auth/me` returns role `admin`; other parents never see it.
 
 ---
 
-## Therapist view (`therapist.html`)
+## Therapist views
 
-Focused facilitator console for the SLP:
+The therapist surface has two pages:
+
+### `/therapist` — roster home (`therapist-home.html`)
+
+A grid of **child profile portraits** — one card per child the therapist has access to (the starred / pinned "me" tile from each child's People column, or the first People tile). Click a card to open that child's facilitator console at `/therapist/<slug>`. Children come from `GET /api/my-children`, which uses the `child_access` table (see *Multi-tenant access*). An empty roster prompts the therapist to ask a parent for an invite (planned).
+
+### `/therapist/<slug>` — one child's console (`therapist.html`)
 
 - **Live session control** — drives a facilitated matching game on the tablet (start/skip/next/end, mark correct verbal/physical responses) over `/api/live`.
 - **Shared progress** — mastery by category, recent sessions.
 - **Daily schedule editor** — same editor as the parent view; the SLP can fill in the child's routine and locations.
 - **Change device default** link in the header.
+
+---
+
+## Multi-tenant access + therapist boards
+
+The system is designed for one therapist to work with multiple children, and one child to have a parent + one or more therapists, while keeping each child's data scoped to the right people.
+
+### Roster: who can see which child
+
+The `child_access` table is a many-to-many link between `users` and `child_id`, with a `relation` ('parent' | 'therapist') and `status` ('active' | 'pending'). Admins see every child. A user's roster comes from `GET /api/my-children` (returns each accessible child + a portrait).
+
+Therapists join via the `access_requests` handshake (parent invites a therapist by email, or therapist requests a parent's child) — UI is planned; the table + helpers ship now so endpoints can already enforce against it.
+
+### Content ownership: shared parent board vs. therapist custom boards
+
+Every category and item carries `owner_user_id`:
+
+- **NULL** = shared "parent board" content. Edit/delete: the child's parent(s) or admin.
+- **`<uid>`** = a therapist's "custom board" content. The therapist who created it owns it; the child sees and uses it the moment it's created (no parent approval gate — **trust the therapist by default; if you wouldn't, that therapist shouldn't be seeing your child**).
+
+### Parent override
+
+A parent of the child can **remove a therapist's content from their child's view** — same access check as the therapist's own delete, just a softer UI verb. The reasoning: trust the therapist by default, but if a parent doesn't want something on their child's board, they have the authority.
+
+Encoded in `api/_lib/access.js`:
+
+- `canAccessChild(user, childId)` — read access to anything for that child.
+- `isParentOf(user, childId)` — does this user have a `relation='parent'` row?
+- `canEditContent(user, ownerUserId, childId)` — true if admin, or owner of the content, or parent of the child.
+
+> **Status:** the helpers + roster + schema ship now. **Enforcement is being rolled out endpoint-by-endpoint** (sync → items/categories → live/child-settings → analytics/events). The custom-board editor for therapists ("Build a Custom Board") lands once enforcement is across.
 
 ---
 
@@ -163,7 +206,9 @@ npx cap sync ios
 
 - Anonymous traffic must first redeem an invite code (`/welcome`) — `lib/session.js` signs a short cookie. After login, a `mw_session` cookie controls access.
 - `middleware.js` gates everything except `api/*`, `login`, `reset`, `welcome`, and static asset directories.
-- Roles: `admin` / `parent` / `therapist` / `child` — checked in API handlers via `_lib/auth.js`.
+- Roles: `admin` / `parent` / `therapist` / `child` — verified server-side in `_lib/auth.js`.
+- `_lib/access.js` adds per-child gating: `canAccessChild` / `isParentOf` / `canEditContent` drive multi-tenant scoping for the data endpoints. Roster lives in `child_access`; invite/request handshake in `access_requests`.
+- Login does **not** auto-redirect by role. It honors `?next=` (used by middleware when it bounces an unauthenticated request), otherwise shows a launchpad of role-appropriate links — parent dashboard, child board, **Set up a new child (onboard)**, admin taxonomy, therapist roster.
 
 ### Live facilitator protocol (`/api/live`)
 
@@ -183,8 +228,9 @@ Commands carry: `action` (start / mark / skip / next / end), `mode`, `scope` or 
 `vercel.json`:
 
 ```
-/u/:slug         → app.html        (the child's board)
+/u/:slug         → app.html             (the child's board)
 /parent/:slug    → parent.html
+/therapist       → therapist-home.html  (roster of children the therapist sees)
 /therapist/:slug → therapist.html
 /login           → login.html
 /reset           → reset.html
@@ -192,6 +238,39 @@ Commands carry: `action` (start / mark / skip / next / end), `mode`, `scope` or 
 /onboard/:slug   → onboard.html
 /onboard         → onboard.html
 ```
+
+---
+
+## Taxonomy — the canonical word/tile library
+
+The taxonomy sits one layer above any one child's board: a **global, admin-curated template** that says "these are the words a brand-new child can start with, how each should be drawn, and which ones are part of the starter set." Per-child boards (`categories` + `items`) are *instances* of this template — same slugs across every child, only the media is personalized.
+
+Edited at **`/admin/taxonomy.html`** (admin role enforced on every `api/admin/taxonomy*` endpoint). Stored in the `taxonomy` table; every import / bulk op auto-snapshots, with a full audit log.
+
+### Row fields
+
+| Field | Meaning |
+|---|---|
+| `id` | Stable slug, dot-separated lowercase: `nouns.food.drinks.milk`. The invariant cross-child anchor. |
+| `column` | `People` / `Nouns` / `Verbs` / `Needs` (maps to the board sections). |
+| `category`, `subcategory` | Hierarchy (free text). |
+| `label` | The word shown on the tile. |
+| `pronunciation` | TTS override (e.g. `Cheery-ohs`). |
+| `subject_mode` | `child_as_subject` / `person` / `object` / `concept`. |
+| `parent_photo_behavior` | `override` (the subject IS an uploaded photo, e.g. Mom) / `supplement` / `none`. |
+| `prompt_template` | Image-generation prompt with `{style}`, `{reference}` (the child), `{parent_photo}` tokens. |
+| `phase` | Rollout grouping: `v1_core` / `v1_extended` / `v2` / `later`. |
+| **`core`** | `true` = part of the baseline standard vocabulary; `false` = grows in later. A whole category/subcategory is "non-core" when its tiles are — flip a group at once via the toolbar filter + **Bulk action → Mark (non-)core**. |
+| `status` | `draft` (invisible to generation) / `published`. |
+| `notes` | Admin/SLP guidance; current home for scene hints like `Scene: pantry` (graduates to a real `scene_tags` column later). |
+
+### Drafted seed
+
+`taxonomy/seed-core-v1.csv` is an importable starter (~208 rows: People, Needs incl. Feelings/Social/Describing, Verbs, and Nouns across Food/Toys/Home/Body/Clothes/Animals/Vehicles/Nature/Places/Colors). Generated by `taxonomy/build-seed.mjs` from structured vocabulary + one shared prompt formula, so every tile shares the same composition / quality / safety rules and only the per-item subject varies. Regenerate with `node taxonomy/build-seed.mjs`.
+
+### Importing the current board
+
+**Import live board…** in the workbench calls `POST /api/admin/taxonomy-import-board?childId=<slug>` — pulls a child's existing categories/items into the taxonomy as `draft` rows with derived slugs + default prompts. Snapshot-first; inserts new ids only.
 
 ---
 
@@ -215,7 +294,16 @@ Commands carry: `action` (start / mark / skip / next / end), `mode`, `scope` or 
 | `POST /api/push-token` | Register an iOS device token for this user + role |
 | `GET/POST /api/reference-images` | Manage style/subject reference photos |
 | `GET /api/events`, `/api/analytics`, `/api/usage` | Read-side dashboards |
+| `GET /api/my-children` | Roster + portrait for every child the signed-in user has access to (drives `/therapist`) |
+| `GET/POST /api/auth/{login,logout,me,register,reset,reset-request}` | Account flow |
 | `POST /api/init` | One-time schema bootstrap (idempotent) |
+| **Admin-only** | |
+| `GET/POST/PUT/DELETE /api/admin/taxonomy` | Canonical taxonomy CRUD |
+| `POST /api/admin/taxonomy-bulk` | Bulk import (CSV/JSON parsed client-side, snapshot-first) |
+| `POST /api/admin/taxonomy-bulkop` | Bulk set status / phase / core / archived / delete |
+| `POST /api/admin/taxonomy-import-board?childId=` | Seed the taxonomy from a child's live board as drafts |
+| `GET/POST/DELETE /api/admin/taxonomy-snapshots` | Manual snapshots + restore + diff |
+| `GET /api/admin/taxonomy-audit` | Filterable audit log |
 
 ---
 
@@ -272,7 +360,10 @@ Child Apple IDs require **Ask to Buy** approval to install TestFlight itself. Af
 ```
 app.html              Kid board — the AAC grid + game/slideshow runtime
 parent.html           Parent dashboard
-therapist.html        Therapist (facilitator) view
+therapist.html        Therapist (facilitator) console for one child
+therapist-home.html   Therapist roster — grid of child portraits
+login.html            Sign-in + post-login launchpad
+index.html            Marketing landing + child-device auto-bounce
 schedule-editor.js    Shared "Daily schedule" editor used by both dashboards
 middleware.js         Invite gate + session gate (Edge middleware)
 capacitor.config.json Capacitor iOS shell config
@@ -280,13 +371,17 @@ vercel.json           URL rewrites for /u/, /parent/, /therapist/, /welcome, etc
 sw.js                 Service worker
 api/                  Vercel Serverless Functions (see table above)
   _lib/auth.js        checkAuth — verifies session cookie / Bearer token
+  _lib/access.js      canAccessChild / isParentOf / canEditContent (multi-tenant)
   _lib/db.js          Neon SQL client + row mappers
   _lib/apns.js        Self-hosted APNs sender (HTTP/2 + ES256 JWT)
+  my-children.js      Roster endpoint for the therapist home
+  admin/taxonomy*.js  Taxonomy workbench backend (CRUD, bulk, snapshots, audit, board-import)
+admin/taxonomy.html   Taxonomy workbench (Tabulator-based editor)
+taxonomy/             Canonical word list — README, build-seed.mjs, seed-core-v1.csv
 icons/                App icon + MyWorld globe used in the header
 audio/                Background music tracks for games
-admin/                Admin-only utility pages (invite codes, taxonomy)
 cap-shell/            Capacitor webDir stub (the real content is served from the URL)
-lib/                  Shared session signing helpers
+lib/                  Shared session signing helpers (session.js)
 styles/               Shared CSS
 ```
 
@@ -305,7 +400,14 @@ All photos / audio of real people live in Vercel Blob behind authenticated `/api
 
 ## Known limitations & follow-ups
 
+### In-flight (foundation shipped, finishing work in flight)
+- **Multi-tenant data enforcement.** `canAccessChild` / `canEditContent` and the `child_access` / `access_requests` tables are in place; the data endpoints (`sync`, `items`, `categories`, `live`, `child-settings`, `analytics`, etc.) are being gated by them endpoint-by-endpoint. Until that's across, only admin really exercises the cross-child path.
+- **Parent ↔ therapist invite/request flow.** Schema and helpers exist; the UI (parent invites by email; therapist requests; accept/decline) is the next phase.
+- **Therapist "Build a Custom Board" editor.** Ownership column shipped; the editor that uses it (and surfaces a per-tile "Remove from <child>'s board" parent-override action) lands after enforcement.
+
+### Open / deferred
 - **Status bar / contentInset** behavior on iOS depends on the Info.plist + the `@capacitor/status-bar` plugin being installed; see the iOS section.
-- **Editing a tile's image/sound from the organizer** isn't wired up yet — the ✎ pencil only renames. The full creator is reachable from the **+ tile** flow.
 - **Scheduled-prompt triggers off `settings.schedule`** (board chooses what to show based on time + location) is intentionally not wired yet — the editor captures the data; the runtime is next.
+- **Per-concept mastery & progressive growth.** `game_attempts.category` currently stores the section, not the canonical taxonomy slug — once tiles carry `taxonomy_slug`, mastery rolls up per concept and drives "grow the board as the child masters levels."
+- **Scene tags for "snap your pantry."** Taxonomy rows park scene hints in `notes` for now (`Scene: pantry`); will graduate to a real `scene_tags` column + a scenes table.
 - **Multi-device race on `child_settings`**: it's a full-blob replace, so simultaneous edits from two devices can lose updates. In practice this is rare; the parent and the therapist rarely edit settings at the same moment.
