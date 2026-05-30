@@ -218,7 +218,7 @@
   <div class="brand fred">Fletcher's World <small>Parent dashboard</small></div>
   <div class="right">
     <span class="device-pill"><span class="dot"></span> Tablet · online</span>
-    <span class="role-switch">View as <a href="#" id="to-therapist">Therapist</a> · <a href="#" id="device-default">Change device default</a></span>
+    <span class="role-switch">View as <a href="#" id="to-therapist">Therapist</a> · <a href="#" id="device-default">Change device default</a><a href="/admin/taxonomy.html" id="admin-taxonomy" style="display:none;"> · 🧬 Taxonomy</a></span>
   </div>
 </header>
 
@@ -613,6 +613,17 @@
 <script src="/schedule-editor.js"></script>
 <script>
 (() => {
+  // ---- Admin-only links (e.g. the taxonomy workbench). Surfaced only when the
+  // signed-in session is role=admin, so other parents never see it. ----
+  (async () => {
+    try {
+      const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const u = (await r.json()).user;
+      if (u && u.role === 'admin') { const el = document.getElementById('admin-taxonomy'); if (el) el.style.display = ''; }
+    } catch (_) {}
+  })();
+
   // ---- Child slug from /parent/<slug> ----
   const m = location.pathname.match(/^\/parent\/([^\/]+)/);
   const slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';
