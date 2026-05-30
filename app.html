@@ -723,7 +723,14 @@
     }
     .aac-section { min-height: 70vh; }
     .aac-section h2 { padding: 10px 14px; font-size: 16px; }
-    .items-grid { overflow-y: visible; gap: 8px; padding: 8px; }
+    .items-grid { overflow-y: visible; gap: 8px; padding: 8px; justify-items: center; }
+    /* Tile size cap — without this, single-column layout × tilesAcross=2 turns
+       a 768px iPad-portrait People row into ~370px-wide tiles. Capping at 200px
+       keeps tiles touch-friendly without ever ballooning, regardless of how the
+       parent set tilesAcross. The needs strip uses a flex calc so cap its
+       children separately. */
+    .items-grid > * { max-width: 200px; width: 100%; }
+    .needs-section .items-grid > * { max-width: 130px; }
     .tab-strip { gap: 6px; padding: 8px; max-height: none; }
     .tile-label { font-size: 13px; }
     .tile-add { min-height: 56px; }
@@ -733,6 +740,43 @@
     header button { padding: 0 12px; height: 36px; min-width: 96px; font-size: 13px; }
     .modal { padding: 18px; }
     .modal h3 { font-size: 18px; }
+  }
+  /* Phone-only (~iPhone). The default edit-mode header uses CSS grid with two
+     auto rows + flex-wrap:nowrap on the toolbar — fragile here, because
+     5 wide buttons exceed the row and the overflow-x:auto interacts badly with
+     safe-area-inset, leaving the buttons rendering outside the pink band on
+     iOS. Switch to a plain flex column with wrapping toolbar so the toolbar
+     stays inside the painted header no matter how cramped it gets. */
+  @media (max-width: 700px) {
+    body.edit-mode header {
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      padding: calc(6px + env(safe-area-inset-top, 0px)) 10px 8px !important;
+      gap: 6px !important;
+    }
+    body.edit-mode header .hdr-center { width: 100%; justify-content: center; }
+    body.edit-mode header .hdr-left {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      overflow: visible !important;
+      justify-content: center !important;
+      align-items: center !important;
+      gap: 4px !important;
+      width: 100%;
+      max-width: 100%;
+    }
+    body.edit-mode header .hdr-right { display: none !important; }
+    body.edit-mode header .hdr-left button {
+      padding: 0 10px !important;
+      height: 28px !important;
+      font-size: 11px !important;
+      min-width: 0 !important;
+      border-radius: 6px !important;
+    }
+    /* The "Edit mode" status word is redundant with the open-padlock icon — hide
+       it on phone so the toolbar has room. */
+    body.edit-mode header .status { display: none !important; }
   }
   @media (max-width: 480px) {
     main { padding: 6px; gap: 6px; }
@@ -840,7 +884,11 @@
   .game-prompt-btn .spk { font-size: 1.1em; }
   .game-progress { position: absolute; top: 24px; left: 20px; font-family: 'Fredoka', ui-rounded, system-ui, sans-serif; color: #d6a8c6; font-weight: 600; font-size: 15px; }
   .game-exit { position: absolute; top: 16px; right: 18px; width: 46px; height: 46px; border-radius: 50%;
-    border: none; background: rgba(0,0,0,.05); color: #c9b5c1; font-size: 20px; cursor: pointer; }
+    border: none; background: rgba(0,0,0,.05); color: #c9b5c1; font-size: 20px; cursor: pointer;
+    /* body's touch-action:pan-x pan-y lets iOS treat a tiny finger tremor on a
+       small button as the start of a pan and fire touchcancel — killing the
+       long-press timer. Opt this button out so it owns the touch outright. */
+    touch-action: none; }
   .game-grid { flex: 1; display: grid; gap: clamp(12px, 3vw, 28px); padding: clamp(12px, 3vw, 30px);
     align-content: center; justify-items: center; grid-template-columns: repeat(2, 1fr); }
   .game-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
@@ -1402,7 +1450,13 @@
           // Plain count: the needs strip uses flex with calc-based tile widths.
           itemsEl.style.setProperty('--needs-cols', needsColCount());
         } else {
-          itemsEl.style.setProperty('--items-cols', `repeat(${display.tilesAcross[s]}, 1fr)`);
+          // Clamp defensively: an undefined / NaN tilesAcross would produce
+          // "repeat(undefined, 1fr)" which CSS silently drops, falling the grid
+          // back to one column per tile — exactly the "huge People tile"
+          // distortion. Force a sane integer here so a corrupted display object
+          // can never deform the board.
+          const cols = clampAcross(display.tilesAcross[s] ?? DISPLAY_DEFAULTS.tilesAcross[s]);
+          itemsEl.style.setProperty('--items-cols', `repeat(${cols}, 1fr)`);
         }
       }
     }
@@ -4451,13 +4505,34 @@
   document.getElementById('remote-btn').addEventListener('click', enterStandby);
 
   // Exit needs a long-press so a child can't tap out of the game.
-  let exitTimer = null;
+  // Pointer Events + setPointerCapture: once a press starts on the button, the
+  // same pointer stays bound to it even if the finger drifts a few pixels —
+  // which it always does on a kid's hold. This replaces the old
+  // mousedown/touchstart pair, where iOS's touchcancel fired on the slightest
+  // tremor and silently killed the timer (the bug the user hit).
+  let exitTimer = null, exitPid = null;
   const exitBtn = document.getElementById('game-exit');
-  const startExit = () => { exitTimer = setTimeout(stopGame, 1200); };
-  const cancelExit = () => { if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; } };
-  exitBtn.addEventListener('mousedown', startExit);
-  exitBtn.addEventListener('touchstart', startExit, { passive: true });
-  ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(e => exitBtn.addEventListener(e, cancelExit));
+  function startExit(e) {
+    if (exitTimer) return;                                  // already counting down
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    exitPid = e.pointerId;
+    try { exitBtn.setPointerCapture(exitPid); } catch (_) {}
+    exitTimer = setTimeout(stopGame, 1200);
+  }
+  function cancelExit() {
+    if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; }
+    if (exitPid != null) { try { exitBtn.releasePointerCapture(exitPid); } catch (_) {} exitPid = null; }
+  }
+  if (window.PointerEvent) {
+    exitBtn.addEventListener('pointerdown', startExit);
+    exitBtn.addEventListener('pointerup', cancelExit);
+    exitBtn.addEventListener('pointercancel', cancelExit);
+  } else {
+    // Legacy fallback for any environment without Pointer Events.
+    exitBtn.addEventListener('mousedown', startExit);
+    exitBtn.addEventListener('touchstart', startExit, { passive: true });
+    ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(e => exitBtn.addEventListener(e, cancelExit));
+  }
 
   // Rewards modal
   document.getElementById('rewards-btn').addEventListener('click', () => {
