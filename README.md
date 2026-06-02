@@ -324,6 +324,9 @@ Edited at **`/admin/taxonomy.html`** (admin role enforced on every `api/admin/ta
 | `APNS_BUNDLE_ID` | `io.andrewpeterson.myworld` |
 | `APNS_PRIVATE_KEY` | Full `.p8` contents (BEGIN/END PRIVATE KEY) |
 | `APNS_HOST` | Optional override (`https://api.sandbox.push.apple.com` for dev) |
+| `RESEND_API_KEY` | Resend API key (used for therapist-invite emails) |
+| `INVITE_FROM_EMAIL` | Verified Resend `From`, e.g. `My World <hello@aac.andrewpeterson.io>` |
+| `APP_URL` | Public base URL for invite links (defaults to `https://aac.andrewpeterson.io`) |
 
 After deploying with the env vars set, hit `POST /api/init` once with the `ADMIN_TOKEN` to create the tables.
 

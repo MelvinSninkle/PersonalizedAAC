@@ -493,6 +493,16 @@
     </div>
   </div>
 
+  <!-- THERAPY TEAM -->
+  <div class="section-label">Therapy team</div>
+  <div class="panel">
+    <h2>Who has access to <span id="team-child-name">your child</span></h2>
+    <p class="hint">Therapists you invite see your child's progress, run live games on the tablet, and (next) build their own custom boards. You can remove anyone at any time.</p>
+    <div id="team-list" style="display:flex;flex-direction:column;gap:8px;margin:14px 0;"></div>
+    <button class="btn primary" id="team-invite">＋ Invite a therapist</button>
+    <span id="team-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
+  </div>
+
   <!-- BACKUP -->
   <div class="section-label">Backup</div>
   <div class="panel">
@@ -525,6 +535,26 @@
       <button class="btn ghost" id="modal-cancel">Cancel</button>
       <button class="btn ghost" id="modal-save">Save</button>
       <button class="btn primary" id="modal-go">Start session</button>
+    </div>
+  </div>
+</div>
+
+<!-- INVITE THERAPIST MODAL -->
+<div class="scrim" id="inv-scrim">
+  <div class="modal" style="max-width:440px;">
+    <button class="x" id="inv-x" aria-label="Close">×</button>
+    <h3 class="fred">Invite a therapist</h3>
+    <p class="sub">They'll get an email with a one-tap link to join the team. If they already have an account, they'll also see the invite the next time they sign in.</p>
+    <div class="field"><label>Their email</label>
+      <input id="inv-email" type="email" placeholder="therapist@example.com" autocomplete="email">
+    </div>
+    <div class="field"><label>Note (optional)</label>
+      <textarea id="inv-msg" rows="3" placeholder="A short note that goes in the invite email" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;"></textarea>
+    </div>
+    <p class="hint" id="inv-err" style="color:#dc2626;min-height:18px;"></p>
+    <div class="foot">
+      <button class="btn ghost" id="inv-cancel">Cancel</button>
+      <button class="btn primary" id="inv-send">Send invite</button>
     </div>
   </div>
 </div>
@@ -1314,6 +1344,85 @@
   });
   pollPlayRequest();
   setInterval(pollPlayRequest, 20000);
+
+  // ---- Therapy team (§8.2): invite by email, accept/decline in-app, remove ----
+  document.getElementById('team-child-name').textContent = pretty;
+  const invScrim = document.getElementById('inv-scrim');
+  function openInvite() { document.getElementById('inv-email').value = ''; document.getElementById('inv-msg').value = ''; document.getElementById('inv-err').textContent = ''; invScrim.classList.add('open'); document.getElementById('inv-email').focus(); }
+  function closeInvite() { invScrim.classList.remove('open'); }
+  document.getElementById('team-invite').addEventListener('click', openInvite);
+  document.getElementById('inv-x').addEventListener('click', closeInvite);
+  document.getElementById('inv-cancel').addEventListener('click', closeInvite);
+  invScrim.addEventListener('click', (e) => { if (e.target === invScrim) closeInvite(); });
+  document.getElementById('inv-send').addEventListener('click', async () => {
+    const email = document.getElementById('inv-email').value.trim();
+    const message = document.getElementById('inv-msg').value.trim();
+    const err = document.getElementById('inv-err'); err.textContent = '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Please enter a valid email address.'; return; }
+    const btn = document.getElementById('inv-send'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Sending…';
+    try {
+      const r = await fetch('/api/access/invite', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+        body: JSON.stringify({ childId: slug, email, message }) });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { err.textContent = d.error || 'Could not send invite.'; return; }
+      closeInvite();
+      // Surface what happened: email sent? account exists?
+      const note = !d.sentEmail
+        ? "Invite saved — email delivery isn't configured yet, so let them know directly."
+        : (d.hasAccount ? 'Invite sent. They\'ll also see it in My World next time they sign in.'
+                        : 'Invite sent — they\'ll get an email to create their account.');
+      const msg = document.getElementById('team-msg'); msg.textContent = note;
+      setTimeout(() => { msg.textContent = ''; }, 6000);
+      await loadTeam();
+    } catch (e) { err.textContent = 'Network error. Please try again.'; }
+    finally { btn.disabled = false; btn.textContent = pv; }
+  });
+
+  function teamRowMember(m) {
+    return `<div style="display:flex;align-items:center;gap:12px;background:#fff7fb;border:1px solid var(--line);border-radius:12px;padding:10px 14px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:14px;">${schEsc(m.email)}</div>
+        <div style="font-size:12px;color:var(--muted);">${m.relation === 'parent' ? '👪 Parent' : '🧑‍⚕️ Therapist'} · joined ${new Date(m.joinedAt).toLocaleDateString()}</div>
+      </div>
+      ${m.relation === 'therapist' ? `<button class="btn ghost" data-team-remove="${m.userId}" style="color:#dc2626;">Remove</button>` : ''}
+    </div>`;
+  }
+  function teamRowPending(p) {
+    return `<div style="display:flex;align-items:center;gap:12px;background:#fffaf0;border:1px dashed var(--line);border-radius:12px;padding:10px 14px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:14px;">${schEsc(p.email)}</div>
+        <div style="font-size:12px;color:var(--muted);">📨 Invite sent · ${p.hasAccount ? 'they have an account' : 'no account yet'} · ${new Date(p.invitedAt).toLocaleDateString()}</div>
+      </div>
+      <button class="btn ghost" data-team-cancel="${p.requestId}" style="color:#dc2626;">Cancel</button>
+    </div>`;
+  }
+  async function loadTeam() {
+    const el = document.getElementById('team-list'); if (!el) return;
+    el.innerHTML = '<div class="hint">Loading…</div>';
+    try {
+      const r = await fetch('/api/access/team?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) { el.innerHTML = '<div class="hint">Could not load the team.</div>'; return; }
+      const d = await r.json();
+      const blocks = d.members.map(teamRowMember).concat(d.pending.map(teamRowPending));
+      el.innerHTML = blocks.length ? blocks.join('') : '<div class="hint" style="font-style:italic;">No therapists on the team yet — tap "Invite a therapist" to add one.</div>';
+    } catch (_) { el.innerHTML = '<div class="hint">Could not load the team.</div>'; }
+  }
+  document.getElementById('team-list').addEventListener('click', async (e) => {
+    const rm = e.target.closest('[data-team-remove]');
+    const cn = e.target.closest('[data-team-cancel]');
+    if (rm) {
+      if (!confirm('Remove this therapist from the team? They will lose access immediately.')) return;
+      rm.disabled = true;
+      await fetch('/api/access/team?childId=' + encodeURIComponent(slug) + '&userId=' + rm.dataset.teamRemove, { method: 'DELETE', credentials: 'same-origin' });
+      await loadTeam();
+    } else if (cn) {
+      if (!confirm('Cancel this pending invite?')) return;
+      cn.disabled = true;
+      await fetch('/api/access/team?childId=' + encodeURIComponent(slug) + '&requestId=' + cn.dataset.teamCancel, { method: 'DELETE', credentials: 'same-origin' });
+      await loadTeam();
+    }
+  });
+  loadTeam();
 
   // ---- Reference images (steer AI tile generation) ----
   const refGrid = document.getElementById('ref-grid');

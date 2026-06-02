@@ -18,7 +18,7 @@ import { verifySession, parseCookies, cookieName } from './lib/session.js';
 const INVITE_COOKIE = 'mw_invite';
 
 export const config = {
-  matcher: ['/((?!api/|login|reset|welcome|favicon\\.ico|robots\\.txt|manifest\\.webmanifest|sw\\.js|icons/|audio/|styles/).*)'],
+  matcher: ['/((?!api/|login|reset|welcome|accept-invite|favicon\\.ico|robots\\.txt|manifest\\.webmanifest|sw\\.js|icons/|audio/|styles/).*)'],
 };
 
 function isPublicPage(pathname) {
