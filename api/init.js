@@ -69,6 +69,30 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS categories_owner_idx ON categories(owner_user_id)`;
     await db`CREATE INDEX IF NOT EXISTS items_owner_idx      ON items(owner_user_id)`;
 
+    // §8.3 Therapist custom boards: a template = a category with child_id NULL
+    // and owner_user_id = <therapist>. Allow nullable child_id on both tables
+    // so a single canonical template (and its items) can be shared with many
+    // children. Existing per-child rows keep their child_id; only templates use NULL.
+    await db`ALTER TABLE categories ALTER COLUMN child_id DROP NOT NULL`;
+    await db`ALTER TABLE items      ALTER COLUMN child_id DROP NOT NULL`;
+
+    // Which template categories are visible on which child's board. A 'removed'
+    // row records that a parent has overridden the visibility for their child;
+    // re-sharing by the owner flips it back to 'active'.
+    await db`
+      CREATE TABLE IF NOT EXISTS category_shares (
+        id BIGSERIAL PRIMARY KEY,
+        category_id BIGINT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+        child_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',   -- 'active' | 'removed'
+        created_by BIGINT REFERENCES users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (category_id, child_id)
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS category_shares_child_idx    ON category_shares(child_id, status)`;
+    await db`CREATE INDEX IF NOT EXISTS category_shares_category_idx ON category_shares(category_id)`;
+
     // Activity log — kid-mode button taps. No FK to items so history
     // survives item deletes; label / category / subcategory are
     // snapshotted at log time for stable analytics.

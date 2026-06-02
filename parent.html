@@ -497,10 +497,18 @@
   <div class="section-label">Therapy team</div>
   <div class="panel">
     <h2>Who has access to <span id="team-child-name">your child</span></h2>
-    <p class="hint">Therapists you invite see your child's progress, run live games on the tablet, and (next) build their own custom boards. You can remove anyone at any time.</p>
+    <p class="hint">Therapists you invite see your child's progress, run live games on the tablet, and can build their own custom boards. You can remove anyone at any time.</p>
     <div id="team-list" style="display:flex;flex-direction:column;gap:8px;margin:14px 0;"></div>
     <button class="btn primary" id="team-invite">＋ Invite a therapist</button>
     <span id="team-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
+  </div>
+
+  <!-- THERAPIST-SHARED BOARDS (parent override) -->
+  <div class="section-label">Therapist boards on the tablet</div>
+  <div class="panel">
+    <h2>Custom boards a therapist has shared</h2>
+    <p class="hint">Anything your therapists make for <span id="shared-child-name">your child</span> appears here. By default they show on the tablet right away. Tap "Remove from view" if you don't want one on the board — the therapist's content is unchanged; it just stops showing for your child.</p>
+    <div id="shared-list" style="display:flex;flex-direction:column;gap:8px;margin-top:14px;"></div>
   </div>
 
   <!-- BACKUP -->
@@ -1423,6 +1431,53 @@
     }
   });
   loadTeam();
+
+  // ---- Therapist-shared boards on this child (parent override "remove from view") ----
+  document.getElementById('shared-child-name').textContent = pretty;
+  async function loadSharedBoards() {
+    const el = document.getElementById('shared-list'); if (!el) return;
+    el.innerHTML = '<div class="hint">Loading…</div>';
+    try {
+      const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) { el.innerHTML = '<div class="hint">Could not load.</div>'; return; }
+      const d = await r.json();
+      // Therapist-shared categories show up in /sync with childId IS NULL +
+      // ownerUserId set. Top-level only (parents see the chip, not each tile).
+      const owned = (d.categories || []).filter(c => c.childId == null && c.ownerUserId != null && c.parentId == null);
+      if (!owned.length) { el.innerHTML = '<div class="hint" style="font-style:italic;">Nothing here yet — a therapist hasn\'t shared any boards with ' + schEsc(pretty) + '.</div>'; return; }
+      // Find the inviter/owner email per ownerUserId (via the team endpoint).
+      let emailByUid = new Map();
+      try {
+        const tr = await fetch('/api/access/team?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+        if (tr.ok) { const td = await tr.json(); (td.members || []).forEach(m => emailByUid.set(Number(m.userId), m.email)); }
+      } catch (_) {}
+      el.innerHTML = owned.map(c => {
+        const tileCount = (d.items || []).filter(i => i.categoryId === c.id).length;
+        const subCount = (d.categories || []).filter(s => s.parentId === c.id).length;
+        const owner = emailByUid.get(Number(c.ownerUserId)) || 'a therapist';
+        const thumb = c.imageKey
+          ? `<div style="width:46px;height:46px;border-radius:8px;background-image:url(/api/media?key=${encodeURIComponent(c.imageKey)});background-size:cover;background-position:center;flex:none;"></div>`
+          : '<div style="width:46px;height:46px;border-radius:8px;background:#fce4ec;display:grid;place-items:center;font-size:20px;color:#d6a8c6;flex:none;">🧩</div>';
+        return `<div style="display:flex;align-items:center;gap:12px;background:#fff7fb;border:1px solid var(--line);border-radius:12px;padding:10px 14px;">
+          ${thumb}
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:14px;">${schEsc(c.label)} <span style="color:var(--muted);font-weight:400;font-size:12px;">· ${c.section}</span></div>
+            <div style="font-size:12px;color:var(--muted);">Shared by ${schEsc(owner)} · ${tileCount} tile${tileCount===1?'':'s'}${subCount ? ' · ' + subCount + ' folder' + (subCount===1?'':'s') : ''}</div>
+          </div>
+          <button class="btn ghost" data-remove-board="${c.id}" style="color:#dc2626;">Remove from view</button>
+        </div>`;
+      }).join('');
+    } catch (_) { el.innerHTML = '<div class="hint">Could not load.</div>'; }
+  }
+  document.getElementById('shared-list').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-remove-board]'); if (!btn) return;
+    if (!confirm("Remove this therapist's board from " + pretty + "'s view? The therapist's content is unchanged; it just stops showing on the tablet.")) return;
+    btn.disabled = true;
+    const r = await fetch('/api/therapist/board-share?categoryId=' + btn.dataset.removeBoard + '&childId=' + encodeURIComponent(slug), { method: 'DELETE', credentials: 'same-origin' });
+    if (!r.ok) { btn.disabled = false; const d = await r.json().catch(()=>({})); alert(d.error || 'Could not remove.'); return; }
+    await loadSharedBoards();
+  });
+  loadSharedBoards();
 
   // ---- Reference images (steer AI tile generation) ----
   const refGrid = document.getElementById('ref-grid');

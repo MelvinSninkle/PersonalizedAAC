@@ -3,6 +3,7 @@
     { "source": "/u/:slug", "destination": "/app.html" },
     { "source": "/parent/:slug", "destination": "/parent.html" },
     { "source": "/therapist", "destination": "/therapist-home.html" },
+    { "source": "/therapist/library", "destination": "/therapist-library.html" },
     { "source": "/therapist/:slug", "destination": "/therapist.html" },
     { "source": "/login", "destination": "/login.html" },
     { "source": "/reset", "destination": "/reset.html" },

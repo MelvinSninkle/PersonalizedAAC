@@ -25,6 +25,9 @@ export function sql() {
 }
 
 // Map a DB row (snake_case) into the shape the client expects (camelCase).
+// `childId` and `ownerUserId` are carried so client UIs can distinguish
+// child-scoped content (childId set) from therapist-owned templates
+// (childId null, ownerUserId set) and gate edits accordingly.
 export function rowToCategory(r) {
   return {
     id: Number(r.id),
@@ -35,6 +38,8 @@ export function rowToCategory(r) {
     imageKey: r.image_key,
     keepAspect: !!r.keep_aspect,
     order: r.display_order == null ? 0 : Number(r.display_order),
+    childId: r.child_id || null,
+    ownerUserId: r.owner_user_id == null ? null : Number(r.owner_user_id),
   };
 }
 
@@ -51,5 +56,7 @@ export function rowToItem(r) {
     keepAspect: !!r.keep_aspect,
     order: r.display_order == null ? 0 : Number(r.display_order),
     pinned: !!r.pinned,
+    childId: r.child_id || null,
+    ownerUserId: r.owner_user_id == null ? null : Number(r.owner_user_id),
   };
 }

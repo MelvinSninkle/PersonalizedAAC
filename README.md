@@ -295,7 +295,15 @@ Edited at **`/admin/taxonomy.html`** (admin role enforced on every `api/admin/ta
 | `GET/POST /api/reference-images` | Manage style/subject reference photos |
 | `GET /api/events`, `/api/analytics`, `/api/usage` | Read-side dashboards |
 | `GET /api/my-children` | Roster + portrait for every child the signed-in user has access to (drives `/therapist`) |
-| `GET/POST /api/auth/{login,logout,me,register,reset,reset-request}` | Account flow |
+| `POST /api/access/invite` | Parent invites a therapist by email (Resend) |
+| `GET /api/access/pending` | Pending invites the signed-in user can act on |
+| `POST /api/access/respond` | Accept / decline an invite |
+| `GET/DELETE /api/access/team?childId=` | Parent's team view; remove members or cancel pending |
+| `GET /api/access/invite-probe?t=` | Token-gated email + hasAccount lookup for accept-invite page |
+| `GET/POST /api/therapist/boards` | List my custom-board templates + create new ones |
+| `GET /api/therapist/board?id=` | Fetch one board's categories + items (for the editor) |
+| `GET/POST/DELETE /api/therapist/board-share?categoryId=&childId=` | Share / unshare a template; parent "remove from view" goes through DELETE too |
+| `GET/POST /api/auth/{login,logout,me,register,reset,reset-request}` | Account flow (register accepts an `inviteToken` for self-signup) |
 | `POST /api/init` | One-time schema bootstrap (idempotent) |
 | **Admin-only** | |
 | `GET/POST/PUT/DELETE /api/admin/taxonomy` | Canonical taxonomy CRUD |
