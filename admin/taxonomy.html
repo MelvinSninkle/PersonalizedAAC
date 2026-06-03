@@ -183,6 +183,7 @@
     <button class="secondary" id="btn-new">+ New row</button>
     <button class="secondary" id="btn-import">Import…</button>
     <button class="secondary" id="btn-import-board" title="Seed the taxonomy from a child's current live board">Import live board…</button>
+    <button class="secondary" id="btn-backfill" title="Link a child's existing tiles to canonical taxonomy slugs">🔗 Backfill slugs…</button>
     <div class="menu-wrap">
       <button class="secondary" id="btn-export">Export ▾</button>
       <div class="menu" id="export-menu">
@@ -572,6 +573,41 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
   </div>
 </div>
 
+<!-- Backfill slugs modal -->
+<div class="modal-backdrop" id="backfill-modal">
+  <div class="modal wide">
+    <h3>Backfill taxonomy slugs</h3>
+    <div class="help">
+      Links a child's existing tiles to canonical taxonomy entries by
+      case-insensitive label match within the same section. Matched items get
+      their <code>taxonomy_slug</code> populated, and historical
+      <code>game_attempts</code> for matched items also receive the slug so
+      per-concept mastery starts rolling up against past sessions immediately.
+      Ambiguous (multiple candidates) and unmatched items are skipped — you can
+      re-run after editing labels.
+    </div>
+    <div class="row2" style="margin-top:14px;">
+      <div>
+        <label for="bf-child">Child slug</label>
+        <input type="text" id="bf-child" value="fletcherpeterson" placeholder="e.g. fletcherpeterson">
+      </div>
+      <div style="display:flex; align-items:flex-end; gap:8px;">
+        <button class="secondary" id="bf-preview">Preview matches</button>
+        <button class="primary" id="bf-apply" disabled>Apply 0 updates</button>
+      </div>
+    </div>
+
+    <div class="import-summary" id="bf-summary"></div>
+    <div class="import-preview" id="bf-preview-list" style="display:none;"></div>
+
+    <div class="error" id="bf-error"></div>
+
+    <div class="button-row">
+      <button class="secondary" id="bf-close">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Snapshots modal -->
 <div class="modal-backdrop" id="snapshots-modal">
   <div class="modal">
@@ -830,6 +866,83 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     document.getElementById(id).addEventListener('input', applyFilters);
     document.getElementById(id).addEventListener('change', applyFilters);
   }
+
+  // ---- Backfill slugs: match a child's existing tiles to canonical taxonomy entries ----
+  const bfModal = document.getElementById('backfill-modal');
+  let bfLast = null;        // last preview result, used by Apply
+
+  function openBackfill() {
+    document.getElementById('bf-error').textContent = '';
+    document.getElementById('bf-summary').innerHTML = '';
+    document.getElementById('bf-preview-list').style.display = 'none';
+    document.getElementById('bf-preview-list').innerHTML = '';
+    const apply = document.getElementById('bf-apply');
+    apply.disabled = true; apply.textContent = 'Apply 0 updates';
+    bfLast = null;
+    bfModal.classList.add('show');
+  }
+  document.getElementById('btn-backfill').addEventListener('click', openBackfill);
+  document.getElementById('bf-close').addEventListener('click', () => bfModal.classList.remove('show'));
+  bfModal.addEventListener('click', (e) => { if (e.target === bfModal) bfModal.classList.remove('show'); });
+
+  function bfRenderReport(report) {
+    const summaryEl = document.getElementById('bf-summary');
+    const listEl    = document.getElementById('bf-preview-list');
+    const apply     = document.getElementById('bf-apply');
+    const t = report.totals;
+    summaryEl.innerHTML = `
+      <span><strong>${t.scannedItems}</strong> items scanned</span>
+      <span style="color:#065f46;"><strong>${t.wouldMatch}</strong> will be matched</span>
+      <span style="color:#92400e;"><strong>${t.ambiguous}</strong> ambiguous (skipped)</span>
+      <span style="color:#9b1c1c;"><strong>${t.unmatched}</strong> unmatched (skipped)</span>
+      ${report.applied ? `<span style="color:#065f46;font-weight:700;">· Applied: ${report.applied.items} items, ${report.applied.gameAttempts} historical attempts</span>` : ''}
+    `;
+    const rowsHtml = (cls, badge, list, fmt) => list.length
+      ? list.map((r, i) => `<tr class="${cls}"><td>${i+1}</td><td><span class="badge ${badge.cls}">${badge.text}</span></td>${fmt(r)}</tr>`).join('')
+      : '';
+    listEl.style.display = 'block';
+    listEl.innerHTML = `
+      <table>
+        <thead><tr><th>#</th><th>action</th><th>item id</th><th>label</th><th>section</th><th>result</th></tr></thead>
+        <tbody>
+          ${rowsHtml('row-update', { cls:'update', text:'match' }, report.matched, r => `
+            <td><code>${r.itemId}</code></td><td>${escapeHtml(r.label)}</td><td>${escapeHtml(r.section)}</td>
+            <td>→ <code>${escapeHtml(r.slug)}</code></td>`)}
+          ${rowsHtml('row-warn', { cls:'skip', text:'ambiguous' }, report.ambiguous, r => `
+            <td><code>${r.itemId}</code></td><td>${escapeHtml(r.label)}</td><td>${escapeHtml(r.section)}</td>
+            <td><span class="fields">candidates: ${r.candidates.map(escapeHtml).join(', ')}</span></td>`)}
+          ${rowsHtml('row-err', { cls:'error', text:'no match' }, report.unmatched, r => `
+            <td><code>${r.itemId}</code></td><td>${escapeHtml(r.label)}</td><td>${escapeHtml(r.section)}</td>
+            <td><span class="fields">${escapeHtml(r.reason || '')}</span></td>`)}
+        </tbody>
+      </table>`;
+    apply.disabled = !report.dryRun || t.wouldMatch === 0;
+    apply.textContent = report.dryRun
+      ? `Apply ${t.wouldMatch} update${t.wouldMatch === 1 ? '' : 's'}`
+      : `Applied`;
+  }
+
+  async function bfRun(apply) {
+    const child = document.getElementById('bf-child').value.trim();
+    const err = document.getElementById('bf-error'); err.textContent = '';
+    if (!child) { err.textContent = 'Enter a child slug.'; return; }
+    const btn = apply ? document.getElementById('bf-apply') : document.getElementById('bf-preview');
+    btn.disabled = true; const prev = btn.textContent; btn.textContent = apply ? 'Applying…' : 'Loading…';
+    try {
+      const qs = '?childId=' + encodeURIComponent(child) + (apply ? '&apply=true' : '');
+      const r = await api('/api/admin/backfill-taxonomy-slug' + qs, { method: 'POST' });
+      bfLast = r;
+      bfRenderReport(r);
+      if (apply) document.getElementById('bf-preview').disabled = false;   // allow re-preview after apply
+    } catch (e) { err.textContent = e.message || String(e); }
+    finally { btn.disabled = apply; btn.textContent = prev; document.getElementById('bf-preview').disabled = false; }
+  }
+  document.getElementById('bf-preview').addEventListener('click', () => bfRun(false));
+  document.getElementById('bf-apply').addEventListener('click', async () => {
+    if (!bfLast || !bfLast.totals.wouldMatch) return;
+    if (!confirm(`Apply ${bfLast.totals.wouldMatch} slug updates to ${bfLast.childId}?\nAmbiguous and unmatched items are skipped.`)) return;
+    await bfRun(true);
+  });
 
   // ---- Import from a child's live board (seed the taxonomy with "the current one") ----
   document.getElementById('btn-import-board').addEventListener('click', async () => {
