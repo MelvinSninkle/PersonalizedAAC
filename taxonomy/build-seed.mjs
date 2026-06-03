@@ -29,6 +29,7 @@ const PORTRAIT_TAIL =
   'soft even lighting; keep them clearly recognizable and kind-looking; no text or letters.';
 
 function promptFor(e) {
+  if (e.promptOverride) return e.promptOverride;
   if (e.parentPhotoBehavior === 'override') return `A {style} portrait based on {parent_photo} — ${PORTRAIT_TAIL}`;
   if (e.subjectMode === 'child_as_subject') return `A {style} portrait based on {reference} — ${PORTRAIT_TAIL}`;
   if (e.subjectMode === 'person')           return `A {style} of a friendly ${e.subject}: ${PORTRAIT_TAIL}`;
@@ -38,7 +39,8 @@ function promptFor(e) {
 
 const rows = [];
 // group(column, category, subcategory, idPrefix, defaults, items[])
-// item = [idTail, label, subject, opts?]   (opts can override mode/photo/phase/core/pron/notes)
+// item = [idTail, label, subject, opts?]   (opts can override mode/photo/phase/core/pron/notes,
+//        plus audience/authoringKind, gestalt-related fields, and a custom prompt for skeletons)
 function group(column, category, subcategory, idPrefix, defaults, items) {
   for (const [idTail, label, subject, opts = {}] of items) {
     rows.push({
@@ -51,6 +53,13 @@ function group(column, category, subcategory, idPrefix, defaults, items) {
       phase: opts.phase || defaults.phase || 'v1_core',
       core: opts.core !== undefined ? opts.core : (defaults.core !== undefined ? defaults.core : true),
       growthStage: opts.growthStage || defaults.growthStage || null,   // null → STAGE_BY_ID + section defaults later
+      audience: opts.audience || defaults.audience || 'universal',
+      authoringKind: opts.authoringKind || defaults.authoringKind || 'canonical',
+      isGestalt: opts.isGestalt === true || defaults.isGestalt === true,
+      gestaltType: opts.gestaltType || defaults.gestaltType || '',
+      gestaltMeaning: opts.gestaltMeaning || defaults.gestaltMeaning || '',
+      gestaltTargets: opts.gestaltTargets || defaults.gestaltTargets || [],
+      promptOverride: opts.promptOverride || '',
       subject,
       notes: opts.notes || defaults.notes || '',
     });
@@ -556,8 +565,363 @@ group('Nouns', 'Health', '', 'nouns.health', { mode: 'concept', photo: 'none', p
   ['medicine', 'medicine', 'a small friendly bottle of liquid medicine with a measuring spoon beside it, plain background', { mode: 'object' }],
 ]);
 
-// ---------------------------------------------------------------------------
-// Validate (mirror the importer's rules) then emit CSV.
+// =============================================================================
+// TIER 4 — GESTALTS (PRD §11 gestalt language processing track)
+// "Whole chunks" the child says as units while they break them apart. Each
+// tile carries gestalt_type / gestalt_meaning / gestalt_targets so the engine
+// can tally the underlying single-words as they emerge. Concept-mode portraits
+// of the social moment, not a literal transcription.
+// =============================================================================
+group('Needs', 'Social', 'Gestalts', 'needs.gestalts', { mode: 'concept', photo: 'none', phase: 'v1_extended', core: false, isGestalt: true, gestaltType: 'compositional' }, [
+  ['good_morning',     'good morning',     'two friendly young children waving at each other at the start of the day, a soft sunrise behind them', { gestaltMeaning: 'morning greeting', gestaltTargets: ['good', 'morning', 'hi'] }],
+  ['good_night',       'good night',       'a friendly young child in pajamas waving sleepily from a doorway, soft crescent moon nearby', { gestaltMeaning: 'bedtime farewell', gestaltTargets: ['good', 'night', 'sleep', 'bye'] }],
+  ['have_a_good_day',  'have a good day',  'a friendly young child waving as another walks toward a school door with a backpack, soft sunshine', { gestaltMeaning: 'departure well-wish', gestaltTargets: ['have', 'good', 'day', 'bye'] }],
+  ['see_you_later',    'see you later',    'a friendly young child waving cheerfully toward someone walking away, soft fade in the background', { gestaltMeaning: 'casual farewell', gestaltTargets: ['see', 'you', 'later', 'bye'] }],
+  ['lets_go',          "let's go",         'a friendly young child grinning and pointing forward with one arm, the other reaching back as if pulling someone along', { gestaltMeaning: 'invitation to move', gestaltTargets: ['lets', 'go'], pron: "let's go" }],
+  ['ready_to_play',    'ready to play',    'a friendly young child standing with toys laid out around them, beaming, arms wide open', { gestaltMeaning: 'announcing play', gestaltTargets: ['ready', 'play'] }],
+  ['i_want_that',      'I want that',      'a friendly young child reaching with one hand toward a small cheerful object on a high shelf, eager smile', { gestaltMeaning: 'desire request', gestaltTargets: ['i', 'want', 'that'], pron: 'I want that' }],
+  ['i_need_help',      'I need help',      'a friendly young child reaching upward both hands, looking toward a larger helping hand coming down from above', { gestaltMeaning: 'help request', gestaltTargets: ['i', 'need', 'help'], pron: 'I need help' }],
+  ['more_please',      'more please',      'a friendly young child holding an empty cup forward with both hands, soft sparkle indicating please', { gestaltMeaning: 'polite continuation', gestaltTargets: ['more', 'please'] }],
+  ['all_done_eat',     'all done eating',  'a friendly young child seated at a small table holding both hands up palms out next to a clean empty plate', { gestaltMeaning: 'finished a meal', gestaltTargets: ['all', 'done', 'eat'] }],
+  ['where_are_you',    'where are you',    'a friendly young child peeking around a doorway with both hands cupped to their mouth, calling out', { gestaltMeaning: 'asking for location', gestaltTargets: ['where', 'are', 'you'] }],
+  ['whats_that',       "what's that",      'a friendly young child pointing at a small cheerful object with one hand, the other hand on chin, curious look', { gestaltMeaning: 'asking to name', gestaltTargets: ['what', 'is', 'that'], pron: "what's that" }],
+  ['i_love_you',       'I love you',       'a friendly young child making a heart shape with both hands held in front of their chest, big smile', { gestaltMeaning: 'expressing love', gestaltTargets: ['i', 'love', 'you'], pron: 'I love you' }],
+  ['yes_please',       'yes please',       'a friendly young child nodding with both hands together in a polite gesture, small heart above', { gestaltMeaning: 'polite acceptance', gestaltTargets: ['yes', 'please'] }],
+  ['no_thank_you',     'no thank you',     'a friendly young child gently shaking their head with one open hand raised politely', { gestaltMeaning: 'polite refusal', gestaltTargets: ['no', 'thank', 'you'] }],
+  ['excuse_me',        'excuse me',        'a friendly young child with one hand gently raised, leaning forward politely to interrupt', { gestaltMeaning: 'polite interruption', gestaltTargets: ['excuse', 'me'] }],
+  ['wait_a_minute',    'wait a minute',    'a friendly young child holding up one finger with a gentle "one moment" gesture, soft patient look', { gestaltMeaning: 'asking to pause', gestaltTargets: ['wait', 'minute'] }],
+  ['sorry_about_that', 'sorry about that', 'a friendly young child with hand on chest, slightly bowed head, gentle apologetic smile', { gestaltMeaning: 'apology', gestaltTargets: ['sorry', 'that'] }],
+  ['i_see_you',        'I see you',        'a friendly young child pointing at the viewer with a big delighted smile, eyes bright', { gestaltMeaning: 'connection greeting', gestaltTargets: ['i', 'see', 'you'], pron: 'I see you' }],
+  ['time_to',          'time to',          'a friendly young child standing beside a soft clock with a forward arrow toward an activity scene', { gestaltMeaning: 'transitioning to an activity', gestaltTargets: ['time', 'to'], notes: 'Often paired with a specific activity tile.' }],
+  ['happy_birthday',   'happy birthday',   'a friendly young child standing beside a small birthday cake with candles, party hat on, big smile', { gestaltMeaning: 'birthday greeting', gestaltTargets: ['happy', 'birthday'] }],
+  ['i_miss_you',       'I miss you',       'a friendly young child holding a small photo of a family member close to their chest with both hands, soft warm expression', { gestaltMeaning: 'expressing missing someone', gestaltTargets: ['i', 'miss', 'you'], pron: 'I miss you' }],
+]);
+
+// =============================================================================
+// TIER 5 — ALPHABET (A-Z)
+// Canonical letter tiles with a familiar object cue. Children build their own
+// personalized "A is for Aiden" variant on top via the per-child override; the
+// canonical row carries the universal "A is for Apple"-style cue so a brand
+// new child has a working alphabet from minute one.
+// =============================================================================
+const LETTER_SUBJECTS = {
+  A: 'a single bright red apple beside a friendly capital A shape',
+  B: 'a single cheerful ball beside a friendly capital B shape',
+  C: 'a single fluffy cat beside a friendly capital C shape',
+  D: 'a friendly dog beside a friendly capital D shape',
+  E: 'a single cooked egg beside a friendly capital E shape',
+  F: 'a single colorful fish beside a friendly capital F shape',
+  G: 'a small bunch of green grapes beside a friendly capital G shape',
+  H: 'a friendly little house beside a friendly capital H shape',
+  I: 'a small block of ice with a sparkle beside a friendly capital I shape',
+  J: 'a single jar of jam beside a friendly capital J shape',
+  K: 'a single bright kite beside a friendly capital K shape',
+  L: 'a single bright yellow lemon beside a friendly capital L shape',
+  M: 'a single full moon with a friendly face beside a friendly capital M shape',
+  N: 'a single soft bird nest beside a friendly capital N shape',
+  O: 'a single bright orange beside a friendly capital O shape',
+  P: 'a single piece of pizza beside a friendly capital P shape',
+  Q: 'a soft cozy quilt folded beside a friendly capital Q shape',
+  R: 'a friendly little rabbit beside a friendly capital R shape',
+  S: 'a single bright yellow sun beside a friendly capital S shape',
+  T: 'a single leafy tree beside a friendly capital T shape',
+  U: 'an open umbrella beside a friendly capital U shape',
+  V: 'a small bright violet flower beside a friendly capital V shape',
+  W: 'a single sparkling drop of water beside a friendly capital W shape',
+  X: 'a small xylophone with a mallet beside a friendly capital X shape',
+  Y: 'a small ball of yellow yarn beside a friendly capital Y shape',
+  Z: 'a friendly cartoon zebra beside a friendly capital Z shape',
+};
+group('Needs', 'Alphabet', '', 'needs.abc', { mode: 'object', photo: 'none', ...EXT, notes: 'Personalize candidate: swap to "A is for Aiden" using the child\'s name + a personal photo.' }, [
+  ...Object.entries(LETTER_SUBJECTS).map(([letter, subj]) => [letter.toLowerCase(), letter, subj]),
+]);
+
+// =============================================================================
+// TIER 6 — NUMBERS 11-30 + tens to 100
+// Visual count-objects extending the 1-10 row. After 20 we keep the explicit
+// rows but include only the tens (30, 40 … 100); a 47-stars tile is not useful.
+// All non-core / stage 5+. Subject phrasing follows the existing 1-10 style.
+// =============================================================================
+const NUMBER_ROWS = [];
+for (let n = 11; n <= 30; n++) {
+  NUMBER_ROWS.push([
+    'n_' + n,
+    String(n),
+    `${n} small cheerful colorful stars arranged in a tidy grid, equal spacing, plain pastel background`,
+    EXT,
+  ]);
+}
+for (const n of [40, 50, 60, 70, 80, 90, 100]) {
+  NUMBER_ROWS.push([
+    'n_' + n,
+    String(n),
+    `${n} tiny bright dots arranged in a clear grid, evenly spaced, plain pastel background`,
+    EXT,
+  ]);
+}
+group('Needs', 'Numbers', '', 'needs.numbers', { mode: 'object', photo: 'none' }, NUMBER_ROWS);
+
+// =============================================================================
+// TIER 7 — EXTENDED COLORS
+// =============================================================================
+group('Nouns', 'Colors', '', 'nouns.colors.more', { mode: 'object', photo: 'none', ...EXT }, [
+  ['gray',   'gray',   'a simple rounded shape filled with solid medium gray'],
+  ['gold',   'gold',   'a simple rounded shape filled with rich warm gold with a soft sheen'],
+  ['silver', 'silver', 'a simple rounded shape filled with shiny cool silver with a soft sheen'],
+  ['lime',   'lime',   'a simple rounded shape filled with solid bright lime green'],
+  ['teal',   'teal',   'a simple rounded shape filled with solid cool teal'],
+  ['navy',   'navy',   'a simple rounded shape filled with solid deep navy blue'],
+  ['peach',  'peach',  'a simple rounded shape filled with soft warm peach'],
+  ['tan',    'tan',    'a simple rounded shape filled with warm light tan'],
+]);
+
+// =============================================================================
+// TIER 8 — SHAPES
+// =============================================================================
+group('Nouns', 'Shapes', '', 'nouns.shapes', { mode: 'object', photo: 'none', ...EXT, notes: 'Great for matching games + early geometry.' }, [
+  ['circle',    'circle',    'a single bright bold circle, evenly outlined, centered'],
+  ['square',    'square',    'a single bright bold square, evenly outlined, centered'],
+  ['triangle',  'triangle',  'a single bright bold equilateral triangle, evenly outlined, centered'],
+  ['rectangle', 'rectangle', 'a single bright bold rectangle, evenly outlined, centered'],
+  ['oval',      'oval',      'a single bright bold oval, evenly outlined, centered'],
+  ['diamond',   'diamond',   'a single bright bold diamond (rotated square), evenly outlined, centered'],
+  ['heart',     'heart',     'a single bright bold red heart shape, centered'],
+  ['star',      'star',      'a single bright bold five-pointed yellow star, centered (the shape, distinct from nouns.nature.star)'],
+  ['crescent',  'crescent',  'a single bright bold crescent (smiling moon shape), centered'],
+  ['hexagon',   'hexagon',   'a single bright bold hexagon, evenly outlined, centered'],
+  ['octagon',   'octagon',   'a single bright bold octagon (like a stop sign), evenly outlined, centered'],
+  ['pentagon',  'pentagon',  'a single bright bold pentagon, evenly outlined, centered'],
+  ['arrow',     'arrow',     'a single bright bold right-pointing arrow, centered'],
+  ['cross',     'cross',     'a single bright bold plus-shaped cross, centered'],
+]);
+
+// =============================================================================
+// TIER 9 — WEATHER EXTENSION (alongside Tier 2 weather descriptors)
+// =============================================================================
+group('Needs', 'Describing', '', 'needs.describe.weather.more', { mode: 'object', photo: 'none', ...EXT }, [
+  ['stormy',    'stormy',    'a friendly gray cloud with gentle rain and a single soft cartoon lightning bolt (not scary)'],
+  ['foggy',     'foggy',     'a soft pale gray fog drifting over a small house and tree, gentle and calm'],
+  ['lightning', 'lightning', 'a single soft cartoon lightning bolt against a dark blue cloud (friendly, not scary)'],
+  ['tornado',   'tornado',   'a soft cartoon swirling spiral funnel touching down on a tiny field, gentle stylized (not scary)'],
+  ['rainbow',   'rainbow',   'a bright friendly arching rainbow over a soft pastel landscape, fluffy clouds at the ends'],
+]);
+
+// =============================================================================
+// TIER 10 — ANIMALS (sub-grouped: pets, farm, jungle, sea, forest, polar, bugs, dinos)
+// All extended / non-core. Personalize for real pets via the notes pointer.
+// =============================================================================
+group('Nouns', 'Animals', 'Pets', 'nouns.animals.pets', { mode: 'object', photo: 'none', ...EXT, notes: 'Personalize candidate for real family pets.' }, [
+  ['hamster',    'hamster',    'a friendly cartoon hamster sitting up holding a small seed, soft fur'],
+  ['guinea_pig', 'guinea pig', 'a friendly cartoon guinea pig with round body and short legs, soft brown and white fur', { pron: 'guinea pig' }],
+  ['gerbil',     'gerbil',     'a friendly cartoon gerbil standing on hind legs, soft sandy fur, alert ears'],
+  ['parrot',     'parrot',     'a friendly cartoon parrot with bright red blue and green feathers on a small perch'],
+  ['turtle',     'turtle',     'a friendly cartoon turtle with a green patterned shell and a small smile'],
+  ['snake',      'snake',      'a friendly cartoon green snake coiled in a soft S-shape, small smile (not scary)'],
+  ['lizard',     'lizard',     'a friendly cartoon green lizard with a long tail, perched on a small branch'],
+  ['ferret',     'ferret',     'a friendly cartoon ferret in soft cream and brown, long body, curious face'],
+]);
+group('Nouns', 'Animals', 'Farm', 'nouns.animals.farm', { mode: 'object', photo: 'none', ...EXT }, [
+  ['goat',    'goat',    'a friendly cartoon white-and-brown goat with small horns, standing on grass'],
+  ['sheep',   'sheep',   'a friendly cartoon fluffy white sheep, gentle smile, standing on green grass'],
+  ['donkey',  'donkey',  'a friendly cartoon gray donkey with long ears, standing calmly'],
+  ['rooster', 'rooster', 'a friendly cartoon rooster with a bright red comb and colorful tail feathers, standing tall'],
+  ['chicken', 'chicken', 'a friendly cartoon brown hen with a small red comb, standing on grass'],
+  ['turkey',  'turkey',  'a friendly cartoon turkey with a fanned tail of warm autumn colors, standing tall'],
+  ['llama',   'llama',   'a friendly cartoon llama with long fluffy white fur and tall ears, gentle smile'],
+  ['alpaca',  'alpaca',  'a friendly cartoon alpaca with very fluffy cream fur and big eyes, gentle smile'],
+]);
+group('Nouns', 'Animals', 'Jungle', 'nouns.animals.jungle', { mode: 'object', photo: 'none', ...EXT }, [
+  ['tiger',    'tiger',    'a friendly cartoon orange-and-black striped tiger with a gentle smile (not scary)'],
+  ['giraffe',  'giraffe',  'a friendly cartoon giraffe with a long neck and warm yellow-and-brown spots'],
+  ['zebra',    'zebra',    'a friendly cartoon zebra with bold black-and-white stripes, gentle smile'],
+  ['kangaroo', 'kangaroo', 'a friendly cartoon kangaroo with a tiny joey peeking from her pouch'],
+  ['koala',    'koala',    'a friendly cartoon gray koala clinging to a small eucalyptus branch, sleepy smile'],
+  ['panda',    'panda',    'a friendly cartoon panda sitting and holding a small green bamboo stalk'],
+  ['gorilla',  'gorilla',  'a friendly cartoon gorilla sitting calmly with a gentle smile, soft dark fur'],
+  ['hippo',    'hippo',    'a friendly cartoon purple-gray hippo with a round body and small smile'],
+]);
+group('Nouns', 'Animals', 'Sea', 'nouns.animals.sea', { mode: 'object', photo: 'none', ...EXT }, [
+  ['whale',     'whale',     'a friendly cartoon blue whale with a small water spout above, gentle smile'],
+  ['dolphin',   'dolphin',   'a friendly cartoon gray dolphin mid-leap, small smile, soft splash below'],
+  ['shark',     'shark',     'a friendly cartoon blue shark with a small smile (not scary)'],
+  ['octopus',   'octopus',   'a friendly cartoon purple octopus with eight curly arms, big eyes, small smile'],
+  ['seal',      'seal',      'a friendly cartoon gray seal balancing playfully on its tail, small smile'],
+  ['walrus',    'walrus',    'a friendly cartoon brown walrus with two small tusks and a fluffy mustache, gentle smile'],
+  ['jellyfish', 'jellyfish', 'a friendly cartoon pink translucent jellyfish with soft trailing tentacles'],
+  ['starfish',  'starfish',  'a friendly cartoon orange starfish with a small smile, plain background'],
+  ['crab',      'crab',      'a friendly cartoon red crab with two small claws raised cheerfully'],
+  ['lobster',   'lobster',   'a friendly cartoon red lobster with two small claws, antennae raised'],
+]);
+group('Nouns', 'Animals', 'Forest', 'nouns.animals.forest', { mode: 'object', photo: 'none', ...EXT }, [
+  ['deer',     'deer',     'a friendly cartoon brown deer with small white spots, gentle smile'],
+  ['fox',      'fox',      'a friendly cartoon orange fox with a fluffy white-tipped tail, gentle smile'],
+  ['bear',     'bear',     'a friendly cartoon brown bear sitting on its haunches, small smile'],
+  ['raccoon',  'raccoon',  'a friendly cartoon gray raccoon with a black mask and ringed tail, small smile'],
+  ['squirrel', 'squirrel', 'a friendly cartoon brown squirrel holding a small acorn, fluffy tail'],
+  ['owl',      'owl',      'a friendly cartoon brown owl with big round eyes on a small branch'],
+  ['wolf',     'wolf',     'a friendly cartoon gray wolf with a gentle smile (not scary)'],
+]);
+group('Nouns', 'Animals', 'Polar', 'nouns.animals.polar', { mode: 'object', photo: 'none', ...EXT }, [
+  ['polar_bear', 'polar bear', 'a friendly cartoon white polar bear sitting on a small ice floe, gentle smile', { pron: 'polar bear' }],
+  ['penguin',    'penguin',    'a friendly cartoon black-and-white penguin standing on ice with a small smile'],
+  ['arctic_fox', 'arctic fox', 'a friendly cartoon fluffy white fox in soft snow, gentle smile', { pron: 'arctic fox' }],
+  ['narwhal',    'narwhal',    'a friendly cartoon gray narwhal with a single straight tusk, swimming gently'],
+  ['puffin',     'puffin',     'a friendly cartoon black-and-white puffin with a bright orange beak, standing on a rock'],
+]);
+group('Nouns', 'Animals', 'Bugs', 'nouns.animals.bugs', { mode: 'object', photo: 'none', ...EXT }, [
+  ['bee',         'bee',         'a friendly cartoon black-and-yellow bee with tiny wings, small smile'],
+  ['butterfly',   'butterfly',   'a friendly cartoon butterfly with colorful symmetrical wings (orange and blue)'],
+  ['ant',         'ant',         'a friendly cartoon red ant with three round body segments and a small smile'],
+  ['ladybug',     'ladybug',     'a friendly cartoon red ladybug with five small black dots and tiny legs'],
+  ['spider',      'spider',      'a friendly cartoon round black spider with eight tiny legs, small smile (not scary)'],
+  ['caterpillar', 'caterpillar', 'a friendly cartoon green caterpillar with several round body segments, small smile'],
+  ['snail',       'snail',       'a friendly cartoon snail with a spiral patterned shell, small smile'],
+  ['dragonfly',   'dragonfly',   'a friendly cartoon dragonfly with four delicate transparent wings, gentle blue body'],
+]);
+group('Nouns', 'Animals', 'Dinosaurs', 'nouns.animals.dinos', { mode: 'object', photo: 'none', ...EXT, notes: 'Friendly toddler-safe cartoon style — never scary.' }, [
+  ['t_rex',         'T-rex',         'a friendly cartoon green T-rex with tiny arms and a small smile (not scary)', { pron: 'tee rex' }],
+  ['triceratops',   'triceratops',   'a friendly cartoon green triceratops with three small horns and a frill, small smile'],
+  ['brontosaurus',  'brontosaurus',  'a friendly cartoon long-necked brontosaurus with a small smile, soft green'],
+  ['stegosaurus',   'stegosaurus',   'a friendly cartoon stegosaurus with rounded plates along the back, small smile'],
+  ['pterodactyl',   'pterodactyl',   'a friendly cartoon pterodactyl with stretched-out wings, small smile in flight'],
+  ['velociraptor',  'velociraptor',  'a friendly cartoon velociraptor with green skin and a small smile (not scary)'],
+]);
+
+// =============================================================================
+// TIER 11 — FRUITS + VEGETABLES extension
+// =============================================================================
+group('Nouns', 'Food', 'Fruit', 'nouns.food.fruit.more', { mode: 'object', photo: 'none', ...EXT }, [
+  ['watermelon', 'watermelon', 'a single slice of bright red watermelon with small black seeds'],
+  ['peach',      'peach',      'a single ripe peach with a soft fuzzy skin and a small green leaf'],
+  ['pineapple',  'pineapple',  'a single golden pineapple with green spiky leaves on top'],
+  ['mango',      'mango',      'a single ripe orange-yellow mango'],
+  ['kiwi',       'kiwi',       'a single sliced kiwi showing the bright green inside with tiny black seeds'],
+  ['cherry',     'cherry',     'two bright red cherries connected by a single green stem'],
+  ['pear',       'pear',       'a single ripe green pear with a small leaf at the top'],
+]);
+group('Nouns', 'Food', 'Vegetables', 'nouns.food.veg.more', { mode: 'object', photo: 'none', ...EXT }, [
+  ['tomato',    'tomato',    'a single bright red tomato with a small green stem on top'],
+  ['potato',    'potato',    'a single brown potato with a few small "eyes", plain background'],
+  ['cucumber',  'cucumber',  'a single dark green cucumber'],
+  ['lettuce',   'lettuce',   'a single leafy head of bright green lettuce'],
+  ['onion',     'onion',     'a single yellow onion with a small green sprout at the top'],
+  ['pepper',    'pepper',    'a single bright red bell pepper with a small green stem'],
+  ['mushroom',  'mushroom',  'a single friendly cartoon mushroom with a red cap and white spots'],
+  ['celery',    'celery',    'a single bright green celery stalk with a few small leaves at the top'],
+]);
+
+// =============================================================================
+// TIER 12 — BODY parts (head/face extensions)
+// =============================================================================
+group('Nouns', 'Body', 'Face', 'nouns.body.face', { mode: 'object', photo: 'none', ...EXT }, [
+  ['eyebrow',  'eyebrow',  'a friendly young child\'s face with one eyebrow gently arched, soft cartoon style'],
+  ['eyelash',  'eyelash',  'a friendly close-up of a single eye with long curled eyelashes, gentle soft style'],
+  ['freckle',  'freckle',  'a friendly young child\'s face with a few small soft freckles across the nose and cheeks'],
+  ['dimple',   'dimple',   'a friendly young child smiling broadly with a small dimple in one cheek'],
+  ['beard',    'beard',    'a friendly cartoon man with a soft trimmed beard, head-and-shoulders'],
+  ['wrist',    'wrist',    'a friendly young child\'s wrist with their hand visible, slight bend, soft cartoon style'],
+]);
+
+// =============================================================================
+// TIER 13 — PLANTS
+// =============================================================================
+group('Nouns', 'Nature', 'Plants', 'nouns.nature.plants', { mode: 'object', photo: 'none', ...EXT }, [
+  ['cactus',    'cactus',    'a friendly cartoon green cactus in a small terracotta pot, with a tiny pink flower on top'],
+  ['fern',      'fern',      'a single bright green fern with delicate fronds in a small pot'],
+  ['daisy',     'daisy',     'a single cheerful white daisy with a yellow center and a small green stem'],
+  ['rose',      'rose',      'a single red rose with a small green stem and a few soft leaves'],
+  ['sunflower', 'sunflower', 'a single bright yellow sunflower with a brown center and a tall green stem'],
+  ['tulip',     'tulip',     'a single bright pink tulip with a smooth green stem and two leaves'],
+  ['grass',     'grass',     'a small patch of bright green grass with a few tall blades'],
+  ['leaf',      'leaf',      'a single bright green leaf with soft veins, plain background'],
+]);
+
+// =============================================================================
+// TIER 14 — CLOTHES extension
+// =============================================================================
+group('Nouns', 'Clothes', '', 'nouns.clothes.more', { mode: 'object', photo: 'none', ...EXT }, [
+  ['t_shirt',     'T-shirt',      "a single colorful child's T-shirt laid flat", { pron: 'tee shirt' }],
+  ['jeans',       'jeans',        "a single pair of small child's blue jeans laid flat"],
+  ['sweater',     'sweater',      "a single cozy knit sweater laid flat"],
+  ['jacket',      'jacket',       "a single child's jacket laid flat"],
+  ['scarf',       'scarf',        "a single colorful knit scarf coiled neatly"],
+  ['mittens',     'mittens',      "a pair of warm mittens connected by a string"],
+  ['beanie',      'beanie',       "a single cozy knit beanie hat with a small pom on top"],
+  ['baseball_cap','baseball cap', "a single classic baseball cap", { pron: 'baseball cap' }],
+  ['sneakers',    'sneakers',     "a single pair of small child's sneakers"],
+  ['rain_boots',  'rain boots',   "a single pair of small yellow rain boots", { pron: 'rain boots' }],
+]);
+
+// =============================================================================
+// TIER 15 — SCHOOL extension
+// =============================================================================
+group('Nouns', 'School', '', 'nouns.school.more', { mode: 'object', photo: 'none', ...EXT }, [
+  ['whiteboard', 'whiteboard', 'a single classroom whiteboard mounted on a wall with a small marker tray, blank surface'],
+  ['eraser',     'eraser',     'a single pink rectangular eraser, centered on a plain background'],
+  ['notebook',   'notebook',   'a single spiral notebook with a colorful cover, closed, on a plain background'],
+  ['ruler',      'ruler',      'a single yellow plastic ruler with small markings, centered'],
+  ['bookshelf',  'bookshelf',  'a small classroom bookshelf with a few colorful picture books standing upright'],
+]);
+
+// =============================================================================
+// TIER 16 — TIME: hours + clock concepts + months
+// =============================================================================
+const HOUR_ROWS = [];
+for (let h = 1; h <= 12; h++) {
+  HOUR_ROWS.push([
+    'hour_' + h,
+    h + " o'clock",
+    `a friendly round clock face with the hour hand pointing exactly at the ${h} and the minute hand pointing at the 12, plain pastel background`,
+    EXT,
+  ]);
+}
+group('Needs', 'Time', 'Hours', 'needs.time.hours', { mode: 'object', photo: 'none' }, HOUR_ROWS);
+
+group('Needs', 'Time', 'Clock', 'needs.time.clock', { mode: 'object', photo: 'none', ...EXT }, [
+  ['noon',      'noon',      'a friendly clock face with both hands straight up at 12, bright cheerful sun behind'],
+  ['midnight',  'midnight',  'a friendly clock face with both hands straight up at 12, soft crescent moon and stars behind'],
+  ['oclock',    "o'clock",   "a friendly clock face with the minute hand pointing exactly at the 12, hour hand straight, soft sparkle indicating 'on the hour'", { pron: "oh clock" }],
+  ['half_past', 'half past', 'a friendly clock face with the minute hand pointing exactly at the 6 (halfway around)', { pron: 'half past' }],
+  ['quarter',   'quarter',   'a friendly clock face with the minute hand pointing exactly at the 3 (one quarter past the hour)'],
+  ['minute',    'minute',    'a friendly clock face with a soft highlight on the longer minute hand'],
+  ['hour',      'hour',      'a friendly clock face with a soft highlight on the shorter hour hand'],
+]);
+
+group('Needs', 'Time', 'Months', 'needs.time.months', { mode: 'object', photo: 'none', ...EXT }, [
+  ['january',   'January',   'a friendly calendar page labeled by a snowflake icon at the top, soft winter scene'],
+  ['february',  'February',  'a friendly calendar page with a small pink heart icon at the top'],
+  ['march',     'March',     'a friendly calendar page with a small green clover and an early spring flower'],
+  ['april',     'April',     'a friendly calendar page with a small umbrella icon and a few raindrops'],
+  ['may',       'May',       'a friendly calendar page with a cluster of small spring flowers at the top'],
+  ['june',      'June',      'a friendly calendar page with a bright sun and a small kite at the top'],
+  ['july',      'July',      'a friendly calendar page with a small American-style fireworks burst at the top'],
+  ['august',    'August',    'a friendly calendar page with a bright sun and a small beach umbrella at the top'],
+  ['september', 'September', 'a friendly calendar page with a small backpack and a pencil at the top'],
+  ['october',   'October',   'a friendly calendar page with a small friendly pumpkin and a falling leaf at the top'],
+  ['november',  'November',  'a friendly calendar page with a small autumn leaf and a tiny pie slice at the top'],
+  ['december',  'December',  'a friendly calendar page with a small evergreen tree and a snowflake at the top'],
+]);
+
+// =============================================================================
+// TIER 17 — HOLIDAYS
+// Personalize-friendly: every family celebrates differently; canonical art is
+// the icon, real photos can override per-child.
+// =============================================================================
+group('Needs', 'Holidays', '', 'needs.holidays', { mode: 'object', photo: 'none', ...EXT, notes: 'Personalize candidate: swap in a real family-event photo per child.' }, [
+  ['birthday',         'birthday',         'a single small birthday cake with three lit candles and a soft sparkle, plain background'],
+  ['christmas',        'Christmas',        'a single small decorated evergreen tree with a star on top and a few wrapped gifts at the base'],
+  ['hanukkah',         'Hanukkah',         'a single friendly menorah with nine candles, the center one taller than the rest, soft warm glow'],
+  ['halloween',        'Halloween',        'a single friendly smiling jack-o-lantern on a plain background (cheerful, not scary)'],
+  ['thanksgiving',     'Thanksgiving',     'a single small autumn pumpkin beside a small bundle of wheat and a warm-colored leaf'],
+  ['easter',           'Easter',           'a single small cheerful Easter basket with two pastel painted eggs and a soft ribbon'],
+  ['valentines',       "Valentine's Day",  'a single red heart with a small ribbon, plain pastel background', { pron: 'valentines day' }],
+  ['fourth_of_july',   'Fourth of July',   'a single small American flag beside a soft cartoon firework burst', { pron: 'fourth of July' }],
+  ['new_year',         'New Year',         "a single party hat and a soft starburst with the words ✨ at the top (no letters)", { pron: 'new year' }],
+  ['mothers_day',      "Mother's Day",     'a single small bouquet of flowers tied with a soft ribbon, plain pastel background', { pron: "mother's day" }],
+  ['fathers_day',      "Father's Day",     'a single small wrapped gift with a soft ribbon beside a coffee mug, plain background', { pron: "father's day" }],
+]);
+
+
 const COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs']);
 const MODES = new Set(['child_as_subject', 'object', 'person', 'concept']);
 const PHOTO = new Set(['override', 'supplement', 'none']);
@@ -660,6 +1024,7 @@ const HEADER = ['id', 'column', 'category', 'subcategory', 'label', 'pronunciati
   'subject_mode', 'parent_photo_behavior', 'phase', 'core',
   'growth_stage', 'meal_context', 'is_gestalt', 'gestalt_type',
   'gestalt_meaning', 'gestalt_target_words', 'descriptive_clues',
+  'audience', 'authoring_kind',
   'status', 'prompt_template', 'notes'];
 const cell = (s) => {
   s = String(s == null ? '' : s);
@@ -671,7 +1036,12 @@ for (const r of rows) {
     r.id, r.column, r.category, r.subcategory, r.label, r.pronunciation,
     r.subjectMode, r.parentPhotoBehavior, r.phase, r.core ? 'true' : 'false',
     r._growthStage, r._mealContext,
-    'false', '', '', '', '',                                                // gestalts + clues left for SLP authoring
+    r.isGestalt ? 'true' : 'false',
+    r.gestaltType || '',
+    r.gestaltMeaning || '',
+    (r.gestaltTargets || []).join(', '),
+    '',                                                                     // descriptive_clues left for SLP authoring
+    r.audience || 'universal', r.authoringKind || 'canonical',
     'draft', r._prompt, r.notes,
   ].map(cell).join(','));
 }
