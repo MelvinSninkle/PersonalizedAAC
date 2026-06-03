@@ -348,6 +348,31 @@ export default async function handler(req, res) {
     // stored elsewhere (in the child's instantiation, not on the canonical row).
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS representation_levels JSONB`;
 
+    // ---- Trainer-pattern columns: who is this row for + what kind of authoring ----
+    // audience: who sees this taxonomy entry in their guided authoring flow.
+    //   'universal'   → everyone (the standard library tile, e.g. apple)
+    //   'parent'      → presented to parents during onboarding / "add favorites"
+    //   'therapist'   → presented to therapists in their custom-board flow
+    //   'school_team' → presented to teachers / aides authoring class boards
+    //   'family'      → extended family (grandparents on the people roster)
+    // authoring_kind: is this a pre-generated tile, or a SKELETON the user fills in?
+    //   'canonical'         → fully-generated standard tile content (apple, monkey)
+    //   'personal_skeleton' → no canonical image; just a label + guidance that
+    //                          prompts a parent/teacher/therapist to author their
+    //                          own version from a photo (fire drill, library day,
+    //                          our pet, grandma's house). This is how the
+    //                          "you may want to make tiles for things like this"
+    //                          train-the-trainer pattern is represented in data.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS audience       TEXT NOT NULL DEFAULT 'universal'`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS authoring_kind TEXT NOT NULL DEFAULT 'canonical'`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_audience_idx       ON taxonomy(audience)`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_authoring_kind_idx ON taxonomy(authoring_kind)`;
+
+    // §8.2 extension: an invite can target either a 'therapist' or a 'school_team'
+    // member. The role applies to child_access.relation on accept. Defaults to
+    // 'therapist' so existing invites flowing through keep their semantics.
+    await db`ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS invite_relation TEXT NOT NULL DEFAULT 'therapist'`;
+
     // ---- Keystone fix (§14): the canonical anchor on items/categories/attempts ----
     // taxonomy_slug links a per-child instantiation back to the canonical
     // taxonomy id, so mastery + cross-child measurement can aggregate per

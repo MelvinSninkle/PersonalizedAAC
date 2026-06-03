@@ -34,7 +34,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    if (!['admin', 'parent', 'therapist'].includes(auth.user.role)) { res.status(403).json({ error: 'Not allowed' }); return; }
+    if (!['admin', 'parent', 'therapist', 'school_team'].includes(auth.user.role)) { res.status(403).json({ error: 'Not allowed' }); return; }
     const b = (typeof req.body === 'object' && req.body) || {};
     const settings = (b.settings && typeof b.settings === 'object') ? b.settings : {};
     try {

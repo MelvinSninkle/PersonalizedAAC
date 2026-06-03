@@ -494,12 +494,12 @@
   </div>
 
   <!-- THERAPY TEAM -->
-  <div class="section-label">Therapy team</div>
+  <div class="section-label">Care team</div>
   <div class="panel">
     <h2>Who has access to <span id="team-child-name">your child</span></h2>
-    <p class="hint">Therapists you invite see your child's progress, run live games on the tablet, and can build their own custom boards. You can remove anyone at any time.</p>
+    <p class="hint">Therapists and school team members you invite see your child's progress, run live games on the tablet, and can build their own custom boards. You can remove anyone at any time.</p>
     <div id="team-list" style="display:flex;flex-direction:column;gap:8px;margin:14px 0;"></div>
-    <button class="btn primary" id="team-invite">＋ Invite a therapist</button>
+    <button class="btn primary" id="team-invite">＋ Invite a team member</button>
     <span id="team-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
   </div>
 
@@ -551,10 +551,17 @@
 <div class="scrim" id="inv-scrim">
   <div class="modal" style="max-width:440px;">
     <button class="x" id="inv-x" aria-label="Close">×</button>
-    <h3 class="fred">Invite a therapist</h3>
+    <h3 class="fred">Invite to the team</h3>
     <p class="sub">They'll get an email with a one-tap link to join the team. If they already have an account, they'll also see the invite the next time they sign in.</p>
+    <div class="field"><label>Their role</label>
+      <select id="inv-relation" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;background:#fff;">
+        <option value="therapist">Therapist (SLP, OT, BCBA, …)</option>
+        <option value="school_team">School team member (teacher, aide, …)</option>
+      </select>
+      <p class="hint" style="margin-top:4px;">Both roles can run live games, see progress, and build their own boards. School team members see school-context skeleton tiles to help them author classroom content.</p>
+    </div>
     <div class="field"><label>Their email</label>
-      <input id="inv-email" type="email" placeholder="therapist@example.com" autocomplete="email">
+      <input id="inv-email" type="email" placeholder="name@example.com" autocomplete="email">
     </div>
     <div class="field"><label>Note (optional)</label>
       <textarea id="inv-msg" rows="3" placeholder="A short note that goes in the invite email" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;"></textarea>
@@ -1356,7 +1363,7 @@
   // ---- Therapy team (§8.2): invite by email, accept/decline in-app, remove ----
   document.getElementById('team-child-name').textContent = pretty;
   const invScrim = document.getElementById('inv-scrim');
-  function openInvite() { document.getElementById('inv-email').value = ''; document.getElementById('inv-msg').value = ''; document.getElementById('inv-err').textContent = ''; invScrim.classList.add('open'); document.getElementById('inv-email').focus(); }
+  function openInvite() { document.getElementById('inv-email').value = ''; document.getElementById('inv-msg').value = ''; document.getElementById('inv-relation').value = 'therapist'; document.getElementById('inv-err').textContent = ''; invScrim.classList.add('open'); document.getElementById('inv-email').focus(); }
   function closeInvite() { invScrim.classList.remove('open'); }
   document.getElementById('team-invite').addEventListener('click', openInvite);
   document.getElementById('inv-x').addEventListener('click', closeInvite);
@@ -1365,12 +1372,13 @@
   document.getElementById('inv-send').addEventListener('click', async () => {
     const email = document.getElementById('inv-email').value.trim();
     const message = document.getElementById('inv-msg').value.trim();
+    const relation = document.getElementById('inv-relation').value === 'school_team' ? 'school_team' : 'therapist';
     const err = document.getElementById('inv-err'); err.textContent = '';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Please enter a valid email address.'; return; }
     const btn = document.getElementById('inv-send'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Sending…';
     try {
       const r = await fetch('/api/access/invite', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
-        body: JSON.stringify({ childId: slug, email, message }) });
+        body: JSON.stringify({ childId: slug, email, message, relation }) });
       const d = await r.json().catch(()=>({}));
       if (!r.ok) { err.textContent = d.error || 'Could not send invite.'; return; }
       closeInvite();

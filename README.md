@@ -120,9 +120,9 @@ The system is designed for one therapist to work with multiple children, and one
 
 ### Roster: who can see which child
 
-The `child_access` table is a many-to-many link between `users` and `child_id`, with a `relation` ('parent' | 'therapist') and `status` ('active' | 'pending'). Admins see every child. A user's roster comes from `GET /api/my-children` (returns each accessible child + a portrait).
+The `child_access` table is a many-to-many link between `users` and `child_id`, with a `relation` ('parent' | 'therapist' | 'school_team') and `status` ('active' | 'pending'). Admins see every child. A user's roster comes from `GET /api/my-children` (returns each accessible child + a portrait).
 
-Therapists join via the `access_requests` handshake (parent invites a therapist by email, or therapist requests a parent's child) — UI is planned; the table + helpers ship now so endpoints can already enforce against it.
+Therapists and school team members join via the `access_requests` handshake (parent invites by email, choosing a role; the invitee accepts in-app or via the signed link in the email). The `invite_relation` column on `access_requests` carries the chosen role so accept-time creates the right `child_access` row. `school_team` is a peer of `therapist` for content authoring and `canEditContent` — the distinction surfaces as a separate audience bucket in the taxonomy (school-context skeleton tiles) and a different label in the parent's care-team roster.
 
 ### Content ownership: shared parent board vs. therapist custom boards
 
@@ -263,6 +263,8 @@ Edited at **`/admin/taxonomy.html`** (admin role enforced on every `api/admin/ta
 | **`core`** | `true` = part of the baseline standard vocabulary; `false` = grows in later. A whole category/subcategory is "non-core" when its tiles are — flip a group at once via the toolbar filter + **Bulk action → Mark (non-)core**. |
 | `status` | `draft` (invisible to generation) / `published`. |
 | `notes` | Admin/SLP guidance; current home for scene hints like `Scene: pantry` (graduates to a real `scene_tags` column later). |
+| **`audience`** | Who the tile is for: `universal` (every child) / `parent` / `therapist` / `school_team` / `family`. Filters what each role sees in their authoring tools so a teacher gets school-context skeletons, an SLP gets clinical skeletons, etc. |
+| **`authoring_kind`** | `canonical` = a real tile that ships as-is. `personal_skeleton` = a template that prompts a parent/therapist/teacher to author their own version from a photo ("train the trainers"). Skeletons are filtered out of standard tile generation but surface in the relevant authoring UI. |
 
 ### Drafted seed
 

@@ -292,6 +292,23 @@
     <option value="no">Single-word only</option>
   </select>
 
+  <label for="filter-audience">Audience</label>
+  <select id="filter-audience">
+    <option value="">All</option>
+    <option value="universal">Universal</option>
+    <option value="parent">Parent only</option>
+    <option value="therapist">Therapist only</option>
+    <option value="school_team">School team only</option>
+    <option value="family">Family only</option>
+  </select>
+
+  <label for="filter-kind">Kind</label>
+  <select id="filter-kind">
+    <option value="">All</option>
+    <option value="canonical">Canonical (pre-generated)</option>
+    <option value="personal_skeleton">Skeleton (authoring prompt)</option>
+  </select>
+
   <div class="spacer"></div>
 </div>
 
@@ -411,6 +428,27 @@
           <option value="true">yes — whole-phrase tile</option>
         </select>
         <div class="help">Whole-thought tiles for the gestalt track (§4.2A).</div>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label for="f-audience">audience</label>
+        <select id="f-audience">
+          <option value="universal">universal · everyone sees it</option>
+          <option value="parent">parent · in onboarding/favorites</option>
+          <option value="therapist">therapist · in custom-board flow</option>
+          <option value="school_team">school_team · in classroom boards</option>
+          <option value="family">family · extended-people roster</option>
+        </select>
+        <div class="help">Who is this row presented to in their guided authoring flow.</div>
+      </div>
+      <div>
+        <label for="f-kind">authoring_kind</label>
+        <select id="f-kind">
+          <option value="canonical">canonical · pre-generated tile content</option>
+          <option value="personal_skeleton">personal_skeleton · just a label + guidance</option>
+        </select>
+        <div class="help">Skeletons have no image; they prompt the user to author one from a photo.</div>
       </div>
     </div>
     <div id="f-gestalt-fields" style="display:none;border:1px solid #fce4ec;background:#fff7fb;border-radius:8px;padding:12px;margin-top:8px;">
@@ -689,6 +727,8 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     const core   = document.getElementById('filter-core').value;
     const growth = document.getElementById('filter-growth').value;
     const gest   = document.getElementById('filter-gestalt').value;
+    const aud    = document.getElementById('filter-audience').value;
+    const kind   = document.getElementById('filter-kind').value;
     table.setFilter((row) => {
       if (col && row.column !== col) return false;
       if (mode && row.subjectMode !== mode) return false;
@@ -699,6 +739,8 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       else if (growth && growth !== '__unset' && row.growthStage !== growth) return false;
       if (gest === 'yes' && !row.isGestalt) return false;
       if (gest === 'no' && row.isGestalt) return false;
+      if (aud && row.audience !== aud) return false;
+      if (kind && row.authoringKind !== kind) return false;
       if (status === 'all') { /* show everything */ }
       else if (status === 'archived') { if (!row.archived) return false; }
       else if (status === '') { if (row.archived) return false; }
@@ -737,6 +779,8 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     document.getElementById('f-gestalt-targets').value = (row?.gestaltTargetWords || []).join(', ');
     document.getElementById('f-gestalt-meaning').value = row?.gestaltMeaning || '';
     document.getElementById('f-clues').value        = (row?.descriptiveClues || []).join('\n');
+    document.getElementById('f-audience').value     = row?.audience || 'universal';
+    document.getElementById('f-kind').value         = row?.authoringKind || 'canonical';
     document.getElementById('f-gestalt-fields').style.display = (row && row.isGestalt) ? 'block' : 'none';
     document.getElementById('f-prompt').value       = row?.promptTemplate || '';
     document.getElementById('f-notes').value        = row?.notes || '';
@@ -772,6 +816,8 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       gestaltMeaning: document.getElementById('f-gestalt-meaning').value.trim() || null,
       gestaltTargetWords: document.getElementById('f-gestalt-targets').value.split(',').map(s => s.trim()).filter(Boolean),
       descriptiveClues: document.getElementById('f-clues').value.split('\n').map(s => s.trim()).filter(Boolean),
+      audience: document.getElementById('f-audience').value,
+      authoringKind: document.getElementById('f-kind').value,
       notes: document.getElementById('f-notes').value.trim() || null,
     };
     try {
@@ -839,6 +885,14 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
         formatter: (cell) => cell.getValue() || '' },
       { title: 'G',             field: 'isGestalt',           width: 44,  headerSort: true,
         formatter: (cell) => cell.getValue() ? '🗣️' : '', tooltip: 'Whole-phrase gestalt tile' },
+      { title: 'aud',           field: 'audience',            width: 95,  headerSort: true,
+        formatter: (cell) => {
+          const v = cell.getValue(); if (!v || v === 'universal') return '';
+          return { parent: '👪', therapist: '🧑‍⚕️', school_team: '🏫', family: '👴' }[v] || v;
+        }, tooltip: 'Audience: who sees this in their authoring flow' },
+      { title: 'kind',          field: 'authoringKind',       width: 80,  headerSort: true,
+        formatter: (cell) => cell.getValue() === 'personal_skeleton' ? '📝 skeleton' : '',
+        tooltip: 'Skeleton = a prompt-to-author, not a pre-generated tile' },
       { title: 'core',          field: 'core',                width: 64,  headerSort: true,
         formatter: (cell) => cell.getValue() === false ? '—' : '✓' },
       { title: 'status',        field: 'status',              width: 100, headerSort: true,
@@ -862,7 +916,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     btn.textContent = data.length ? `Bulk action (${data.length}) ▾` : 'Bulk action ▾';
   });
 
-  for (const id of ['filter-search','filter-column','filter-mode','filter-phase','filter-status','filter-core','filter-growth','filter-gestalt']) {
+  for (const id of ['filter-search','filter-column','filter-mode','filter-phase','filter-status','filter-core','filter-growth','filter-gestalt','filter-audience','filter-kind']) {
     document.getElementById(id).addEventListener('input', applyFilters);
     document.getElementById(id).addEventListener('change', applyFilters);
   }
@@ -1005,6 +1059,8 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
         case 'gestalt_meaning':       out.gestaltMeaning = v || null; break;
         case 'gestalt_target_words':  out.gestaltTargetWords = String(v || '').split(/[,;|]/).map(s => s.trim()).filter(Boolean); break;
         case 'descriptive_clues':     out.descriptiveClues = String(v || '').split(/\s*\|\s*|\s*\n\s*/).map(s => s.trim()).filter(Boolean); break;
+        case 'audience':              out.audience = v || 'universal'; break;
+        case 'authoring_kind':        out.authoringKind = v || 'canonical'; break;
         default: /* ignore unknown columns */ break;
       }
     }
@@ -1303,6 +1359,8 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       gestalt_meaning: r.gestaltMeaning || '',
       gestalt_target_words: (r.gestaltTargetWords || []).join(', '),
       descriptive_clues: (r.descriptiveClues || []).join(' | '),
+      audience: r.audience || 'universal',
+      authoring_kind: r.authoringKind || 'canonical',
       status: r.status, notes: r.notes, prompt_template: r.promptTemplate,
     };
   }
@@ -1311,6 +1369,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
                   'subject_mode','parent_photo_behavior','phase','core',
                   'growth_stage','meal_context','is_gestalt','gestalt_type',
                   'gestalt_meaning','gestalt_target_words','descriptive_clues',
+                  'audience','authoring_kind',
                   'status','notes','prompt_template'];
     const csv = Papa.unparse(rows.map(exportRow), { columns: cols });
     download(`taxonomy-${tsStamp()}.csv`, csv, 'text/csv;charset=utf-8');

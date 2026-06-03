@@ -13,7 +13,9 @@ import { sql } from '../_lib/db.js';
 import { hashPassword } from '../_lib/password.js';
 import { signSession, serializeCookie, verifySession, SESSION_MAX_AGE } from '../../lib/session.js';
 
-const ROLES = new Set(['admin', 'parent', 'therapist']);
+// 'school_team' = teacher / aide / school SLP. Peer of therapist for content
+// ownership and canEditContent; presented separately in the parent's roster.
+const ROLES = new Set(['admin', 'parent', 'therapist', 'school_team']);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -41,9 +43,16 @@ export default async function handler(req, res) {
 
   let role, email, slug;
   if (invitePayload) {
-    role = 'therapist';
+    role = 'therapist';     // default; we'll upgrade to 'school_team' if the invite said so
     email = String(invitePayload.email || '').trim().toLowerCase();
-    slug = null;            // therapist accounts aren't tied to one child slug
+    slug = null;            // therapist/school_team accounts aren't tied to one child slug
+    if (Number.isFinite(Number(invitePayload.requestId))) {
+      try {
+        const db0 = sql();
+        const r0 = await db0`SELECT invite_relation FROM access_requests WHERE id = ${Number(invitePayload.requestId)} LIMIT 1`;
+        if (r0.length && r0[0].invite_relation === 'school_team') role = 'school_team';
+      } catch (_) { /* fall through with default role */ }
+    }
   } else {
     const auth = await checkAuth(req);
     if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }

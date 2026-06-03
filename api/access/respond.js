@@ -25,7 +25,7 @@ export default async function handler(req, res) {
   try {
     const db = sql();
     const rows = await db`
-      SELECT id, child_id, therapist_user_id, therapist_email, status, direction
+      SELECT id, child_id, therapist_user_id, therapist_email, status, direction, invite_relation
       FROM access_requests WHERE id = ${requestId} LIMIT 1`;
     if (!rows.length) { res.status(404).json({ error: 'Invite not found' }); return; }
     const r = rows[0];
@@ -58,11 +58,13 @@ export default async function handler(req, res) {
     }
 
     // Accept: create child_access (idempotent) + close the request. The user's
-    // role stays whatever it was, but their relation TO THIS CHILD is therapist.
+    // role stays whatever it was, but their relation TO THIS CHILD is whatever
+    // the invite specified ('therapist' or 'school_team').
+    const rel = (r.invite_relation === 'school_team') ? 'school_team' : 'therapist';
     await db`
       INSERT INTO child_access (user_id, child_id, relation, status)
-      VALUES (${auth.user.id}, ${r.child_id}, 'therapist', 'active')
-      ON CONFLICT (user_id, child_id) DO UPDATE SET status = 'active'`;
+      VALUES (${auth.user.id}, ${r.child_id}, ${rel}, 'active')
+      ON CONFLICT (user_id, child_id) DO UPDATE SET status = 'active', relation = ${rel}`;
     // Also link the request to the now-known user id (helps audit / search).
     await db`
       UPDATE access_requests SET status='accepted', decided_at=NOW(), therapist_user_id=${auth.user.id}

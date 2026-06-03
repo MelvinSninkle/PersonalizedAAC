@@ -15,6 +15,8 @@ const VALID_PHASES = new Set(['v1_core', 'v1_extended', 'v2', 'later']);
 const VALID_GROWTH_STAGES = new Set(['stage_1', 'stage_2', 'stage_3', 'stage_4', 'stage_5plus']);
 const VALID_MEAL = new Set(['breakfast', 'lunch', 'dinner', 'snack', 'anytime']);
 const VALID_GESTALT_TYPES = new Set(['compositional', 'category_holding', 'opaque']);
+const VALID_AUDIENCE = new Set(['universal', 'parent', 'therapist', 'school_team', 'family']);
+const VALID_AUTHORING_KIND = new Set(['canonical', 'personal_skeleton']);
 const ID_PATTERN = /^[a-z0-9_]+(\.[a-z0-9_]+)*$/;
 // Helpers for the array fields stored as Postgres TEXT[].
 function cleanStrArray(v, max = 24, itemMax = 400) {
@@ -36,6 +38,8 @@ function rowOut(r) {
     parentPhotoBehavior: r.parent_photo_behavior,
     phase: r.phase,
     core: r.core === undefined || r.core === null ? true : !!r.core,
+    audience: r.audience || 'universal',
+    authoringKind: r.authoring_kind || 'canonical',
     growthStage: r.growth_stage || null,
     mealContext: r.meal_context || null,
     isGestalt: !!r.is_gestalt,
@@ -116,6 +120,14 @@ function validateRow(body, { partial }) {
   if (body.gestaltTargetWords !== undefined)  out.gestaltTargetWords = cleanStrArray(body.gestaltTargetWords, 24, 80);
   if (body.descriptiveClues !== undefined)    out.descriptiveClues = cleanStrArray(body.descriptiveClues, 12, 400);
   if (body.representationLevels !== undefined) out.representationLevels = body.representationLevels || null;
+  if (body.audience !== undefined) {
+    if (!VALID_AUDIENCE.has(body.audience)) errs.push(`audience must be one of ${[...VALID_AUDIENCE].join(', ')}`);
+    out.audience = body.audience;
+  }
+  if (body.authoringKind !== undefined) {
+    if (!VALID_AUTHORING_KIND.has(body.authoringKind)) errs.push(`authoringKind must be one of ${[...VALID_AUTHORING_KIND].join(', ')}`);
+    out.authoringKind = body.authoringKind;
+  }
   return { ok: errs.length === 0, errors: errs, value: out };
 }
 
@@ -170,6 +182,7 @@ async function create(req, res, db) {
       prompt_template, subject_mode, parent_photo_behavior, phase, core, notes,
       growth_stage, meal_context, is_gestalt, gestalt_type, gestalt_meaning,
       gestalt_target_words, descriptive_clues, representation_levels,
+      audience, authoring_kind,
       status, archived, created_by, updated_by
     ) VALUES (
       ${value.id}, ${value.column}, ${value.category ?? null}, ${value.subcategory ?? null},
@@ -180,6 +193,7 @@ async function create(req, res, db) {
       ${value.isGestalt ?? false}, ${value.gestaltType ?? null}, ${value.gestaltMeaning ?? null},
       ${value.gestaltTargetWords ?? null}, ${value.descriptiveClues ?? null},
       ${value.representationLevels == null ? null : JSON.stringify(value.representationLevels)}::jsonb,
+      ${value.audience ?? 'universal'}, ${value.authoringKind ?? 'canonical'},
       ${value.status ?? 'draft'}, ${value.archived ?? false},
       ${ACTOR}, ${ACTOR}
     )
@@ -233,6 +247,8 @@ async function update(req, res, db) {
       gestalt_target_words   = ${value.gestaltTargetWords    !== undefined ? value.gestaltTargetWords    : old.gestalt_target_words},
       descriptive_clues      = ${value.descriptiveClues      !== undefined ? value.descriptiveClues      : old.descriptive_clues},
       representation_levels  = ${value.representationLevels  !== undefined ? (value.representationLevels == null ? null : JSON.stringify(value.representationLevels)) : (old.representation_levels == null ? null : JSON.stringify(old.representation_levels))}::jsonb,
+      audience               = ${value.audience              ?? old.audience},
+      authoring_kind         = ${value.authoringKind         ?? old.authoring_kind},
       status                 = ${value.status                ?? old.status},
       archived               = ${value.archived              !== undefined ? value.archived              : old.archived},
       updated_at             = NOW(),

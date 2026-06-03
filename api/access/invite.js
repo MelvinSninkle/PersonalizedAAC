@@ -35,6 +35,7 @@ export default async function handler(req, res) {
   const childId = typeof body.childId === 'string' ? body.childId.trim().slice(0, 64) : '';
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase().slice(0, 200) : '';
   const message = typeof body.message === 'string' ? body.message.trim().slice(0, 500) : '';
+  const relation = body.relation === 'school_team' ? 'school_team' : 'therapist';
   if (!childId || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     res.status(400).json({ error: 'childId and a valid email are required' }); return;
   }
@@ -61,8 +62,8 @@ export default async function handler(req, res) {
       WHERE child_id = ${childId} AND LOWER(therapist_email) = ${email} AND status = 'pending'`;
 
     const rows = await db`
-      INSERT INTO access_requests (child_id, therapist_user_id, therapist_email, direction, status, created_by)
-      VALUES (${childId}, ${targetUser ? targetUser.id : null}, ${email}, 'invite', 'pending', ${auth.user.id || null})
+      INSERT INTO access_requests (child_id, therapist_user_id, therapist_email, direction, status, created_by, invite_relation)
+      VALUES (${childId}, ${targetUser ? targetUser.id : null}, ${email}, 'invite', 'pending', ${auth.user.id || null}, ${relation})
       RETURNING id, created_at`;
     const requestId = Number(rows[0].id);
 
