@@ -921,6 +921,81 @@ group('Needs', 'Holidays', '', 'needs.holidays', { mode: 'object', photo: 'none'
   ['fathers_day',      "Father's Day",     'a single small wrapped gift with a soft ribbon beside a coffee mug, plain background', { pron: "father's day" }],
 ]);
 
+// =============================================================================
+// TIER 18 — SKELETONS (train the trainers)
+// "personal_skeleton" tiles are not real tiles in the library — they are
+// authoring prompts that the relevant teammate sees in their build flow:
+// "you may want to make a tile for this. Snap a photo and we'll name it."
+// They never go through image generation (the prompt is human instructions),
+// they're filtered out of standard tile lookups by authoring_kind, and they
+// surface in the matching role's "build a board" picker.
+// =============================================================================
+const SK = { authoringKind: 'personal_skeleton', mode: 'concept', photo: 'none', ...EXT };
+
+// --- school_team skeletons -------------------------------------------------
+group('Nouns', 'School', 'School (teacher authoring)', 'personal.school', { ...SK, audience: 'school_team' }, [
+  ['fire_drill',     'Fire Drill',     '', { promptOverride: 'SKELETON for the school team: take a photo of your fire-drill rally point — the spot outside where your class gathers. A predictable visual makes the drill enormously less scary. Pair the tile with the language you use ("we go to our spot").' }],
+  ['lockdown_drill', 'Lockdown Drill', '', { promptOverride: 'SKELETON for the school team: take a photo of the calm corner of your classroom where students gather during a lockdown drill. Keep the image friendly and unambiguous — this is about predictability, not alarm.' }],
+  ['field_trip',     'Field Trip',     '', { promptOverride: 'SKELETON for the school team: snap a photo of the school bus or your class lining up at the door for a field trip. Use the same photo across trips; what changes is the destination tile that follows.' }],
+  ['library_day',    'Library Day',    '', { promptOverride: 'SKELETON for the school team: photo of your school library entrance, or the librarian, or the rug where storytime happens. Schedule it as a recurring tile on library days.' }],
+  ['picture_day',    'Picture Day',    '', { promptOverride: 'SKELETON for the school team: photo of the photo-backdrop area, or a friendly camera icon. Surface this only on picture day so the student knows what to expect.' }],
+  ['show_and_tell',  'Show and Tell',  '', { promptOverride: 'SKELETON for the school team: photo of the rug, podium, or "presenter spot" your class uses. Pair with a sentence-starter strip if the student needs scaffolding.' }],
+  ['specials_pe',    'PE',             '', { promptOverride: 'SKELETON for the school team: photo of the gym door or PE teacher. PE is loud and physical — a predictable visual helps an AAC user transition into it.' }],
+  ['specials_art',   'Art',            '', { promptOverride: 'SKELETON for the school team: photo of the art room or art teacher. Pair with material tiles (paint, clay, glue) the student can request.' }],
+  ['specials_music', 'Music',          '', { promptOverride: 'SKELETON for the school team: photo of the music room, music teacher, or a familiar instrument. Music is often a strong reinforcer for AAC learners — make it requestable.' }],
+  ['lunchroom',      'Lunchroom',      '', { promptOverride: 'SKELETON for the school team: photo of your cafeteria (or the table the student\'s class sits at). Use the same lunchroom image, then layer the menu choices as separate tiles.' }],
+  ['arrival',        'Arrival',        '', { promptOverride: 'SKELETON for the school team: photo of the classroom entrance from the hallway side, OR the drop-off door. Helps the student name the start of the school day.' }],
+  ['dismissal',      'Dismissal',      '', { promptOverride: 'SKELETON for the school team: photo of the dismissal door, OR the bus loop, OR the line-up spot. Pair with "Bye" gestalt for an end-of-day script.' }],
+  ['centers',        'Centers',        '', { promptOverride: 'SKELETON for the school team: photo of your centers rotation chart, or the rug/table where centers happen. If you can, make one tile per center (reading center, math center, etc.) and link them all to this one.' }],
+  ['line_up',        'Line up',        '', { promptOverride: 'SKELETON for the school team: photo of the line-up spot at the door, ideally with the painted line or floor marker visible. Pair with "follow" or "go" gestalts.' }],
+  ['quiet_time',     'Quiet time',     '', { promptOverride: 'SKELETON for the school team: photo of the cozy corner, rest mat, or whatever signals quiet time in your room. Pair with a "calm" tile for self-regulation language.' }],
+  ['calm_corner',    'Calm corner',    '', { promptOverride: 'SKELETON for the school team: photo of the calm-down spot in your room (beanbag, sensory bin, etc.). Make the tile available as a request so the student can ask to go there.' }],
+  ['my_teacher',     'My teacher',     '', { promptOverride: 'SKELETON for the school team: head-and-shoulders photo of the lead teacher. Each year this tile updates — keep the slug, swap the image.', mode: 'person' }],
+  ['my_para',        'My aide',        '', { promptOverride: 'SKELETON for the school team: head-and-shoulders photo of the paraprofessional/aide working with the student. Replace per year / per assignment.', mode: 'person' }],
+  ['class_pet',      'Class pet',      '', { promptOverride: 'SKELETON for the school team: photo of your class pet (or class mascot stuffie). Strong daily-vocabulary anchor.' }],
+  ['class_job',      'My class job',   '', { promptOverride: 'SKELETON for the school team: photo of the chart spot showing this student\'s class job (line leader, paper passer, etc.). Update weekly with the rotation.' }],
+]);
+
+// --- therapist skeletons ---------------------------------------------------
+group('Nouns', 'Therapy', 'Therapy (clinician authoring)', 'personal.therapy', { ...SK, audience: 'therapist' }, [
+  ['therapy_room',     'Therapy room',     '', { promptOverride: 'SKELETON for the therapist: photo of YOUR therapy room from the doorway. The single most useful transition cue for an AAC user.' }],
+  ['session_start',    'Session start',    '', { promptOverride: 'SKELETON for the therapist: photo of your session-start routine (greeting board, name card, whatever you open with). Bracket the session in visuals so the child knows what to expect.' }],
+  ['session_end',      'Session end',      '', { promptOverride: 'SKELETON for the therapist: photo of your end-of-session marker (timer hitting zero, "all done" card, the door). Pair with the "all done" gestalt.' }],
+  ['reinforcer',       'My reinforcer',    '', { promptOverride: 'SKELETON for the therapist: photo of THIS child\'s strongest reinforcer (the bubble machine, their iPad video, the spinner). Make it requestable; reinforce by handing over what they asked for.' }],
+  ['sensory_bin',      'Sensory bin',      '', { promptOverride: 'SKELETON for the therapist: photo of the sensory bin the child engages with. If you swap the contents weekly, photo each variant as a separate tile (rice bin, bean bin, water bin) and link them.' }],
+  ['visual_schedule',  'Visual schedule',  '', { promptOverride: 'SKELETON for the therapist: photo of your printed/laminated visual schedule. Surface this tile when transitioning between activities — "let\'s check the schedule".' }],
+  ['target_word',      'Target word',      '', { promptOverride: 'SKELETON for the therapist: this is a placeholder you duplicate per session target — photo of the actual referent you\'re working on (a specific toy, a specific snack). Update the label per target.' }],
+  ['co_treat',         'Co-treat partner', '', { promptOverride: 'SKELETON for the therapist: head-and-shoulders photo of the OT/SLP/BCBA you co-treat with. Helps the child anchor multi-person sessions.', mode: 'person' }],
+  ['quiet_space',      'Quiet space',      '', { promptOverride: 'SKELETON for the therapist: photo of the calm corner / sensory tent / whatever de-escalation space you use. Available as a request — children CAN ask for a break.' }],
+  ['therapy_toy',      'Favorite toy here','', { promptOverride: 'SKELETON for the therapist: photo of the toy in YOUR room the child reliably reaches for. Different from a home favorite — this is what works in YOUR space.' }],
+]);
+
+// --- parent skeletons ------------------------------------------------------
+group('Nouns', 'Personalize', 'Family-authored', 'personal.family', { ...SK, audience: 'parent' }, [
+  ['bedtime_routine', 'Bedtime',          '', { promptOverride: 'SKELETON for parents: photo of your bedtime routine\'s anchor moment (bath, brush teeth, books in the rocker). Pair with the "good night" gestalt for a complete bedtime script.' }],
+  ['grandma_house',   "Grandma's house",  '', { promptOverride: 'SKELETON for parents: photo of grandma\'s front door, OR grandma herself, OR the room your child plays in there. Helps the child name where they\'re going.' }],
+  ['grandpa_house',   "Grandpa's house",  '', { promptOverride: 'SKELETON for parents: photo of grandpa\'s house OR grandpa himself. Make one tile per grandparent the child sees regularly.' }],
+  ['comfort_object',  'My lovey',         '', { promptOverride: 'SKELETON for parents: photo of THE comfort object (the specific blanket, the specific stuffie). Use the child\'s actual word for it as the label.' }],
+  ['family_pet',      'Our pet',          '', { promptOverride: 'SKELETON for parents: photo of YOUR family pet (not a stock dog/cat). Use the pet\'s real name as the label.' }],
+  ['family_car',      'Our car',          '', { promptOverride: 'SKELETON for parents: photo of YOUR car (interior with the child\'s car seat visible works great). Pair with "go" + a destination tile.' }],
+  ['our_park',        'Our park',         '', { promptOverride: 'SKELETON for parents: photo of the playground or park you visit most. Adds a "where" answer the child can actually request.' }],
+  ['special_snack',   'Special snack',    '', { promptOverride: 'SKELETON for parents: photo of THE snack — the one you keep on the top shelf, the one that\'s the reinforcer. Specific is far better than generic.' }],
+  ['bath_time',       'Bath time',        '', { promptOverride: 'SKELETON for parents: photo of your bathtub with the bath toys / bubbles your child knows. Pair with "more" and "all done" for full bath-time language.' }],
+  ['favorite_book',   'Favorite book',    '', { promptOverride: 'SKELETON for parents: photo of the cover of THE book — the one you\'ve read a hundred times. Pair with "read" or "again".' }],
+]);
+
+// --- universal placeholders (media) ---------------------------------------
+// Specific titles/IP do NOT live in the canonical library, but every family
+// has "their show" and "their song". These are universal skeletons — every
+// audience sees them — so any teammate can author the right placeholder when
+// the family tells them.
+group('Nouns', 'Personalize', 'Media (family-authored)', 'personal.media', { ...SK, audience: 'universal' }, [
+  ['favorite_show',     'My show',        '', { promptOverride: 'SKELETON: photo (or screenshot) of the show your child reaches for. We do not bundle specific titles here for licensing reasons — every family fills this in with their own.' }],
+  ['favorite_movie',    'My movie',       '', { promptOverride: 'SKELETON: photo (or poster) of the movie the child requests over and over. Same idea as "my show" but for a specific movie.' }],
+  ['favorite_song',     'My song',        '', { promptOverride: 'SKELETON: image of the album cover, the speaker, or even just a friendly music note for THE song. Pair with "more" + "again" for full requesting language.' }],
+  ['favorite_character','My character',   '', { promptOverride: 'SKELETON: image of the character (toy figure photo works great). The character your child names everything after.' }],
+  ['favorite_app',      'My app',         '', { promptOverride: 'SKELETON: photo of the iPad showing the app icon, or the icon itself. Specific app, not "an app" — the one that gets asked for.' }],
+]);
 
 const COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs']);
 const MODES = new Set(['child_as_subject', 'object', 'person', 'concept']);
@@ -937,13 +1012,19 @@ for (const r of rows) {
   if (!MODES.has(r.subjectMode)) problems.push('bad mode ' + r.id);
   if (!PHOTO.has(r.parentPhotoBehavior)) problems.push('bad photo ' + r.id);
   if (!r.label) problems.push('empty label ' + r.id);
-  if (!prompt.includes('{style}')) problems.push('no {style} ' + r.id);
-  // People that personalize from a photo must carry the right token; generic
-  // people (teacher/doctor) and all object/concept tiles must have a real subject.
-  const portrait = r.parentPhotoBehavior === 'override' || r.subjectMode === 'child_as_subject';
-  if (r.parentPhotoBehavior === 'override' && !prompt.includes('{parent_photo}')) problems.push('override w/o {parent_photo} ' + r.id);
-  if (r.subjectMode === 'child_as_subject' && !prompt.includes('{reference}')) problems.push('child w/o {reference} ' + r.id);
-  if (!portrait && !String(r.subject).trim()) problems.push('empty subject ' + r.id);
+  // Skeletons carry human-authoring instructions instead of an image-generation
+  // template, so they are exempt from the {style}/{reference}/{parent_photo}/
+  // subject checks that gate canonical tiles.
+  const isSkeleton = r.authoringKind === 'personal_skeleton';
+  if (!isSkeleton) {
+    if (!prompt.includes('{style}')) problems.push('no {style} ' + r.id);
+    // People that personalize from a photo must carry the right token; generic
+    // people (teacher/doctor) and all object/concept tiles must have a real subject.
+    const portrait = r.parentPhotoBehavior === 'override' || r.subjectMode === 'child_as_subject';
+    if (r.parentPhotoBehavior === 'override' && !prompt.includes('{parent_photo}')) problems.push('override w/o {parent_photo} ' + r.id);
+    if (r.subjectMode === 'child_as_subject' && !prompt.includes('{reference}')) problems.push('child w/o {reference} ' + r.id);
+    if (!portrait && !String(r.subject).trim()) problems.push('empty subject ' + r.id);
+  }
   r._prompt = prompt;
 }
 if (problems.length) { console.error('VALIDATION FAILED:\n' + problems.join('\n')); process.exit(1); }
