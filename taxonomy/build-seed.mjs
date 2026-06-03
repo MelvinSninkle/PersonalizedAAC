@@ -50,6 +50,7 @@ function group(column, category, subcategory, idPrefix, defaults, items) {
       parentPhotoBehavior: opts.photo || defaults.photo || 'none',
       phase: opts.phase || defaults.phase || 'v1_core',
       core: opts.core !== undefined ? opts.core : (defaults.core !== undefined ? defaults.core : true),
+      growthStage: opts.growthStage || defaults.growthStage || null,   // null → STAGE_BY_ID + section defaults later
       subject,
       notes: opts.notes || defaults.notes || '',
     });
@@ -320,6 +321,241 @@ group('Nouns', 'Colors', '', 'nouns.colors', { mode: 'object', ...EXT, notes: 'N
   ['brown', 'brown', 'a simple rounded shape filled with solid brown'],
 ]);
 
+// =============================================================================
+// TIER 1 — GRAMMAR ESSENTIALS (PRD §11 / §4.2B)
+// Pronouns, question words, linking words, prepositions. All concept-mode and
+// global-standard (parent_photo_behavior=none) — these are gestures and
+// abstract relations, not personal items. "I" and "my" are flagged as
+// personalize candidates in notes (the actual child making the gesture would
+// be ideal) but ship as standard for v1 simplicity + global asset cache.
+// =============================================================================
+
+// People · Pronouns — grammatical referents to people. Lives in the People
+// column so a user reaching for "who" words finds them there.
+const STD = { phase: 'v1_core' };
+group('People', 'Pronouns', '', 'people.pronouns', { mode: 'concept', photo: 'none', ...STD }, [
+  ['i',    'I',    'a friendly young child pointing to their own chest with a thumb, looking at the viewer with a small smile', { growthStage: 'stage_3', notes: 'Personalize candidate: the actual child making the gesture. Paired with WANT to form "I want".' }],
+  ['you',  'you',  'a friendly young child with one arm extended forward, open palm gesturing toward the viewer (the "you" gesture)', { growthStage: 'stage_5plus' }],
+  ['my',   'my',   'a friendly young child hugging a favorite stuffed animal close to their chest', { growthStage: 'stage_5plus', notes: 'Personalize candidate: the child with their actual favorite object.' }],
+  ['your', 'your', 'a friendly young child handing a small object forward to an imagined other, open palms', { growthStage: 'stage_5plus' }],
+  ['we',   'we',   'two friendly young children standing close side by side, both smiling at the viewer with arms around each other', { growthStage: 'stage_5plus' }],
+  ['they', 'they', 'a small group of three friendly young children together at a slight distance, all smiling at the viewer', { growthStage: 'stage_5plus' }],
+  ['he',   'he',   'a friendly young boy facing the viewer with a small wave', { growthStage: 'stage_5plus' }],
+  ['she',  'she',  'a friendly young girl facing the viewer with a small wave', { growthStage: 'stage_5plus' }],
+]);
+
+// Needs · Asking — question words. Most powerful single category for unlocking
+// real conversation ("where's mom?" "what's that?"). All concept-mode with a
+// gentle question-mark cue.
+group('Needs', 'Asking', '', 'needs.asking', { mode: 'concept', photo: 'none', ...STD }, [
+  ['what',  'what',  'a friendly young child with a tilted head and one open hand, a small friendly question mark above their head', { growthStage: 'stage_4' }],
+  ['where', 'where', 'a friendly young child looking around with both hands raised palm-up, a small friendly question mark above their head', { growthStage: 'stage_4' }],
+  ['who',   'who',   'a friendly young child pointing toward a soft silhouette of a person, a small friendly question mark above', { growthStage: 'stage_5plus' }],
+  ['why',   'why',   'a friendly young child with a thoughtful look, finger to chin, a small friendly question mark above their head', { growthStage: 'stage_5plus' }],
+  ['when',  'when',  'a friendly young child looking at a simple friendly clock face, a small friendly question mark above their head', { growthStage: 'stage_5plus' }],
+  ['how',   'how',   'a friendly young child with both hands up shrugging gently, a small friendly question mark above their head', { growthStage: 'stage_5plus' }],
+]);
+
+// Needs · Linking — the abstract grammar particles. Hard to illustrate; we use
+// gestures, simple icons, and contrast metaphors. Honest about their abstraction.
+group('Needs', 'Linking', '', 'needs.linking', { mode: 'concept', photo: 'none', ...STD }, [
+  ['is',      'is',      'two friendly objects with a soft equals sign between them — a ball on the left and the same ball on the right, showing identity'],
+  ['can',     'can',     'a friendly young child with one arm flexed showing a small bicep, confident smile, small green check above'],
+  ['will',    'will',    'a friendly young child looking forward with a soft forward-pointing arrow toward a future scene'],
+  ['a',       'a',       'a single small object (one cheerful ball) gently spotlit on a plain background, soft circular indicator around it'],
+  ['the',     'the',     'a specific cheerful ball with a soft glow around it, distinguishing it from background', { notes: 'Definite article — illustrated as "this specific thing".' }],
+  ['this',    'this',    'a friendly young child pointing down at a small cheerful object right in front of them'],
+  ['that',    'that',    'a friendly young child pointing forward at a small cheerful object in the distance'],
+  ['it',      'it',      'a friendly young child gesturing at a small generic cheerful object on a plain surface'],
+  ['and',     'and',     'two cheerful objects (a ball and a star) side by side connected by a soft plus-sign'],
+  ['but',     'but',     'two cheerful objects with a small contrast mark between them — one is a sun, the other a small cloud'],
+  ['because', 'because', 'a soft causal arrow between two small scenes — one event leading to another'],
+  ['with',    'with',    'a friendly young child holding hands with a teddy bear close to their side, "together" feeling'],
+  ['for',     'for',     'a friendly young child offering a small cheerful gift forward with open palms'],
+  ['to',      'to',      'a soft arrow pointing from a friendly young child toward a destination — a small house or playground'],
+]);
+
+// Needs (top-level) — spatial prepositions live alongside the existing "in,
+// out, up, down, here, wait" because that's where the kid-board already keeps
+// position words. Object-mode with two items in clear spatial relation.
+group('Needs', '', '', 'needs', { mode: 'concept', photo: 'none', ...STD }, [
+  ['on',       'on',       'a cheerful colorful ball resting on top of a small wooden box, clearly above the box'],
+  ['under',    'under',    'a cheerful colorful ball under a small wooden table, clearly beneath'],
+  ['over',     'over',     'a happy young child mid-jump over a small log on the ground, clearly above'],
+  ['behind',   'behind',   'a friendly young child peeking out from behind a single small tree, half-hidden'],
+  ['next_to',  'next to',  'two friendly young children standing directly next to each other, arms touching, equal height', { pron: 'next to' }],
+  ['between',  'between',  'a friendly young child standing in the middle of two small trees, one on each side'],
+]);
+
+// =============================================================================
+// TIER 2 — MISSING CATEGORIES (PRD §4.2 + §11)
+// Time/calendar, numbers, weather, school — categories every commercial AAC
+// system ships and we had zero of.
+// =============================================================================
+
+// Needs · Time — abstract time concepts. Concept-mode with friendly clock/sun/
+// moon iconography.
+const EXT_S5 = { phase: 'v1_extended', core: false, growthStage: 'stage_5plus' };
+group('Needs', 'Time', '', 'needs.time', { mode: 'concept', photo: 'none', phase: 'v1_core' }, [
+  ['now',       'now',       'a friendly clock face with both hands pointing straight up at 12, with a soft "right now" indicator', { growthStage: 'stage_5plus' }],
+  ['later',     'later',     'a friendly clock with a soft forward arrow indicating time advancing to a future point', { growthStage: 'stage_5plus' }],
+  ['soon',      'soon',      'a friendly clock with the minute hand close to the top, with a "soon!" gentle hourglass nearby', { growthStage: 'stage_5plus' }],
+  ['today',     'today',     'a friendly calendar page with the current day highlighted in a soft warm color, sun above', { growthStage: 'stage_5plus' }],
+  ['tomorrow',  'tomorrow',  'a friendly calendar with the day after today highlighted, sunrise icon above', { growthStage: 'stage_5plus' }],
+  ['yesterday', 'yesterday', 'a friendly calendar with the previous day highlighted, with a soft past arrow', { growthStage: 'stage_5plus' }],
+  ['morning',   'morning',   'a cheerful sunrise scene with a sun rising over a soft horizon, light pastel sky'],
+  ['afternoon', 'afternoon', 'a bright sun high in the middle of a soft blue sky, midday feeling', EXT_S5],
+  ['night',     'night',     'a friendly crescent moon and a few bright stars in a soft deep-blue sky'],
+  ['before',    'before',    'a soft backward-pointing arrow above a friendly clock, indicating "earlier"', EXT_S5],
+  ['after',     'after',     'a soft forward-pointing arrow above a friendly clock, indicating "later"', EXT_S5],
+]);
+
+// Needs · Numbers — cardinality 1-10. We show the COUNT (N stars/objects) not
+// the digit, per the no-text-in-image rule. Distinctive arrangements help
+// subitizing (1, 2-3 in a row, 4 in a square, 5 like a die, etc.).
+group('Needs', 'Numbers', '', 'needs.numbers', { mode: 'object', photo: 'none', phase: 'v1_core' }, [
+  ['one',   '1',  'one large bright friendly yellow star, centered, cheerful'],
+  ['two',   '2',  'two large bright stars side by side, equal size, on a plain pastel background'],
+  ['three', '3',  'three bright stars arranged in a clear horizontal row, equal spacing'],
+  ['four',  '4',  'four colorful balls arranged in a 2-by-2 square grid, equal size'],
+  ['five',  '5',  'five bright stars arranged like the 5-face of a die — four corners and one centered'],
+  ['six',   '6',  'six small cheerful stars arranged in 2 rows of 3, evenly spaced',  { core: false }],
+  ['seven', '7',  'seven small colorful balls arranged with 3 on top, 4 on bottom',    { core: false }],
+  ['eight', '8',  'eight small cheerful stars arranged in 2 rows of 4, evenly spaced', { core: false }],
+  ['nine',  '9',  'nine colorful blocks arranged in a 3-by-3 grid',                    { core: false }],
+  ['ten',   '10', 'ten small bright stars arranged in 2 rows of 5, evenly spaced',     { core: false }],
+]);
+
+// Needs · Describing — weather descriptors. Sit alongside the existing
+// big/little/hot/cold so a child describes the day the same way they describe
+// any quality. Object-mode with weather scenes.
+group('Needs', 'Describing', '', 'needs.describe.weather', { mode: 'object', photo: 'none', phase: 'v1_extended', core: false }, [
+  ['sunny',  'sunny',  'a bright cheerful sun shining in a clear soft-blue sky, light beams radiating', { growthStage: 'stage_5plus' }],
+  ['cloudy', 'cloudy', 'fluffy white clouds covering most of a soft pale-blue sky', { growthStage: 'stage_5plus' }],
+  ['rainy',  'rainy',  'a friendly grey cloud with steady raindrops falling onto a small puddle below', { growthStage: 'stage_5plus' }],
+  ['snowy',  'snowy',  'soft white snowflakes falling from a pale sky onto a thin blanket of snow', { growthStage: 'stage_5plus' }],
+  ['windy',  'windy',  'leaves and a small kite tail flying sideways through the air, soft motion lines', { growthStage: 'stage_5plus' }],
+  ['warm',   'warm',   'a friendly young child in a t-shirt smiling under a gentle sun, comfortable warmth', { growthStage: 'stage_5plus' }],
+  ['cool',   'cool',   'a friendly young child in a light jacket with a soft cool breeze, comfortable not cold', { growthStage: 'stage_5plus' }],
+]);
+
+// Nouns · School — basic classroom objects + routine concepts. Object-mode for
+// the items; the "recess" and "lunch" entries are scenes. Stage 5+ default.
+group('Nouns', 'School', '', 'nouns.school', { mode: 'object', photo: 'none', phase: 'v1_extended', core: false }, [
+  ['pencil',    'pencil',    'a single classic yellow pencil with a pink eraser, centered on a plain background'],
+  ['paper',     'paper',     'a single sheet of clean white paper, slightly tilted, on a plain background'],
+  ['marker',    'marker',    'a single colorful marker with the cap on, centered, friendly look'],
+  ['scissors',  'scissors',  'a pair of child-safe scissors with rounded tips, plastic friendly handles'],
+  ['glue',      'glue',      'a single classic white glue stick with a friendly twist cap'],
+  ['backpack',  'backpack',  "a small cheerful child's backpack with two straps, simple cartoon style"],
+  ['desk',      'desk',      'a small wooden classroom desk with a single chair attached, plain background'],
+  ['classroom', 'classroom', 'a friendly bright classroom interior — desks, a chalkboard, a window with sun streaming in', { mode: 'concept' }],
+  ['recess',    'recess',    'a friendly playground scene at school recess — a slide, a swing, a happy young child playing', { mode: 'concept' }],
+  ['lunch',     'lunch',     "a child's lunchbox, open, showing a sandwich, an apple, and a juice box neatly arranged"],
+]);
+
+// =============================================================================
+// TIER 3 — COVERAGE IN EXISTING CATEGORIES (PRD §11.1 breadth)
+// More cognitive/communication verbs, more body parts, more emotions, more
+// descriptors, plus a small Health subcategory.
+// =============================================================================
+
+// Verbs · Actions — cognitive, sensing, communication, and daily routine verbs
+// the existing set missed. All concept-mode with a clear figure.
+group('Verbs', 'Actions', '', 'verbs.actions.more', { mode: 'concept', photo: 'none', phase: 'v1_extended', core: false }, [
+  // Cognitive
+  ['think',    'think',    'a friendly young child with a finger to their chin, looking thoughtful, a small soft thought-bubble above', { growthStage: 'stage_5plus' }],
+  ['know',     'know',     'a friendly young child with a confident smile, finger pointed up beside their head as if "got it!"', { growthStage: 'stage_5plus' }],
+  ['remember', 'remember', 'a friendly young child with a hand on their forehead and a small soft thought-bubble showing a familiar object'],
+  // Sensing
+  ['see',      'see',      'a friendly young child with a hand visoring their forehead, looking outward attentively', { growthStage: 'stage_5plus', core: true, phase: 'v1_core' }],
+  ['hear',     'hear',     'a friendly young child cupping one ear with a hand, leaning slightly forward to listen', { growthStage: 'stage_5plus', core: true, phase: 'v1_core' }],
+  ['listen',   'listen',   'a friendly young child with both hands cupped behind their ears, head tilted, attentive'],
+  ['feel',     'feel',     'a friendly young child gently touching a soft fuzzy object with one fingertip, exploring texture'],
+  // General actions
+  ['try',      'try',      'a friendly young child reaching upward with effort, on tiptoes, determined smile'],
+  ['make',     'make',     'a friendly young child mid-craft, hands building a small tower of colorful blocks', { growthStage: 'stage_5plus', core: true, phase: 'v1_core' }],
+  ['do',       'do',       'a friendly young child mid-action, hands working on a small project, focused face', { growthStage: 'stage_5plus', core: true, phase: 'v1_core' }],
+  ['get',      'get',      'a friendly young child reaching out to grab a small cheerful object on a low shelf', { growthStage: 'stage_5plus', core: true, phase: 'v1_core' }],
+  ['put',      'put',      'a friendly young child placing a small block carefully onto a stack of blocks'],
+  ['take',     'take',     'a friendly young child gently receiving a small wrapped gift in both hands'],
+  ['find',     'find',     'a friendly young child peeking around a corner with a happy "found it!" smile'],
+  // Handling
+  ['hold',     'hold',     'a friendly young child holding a small teddy bear gently with both hands at chest height'],
+  ['carry',    'carry',    'a friendly young child walking carefully while carrying a medium cardboard box with both arms'],
+  ['share',    'share',    'two friendly young children sitting side by side, passing a single cookie between them, both smiling'],
+  // Communication
+  ['say',      'say',      'a friendly young child with mouth slightly open speaking, a small soft speech-bubble above'],
+  ['tell',     'tell',     'a friendly young child gesturing one hand while speaking to another child, soft speech-bubble above'],
+  ['ask',      'ask',      'a friendly young child raising one hand and looking up with a small soft question mark beside them'],
+  ['answer',   'answer',   'a friendly young child responding with a small smile and a soft speech-bubble containing a check mark'],
+  ['talk',     'talk',     'two friendly young children facing each other mid-conversation, both smiling, small speech-bubbles above'],
+  // Daily routine
+  ['watch',    'watch',    'a friendly young child sitting comfortably watching a friendly cartoon on a small TV screen'],
+  ['cook',     'cook',     'a friendly young child standing on a small step stool, stirring a small pot on a stovetop, happy'],
+  ['clean',    'clean',    'a friendly young child wiping a small table with a soft cloth, cheerful expression'],
+  ['drive',    'drive',    'a friendly young child pretending to drive a small toy car, hands on a tiny steering wheel'],
+  ['fix',      'fix',      'a friendly young child gently using a small toy screwdriver on a broken toy, focused face'],
+]);
+
+// Nouns · Body additions — extends the existing Body subcategory.
+group('Nouns', 'Body', '', 'nouns.body.more', { mode: 'object', photo: 'none', phase: 'v1_extended', core: false, notes: 'Could be supplement-mode for the child\'s actual body part.' }, [
+  ['finger',   'finger',   "a child's pointing index finger, hand visible, friendly soft style"],
+  ['toe',      'toe',      "a child's bare big toe and a few smaller toes, soft cartoon"],
+  ['knee',     'knee',     "a child's bent knee with a small dot for the kneecap, leg visible"],
+  ['elbow',    'elbow',    "a child's bent arm showing the elbow joint clearly"],
+  ['shoulder', 'shoulder', "a child's shoulder visible from the side, soft friendly style"],
+  ['back',     'back',     "the back of a friendly young child standing, view from behind, shoulders visible"],
+  ['chest',    'chest',    "a friendly young child standing facing forward, hands gesturing toward their chest area"],
+  ['neck',     'neck',     "a friendly young child's neck visible between the chin and shoulders"],
+  ['face',     'face',     "a friendly young child's face, soft smile, head-and-shoulders framing"],
+  ['cheek',    'cheek',    'a friendly young child with a finger touching their cheek, small soft blush dot on the cheek'],
+  ['chin',     'chin',     'a friendly young child with their hand touching their chin, thoughtful soft expression'],
+  ['lip',      'lip',      'a friendly young child smiling, lips clearly visible, soft natural color'],
+  ['tongue',   'tongue',   'a friendly young child playfully sticking out their tongue, cheerful expression'],
+]);
+
+// Needs · Feelings additions.
+group('Needs', 'Feelings', '', 'needs.feelings.more', { mode: 'concept', photo: 'none', phase: 'v1_extended', core: false }, [
+  ['surprised',   'surprised',   'a friendly young child with wide round eyes and a small open mouth, gentle surprise (not scary)'],
+  ['embarrassed', 'embarrassed', 'a friendly young child with soft red cheeks, looking shyly down, small smile'],
+  ['frustrated',  'frustrated',  'a friendly young child with arms crossed and a mild puffed-cheek expression, not scary'],
+  ['confused',    'confused',    'a friendly young child with head tilted sideways and one finger to chin, puzzled but calm'],
+  ['bored',       'bored',       'a friendly young child resting their chin on their hand, half-smile, mildly bored'],
+  ['proud',       'proud',       'a friendly young child standing tall with chest out, big smile, hands on hips'],
+  ['nervous',     'nervous',     'a friendly young child biting their bottom lip lightly, hands clasped in front, gentle worry'],
+  ['worried',     'worried',     'a friendly young child with hands gently clasped together, soft concerned look (not distressing)'],
+  ['lonely',      'lonely',      'a friendly young child sitting alone on a small bench, soft thoughtful expression (gentle, not sad)'],
+  ['angry',       'angry',       'a friendly young child with crossed arms and a firm frown, brows down slightly (not scary)'],
+]);
+
+// Needs · Describing additions — common adjectives every child wants to use.
+group('Needs', 'Describing', '', 'needs.describe.more', { mode: 'object', photo: 'none', phase: 'v1_extended', core: false }, [
+  ['wet',    'wet',    'a single wet leaf with shining water droplets glistening on its surface'],
+  ['dry',    'dry',    'a single dry crinkly autumn leaf, no shine, soft warm color'],
+  ['soft',   'soft',   'a single soft fluffy cloud or cotton ball, gentle airy feel'],
+  ['hard',   'hard',   'a single smooth gray river stone, solid and firm, plain background'],
+  ['sticky', 'sticky', 'a small jar of honey with a single dripping golden strand'],
+  ['sweet',  'sweet',  'a single colorful lollipop with a small sparkle indicating sweetness'],
+  ['funny',  'funny',  'a friendly young child laughing with both hands on belly, eyes squeezed shut in giggles', { mode: 'concept' }],
+  ['scary',  'scary',  'a soft friendly cartoon ghost (Halloween-style, not frightening), gentle wave', { notes: 'Keep gentle and friendly — no actual scary content for toddlers.' }],
+  ['new',    'new',    'a single shiny gift box with a fresh bow, soft sparkle effect, plain background'],
+  ['tall',   'tall',   'a single tall stack of colorful blocks reaching toward the top of the frame'],
+  ['short',  'short',  'a single short stack of two colorful blocks, low to the ground'],
+  ['pretty', 'pretty', 'a single beautiful flower with bright cheerful petals, soft sparkle'],
+]);
+
+// Nouns · Health — symptoms + meds. New small category for self-advocacy
+// ("itchy", "sore", "throw up") that goes well beyond what current "hurt" covers.
+group('Nouns', 'Health', '', 'nouns.health', { mode: 'concept', photo: 'none', phase: 'v1_extended', core: false }, [
+  ['itchy',    'itchy',    'a friendly young child gently scratching their arm, small soft wavy lines indicating an itch'],
+  ['sore',     'sore',     'a friendly young child holding their arm with the other hand, a small soft red dot indicating soreness'],
+  ['dizzy',    'dizzy',    'a friendly young child with a hand on their forehead, small soft spiral above their head (gentle, not distressing)'],
+  ['sneeze',   'sneeze',   'a friendly young child sneezing politely into their elbow, head turned aside'],
+  ['cough',    'cough',    'a friendly young child coughing into their elbow, considerate expression'],
+  ['medicine', 'medicine', 'a small friendly bottle of liquid medicine with a measuring spoon beside it, plain background', { mode: 'object' }],
+]);
+
 // ---------------------------------------------------------------------------
 // Validate (mirror the importer's rules) then emit CSV.
 const COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs']);
@@ -371,6 +607,9 @@ const STAGE_BY_ID = new Map(Object.entries({
 }));
 // Section-level defaults applied when no explicit override above.
 function defaultGrowthStage(r) {
+  // Per-row override (set by Tier 1/2/3 group() opts) wins over the section
+  // defaults — these are the explicit PRD §4.2B mappings authored at entry time.
+  if (r.growthStage) return r.growthStage;
   if (STAGE_BY_ID.has(r.id)) return STAGE_BY_ID.get(r.id);
   if (r.column === 'Nouns' && r.category === 'Food')   return 'stage_1';
   if (r.column === 'Nouns' && r.category === 'Toys')   return 'stage_1';
