@@ -40,6 +40,7 @@ export function rowToCategory(r) {
     order: r.display_order == null ? 0 : Number(r.display_order),
     childId: r.child_id || null,
     ownerUserId: r.owner_user_id == null ? null : Number(r.owner_user_id),
+    taxonomySlug: r.taxonomy_slug || null,
   };
 }
 
@@ -58,5 +59,6 @@ export function rowToItem(r) {
     pinned: !!r.pinned,
     childId: r.child_id || null,
     ownerUserId: r.owner_user_id == null ? null : Number(r.owner_user_id),
+    taxonomySlug: r.taxonomy_slug || null,
   };
 }

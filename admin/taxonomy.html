@@ -209,6 +209,13 @@
         <button data-act="set-core" data-val="true">Mark core ✓</button>
         <button data-act="set-core" data-val="false">Mark non-core</button>
         <div style="border-top: 1px solid #eef1f6; margin: 4px 0;"></div>
+        <button data-act="set-growth-stage" data-val="stage_1">Set growth_stage → stage_1</button>
+        <button data-act="set-growth-stage" data-val="stage_2">Set growth_stage → stage_2</button>
+        <button data-act="set-growth-stage" data-val="stage_3">Set growth_stage → stage_3</button>
+        <button data-act="set-growth-stage" data-val="stage_4">Set growth_stage → stage_4</button>
+        <button data-act="set-growth-stage" data-val="stage_5plus">Set growth_stage → stage_5plus</button>
+        <button data-act="set-growth-stage" data-val="">Clear growth_stage</button>
+        <div style="border-top: 1px solid #eef1f6; margin: 4px 0;"></div>
         <button data-act="delete" style="color: #991b1b;">Delete selected…</button>
       </div>
     </div>
@@ -263,6 +270,25 @@
     <option value="">All</option>
     <option value="core">Core only</option>
     <option value="noncore">Non-core only</option>
+  </select>
+
+  <label for="filter-growth">Stage</label>
+  <select id="filter-growth">
+    <option value="">All</option>
+    <option value="">— (none set)</option>
+    <option value="stage_1">stage_1</option>
+    <option value="stage_2">stage_2</option>
+    <option value="stage_3">stage_3</option>
+    <option value="stage_4">stage_4</option>
+    <option value="stage_5plus">stage_5plus</option>
+    <option value="__unset">unset only</option>
+  </select>
+
+  <label for="filter-gestalt">Gestalt</label>
+  <select id="filter-gestalt">
+    <option value="">All</option>
+    <option value="yes">Gestalt tiles only</option>
+    <option value="no">Single-word only</option>
   </select>
 
   <div class="spacer"></div>
@@ -352,9 +378,69 @@
         <div class="help">A category/subcategory is non-core when its tiles are.</div>
       </div>
     </div>
+    <div class="row3">
+      <div>
+        <label for="f-growth">growth_stage</label>
+        <select id="f-growth">
+          <option value="">— (5plus default)</option>
+          <option value="stage_1">stage_1 · first contact</option>
+          <option value="stage_2">stage_2 · more &amp; done</option>
+          <option value="stage_3">stage_3 · want</option>
+          <option value="stage_4">stage_4 · places + go/stop</option>
+          <option value="stage_5plus">stage_5plus · broadening</option>
+        </select>
+        <div class="help">Default-prominence stage on the standard scaffold. Advisory, never gating.</div>
+      </div>
+      <div>
+        <label for="f-meal">meal_context (food only)</label>
+        <select id="f-meal">
+          <option value="">—</option>
+          <option value="breakfast">breakfast</option>
+          <option value="lunch">lunch</option>
+          <option value="dinner">dinner</option>
+          <option value="snack">snack</option>
+          <option value="anytime">anytime</option>
+        </select>
+        <div class="help">Drives mode-based defaults in the Nouns column.</div>
+      </div>
+      <div>
+        <label for="f-is-gestalt">is_gestalt</label>
+        <select id="f-is-gestalt">
+          <option value="false">no — single word</option>
+          <option value="true">yes — whole-phrase tile</option>
+        </select>
+        <div class="help">Whole-thought tiles for the gestalt track (§4.2A).</div>
+      </div>
+    </div>
+    <div id="f-gestalt-fields" style="display:none;border:1px solid #fce4ec;background:#fff7fb;border-radius:8px;padding:12px;margin-top:8px;">
+      <div class="row2">
+        <div>
+          <label for="f-gestalt-type">gestalt_type</label>
+          <select id="f-gestalt-type">
+            <option value="">—</option>
+            <option value="compositional">compositional · surface words mean what they say</option>
+            <option value="category_holding">category_holding · frozen as the sole way to express a function</option>
+            <option value="opaque">opaque · surface words are a decoy; meaning is private</option>
+          </select>
+        </div>
+        <div>
+          <label for="f-gestalt-targets">gestalt_target_words (comma-separated slugs)</label>
+          <input type="text" id="f-gestalt-targets" placeholder="e.g. needs.want, nouns.food.snacks">
+          <div class="help">Word ids embedded in this phrase that the system may help the child isolate. Leave blank for opaque holophrases.</div>
+        </div>
+      </div>
+      <label for="f-gestalt-meaning">gestalt_meaning (what does this phrase actually mean for the child?)</label>
+      <textarea id="f-gestalt-meaning" style="min-height:50px;" placeholder='Essential for opaque holophrases — e.g. "a big fat owl" → "we are driving somewhere"'></textarea>
+    </div>
     <label for="f-prompt">prompt_template</label>
     <textarea id="f-prompt" placeholder="A {style} illustration of {reference} ..."></textarea>
     <div class="help">Variables: <code>{style}</code>, <code>{color}</code>, <code>{reference}</code>, <code>{parent_photo}</code>.</div>
+    <label for="f-clues">descriptive_clues (one per line, easiest first)</label>
+    <textarea id="f-clues" style="min-height:60px;" placeholder='For See and Solve Description Matching (§4.2C). Concrete/experiential first, then abstract/categorical.
+e.g. for "egg":
+a breakfast food
+what you eat that comes from a chicken
+white or brown outside, yellow inside'></textarea>
     <label for="f-notes">notes</label>
     <textarea id="f-notes" style="min-height: 60px;"></textarea>
 
@@ -375,7 +461,7 @@
     <div class="help">
       Accepts CSV, TSV, or XLSX. Required columns: <code>id</code>, <code>column</code>, <code>label</code>,
       <code>subject_mode</code>, <code>parent_photo_behavior</code>, <code>prompt_template</code>.
-      Optional: <code>category</code>, <code>subcategory</code>, <code>pronunciation</code>, <code>phase</code>, <code>core</code> (true/false, default true), <code>status</code>, <code>notes</code>.
+      Optional: <code>category</code>, <code>subcategory</code>, <code>pronunciation</code>, <code>phase</code>, <code>core</code> (true/false, default true), <code>status</code>, <code>notes</code>, <code>growth_stage</code>, <code>meal_context</code>, <code>is_gestalt</code>, <code>gestalt_type</code>, <code>gestalt_meaning</code>, <code>gestalt_target_words</code> (comma-separated), <code>descriptive_clues</code> (pipe- or newline-separated).
       Aliases: <code>name→label</code>, <code>mode→subject_mode</code>, <code>behavior→parent_photo_behavior</code>, <code>prompt→prompt_template</code>.
     </div>
     <label for="import-paste">Paste CSV or TSV</label>
@@ -565,12 +651,18 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     const phase  = document.getElementById('filter-phase').value;
     const status = document.getElementById('filter-status').value;
     const core   = document.getElementById('filter-core').value;
+    const growth = document.getElementById('filter-growth').value;
+    const gest   = document.getElementById('filter-gestalt').value;
     table.setFilter((row) => {
       if (col && row.column !== col) return false;
       if (mode && row.subjectMode !== mode) return false;
       if (phase && row.phase !== phase) return false;
       if (core === 'core' && row.core === false) return false;
       if (core === 'noncore' && row.core !== false) return false;
+      if (growth === '__unset' && row.growthStage) return false;
+      else if (growth && growth !== '__unset' && row.growthStage !== growth) return false;
+      if (gest === 'yes' && !row.isGestalt) return false;
+      if (gest === 'no' && row.isGestalt) return false;
       if (status === 'all') { /* show everything */ }
       else if (status === 'archived') { if (!row.archived) return false; }
       else if (status === '') { if (row.archived) return false; }
@@ -602,6 +694,14 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     document.getElementById('f-pron').value         = row?.pronunciation || '';
     document.getElementById('f-status').value       = row?.status || 'draft';
     document.getElementById('f-core').value         = (row && row.core === false) ? 'false' : 'true';
+    document.getElementById('f-growth').value       = row?.growthStage || '';
+    document.getElementById('f-meal').value         = row?.mealContext || '';
+    document.getElementById('f-is-gestalt').value   = row && row.isGestalt ? 'true' : 'false';
+    document.getElementById('f-gestalt-type').value    = row?.gestaltType || '';
+    document.getElementById('f-gestalt-targets').value = (row?.gestaltTargetWords || []).join(', ');
+    document.getElementById('f-gestalt-meaning').value = row?.gestaltMeaning || '';
+    document.getElementById('f-clues').value        = (row?.descriptiveClues || []).join('\n');
+    document.getElementById('f-gestalt-fields').style.display = (row && row.isGestalt) ? 'block' : 'none';
     document.getElementById('f-prompt').value       = row?.promptTemplate || '';
     document.getElementById('f-notes').value        = row?.notes || '';
     document.getElementById('row-delete').style.display = row ? 'inline-block' : 'none';
@@ -629,6 +729,13 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       phase: document.getElementById('f-phase').value,
       status: document.getElementById('f-status').value,
       core: document.getElementById('f-core').value === 'true',
+      growthStage: document.getElementById('f-growth').value || null,
+      mealContext: document.getElementById('f-meal').value || null,
+      isGestalt: document.getElementById('f-is-gestalt').value === 'true',
+      gestaltType: document.getElementById('f-gestalt-type').value || null,
+      gestaltMeaning: document.getElementById('f-gestalt-meaning').value.trim() || null,
+      gestaltTargetWords: document.getElementById('f-gestalt-targets').value.split(',').map(s => s.trim()).filter(Boolean),
+      descriptiveClues: document.getElementById('f-clues').value.split('\n').map(s => s.trim()).filter(Boolean),
       notes: document.getElementById('f-notes').value.trim() || null,
     };
     try {
@@ -646,6 +753,12 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     } catch (e) {
       err.textContent = e.message || String(e);
     }
+  });
+
+  // Show the gestalt-only fields only when this row IS a gestalt — keeps the
+  // form cleaner for the common single-word case.
+  document.getElementById('f-is-gestalt').addEventListener('change', (e) => {
+    document.getElementById('f-gestalt-fields').style.display = e.target.value === 'true' ? 'block' : 'none';
   });
 
   document.getElementById('row-delete').addEventListener('click', async () => {
@@ -684,6 +797,12 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       { title: 'subject',       field: 'subjectMode',         width: 145, headerSort: true },
       { title: 'parent_photo',  field: 'parentPhotoBehavior', width: 115, headerSort: true },
       { title: 'phase',         field: 'phase',               width: 105, headerSort: true },
+      { title: 'stage',         field: 'growthStage',         width: 95,  headerSort: true,
+        formatter: (cell) => { const v = cell.getValue(); return v ? v.replace('stage_', 's') : '—'; } },
+      { title: 'meal',          field: 'mealContext',         width: 80,  headerSort: true,
+        formatter: (cell) => cell.getValue() || '' },
+      { title: 'G',             field: 'isGestalt',           width: 44,  headerSort: true,
+        formatter: (cell) => cell.getValue() ? '🗣️' : '', tooltip: 'Whole-phrase gestalt tile' },
       { title: 'core',          field: 'core',                width: 64,  headerSort: true,
         formatter: (cell) => cell.getValue() === false ? '—' : '✓' },
       { title: 'status',        field: 'status',              width: 100, headerSort: true,
@@ -707,7 +826,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     btn.textContent = data.length ? `Bulk action (${data.length}) ▾` : 'Bulk action ▾';
   });
 
-  for (const id of ['filter-search','filter-column','filter-mode','filter-phase','filter-status','filter-core']) {
+  for (const id of ['filter-search','filter-column','filter-mode','filter-phase','filter-status','filter-core','filter-growth','filter-gestalt']) {
     document.getElementById(id).addEventListener('input', applyFilters);
     document.getElementById(id).addEventListener('change', applyFilters);
   }
@@ -766,6 +885,13 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
         case 'notes':                 out.notes = v || null; break;
         case 'core':                  out.core = !/^(false|0|no|non[-_]?core|n)$/i.test(String(v).trim()); break;
         case 'archived':              out.archived = /^(true|1|yes)$/i.test(String(v)); break;
+        case 'growth_stage':          out.growthStage = v || null; break;
+        case 'meal_context':          out.mealContext = v || null; break;
+        case 'is_gestalt':            out.isGestalt = /^(true|1|yes|y)$/i.test(String(v).trim()); break;
+        case 'gestalt_type':          out.gestaltType = v || null; break;
+        case 'gestalt_meaning':       out.gestaltMeaning = v || null; break;
+        case 'gestalt_target_words':  out.gestaltTargetWords = String(v || '').split(/[,;|]/).map(s => s.trim()).filter(Boolean); break;
+        case 'descriptive_clues':     out.descriptiveClues = String(v || '').split(/\s*\|\s*|\s*\n\s*/).map(s => s.trim()).filter(Boolean); break;
         default: /* ignore unknown columns */ break;
       }
     }
@@ -1051,28 +1177,34 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   function tsStamp() { return new Date().toISOString().replace(/[:.]/g, '-'); }
-  function exportCSV(rows) {
-    const cols = ['id','column','category','subcategory','label','pronunciation',
-                  'subject_mode','parent_photo_behavior','phase','core','status','notes','prompt_template'];
-    const data = rows.map(r => ({
+  function exportRow(r) {
+    return {
       id: r.id, column: r.column, category: r.category, subcategory: r.subcategory,
       label: r.label, pronunciation: r.pronunciation,
       subject_mode: r.subjectMode, parent_photo_behavior: r.parentPhotoBehavior,
-      phase: r.phase, core: r.core === false ? 'false' : 'true', status: r.status, notes: r.notes,
-      prompt_template: r.promptTemplate,
-    }));
-    const csv = Papa.unparse(data, { columns: cols });
+      phase: r.phase, core: r.core === false ? 'false' : 'true',
+      growth_stage: r.growthStage || '',
+      meal_context: r.mealContext || '',
+      is_gestalt: r.isGestalt ? 'true' : 'false',
+      gestalt_type: r.gestaltType || '',
+      gestalt_meaning: r.gestaltMeaning || '',
+      gestalt_target_words: (r.gestaltTargetWords || []).join(', '),
+      descriptive_clues: (r.descriptiveClues || []).join(' | '),
+      status: r.status, notes: r.notes, prompt_template: r.promptTemplate,
+    };
+  }
+  function exportCSV(rows) {
+    const cols = ['id','column','category','subcategory','label','pronunciation',
+                  'subject_mode','parent_photo_behavior','phase','core',
+                  'growth_stage','meal_context','is_gestalt','gestalt_type',
+                  'gestalt_meaning','gestalt_target_words','descriptive_clues',
+                  'status','notes','prompt_template'];
+    const csv = Papa.unparse(rows.map(exportRow), { columns: cols });
     download(`taxonomy-${tsStamp()}.csv`, csv, 'text/csv;charset=utf-8');
   }
   function exportXLSX(rows) {
     const wb = XLSX.utils.book_new();
-    const data = rows.map(r => ({
-      id: r.id, column: r.column, category: r.category, subcategory: r.subcategory,
-      label: r.label, pronunciation: r.pronunciation,
-      subject_mode: r.subjectMode, parent_photo_behavior: r.parentPhotoBehavior,
-      phase: r.phase, core: r.core === false ? 'false' : 'true', status: r.status, notes: r.notes,
-      prompt_template: r.promptTemplate,
-    }));
+    const data = rows.map(exportRow);
     const ws = XLSX.utils.json_to_sheet(data);
     XLSX.utils.book_append_sheet(wb, ws, 'Taxonomy');
     XLSX.writeFile(wb, `taxonomy-${tsStamp()}.xlsx`);
@@ -1158,6 +1290,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     if (act === 'set-status' || act === 'set-phase') body.value = value;
     if (act === 'set-archived') body.value = value === 'true';
     if (act === 'set-core') body.value = value === 'true';
+    if (act === 'set-growth-stage') body.value = value || null;
     try {
       const r = await api('/api/admin/taxonomy-bulkop', { method: 'POST', body });
       await loadRows();

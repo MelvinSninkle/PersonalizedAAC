@@ -348,8 +348,80 @@ for (const r of rows) {
 }
 if (problems.length) { console.error('VALIDATION FAILED:\n' + problems.join('\n')); process.exit(1); }
 
+// ---- Growth-stage assignment (PRD §4.2B.3) ----
+// Stage 1 = First Contact: persistent strip + food + toys + immediate family
+// Stage 2 = More & Done   : adds more, all_done
+// Stage 3 = Want          : adds want
+// Stage 4 = Places + Go/Stop
+// Stage 5+= Broadening (help, full verbs, body parts, feelings, social, etc.)
+const STAGE_BY_ID = new Map(Object.entries({
+  // Stage 1: persistent strip + immediate motivation
+  'needs.yes': 'stage_1', 'needs.no': 'stage_1',
+  'needs.eat': 'stage_1', 'needs.drink': 'stage_1',
+  'needs.bathroom': 'stage_1', 'needs.hurt': 'stage_1',
+  'people.family.me': 'stage_1', 'people.family.mom': 'stage_1', 'people.family.dad': 'stage_1',
+  // Stage 2: the connector words that attach to the requesting the child already does
+  'needs.more': 'stage_2', 'needs.all_done': 'stage_2',
+  // Stage 3: first syntax move
+  'needs.want': 'stage_3',
+  // Stage 4: places + go/stop arrive together (PRD §4.2B.3)
+  'needs.go': 'stage_4', 'needs.stop': 'stage_4',
+  // Stage 5+: help is explicitly stage 5+ per PRD
+  'needs.help': 'stage_5plus',
+}));
+// Section-level defaults applied when no explicit override above.
+function defaultGrowthStage(r) {
+  if (STAGE_BY_ID.has(r.id)) return STAGE_BY_ID.get(r.id);
+  if (r.column === 'Nouns' && r.category === 'Food')   return 'stage_1';
+  if (r.column === 'Nouns' && r.category === 'Toys')   return 'stage_1';
+  if (r.column === 'Nouns' && r.category === 'Places') return 'stage_4';
+  // Everything else (verbs, body, clothes, animals, vehicles, colors, feelings,
+  // social, describing, extended people) defaults to broadening — available but
+  // not auto-prominent for an early-stage child.
+  return 'stage_5plus';
+}
+// ---- Meal context for food items (PRD §4.2 + Nouns/Food taxonomy) ----
+const MEAL_BY_ID = new Map(Object.entries({
+  'nouns.food.drinks.milk': 'anytime',
+  'nouns.food.drinks.water': 'anytime',
+  'nouns.food.drinks.juice': 'anytime',
+  'nouns.food.drinks.smoothie': 'anytime',
+  'nouns.food.fruit.banana': 'anytime',
+  'nouns.food.fruit.apple': 'anytime',
+  'nouns.food.fruit.grapes': 'anytime',
+  'nouns.food.fruit.orange': 'anytime',
+  'nouns.food.fruit.strawberry': 'anytime',
+  'nouns.food.fruit.blueberry': 'anytime',
+  'nouns.food.veg.carrot': 'dinner',
+  'nouns.food.veg.broccoli': 'dinner',
+  'nouns.food.veg.corn': 'dinner',
+  'nouns.food.veg.peas': 'dinner',
+  'nouns.food.snacks.cracker': 'snack',
+  'nouns.food.snacks.cereal': 'breakfast',
+  'nouns.food.snacks.cheese': 'snack',
+  'nouns.food.snacks.yogurt': 'snack',
+  'nouns.food.snacks.cookie': 'snack',
+  'nouns.food.snacks.chips': 'snack',
+  'nouns.food.snacks.pretzel': 'snack',
+  'nouns.food.meals.bread': 'breakfast',
+  'nouns.food.meals.pasta': 'dinner',
+  'nouns.food.meals.pizza': 'dinner',
+  'nouns.food.meals.egg': 'breakfast',
+  'nouns.food.meals.chicken': 'dinner',
+  'nouns.food.meals.rice': 'dinner',
+  'nouns.food.meals.sandwich': 'lunch',
+}));
+
+for (const r of rows) {
+  r._growthStage = defaultGrowthStage(r);
+  r._mealContext = MEAL_BY_ID.get(r.id) || '';
+}
+
 const HEADER = ['id', 'column', 'category', 'subcategory', 'label', 'pronunciation',
-  'subject_mode', 'parent_photo_behavior', 'phase', 'core', 'status', 'prompt_template', 'notes'];
+  'subject_mode', 'parent_photo_behavior', 'phase', 'core',
+  'growth_stage', 'meal_context', 'is_gestalt', 'gestalt_type',
+  'gestalt_meaning', 'gestalt_target_words', 'descriptive_clues',
+  'status', 'prompt_template', 'notes'];
 const cell = (s) => {
   s = String(s == null ? '' : s);
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -358,15 +430,23 @@ const lines = [HEADER.join(',')];
 for (const r of rows) {
   lines.push([
     r.id, r.column, r.category, r.subcategory, r.label, r.pronunciation,
-    r.subjectMode, r.parentPhotoBehavior, r.phase, r.core ? 'true' : 'false', 'draft',
-    r._prompt, r.notes,
+    r.subjectMode, r.parentPhotoBehavior, r.phase, r.core ? 'true' : 'false',
+    r._growthStage, r._mealContext,
+    'false', '', '', '', '',                                                // gestalts + clues left for SLP authoring
+    'draft', r._prompt, r.notes,
   ].map(cell).join(','));
 }
 const outPath = path.join(HERE, 'seed-core-v1.csv');
 fs.writeFileSync(outPath, lines.join('\n') + '\n');
 
 const bySection = {}, byCore = { core: 0, noncore: 0 };
-for (const r of rows) { bySection[r.column] = (bySection[r.column] || 0) + 1; byCore[r.core ? 'core' : 'noncore']++; }
+const byStage = {};
+for (const r of rows) {
+  bySection[r.column] = (bySection[r.column] || 0) + 1;
+  byCore[r.core ? 'core' : 'noncore']++;
+  byStage[r._growthStage] = (byStage[r._growthStage] || 0) + 1;
+}
+console.log('By stage:', JSON.stringify(byStage));
 console.log(`Wrote ${rows.length} rows → ${path.relative(process.cwd(), outPath)}`);
 console.log('By section:', JSON.stringify(bySection));
 console.log(`Core: ${byCore.core} · Non-core: ${byCore.noncore}`);

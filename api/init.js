@@ -315,11 +315,49 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS taxonomy_phase_idx    ON taxonomy(phase)`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_status_idx   ON taxonomy(status)`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_archived_idx ON taxonomy(archived)`;
-    // `core` = part of the baseline board a brand-new child starts with (Level 0).
+    // `core` = part of the baseline standard vocabulary a brand-new child starts with (Level 0).
     // Non-core concepts/categories grow in later as competence increases. A whole
     // category/subcategory is "non-core" when its tile rows are flagged non-core.
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS core BOOLEAN NOT NULL DEFAULT TRUE`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_core_idx      ON taxonomy(core)`;
+
+    // ---- PRD §11.1 field additions (March 2026 alignment) ----
+    // growth_stage: the developmental stage at which this tile becomes prominent
+    // by default for a child on the standard scaffold (§4.2B). Advisory, never
+    // a gate — parents/SLPs can surface anything at any stage. NULL = stage_5plus.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS growth_stage TEXT`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_growth_idx ON taxonomy(growth_stage)`;
+    // meal_context (food only): one of breakfast/lunch/dinner/snack/anytime.
+    // Drives mode-based default-category in the Nouns column (§4.2).
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS meal_context TEXT`;
+    // Gestalt track (§4.2A): is_gestalt marks whole-phrase tiles; gestalt_type
+    // is the adult-supplied typology; gestalt_meaning is what the gestalt means
+    // (essential for opaque holophrases); gestalt_target_words lists embedded
+    // canonical word ids the system may help the child isolate.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS is_gestalt BOOLEAN NOT NULL DEFAULT FALSE`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS gestalt_type TEXT`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS gestalt_meaning TEXT`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS gestalt_target_words TEXT[]`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_gestalt_idx ON taxonomy(is_gestalt)`;
+    // See and Solve description-matching clues (§4.2C.2): ordered list of
+    // meaning/function/relationship clues, easiest first.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS descriptive_clues TEXT[]`;
+    // Symbol-maturation ladder (§11.10): ordered set of renderings from
+    // concrete-personal (level 0) to abstract-conventional. JSONB so each
+    // rendering can carry its own prompt/notes; per-child operative level is
+    // stored elsewhere (in the child's instantiation, not on the canonical row).
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS representation_levels JSONB`;
+
+    // ---- Keystone fix (§14): the canonical anchor on items/categories/attempts ----
+    // taxonomy_slug links a per-child instantiation back to the canonical
+    // taxonomy id, so mastery + cross-child measurement can aggregate per
+    // concept (not per section). Nullable: legacy rows stay null until touched.
+    await db`ALTER TABLE items         ADD COLUMN IF NOT EXISTS taxonomy_slug TEXT`;
+    await db`ALTER TABLE categories    ADD COLUMN IF NOT EXISTS taxonomy_slug TEXT`;
+    await db`ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS taxonomy_slug TEXT`;
+    await db`CREATE INDEX IF NOT EXISTS items_taxonomy_slug_idx         ON items(taxonomy_slug)`;
+    await db`CREATE INDEX IF NOT EXISTS categories_taxonomy_slug_idx    ON categories(taxonomy_slug)`;
+    await db`CREATE INDEX IF NOT EXISTS game_attempts_taxonomy_slug_idx ON game_attempts(taxonomy_slug)`;
 
     // Point-in-time snapshots so any bulk op or restore is itself reversible.
     await db`
