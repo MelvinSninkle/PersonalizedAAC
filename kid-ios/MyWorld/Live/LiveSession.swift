@@ -17,6 +17,7 @@ struct LiveCommand: Codable, Equatable {
     let secondsPerImage: Double?   // slideshow pacing
     let labelStyle: String?        // "plain" | "first_person"
     let music: String?             // music override (path)
+    let steps: [RoutineStep]?      // chain of steps for a routine
     let ts: Double?
 }
 

@@ -8,47 +8,50 @@ import Observation
 final class GameController {
     enum Mode: Equatable {
         case matching
-        case slideshow(firstPerson: Bool)   // Learn (plain) vs Exposure (first-person)
+        case slideshow(firstPerson: Bool)
         case celebration
     }
 
     struct Session: Identifiable, Equatable {
         let id = UUID()
         let mode: Mode
-        let scope: String?          // "all" | "people"/"nouns"/"verbs" | "cat:<id>"
-        let choices: Int?           // matching only
+        let scope: String?
+        let choices: Int?
         let from: Int?
         let to: Int?
         let sample: Int?
         let limitMin: Double?
-        let secondsPerImage: Double?   // slideshow pacing (default applied in the view)
-        let music: String?             // optional music override
+        let secondsPerImage: Double?
+        let music: String?
     }
 
     var current: Session?
     var inGameCommand: LiveCommand?
 
-    /// Map the web app's mode vocabulary to our native modes:
-    ///   self_paced / facilitated / matching / (nil) → matching
-    ///   learn_slideshow                              → slideshow (plain labels)
-    ///   exposure_slideshow                           → slideshow (first-person)
-    ///   slideshow                                    → slideshow (plain)
-    ///   celebration                                  → celebration
+    /// When a routine is running, the queued steps + cursor. Each step builds a
+    /// Session that runs to completion, then we auto-advance to the next.
+    /// `runRoutine(_:)` kicks one off; the view's onExit handler nudges along.
+    private var routineSteps: [RoutineStep] = []
+    private var routineIndex = 0
+    var isRoutineActive: Bool { !routineSteps.isEmpty && routineIndex < routineSteps.count }
+
     private func resolveMode(_ raw: String?) -> Mode {
         switch raw {
         case "learn_slideshow", "slideshow":  return .slideshow(firstPerson: false)
         case "exposure_slideshow":            return .slideshow(firstPerson: true)
         case "celebration":                   return .celebration
-        default:                              return .matching   // self_paced/facilitated/nil
+        default:                              return .matching
         }
     }
 
     func apply(_ cmd: LiveCommand) {
         switch cmd.action {
         case "start":
-            guard current == nil else { return }
-            // The labelStyle field also distinguishes plain vs first-person when
-            // the mode is a bare "slideshow".
+            guard current == nil, !isRoutineActive else { return }
+            // A `start` with `steps` is a routine, not a single session.
+            if let steps = cmd.steps, !steps.isEmpty {
+                runRoutine(steps); return
+            }
             var mode = resolveMode(cmd.mode)
             if case .slideshow = mode, cmd.labelStyle == "first_person" {
                 mode = .slideshow(firstPerson: true)
@@ -67,6 +70,7 @@ final class GameController {
         case "end":
             current = nil
             inGameCommand = nil
+            abortRoutine()
         default:
             inGameCommand = cmd
         }
@@ -78,6 +82,67 @@ final class GameController {
                           secondsPerImage: nil, music: nil)
     }
 
+    /// Run a saved routine — a chain of slideshow/game/celebration steps.
+    func runRoutine(_ steps: [RoutineStep]) {
+        guard current == nil else { return }
+        routineSteps = Array(steps.prefix(12))
+        routineIndex = 0
+        startCurrentRoutineStep()
+    }
+
+    /// Called by BoardView when a session ends — advances the routine if any.
+    /// Returns true if the routine handled the end (caller should NOT clear
+    /// live standby until the routine is done).
+    @discardableResult
+    func sessionDidEnd() -> Bool {
+        current = nil
+        guard isRoutineActive else { return false }
+        routineIndex += 1
+        if routineIndex >= routineSteps.count {
+            abortRoutine()
+            return false
+        }
+        // Tiny gap so the SwiftUI cover dismiss animation finishes before the
+        // next mode pushes (otherwise the cover ignores the new item).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            self.startCurrentRoutineStep()
+        }
+        return true
+    }
+
+    func abortRoutine() {
+        routineSteps = []
+        routineIndex = 0
+    }
+
     func consumeInGameCommand() { inGameCommand = nil }
-    func stop() { current = nil; inGameCommand = nil }
+
+    func stop() {
+        current = nil
+        inGameCommand = nil
+        abortRoutine()
+    }
+
+    private func startCurrentRoutineStep() {
+        guard routineIndex < routineSteps.count else { abortRoutine(); return }
+        let step = routineSteps[routineIndex]
+        var mode = resolveMode(step.mode)
+        // Slideshow steps in a routine NEED a time limit so we can auto-advance.
+        // Web defaults to 3 minutes when missing — match that.
+        var limit = step.limitMin
+        if case .slideshow = mode, (limit ?? 0) <= 0 { limit = 3 }
+        if case .slideshow = mode {} else { /* no extra handling */ }
+        // labelStyle isn't a step field, so we use mode alone (slideshow/exposure)
+        current = Session(
+            mode: mode,
+            scope: step.scope,
+            choices: step.choices,
+            from: step.from.map { Int($0) },
+            to: step.to.map { Int($0) },
+            sample: step.sample.map { Int($0) },
+            limitMin: limit,
+            secondsPerImage: step.secondsPerImage,
+            music: step.music
+        )
+    }
 }

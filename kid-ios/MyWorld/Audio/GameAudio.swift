@@ -72,6 +72,23 @@ final class GameAudio {
 
     // MARK: -- Cheer
 
+    /// Speak an arbitrary phrase in the app voice (used by scheduled prompts /
+    /// reminder toasts). Same /api/tts path as the cheers — different player so
+    /// it won't clobber the cheer mid-celebration.
+    private var speakPlayer: AVAudioPlayer?
+    func speak(_ text: String, childId: String) {
+        Task {
+            guard let data = await api.tts(text: text, emotion: "default") else { return }
+            do {
+                let p = try AVAudioPlayer(data: data)
+                p.volume = 1.0
+                p.prepareToPlay()
+                p.play()
+                speakPlayer = p
+            } catch { }
+        }
+    }
+
     /// Pick a random cheer phrase and speak it (plays over the music, which the
     /// caller stops a moment later — same as the web's celebration).
     func playCheer(childId: String) {

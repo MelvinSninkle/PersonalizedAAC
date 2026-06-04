@@ -121,6 +121,29 @@ struct APIClient {
         return (root["settings"] as? [String: Any]) ?? [:]
     }
 
+    /// Schedules the parent set in the web Schedules panel (timed reminders,
+    /// interactive questions, game nudges). Stored under settings.schedules.
+    func fetchSchedules(childId: String) async -> [Schedule] {
+        let settings = await childSettings(childId: childId)
+        guard let arr = settings["schedules"] as? [Any],
+              let data = try? JSONSerialization.data(withJSONObject: arr) else { return [] }
+        return (try? JSONDecoder().decode([Schedule].self, from: data)) ?? []
+    }
+
+    /// Log a child's answer to a scheduled question so the parent dashboard
+    /// can see what was tapped. Fire-and-forget.
+    func logInteraction(childId: String, kind: String, prompt: String,
+                        response: String, scheduleId: String?) async {
+        var dict: [String: Any] = [
+            "childId": childId, "kind": kind,
+            "prompt": prompt, "response": response,
+        ]
+        if let scheduleId { dict["scheduleId"] = scheduleId }
+        guard let body = try? JSONSerialization.data(withJSONObject: dict) else { return }
+        _ = try? await request(method: "POST", path: "/api/interactions",
+                               body: body, contentType: "application/json")
+    }
+
     /// GET display prefs stored under `settings.kidDisplay`.
     func fetchDisplayPrefs(childId: String) async -> DisplayPrefsData? {
         let settings = await childSettings(childId: childId)

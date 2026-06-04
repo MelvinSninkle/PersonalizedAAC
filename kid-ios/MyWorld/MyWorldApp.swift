@@ -3,11 +3,12 @@ import AVFoundation
 
 @main
 struct MyWorldApp: App {
-    @State private var auth  = AuthManager()
-    @State private var board = BoardStore()
-    @State private var prefs = DisplayPrefs()
-    @State private var live  = LiveSession()
-    @State private var game  = GameController()
+    @State private var auth      = AuthManager()
+    @State private var board     = BoardStore()
+    @State private var prefs     = DisplayPrefs()
+    @State private var live      = LiveSession()
+    @State private var game      = GameController()
+    @State private var scheduler = Scheduler()
 
     init() {
         setupAudioSession()
@@ -21,6 +22,7 @@ struct MyWorldApp: App {
                 .environment(prefs)
                 .environment(live)
                 .environment(game)
+                .environment(scheduler)
                 .statusBarHidden(true)
                 .persistentSystemOverlays(.hidden)
         }

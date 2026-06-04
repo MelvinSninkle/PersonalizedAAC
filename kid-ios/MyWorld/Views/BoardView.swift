@@ -17,6 +17,7 @@ struct BoardView: View {
     @Environment(DisplayPrefs.self) private var prefs
     @Environment(LiveSession.self) private var live
     @Environment(GameController.self) private var game
+    @Environment(Scheduler.self) private var scheduler
 
     @State private var showSettings = false
     @State private var showDisplay  = false
@@ -54,6 +55,7 @@ struct BoardView: View {
             }
         }
         .background(Color(hex: "#fff7fb"))
+        .overlay(alignment: .top) { scheduledPromptOverlay }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showDisplay)  { DisplaySettingsView() }
         .fullScreenCover(item: gameSessionBinding) { session in
@@ -72,21 +74,59 @@ struct BoardView: View {
             prefs.attach(childId: auth.childSlug)
             await board.refresh(childId: auth.childSlug)
             live.start(childId: auth.childSlug)
+            scheduler.start(childId: auth.childSlug)
         }
-        .onDisappear { live.stop() }
-        .refreshable { await board.refresh(childId: auth.childSlug) }
+        .onDisappear {
+            live.stop()
+            scheduler.stop()
+        }
+        .refreshable {
+            await board.refresh(childId: auth.childSlug)
+            scheduler.refreshSchedules()
+        }
         .onChange(of: live.latest) { _, cmd in
             guard let cmd else { return }
             game.apply(cmd)
             live.acknowledge()
         }
+        // Pause the scheduler tick while a game / unlock / settings sheet is up
+        // so a fired schedule doesn't try to stack a second sheet on top.
+        .onChange(of: game.current) { _, c in scheduler.isBlocked = (c != nil) || showSettings || showDisplay }
+        .onChange(of: showSettings) { _, on in scheduler.isBlocked = on || showDisplay || (game.current != nil) }
+        .onChange(of: showDisplay)  { _, on in scheduler.isBlocked = on || showSettings || (game.current != nil) }
     }
 
-    /// Close any running game and return the tablet to "listening" so the
-    /// facilitator phone shows standby again.
+    /// Surface the scheduler's pending prompt as the right sheet.
+    @ViewBuilder
+    private var scheduledPromptOverlay: some View {
+        if let s = scheduler.pending {
+            switch s.type {
+            case .reminder:
+                ReminderToast(schedule: s) { scheduler.acknowledge() }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            case .question:
+                ScheduledQuestionSheet(schedule: s) { scheduler.acknowledge() }
+            case .game:
+                GameNudgeCard(
+                    schedule: s,
+                    onPlay: {
+                        // Launch a matching game scoped to the schedule's first scope.
+                        let scope = (s.scopes?.first) ?? s.scope ?? "all"
+                        scheduler.acknowledge()
+                        game.startLocal(.matching, scope: scope)
+                    },
+                    onDismiss: { scheduler.acknowledge() }
+                )
+            }
+        }
+    }
+
+    /// Close the current game and either advance the routine (if one is
+    /// running) or return the tablet to "listening" so the facilitator phone
+    /// shows standby again.
     private func endGame() {
-        game.stop()
-        live.setStandby()
+        let routineContinues = game.sessionDidEnd()
+        if !routineContinues { live.setStandby() }
     }
 
     /// Binding adapter that lets `fullScreenCover(item:)` observe the
