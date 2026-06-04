@@ -1,14 +1,16 @@
 import SwiftUI
 
-/// Facilitated matching game. The tablet picks a target word and shows it
-/// large at the top, with `choices` tiles below (the target + distractors).
-/// The child taps a tile:
-///   - correct → confetti, advance to the next target
-///   - wrong   → gentle shake, stays so they can try again
+/// Facilitated matching game — "find the one I say."
 ///
-/// The facilitator's phone can also drive it via live commands (next / skip /
-/// end / mark). The tablet publishes its current target + progress every step
-/// so the phone shows what's on screen.
+/// Pedagogy (matches the web app exactly):
+///   - The target word is ANNOUNCED with audio when a round starts. No text is
+///     shown to the child — they listen and pick.
+///   - Wrong tap → no negative feedback. We replay the word and escalate a hint
+///     on the CORRECT tile: 1st miss wiggles it, 2nd miss gives it a yellow
+///     glow, 3rd miss reveals it and moves on (errorless learning).
+///   - Right tap → green pop + confetti, then the next round.
+///   - The child never sees a score. The facilitator's phone still gets the
+///     full target/progress/correct-count via the published live state.
 struct MatchingView: View {
     let session: GameController.Session
     let onExit: () -> Void
@@ -20,11 +22,18 @@ struct MatchingView: View {
     @State private var targets: [Tile] = []
     @State private var index = 0
     @State private var choiceTiles: [Tile] = []
-    @State private var correctCount = 0
+    @State private var correctCount = 0          // facilitator-only, never shown here
+
+    // Per-round scaffolding state
+    @State private var misses = 0
+    @State private var locked = false
+    @State private var glowCorrect = false       // yellow highlight on the answer
+    @State private var wiggleCorrectId: Int?     // brief shake on the answer
+    @State private var chosenCorrectId: Int?     // green pop on the picked answer
+
     @State private var celebrating = false
-    @State private var wrongShakeId: Int?
-    @State private var lastHandledCmdSeq = 0
     @State private var finished = false
+    @State private var lastHandledCmdSeq = 0
     @State private var limitTask: Task<Void, Never>?
 
     private var target: Tile? { targets.indices.contains(index) ? targets[index] : nil }
@@ -38,11 +47,10 @@ struct MatchingView: View {
                 finishedView
             } else if let target {
                 VStack(spacing: 24) {
-                    promptHeader(target)
+                    listenButton(target)
                     Spacer()
                     choiceGrid(target)
-                    Spacer()
-                    progressFooter
+                    Spacer(minLength: 40)
                 }
                 .padding(24)
             } else {
@@ -61,22 +69,25 @@ struct MatchingView: View {
 
     // MARK: -- Pieces
 
-    private func promptHeader(_ target: Tile) -> some View {
-        VStack(spacing: 8) {
-            Text("Find…")
-                .font(.title3).foregroundStyle(.secondary)
-            Button {
-                Task { await TilePlayer.shared.play(target) }
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "speaker.wave.2.fill")
-                    Text(target.label)
-                        .font(.system(size: 44, weight: .bold, design: .rounded))
-                }
-                .foregroundStyle(Color(hex: "#ad1457"))
+    /// A single "Listen again" button — replays the target audio. Deliberately
+    /// shows NO text (the child isn't reading the answer, they're hearing it).
+    private func listenButton(_ target: Tile) -> some View {
+        Button {
+            Task { await TilePlayer.shared.play(target) }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "speaker.wave.3.fill")
+                Text("Listen")
             }
-            .buttonStyle(.plain)
+            .font(.system(size: 26, weight: .bold, design: .rounded))
+            .foregroundStyle(Color(hex: "#ad1457"))
+            .padding(.horizontal, 28).padding(.vertical, 14)
+            .background(Color.white)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(Color(hex: "#ff1493"), lineWidth: 3))
+            .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
         }
+        .buttonStyle(.plain)
     }
 
     private func choiceGrid(_ target: Tile) -> some View {
@@ -86,35 +97,31 @@ struct MatchingView: View {
             spacing: 18
         ) {
             ForEach(choiceTiles) { tile in
-                ChoiceTile(tile: tile, shaking: wrongShakeId == tile.id) {
+                let isAnswer = tile.id == target.id
+                ChoiceTile(
+                    tile: tile,
+                    glow: isAnswer && glowCorrect,
+                    wiggle: wiggleCorrectId == tile.id,
+                    pop: chosenCorrectId == tile.id,
+                    dim: chosenCorrectId != nil && chosenCorrectId != tile.id
+                ) {
                     tap(tile, target: target)
                 }
             }
         }
-        .frame(maxWidth: 820)
-    }
-
-    private var progressFooter: some View {
-        Text("\(index + 1) of \(targets.count)   ·   \(correctCount) correct")
-            .font(.callout)
-            .foregroundStyle(.secondary)
+        .frame(maxWidth: 860)
     }
 
     private var finishedView: some View {
         VStack(spacing: 18) {
-            Text("🎉")
-                .font(.system(size: 90))
+            Text("🎉").font(.system(size: 96))
             Text("Great job!")
-                .font(.system(size: 48, weight: .bold, design: .rounded))
+                .font(.system(size: 52, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: "#ad1457"))
-            Text("\(correctCount) of \(targets.count) correct")
-                .font(.title3).foregroundStyle(.secondary)
-            Button {
-                onExit()
-            } label: {
+            Button { onExit() } label: {
                 Text("Done")
                     .font(.title3.weight(.semibold))
-                    .padding(.horizontal, 40).padding(.vertical, 14)
+                    .padding(.horizontal, 44).padding(.vertical, 14)
                     .foregroundStyle(.white)
                     .background(Color(hex: "#ff1493"))
                     .clipShape(Capsule())
@@ -127,9 +134,7 @@ struct MatchingView: View {
         VStack {
             HStack {
                 Spacer()
-                Button {
-                    onExit()
-                } label: {
+                Button { onExit() } label: {
                     Image(systemName: "xmark")
                         .font(.title3.weight(.bold))
                         .foregroundStyle(.secondary)
@@ -147,54 +152,69 @@ struct MatchingView: View {
 
     private func setup() {
         let pool = board.tilesForScope(session.scope, from: session.from, to: session.to)
-            .filter { ($0.imageKey?.isEmpty == false) }   // need an image to match on
+            .filter { ($0.imageKey?.isEmpty == false) }
         var picked = pool.shuffled()
-        // Random sample: keep just N for a short, focused lesson.
         if let n = session.sample, n > 0 { picked = Array(picked.prefix(n)) }
         targets = picked
         index = 0
         correctCount = 0
         finished = targets.isEmpty
-        buildChoices()
-        publishState()
+        startRound()
         startLimitTimerIfNeeded()
     }
 
-    /// Auto-end the lesson after the facilitator's time limit (1–4 min).
-    private func startLimitTimerIfNeeded() {
-        limitTask?.cancel()
-        guard let mins = session.limitMin, mins > 0 else { return }
-        let nanos = UInt64(mins * 60 * 1_000_000_000)
-        limitTask = Task {
-            try? await Task.sleep(nanoseconds: nanos)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                finished = true
-                live.setEnded(currentPayload())
-            }
-        }
+    /// Reset per-round state, build choices, announce the target.
+    private func startRound() {
+        misses = 0
+        locked = false
+        glowCorrect = false
+        wiggleCorrectId = nil
+        chosenCorrectId = nil
+        buildChoices()
+        publishState()
+        announceTarget()
+    }
+
+    private func announceTarget() {
+        guard let target else { return }
+        Task { await TilePlayer.shared.play(target) }
     }
 
     private func buildChoices() {
         guard let target else { choiceTiles = []; return }
-        // Distractors: other tiles from the same pool, falling back to any tile.
         let pool = board.tilesForScope(session.scope, from: session.from, to: session.to)
             .filter { $0.id != target.id && ($0.imageKey?.isEmpty == false) }
         let fallback = board.tiles.filter { $0.id != target.id && ($0.imageKey?.isEmpty == false) }
-        let distractorSource = pool.count >= choiceCount - 1 ? pool : fallback
-        let distractors = distractorSource.shuffled().prefix(choiceCount - 1)
+        let source = pool.count >= choiceCount - 1 ? pool : fallback
+        let distractors = source.shuffled().prefix(choiceCount - 1)
         choiceTiles = ([target] + distractors).shuffled()
     }
 
     private func tap(_ tile: Tile, target: Tile) {
-        Task { await TilePlayer.shared.play(tile) }
+        guard !locked else { return }
         if tile.id == target.id {
-            correctCount += 1
+            // Correct → green pop, reinforce the word, confetti, advance.
+            locked = true
+            chosenCorrectId = tile.id
+            correctCount += (misses == 0 ? 1 : 0)
+            Task { await TilePlayer.shared.play(target) }
             celebrate()
-            advance(after: 1.4)
+            advance(after: 0.95)
         } else {
-            wrongShakeId = tile.id
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { wrongShakeId = nil }
+            // Wrong → escalate a hint on the CORRECT tile, replay the word.
+            misses += 1
+            switch misses {
+            case 1:
+                wiggleCorrectId = target.id
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { wiggleCorrectId = nil }
+            case 2:
+                glowCorrect = true
+            default:        // 3rd miss → reveal + move on
+                glowCorrect = true
+                locked = true
+                advance(after: 0.9)
+            }
+            if misses < 3 { announceTarget() }
         }
     }
 
@@ -207,8 +227,22 @@ struct MatchingView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             if index + 1 < targets.count {
                 index += 1
-                buildChoices()
+                startRound()
             } else {
+                finished = true
+                live.setEnded(currentPayload())
+            }
+        }
+    }
+
+    private func startLimitTimerIfNeeded() {
+        limitTask?.cancel()
+        guard let mins = session.limitMin, mins > 0 else { return }
+        let nanos = UInt64(mins * 60 * 1_000_000_000)
+        limitTask = Task {
+            try? await Task.sleep(nanoseconds: nanos)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
                 finished = true
                 live.setEnded(currentPayload())
             }
@@ -251,14 +285,27 @@ struct MatchingView: View {
     }
 }
 
-/// One tappable choice in the matching grid. Big, square, with a shake
-/// animation when it's the wrong answer.
+/// One tappable choice. Visual states drive the errorless-learning scaffolding:
+///   glow   → yellow highlight on the correct answer (after 2nd miss / reveal)
+///   wiggle → brief shake on the correct answer (after 1st miss)
+///   pop    → green ring on the answer the child correctly picked
+///   dim    → fade the other tiles once the answer is found
 private struct ChoiceTile: View {
     let tile: Tile
-    let shaking: Bool
+    var glow = false
+    var wiggle = false
+    var pop = false
+    var dim = false
     let onTap: () -> Void
 
     @State private var image: UIImage?
+
+    private var borderColor: Color {
+        if pop  { return Color(hex: "#16a34a") }       // green
+        if glow { return Color(hex: "#facc15") }       // yellow
+        return Color.black.opacity(0.08)
+    }
+    private var borderWidth: CGFloat { (pop || glow) ? 6 : 2 }
 
     var body: some View {
         Button(action: onTap) {
@@ -276,16 +323,19 @@ private struct ChoiceTile: View {
             }
             .aspectRatio(1, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 24))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24)
-                    .stroke(Color.black.opacity(0.08), lineWidth: 2)
-            )
-            .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(borderColor, lineWidth: borderWidth))
+            .shadow(color: glow ? Color(hex: "#facc15").opacity(0.7) : .black.opacity(0.08),
+                    radius: glow ? 16 : 8, y: 3)
+            .scaleEffect(pop ? 1.06 : 1.0)
+            .opacity(dim ? 0.4 : 1.0)
         }
         .buttonStyle(.plain)
-        .offset(x: shaking ? -8 : 0)
-        .animation(shaking ? .default.repeatCount(3, autoreverses: true).speed(6) : .default,
-                   value: shaking)
+        .offset(x: wiggle ? -8 : 0)
+        .animation(wiggle ? .default.repeatCount(3, autoreverses: true).speed(6) : .spring(response: 0.25),
+                   value: wiggle)
+        .animation(.spring(response: 0.25), value: pop)
+        .animation(.easeInOut(duration: 0.2), value: glow)
+        .animation(.easeInOut(duration: 0.2), value: dim)
         .task(id: tile.imageKey) {
             guard let key = tile.imageKey, !key.isEmpty else { return }
             if let img = await MediaCache.shared.image(for: key) {
