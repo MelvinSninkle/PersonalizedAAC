@@ -2,7 +2,8 @@ import Foundation
 import Observation
 
 /// Translates incoming LiveCommands into a runnable game session. The UI
-/// observes `current` and presents whichever mode it represents.
+/// observes `current` (which game is on screen) and `inGameCommand` (mark /
+/// next / skip directives the running game should act on).
 @Observable
 final class GameController {
     enum Mode: String { case slideshow, matching, celebration }
@@ -10,47 +11,51 @@ final class GameController {
     struct Session: Identifiable, Equatable {
         let id = UUID()
         let mode: Mode
-        let scope: String?         // category id (web sends slug-like strings) or "all"
+        let scope: String?          // "all" | "people"/"nouns"/"verbs" | "cat:<id>"
         let choices: Int?           // matching only
-        let secondsPerImage: Double?
-        let labelStyle: String?
-        let limitMin: Double?
+        let from: Int?              // optional range slice (e.g. Numbers 1–20)
+        let to: Int?
     }
 
     /// The active game session — non-nil means the kid sees a full-screen game.
     var current: Session?
 
-    /// Apply a freshly-received LiveCommand. "start" launches the right mode;
-    /// "end" closes whatever was running.
+    /// Latest mid-game directive (mark / next / skip) for the running view to
+    /// consume. Carries the command's seq so the view can dedupe.
+    var inGameCommand: LiveCommand?
+
+    /// Apply a freshly-received LiveCommand.
+    ///   - "start": opens the right game. The therapist console sends matching
+    ///     WITHOUT a `mode` field, so a missing/unknown mode defaults to
+    ///     matching (that's the only thing that console drives).
+    ///   - "end": closes whatever was running.
+    ///   - everything else (mark/next/skip): handed to the running view.
     func apply(_ cmd: LiveCommand) {
         switch cmd.action {
         case "start":
-            guard let mode = cmd.mode.flatMap(Mode.init(rawValue:)) else {
-                // Unknown mode — bail silently; the iPad doesn't lock up.
-                return
-            }
+            guard current == nil else { return }   // ignore re-starts mid-game
+            let mode = cmd.mode.flatMap(Mode.init(rawValue:)) ?? .matching
             current = Session(
                 mode: mode,
                 scope: cmd.scope,
                 choices: cmd.choices,
-                secondsPerImage: cmd.secondsPerImage,
-                labelStyle: cmd.labelStyle,
-                limitMin: cmd.limitMin
+                from: cmd.from.map { Int($0) },
+                to: cmd.to.map { Int($0) }
             )
         case "end":
             current = nil
+            inGameCommand = nil
         default:
-            // "next" / "mark" handled inside the running mode's own view.
-            break
+            inGameCommand = cmd
         }
     }
 
-    /// Locally start a mode without an incoming live command (e.g. from the
-    /// parent-mode "Play" pill on the iPad itself).
+    /// Locally start a mode without an incoming live command (e.g. a future
+    /// on-tablet "Play" button).
     func startLocal(_ mode: Mode, scope: String? = nil, choices: Int? = nil) {
-        current = Session(mode: mode, scope: scope, choices: choices,
-                          secondsPerImage: nil, labelStyle: nil, limitMin: nil)
+        current = Session(mode: mode, scope: scope, choices: choices, from: nil, to: nil)
     }
 
-    func stop() { current = nil }
+    func consumeInGameCommand() { inGameCommand = nil }
+    func stop() { current = nil; inGameCommand = nil }
 }

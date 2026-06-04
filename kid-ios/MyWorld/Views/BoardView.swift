@@ -53,15 +53,17 @@ struct BoardView: View {
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showDisplay)  { DisplaySettingsView() }
         .fullScreenCover(item: gameSessionBinding) { session in
-            switch session.mode {
-            case .slideshow, .celebration:
-                SlideshowView(session: session) { game.stop() }
-            case .matching:
-                // Matching lands in the next commit — for now slideshow stands in.
-                SlideshowView(session: session) { game.stop() }
+            Group {
+                switch session.mode {
+                case .matching:
+                    MatchingView(session: session) { endGame() }
+                case .slideshow, .celebration:
+                    SlideshowView(session: session) { endGame() }
+                }
             }
         }
         .task {
+            prefs.attach(childId: auth.childSlug)
             await board.refresh(childId: auth.childSlug)
             live.start(childId: auth.childSlug)
         }
@@ -72,6 +74,13 @@ struct BoardView: View {
             game.apply(cmd)
             live.acknowledge()
         }
+    }
+
+    /// Close any running game and return the tablet to "listening" so the
+    /// facilitator phone shows standby again.
+    private func endGame() {
+        game.stop()
+        live.setStandby()
     }
 
     /// Binding adapter that lets `fullScreenCover(item:)` observe the

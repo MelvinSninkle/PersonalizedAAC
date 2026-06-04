@@ -71,6 +71,24 @@ struct APIClient {
         try await getJSON("/api/live?childId=\(percentEscape(childId))")
     }
 
+    /// POST /api/live — tablet publishes its current state so the facilitator
+    /// phone knows the tablet is present (status != 'idle' within 8s) and can
+    /// show live progress. Fire-and-forget.
+    func publishLiveState(childId: String, status: String, payload: LivePayload?) async {
+        var dict: [String: Any] = ["kind": "state", "status": status]
+        if let payload,
+           let data = try? JSONEncoder().encode(payload),
+           let obj = try? JSONSerialization.jsonObject(with: data) {
+            dict["payload"] = obj
+        } else {
+            dict["payload"] = [:]
+        }
+        guard let body = try? JSONSerialization.data(withJSONObject: dict) else { return }
+        _ = try? await request(method: "POST",
+                               path: "/api/live?childId=\(percentEscape(childId))",
+                               body: body, contentType: "application/json")
+    }
+
     /// GET /api/media?key=<key> — streams blob bytes. Used for images + audio.
     func media(key: String) async throws -> (Data, String) {
         let (data, resp) = try await request(method: "GET",
@@ -90,6 +108,42 @@ struct APIClient {
     /// used for things like `/api/play-request?childId=...`.
     func postEmpty(path: String) async {
         _ = try? await request(method: "POST", path: path, body: nil)
+    }
+
+    /// Read the full child_settings blob (empty dict on any failure).
+    private func childSettings(childId: String) async -> [String: Any] {
+        guard let (data, _) = try? await request(
+                method: "GET",
+                path: "/api/child-settings?childId=\(percentEscape(childId))",
+                body: nil),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return [:] }
+        return (root["settings"] as? [String: Any]) ?? [:]
+    }
+
+    /// GET display prefs stored under `settings.kidDisplay`.
+    func fetchDisplayPrefs(childId: String) async -> DisplayPrefsData? {
+        let settings = await childSettings(childId: childId)
+        guard let kd = settings["kidDisplay"],
+              let kdData = try? JSONSerialization.data(withJSONObject: kd) else { return nil }
+        return try? JSONDecoder().decode(DisplayPrefsData.self, from: kdData)
+    }
+
+    /// Merge-safe write of display prefs: read the current settings blob, set
+    /// only the `kidDisplay` key, write the whole thing back. Avoids clobbering
+    /// the web app's schedule / reward settings stored in the same blob.
+    func saveDisplayPrefs(childId: String, data: DisplayPrefsData) async {
+        var settings = await childSettings(childId: childId)
+        if let encoded = try? JSONEncoder().encode(data),
+           let kd = try? JSONSerialization.jsonObject(with: encoded) {
+            settings["kidDisplay"] = kd
+        }
+        guard let body = try? JSONSerialization.data(withJSONObject: ["settings": settings]) else { return }
+        _ = try? await request(
+            method: "POST",
+            path: "/api/child-settings?childId=\(percentEscape(childId))",
+            body: body, contentType: "application/json"
+        )
     }
 
     // MARK: -- Plumbing

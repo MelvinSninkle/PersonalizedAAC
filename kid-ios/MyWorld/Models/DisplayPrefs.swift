@@ -1,9 +1,20 @@
 import Foundation
 import Observation
 
-/// Per-device display preferences — colors, tile-density, what's visible.
-/// Persisted to UserDefaults so every device remembers its own layout
-/// (same model as the web app's localStorage "device preferences" panel).
+/// Codable snapshot of every display preference — the wire format for both
+/// UserDefaults backup and the server (stored under `settings.kidDisplay` in
+/// child_settings, so all of a child's devices share the same look).
+struct DisplayPrefsData: Codable, Equatable {
+    var hideLabels: Bool
+    var showPeople: Bool, showNouns: Bool, showVerbs: Bool, showNeeds: Bool
+    var acrossPeople: Int, acrossNouns: Int, acrossVerbs: Int
+    var colorPeople: String, colorNouns: String, colorVerbs: String, colorNeeds: String
+    var colorHeaderBg: String, colorHeaderText: String
+}
+
+/// Display preferences — colors, tile-density, what's visible. Persisted both
+/// to UserDefaults (instant cold-launch) AND to the server via child_settings
+/// (so a parent sets the look once and every device for that child matches).
 @Observable
 final class DisplayPrefs {
     var hideLabels: Bool { didSet { save() } }
@@ -97,6 +108,62 @@ final class DisplayPrefs {
         }
     }
 
+    // MARK: -- Snapshot / apply
+
+    var snapshot: DisplayPrefsData {
+        DisplayPrefsData(
+            hideLabels: hideLabels,
+            showPeople: showPeople, showNouns: showNouns, showVerbs: showVerbs, showNeeds: showNeeds,
+            acrossPeople: acrossPeople, acrossNouns: acrossNouns, acrossVerbs: acrossVerbs,
+            colorPeople: colorPeople, colorNouns: colorNouns, colorVerbs: colorVerbs, colorNeeds: colorNeeds,
+            colorHeaderBg: colorHeaderBg, colorHeaderText: colorHeaderText
+        )
+    }
+
+    /// Apply a snapshot (from the server) without echoing a save back out.
+    func apply(_ d: DisplayPrefsData) {
+        isApplying = true
+        hideLabels = d.hideLabels
+        showPeople = d.showPeople; showNouns = d.showNouns; showVerbs = d.showVerbs; showNeeds = d.showNeeds
+        acrossPeople = d.acrossPeople; acrossNouns = d.acrossNouns; acrossVerbs = d.acrossVerbs
+        colorPeople = d.colorPeople; colorNouns = d.colorNouns; colorVerbs = d.colorVerbs; colorNeeds = d.colorNeeds
+        colorHeaderBg = d.colorHeaderBg; colorHeaderText = d.colorHeaderText
+        isApplying = false
+    }
+
+    // MARK: -- Server sync
+
+    @ObservationIgnored private var childId: String?
+    @ObservationIgnored private var isApplying = false
+    @ObservationIgnored private var serverLoaded = false
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
+
+    /// Called once the signed-in child is known. Pulls the server copy and
+    /// applies it over the local defaults, then enables write-back on change.
+    func attach(childId: String) {
+        guard self.childId != childId else { return }
+        self.childId = childId
+        Task { @MainActor in
+            if let data = await APIClient().fetchDisplayPrefs(childId: childId) {
+                apply(data)
+            }
+            serverLoaded = true
+        }
+    }
+
+    /// Debounced server write — coalesces a burst of slider/color edits into a
+    /// single POST 0.8s after the last change.
+    private func scheduleServerSave() {
+        guard serverLoaded, !isApplying, let childId else { return }
+        let data = snapshot
+        saveTask?.cancel()
+        saveTask = Task {
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            guard !Task.isCancelled else { return }
+            await APIClient().saveDisplayPrefs(childId: childId, data: data)
+        }
+    }
+
     // MARK: -- Persistence
 
     private func save() {
@@ -115,6 +182,7 @@ final class DisplayPrefs {
         d.set(colorNeeds,   forKey: "pref.colorNeeds")
         d.set(colorHeaderBg,   forKey: "pref.colorHeaderBg")
         d.set(colorHeaderText, forKey: "pref.colorHeaderText")
+        scheduleServerSave()
     }
 }
 

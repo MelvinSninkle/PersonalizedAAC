@@ -60,6 +60,45 @@ final class BoardStore {
             .sorted { ($0.order, $0.id) < ($1.order, $1.id) }
     }
 
+    /// Resolve a facilitator "scope" string into the set of tiles to practice.
+    /// Mirrors the scope vocabulary the web therapist console emits:
+    ///   - "all"            → every tile
+    ///   - "people"/"nouns"/"verbs" → that whole section
+    ///   - "cat:<id>"       → that category + all its descendant categories
+    /// `from`/`to` (1-based, inclusive) optionally slice the ordered result —
+    /// used for ranges like "Numbers 1–20".
+    func tilesForScope(_ scope: String?, from: Int? = nil, to: Int? = nil) -> [Tile] {
+        let s = scope ?? "all"
+        var result: [Tile]
+        if s == "all" {
+            result = tiles
+        } else if let sec = BoardSection(rawValue: s) {
+            result = tiles.filter { $0.section == sec }
+        } else if s.hasPrefix("cat:"), let id = Int(s.dropFirst(4)) {
+            var ids: Set<Int> = [id]
+            var frontier = [id]
+            while !frontier.isEmpty {
+                let next = categories
+                    .filter { $0.parentId.map { frontier.contains($0) } ?? false }
+                    .map(\.id)
+                let fresh = next.filter { !ids.contains($0) }
+                ids.formUnion(fresh)
+                frontier = fresh
+            }
+            result = tiles.filter { $0.categoryId.map { ids.contains($0) } ?? false }
+        } else {
+            result = tiles
+        }
+        result.sort { ($0.order, $0.id) < ($1.order, $1.id) }
+
+        if let from, let to, from >= 1, to >= from {
+            let lo = min(from - 1, result.count)
+            let hi = min(to, result.count)
+            if lo < hi { result = Array(result[lo..<hi]) }
+        }
+        return result
+    }
+
     // MARK: -- Sync
 
     /// Fetch the latest board from /api/sync. Silently keeps stale data on
