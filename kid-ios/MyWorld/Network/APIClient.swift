@@ -146,6 +146,19 @@ struct APIClient {
         _ = try? await request(method: "POST", path: "/api/game-log", body: body, contentType: "application/json")
     }
 
+    /// POST /api/exposure-tick — record one exposure of a skill for a child
+    /// and let the server recompute the schedule (PRD §8). Used by the
+    /// slideshow at session-end; matching/auditory/expressive sessions tick
+    /// internally on the server side inside /api/game-log.
+    func tickExposure(childId: String, skillSlug: String, source: String = "slideshow") async {
+        guard let body = try? JSONSerialization.data(withJSONObject: [
+            "childId":   childId,
+            "skillSlug": skillSlug,
+            "source":    source,
+        ]) else { return }
+        _ = try? await request(method: "POST", path: "/api/exposure-tick", body: body, contentType: "application/json")
+    }
+
     /// Fire-and-forget POST to any path that doesn't need a body or response —
     /// used for things like `/api/play-request?childId=...`.
     func postEmpty(path: String) async {

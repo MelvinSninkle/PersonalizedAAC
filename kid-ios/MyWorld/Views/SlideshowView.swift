@@ -68,8 +68,28 @@ struct SlideshowView: View {
             advanceTask?.cancel()
             limitTask?.cancel()
             GameAudio.shared.stopMusic()
+            // PRD §8: a slideshow run is one exposure of its dominant skill.
+            // Tick once on exit so the schedule advances and Phase 7 can
+            // bucket spikes against the right exposure count.
+            tickDominantSkillOnExit()
         }
         .task(id: pos) { await loadCurrent() }
+    }
+
+    /// Most-common taxonomy_slug across the played deck. Slideshows that
+    /// scope to a category usually have a coherent skill (e.g. "Numbers");
+    /// for mixed decks we pick whichever skill the child saw most.
+    private func tickDominantSkillOnExit() {
+        var counts: [String: Int] = [:]
+        for t in deck {
+            guard let s = t.taxonomySlug, !s.isEmpty else { continue }
+            counts[s, default: 0] += 1
+        }
+        guard let skill = counts.max(by: { $0.value < $1.value })?.key else { return }
+        let childId = auth.childSlug
+        Task.detached(priority: .utility) {
+            await APIClient().tickExposure(childId: childId, skillSlug: skill, source: "slideshow")
+        }
     }
 
     private func setup() {

@@ -350,6 +350,16 @@
     <div class="bars" id="mastery"></div>
   </div>
 
+  <!-- EXPOSURE SCHEDULE (PRD §8) -->
+  <div class="section-label">Exposure schedule</div>
+  <div class="panel" style="padding:8px 14px;">
+    <p class="hint" style="margin:8px 4px 12px;">What's coming up next per skill, ordered by what's due soonest. Each row shows the spaced-repetition stage (10 → 50 ceiling) and how many exposures have landed so far. "Tightened" means the schedule clusters closer because the spike threshold isn't met yet.</p>
+    <table id="exposure-table">
+      <thead><tr><th>Skill</th><th>Stage</th><th>Progress</th><th>Status</th><th>Next due</th></tr></thead>
+      <tbody id="exposure-body"><tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No exposure protocols yet — they appear once a slideshow or scored session runs for a tile with a canonical skill anchor.</td></tr></tbody>
+    </table>
+  </div>
+
   <!-- RECENT SESSIONS -->
   <div class="section-label">Recent sessions</div>
   <div class="panel" style="padding:8px 14px;">
@@ -835,6 +845,54 @@
     if (a.mastery && a.mastery.length) renderMastery(a.mastery.map(m => [m.name, m.pct]));
     if (a.recentSessions && a.recentSessions.length) renderRecent(a.recentSessions);
   }
+  // PRD §8: Exposure schedule panel. Lightweight call alongside analytics —
+  // returns the next-due list per skill, ordered by what's coming up first.
+  // Idempotent renderer; safe to call repeatedly.
+  function renderExposureSchedule(protocols) {
+    const body = document.getElementById('exposure-body');
+    if (!body) return;
+    if (!protocols || !protocols.length) {
+      body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No exposure protocols yet — they appear once a slideshow or scored session runs for a tile with a canonical skill anchor.</td></tr>';
+      return;
+    }
+    const niceSkill = (s) => s.split('.').slice(-1)[0].replace(/_/g, ' ');
+    const statusLabel = {
+      intro: 'Intro burst', spacing: 'Spacing',
+      mastered: '✓ Mastered', eval_flagged: '⚠ Consider eval',
+    };
+    const dueLabel = (iso) => {
+      if (!iso) return '—';
+      const ms = new Date(iso).getTime() - Date.now();
+      if (ms <= 0) return 'due now';
+      const m = Math.round(ms / 60000);
+      if (m < 60)  return 'in ' + m + ' min';
+      const h = Math.round(m / 60);
+      if (h < 24)  return 'in ' + h + 'h';
+      const d = Math.round(h / 24);
+      return 'in ' + d + 'd';
+    };
+    body.innerHTML = protocols.map(p => {
+      const spacing = p.spacingMode === 'tightened' ? ' · <em>tightened</em>' : '';
+      return `<tr>
+        <td>${niceSkill(p.skillSlug)}</td>
+        <td>Stage ${p.stage} <span style="color:#888;font-size:12px;">(→${p.targetCount})</span>${spacing}</td>
+        <td>${p.currentCount} / ${p.targetCount}</td>
+        <td>${statusLabel[p.status] || p.status}</td>
+        <td>${p.status === 'mastered' ? '—' : dueLabel(p.nextDueAt)}</td>
+      </tr>`;
+    }).join('');
+  }
+  async function loadExposureSchedule() {
+    try {
+      const tok = localStorage.getItem('aacToken');
+      const headers = tok ? { Authorization: 'Bearer ' + tok } : {};
+      const r = await fetch('/api/exposure-schedule?childId=' + encodeURIComponent(slug), { headers, credentials: 'same-origin' });
+      if (!r.ok) return;
+      const d = await r.json();
+      renderExposureSchedule(d.protocols || []);
+    } catch (_) { /* dashboard already rendered other tiles; this is best-effort */ }
+  }
+
   // Granularity (day/week/month). Uses the session cookie; empty/401 → sample.
   let gran = localStorage.getItem('aacGran') || 'day';
   async function loadAnalytics() {
@@ -845,6 +903,7 @@
       if (!r.ok) return;
       applyAnalytics(await r.json());
       renderChart(currentTab);
+      loadExposureSchedule();
     } catch (_) { /* keep sample data */ }
   }
   (function initGran() {

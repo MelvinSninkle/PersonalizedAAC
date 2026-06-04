@@ -4,6 +4,7 @@
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
 import { apnsConfigured, sendToTokens } from './_lib/apns.js';
+import { tickExposure } from './_lib/exposure.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -81,6 +82,15 @@ export default async function handler(req, res) {
                 ${childGenerated},
                 ${typeof a.taxonomySlug === 'string' ? a.taxonomySlug.slice(0, 200) : null})`;
     }
+    // PRD §8: every scored session is one exposure of its dominant skill.
+    // Best-effort — a tick failure never blocks the log response. Slideshow
+    // sessions don't pass through here; SlideshowView ticks directly via
+    // /api/exposure-tick.
+    if (effectiveSkill) {
+      try { await tickExposure(db, { childId, skillSlug: effectiveSkill, source: 'game', sessionId: Number(sid) }); }
+      catch (_) {}
+    }
+
     // For auto-games (scheduled), push the score to opted-in parents — best effort.
     try {
       if (b.auto && apnsConfigured()) {
