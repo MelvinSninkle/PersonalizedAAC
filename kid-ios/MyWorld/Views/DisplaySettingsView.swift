@@ -7,6 +7,10 @@ import SwiftUI
 struct DisplaySettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(DisplayPrefs.self) private var prefs
+    @Environment(BoardStore.self) private var board
+    @Environment(AuthManager.self) private var auth
+
+    @State private var refreshing = false
 
     private let columnChoices = [1, 2, 3, 4, 5, 6, 7, 8]
 
@@ -14,6 +18,24 @@ struct DisplaySettingsView: View {
         @Bindable var prefs = prefs
         NavigationStack {
             Form {
+                Section {
+                    Button {
+                        Task {
+                            refreshing = true
+                            await board.refresh(childId: auth.childSlug)
+                            prefs.reloadFromServer()
+                            refreshing = false
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: refreshing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                            Text(refreshing ? "Refreshing…" : "Refresh board")
+                        }
+                    }
+                    .disabled(refreshing)
+                } footer: {
+                    Text("Pull the latest tiles, categories, and settings after you make changes in the parent dashboard.")
+                }
                 Section("Labels") {
                     Toggle("Hide all labels", isOn: $prefs.hideLabels)
                 }

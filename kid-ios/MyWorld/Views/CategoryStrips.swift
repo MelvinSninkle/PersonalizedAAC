@@ -22,7 +22,9 @@ struct CategoryTabStrip: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
         }
-        .background(Color.white.opacity(0.4))
+        // Transparent — shares the section band color set on SectionColumn,
+        // so there's no persistent white strip behind the category chips.
+        .background(Color.clear)
     }
 }
 

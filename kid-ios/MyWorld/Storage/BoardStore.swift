@@ -113,8 +113,36 @@ final class BoardStore {
             self.tiles = resp.items
             self.lastError = nil
             persistToDisk(resp)
+            precacheMedia()
         } catch {
             self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// Download every tile + category image (then every sound) up front, in a
+    /// sensible order, so the whole board is ready before the child taps. A kid
+    /// can't be left without words while a category lazily loads.
+    func precacheMedia() {
+        // Order: People → Nouns → Verbs → Needs, each by display order. Folder
+        // icons first within a section, then tiles.
+        let sectionOrder: [BoardSection] = [.people, .nouns, .verbs, .needs]
+        var imageKeys: [String] = []
+        for section in sectionOrder {
+            let cats = categories
+                .filter { $0.section == section }
+                .sorted { ($0.order, $0.id) < ($1.order, $1.id) }
+            imageKeys += cats.compactMap { $0.imageKey }
+            let secTiles = tiles
+                .filter { $0.section == section }
+                .sorted { ($0.order, $0.id) < ($1.order, $1.id) }
+            imageKeys += secTiles.compactMap { $0.imageKey }
+        }
+        let soundKeys = tiles.compactMap { $0.soundKey }
+
+        Task.detached(priority: .utility) {
+            // Images first (the child needs to SEE the words), then audio.
+            await MediaCache.shared.warm(imageKeys)
+            await MediaCache.shared.warm(soundKeys)
         }
     }
 
@@ -125,6 +153,7 @@ final class BoardStore {
         guard let resp = try? JSONDecoder().decode(APIClient.SyncResponse.self, from: data) else { return }
         self.categories = resp.categories
         self.tiles = resp.items
+        precacheMedia()   // start warming from the cached board on cold launch
     }
 
     private func persistToDisk(_ resp: APIClient.SyncResponse) {

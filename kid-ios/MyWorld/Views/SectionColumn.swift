@@ -24,7 +24,7 @@ struct SectionColumn: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.6))
+                    // No white band — let the section color show through.
             }
 
             // Top-level category strip

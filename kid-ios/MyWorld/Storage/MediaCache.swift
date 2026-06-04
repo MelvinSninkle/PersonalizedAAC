@@ -40,6 +40,24 @@ actor MediaCache {
         return try await task.value
     }
 
+    /// Eagerly download a batch of blob keys into the cache so the board is
+    /// fully populated before the child taps anything — no "blank until you
+    /// open the category" gaps. Bounded concurrency keeps it orderly and from
+    /// saturating the connection. Already-cached keys are skipped cheaply.
+    func warm(_ keys: [String], concurrency: Int = 6) async {
+        var seen = Set<String>()
+        let ordered = keys.filter { !$0.isEmpty && seen.insert($0).inserted }
+        var it = ordered.makeIterator()
+        await withTaskGroup(of: Void.self) { group in
+            func addNext() {
+                guard let key = it.next() else { return }
+                group.addTask { _ = try? await self.data(for: key) }
+            }
+            for _ in 0..<max(1, concurrency) { addNext() }
+            while await group.next() != nil { addNext() }
+        }
+    }
+
     /// Convenience: load + decode a UIImage. Returns nil if the bytes don't
     /// decode (corrupt cache entry → caller can re-fetch by deleting + retrying).
     func image(for key: String) async -> UIImage? {

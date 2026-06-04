@@ -151,6 +151,17 @@ final class DisplayPrefs {
         }
     }
 
+    /// Re-pull the server copy on demand (the Display "Refresh board" button),
+    /// so changes a parent made elsewhere show up without relaunching.
+    func reloadFromServer() {
+        guard let childId else { return }
+        Task { @MainActor in
+            if let data = await APIClient().fetchDisplayPrefs(childId: childId) {
+                apply(data)
+            }
+        }
+    }
+
     /// Debounced server write — coalesces a burst of slider/color edits into a
     /// single POST 0.8s after the last change.
     private func scheduleServerSave() {
