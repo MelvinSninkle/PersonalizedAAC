@@ -81,6 +81,12 @@ struct APIClient {
         _ = try? await request(method: "POST", path: "/api/events", body: body, contentType: "application/json")
     }
 
+    /// Fire-and-forget POST to any path that doesn't need a body or response —
+    /// used for things like `/api/play-request?childId=...`.
+    func postEmpty(path: String) async {
+        _ = try? await request(method: "POST", path: path, body: nil)
+    }
+
     // MARK: -- Plumbing
 
     private func percentEscape(_ s: String) -> String {

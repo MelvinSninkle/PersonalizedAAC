@@ -6,12 +6,15 @@ import SwiftUI
 struct CategoryTabStrip: View {
     let categories: [Category]
     @Binding var selectedId: Int?
+    var hideLabels: Bool = false
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(categories) { cat in
-                    CategoryChip(category: cat, selected: selectedId == cat.id) {
+                    CategoryChip(category: cat,
+                                 selected: selectedId == cat.id,
+                                 hideLabel: hideLabels) {
                         selectedId = cat.id
                     }
                 }
@@ -23,16 +26,19 @@ struct CategoryTabStrip: View {
     }
 }
 
-/// Same idea, slightly more compact, used for the second-level subcategory row.
 struct SubcategoryStrip: View {
     let subcategories: [Category]
     @Binding var selectedId: Int?
+    var hideLabels: Bool = false
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(subcategories) { sub in
-                    CategoryChip(category: sub, selected: selectedId == sub.id, compact: true) {
+                    CategoryChip(category: sub,
+                                 selected: selectedId == sub.id,
+                                 compact: true,
+                                 hideLabel: hideLabels) {
                         selectedId = sub.id
                     }
                 }
@@ -44,11 +50,11 @@ struct SubcategoryStrip: View {
     }
 }
 
-/// A category as a small button with image + label.
 struct CategoryChip: View {
     let category: Category
     let selected: Bool
     var compact: Bool = false
+    var hideLabel: Bool = false
     let onTap: () -> Void
 
     @State private var image: UIImage?
@@ -59,8 +65,7 @@ struct CategoryChip: View {
         Button(action: onTap) {
             VStack(spacing: 2) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.white)
+                    RoundedRectangle(cornerRadius: 12).fill(Color.white)
                     if let img = image {
                         Image(uiImage: img)
                             .resizable()
@@ -78,7 +83,7 @@ struct CategoryChip: View {
                                 lineWidth: selected ? 3 : 1)
                 )
 
-                if !compact {
+                if !compact && !hideLabel {
                     Text(category.label)
                         .font(.system(size: 11, weight: .semibold))
                         .lineLimit(1)

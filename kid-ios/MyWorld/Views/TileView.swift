@@ -7,6 +7,7 @@ struct TileView: View {
     let tile: Tile
     let onTap: (Tile) -> Void
 
+    @Environment(DisplayPrefs.self) private var prefs
     @State private var image: UIImage?
 
     var body: some View {
@@ -35,12 +36,14 @@ struct TileView: View {
                         .stroke(Color.black.opacity(0.06), lineWidth: 1)
                 )
 
-                Text(tile.label)
-                    .font(.system(size: 17, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 4)
+                if !prefs.hideLabels {
+                    Text(tile.label)
+                        .font(.system(size: 17, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 4)
+                }
             }
         }
         .buttonStyle(TileButtonStyle())

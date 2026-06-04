@@ -3,8 +3,9 @@ import AVFoundation
 
 @main
 struct MyWorldApp: App {
-    @State private var auth = AuthManager()
+    @State private var auth  = AuthManager()
     @State private var board = BoardStore()
+    @State private var prefs = DisplayPrefs()
 
     init() {
         setupAudioSession()
@@ -15,6 +16,7 @@ struct MyWorldApp: App {
             ContentView()
                 .environment(auth)
                 .environment(board)
+                .environment(prefs)
                 .statusBarHidden(true)
                 .persistentSystemOverlays(.hidden)
         }

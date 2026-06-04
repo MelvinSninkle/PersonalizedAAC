@@ -2,70 +2,67 @@ import SwiftUI
 
 /// The board, mirroring the web layout:
 ///
-///   ┌──────── HEADER ────────┐
-///   │ People │ Nouns │ Verbs │
-///   │  (2fr) │ (4fr) │ (3fr) │
-///   └──────── NEEDS ─────────┘   ← horizontal strip, full width
-///
-/// No navigation drill-in. Each section column owns its own selection
-/// (current category + subcategory) so the three columns stay visible at
-/// all times — exactly the AAC board affordance the web app gives Fletcher.
+///   ┌──── HEADER (configurable colors) ────┐
+///   │ People │ Nouns │ Verbs                │   ← visible columns set in prefs
+///   │  (2fr) │ (4fr) │ (3fr)                │     (each can be hidden)
+///   └──── NEEDS strip (optional) ──────────┘   ← horizontal strip, full width
 struct BoardView: View {
     @Environment(AuthManager.self) private var auth
-    @Environment(BoardStore.self) private var board
+    @Environment(BoardStore.self)  private var board
+    @Environment(DisplayPrefs.self) private var prefs
 
     @State private var showSettings = false
-
-    /// Column flex ratios mirror the web's CSS `2fr 4fr 3fr`.
-    private let ratios: (CGFloat, CGFloat, CGFloat) = (2, 4, 3)
+    @State private var showDisplay  = false
+    @State private var editMode     = false
 
     var body: some View {
         VStack(spacing: 0) {
-            headerBar
+            HeaderBar(editMode: $editMode,
+                      showDisplay: $showDisplay,
+                      showSettings: $showSettings)
 
             GeometryReader { geo in
-                let total = ratios.0 + ratios.1 + ratios.2
-                let w0 = geo.size.width * ratios.0 / total
-                let w1 = geo.size.width * ratios.1 / total
-                let w2 = geo.size.width * ratios.2 / total
-
                 HStack(spacing: 0) {
-                    SectionColumn(section: .people).frame(width: w0)
-                    Divider()
-                    SectionColumn(section: .nouns).frame(width: w1)
-                    Divider()
-                    SectionColumn(section: .verbs).frame(width: w2)
+                    let widths = columnWidths(in: geo.size.width)
+                    if prefs.showPeople {
+                        SectionColumn(section: .people).frame(width: widths.people)
+                        if prefs.showNouns || prefs.showVerbs { Divider() }
+                    }
+                    if prefs.showNouns {
+                        SectionColumn(section: .nouns).frame(width: widths.nouns)
+                        if prefs.showVerbs { Divider() }
+                    }
+                    if prefs.showVerbs {
+                        SectionColumn(section: .verbs).frame(width: widths.verbs)
+                    }
                 }
             }
 
-            Divider()
-            NeedsStrip()
+            if prefs.showNeeds {
+                Divider()
+                NeedsStrip()
+            }
         }
         .background(Color(hex: "#fff7fb"))
         .sheet(isPresented: $showSettings) { SettingsView() }
-        .task { await board.refresh(childId: auth.childSlug) }
-        .refreshable { await board.refresh(childId: auth.childSlug) }
+        .sheet(isPresented: $showDisplay)  { DisplaySettingsView() }
+        .task         { await board.refresh(childId: auth.childSlug) }
+        .refreshable  { await board.refresh(childId: auth.childSlug) }
     }
 
-    // MARK: -- Pink header strip
-
-    private var headerBar: some View {
-        HStack {
-            Text("My World")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-            Spacer()
-            // Tiny gear, long-press for parent settings.
-            Image(systemName: "gearshape")
-                .foregroundStyle(.white.opacity(0.55))
-                .padding(8)
-                .contentShape(Rectangle())
-                .onLongPressGesture(minimumDuration: 0.7) {
-                    showSettings = true
-                }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(Color(hex: "#ff1493"))
+    /// Computes the px-widths for People / Nouns / Verbs given which columns
+    /// are visible, keeping the web's 2:4:3 flex ratios.
+    private func columnWidths(in total: CGFloat) -> (people: CGFloat, nouns: CGFloat, verbs: CGFloat) {
+        var sum: CGFloat = 0
+        if prefs.showPeople { sum += 2 }
+        if prefs.showNouns  { sum += 4 }
+        if prefs.showVerbs  { sum += 3 }
+        guard sum > 0 else { return (0, 0, 0) }
+        let unit = total / sum
+        return (
+            people: prefs.showPeople ? unit * 2 : 0,
+            nouns:  prefs.showNouns  ? unit * 4 : 0,
+            verbs:  prefs.showVerbs  ? unit * 3 : 0
+        )
     }
 }

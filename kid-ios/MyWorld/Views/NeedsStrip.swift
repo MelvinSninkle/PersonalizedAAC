@@ -6,6 +6,7 @@ import SwiftUI
 /// All Needs-section tiles show up here in display_order.
 struct NeedsStrip: View {
     @Environment(BoardStore.self) private var board
+    @Environment(DisplayPrefs.self) private var prefs
 
     private var tiles: [Tile] {
         board.tiles
@@ -34,7 +35,7 @@ struct NeedsStrip: View {
                 .padding(.vertical, 8)
             }
             .frame(height: 150)
-            .background(Color(hex: "#fff7e6"))
+            .background(Color(hex: prefs.colorNeeds))
         }
     }
 }
