@@ -12,6 +12,8 @@ struct LiveCommand: Codable, Equatable {
     let choices: Int?         // for matching, how many tiles on screen
     let from: Double?
     let to: Double?
+    let sample: Double?       // pick this many at random from the range
+    let limitMin: Double?     // auto-end the lesson after this many minutes
     let ts: Double?
 }
 

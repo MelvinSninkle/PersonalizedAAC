@@ -25,6 +25,7 @@ struct MatchingView: View {
     @State private var wrongShakeId: Int?
     @State private var lastHandledCmdSeq = 0
     @State private var finished = false
+    @State private var limitTask: Task<Void, Never>?
 
     private var target: Tile? { targets.indices.contains(index) ? targets[index] : nil }
     private var choiceCount: Int { max(2, min(session.choices ?? 3, 6)) }
@@ -53,6 +54,7 @@ struct MatchingView: View {
             ConfettiView(running: celebrating)
         }
         .task { setup() }
+        .onDisappear { limitTask?.cancel() }
         .onChange(of: index) { _, _ in publishState() }
         .onChange(of: game.inGameCommand) { _, cmd in handleCommand(cmd) }
     }
@@ -146,12 +148,31 @@ struct MatchingView: View {
     private func setup() {
         let pool = board.tilesForScope(session.scope, from: session.from, to: session.to)
             .filter { ($0.imageKey?.isEmpty == false) }   // need an image to match on
-        targets = pool.shuffled()
+        var picked = pool.shuffled()
+        // Random sample: keep just N for a short, focused lesson.
+        if let n = session.sample, n > 0 { picked = Array(picked.prefix(n)) }
+        targets = picked
         index = 0
         correctCount = 0
         finished = targets.isEmpty
         buildChoices()
         publishState()
+        startLimitTimerIfNeeded()
+    }
+
+    /// Auto-end the lesson after the facilitator's time limit (1–4 min).
+    private func startLimitTimerIfNeeded() {
+        limitTask?.cancel()
+        guard let mins = session.limitMin, mins > 0 else { return }
+        let nanos = UInt64(mins * 60 * 1_000_000_000)
+        limitTask = Task {
+            try? await Task.sleep(nanoseconds: nanos)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                finished = true
+                live.setEnded(currentPayload())
+            }
+        }
     }
 
     private func buildChoices() {

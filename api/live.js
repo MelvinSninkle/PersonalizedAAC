@@ -67,6 +67,7 @@ export default async function handler(req, res) {
           })) : null,
           from: Number.isFinite(b.from) ? b.from : null,
           to: Number.isFinite(b.to) ? b.to : null,
+          sample: Number.isFinite(b.sample) ? b.sample : null,   // random N from the range
           ts: Date.now(),
         };
         const json = JSON.stringify(cmdObj);

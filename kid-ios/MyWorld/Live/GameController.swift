@@ -15,6 +15,8 @@ final class GameController {
         let choices: Int?           // matching only
         let from: Int?              // optional range slice (e.g. Numbers 1–20)
         let to: Int?
+        let sample: Int?            // pick this many at random from the range
+        let limitMin: Double?       // auto-end after this many minutes
     }
 
     /// The active game session — non-nil means the kid sees a full-screen game.
@@ -40,7 +42,9 @@ final class GameController {
                 scope: cmd.scope,
                 choices: cmd.choices,
                 from: cmd.from.map { Int($0) },
-                to: cmd.to.map { Int($0) }
+                to: cmd.to.map { Int($0) },
+                sample: cmd.sample.map { Int($0) },
+                limitMin: cmd.limitMin
             )
         case "end":
             current = nil
@@ -53,7 +57,8 @@ final class GameController {
     /// Locally start a mode without an incoming live command (e.g. a future
     /// on-tablet "Play" button).
     func startLocal(_ mode: Mode, scope: String? = nil, choices: Int? = nil) {
-        current = Session(mode: mode, scope: scope, choices: choices, from: nil, to: nil)
+        current = Session(mode: mode, scope: scope, choices: choices,
+                          from: nil, to: nil, sample: nil, limitMin: nil)
     }
 
     func consumeInGameCommand() { inGameCommand = nil }
