@@ -22,7 +22,8 @@ struct TileView: View {
                         Image(uiImage: img)
                             .resizable()
                             .aspectRatio(contentMode: tile.keepAspect ? .fit : .fill)
-                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
                     } else {
                         Image(systemName: "photo")
                             .font(.largeTitle)
@@ -31,6 +32,7 @@ struct TileView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .aspectRatio(1, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
                 .overlay(
                     RoundedRectangle(cornerRadius: 18)
                         .stroke(Color.black.opacity(0.06), lineWidth: 1)

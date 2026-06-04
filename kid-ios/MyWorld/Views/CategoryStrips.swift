@@ -70,13 +70,15 @@ struct CategoryChip: View {
                         Image(uiImage: img)
                             .resizable()
                             .aspectRatio(contentMode: category.keepAspect ? .fit : .fill)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .frame(width: side, height: side)
+                            .clipped()
                     } else {
                         Image(systemName: "folder.fill")
                             .foregroundStyle(.tertiary)
                     }
                 }
                 .frame(width: side, height: side)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(selected ? Color(hex: "#ff1493") : Color.black.opacity(0.08),

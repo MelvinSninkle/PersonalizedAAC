@@ -16,6 +16,7 @@ struct HeaderBar: View {
     @Binding var editMode: Bool
     @Binding var showDisplay: Bool
     @Binding var showSettings: Bool
+    @State private var showUnlock = false
 
     var title: String { "\(prettyChildName(auth.user?.slug))'s World" }
     private var hex: String { prefs.colorHeaderText }
@@ -45,13 +46,20 @@ struct HeaderBar: View {
             // clear cache). Long-press the lock for edit mode.
             showSettings = true
         }
+        .sheet(isPresented: $showUnlock) {
+            UnlockSheet { editMode = true }
+        }
     }
 
     // MARK: -- Left: the lock icon
+    //
+    // Tap = no-op (kids can mash on it and nothing happens — there's no flash
+    //   of UI, no animation, nothing to "discover").
+    // Tap when unlocked = re-locks immediately (one-tap exit for the parent).
+    // Long-press 0.7s = opens the password sheet → unlock on correct password.
 
     private var lockButton: some View {
         Button {
-            // Tap when unlocked → re-lock immediately.
             if editMode { editMode = false }
         } label: {
             Image(systemName: editMode ? "lock.open.fill" : "lock.fill")
@@ -63,7 +71,9 @@ struct HeaderBar: View {
         .buttonStyle(.plain)
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.7)
-                .onEnded { _ in editMode = true }
+                .onEnded { _ in
+                    if !editMode { showUnlock = true }
+                }
         )
     }
 
