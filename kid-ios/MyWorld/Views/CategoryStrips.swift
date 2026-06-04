@@ -46,7 +46,9 @@ struct SubcategoryStrip: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
         }
-        .background(Color.black.opacity(0.035))
+        // Transparent so the section band color (set on SectionColumn) shows
+        // through — the subcategory strip blends with the tiles underneath it.
+        .background(Color.clear)
     }
 }
 

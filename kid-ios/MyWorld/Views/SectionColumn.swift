@@ -5,11 +5,15 @@ import SwiftUI
 /// layout: title → category tab strip → subcategory strip → tile grid.
 struct SectionColumn: View {
     let section: BoardSection
+    let tileSize: CGFloat
 
     @Environment(BoardStore.self) private var board
     @Environment(DisplayPrefs.self) private var prefs
     @State private var selectedCategoryId: Int?
     @State private var selectedSubcategoryId: Int?
+
+    /// The section band color the tiles + subcategory strip sit on.
+    private var bandColor: Color { Color(hex: prefs.color(section)).opacity(0.7) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,7 +33,9 @@ struct SectionColumn: View {
                              selectedId: $selectedCategoryId,
                              hideLabels: prefs.hideLabels)
 
-            // Subcategory strip — only if the active category has children
+            // Subcategory strip — only if the active category has children.
+            // It shares the section band color so it blends with the tiles
+            // directly underneath it (rather than the old gray tint).
             if let cat = activeCategory(in: cats), !board.children(of: cat).isEmpty {
                 SubcategoryStrip(subcategories: board.children(of: cat),
                                  selectedId: $selectedSubcategoryId,
@@ -38,7 +44,7 @@ struct SectionColumn: View {
 
             tilesGrid
         }
-        .background(Color(hex: prefs.color(section)).opacity(0.7))
+        .background(bandColor)
         .onAppear { ensureSelection(in: cats) }
         .onChange(of: cats.map(\.id)) { _, _ in ensureSelection(in: cats) }
         .onChange(of: selectedCategoryId) { _, _ in
@@ -72,16 +78,21 @@ struct SectionColumn: View {
     private var tilesGrid: some View {
         let tiles = effectiveCategory.map { board.tiles(in: $0) } ?? []
         let cols = max(1, prefs.across(section))
+        // Fixed tile size (shared across every column) so all tiles on the
+        // board are identical — the column's frame width is sized to match.
+        let gridCols = Array(repeating: GridItem(.fixed(tileSize), spacing: BoardMetrics.tileGap),
+                             count: cols)
         ScrollView {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: cols),
-                      spacing: 8) {
+            LazyVGrid(columns: gridCols, alignment: .leading, spacing: BoardMetrics.tileGap) {
                 ForEach(tiles) { tile in
                     TileView(tile: tile) { t in
                         Task { await TilePlayer.shared.play(t) }
                     }
+                    .frame(width: tileSize)
                 }
             }
-            .padding(8)
+            .padding(.horizontal, BoardMetrics.columnPad)
+            .padding(.vertical, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

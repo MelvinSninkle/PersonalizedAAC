@@ -18,6 +18,15 @@ struct NeedsStrip: View {
             }
     }
 
+    /// Width of each Needs tile.
+    private let tileWidth: CGFloat = 104
+
+    /// Height hugs the content: the square image, plus the label band only
+    /// when labels are shown, plus the vertical padding. No dead space.
+    private var stripHeight: CGFloat {
+        tileWidth + (prefs.hideLabels ? 0 : 24) + 16
+    }
+
     var body: some View {
         if tiles.isEmpty {
             EmptyView()
@@ -28,13 +37,13 @@ struct NeedsStrip: View {
                         TileView(tile: tile) { t in
                             Task { await TilePlayer.shared.play(t) }
                         }
-                        .frame(width: 110)
+                        .frame(width: tileWidth)
                     }
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
             }
-            .frame(height: 150)
+            .frame(height: stripHeight)
             .background(Color(hex: prefs.colorNeeds))
         }
     }
