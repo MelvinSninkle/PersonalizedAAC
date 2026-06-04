@@ -268,7 +268,7 @@ Edited at **`/admin/taxonomy.html`** (admin role enforced on every `api/admin/ta
 
 ### Drafted seed
 
-`taxonomy/seed-core-v1.csv` is an importable starter (~910 rows). Sized for TD Snap Core First parity at launch (grammar layer + topic categories) and informed by walking through a typical day from waking to bed, so the surface is wide enough for any caregiver to find what they need on day one. Covers:
+`taxonomy/seed-core-v1.csv` is an importable starter (~1,100 rows). Sized for TD Snap Core First parity at launch (grammar layer + topic categories), informed by walking through a typical day from waking to bed, and spot-checked against TD Snap's symbol library for the high-frequency long tail a 3-7yo would actually reach for. Covers:
 
 - **People**: Family, Community, Therapy Team, Pronouns (full set incl. him/her/his/hers/these/those)
 - **Needs**: Core requesting strip; Feelings; Social (incl. ~38 conversational gestalts split into universal-daily, family-only, and a base set); Describing (incl. weather + core descriptors good/bad/same/different/full/empty/heavy/light); Asking (question words); Linking (helping verbs incl. am/are/was/have/has/had/could/would; conjunctions; negation incl. not/don't); Prepositions; Quantifiers (all/some/many/few/much/any/none/every); Time (incl. hours 1-12, clock concepts, months, seasons); **Numbers 1-100**; Alphabet A-Z; Holidays; Classroom social (raise hand, may I, quiet please, …)

@@ -1581,6 +1581,70 @@ group('Nouns', 'Body', 'Joints', 'nouns.body.joints', { mode: 'object', photo: '
   ['knuckle',  'knuckle',  "a friendly young child's clenched hand showing the knuckles clearly, soft cartoon style"],
 ]);
 
+// =============================================================================
+// TIER 37 — ADJECTIVES & OPPOSITES
+// Dedicated category. The data carries each adjective as its own tile;
+// `notes` records the opposite-pair partner so the workbench (and later the
+// authoring tools) can render them as pairs. This is the foundation for a
+// matching-game / opposites-mode without baking pair-ID into a separate
+// column we don't need yet.
+// =============================================================================
+
+// Opposites — pairs (some halves already exist in needs.describe.*; those
+// existing rows are NOT redefined here, only the missing partners are added,
+// with notes that point back to the existing partner id).
+group('Needs', 'Describing', 'Opposites', 'needs.describe.opp', { mode: 'object', photo: 'none', ...EXT }, [
+  ['old',          'old',          'a single warm-looking weathered teddy bear with a small patched seam, sitting on a soft cushion', { notes: 'Opposite of: needs.describe.more.new' }],
+  ['young',        'young',        'a single small bright sapling growing out of a soft pot beside a tall grown tree', { notes: 'Opposite of: needs.describe.opp.old (people-age sense)' }],
+  ['closed',       'closed',       'a single small wooden box with the lid firmly shut, a soft latch indicating "closed"', { notes: 'Opposite of: verbs.actions.open / needs.actions.open' }],
+  ['sour',         'sour',         'a friendly young child puckering their mouth slightly after biting a bright yellow lemon', { mode: 'concept', notes: 'Opposite of: needs.describe.more.sweet' }],
+  ['bright',       'bright',       'a single warmly glowing lamp filling a soft pastel room with light, plain background', { notes: 'Opposite of: needs.describe.opp.dark' }],
+  ['dark',         'dark',         'a single dim lamp at dusk with soft shadows around it, plain background', { notes: 'Opposite of: needs.describe.opp.bright' }],
+  ['shiny',        'shiny',        'a single bright apple with a soft highlighted sparkle on its skin, plain background', { notes: 'Opposite of: needs.describe.opp.dull' }],
+  ['dull',         'dull',         'a single matte stone with no shine, soft gray, plain background', { notes: 'Opposite of: needs.describe.opp.shiny' }],
+  ['thick',        'thick',        'a single thick slice of bread on a plain background, soft cross-section visible', { notes: 'Opposite of: needs.describe.opp.thin' }],
+  ['thin',         'thin',         'a single very thin slice of bread on a plain background, soft cross-section visible', { notes: 'Opposite of: needs.describe.opp.thick' }],
+  ['deep',         'deep',         'a single small swimming pool with a clear "deep end" sign and soft blue depth indicated', { notes: 'Opposite of: needs.describe.opp.shallow' }],
+  ['shallow',      'shallow',      'a single small kiddie pool with a clear "shallow" feel, friendly young child standing in it ankle-deep', { notes: 'Opposite of: needs.describe.opp.deep' }],
+  ['rough',        'rough',        'a single piece of weathered bark with a clearly textured surface, plain background', { notes: 'Opposite of: needs.describe.opp.smooth' }],
+  ['smooth',       'smooth',       'a single small polished river stone with a glossy surface, plain background', { notes: 'Opposite of: needs.describe.opp.rough' }],
+  ['strong',       'strong',       'a friendly young child flexing one bicep with a confident smile, soft strength lines', { mode: 'concept', notes: 'Opposite of: needs.describe.opp.weak' }],
+  ['weak',         'weak',         'a friendly young child gently leaning against a small wall, soft tired expression (not distressed)', { mode: 'concept', notes: 'Opposite of: needs.describe.opp.strong' }],
+  ['correct',      'right (correct)','a friendly cheerful round green check mark with a soft sparkle, plain background', { notes: 'Opposite of: needs.describe.opp.wrong. Label is "right (correct)" to disambiguate from needs.direction.right (the side).' }],
+  ['wrong',        'wrong',        'a friendly soft cheerful red X with a small frown, plain background', { notes: 'Opposite of: needs.describe.opp.correct' }],
+  ['early',        'early',        'a friendly clock showing 7am with a soft sunrise behind it, "early!" feeling', { notes: 'Opposite of: needs.describe.opp.late' }],
+  ['late',         'late',         'a friendly clock showing 11pm with a soft moon behind it, "late!" feeling', { notes: 'Opposite of: needs.describe.opp.early' }],
+  ['first',        'first',        'a friendly young child at the front of a small line with a soft "1" indicator above them', { mode: 'concept', notes: 'Opposite of: needs.describe.opp.last' }],
+  ['last',         'last',         'a friendly young child at the back of a small line with a soft "last" indicator above them', { mode: 'concept', notes: 'Opposite of: needs.describe.opp.first' }],
+  ['there',        'there',        'a friendly young child pointing forward toward a small house in the distance, "there!" feeling', { mode: 'concept', notes: 'Opposite of: needs.here (existing).' }],
+  ['less',         'less',         'a small handful of three cheerful blocks beside a larger pile, indicating "less than"', { notes: 'Opposite of: needs.more (existing).' }],
+  ['equal',        'equal',        'two cheerful equal piles of three blocks each, side by side with a soft "=" sign between them'],
+  ['longer',       'longer',       'two pencils side by side, one clearly longer than the other, plain background'],
+  ['shorter',      'shorter',      'two pencils side by side, one clearly shorter than the other, plain background'],
+  ['asleep',       'asleep',       'a friendly young child curled up under a soft blanket with eyes closed, peaceful smile, soft Z above', { mode: 'concept', notes: 'Opposite of: needs.describe.opp.awake' }],
+  ['awake',        'awake',        'a friendly young child sitting up brightly with eyes wide open after sleeping, small soft sun above', { mode: 'concept', notes: 'Opposite of: needs.describe.opp.asleep' }],
+  ['noisy',        'noisy',        'a friendly young child standing at the center of large soft sound waves with hands over ears slightly', { mode: 'concept', notes: 'Opposite of: needs.describe.quiet (existing). Distinct from "loud" which is also paired with quiet.' }],
+  ['safe',         'safe',         'a friendly young child being gently held by a parent figure under a soft glowing protective bubble', { mode: 'concept' }],
+  ['everywhere',   'everywhere',   'a soft scattering of small colorful stars across the whole frame, plain pastel background'],
+  ['nowhere',      'nowhere',      'a friendly young child shrugging gently with palms up and a soft empty pastel background behind them', { mode: 'concept' }],
+]);
+
+// Character / personality adjectives — used to describe people, not just things.
+group('Needs', 'Describing', 'Character', 'needs.describe.character', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['kind',         'kind',         'a friendly young child gently offering a small flower to another child, soft warm smile'],
+  ['mean',         'mean',         'a friendly young child crossing their arms with a small frown after pulling a toy away (mild, not distressing)'],
+  ['gentle',       'gentle',       'a friendly young child softly stroking a small kitten with one finger, calm smile'],
+  ['friendly',     'friendly',     'a friendly young child waving enthusiastically at another child, warm welcoming smile'],
+  ['helpful',      'helpful',      'a friendly young child carrying a small bag for an adult figure with a proud smile'],
+  ['polite',       'polite',       'a friendly young child saying "please" with hands politely clasped, a small warm soft smile'],
+  ['careful',      'careful',      'a friendly young child walking slowly carrying a small full cup with both hands, tongue out in focus'],
+  ['busy',         'busy',         'a friendly young child surrounded by colorful blocks and crayons, focused on building, soft motion lines'],
+  ['smart',        'smart',        'a friendly young child looking up with a small light-bulb sparkle above their head, big "aha!" smile'],
+  ['lazy',         'lazy',         'a friendly young child lounging cozily on a soft couch with a small pillow, sleepy easygoing smile (gentle, not negative)'],
+  ['fancy',        'fancy',        'a friendly young child in a small dressy outfit with a tiny bow tie, proud spinning pose'],
+  ['silly_more',   'goofy',        'a friendly young child making a silly face with tongue out and crossed eyes, joyful giggle', { notes: 'Goofy — a sibling to existing "silly".' }],
+]);
+
 
 const COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs']);
 const MODES = new Set(['child_as_subject', 'object', 'person', 'concept']);
