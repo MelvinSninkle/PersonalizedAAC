@@ -326,6 +326,28 @@ export default async function handler(req, res) {
       )`;
     await db`CREATE INDEX IF NOT EXISTS exposure_events_protocol_idx ON exposure_events(protocol_id, occurred_at DESC)`;
 
+    // ---- One-shot backfill: sessions.skill_slug from game_attempts ----
+    // PRD §11 anchors mastery/spike math to taxonomy_slug. Sessions logged
+    // before Phase 2 didn't carry it on the session row; recover it as the
+    // most-common taxonomy_slug across the session's attempts (NULL when the
+    // session has no slugged attempts — analytics falls back to label).
+    // Idempotent: only fills rows where skill_slug IS NULL.
+    await db`
+      UPDATE sessions s SET skill_slug = sub.slug
+      FROM (
+        SELECT session_id, slug FROM (
+          SELECT a.session_id,
+                 NULLIF(a.taxonomy_slug, '') AS slug,
+                 count(*) AS n,
+                 row_number() OVER (PARTITION BY a.session_id ORDER BY count(*) DESC) AS rn
+          FROM game_attempts a
+          WHERE a.taxonomy_slug IS NOT NULL AND a.taxonomy_slug <> ''
+          GROUP BY a.session_id, a.taxonomy_slug
+        ) ranked
+        WHERE ranked.rn = 1
+      ) sub
+      WHERE s.id = sub.session_id AND s.skill_slug IS NULL`;
+
     // ---- AI image generation: cost/volume log + per-child reference images ----
     await db`
       CREATE TABLE IF NOT EXISTS image_generations (

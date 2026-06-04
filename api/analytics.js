@@ -47,7 +47,16 @@ export default async function handler(req, res) {
   const idx = (b) => (N - 1) - b; // bucket 0 = current period → last slot
   const db = sql();
 
-  const out = { bucket, labels: labelsFor(N, G.unit), use: { series: [] }, games: { series: [] }, time: { series: [] }, mastery: [], recentSessions: [] };
+  const out = {
+    bucket, labels: labelsFor(N, G.unit),
+    use: { series: [] },
+    games: { series: [] },               // byCategory (legacy back-compat)
+    gamesBySkill: { series: [] },        // PRD §11 — bucketed by taxonomy_slug
+    gamesByMode: { series: [] },         // PRD §5.1 — bucketed by session mode
+    time: { series: [] },
+    mastery: [],
+    recentSessions: [],
+  };
 
   // ---- USE: taps per category per bucket ----
   try {
@@ -109,6 +118,71 @@ export default async function handler(req, res) {
       const data = []; let last = 0;
       for (let i = 0; i < N; i++) { if (raw[i] != null) last = raw[i]; data.push(last); }
       return { name, data, legacyScoring: legacyBuckets.get(name) };
+    }).sort((a, b) => b.data[N - 1] - a.data[N - 1]);
+  } catch (_) { /* */ }
+
+  // ---- GAMES BY SKILL: accuracy per skill_slug per bucket ----
+  // PRD §11 anchors mastery to taxonomy_slug. Falls back to label so custom-
+  // board items still surface; sessions inherit mode for the byMode pivot.
+  // Carries scoring_version so charts can dot-line / footnote legacy buckets.
+  try {
+    const rows = await db`
+      SELECT COALESCE(NULLIF(a.taxonomy_slug, ''), a.label) AS name,
+             s.mode AS mode,
+             floor(extract(epoch from (now() - a.occurred_at)) / ${SECS})::int AS bucket,
+             count(*)::int AS total,
+             sum(case when a.correct then 1 else 0 end)::int AS ok,
+             min(coalesce(s.scoring_version, 1))::int AS min_sv
+      FROM game_attempts a
+      LEFT JOIN sessions s ON s.id = a.session_id
+      WHERE a.child_id = ${childId} AND COALESCE(NULLIF(a.taxonomy_slug, ''), a.label) IS NOT NULL
+        AND a.occurred_at >= now() - ${SPAN} * interval '1 second'
+      GROUP BY 1, 2, 3`;
+    const bySkill = new Map();
+    const legacy = new Map();
+    for (const r of rows) {
+      const b = Number(r.bucket);
+      if (b < 0 || b >= N) continue;
+      if (!bySkill.has(r.name)) {
+        bySkill.set(r.name, new Array(N).fill(null));
+        legacy.set(r.name, new Array(N).fill(false));
+      }
+      bySkill.get(r.name)[idx(b)] = Math.round((Number(r.ok) / Number(r.total)) * 100);
+      if (Number(r.min_sv) < 2) legacy.get(r.name)[idx(b)] = true;
+    }
+    out.gamesBySkill.series = [...bySkill.entries()].map(([name, raw]) => {
+      const data = []; let last = 0;
+      for (let i = 0; i < N; i++) { if (raw[i] != null) last = raw[i]; data.push(last); }
+      return { name, data, legacyScoring: legacy.get(name) };
+    }).sort((a, b) => b.data[N - 1] - a.data[N - 1]);
+  } catch (_) { /* */ }
+
+  // ---- GAMES BY MODE: accuracy per session mode per bucket ----
+  // PRD §5.1: each mode is a qualitatively different measurement; surface the
+  // overall trend by mode so a child who excels at auditory comprehension but
+  // struggles with expressive naming is visible.
+  try {
+    const rows = await db`
+      SELECT s.mode AS mode,
+             floor(extract(epoch from (now() - a.occurred_at)) / ${SECS})::int AS bucket,
+             count(*)::int AS total,
+             sum(case when a.correct then 1 else 0 end)::int AS ok
+      FROM game_attempts a
+      LEFT JOIN sessions s ON s.id = a.session_id
+      WHERE a.child_id = ${childId} AND s.mode IS NOT NULL
+        AND a.occurred_at >= now() - ${SPAN} * interval '1 second'
+      GROUP BY 1, 2`;
+    const byMode = new Map();
+    for (const r of rows) {
+      const b = Number(r.bucket);
+      if (b < 0 || b >= N) continue;
+      if (!byMode.has(r.mode)) byMode.set(r.mode, new Array(N).fill(null));
+      byMode.get(r.mode)[idx(b)] = Math.round((Number(r.ok) / Number(r.total)) * 100);
+    }
+    out.gamesByMode.series = [...byMode.entries()].map(([mode, raw]) => {
+      const data = []; let last = 0;
+      for (let i = 0; i < N; i++) { if (raw[i] != null) last = raw[i]; data.push(last); }
+      return { name: MODE_LABEL[mode] || mode, mode, data };
     }).sort((a, b) => b.data[N - 1] - a.data[N - 1]);
   } catch (_) { /* */ }
 
