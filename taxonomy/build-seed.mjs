@@ -1180,6 +1180,22 @@ group('Nouns', 'Home', 'Kitchen', 'nouns.home.kitchen', { mode: 'object', photo:
   ['knife',        'knife',        'a single small child-safe butter knife, plain background'],
 ]);
 
+// Mealtime gear that an AAC toddler actually reaches for at the table —
+// the bib / straw / sippy cup layer that lives between "cup" and "fork".
+group('Nouns', 'Home', 'Mealtime', 'nouns.home.mealtime', { mode: 'object', photo: 'none', ...EXT, notes: 'Scene: kitchen, table.' }, [
+  ['napkin',       'napkin',       'a single folded paper napkin on a plain background'],
+  ['straw',        'straw',        'a single colorful striped drinking straw, plain background'],
+  ['bib',          'bib',          "a single small child's bib with a cheerful pattern, plain background"],
+  ['sippy_cup',    'sippy cup',    "a single small toddler sippy cup with a spout lid and two handles, plain background", { pron: 'sippy cup' }],
+  ['water_bottle', 'water bottle', "a single small child's reusable water bottle with a spout lid, plain background", { pron: 'water bottle' }],
+  ['mug',          'mug',          'a single small cheerful mug with a handle, plain background'],
+  ['tray',         'tray',         'a single small cheerful tray with raised edges, plain background'],
+  ['pitcher',      'pitcher',      'a single small clear pitcher with a handle and a spout, plain background'],
+  ['placemat',     'placemat',     'a single small cheerful placemat with a fun pattern, plain background'],
+  ['lunchbox',     'lunchbox',     "a single small cheerful child's lunchbox with a handle, closed, plain background"],
+  ['thermos',      'thermos',      'a single small insulated thermos with a screw-on cap, plain background'],
+]);
+
 // =============================================================================
 // TIER 26 — BATHROOM ITEMS
 // =============================================================================
