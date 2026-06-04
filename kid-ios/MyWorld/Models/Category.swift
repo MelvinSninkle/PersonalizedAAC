@@ -14,6 +14,14 @@ struct Category: Codable, Identifiable, Hashable {
     let childId: String?
     let ownerUserId: Int?
     let taxonomySlug: String?
+    /// Special-render hint:
+    ///   "location" → tap-to-speak + show its children as room tiles
+    ///   "room"     → short-press speaks, long-press opens its interior
+    ///   nil        → normal category (default)
+    let kind: String?
+
+    var isLocation: Bool { kind == "location" }
+    var isRoom: Bool { kind == "room" }
 
     enum CodingKeys: String, CodingKey {
         case id, section, label
@@ -25,6 +33,7 @@ struct Category: Codable, Identifiable, Hashable {
         case childId
         case ownerUserId
         case taxonomySlug
+        case kind
     }
 
     init(from decoder: Decoder) throws {
@@ -42,5 +51,6 @@ struct Category: Codable, Identifiable, Hashable {
         childId = try c.decodeIfPresent(String.self, forKey: .childId)
         ownerUserId = try c.decodeIfPresent(Int.self, forKey: .ownerUserId)
         taxonomySlug = try c.decodeIfPresent(String.self, forKey: .taxonomySlug)
+        kind = try c.decodeIfPresent(String.self, forKey: .kind)
     }
 }

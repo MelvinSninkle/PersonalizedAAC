@@ -76,6 +76,18 @@ export default async function handler(req, res) {
     await db`ALTER TABLE categories ALTER COLUMN child_id DROP NOT NULL`;
     await db`ALTER TABLE items      ALTER COLUMN child_id DROP NOT NULL`;
 
+    // Category "kind" — special-render hint for the kid app. Two values today:
+    //   'location' → a place (Home, Grandma's). Tap a location chip and the
+    //                tablet speaks its name + shows its children as ROOMS.
+    //   'room'     → a room (Kitchen, Bedroom). Short-press speaks its name;
+    //                long-press opens the room's interior (its items) in an
+    //                overlay; long-press the same room again to back out.
+    // null/missing = normal category. This is what lets a parent build a tidy
+    // "Places" tree (Places → Home → Kitchen → toaster) without nesting
+    // chip-strips four levels deep.
+    await db`ALTER TABLE categories ADD COLUMN IF NOT EXISTS kind TEXT`;
+    await db`CREATE INDEX IF NOT EXISTS categories_kind_idx ON categories(kind)`;
+
     // Which template categories are visible on which child's board. A 'removed'
     // row records that a parent has overridden the visibility for their child;
     // re-sharing by the owner flips it back to 'active'.

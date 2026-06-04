@@ -34,6 +34,7 @@ async function create(req, res, db, user) {
   const b = (typeof req.body === 'object' && req.body) || {};
   const { section, label, imageUrl, imageKey, keepAspect, order } = b;
   const parentId = b.parentId == null ? null : Number(b.parentId);
+  const kind = normalizeKind(b.kind);
   if (!section || !label) { res.status(400).json({ error: 'section and label required' }); return; }
 
   let childId = null, ownerUserId = null;
@@ -59,17 +60,26 @@ async function create(req, res, db, user) {
   }
 
   const rows = await db`
-    INSERT INTO categories (section, label, parent_id, image_url, image_key, keep_aspect, display_order, child_id, owner_user_id, updated_at)
-    VALUES (${section}, ${label}, ${parentId}, ${imageUrl ?? null}, ${imageKey ?? null}, ${!!keepAspect}, ${order ?? Date.now()}, ${childId}, ${ownerUserId}, NOW())
+    INSERT INTO categories (section, label, parent_id, image_url, image_key, keep_aspect, display_order, child_id, owner_user_id, kind, updated_at)
+    VALUES (${section}, ${label}, ${parentId}, ${imageUrl ?? null}, ${imageKey ?? null}, ${!!keepAspect}, ${order ?? Date.now()}, ${childId}, ${ownerUserId}, ${kind}, NOW())
     RETURNING *
   `;
   res.status(200).json(rowToCategory(rows[0]));
+}
+
+/// Whitelist the category "kind" hint so only known values land in the DB.
+/// null clears the field (back to a normal category).
+function normalizeKind(v) {
+  if (v === undefined) return undefined;     // means "don't touch on update"
+  if (v === null || v === '') return null;
+  return (v === 'location' || v === 'room') ? v : null;
 }
 
 async function update(req, res, db, user) {
   const id = parseInt(req.query.id, 10);
   if (!id) { res.status(400).json({ error: 'id required' }); return; }
   const { label, parentId, imageUrl, imageKey, keepAspect, order, section, cascade } = req.body || {};
+  const kind = normalizeKind((req.body || {}).kind);
 
   const current = await db`SELECT * FROM categories WHERE id = ${id} LIMIT 1`;
   if (!current.length) { res.status(404).json({ error: 'Not found' }); return; }
@@ -87,6 +97,7 @@ async function update(req, res, db, user) {
       image_url     = COALESCE(${imageUrl ?? null}, image_url),
       image_key     = COALESCE(${imageKey ?? null}, image_key),
       keep_aspect   = ${keepAspect === undefined ? old.keep_aspect : !!keepAspect},
+      kind          = ${kind === undefined ? old.kind : kind},
       display_order = COALESCE(${order ?? null},   display_order),
       updated_at    = NOW()
     WHERE id = ${id}

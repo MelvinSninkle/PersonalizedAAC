@@ -122,34 +122,14 @@ struct MatchingView: View {
             Text("Great job!")
                 .font(.system(size: 52, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: "#ad1457"))
-            Button { onExit() } label: {
-                Text("Done")
-                    .font(.title3.weight(.semibold))
-                    .padding(.horizontal, 44).padding(.vertical, 14)
-                    .foregroundStyle(.white)
-                    .background(Color(hex: "#ff1493"))
-                    .clipShape(Capsule())
-            }
-            .padding(.top, 8)
         }
     }
 
     private var exitButton: some View {
-        VStack {
-            HStack {
-                Spacer()
-                Button { onExit() } label: {
-                    Image(systemName: "xmark")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .padding(12)
-                        .background(.thinMaterial)
-                        .clipShape(Circle())
-                }
-                .padding(.top, 16).padding(.trailing, 16)
-            }
-            Spacer()
-        }
+        LongPressExitButton.corner(
+            tint: Color(hex: "#ad1457"),
+            background: Color.black.opacity(0.06)
+        ) { onExit() }
     }
 
     // MARK: -- Game logic
@@ -172,12 +152,17 @@ struct MatchingView: View {
     }
 
     /// End the lesson: stop polling state to ended, play the vocalized cheer
-    /// over the still-playing music (the music stops when the view exits).
+    /// over the still-playing music, then auto-exit so the kid never sees a
+    /// "Done" button to puzzle over. Parent can long-hold ✕ to leave early.
     private func finishGame() {
         guard !finished else { return }
         finished = true
         live.setEnded(currentPayload())
         GameAudio.shared.playCheer(childId: auth.childSlug)
+        Task {
+            try? await Task.sleep(nanoseconds: 4_400_000_000)
+            await MainActor.run { onExit() }
+        }
     }
 
     /// Reset per-round state, build choices, announce the target.

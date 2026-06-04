@@ -1,13 +1,17 @@
 import SwiftUI
 
 /// Passive learning slideshow — "Learn" (plain labels) and "Exposure"
-/// (first-person "I can see a ___"). Matches the web app:
+/// (first-person "I can see a ___"). Matches the web pacing:
 ///   - Auto-advances every `secondsPerImage` (default 5, min 2).
-///   - LOOPS through the deck until the time limit (or ✕). Passive exposure is
-///     about calm repetition, not finishing.
-///   - Speaks each tile as it appears (recorded audio or TTS).
+///   - LOOPS through the deck until the time limit (or long-hold ✕). Passive
+///     exposure is calm repetition, not "finishing".
+///   - Speaks each tile as it appears (recorded audio or TTS — Exposure uses
+///     the "I can see a ___" phrasing).
 ///   - Background music loops underneath.
-/// A tap advances early; the ✕ exits.
+/// A tap anywhere advances early; long-hold the ✕ in the corner to exit.
+///
+/// Visually minimal on purpose: soft pastel background, image only, no text
+/// label on screen. The phrasing is heard, not read.
 struct SlideshowView: View {
     let session: GameController.Session
     let onExit: () -> Void
@@ -27,60 +31,38 @@ struct SlideshowView: View {
     }
     private var secondsPerImage: Double { max(2, session.secondsPerImage ?? 5) }
     private var current: Tile? { deck.indices.contains(pos) ? deck[pos] : nil }
-
-    private var labelText: String {
+    private var spokenPhrase: String {
         guard let t = current else { return "" }
         return firstPerson ? "I can see a \(t.label)" : t.label
     }
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            // Soft pastel background — matches the board, not the harsh black.
+            Color(hex: "#fff7fb").ignoresSafeArea()
 
             if let _ = current {
-                VStack(spacing: 24) {
-                    Spacer()
-                    if let img = image {
-                        Image(uiImage: img)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: 760, maxHeight: 560)
-                            .clipShape(RoundedRectangle(cornerRadius: 28))
-                            .shadow(radius: 28)
-                    } else {
-                        ProgressView().tint(.white)
-                    }
-                    Text(labelText)
-                        .font(.system(size: 60, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
-                    Spacer()
+                if let img = image {
+                    Image(uiImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: 820, maxHeight: 620)
+                        .clipShape(RoundedRectangle(cornerRadius: 32))
+                        .shadow(color: .black.opacity(0.12), radius: 28, y: 8)
+                        .padding(40)
+                } else {
+                    ProgressView().tint(Color(hex: "#ad1457"))
                 }
-            } else {
-                Text("No pictures to show here yet")
-                    .foregroundStyle(.white)
             }
 
-            // Exit — top-right, away from the center a kid taps to advance.
-            VStack {
-                HStack {
-                    Spacer()
-                    Button { onExit() } label: {
-                        Image(systemName: "xmark")
-                            .font(.title2.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(14)
-                            .background(Color.white.opacity(0.16))
-                            .clipShape(Circle())
-                    }
-                    .padding(.top, 18).padding(.trailing, 18)
-                }
-                Spacer()
-            }
+            // Long-hold ✕ to exit (consistent across every full-screen view).
+            LongPressExitButton.corner(
+                tint: Color(hex: "#ad1457"),
+                background: Color.black.opacity(0.06)
+            ) { onExit() }
         }
         .contentShape(Rectangle())
-        .onTapGesture { advance() }     // tap advances early
+        .onTapGesture { advance() }     // any tap advances
         .task { setup() }
         .onDisappear {
             advanceTask?.cancel()
@@ -107,7 +89,14 @@ struct SlideshowView: View {
            let img = await MediaCache.shared.image(for: key) {
             await MainActor.run { self.image = img }
         }
-        await TilePlayer.shared.play(t)     // speak the word/phrase
+        // Speak the phrase ("milk" for Learn, "I can see a milk" for Exposure).
+        // Exposure uses TTS so the phrasing reads correctly; Learn prefers the
+        // tile's recorded sound when one exists.
+        if firstPerson {
+            GameAudio.shared.speak(spokenPhrase, childId: auth.childSlug)
+        } else {
+            await TilePlayer.shared.play(t)
+        }
     }
 
     /// Auto-advance after `secondsPerImage`. Re-armed each slide.

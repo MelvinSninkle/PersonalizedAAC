@@ -24,21 +24,10 @@ struct CelebrationView: View {
 
             ConfettiView(running: celebrating)
 
-            VStack {
-                HStack {
-                    Spacer()
-                    Button { onExit() } label: {
-                        Image(systemName: "xmark")
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .padding(12)
-                            .background(.thinMaterial)
-                            .clipShape(Circle())
-                    }
-                    .padding(.top, 16).padding(.trailing, 16)
-                }
-                Spacer()
-            }
+            LongPressExitButton.corner(
+                tint: Color(hex: "#ad1457"),
+                background: Color.black.opacity(0.06)
+            ) { onExit() }
         }
         .task {
             celebrating = true
