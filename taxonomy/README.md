@@ -22,9 +22,19 @@ every import / bulk op auto-snapshots, and there's a full audit log.
 | `parent_photo_behavior` | how an uploaded photo is used: `override` (the subject *is* the photo) · `supplement` (photo steers style) · `none`. |
 | `prompt_template` | the image-generation prompt. Tokens: `{style}`, `{color}`, `{reference}` (child photo), `{parent_photo}`. |
 | `phase` | rollout grouping: `v1_core` / `v1_extended` / `v2` / `later`. |
-| **`core`** | **`true`** = part of the Level‑0 starter board a brand-new child begins with; **`false`** = grows in later. A whole category/subcategory is "non-core" when its tiles are — flip a group at once via the toolbar filter + **Bulk action → Mark non-core**. |
+| **`core`** | **`true`** = part of the standard baseline vocabulary; **`false`** = grows in later. A whole category/subcategory is "non-core" when its tiles are — flip a group at once via the toolbar filter + **Bulk action → Mark non-core**. |
+| `growth_stage` | When this tile becomes prominent **by default for a child** on the standard scaffold (PRD §4.2B): `stage_1` (first contact: persistent strip + food + toys + immediate family), `stage_2` (more & done), `stage_3` (want), `stage_4` (places + go/stop), `stage_5plus` (broadening: help, verbs, body, feelings, social). Advisory only — never a gate. |
+| `meal_context` | Food tiles only: `breakfast` / `lunch` / `dinner` / `snack` / `anytime`. Drives mode-based default-category in the Nouns column (§4.2). |
+| `is_gestalt` | Boolean — whole-phrase tile for the gestalt track (§4.2A). |
+| `gestalt_type` | `compositional` / `category_holding` / `opaque` (§4.2A.3). Adult-supplied; never auto-inferred. |
+| `gestalt_meaning` | What this phrase actually means for the child. **Essential for opaque holophrases** (the surface words give no clue). |
+| `gestalt_target_words` | Canonical word ids embedded in the gestalt that the system may help the child isolate. Comma-separated in CSV import; Postgres `TEXT[]` server-side. |
+| `descriptive_clues` | Ordered clues for See and Solve Description Matching (§4.2C.2), easiest first. Pipe- or newline-separated in CSV. |
+| `representation_levels` | Symbol-maturation ladder (§11.10) — ordered concrete-personal → abstract-conventional renderings. JSONB; per-child operative level is stored on the child's instance, not here. |
 | `status` | `draft` (invisible to generation) / `published`. |
 | `notes` | admin/SLP guidance (also where we currently park scene hints like "Scene: pantry"). |
+
+The keystone link from each per-child tile back to its canonical entry is **`items.taxonomy_slug`** (also on `categories` and `game_attempts`) — the column the cross-child measurement layer (PRD §14) depends on. Nullable for legacy rows; populated forward as content is instantiated from the taxonomy.
 
 ## The drafted seed + how prompts are written
 

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Accept invite · My World</title>
+<meta name="theme-color" content="#ad1457">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  :root { --pink:#ff1493; --pink-deep:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#fce4ec; --danger:#dc2626; --good:#16a34a; }
+  html,body { margin:0; min-height:100%; background:linear-gradient(180deg,#fff7fb,#ffeaf4); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--ink); }
+  .wrap { min-height:100vh; display:grid; place-items:center; padding:24px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:22px; padding:30px; width:100%; max-width:440px;
+    box-shadow:0 18px 50px rgba(255,20,147,.12); }
+  .brand { font-family:'Fredoka',ui-rounded,system-ui,sans-serif; font-weight:700; color:var(--pink-deep); font-size:22px; text-align:center; margin-bottom:6px; }
+  h2 { font-family:'Fredoka',ui-rounded,system-ui,sans-serif; font-weight:700; color:var(--ink); margin:6px 0 4px; font-size:22px; }
+  .sub { text-align:center; color:var(--muted); font-size:13px; margin:4px 0 22px; }
+  .child-card { display:flex; align-items:center; gap:14px; background:#fff7fb; border:1px solid var(--line); border-radius:14px; padding:14px; margin:0 0 18px; }
+  .child-card .pic { width:64px; height:64px; border-radius:50%; background:#fce4ec center/cover no-repeat; border:3px solid #ffd400; flex:none; display:grid; place-items:center; font-size:28px; color:#d6a8c6; }
+  .child-card .meta { flex:1; min-width:0; }
+  .child-card .name { font-family:'Fredoka',system-ui; font-weight:700; font-size:18px; }
+  .child-card .role { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  label { display:block; font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px; }
+  input { width:100%; padding:12px 13px; border:1px solid var(--line); border-radius:11px; font:inherit; margin-bottom:14px; }
+  input:focus { outline:none; border-color:var(--pink); }
+  button.primary { width:100%; border:none; cursor:pointer; font:inherit; font-weight:700; font-size:15px; border-radius:999px; padding:13px; background:var(--pink); color:#fff; margin-top:4px; }
+  button.primary:hover { background:var(--pink-deep); }
+  button.primary:disabled { opacity:.55; cursor:default; }
+  button.ghost { background:transparent; color:var(--muted); border:none; cursor:pointer; font:inherit; font-size:13px; margin-top:10px; width:100%; }
+  .msg { font-size:13px; margin-top:14px; min-height:18px; }
+  .msg.err { color:var(--danger); } .msg.ok { color:var(--good); }
+  .switch { font-size:13px; color:var(--muted); text-align:center; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+  .switch a { color:var(--pink-deep); cursor:pointer; font-weight:600; text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="brand"><img src="/icons/myworld-globe.png" alt="" style="height:1.2em;vertical-align:-3px;margin-right:.15em;">My World</div>
+
+    <div id="loading" class="sub">Checking your invite…</div>
+
+    <div id="content" hidden>
+      <h2 id="title">You're invited!</h2>
+      <p class="sub" id="subtitle"></p>
+      <div class="child-card">
+        <div class="pic" id="child-pic">🧒</div>
+        <div class="meta">
+          <div class="name" id="child-name">—</div>
+          <div class="role">Therapy team member</div>
+        </div>
+      </div>
+
+      <!-- Sign in (existing user) -->
+      <div id="signin" hidden>
+        <p class="sub" style="text-align:left;color:var(--ink);font-size:14px;">Sign in to your account to accept.</p>
+        <label for="si-pw">Password</label>
+        <input id="si-pw" type="password" autocomplete="current-password">
+        <button class="primary" id="si-btn">Sign in & accept</button>
+      </div>
+
+      <!-- Sign up (new user) -->
+      <div id="signup" hidden>
+        <p class="sub" style="text-align:left;color:var(--ink);font-size:14px;">Create a therapist account with this email to accept.</p>
+        <label for="su-pw">Choose a password</label>
+        <input id="su-pw" type="password" placeholder="At least 8 characters" autocomplete="new-password">
+        <button class="primary" id="su-btn">Create account & accept</button>
+      </div>
+
+      <!-- Already logged in, but the wrong account -->
+      <div id="wrong" hidden>
+        <p class="sub" style="color:var(--danger);font-size:13px;">This invite was sent to <strong id="invite-email"></strong> but you're signed in as <strong id="my-email"></strong>. Sign out and try again.</p>
+        <button class="primary" id="signout-btn">Sign out</button>
+      </div>
+
+      <button class="ghost" id="decline-btn">Decline this invite</button>
+      <div class="msg" id="msg"></div>
+    </div>
+
+    <div id="error" hidden>
+      <h2>This invite isn't usable</h2>
+      <p class="sub" id="error-msg">The link may have expired or been used already.</p>
+      <button class="primary" onclick="location.href='/login'">Go to sign in</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const token = params.get('t') || '';
+
+  // Decode the unverified payload so we can show the user what they're being
+  // asked to accept BEFORE they sign in. The server still verifies the token.
+  function decodePayload(tok) {
+    try {
+      const body = tok.split('.')[0];
+      const s = body.replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(atob(s + '==='.slice((s.length + 3) % 4)));
+    } catch (_) { return null; }
+  }
+  const claim = decodePayload(token);
+
+  if (!token || !claim || claim.kind !== 'invite' || !claim.requestId) {
+    $('loading').hidden = true; $('error').hidden = false; return;
+  }
+  if (claim.exp && Date.now() > Number(claim.exp)) {
+    $('loading').hidden = true; $('error').hidden = false;
+    $('error-msg').textContent = 'This invite link has expired. Ask the parent to send a new one.'; return;
+  }
+
+  const childName = (claim.childId || '').replace(/peterson$/i, '').replace(/^./, c => c.toUpperCase()) || 'a child';
+  $('child-name').textContent = childName;
+  $('subtitle').textContent = "You've been invited to join " + childName + "'s therapy team. As a team member you can run live games, see progress, and build custom boards.";
+
+  async function whoAmI() {
+    try { const r = await fetch('/api/auth/me', { credentials: 'same-origin' }); if (r.ok) return (await r.json()).user; } catch (_) {}
+    return null;
+  }
+
+  async function probeAccount() {
+    // We can't safely query "does an email have an account" without authn'ing,
+    // and the invite endpoint already told the parent. So we just try sign-in;
+    // a 401 'invalid credentials' on a real account is the same UX as a 401 on
+    // a non-existent account, and the invite payload tells us if we expected an
+    // account. For the user experience, we show both options based on the
+    // server's hasAccount flag — fetched fresh via a no-side-effect probe.
+    try {
+      const r = await fetch('/api/access/invite-probe?t=' + encodeURIComponent(token), { credentials: 'same-origin' });
+      if (r.ok) return (await r.json()); // { hasAccount: bool, email }
+    } catch (_) {}
+    return { hasAccount: false, email: claim.email || '' };
+  }
+
+  function show(id) { ['signin','signup','wrong'].forEach(x => $(x).hidden = (x !== id)); }
+  function msg(text, ok) { const m = $('msg'); m.className = 'msg ' + (ok ? 'ok' : 'err'); m.textContent = text || ''; }
+
+  async function start() {
+    const me = await whoAmI();
+    const probe = await probeAccount();
+    const inviteEmail = (probe.email || claim.email || '').toLowerCase();
+    $('loading').hidden = true; $('content').hidden = false;
+
+    if (me) {
+      if ((me.email || '').toLowerCase() === inviteEmail) {
+        // Already signed in as the right user — accept directly.
+        $('title').textContent = 'Ready to accept';
+        $('subtitle').textContent = "You're signed in. Tap Accept to join " + childName + "'s team.";
+        show(null);
+        const btn = document.createElement('button'); btn.className = 'primary'; btn.textContent = 'Accept & join team';
+        btn.addEventListener('click', () => accept('accept'));
+        $('content').insertBefore(btn, $('decline-btn'));
+        return;
+      } else {
+        // Signed in as someone else.
+        $('invite-email').textContent = inviteEmail || '(unknown)';
+        $('my-email').textContent = me.email;
+        show('wrong'); return;
+      }
+    }
+
+    if (probe.hasAccount) show('signin'); else show('signup');
+  }
+
+  $('si-btn').addEventListener('click', async () => {
+    msg(''); const btn = $('si-btn'); btn.disabled = true; const prev = btn.textContent; btn.textContent = 'Signing in…';
+    const r = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+      body: JSON.stringify({ email: claim.email, password: $('si-pw').value }) });
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok || !d.ok) { msg(d.error || 'Sign-in failed.'); btn.disabled = false; btn.textContent = prev; return; }
+    await accept('accept');
+  });
+
+  $('su-btn').addEventListener('click', async () => {
+    msg(''); const pw = $('su-pw').value;
+    if (pw.length < 8) { msg('Password must be at least 8 characters.'); return; }
+    const btn = $('su-btn'); btn.disabled = true; const prev = btn.textContent; btn.textContent = 'Creating…';
+    const r = await fetch('/api/auth/register', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+      body: JSON.stringify({ inviteToken: token, password: pw }) });
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok || !d.ok) { msg(d.error || 'Could not create account.'); btn.disabled = false; btn.textContent = prev; return; }
+    await accept('accept');
+  });
+
+  $('decline-btn').addEventListener('click', () => accept('decline'));
+  $('signout-btn').addEventListener('click', async () => {
+    try { await fetch('/api/auth/logout', { method:'POST', credentials:'same-origin' }); } catch (_) {}
+    location.reload();
+  });
+
+  async function accept(action) {
+    msg('');
+    const r = await fetch('/api/access/respond', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+      body: JSON.stringify({ requestId: claim.requestId, action, token }) });
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok) { msg(d.error || 'Could not save.'); return; }
+    if (action === 'accept') { msg('Joined! Taking you to your roster…', true); setTimeout(() => location.href = '/therapist', 800); }
+    else { msg('Invite declined.', true); setTimeout(() => location.href = '/', 1200); }
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>

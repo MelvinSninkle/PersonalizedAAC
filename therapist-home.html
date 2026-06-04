@@ -28,16 +28,36 @@
   .empty { background:#fff; border:1px dashed var(--line); border-radius:18px; padding:30px; text-align:center; color:var(--muted); }
   .empty strong { color:var(--ink); }
   .msg { color:var(--muted); font-size:14px; }
+  .invites { background:#ecfdf5; border:1px solid #6ee7b7; border-radius:14px; padding:14px 18px; margin:0 0 22px; }
+  .invites h2 { font-family:'Fredoka',system-ui; margin:0 0 10px; font-size:17px; color:#065f46; }
+  .inv { display:flex; align-items:center; gap:12px; padding:10px 12px; background:#fff; border-radius:12px; margin-top:8px; }
+  .inv .pic { width:42px; height:42px; border-radius:50%; background:#fce4ec center/cover no-repeat; flex:none; display:grid; place-items:center; font-size:18px; color:#d6a8c6; }
+  .inv .meta { flex:1; min-width:0; }
+  .inv .name { font-weight:700; font-size:14px; }
+  .inv .from { font-size:12px; color:var(--muted); }
+  .inv button { border:none; cursor:pointer; font:inherit; font-weight:700; border-radius:999px; padding:8px 14px; font-size:13px; margin-left:4px; }
+  .inv .accept { background:var(--pink); color:#fff; }
+  .inv .accept:hover { background:var(--pink-deep); }
+  .inv .decline { background:transparent; color:var(--muted); }
 </style>
 </head>
 <body>
 <header>
   <div class="brand"><img src="/icons/myworld-globe.png" alt="" style="height:1.2em;vertical-align:-3px;margin-right:.15em;">My World</div>
-  <a href="#" id="signout">Sign out</a>
+  <div style="display:flex;gap:14px;align-items:center;">
+    <a href="/therapist/library">🧩 My boards</a>
+    <a href="#" id="signout">Sign out</a>
+  </div>
 </header>
 <div class="wrap">
   <h1>Your children 🧑‍⚕️</h1>
   <p class="sub">Tap a child to see their progress and run sessions. Boards you build are shared with that child and only you can edit them.</p>
+
+  <div id="invites-wrap" class="invites" hidden>
+    <h2>📨 You have an invitation</h2>
+    <div id="invites"></div>
+  </div>
+
   <div id="grid" class="grid"><div class="msg">Loading…</div></div>
 </div>
 <script>
@@ -51,6 +71,42 @@
     const rel = c.relation && c.relation !== 'admin' ? `<div class="rel">${c.relation}</div>` : '';
     return `<a class="child" href="${href}">${pic}<div class="name">${(c.name||'').replace(/[&<>"]/g,'')}</div>${rel}</a>`;
   }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+
+  async function loadInvites() {
+    try {
+      const r = await fetch('/api/access/pending', { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const invites = (await r.json()).invites || [];
+      if (!invites.length) { document.getElementById('invites-wrap').hidden = true; return; }
+      document.getElementById('invites-wrap').hidden = false;
+      document.getElementById('invites').innerHTML = invites.map(inv => `
+        <div class="inv" data-id="${inv.id}">
+          ${inv.imageKey
+            ? `<div class="pic" style="background-image:url(/api/media?key=${encodeURIComponent(inv.imageKey)})"></div>`
+            : `<div class="pic">🧒</div>`}
+          <div class="meta">
+            <div class="name">${esc(inv.childName)}</div>
+            <div class="from">${inv.inviterEmail ? 'From ' + esc(inv.inviterEmail) : 'Therapy-team invitation'}</div>
+          </div>
+          <button class="accept" data-action="accept">Accept</button>
+          <button class="decline" data-action="decline">Decline</button>
+        </div>`).join('');
+    } catch (_) {}
+  }
+  document.getElementById('invites').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-action]'); if (!btn) return;
+    const row = btn.closest('.inv'); const id = Number(row.dataset.id);
+    const action = btn.dataset.action;
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/access/respond', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+        body: JSON.stringify({ requestId: id, action }) });
+      if (r.ok) { await loadInvites(); await load(); }
+      else { btn.disabled = false; alert((await r.json().catch(()=>({}))).error || 'Could not save.'); }
+    } catch (_) { btn.disabled = false; }
+  });
+
   async function load() {
     try {
       const r = await fetch('/api/my-children', { credentials: 'same-origin' });
@@ -58,7 +114,7 @@
       if (!r.ok) { grid.innerHTML = '<div class="empty">Couldn\'t load right now. Please refresh.</div>'; return; }
       const children = (await r.json()).children || [];
       if (!children.length) {
-        grid.innerHTML = '<div class="empty"><strong>No children linked yet.</strong><br>Ask a parent to invite you, or send them a request once that\'s available.</div>';
+        grid.innerHTML = '<div class="empty"><strong>No children linked yet.</strong><br>If a parent has invited you, check the box above. Otherwise ask them to send an invite.</div>';
         return;
       }
       grid.innerHTML = children.map(card).join('');
@@ -71,6 +127,7 @@
     try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
     location.href = '/login';
   });
+  loadInvites();
   load();
 })();
 </script>

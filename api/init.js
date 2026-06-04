@@ -69,6 +69,30 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS categories_owner_idx ON categories(owner_user_id)`;
     await db`CREATE INDEX IF NOT EXISTS items_owner_idx      ON items(owner_user_id)`;
 
+    // §8.3 Therapist custom boards: a template = a category with child_id NULL
+    // and owner_user_id = <therapist>. Allow nullable child_id on both tables
+    // so a single canonical template (and its items) can be shared with many
+    // children. Existing per-child rows keep their child_id; only templates use NULL.
+    await db`ALTER TABLE categories ALTER COLUMN child_id DROP NOT NULL`;
+    await db`ALTER TABLE items      ALTER COLUMN child_id DROP NOT NULL`;
+
+    // Which template categories are visible on which child's board. A 'removed'
+    // row records that a parent has overridden the visibility for their child;
+    // re-sharing by the owner flips it back to 'active'.
+    await db`
+      CREATE TABLE IF NOT EXISTS category_shares (
+        id BIGSERIAL PRIMARY KEY,
+        category_id BIGINT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+        child_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',   -- 'active' | 'removed'
+        created_by BIGINT REFERENCES users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (category_id, child_id)
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS category_shares_child_idx    ON category_shares(child_id, status)`;
+    await db`CREATE INDEX IF NOT EXISTS category_shares_category_idx ON category_shares(category_id)`;
+
     // Activity log — kid-mode button taps. No FK to items so history
     // survives item deletes; label / category / subcategory are
     // snapshotted at log time for stable analytics.
@@ -291,11 +315,74 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS taxonomy_phase_idx    ON taxonomy(phase)`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_status_idx   ON taxonomy(status)`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_archived_idx ON taxonomy(archived)`;
-    // `core` = part of the baseline board a brand-new child starts with (Level 0).
+    // `core` = part of the baseline standard vocabulary a brand-new child starts with (Level 0).
     // Non-core concepts/categories grow in later as competence increases. A whole
     // category/subcategory is "non-core" when its tile rows are flagged non-core.
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS core BOOLEAN NOT NULL DEFAULT TRUE`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_core_idx      ON taxonomy(core)`;
+
+    // ---- PRD §11.1 field additions (March 2026 alignment) ----
+    // growth_stage: the developmental stage at which this tile becomes prominent
+    // by default for a child on the standard scaffold (§4.2B). Advisory, never
+    // a gate — parents/SLPs can surface anything at any stage. NULL = stage_5plus.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS growth_stage TEXT`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_growth_idx ON taxonomy(growth_stage)`;
+    // meal_context (food only): one of breakfast/lunch/dinner/snack/anytime.
+    // Drives mode-based default-category in the Nouns column (§4.2).
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS meal_context TEXT`;
+    // Gestalt track (§4.2A): is_gestalt marks whole-phrase tiles; gestalt_type
+    // is the adult-supplied typology; gestalt_meaning is what the gestalt means
+    // (essential for opaque holophrases); gestalt_target_words lists embedded
+    // canonical word ids the system may help the child isolate.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS is_gestalt BOOLEAN NOT NULL DEFAULT FALSE`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS gestalt_type TEXT`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS gestalt_meaning TEXT`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS gestalt_target_words TEXT[]`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_gestalt_idx ON taxonomy(is_gestalt)`;
+    // See and Solve description-matching clues (§4.2C.2): ordered list of
+    // meaning/function/relationship clues, easiest first.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS descriptive_clues TEXT[]`;
+    // Symbol-maturation ladder (§11.10): ordered set of renderings from
+    // concrete-personal (level 0) to abstract-conventional. JSONB so each
+    // rendering can carry its own prompt/notes; per-child operative level is
+    // stored elsewhere (in the child's instantiation, not on the canonical row).
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS representation_levels JSONB`;
+
+    // ---- Trainer-pattern columns: who is this row for + what kind of authoring ----
+    // audience: who sees this taxonomy entry in their guided authoring flow.
+    //   'universal'   → everyone (the standard library tile, e.g. apple)
+    //   'parent'      → presented to parents during onboarding / "add favorites"
+    //   'therapist'   → presented to therapists in their custom-board flow
+    //   'school_team' → presented to teachers / aides authoring class boards
+    //   'family'      → extended family (grandparents on the people roster)
+    // authoring_kind: is this a pre-generated tile, or a SKELETON the user fills in?
+    //   'canonical'         → fully-generated standard tile content (apple, monkey)
+    //   'personal_skeleton' → no canonical image; just a label + guidance that
+    //                          prompts a parent/teacher/therapist to author their
+    //                          own version from a photo (fire drill, library day,
+    //                          our pet, grandma's house). This is how the
+    //                          "you may want to make tiles for things like this"
+    //                          train-the-trainer pattern is represented in data.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS audience       TEXT NOT NULL DEFAULT 'universal'`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS authoring_kind TEXT NOT NULL DEFAULT 'canonical'`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_audience_idx       ON taxonomy(audience)`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_authoring_kind_idx ON taxonomy(authoring_kind)`;
+
+    // §8.2 extension: an invite can target either a 'therapist' or a 'school_team'
+    // member. The role applies to child_access.relation on accept. Defaults to
+    // 'therapist' so existing invites flowing through keep their semantics.
+    await db`ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS invite_relation TEXT NOT NULL DEFAULT 'therapist'`;
+
+    // ---- Keystone fix (§14): the canonical anchor on items/categories/attempts ----
+    // taxonomy_slug links a per-child instantiation back to the canonical
+    // taxonomy id, so mastery + cross-child measurement can aggregate per
+    // concept (not per section). Nullable: legacy rows stay null until touched.
+    await db`ALTER TABLE items         ADD COLUMN IF NOT EXISTS taxonomy_slug TEXT`;
+    await db`ALTER TABLE categories    ADD COLUMN IF NOT EXISTS taxonomy_slug TEXT`;
+    await db`ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS taxonomy_slug TEXT`;
+    await db`CREATE INDEX IF NOT EXISTS items_taxonomy_slug_idx         ON items(taxonomy_slug)`;
+    await db`CREATE INDEX IF NOT EXISTS categories_taxonomy_slug_idx    ON categories(taxonomy_slug)`;
+    await db`CREATE INDEX IF NOT EXISTS game_attempts_taxonomy_slug_idx ON game_attempts(taxonomy_slug)`;
 
     // Point-in-time snapshots so any bulk op or restore is itself reversible.
     await db`

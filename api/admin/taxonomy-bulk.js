@@ -17,6 +17,11 @@ const VALID_SUBJECT_MODES = new Set(['child_as_subject', 'object', 'person', 'co
 const VALID_PARENT_PHOTO = new Set(['override', 'supplement', 'none']);
 const VALID_STATUS = new Set(['draft', 'published']);
 const VALID_PHASES = new Set(['v1_core', 'v1_extended', 'v2', 'later']);
+const VALID_GROWTH_STAGES = new Set(['stage_1', 'stage_2', 'stage_3', 'stage_4', 'stage_5plus']);
+const VALID_MEAL = new Set(['breakfast', 'lunch', 'dinner', 'snack', 'anytime']);
+const VALID_GESTALT_TYPES = new Set(['compositional', 'category_holding', 'opaque']);
+const VALID_AUDIENCE = new Set(['universal', 'parent', 'therapist', 'school_team', 'family']);
+const VALID_AUTHORING_KIND = new Set(['canonical', 'personal_skeleton']);
 const ID_PATTERN = /^[a-z0-9_]+(\.[a-z0-9_]+)*$/;
 const MAX_ROWS = 5000;
 
@@ -30,6 +35,11 @@ function validateRow(r) {
   if (!VALID_PARENT_PHOTO.has(r.parentPhotoBehavior)) errs.push('parentPhotoBehavior');
   if (r.phase && !VALID_PHASES.has(r.phase)) errs.push('phase');
   if (r.status && !VALID_STATUS.has(r.status)) errs.push('status');
+  if (r.growthStage && !VALID_GROWTH_STAGES.has(r.growthStage)) errs.push('growthStage');
+  if (r.mealContext && !VALID_MEAL.has(r.mealContext)) errs.push('mealContext');
+  if (r.gestaltType && !VALID_GESTALT_TYPES.has(r.gestaltType)) errs.push('gestaltType');
+  if (r.audience && !VALID_AUDIENCE.has(r.audience)) errs.push('audience');
+  if (r.authoringKind && !VALID_AUTHORING_KIND.has(r.authoringKind)) errs.push('authoringKind');
   return errs;
 }
 
@@ -78,6 +88,13 @@ export default async function handler(req, res) {
 
       const status = VALID_STATUS.has(r.status) ? r.status : defaultStatus;
       const core = r.core === undefined ? true : !!r.core;   // default to core unless explicitly false
+      const isGestalt = !!r.isGestalt;
+      // Postgres array fields — leave NULL when omitted (preserves existing on update).
+      const targetWords = Array.isArray(r.gestaltTargetWords) ? r.gestaltTargetWords.filter(s => typeof s === 'string' && s.trim()).map(s => s.slice(0, 80)) : null;
+      const clues = Array.isArray(r.descriptiveClues) ? r.descriptiveClues.filter(s => typeof s === 'string' && s.trim()).map(s => s.slice(0, 400)) : null;
+      const repLevels = r.representationLevels == null ? null : JSON.stringify(r.representationLevels);
+      const audience = VALID_AUDIENCE.has(r.audience) ? r.audience : 'universal';
+      const authoringKind = VALID_AUTHORING_KIND.has(r.authoringKind) ? r.authoringKind : 'canonical';
 
       if (collision) {
         await db`
@@ -93,6 +110,16 @@ export default async function handler(req, res) {
             phase                 = ${r.phase ?? 'v1_core'},
             core                  = ${core},
             notes                 = ${r.notes ?? null},
+            growth_stage          = ${r.growthStage ?? null},
+            meal_context          = ${r.mealContext ?? null},
+            is_gestalt            = ${isGestalt},
+            gestalt_type          = ${r.gestaltType ?? null},
+            gestalt_meaning       = ${r.gestaltMeaning ?? null},
+            gestalt_target_words  = ${targetWords},
+            descriptive_clues     = ${clues},
+            representation_levels = ${repLevels}::jsonb,
+            audience              = ${audience},
+            authoring_kind        = ${authoringKind},
             status                = ${status},
             archived              = ${!!r.archived},
             updated_at            = NOW(),
@@ -105,12 +132,19 @@ export default async function handler(req, res) {
           INSERT INTO taxonomy (
             id, column_name, category, subcategory, label, pronunciation,
             prompt_template, subject_mode, parent_photo_behavior, phase, core, notes,
+            growth_stage, meal_context, is_gestalt, gestalt_type, gestalt_meaning,
+            gestalt_target_words, descriptive_clues, representation_levels,
+            audience, authoring_kind,
             status, archived, created_by, updated_by
           ) VALUES (
             ${r.id}, ${r.column}, ${r.category ?? null}, ${r.subcategory ?? null},
             ${r.label}, ${r.pronunciation ?? null},
             ${r.promptTemplate}, ${r.subjectMode}, ${r.parentPhotoBehavior},
             ${r.phase ?? 'v1_core'}, ${core}, ${r.notes ?? null},
+            ${r.growthStage ?? null}, ${r.mealContext ?? null},
+            ${isGestalt}, ${r.gestaltType ?? null}, ${r.gestaltMeaning ?? null},
+            ${targetWords}, ${clues}, ${repLevels}::jsonb,
+            ${audience}, ${authoringKind},
             ${status}, ${!!r.archived}, ${ACTOR}, ${ACTOR}
           )
         `;

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My boards · My World</title>
+<meta name="theme-color" content="#ad1457">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  :root { --pink:#ff1493; --pink-deep:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#fce4ec; --bg:#fdf2f8; }
+  html,body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  header.top { position:sticky; top:0; z-index:10; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 22px; background:rgba(255,255,255,.95); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+  .brand { font-family:'Fredoka',ui-rounded,system-ui,sans-serif; font-weight:700; color:var(--pink-deep); font-size:19px; }
+  header.top a, header.top .ghost { color:var(--pink-deep); font-size:13px; font-weight:600; text-decoration:none; }
+  .wrap { max-width:1000px; margin:0 auto; padding:24px 22px 60px; }
+  h1 { font-family:'Fredoka',system-ui; font-size:26px; margin:6px 0 4px; }
+  .sub { color:var(--muted); margin:0 0 22px; font-size:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px; }
+  .board { background:#fff; border:1px solid var(--line); border-radius:18px; padding:18px; display:flex; flex-direction:column; gap:8px;
+    box-shadow:0 4px 14px rgba(255,20,147,.06); cursor:pointer; }
+  .board:hover { box-shadow:0 10px 26px rgba(255,20,147,.16); }
+  .board .thumb { width:100%; aspect-ratio:1.6; border-radius:12px; background:#fce4ec center/cover no-repeat; display:grid; place-items:center; font-size:38px; color:#d6a8c6; }
+  .board h3 { font-family:'Fredoka',system-ui; font-weight:700; font-size:17px; margin:6px 0 0; }
+  .board .meta { font-size:12px; color:var(--muted); }
+  .empty { background:#fff; border:1px dashed var(--line); border-radius:18px; padding:36px; text-align:center; color:var(--muted); }
+  .empty strong { color:var(--ink); }
+  button, .btn { border:none; cursor:pointer; font:inherit; font-weight:600; border-radius:999px; padding:10px 18px; font-size:14px; background:var(--pink); color:#fff; text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+  button:hover { background:var(--pink-deep); }
+  .btn.ghost { background:#fff0f6; color:var(--pink-deep); }
+  .btn.ghost:hover { background:#ffe3ef; }
+  .btn.danger { background:transparent; color:#dc2626; }
+  .scrim { position:fixed; inset:0; background:rgba(31,41,55,.45); display:none; place-items:center; z-index:1000; padding:20px; }
+  .scrim.open { display:grid; }
+  .modal { background:#fff; border-radius:20px; max-width:480px; width:100%; padding:24px; box-shadow:0 24px 70px rgba(0,0,0,.25); max-height:90vh; overflow:auto; }
+  .modal h3 { margin:0 0 8px; font-family:'Fredoka',system-ui; font-size:19px; }
+  .modal .sub { color:var(--muted); font-size:13px; margin:0 0 16px; }
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px; }
+  .field input, .field select, .field textarea { width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; box-sizing:border-box; }
+  .foot { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
+  .err { color:#dc2626; font-size:13px; min-height:18px; margin-top:6px; }
+  .row { display:flex; align-items:center; gap:10px; padding:10px 12px; background:#fff7fb; border:1px solid var(--line); border-radius:12px; margin-bottom:6px; }
+  .row .thumb { width:42px; height:42px; border-radius:8px; background:#fce4ec center/cover no-repeat; flex:none; display:grid; place-items:center; font-size:18px; color:#d6a8c6; }
+  .row .meta { flex:1; min-width:0; }
+  .row .name { font-weight:600; font-size:14px; }
+  .row .extra { font-size:12px; color:var(--muted); }
+  .share-line { display:flex; align-items:center; gap:10px; padding:8px 10px; }
+  .share-line input { width:auto; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><img src="/icons/myworld-globe.png" alt="" style="height:1.2em;vertical-align:-3px;margin-right:.15em;">My World</div>
+  <div style="display:flex;gap:14px;">
+    <a href="/therapist">My children</a>
+    <a href="#" id="signout">Sign out</a>
+  </div>
+</header>
+<div class="wrap">
+  <h1>My boards 🧩</h1>
+  <p class="sub">Build a board once — a category of tiles you use in practice — and share it with any of the children on your roster. You own these boards; only you can edit them. A parent can remove your board from their child's view at any time.</p>
+  <div style="margin-bottom:18px;"><button id="new-board">＋ New board</button></div>
+  <div id="grid" class="grid"><div class="empty" id="empty" hidden></div></div>
+</div>
+
+<!-- New board modal -->
+<div class="scrim" id="new-scrim">
+  <div class="modal">
+    <h3>New board</h3>
+    <p class="sub">A board appears as a top-level chip in the section you choose, on every child you share it with.</p>
+    <div class="field"><label>Board name</label><input id="nb-label" type="text" placeholder="e.g. Therapy toys"></div>
+    <div class="field"><label>Which section</label>
+      <select id="nb-section">
+        <option value="nouns">Nouns</option>
+        <option value="verbs">Verbs</option>
+        <option value="people">People</option>
+        <option value="needs">Needs</option>
+      </select>
+    </div>
+    <p class="err" id="nb-err"></p>
+    <div class="foot">
+      <button class="btn ghost" id="nb-cancel">Cancel</button>
+      <button id="nb-create">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Board editor modal -->
+<div class="scrim" id="edit-scrim">
+  <div class="modal" style="max-width:640px;">
+    <h3 id="ed-title">Board</h3>
+    <p class="sub" id="ed-sub"></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+      <button class="btn ghost" id="ed-add-tile">＋ Add tile</button>
+      <button class="btn ghost" id="ed-share">📤 Share with…</button>
+      <button class="btn danger" id="ed-delete" style="margin-left:auto;">Delete board</button>
+    </div>
+    <div id="ed-items"></div>
+    <div class="foot"><button class="btn ghost" id="ed-close">Close</button></div>
+  </div>
+</div>
+
+<!-- Add tile modal (reuses the Add-tile flow from parent.html in a stripped-down form) -->
+<div class="scrim" id="tile-scrim">
+  <div class="modal" style="max-width:460px;">
+    <h3 id="ti-title">Add a tile</h3>
+    <p class="sub" id="ti-sub"></p>
+    <div class="field"><label>Label</label><input id="ti-label" type="text" maxlength="60" placeholder="e.g. ball"></div>
+    <div style="border:1px solid #f3c6dd;background:#fff5fa;border-radius:12px;padding:12px;margin-bottom:14px;">
+      <div style="font-weight:700;color:var(--pink-deep);margin-bottom:4px;">✨ Make from a photo</div>
+      <p class="sub" style="margin:0 0 8px;">Pick a photo — we'll create the artwork in My World's standard style.</p>
+      <input type="file" id="ti-photo" accept="image/*" style="display:none;">
+      <button id="ti-magic" style="width:100%;">📷 Choose photo & make it</button>
+      <p class="sub" id="ti-magic-status" style="margin:8px 0 0;">—</p>
+      <img id="ti-preview" alt="" style="display:none;width:100%;max-width:200px;border-radius:12px;margin-top:8px;">
+    </div>
+    <div class="field"><label>Or upload an image</label><input type="file" id="ti-image" accept="image/*"></div>
+    <div class="field"><label>Phrase to speak (defaults to label)</label>
+      <input id="ti-phrase" type="text" maxlength="120" placeholder="e.g. ball">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn ghost" id="ti-gen-audio">Generate audio</button>
+      <input type="file" id="ti-sound" accept="audio/*" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:10px;">
+    </div>
+    <p class="sub" id="ti-sound-status" style="margin:6px 0 0;">No sound yet</p>
+    <p class="err" id="ti-err"></p>
+    <div class="foot">
+      <button class="btn ghost" id="ti-cancel">Cancel</button>
+      <button id="ti-save">Save tile</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share-with modal -->
+<div class="scrim" id="share-scrim">
+  <div class="modal">
+    <h3>Share this board</h3>
+    <p class="sub">Pick the children who should see this board. They see it immediately. Parents can remove it from their child's view at any time.</p>
+    <div id="share-list"></div>
+    <p class="err" id="share-err"></p>
+    <div class="foot"><button class="btn ghost" id="share-close">Done</button></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  let me = null;          // current user
+  let myChildren = [];     // children I can share to
+  let boards = [];         // my templates
+  let editing = null;      // { board, categories, items } when the editor is open
+  let pendingImage = null, pendingSound = null;
+
+  // ---- Bootstrap ----
+  async function start() {
+    try {
+      const r = await fetch('/api/auth/me', { credentials:'same-origin' });
+      if (!r.ok) { location.href = '/login?next=/therapist/library'; return; }
+      me = (await r.json()).user;
+    } catch (_) { location.href = '/login?next=/therapist/library'; return; }
+    try {
+      const r = await fetch('/api/my-children', { credentials:'same-origin' });
+      if (r.ok) myChildren = (await r.json()).children || [];
+    } catch (_) {}
+    await loadBoards();
+  }
+
+  async function loadBoards() {
+    const grid = $('grid');
+    try {
+      const r = await fetch('/api/therapist/boards', { credentials:'same-origin' });
+      const d = await r.json().catch(()=>({}));
+      boards = d.boards || [];
+    } catch (_) { boards = []; }
+    if (!boards.length) {
+      grid.innerHTML = '<div class="empty"><strong>No boards yet.</strong><br>Tap "＋ New board" above to create your first one.</div>';
+      return;
+    }
+    grid.innerHTML = boards.map(b => `
+      <div class="board" data-board-id="${b.id}">
+        ${b.imageKey
+          ? `<div class="thumb" style="background-image:url(/api/media?key=${encodeURIComponent(b.imageKey)})"></div>`
+          : `<div class="thumb">🧩</div>`}
+        <h3>${esc(b.label)}</h3>
+        <div class="meta">${b.section} · ${b.itemCount} tile${b.itemCount===1?'':'s'} · shared with ${b.shareCount} ${b.shareCount===1?'child':'children'}</div>
+      </div>`).join('');
+  }
+
+  $('grid').addEventListener('click', (e) => {
+    const card = e.target.closest('[data-board-id]'); if (!card) return;
+    openEditor(Number(card.dataset.boardId));
+  });
+
+  // ---- New board ----
+  $('new-board').addEventListener('click', () => { $('nb-label').value = ''; $('nb-section').value = 'nouns'; $('nb-err').textContent = ''; $('new-scrim').classList.add('open'); $('nb-label').focus(); });
+  $('nb-cancel').addEventListener('click', () => $('new-scrim').classList.remove('open'));
+  $('new-scrim').addEventListener('click', (e) => { if (e.target === $('new-scrim')) $('new-scrim').classList.remove('open'); });
+  $('nb-create').addEventListener('click', async () => {
+    const label = $('nb-label').value.trim(); const section = $('nb-section').value;
+    if (!label) { $('nb-err').textContent = 'Please enter a board name.'; return; }
+    const btn = $('nb-create'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Creating…';
+    try {
+      const r = await fetch('/api/therapist/boards', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+        body: JSON.stringify({ section, label }) });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) { $('nb-err').textContent = d.error || 'Could not create.'; return; }
+      $('new-scrim').classList.remove('open'); await loadBoards();
+      openEditor(d.board.id);
+    } finally { btn.disabled = false; btn.textContent = pv; }
+  });
+
+  // ---- Editor ----
+  async function openEditor(boardId) {
+    try {
+      const r = await fetch('/api/therapist/board?id=' + boardId, { credentials:'same-origin' });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) return alert(d.error || 'Could not load board.');
+      editing = d;
+    } catch (_) { return alert('Could not load board.'); }
+    $('ed-title').textContent = editing.board.label;
+    $('ed-sub').textContent = editing.board.section + ' · ' + editing.items.length + ' tile' + (editing.items.length === 1 ? '' : 's');
+    renderItems();
+    $('edit-scrim').classList.add('open');
+  }
+  function renderItems() {
+    const items = editing.items || [];
+    $('ed-items').innerHTML = items.length
+      ? items.map(it => `
+          <div class="row" data-item-id="${it.id}">
+            ${it.imageKey
+              ? `<div class="thumb" style="background-image:url(/api/media?key=${encodeURIComponent(it.imageKey)})"></div>`
+              : `<div class="thumb">🧩</div>`}
+            <div class="meta"><div class="name">${esc(it.label)}</div><div class="extra">${it.soundKey ? '🔊 has audio' : 'no audio yet'}</div></div>
+            <button class="btn danger" data-del-item="${it.id}">Delete</button>
+          </div>`).join('')
+      : '<div class="sub" style="font-style:italic;">No tiles yet — tap "＋ Add tile" above.</div>';
+  }
+  $('ed-close').addEventListener('click', () => { $('edit-scrim').classList.remove('open'); loadBoards(); });
+  $('ed-items').addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-del-item]'); if (!del) return;
+    if (!confirm('Delete this tile?')) return;
+    del.disabled = true;
+    const r = await fetch('/api/items?id=' + del.dataset.delItem, { method:'DELETE', credentials:'same-origin' });
+    if (!r.ok) { del.disabled = false; const d = await r.json().catch(()=>({})); alert(d.error || 'Could not delete.'); return; }
+    // Refresh
+    await openEditor(editing.board.id);
+  });
+  $('ed-delete').addEventListener('click', async () => {
+    if (!editing) return;
+    if (!confirm('Delete this entire board and all its tiles? This cannot be undone.')) return;
+    const r = await fetch('/api/categories?id=' + editing.board.id, { method:'DELETE', credentials:'same-origin' });
+    if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error || 'Could not delete.'); return; }
+    $('edit-scrim').classList.remove('open'); editing = null; await loadBoards();
+  });
+
+  // ---- Add tile ----
+  $('ed-add-tile').addEventListener('click', () => {
+    if (!editing) return;
+    pendingImage = null; pendingSound = null;
+    $('ti-title').textContent = 'Add a tile to "' + editing.board.label + '"';
+    $('ti-sub').textContent = '';
+    ['ti-label','ti-phrase','ti-photo','ti-image','ti-sound'].forEach(id => { $(id).value = ''; });
+    $('ti-magic-status').textContent = '—';
+    $('ti-sound-status').textContent = 'No sound yet';
+    $('ti-err').textContent = '';
+    const prev = $('ti-preview'); prev.style.display = 'none'; prev.removeAttribute('src');
+    $('tile-scrim').classList.add('open');
+  });
+  $('ti-cancel').addEventListener('click', () => $('tile-scrim').classList.remove('open'));
+  async function downscale(file, max = 1024, q = 0.85) {
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+      const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(bmp, 0, 0, w, h);
+      if (bmp.close) bmp.close();
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', q));
+      return (blob && blob.size < file.size) ? blob : file;
+    } catch (_) { return file; }
+  }
+  $('ti-magic').addEventListener('click', () => {
+    if (!$('ti-label').value.trim()) { $('ti-err').textContent = 'Type a label first.'; return; }
+    $('ti-err').textContent = ''; $('ti-photo').click();
+  });
+  $('ti-photo').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+    const label = $('ti-label').value.trim(); const phrase = $('ti-phrase').value.trim() || label;
+    const btn = $('ti-magic'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Working…';
+    try {
+      $('ti-magic-status').textContent = '🎨 Creating the artwork…';
+      const photo = await downscale(file);
+      const ir = await fetch('/api/generate-image?label=' + encodeURIComponent(label), { method:'POST', headers:{'Content-Type':'image/jpeg'}, credentials:'same-origin', body: photo });
+      if (!ir.ok) throw new Error('Image failed (' + ir.status + ')');
+      pendingImage = await ir.blob();
+      const u = URL.createObjectURL(pendingImage); const prev = $('ti-preview'); prev.src = u; prev.style.display = 'block';
+      $('ti-magic-status').textContent = '🔊 Making the voice…';
+      const tr = await fetch('/api/tts', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify({ text: phrase }) });
+      if (tr.ok) { pendingSound = await tr.blob(); $('ti-sound-status').textContent = 'AI voice ready ✓'; }
+      $('ti-magic-status').textContent = '✅ Ready — tap Save tile.';
+    } catch (err) { $('ti-magic-status').textContent = '—'; $('ti-err').textContent = String(err.message || err); }
+    finally { btn.disabled = false; btn.textContent = pv; }
+  });
+  $('ti-image').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    pendingImage = await downscale(f); $('ti-magic-status').textContent = 'Image selected ✓';
+    const u = URL.createObjectURL(pendingImage); const prev = $('ti-preview'); prev.src = u; prev.style.display = 'block';
+  });
+  $('ti-gen-audio').addEventListener('click', async () => {
+    const phrase = ($('ti-phrase').value.trim() || $('ti-label').value.trim());
+    if (!phrase) { $('ti-err').textContent = 'Type a label or phrase first.'; return; }
+    $('ti-err').textContent = '';
+    const btn = $('ti-gen-audio'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Generating…';
+    try {
+      const r = await fetch('/api/tts', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify({ text: phrase }) });
+      if (!r.ok) throw new Error('TTS failed');
+      pendingSound = await r.blob(); $('ti-sound-status').textContent = 'Voice ready ✓';
+    } catch (err) { $('ti-err').textContent = String(err.message || err); }
+    finally { btn.disabled = false; btn.textContent = pv; }
+  });
+  $('ti-sound').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) { pendingSound = f; $('ti-sound-status').textContent = 'Sound selected ✓'; } });
+
+  async function upload(blob, kind, ext, type) {
+    const r = await fetch('/api/upload?kind=' + kind + '&ext=' + ext, { method:'POST', headers:{'Content-Type':type}, credentials:'same-origin', body: blob });
+    const d = await r.json().catch(()=>({})); if (!r.ok) throw new Error(d.error || ('upload ' + r.status)); return d.key;
+  }
+  $('ti-save').addEventListener('click', async () => {
+    const label = $('ti-label').value.trim();
+    if (!label) { $('ti-err').textContent = 'Please enter a label.'; return; }
+    if (!pendingImage) { $('ti-err').textContent = 'Add a picture first.'; return; }
+    const btn = $('ti-save'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Saving…'; $('ti-err').textContent = '';
+    try {
+      const imageKey = await upload(pendingImage, 'image', 'jpg', 'image/jpeg');
+      let soundKey = null;
+      if (pendingSound) { const isWav = (pendingSound.type || '').includes('wav'); soundKey = await upload(pendingSound, 'sound', isWav ? 'wav' : 'mp3', pendingSound.type || 'audio/mpeg'); }
+      const r = await fetch('/api/items', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+        body: JSON.stringify({ section: editing.board.section, categoryId: editing.board.id, label, imageKey, soundKey }) });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) throw new Error(d.error || ('save ' + r.status));
+      $('tile-scrim').classList.remove('open');
+      await openEditor(editing.board.id);
+    } catch (err) { $('ti-err').textContent = String(err.message || err); }
+    finally { btn.disabled = false; btn.textContent = pv; }
+  });
+
+  // ---- Share ----
+  $('ed-share').addEventListener('click', async () => {
+    if (!editing) return; $('share-err').textContent = '';
+    const list = $('share-list');
+    if (!myChildren.length) { list.innerHTML = '<div class="sub">You don\'t have any children on your roster yet — accept an invite first.</div>'; $('share-scrim').classList.add('open'); return; }
+    // Fetch current shares to set checkbox state
+    let active = new Set();
+    try {
+      const r = await fetch('/api/therapist/board-share?categoryId=' + editing.board.id, { credentials:'same-origin' });
+      if (r.ok) { const d = await r.json(); active = new Set((d.shares || []).filter(s => s.status === 'active').map(s => s.childId)); }
+    } catch (_) {}
+    list.innerHTML = myChildren.map(c => `
+      <label class="share-line">
+        ${c.imageKey
+          ? `<span class="thumb" style="width:36px;height:36px;border-radius:50%;background:#fce4ec center/cover no-repeat;background-image:url(/api/media?key=${encodeURIComponent(c.imageKey)});flex:none;"></span>`
+          : `<span class="thumb" style="width:36px;height:36px;border-radius:50%;background:#fce4ec;display:grid;place-items:center;font-size:16px;color:#d6a8c6;flex:none;">🧒</span>`}
+        <input type="checkbox" data-share-child="${esc(c.childId)}"${active.has(c.childId) ? ' checked' : ''}>
+        <span style="flex:1;">${esc(c.name)}</span>
+      </label>`).join('');
+    $('share-scrim').classList.add('open');
+  });
+  $('share-list').addEventListener('change', async (e) => {
+    const cb = e.target.closest('input[data-share-child]'); if (!cb) return;
+    cb.disabled = true;
+    const method = cb.checked ? 'POST' : 'DELETE';
+    const r = await fetch('/api/therapist/board-share?categoryId=' + editing.board.id + '&childId=' + encodeURIComponent(cb.dataset.shareChild), { method, credentials:'same-origin' });
+    if (!r.ok) { const d = await r.json().catch(()=>({})); $('share-err').textContent = d.error || 'Could not save.'; cb.checked = !cb.checked; }
+    cb.disabled = false;
+  });
+  $('share-close').addEventListener('click', () => { $('share-scrim').classList.remove('open'); loadBoards(); });
+
+  $('signout').addEventListener('click', async (e) => {
+    e.preventDefault();
+    try { await fetch('/api/auth/logout', { method:'POST', credentials:'same-origin' }); } catch (_) {}
+    location.href = '/login';
+  });
+
+  start();
+})();
+</script>
+</body>
+</html>

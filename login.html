@@ -95,7 +95,7 @@
       <div class="row2">
         <div>
           <label for="s-role">Role</label>
-          <select id="s-role"><option value="admin">admin</option><option value="parent">parent</option><option value="therapist">therapist</option></select>
+          <select id="s-role"><option value="admin">admin</option><option value="parent">parent</option><option value="therapist">therapist</option><option value="school_team">school team</option></select>
         </div>
         <div>
           <label for="s-slug">Child slug</label>
@@ -122,8 +122,9 @@
   function linksFor(user) {
     const slug = user.slug || 'fletcherpeterson';
     const out = [];
-    if (user.role === 'therapist') {
-      out.push(['🧑‍⚕️ My children', '/therapist']);
+    if (user.role === 'therapist' || user.role === 'school_team') {
+      const label = user.role === 'school_team' ? '🏫 My children' : '🧑‍⚕️ My children';
+      out.push([label, '/therapist']);
     }
     if (user.role === 'admin' || user.role === 'parent') {
       if (user.slug) {
