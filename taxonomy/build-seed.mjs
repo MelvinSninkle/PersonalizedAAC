@@ -585,7 +585,7 @@ group('Needs', 'Social', 'Gestalts', 'needs.gestalts', { mode: 'concept', photo:
   ['all_done_eat',     'all done eating',  'a friendly young child seated at a small table holding both hands up palms out next to a clean empty plate', { gestaltMeaning: 'finished a meal', gestaltTargets: ['all', 'done', 'eat'] }],
   ['where_are_you',    'where are you',    'a friendly young child peeking around a doorway with both hands cupped to their mouth, calling out', { gestaltMeaning: 'asking for location', gestaltTargets: ['where', 'are', 'you'] }],
   ['whats_that',       "what's that",      'a friendly young child pointing at a small cheerful object with one hand, the other hand on chin, curious look', { gestaltMeaning: 'asking to name', gestaltTargets: ['what', 'is', 'that'], pron: "what's that" }],
-  ['i_love_you',       'I love you',       'a friendly young child making a heart shape with both hands held in front of their chest, big smile', { gestaltMeaning: 'expressing love', gestaltTargets: ['i', 'love', 'you'], pron: 'I love you' }],
+  ['i_love_you',       'I love you',       'a friendly young child making a heart shape with both hands held in front of their chest, big smile', { gestaltMeaning: 'expressing love', gestaltTargets: ['i', 'love', 'you'], pron: 'I love you', audience: 'parent', notes: 'Family-context phrase. Surface as a parent-authoring suggestion only — the tile itself is available everywhere, but teachers/therapists shouldn\'t be prompted to add it to their boards.' }],
   ['yes_please',       'yes please',       'a friendly young child nodding with both hands together in a polite gesture, small heart above', { gestaltMeaning: 'polite acceptance', gestaltTargets: ['yes', 'please'] }],
   ['no_thank_you',     'no thank you',     'a friendly young child gently shaking their head with one open hand raised politely', { gestaltMeaning: 'polite refusal', gestaltTargets: ['no', 'thank', 'you'] }],
   ['excuse_me',        'excuse me',        'a friendly young child with one hand gently raised, leaning forward politely to interrupt', { gestaltMeaning: 'polite interruption', gestaltTargets: ['excuse', 'me'] }],
@@ -594,7 +594,7 @@ group('Needs', 'Social', 'Gestalts', 'needs.gestalts', { mode: 'concept', photo:
   ['i_see_you',        'I see you',        'a friendly young child pointing at the viewer with a big delighted smile, eyes bright', { gestaltMeaning: 'connection greeting', gestaltTargets: ['i', 'see', 'you'], pron: 'I see you' }],
   ['time_to',          'time to',          'a friendly young child standing beside a soft clock with a forward arrow toward an activity scene', { gestaltMeaning: 'transitioning to an activity', gestaltTargets: ['time', 'to'], notes: 'Often paired with a specific activity tile.' }],
   ['happy_birthday',   'happy birthday',   'a friendly young child standing beside a small birthday cake with candles, party hat on, big smile', { gestaltMeaning: 'birthday greeting', gestaltTargets: ['happy', 'birthday'] }],
-  ['i_miss_you',       'I miss you',       'a friendly young child holding a small photo of a family member close to their chest with both hands, soft warm expression', { gestaltMeaning: 'expressing missing someone', gestaltTargets: ['i', 'miss', 'you'], pron: 'I miss you' }],
+  ['i_miss_you',       'I miss you',       'a friendly young child holding a small photo of a family member close to their chest with both hands, soft warm expression', { gestaltMeaning: 'expressing missing someone', gestaltTargets: ['i', 'miss', 'you'], pron: 'I miss you', audience: 'parent', notes: 'Family-context phrase. Same audience treatment as "I love you".' }],
 ]);
 
 // =============================================================================
@@ -637,9 +637,12 @@ group('Needs', 'Alphabet', '', 'needs.abc', { mode: 'object', photo: 'none', ...
 ]);
 
 // =============================================================================
-// TIER 6 — NUMBERS 11-30 + tens to 100
-// Visual count-objects extending the 1-10 row. After 20 we keep the explicit
-// rows but include only the tens (30, 40 … 100); a 47-stars tile is not useful.
+// TIER 6 — NUMBERS 11-100
+// Visual count-objects extending the 1-10 row. For 11-30 we render a tidy grid
+// of the actual count; for 31-99 we use a numeric card (digit on a friendly
+// card) — past about 30 a literal star-grid is no longer subitizable for a
+// toddler and the digit becomes the useful cue. 100 gets the "10 rows of 10"
+// hundreds-grid as a hundredths-chart anchor.
 // All non-core / stage 5+. Subject phrasing follows the existing 1-10 style.
 // =============================================================================
 const NUMBER_ROWS = [];
@@ -651,14 +654,20 @@ for (let n = 11; n <= 30; n++) {
     EXT,
   ]);
 }
-for (const n of [40, 50, 60, 70, 80, 90, 100]) {
+for (let n = 31; n <= 99; n++) {
   NUMBER_ROWS.push([
     'n_' + n,
     String(n),
-    `${n} tiny bright dots arranged in a clear grid, evenly spaced, plain pastel background`,
+    `a single large friendly numeric card showing the bold digits "${n}" centered on a soft pastel background, gentle rounded sans-serif`,
     EXT,
   ]);
 }
+NUMBER_ROWS.push([
+  'n_100',
+  '100',
+  '100 tiny bright dots arranged as a 10-by-10 hundreds-chart grid, evenly spaced, plain pastel background',
+  EXT,
+]);
 group('Needs', 'Numbers', '', 'needs.numbers', { mode: 'object', photo: 'none' }, NUMBER_ROWS);
 
 // =============================================================================
@@ -996,6 +1005,363 @@ group('Nouns', 'Personalize', 'Media (family-authored)', 'personal.media', { ...
   ['favorite_character','My character',   '', { promptOverride: 'SKELETON: image of the character (toy figure photo works great). The character your child names everything after.' }],
   ['favorite_app',      'My app',         '', { promptOverride: 'SKELETON: photo of the iPad showing the app icon, or the icon itself. Specific app, not "an app" — the one that gets asked for.' }],
 ]);
+
+// =============================================================================
+// TIER 19 — TD SNAP CORE PARITY: GRAMMAR EXTENSIONS
+// Helping verbs, more prepositions, conjunctions, negation, quantifiers,
+// pronoun extensions. All Stage 5+ broadening vocabulary, concept-mode, no
+// photo. Targets parity with the TD Snap Core First syntax layer.
+// =============================================================================
+group('Needs', 'Linking', 'Helping verbs', 'needs.linking.helping', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['am',     'am',     'a friendly young child pointing to themselves with one thumb, simple equals sign next to them indicating "I am ___"'],
+  ['are',    'are',    'two friendly young children side by side, each pointing at the other, a soft equals sign between them indicating "you/we are ___"'],
+  ['was',    'was',    'a friendly young child looking back over their shoulder with a soft backward arrow indicating past tense'],
+  ['have',   'have',   'a friendly young child holding a single small cheerful object with both hands at chest height, "I have ___"'],
+  ['has',    'has',    'a friendly young child gesturing toward a teddy bear next to another child, "she/he has ___"'],
+  ['had',    'had',    'a friendly young child looking thoughtfully at an empty hand, with a soft past-tense backward arrow above'],
+  ['could',  'could',  'a friendly young child shrugging gently with both palms up, a soft "maybe" curved arrow above them'],
+  ['would',  'would',  'a friendly young child considering two small cheerful objects in front of them, finger tapping chin'],
+]);
+
+group('Needs', 'Linking', 'Conjunctions', 'needs.linking.conj', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['or',  'or',  'two cheerful objects (a small ball and a small star) on either side of a soft forked path icon'],
+  ['so',  'so',  'a soft arrow leading from a small cheerful event icon to a friendly young child reacting with a small "got it!" face'],
+  ['if',  'if',  'a small cheerful question mark hovering above a forked path, gentle "what if?" feeling'],
+]);
+
+group('Needs', 'Linking', 'Negation', 'needs.linking.neg', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['not',     'not',     'a friendly young child gently shaking their head with one finger raised and a soft red diagonal "no" line near a small cheerful object'],
+  ['dont',    "don't",   'a friendly young child holding up both flat hands in a polite refusing gesture, soft red diagonal line nearby', { pron: 'dont' }],
+]);
+
+group('Needs', '', 'Prepositions', 'needs.prep', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['at',       'at',       'a friendly young child standing at a clearly marked spot (a small painted X on the floor), pointing down to it'],
+  ['from',     'from',     'a soft arrow leaving a small cheerful house and heading outward, indicating origin'],
+  ['of',       'of',       'a cheerful gift box being gently unwrapped by a friendly young child, revealing a small toy inside ("part of")'],
+  ['through',  'through',  'a friendly young child stepping through a small open doorway, soft motion lines'],
+  ['around',   'around',   'a friendly young child running in a soft circular path around a small tree, dotted-circle indicator'],
+  ['inside',   'inside',   'a friendly young child peeking out from inside a small cheerful cardboard box, both hands on the rim'],
+  ['outside',  'outside',  'a friendly young child standing on green grass outside a small house, sun above'],
+]);
+
+group('Needs', 'Quantifiers', '', 'needs.quant', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['all',     'all',     'a friendly young child standing beside a row of cheerful colorful blocks, both arms wide open indicating "all of them"'],
+  ['some',    'some',    'a small handful of cheerful colorful blocks gathered together, with several more remaining off to the side'],
+  ['many',    'many',    'a large group of cheerful colorful balls piled together, plain background'],
+  ['few',     'few',     'three small cheerful colorful balls standing alone on a plain background'],
+  ['much',    'much',    'a small cheerful overflowing cup with a sparkle above, gesture of "this much!"'],
+  ['any',     'any',     'a friendly young child shrugging gently with palms up, beside a soft question-mark icon — "any?"'],
+  ['none',    'none',    'an empty cheerful cup with a small soft "0" sparkle above, plain background'],
+  ['every',   'every',   'a friendly young child holding a single block out of a complete neat row, indicating "each one"'],
+]);
+
+group('People', 'Pronouns', 'Extended', 'people.pronouns.more', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['him',     'him',     'a friendly young child pointing toward a small boy figure off to the side, palm open'],
+  ['her',     'her',     'a friendly young child pointing toward a small girl figure off to the side, palm open'],
+  ['his',     'his',     'a friendly young boy holding a small toy close, an arrow pointing back to him indicating possession'],
+  ['hers',    'hers',    'a friendly young girl holding a small toy close, an arrow pointing back to her indicating possession'],
+  ['these',   'these',   'a friendly young child gesturing down at a small cluster of three nearby cheerful objects with both hands'],
+  ['those',   'those',   'a friendly young child pointing forward toward a small cluster of three cheerful objects in the distance'],
+]);
+
+// =============================================================================
+// TIER 20 — DESCRIPTOR PARITY (good/bad/same/different/full/empty/...)
+// =============================================================================
+group('Needs', 'Describing', 'Core descriptors', 'needs.describe.core', { mode: 'object', photo: 'none', ...EXT }, [
+  ['good',      'good',      'a cheerful round green check mark with a small sparkle, plain background'],
+  ['bad',       'bad',       'a soft cheerful red X with a small frown, plain background (gentle, not harsh)'],
+  ['same',      'same',      'two identical cheerful round blue balls side by side on a plain background'],
+  ['different', 'different', 'a cheerful round blue ball beside a bright yellow star, plain background'],
+  ['full',      'full',      'a cheerful cup filled to the brim with bright orange juice'],
+  ['empty',     'empty',     'a cheerful empty cup with a small sparkle indicating "nothing inside"'],
+  ['on',        'on',        'a small bright lamp glowing warmly, switch flipped up, "powered on" feel', { notes: 'Power state "on" — distinct from spatial "on" preposition.' }],
+  ['off',       'off',       'a small dim lamp with a darkened bulb, switch flipped down, "powered off" feel'],
+  ['broken',    'broken',    'a small toy car with a single wheel detached and a soft cartoon crack line — needs fixing (not distressing)'],
+  ['easy',      'easy',      'a friendly young child smiling broadly while gently completing a simple two-piece puzzle, thumbs up'],
+  ['heavy',     'heavy',     'a friendly young child straining lightly to lift a single large box, small effort lines (not distressing)'],
+  ['light',     'light_wt',  'a friendly young child easily lifting a single small feather above their head with one finger', { notes: 'Weight "light" — distinct from the visual "light" (lamp) in Home.' }],
+]);
+
+// =============================================================================
+// TIER 21 — VEHICLES EXPANSION (Priddy First-100-Trucks parity)
+// =============================================================================
+group('Nouns', 'Vehicles', 'Emergency', 'nouns.vehicles.emerg', { mode: 'object', photo: 'none', ...EXT }, [
+  ['fire_truck',  'fire truck',  'a friendly cartoon red fire truck with a small ladder on top, cheerful style', { pron: 'fire truck' }],
+  ['police_car',  'police car',  'a friendly cartoon black-and-white police car with a small light bar on top', { pron: 'police car' }],
+  ['ambulance',   'ambulance',   'a friendly cartoon white ambulance with a small red cross on the side and a small light on top'],
+  ['helicopter',  'helicopter',  'a friendly cartoon blue helicopter with spinning rotor blades, hovering low'],
+]);
+group('Nouns', 'Vehicles', 'Work', 'nouns.vehicles.work', { mode: 'object', photo: 'none', ...EXT }, [
+  ['tractor',       'tractor',       'a friendly cartoon green tractor with large wheels in a small field'],
+  ['dump_truck',    'dump truck',    'a friendly cartoon yellow dump truck with the bed slightly tilted, small rocks tumbling out', { pron: 'dump truck' }],
+  ['garbage_truck', 'garbage truck', 'a friendly cartoon green garbage truck with an arm lifting a small bin', { pron: 'garbage truck' }],
+  ['crane',         'crane',         'a friendly cartoon yellow construction crane with a long arm and a hook lowering'],
+  ['cement_mixer',  'cement mixer',  'a friendly cartoon orange cement mixer truck with a rotating drum', { pron: 'cement mixer' }],
+  ['bulldozer',     'bulldozer',     'a friendly cartoon yellow bulldozer with a wide front blade pushing a small pile of dirt'],
+]);
+group('Nouns', 'Vehicles', 'Personal', 'nouns.vehicles.personal', { mode: 'object', photo: 'none', ...EXT }, [
+  ['motorcycle', 'motorcycle', 'a friendly cartoon red motorcycle with two wheels, parked, plain background'],
+  ['scooter',    'scooter',    "a friendly cartoon child's kick scooter with two small wheels"],
+  ['skateboard', 'skateboard', 'a friendly cartoon colorful skateboard with four small wheels'],
+  ['taxi',       'taxi',       'a friendly cartoon yellow taxi cab with a small "taxi" sign on top'],
+  ['race_car',   'race car',   'a friendly cartoon red race car with a small number circle on the side, soft motion lines', { pron: 'race car' }],
+  ['rv',         'RV',         'a friendly cartoon brown-and-white camper / RV with small windows', { pron: 'R V' }],
+]);
+group('Nouns', 'Vehicles', 'Air & Sea', 'nouns.vehicles.airsea', { mode: 'object', photo: 'none', ...EXT }, [
+  ['rocket',     'rocket',     'a friendly cartoon white rocket with a small red nose cone and gentle exhaust flames at the bottom'],
+  ['submarine',  'submarine',  'a friendly cartoon yellow submarine with a small periscope on top, underwater bubbles around it'],
+  ['sailboat',   'sailboat',   'a friendly cartoon white sailboat with a single triangular sail on calm blue water'],
+  ['ship',       'ship',       'a friendly cartoon blue cargo ship with a small smokestack on calm blue water'],
+  ['hot_air',    'hot air balloon', 'a friendly cartoon red-and-yellow hot air balloon with a small basket, drifting in a soft blue sky', { pron: 'hot air balloon' }],
+]);
+
+// =============================================================================
+// TIER 22 — SPORTS (NEW)
+// =============================================================================
+group('Nouns', 'Sports', '', 'nouns.sports', { mode: 'object', photo: 'none', ...EXT, notes: 'Equipment-focused — the canonical tile shows the ball/equipment; the doing-the-sport verb lives elsewhere.' }, [
+  ['soccer',      'soccer',      'a single classic black-and-white soccer ball, centered'],
+  ['basketball',  'basketball',  'a single bright orange basketball with black seam lines, centered'],
+  ['baseball',    'baseball',    'a single white baseball with red stitching, centered'],
+  ['football',    'football',    'a single brown American football with white laces, centered'],
+  ['tennis',      'tennis',      'a single bright yellow-green tennis ball, centered'],
+  ['hockey',      'hockey',      'a single black hockey puck and a small wooden stick beside it, plain background'],
+  ['golf',        'golf',        'a single white golf ball on a small wooden tee, plain background'],
+  ['bowling',     'bowling',     'a single black bowling ball beside a small white pin, plain background'],
+  ['skating',     'skating',     'a single pair of white ice skates with silver blades, plain background'],
+  ['swimming',    'swimming',    'a friendly young child swimming with a kickboard, soft water around them', { mode: 'concept' }],
+  ['gymnastics',  'gymnastics',  'a friendly young child mid-cartwheel on a soft mat, cheerful expression', { mode: 'concept' }],
+  ['dancing',     'dancing',     'a friendly young child dancing joyfully with arms raised, soft music notes around them', { mode: 'concept' }],
+]);
+
+// =============================================================================
+// TIER 23 — MUSICAL INSTRUMENTS (NEW)
+// =============================================================================
+group('Nouns', 'Music', '', 'nouns.music', { mode: 'object', photo: 'none', ...EXT }, [
+  ['drum',       'drum',       'a single small cheerful drum with two crossed drumsticks on top'],
+  ['guitar',     'guitar',     'a single bright wooden acoustic guitar with six strings, plain background'],
+  ['piano',      'piano',      'a single small upright piano with black and white keys showing, plain background'],
+  ['violin',     'violin',     'a single small wooden violin with a bow beside it, plain background'],
+  ['trumpet',    'trumpet',    'a single bright brass trumpet, plain background'],
+  ['flute',      'flute',      'a single silver flute lying horizontally, plain background'],
+  ['xylophone',  'xylophone',  'a single small colorful child\'s xylophone with rainbow-colored bars and two small mallets'],
+  ['tambourine', 'tambourine', 'a single small tambourine with a colorful ribbon and small jingle disks'],
+  ['maracas',    'maracas',    'a single pair of small colorful maracas with curved handles, plain background'],
+  ['harmonica',  'harmonica',  'a single small silver harmonica, plain background'],
+]);
+
+// =============================================================================
+// TIER 24 — TOOLS (NEW)
+// =============================================================================
+group('Nouns', 'Tools', '', 'nouns.tools', { mode: 'object', photo: 'none', ...EXT, notes: 'Friendly toddler-safe cartoon style.' }, [
+  ['hammer',      'hammer',      'a single small friendly cartoon hammer with a wooden handle and a steel head, plain background'],
+  ['screwdriver', 'screwdriver', 'a single small friendly cartoon screwdriver with a red handle, plain background'],
+  ['wrench',      'wrench',      'a single small friendly cartoon adjustable wrench, plain background'],
+  ['saw',         'saw',         'a single small friendly cartoon handsaw with a wooden handle, plain background'],
+  ['drill',       'drill',       'a single small friendly cartoon power drill with a yellow body and a small bit, plain background'],
+  ['paintbrush',  'paintbrush',  'a single small friendly paintbrush with a wooden handle and bright bristles, dab of paint on the tip'],
+  ['toolbox',     'toolbox',     'a single small friendly red toolbox with a sturdy handle on top, lid closed'],
+]);
+
+// =============================================================================
+// TIER 25 — KITCHEN APPLIANCES (Home/Kitchen extension)
+// =============================================================================
+group('Nouns', 'Home', 'Kitchen', 'nouns.home.kitchen', { mode: 'object', photo: 'none', ...EXT, notes: 'Scene: kitchen' }, [
+  ['refrigerator', 'refrigerator', 'a single friendly cartoon white refrigerator with a small handle, plain background', { pron: 'refrigerator' }],
+  ['oven',         'oven',         'a single friendly cartoon white oven with a small window in the door, plain background'],
+  ['stove',        'stove',        'a single friendly cartoon stovetop with four small burner circles, plain background'],
+  ['microwave',    'microwave',    'a single friendly cartoon white microwave with a small window and button panel'],
+  ['sink',         'sink',         'a single friendly cartoon kitchen sink with a small faucet, plain background'],
+  ['dishwasher',   'dishwasher',   'a single friendly cartoon white dishwasher with a small handle on the front'],
+  ['blender',      'blender',      'a single friendly cartoon blender with a small clear pitcher and a colorful smoothie inside'],
+  ['toaster',      'toaster',      'a single friendly cartoon silver toaster with two small slots and a slice of bread peeking out'],
+  ['bowl',         'bowl',         'a single small cheerful empty bowl on a plain background'],
+  ['pot',          'pot',          'a single small cooking pot with a single handle, plain background'],
+  ['pan',          'pan',          'a single small frying pan with a single handle, plain background'],
+  ['knife',        'knife',        'a single small child-safe butter knife, plain background'],
+]);
+
+// =============================================================================
+// TIER 26 — BATHROOM ITEMS
+// =============================================================================
+group('Nouns', 'Home', 'Bathroom', 'nouns.home.bathroom', { mode: 'object', photo: 'none', ...EXT, notes: 'Scene: bathroom' }, [
+  ['toothbrush', 'toothbrush', "a single small child's toothbrush with colorful bristles, plain background"],
+  ['toothpaste', 'toothpaste', 'a single small tube of toothpaste with the cap on, plain background'],
+  ['comb',       'comb',       'a single small plastic comb, plain background'],
+  ['brush',      'hairbrush',  'a single small hairbrush with a wooden handle and soft bristles, plain background'],
+  ['mirror',     'mirror',     'a single small framed bathroom mirror reflecting a soft light, plain background'],
+  ['shampoo',    'shampoo',    'a single small friendly bottle of shampoo with a cheerful label, plain background'],
+  ['shower',     'shower',     'a single friendly cartoon shower head with a few soft water droplets falling'],
+  ['faucet',     'faucet',     'a single small friendly chrome faucet with a soft stream of water flowing'],
+]);
+
+// =============================================================================
+// TIER 27 — OUTDOOR / YARD
+// =============================================================================
+group('Nouns', 'Places', 'Outdoor', 'nouns.places.outdoor', { mode: 'object', photo: 'none', ...EXT, notes: 'Scene: outside' }, [
+  ['sandbox',   'sandbox',   "a single small wooden sandbox with bright sand and a small bucket and shovel inside"],
+  ['swing',     'swing',     "a single small playground swing hanging from soft ropes"],
+  ['slide',     'slide',     'a single small bright red playground slide with a small ladder', { notes: 'The play slide — distinct from the verb "slide".' }],
+  ['sprinkler', 'sprinkler', 'a single friendly garden sprinkler with soft water arcs in the air'],
+  ['hose',      'hose',      'a single coiled green garden hose with a small nozzle, plain background'],
+  ['sidewalk',  'sidewalk',  'a single section of friendly sidewalk with soft chalk drawings, plain background'],
+  ['driveway',  'driveway',  'a single small friendly driveway leading up to a small house, plain background'],
+  ['mailbox',   'mailbox',   'a single small friendly red mailbox with the flag up, plain background'],
+]);
+
+// =============================================================================
+// TIER 28 — SKY / SPACE
+// =============================================================================
+group('Nouns', 'Nature', 'Sky', 'nouns.nature.sky', { mode: 'object', photo: 'none', ...EXT }, [
+  ['cloud',     'cloud',     'a single soft fluffy white cloud on a pale blue sky background'],
+  ['planet',    'planet',    'a single friendly cartoon blue-and-green planet with a soft ring around it, plain dark background'],
+  ['comet',     'comet',     'a single friendly cartoon comet with a long soft tail, plain dark background'],
+  ['astronaut', 'astronaut', 'a single friendly cartoon astronaut in a white spacesuit, floating gently'],
+  ['galaxy',    'galaxy',    'a single soft swirling spiral galaxy with twinkling stars, plain dark background'],
+]);
+
+// =============================================================================
+// TIER 29 — SEASONS
+// =============================================================================
+group('Needs', 'Time', 'Seasons', 'needs.time.seasons', { mode: 'object', photo: 'none', ...EXT }, [
+  ['spring', 'spring', 'a friendly soft pastel scene — a single tree with new green leaves and a few small pink flowers on the ground'],
+  ['summer', 'summer', 'a friendly soft pastel scene — a bright sun in a clear sky over a small beach with a sand bucket'],
+  ['fall',   'fall',   'a friendly soft pastel scene — a single tree with warm orange and red leaves, a few leaves falling'],
+  ['winter', 'winter', 'a friendly soft pastel scene — a single tree with bare branches and soft snow on the ground'],
+]);
+
+// =============================================================================
+// TIER 30 — TREATS / SWEETS / CONDIMENTS (Food extension)
+// =============================================================================
+group('Nouns', 'Food', 'Treats', 'nouns.food.treats', { mode: 'object', photo: 'none', ...EXT, notes: 'Scene: kitchen, party.' }, [
+  ['ice_cream',  'ice cream',  'a single scoop of vanilla ice cream in a small waffle cone, plain background', { pron: 'ice cream' }],
+  ['cake',       'cake',       'a single small slice of birthday cake with a single candle on top'],
+  ['candy',      'candy',      'a single wrapped piece of candy with twisted ends, plain background'],
+  ['popcorn',    'popcorn',    'a single small striped popcorn bag with a few popped kernels spilling out'],
+  ['donut',      'donut',      'a single round donut with pink frosting and rainbow sprinkles'],
+  ['lollipop',   'lollipop',   'a single round lollipop with rainbow swirls on a white stick'],
+  ['chocolate',  'chocolate',  'a single small bar of chocolate broken into squares'],
+]);
+group('Nouns', 'Food', 'Condiments', 'nouns.food.condiments', { mode: 'object', photo: 'none', ...EXT }, [
+  ['ketchup', 'ketchup', 'a single small red ketchup bottle with a cheerful label'],
+  ['butter',  'butter',  'a single small stick of butter on a small dish'],
+  ['syrup',   'syrup',   'a single small bottle of golden maple syrup with a cheerful label'],
+  ['jam',     'jam',     'a single small jar of red strawberry jam with a cheerful label'],
+  ['salt',    'salt',    'a single small salt shaker with white granules visible inside'],
+  ['pepper',  'pepper',  'a single small pepper shaker with dark granules visible inside'],
+]);
+group('Nouns', 'Food', 'Breakfast', 'nouns.food.breakfast', { mode: 'object', photo: 'none', ...EXT }, [
+  ['pancake', 'pancake', 'a single small stack of three pancakes with a pat of butter and a drizzle of syrup'],
+  ['waffle',  'waffle',  'a single round waffle with a small pat of butter in the center'],
+  ['muffin',  'muffin',  'a single blueberry muffin in a paper liner, plain background'],
+  ['bagel',   'bagel',   'a single round bagel sliced in half, plain background'],
+  ['oatmeal', 'oatmeal', 'a single small bowl of warm oatmeal with a few blueberries on top'],
+]);
+
+// =============================================================================
+// TIER 31 — TOY EXTENSIONS (Priddy parity)
+// =============================================================================
+group('Nouns', 'Toys', 'Extended', 'nouns.toys.more', { mode: 'object', photo: 'none', ...EXT, notes: 'Scene: playroom' }, [
+  ['lego',         'building bricks', 'a small handful of colorful plastic building bricks of various shapes and sizes', { pron: 'building bricks', notes: 'Generic label — avoids the trademarked name.' }],
+  ['stroller',     'stroller',        "a single small toy stroller for a doll, plain background"],
+  ['dollhouse',    'dollhouse',       'a single small open dollhouse showing tiny furniture inside, friendly cartoon style'],
+  ['kite',         'kite',            'a single colorful diamond-shaped kite with a small ribbon tail'],
+  ['jumprope',     'jump rope',       'a single colorful jump rope with two small wooden handles', { pron: 'jump rope' }],
+  ['hula_hoop',    'hula hoop',       'a single colorful hula hoop standing upright, plain background', { pron: 'hula hoop' }],
+  ['play_doh',     'play dough',      'a small handful of colorful play dough in three small rounded balls', { pron: 'play dough' }],
+  ['stickers',     'stickers',        'a small sheet of colorful star and heart stickers'],
+  ['robot_toy',    'robot',           'a single small friendly cartoon toy robot with antenna and a cheerful face'],
+  ['action_figure','action figure',   'a single small generic plastic toy figure standing upright, plain background', { pron: 'action figure' }],
+  ['marble',       'marble',          'a small glass marble with swirling blue and yellow inside'],
+  ['slinky',       'slinky',          'a small spring-toy slinky stretched between two surfaces, soft metallic'],
+]);
+
+// =============================================================================
+// TIER 32 — VERB EXTENSION (action verbs from first-words books)
+// =============================================================================
+group('Verbs', 'Actions', 'More', 'verbs.actions.extra', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['kiss',     'kiss',     'a friendly young child blowing a kiss with one hand, a small soft heart floating from their hand'],
+  ['climb',    'climb',    'a friendly young child carefully climbing a small wooden ladder, both hands gripping'],
+  ['hop',      'hop',      'a friendly young child mid-hop on one foot, soft motion lines below'],
+  ['skip',     'skip',     'a friendly young child mid-skip, one knee raised, soft motion lines below'],
+  ['swim',     'swim',     'a friendly young child swimming in calm water with goggles on, soft splashes around'],
+  ['blow',     'blow',     'a friendly young child blowing softly at a dandelion, small fluff drifting away'],
+  ['paint',    'paint',    'a friendly young child painting on a small easel with a colorful brush, focused smile'],
+  ['dig',      'dig',      'a friendly young child kneeling in sand using a small shovel, small pile beside them'],
+  ['splash',   'splash',   'a friendly young child splashing in a small puddle, soft water droplets in the air'],
+  ['color',    'color',    'a friendly young child coloring on a sheet of paper with a small bright crayon, focused smile'],
+  ['cut',      'cut',      'a friendly young child carefully using child-safe scissors on a small piece of paper'],
+  ['glue',     'glue',     'a friendly young child gently applying glue from a small glue stick to a piece of paper'],
+  ['pour',     'pour',     'a friendly young child carefully pouring water from a small pitcher into a cup'],
+  ['stir',     'stir',     'a friendly young child stirring a small bowl with a wooden spoon, focused smile'],
+  ['ride',     'ride',     'a friendly young child riding a small tricycle, hands on the handlebars'],
+  ['fly',      'fly',      'a friendly young child holding a small toy airplane up high, pretending to make it fly'],
+  ['fall',     'fall_v',   'a friendly young child gently sitting down on a soft mat, surprised but unhurt', { notes: 'Verb "fall" — distinct from the season.' }],
+  ['fix',      'fix',      'a friendly young child gently using a small toy screwdriver on a small toy, focused face'],
+]);
+
+// =============================================================================
+// TIER 33 — FAMILY-CONTEXT AFFECTION (audience='parent')
+// Day-roleplay analysis: phrases like kiss/snuggle/tickle/carry-me belong to
+// caregiver-child intimate context. Tiles live in the canonical library so the
+// child CAN use them anywhere (e.g. "I love you" said to mom at school pickup),
+// but the AUDIENCE field flags them as parent-authoring suggestions only —
+// teachers/therapists won't be prompted to add them when building boards.
+// =============================================================================
+group('Needs', 'Social', 'Family', 'needs.social.family', { mode: 'concept', photo: 'none', ...EXT, audience: 'parent' }, [
+  ['family_hug',     'family hug',      'a friendly young child in the middle of a warm group hug with two adults, soft smiles'],
+  ['kiss_affection', 'goodnight kiss',  'a friendly parent gently kissing a sleepy young child on the forehead, soft warm light', { pron: 'goodnight kiss' }],
+  ['snuggle',        'snuggle',         'a friendly young child snuggled under a soft blanket close to a parent figure, warm smile'],
+  ['cuddle',         'cuddle',          'a friendly young child being held closely by a parent figure, both smiling softly'],
+  ['tickle',         'tickle',          'a friendly young child laughing brightly while being tickled by a parent figure (gentle, joyful)'],
+  ['piggyback',      'piggyback',       'a friendly young child riding piggyback on a parent figure, both grinning broadly'],
+]);
+
+// Family-context gestalts surfaced only to parent-role authoring. Same logic
+// as TIER 4 gestalts (gestalt_type / meaning / targets), but the audience is
+// 'parent' so school/therapy authoring doesn't suggest them.
+group('Needs', 'Social', 'Family gestalts', 'needs.gestalts.family', { mode: 'concept', photo: 'none', ...EXT, audience: 'parent', isGestalt: true, gestaltType: 'compositional' }, [
+  ['carry_me',         'carry me',         'a friendly young child reaching both arms up toward a parent figure, eager pleading smile', { gestaltMeaning: 'asking to be picked up', gestaltTargets: ['carry', 'me', 'up'] }],
+  ['hold_me',          'hold me',          'a friendly young child holding both arms out toward a parent figure, wanting comfort', { gestaltMeaning: 'asking for comfort', gestaltTargets: ['hold', 'me'] }],
+  ['one_more_book',    'one more book',    'a friendly young child in pajamas in bed holding up a picture book with both hands, gentle pleading smile', { gestaltMeaning: 'asking to extend bedtime reading', gestaltTargets: ['one', 'more', 'book'] }],
+  ['snuggle_with_me',  'snuggle with me',  'a friendly young child patting the spot next to them on a soft blanket, inviting a parent to sit', { gestaltMeaning: 'inviting a cuddle', gestaltTargets: ['snuggle', 'with', 'me'] }],
+  ['tuck_me_in',       'tuck me in',       'a friendly young child in bed pulling a blanket up to their chin, gentle smile, a parent figure adjusting it', { gestaltMeaning: 'bedtime ritual request', gestaltTargets: ['tuck', 'me', 'in'] }],
+  ['read_to_me',       'read to me',       'a friendly young child handing a picture book up to a parent figure, eager smile', { gestaltMeaning: 'asking to be read to', gestaltTargets: ['read', 'to', 'me'] }],
+]);
+
+// =============================================================================
+// TIER 34 — UNIVERSAL DAILY GESTALTS (meal + transition)
+// Day-roleplay surfaced: hungry/thirsty/yummy/yucky are universal phrases the
+// child says to ANY caregiver. Stay audience='universal'.
+// =============================================================================
+group('Needs', 'Social', 'Daily gestalts', 'needs.gestalts.daily', { mode: 'concept', photo: 'none', ...EXT, isGestalt: true, gestaltType: 'compositional' }, [
+  ['im_hungry',     "I'm hungry",      'a friendly young child rubbing their stomach with one hand, slightly droopy look, soft "hungry" feeling', { gestaltMeaning: 'requesting food', gestaltTargets: ['i', 'am', 'hungry'], pron: "I'm hungry" }],
+  ['im_thirsty',    "I'm thirsty",     'a friendly young child holding an empty cup forward, gentle "I need a drink" expression', { gestaltMeaning: 'requesting a drink', gestaltTargets: ['i', 'am', 'thirsty'], pron: "I'm thirsty" }],
+  ['yummy',         'yummy',           'a friendly young child rubbing their tummy with one hand, big delighted smile after a bite', { gestaltMeaning: 'expressing food enjoyment', gestaltTargets: ['yummy', 'good'] }],
+  ['yucky',         'yucky',           'a friendly young child gently pushing a small plate away with one hand, slight wrinkled-nose expression (not distressed)', { gestaltMeaning: 'expressing food refusal', gestaltTargets: ['yucky', 'no'] }],
+  ['i_did_it',      'I did it',        'a friendly young child standing proudly beside a small completed tower of blocks, arms up in celebration', { gestaltMeaning: 'announcing accomplishment', gestaltTargets: ['i', 'did', 'it'], pron: 'I did it' }],
+  ['i_need_a_break','I need a break',  'a friendly young child gently raising one open palm with a soft "pause" face, calm not distressed', { gestaltMeaning: 'requesting a break', gestaltTargets: ['i', 'need', 'break'], pron: 'I need a break' }],
+  ['try_again',     'try again',       'a friendly young child looking determined while reaching toward a small puzzle piece, soft "again" arrow above'],
+  ['good_job',      'good job',        'a friendly adult hand giving a thumbs-up beside a friendly young child smiling, soft sparkle'],
+  ['my_turn',       'my turn now',     'a friendly young child smiling and pointing at themselves with both thumbs, eager but polite', { gestaltMeaning: 'turn-taking request', gestaltTargets: ['my', 'turn'] }],
+  ['your_turn',     'your turn',       'a friendly young child handing a small toy forward toward another child, polite smile', { gestaltMeaning: 'turn-taking offer', gestaltTargets: ['your', 'turn'] }],
+]);
+
+// =============================================================================
+// TIER 35 — SCHOOL-CONTEXT TILES (audience='school_team', canonical not skeleton)
+// Day-roleplay: phrases that mostly fire at school. Canonical because every
+// school uses them — only the photo differs from the classroom-specific
+// skeletons in TIER 18.
+// =============================================================================
+group('Needs', 'Social', 'Classroom', 'needs.social.school', { mode: 'concept', photo: 'none', ...EXT, audience: 'school_team' }, [
+  ['raise_hand',     'raise my hand',  'a friendly young child sitting at a small desk raising one hand high, eager to participate'],
+  ['may_i',          'may I',          'a friendly young child gently raising one finger with a polite tilted head, "may I?" feeling'],
+  ['line_leader',    'line leader',    'a friendly young child at the front of a small line of students, hand on hip, proud smile'],
+  ['quiet_please',   'quiet please',   'a friendly young child holding one finger to their lips with a polite smile'],
+  ['my_turn_share',  'sharing time',   'a friendly young child holding a small show-and-tell object out to the viewer with both hands, big smile'],
+  ['circle_time',    'circle time',    'a friendly young child sitting cross-legged on a colorful rug among other children, attentive smile'],
+  ['centers_time',   'centers',        'a friendly young child at a small classroom table with manipulatives, focused smile', { notes: 'Canonical illustration; school-team skeleton in TIER 18 lets the teacher swap to their actual room.' }],
+]);
+
 
 const COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs']);
 const MODES = new Set(['child_as_subject', 'object', 'person', 'concept']);
