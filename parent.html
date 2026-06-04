@@ -350,6 +350,15 @@
     <div class="bars" id="mastery"></div>
   </div>
 
+  <!-- MASTERY MOMENTS (PRD §6) -->
+  <div class="section-label">Mastery moments</div>
+  <div class="panel" style="padding:8px 14px;">
+    <p class="hint" style="margin:8px 4px 12px;">Sessions where Fletcher cleared his own baseline by 2 or 3 standard deviations, or got 100%. <strong>The knowledge is in there</strong> — these moments are how mastery actually surfaces for autistic learners. Spikes via voice / gesture / object carry the strongest evidence and are flagged with the 🗣️ icon.</p>
+    <div id="spikes-body">
+      <div class="muted" style="padding:14px;color:#888;">No spike events yet — these appear once Fletcher has ≥10 sessions in any (skill, mode) bucket and clears the 2σ threshold (or hits 100%).</div>
+    </div>
+  </div>
+
   <!-- EXPOSURE SCHEDULE (PRD §8) -->
   <div class="section-label">Exposure schedule</div>
   <div class="panel" style="padding:8px 14px;">
@@ -844,6 +853,41 @@
     }
     if (a.mastery && a.mastery.length) renderMastery(a.mastery.map(m => [m.name, m.pct]));
     if (a.recentSessions && a.recentSessions.length) renderRecent(a.recentSessions);
+    renderSpikes(a.recentSpikes || []);
+  }
+
+  // PRD §6: render the most recent spike events as a chip stack. Each chip
+  // shows kind (2σ / 3σ / 100%), skill, mode, and "child-generated" marker.
+  function renderSpikes(list) {
+    const el = document.getElementById('spikes-body');
+    if (!el) return;
+    if (!list.length) {
+      el.innerHTML = '<div class="muted" style="padding:14px;color:#888;">No spike events yet — these appear once Fletcher has ≥10 sessions in any (skill, mode) bucket and clears the 2σ threshold (or hits 100%).</div>';
+      return;
+    }
+    const KIND = {
+      perfect_pass: { label: '100%',  bg: '#fef3c7', fg: '#92400e' },
+      spike_3sigma: { label: '3σ',    bg: '#dcfce7', fg: '#166534' },
+      spike_2sigma: { label: '2σ',    bg: '#dbeafe', fg: '#1e40af' },
+    };
+    const niceSkill = (s) => s ? s.split('.').slice(-1)[0].replace(/_/g, ' ') : '—';
+    const niceAt = (iso) => {
+      const ms = Date.now() - new Date(iso).getTime();
+      if (ms < 60 * 60 * 1000) return Math.max(1, Math.round(ms / 60000)) + ' min ago';
+      if (ms < 24 * 60 * 60 * 1000) return Math.round(ms / 3600000) + 'h ago';
+      return Math.round(ms / 86400000) + 'd ago';
+    };
+    el.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px;padding:10px 4px;">' +
+      list.map(s => {
+        const k = KIND[s.kind] || { label: s.kind, bg: '#eee', fg: '#333' };
+        const cg = s.childGeneratedOnly ? ' 🗣️' : '';
+        const pct = s.observedPct != null ? Math.round(s.observedPct * 100) + '%' : '';
+        return `<div style="background:${k.bg};color:${k.fg};border-radius:14px;padding:8px 12px;font-size:13px;line-height:1.35;">
+          <div style="font-weight:700;">${k.label}${cg} · ${pct}</div>
+          <div>${niceSkill(s.skillSlug)} · ${s.modeLabel || s.mode || ''}</div>
+          <div style="opacity:.7;font-size:11px;">${niceAt(s.at)}</div>
+        </div>`;
+      }).join('') + '</div>';
   }
   // PRD §8: Exposure schedule panel. Lightweight call alongside analytics —
   // returns the next-due list per skill, ordered by what's coming up first.

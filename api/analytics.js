@@ -59,6 +59,7 @@ export default async function handler(req, res) {
     time: { series: [] },
     mastery: [],
     recentSessions: [],
+    recentSpikes: [],                    // PRD §6 mastery signal
   };
 
   // ---- USE: taps per category per bucket ----
@@ -267,6 +268,34 @@ export default async function handler(req, res) {
       };
     });
     out.hasLegacyScoring = out.recentSessions.some(s => s.scoringVersion < 2);
+  } catch (_) { /* */ }
+
+  // ---- RECENT SPIKES (PRD §6 mastery signal) ----
+  // Last 14 flags for this child, newest first. Joined to sessions so the
+  // dashboard can show "X 3σ spike on horse · auditory comprehension · 2 days ago".
+  try {
+    const rows = await db`
+      SELECT f.kind, f.sigma, f.observed_pct, f.baseline_mu, f.baseline_sigma,
+             f.child_generated_only, f.created_at,
+             s.skill_slug, s.mode
+      FROM session_flags f
+      JOIN sessions s ON s.id = f.session_id
+      WHERE s.child_id = ${childId}
+        AND f.created_at >= now() - interval '60 days'
+      ORDER BY f.created_at DESC
+      LIMIT 14`;
+    out.recentSpikes = rows.map(r => ({
+      kind: r.kind,                                          // 'spike_2sigma' | 'spike_3sigma' | 'perfect_pass'
+      sigma: r.sigma == null ? null : Number(r.sigma),
+      observedPct: r.observed_pct == null ? null : Number(r.observed_pct),
+      baselineMu: r.baseline_mu == null ? null : Number(r.baseline_mu),
+      baselineSigma: r.baseline_sigma == null ? null : Number(r.baseline_sigma),
+      childGeneratedOnly: !!r.child_generated_only,
+      skillSlug: r.skill_slug || null,
+      mode: r.mode || null,
+      modeLabel: r.mode ? (MODE_LABEL[r.mode] || r.mode) : null,
+      at: r.created_at,
+    }));
   } catch (_) { /* */ }
 
   res.setHeader('Cache-Control', 'no-store');

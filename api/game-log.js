@@ -5,6 +5,7 @@ import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
 import { apnsConfigured, sendToTokens } from './_lib/apns.js';
 import { tickExposure } from './_lib/exposure.js';
+import { detectSpikes } from './_lib/spike.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -91,6 +92,21 @@ export default async function handler(req, res) {
       catch (_) {}
     }
 
+    // PRD §6: inline spike detection — pull this session's (skill, mode)
+    // history, compute baseline + sigma, write flags for 2σ / 3σ / 100%.
+    // Best-effort; never blocks the response. Runs only on v2 sessions to
+    // keep the baseline clean from the pre-cutover first-try-only scoring.
+    let spikeFlags = [];
+    try {
+      spikeFlags = await detectSpikes(db, {
+        sessionId: Number(sid),
+        childId,
+        skillSlug: effectiveSkill,
+        mode,
+        scoringVersion,
+      });
+    } catch (_) { /* */ }
+
     // For auto-games (scheduled), push the score to opted-in parents — best effort.
     try {
       if (b.auto && apnsConfigured()) {
@@ -106,7 +122,7 @@ export default async function handler(req, res) {
         }
       }
     } catch (_) {}
-    res.status(200).json({ ok: true, sessionId: Number(sid), attempts: attempts.length });
+    res.status(200).json({ ok: true, sessionId: Number(sid), attempts: attempts.length, spikeFlags });
   } catch (err) {
     res.status(500).json({ error: 'Log failed', detail: String(err.message || err) });
   }
