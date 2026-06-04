@@ -104,6 +104,48 @@ struct APIClient {
         _ = try? await request(method: "POST", path: "/api/events", body: body, contentType: "application/json")
     }
 
+    // MARK: -- /api/game-log
+
+    /// Wire format for POST /api/game-log — mirrors the optional fields the
+    /// server learned to accept in Phase 1. Codable means we can ship arrays
+    /// of attempts without hand-rolling the JSON. PRD §3/§4: slidesAttempted
+    /// is the honest denominator, scoringVersion stamps the mercy cutover.
+    struct GameLogPayload: Encodable {
+        let childId: String
+        let mode: String
+        let category: String?
+        let startedAt: String
+        let endedAt: String
+        let itemCount: Int                // full game length
+        let slidesAttempted: Int          // rounds actually played (PRD §3.1)
+        let correctCount: Int
+        let scoringVersion: Int           // 2 = mercy any-attempt counts
+        let endReason: String             // 'completed' | 'timeout' | 'facilitator_stop' | 'child_quit' | 'empty_scope'
+        let skillSlug: String?
+        let attempts: [Attempt]
+
+        struct Attempt: Encodable {
+            let itemId: Int?
+            let label: String
+            let category: String?
+            let taxonomySlug: String?
+            let correct: Bool
+            let inputMethod: String       // "tap" | "verbal" | "object" | "physical" | "gesture"
+            let misses: Int               // legacy parity field
+            let attemptsTaken: Int        // PRD §3.2 mercy count
+            let distractorCount: Int      // PRD §3.3 difficulty signal
+            let childGenerated: Bool      // PRD §4.2 weighting flag
+            let occurredAt: String
+        }
+    }
+
+    /// POST /api/game-log — fire-and-forget. A failure never blocks the UI;
+    /// the iPad has already celebrated by the time this fires.
+    func submitGameLog(_ payload: GameLogPayload) async {
+        guard let body = try? JSONEncoder().encode(payload) else { return }
+        _ = try? await request(method: "POST", path: "/api/game-log", body: body, contentType: "application/json")
+    }
+
     /// Fire-and-forget POST to any path that doesn't need a body or response —
     /// used for things like `/api/play-request?childId=...`.
     func postEmpty(path: String) async {

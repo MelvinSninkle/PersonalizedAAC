@@ -81,25 +81,34 @@ export default async function handler(req, res) {
   // ---- GAMES: accuracy per category per bucket (carry-forward fill) ----
   try {
     const rows = await db`
-      SELECT category AS name,
-             floor(extract(epoch from (now() - occurred_at)) / ${SECS})::int AS bucket,
+      SELECT a.category AS name,
+             floor(extract(epoch from (now() - a.occurred_at)) / ${SECS})::int AS bucket,
              count(*)::int AS total,
-             sum(case when correct then 1 else 0 end)::int AS ok
-      FROM game_attempts
-      WHERE child_id = ${childId} AND category IS NOT NULL
-        AND occurred_at >= now() - ${SPAN} * interval '1 second'
+             sum(case when a.correct then 1 else 0 end)::int AS ok,
+             min(coalesce(s.scoring_version, 1))::int AS min_sv
+      FROM game_attempts a
+      LEFT JOIN sessions s ON s.id = a.session_id
+      WHERE a.child_id = ${childId} AND a.category IS NOT NULL
+        AND a.occurred_at >= now() - ${SPAN} * interval '1 second'
       GROUP BY 1, 2`;
     const byCat = new Map();
+    const legacyBuckets = new Map();
     for (const r of rows) {
       const b = Number(r.bucket);
       if (b < 0 || b >= N) continue;
-      if (!byCat.has(r.name)) byCat.set(r.name, new Array(N).fill(null));
+      if (!byCat.has(r.name)) {
+        byCat.set(r.name, new Array(N).fill(null));
+        legacyBuckets.set(r.name, new Array(N).fill(false));
+      }
       byCat.get(r.name)[idx(b)] = Math.round((Number(r.ok) / Number(r.total)) * 100);
+      // PRD §3 cutover: mark any bucket whose data includes a pre-v2 session
+      // so charts can dot-line / footnote it.
+      if (Number(r.min_sv) < 2) legacyBuckets.get(r.name)[idx(b)] = true;
     }
     out.games.series = [...byCat.entries()].map(([name, raw]) => {
       const data = []; let last = 0;
       for (let i = 0; i < N; i++) { if (raw[i] != null) last = raw[i]; data.push(last); }
-      return { name, data };
+      return { name, data, legacyScoring: legacyBuckets.get(name) };
     }).sort((a, b) => b.data[N - 1] - a.data[N - 1]);
   } catch (_) { /* */ }
 

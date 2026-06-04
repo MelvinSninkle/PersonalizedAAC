@@ -18,6 +18,9 @@ struct LiveCommand: Codable, Equatable {
     let labelStyle: String?        // "plain" | "first_person"
     let music: String?             // music override (path)
     let steps: [RoutineStep]?      // chain of steps for a routine
+    /// PRD §3 mercy bridge — facilitator's view of "the kid took N tries
+    /// before I marked this." Used by MatchingView to log attempts_taken.
+    let attemptsTaken: Int?
     let ts: Double?
 }
 

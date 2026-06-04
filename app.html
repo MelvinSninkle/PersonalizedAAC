@@ -4163,8 +4163,25 @@
     if (url) { const v = gVoice(); v.src = url; v.currentTime = 0; v.play().catch(() => {}); }
   }
 
+  // PRD §3.2 mercy semantics — `correct` is binary per slide (any pass within
+  // the mercy ceiling counts as a full pass). attemptsTaken is recorded
+  // independently so trend analysis can still see motor improvement (fewer
+  // attempts over time) without penalizing the pass.
   function logAttempt(correct) {
-    G.attempts.push({ category: G.target.section, label: G.target.label, itemId: G.target.id, correct, inputMethod: 'tap', misses: G.misses, occurredAt: new Date().toISOString() });
+    const attemptsTaken = Math.max(1, (G.misses || 0) + (correct ? 1 : 0));
+    G.attempts.push({
+      category: G.target.section,
+      label: G.target.label,
+      itemId: G.target.id,
+      taxonomySlug: G.target.taxonomySlug || null,
+      correct,
+      inputMethod: 'tap',
+      misses: G.misses,
+      attemptsTaken,
+      distractorCount: Math.max(0, ((G.settings && G.settings.choices) || 3) - 1),
+      childGenerated: false,                // 'tap' is the button method
+      occurredAt: new Date().toISOString(),
+    });
   }
 
   function onPick(el, choice) {
@@ -4174,7 +4191,8 @@
       el.classList.add('correct');
       document.querySelectorAll('.game-choice').forEach(x => { if (x !== el) x.classList.add('dim'); });
       chime();
-      logAttempt(G.misses === 0);
+      // PRD §3.2 mercy cutover: 2nd- or 3rd-attempt pass is a FULL PASS.
+      logAttempt(true);
       publishState();
       setTimeout(() => { G.i++; nextRound(); }, 950);
     } else {
@@ -4450,7 +4468,25 @@
     const correctEl = [...document.querySelectorAll('.game-choice')].find(x => Number(x.dataset.id) === G.target.id);
     if (correctEl) { correctEl.classList.add('correct'); document.querySelectorAll('.game-choice').forEach(x => { if (x !== correctEl) x.classList.add('dim'); }); }
     chime();
-    G.attempts.push({ category: G.target.section, label: G.target.label, itemId: G.target.id, correct: G.misses === 0, inputMethod: method, misses: G.misses, occurredAt: new Date().toISOString() });
+    // PRD §4: a facilitator mark IS a pass + the input method (verbal /
+    // gesture / object / physical). Mercy semantic applies — credit the
+    // pass regardless of how many failed taps preceded the mark.
+    const m = (typeof method === 'string' && method) ? method : 'verbal';
+    const childGenerated = m !== 'tap';
+    const attemptsTaken = Math.max(1, (G.misses || 0) + 1);
+    G.attempts.push({
+      category: G.target.section,
+      label: G.target.label,
+      itemId: G.target.id,
+      taxonomySlug: G.target.taxonomySlug || null,
+      correct: true,
+      inputMethod: m,
+      misses: G.misses,
+      attemptsTaken,
+      distractorCount: Math.max(0, ((G.settings && G.settings.choices) || 3) - 1),
+      childGenerated,
+      occurredAt: new Date().toISOString(),
+    });
     publishState();
     setTimeout(() => { G.i++; nextRound(); }, 950);
   }
@@ -4467,10 +4503,28 @@
   async function logSession() {
     if (!G.session || !G.attempts.length) return;
     const correct = G.attempts.filter(a => a.correct).length;
+    // PRD §3 honest scoring: denominator is what was attempted, not the
+    // full deck. PRD §11 skill anchor: pick the most-common taxonomy slug
+    // across the played slides (falls back server-side to label).
+    const slidesAttempted = G.attempts.length;
+    const itemCount = (G.queue && G.queue.length) || slidesAttempted;
+    const skillCounts = {};
+    for (const a of G.attempts) { if (a.taxonomySlug) skillCounts[a.taxonomySlug] = (skillCounts[a.taxonomySlug] || 0) + 1; }
+    const skillSlug = Object.entries(skillCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
     const payload = {
-      childId: CHILD_ID, mode: G.session.mode, category: G.session.category,
-      startedAt: G.session.startedAt, endedAt: new Date().toISOString(),
-      correctCount: correct, itemCount: G.attempts.length, attempts: G.attempts, auto: !!G.sequence,
+      childId: CHILD_ID,
+      mode: G.session.mode,
+      category: G.session.category,
+      startedAt: G.session.startedAt,
+      endedAt: new Date().toISOString(),
+      correctCount: correct,
+      itemCount,                                  // full game length
+      slidesAttempted,                            // PRD §3.1 honest denominator
+      scoringVersion: 2,                          // PRD §3 mercy cutover stamp
+      endReason: G.ended ? 'completed' : (G.standby ? 'facilitator_stop' : 'child_quit'),
+      skillSlug,
+      attempts: G.attempts,
+      auto: !!G.sequence,
     };
     try { await apiFetch('/api/game-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); } catch (_) {}
   }
