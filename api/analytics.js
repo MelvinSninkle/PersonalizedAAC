@@ -156,20 +156,31 @@ export default async function handler(req, res) {
       return SCOPE_LABEL[scope] || scope;
     };
     const rows = await db`
-      SELECT mode, category, started_at, ended_at, correct_count, item_count
+      SELECT mode, category, started_at, ended_at, correct_count, item_count,
+             slides_attempted, end_reason, scoring_version
       FROM sessions WHERE child_id = ${childId}
       ORDER BY started_at DESC LIMIT 8`;
     out.recentSessions = rows.map(r => {
-      const scored = r.mode === 'self_paced' || r.mode === 'facilitated';
+      // PRD §3.1 honest denominator. Mercy/quit-aware: a session that bailed
+      // at slide 5/12 reports "X / 5", not "X / 12".
+      const scored = r.mode === 'self_paced' || r.mode === 'facilitated'
+                  || r.mode === 'auditory_comprehension' || r.mode === 'expressive_naming';
+      const denom = Number.isFinite(Number(r.slides_attempted)) && r.slides_attempted != null
+        ? Number(r.slides_attempted)
+        : Number(r.item_count);
       const mins = r.ended_at ? Math.max(1, Math.round((new Date(r.ended_at) - new Date(r.started_at)) / 60000)) : null;
       return {
         date: new Date(r.started_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         mode: MODE_LABEL[r.mode] || r.mode,
         category: resolveScope(r.category),
-        result: scored && r.item_count ? `${r.correct_count} / ${r.item_count}` : '—',
+        result: scored && denom ? `${r.correct_count} / ${denom}` : '—',
         length: mins ? `${mins} min` : '—',
+        // PRD §3 cutover marker: dashboards can dot-line / footnote pre-v2 rows.
+        scoringVersion: Number(r.scoring_version) || 1,
+        endReason: r.end_reason || null,
       };
     });
+    out.hasLegacyScoring = out.recentSessions.some(s => s.scoringVersion < 2);
   } catch (_) { /* */ }
 
   res.setHeader('Cache-Control', 'no-store');
