@@ -61,16 +61,21 @@ async function create(req, res, db, user) {
     }
   }
 
+  // PRD §5 Auditory Comprehension: an optional description text the parent
+  // can author per item (e.g. "lives in a field, has four legs, eats grass").
+  // Falls back to "Who/what is the [label]?" in the game view when unset.
+  const description = typeof b.description === 'string' ? b.description.slice(0, 500) : null;
+
   const rows = await db`
     INSERT INTO items
       (section, category_id, label, image_url, image_key, sound_url, sound_key,
-       keep_aspect, display_order, pinned, child_id, owner_user_id, updated_at)
+       keep_aspect, display_order, pinned, child_id, owner_user_id, description, updated_at)
     VALUES
       (${section}, ${categoryId}, ${label},
        ${b.imageUrl ?? null}, ${b.imageKey ?? null},
        ${b.soundUrl ?? null}, ${b.soundKey ?? null},
        ${!!b.keepAspect}, ${b.order ?? Date.now()}, ${!!b.pinned},
-       ${childId}, ${ownerUserId}, NOW())
+       ${childId}, ${ownerUserId}, ${description}, NOW())
     RETURNING *
   `;
   res.status(200).json(rowToItem(rows[0]));
@@ -89,6 +94,9 @@ async function update(req, res, db, user) {
   }
 
   const { label, categoryId, imageUrl, imageKey, soundUrl, soundKey, keepAspect, order, pinned, section } = req.body || {};
+  // PRD §5: description is updatable. `undefined` = leave the existing value
+  // alone; explicit "" clears it back to the fallback prompt in the game.
+  const description = (req.body || {}).description;
   const rows = await db`
     UPDATE items SET
       label         = COALESCE(${label ?? null},      label),
@@ -101,6 +109,7 @@ async function update(req, res, db, user) {
       keep_aspect   = ${keepAspect === undefined ? old.keep_aspect : !!keepAspect},
       display_order = COALESCE(${order ?? null},      display_order),
       pinned        = ${pinned === undefined ? old.pinned : !!pinned},
+      description   = ${description === undefined ? old.description : (typeof description === 'string' ? description.slice(0, 500) : null)},
       updated_at    = NOW()
     WHERE id = ${id}
     RETURNING *

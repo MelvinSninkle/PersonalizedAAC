@@ -61,8 +61,14 @@ struct BoardView: View {
         .fullScreenCover(item: gameSessionBinding) { session in
             Group {
                 switch session.mode {
-                case .matching:
+                case .matching, .auditoryComprehension:
+                    // Auditory Comprehension reuses MatchingView's lifecycle
+                    // and choice grid; only the prompt source differs
+                    // (description TTS vs. recorded label audio — handled
+                    // inside MatchingView.announceTarget).
                     MatchingView(session: session) { endGame() }
+                case .expressiveNaming:
+                    ExpressiveNamingView(session: session) { endGame() }
                 case .slideshow:
                     SlideshowView(session: session) { endGame() }
                 case .celebration:

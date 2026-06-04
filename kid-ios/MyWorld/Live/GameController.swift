@@ -8,6 +8,14 @@ import Observation
 final class GameController {
     enum Mode: Equatable {
         case matching
+        /// PRD §5 "Auditory comprehension" — hear a description, pick the picture.
+        /// Same lifecycle as matching; differs only in the prompt source (the
+        /// item's description text via TTS, not the recorded label audio).
+        case auditoryComprehension
+        /// PRD §5 "Expressive naming" — image shown alone, no audio prompt;
+        /// child speaks/gestures the answer unaided. Facilitator marks via the
+        /// live-session bridge with method = verbal / gesture / object.
+        case expressiveNaming
         case slideshow(firstPerson: Bool)
         case celebration
     }
@@ -40,6 +48,8 @@ final class GameController {
         case "learn_slideshow", "slideshow":  return .slideshow(firstPerson: false)
         case "exposure_slideshow":            return .slideshow(firstPerson: true)
         case "celebration":                   return .celebration
+        case "auditory_comprehension":        return .auditoryComprehension
+        case "expressive_naming":             return .expressiveNaming
         default:                              return .matching
         }
     }

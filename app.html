@@ -1073,6 +1073,9 @@
       <input type="checkbox" id="item-pin">
       <label for="item-pin">Pin to top (e.g. for Fletcher)</label>
     </div>
+    <label for="item-description" style="margin-top:14px;">Description for Auditory Comprehension game (optional)</label>
+    <textarea id="item-description" rows="2" placeholder='e.g. "Lives in a field, has four legs, eats grass." Spoken aloud — the child picks the matching tile.' style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font:inherit;box-sizing:border-box;"></textarea>
+    <div style="font-size:12px;color:#666;margin-top:4px;">If left blank the game falls back to "Who or what is the [tile name]?"</div>
     <div class="error" id="item-error"></div>
     <div class="button-row">
       <button class="danger" id="item-delete" style="display:none;">Delete</button>
@@ -2317,6 +2320,8 @@
           id: it.id, section: it.section, categoryId: it.categoryId, label: it.label,
           order: it.order, pinned: !!it.pinned,
           imageKey: it.imageKey, soundKey: it.soundKey, keepAspect: !!it.keepAspect,
+          description: it.description || null,                    // PRD §5 auditory-comp prompt
+          taxonomySlug: it.taxonomySlug || null,                  // PRD §11 skill anchor
         });
       }
       t.oncomplete = () => res();
@@ -2484,7 +2489,7 @@
     }
   }
 
-  async function serverCreateItem({ section, categoryId, label, image, sound, keepAspect, order, pinned }) {
+  async function serverCreateItem({ section, categoryId, label, image, sound, keepAspect, order, pinned, description }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const saved = await apiJSON('/api/items', {
@@ -2495,6 +2500,7 @@
         imageKey: upImg?.key || null,
         soundKey: upSnd?.key || null,
         keepAspect: !!keepAspect,
+        description: description ?? null,
         childId: CHILD_ID,
       }),
     });
@@ -2504,7 +2510,7 @@
     return saved;
   }
 
-  async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned }) {
+  async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned, description }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const body = { childId: CHILD_ID };
@@ -2513,6 +2519,7 @@
     if (order !== undefined) body.order = order;
     if (pinned !== undefined) body.pinned = !!pinned;
     if (keepAspect !== undefined) body.keepAspect = !!keepAspect;
+    if (description !== undefined) body.description = description;     // PRD §5 auditory-comp prompt
     if (upImg) { body.imageKey = upImg.key; }
     if (upSnd) { body.soundKey = upSnd.key; }
     const saved = await apiJSON('/api/items?id=' + old.id + '&childId=' + encodeURIComponent(CHILD_ID), {
@@ -2561,6 +2568,7 @@
     document.getElementById('item-phrase').value = item?.label || '';
     document.getElementById('item-emotion').value = 'default';
     document.getElementById('item-keep-aspect').checked = !!item?.keepAspect;
+    document.getElementById('item-description').value = item?.description || '';
     const ist = document.getElementById('item-image-status');
     ist.textContent = item?.imageKey ? 'Current image will be kept' : 'No image selected';
     ist.className = 'file-status' + (item?.imageKey ? ' has-file' : '');
@@ -2711,6 +2719,7 @@
     const label = document.getElementById('item-label').value.trim();
     const pinned = document.getElementById('item-pin').checked;
     const keepAspect = document.getElementById('item-keep-aspect').checked;
+    const description = document.getElementById('item-description').value.trim();   // PRD §5
     const errEl = document.getElementById('item-error');
     errEl.textContent = '';
 
@@ -2729,6 +2738,7 @@
           image: pendingImage,
           sound: pendingSound,
           keepAspect,
+          description,
           pinned: editingItemSection === 'people' ? pinned : undefined,
         });
       } else {
@@ -2739,6 +2749,7 @@
           image: pendingImage,
           sound: pendingSound,
           keepAspect,
+          description,
           order: Date.now(),
           pinned: editingItemSection === 'people' ? pinned : false,
         });

@@ -307,7 +307,25 @@
       </div>
     </div>
     <div class="mode">
-      <div class="icon">🎉</div><span class="tag">Mode 5 · Reward</span>
+      <div class="icon">👂</div><span class="tag">Mode 5 · Active</span>
+      <h3>Auditory Comprehension</h3>
+      <p>Hear a description ("lives in a field, four legs, eats grass") and pick the matching picture. Builds receptive comprehension and inference, not just word-to-image recognition.</p>
+      <div class="actions">
+        <button class="btn primary" data-launch="Auditory Comprehension">Start</button>
+        <button class="btn ghost" data-config="Auditory Comprehension">Configure</button>
+      </div>
+    </div>
+    <div class="mode">
+      <div class="icon">🗣️</div><span class="tag">Mode 6 · Active</span>
+      <h3>Expressive Naming</h3>
+      <p>An image alone — no audio prompt. Fletcher names it unaided (voice / gesture / object). You mark the response from your phone. This is the ideal: unprompted expressive production.</p>
+      <div class="actions">
+        <button class="btn primary" data-launch="Expressive Naming">Start</button>
+        <button class="btn ghost" data-config="Expressive Naming">Configure</button>
+      </div>
+    </div>
+    <div class="mode">
+      <div class="icon">🎉</div><span class="tag">Mode 7 · Reward</span>
       <h3>Celebration</h3>
       <p>Yellow flowers burst and your recorded voice cheers Fletcher on. Plays at session end.</p>
       <div class="actions">
@@ -849,6 +867,8 @@
   const goBtn = document.getElementById('modal-go');
   const MODE_KEY = {
     'Self-Paced Matching Game': 'self_paced', 'Facilitated Matching Game': 'facilitated',
+    'Auditory Comprehension': 'auditory_comprehension',
+    'Expressive Naming': 'expressive_naming',
     'Learn Slideshow': 'learn_slideshow', 'Exposure Slideshow': 'exposure_slideshow', 'Celebration': 'celebration',
   };
   const SECT_LABEL = { people: 'People', nouns: 'Nouns', verbs: 'Verbs' };
@@ -962,8 +982,15 @@
     const scope = scopeEl ? scopeEl.value : 'all';
     const musicEl = body.querySelector('#lc-music'); if (musicEl) cmd.music = musicEl.value;
     const limEl = body.querySelector('#lc-limit'); if (limEl) { const v = parseInt(limEl.value, 10); if (Number.isFinite(v)) cmd.limitMin = v; }
-    if (mode === 'self_paced' || mode === 'facilitated') {
+    if (mode === 'self_paced' || mode === 'facilitated' || mode === 'auditory_comprehension') {
+      // Same choice-grid configuration as matching — these all show N tiles
+      // on the iPad and credit the right one. Expressive Naming has no
+      // grid so it skips this.
       const ch = body.querySelector('#lc-choices'); cmd.choices = ch ? (parseInt(ch.value, 10) || 3) : 3;
+      cmd.scope = scope;
+    } else if (mode === 'expressive_naming') {
+      // No on-screen choices in expressive naming — the iPad just shows the
+      // target image and the facilitator marks the response. PRD §5.
       cmd.scope = scope;
     } else if (mode === 'learn_slideshow' || mode === 'exposure_slideshow') {
       cmd.scope = scope;

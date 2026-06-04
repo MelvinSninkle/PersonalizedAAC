@@ -205,6 +205,8 @@ struct MatchingView: View {
         let modeStr: String
         switch session.mode {
         case .matching:                modeStr = "self_paced"
+        case .auditoryComprehension:   modeStr = "auditory_comprehension"
+        case .expressiveNaming:        modeStr = "expressive_naming"
         case .slideshow(let fp):       modeStr = fp ? "exposure_slideshow" : "learn_slideshow"
         case .celebration:             modeStr = "celebration"
         }
@@ -266,9 +268,21 @@ struct MatchingView: View {
         announceTarget()
     }
 
+    /// In matching mode we play the tile's recorded audio (or TTS the label
+    /// as a fallback). In Auditory Comprehension we instead speak the
+    /// description text — that IS the puzzle ("lives in a field, four legs,
+    /// eats grass" → horse). PRD §5.
     private func announceTarget() {
         guard let target else { return }
-        Task { await TilePlayer.shared.play(target) }
+        if case .auditoryComprehension = session.mode {
+            let desc = target.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let prompt = (desc?.isEmpty == false)
+                ? desc!
+                : "Who or what is the \(target.label)?"
+            GameAudio.shared.speak(prompt, childId: auth.childSlug)
+        } else {
+            Task { await TilePlayer.shared.play(target) }
+        }
     }
 
     private func buildChoices() {

@@ -250,6 +250,11 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS sessions_skill_slug_idx       ON sessions(skill_slug)`;
     await db`CREATE INDEX IF NOT EXISTS sessions_scoring_version_idx  ON sessions(scoring_version)`;
 
+    // PRD §5 Auditory Comprehension: optional description on items for the
+    // "hear a description, pick the picture" mode. Empty/missing falls back
+    // to "Who/what is the [label]?" in the game view.
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS description TEXT`;
+
     // Per-attempt mercy + difficulty + child-generated method flag.
     // attempts_taken defaults to 1 (back-compat: every legacy attempt was
     // recorded as "took one try"). child_generated is NULL on legacy rows

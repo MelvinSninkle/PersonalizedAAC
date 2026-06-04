@@ -11,6 +11,9 @@ import { sql } from './_lib/db.js';
 const MODE_LABEL = {
   self_paced: 'Self-Paced Game',
   facilitated: 'Facilitated',
+  // PRD §5 — the three scored game modes.
+  auditory_comprehension: 'Auditory Comprehension',
+  expressive_naming: 'Expressive Naming',
   learn_slideshow: 'Learn Slideshow',
   exposure_slideshow: 'Exposure',
   celebration: 'Celebration',

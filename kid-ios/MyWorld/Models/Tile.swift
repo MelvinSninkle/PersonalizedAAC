@@ -17,6 +17,10 @@ struct Tile: Codable, Identifiable, Hashable {
     let childId: String?
     let ownerUserId: Int?
     let taxonomySlug: String?
+    /// PRD §5: optional description used as the audio prompt in Auditory
+    /// Comprehension mode (e.g. "lives in a field, four legs, eats grass").
+    /// Falls back to "Who/what is the [label]?" in the view when empty.
+    let description: String?
 
     enum CodingKeys: String, CodingKey {
         case id, section, label
@@ -31,6 +35,7 @@ struct Tile: Codable, Identifiable, Hashable {
         case childId
         case ownerUserId
         case taxonomySlug
+        case description
     }
 
     init(from decoder: Decoder) throws {
@@ -50,5 +55,6 @@ struct Tile: Codable, Identifiable, Hashable {
         childId = try c.decodeIfPresent(String.self, forKey: .childId)
         ownerUserId = try c.decodeIfPresent(Int.self, forKey: .ownerUserId)
         taxonomySlug = try c.decodeIfPresent(String.self, forKey: .taxonomySlug)
+        description = try c.decodeIfPresent(String.self, forKey: .description)
     }
 }
