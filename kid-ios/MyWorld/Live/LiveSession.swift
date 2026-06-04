@@ -53,6 +53,11 @@ final class LiveSession {
     var latest: LiveCommand?
 
     private var handledSeq: Int = 0
+    /// On launch we "baseline" to whatever command is already sitting in the DB
+    /// and DON'T act on it — otherwise rebooting mid-game would re-fire the last
+    /// `start` and relaunch the game. Only commands issued AFTER the tablet
+    /// comes up should run.
+    private var baselined = false
     private var pollTask: Task<Void, Never>?
     private var heartbeatTask: Task<Void, Never>?
     private let api = APIClient()
@@ -64,6 +69,8 @@ final class LiveSession {
 
     func start(childId: String) {
         self.childId = childId
+        handledSeq = 0
+        baselined = false       // first poll will baseline to the current command
         pollTask?.cancel()
         heartbeatTask?.cancel()
 
@@ -119,6 +126,13 @@ final class LiveSession {
     @MainActor
     private func pollOnce() async {
         guard let status = try? await api.live(childId: childId) else { return }
+        // First poll after launch: treat whatever is already in the DB as
+        // already-handled so a stale `start` doesn't relaunch a game on reboot.
+        if !baselined {
+            handledSeq = max(handledSeq, status.cmdSeq)
+            baselined = true
+            return
+        }
         guard let cmd = status.cmd, cmd.seq > handledSeq else { return }
         handledSeq = cmd.seq
         self.latest = cmd
