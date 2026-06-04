@@ -32,12 +32,17 @@ final class GameAudio {
 
     // MARK: -- Music
 
-    func startMusic(childId: String) {
+    /// Start looping music. `override` (from a launcher command) wins over the
+    /// parent's saved rewards music when provided.
+    func startMusic(childId: String, override: String? = nil) {
         Task {
-            let rewards = await api.fetchRewards(childId: childId)
-            let path = (rewards.music?.isEmpty == false) ? rewards.music! : Self.defaultMusic
+            let chosen: String?
+            if let override { chosen = override }
+            else { chosen = await api.fetchRewards(childId: childId).music }
+
             // An explicit empty-string music choice means "No music".
-            guard rewards.music != "" else { return }
+            guard chosen != "" else { return }
+            let path = (chosen?.isEmpty == false) ? chosen! : Self.defaultMusic
 
             let data: Data?
             if let cached = musicCache[path] {

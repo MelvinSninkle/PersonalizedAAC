@@ -1,8 +1,13 @@
 import SwiftUI
 
-/// Slideshow game: cycles through a chosen set of tiles full-screen, plays
-/// each tile's audio as it appears. Tap anywhere → next. ✕ in the corner →
-/// exit back to the board.
+/// Passive learning slideshow — "Learn" (plain labels) and "Exposure"
+/// (first-person "I can see a ___"). Matches the web app:
+///   - Auto-advances every `secondsPerImage` (default 5, min 2).
+///   - LOOPS through the deck until the time limit (or ✕). Passive exposure is
+///     about calm repetition, not finishing.
+///   - Speaks each tile as it appears (recorded audio or TTS).
+///   - Background music loops underneath.
+/// A tap advances early; the ✕ exits.
 struct SlideshowView: View {
     let session: GameController.Session
     let onExit: () -> Void
@@ -10,110 +15,124 @@ struct SlideshowView: View {
     @Environment(BoardStore.self) private var board
     @Environment(AuthManager.self) private var auth
 
-    @State private var index: Int = 0
-    @State private var tiles: [Tile] = []
+    @State private var deck: [Tile] = []
+    @State private var pos = 0
     @State private var image: UIImage?
-    @State private var celebrating = false
+    @State private var advanceTask: Task<Void, Never>?
+    @State private var limitTask: Task<Void, Never>?
 
-    private var current: Tile? { tiles.indices.contains(index) ? tiles[index] : nil }
+    private var firstPerson: Bool {
+        if case .slideshow(let fp) = session.mode { return fp }
+        return false
+    }
+    private var secondsPerImage: Double { max(2, session.secondsPerImage ?? 5) }
+    private var current: Tile? { deck.indices.contains(pos) ? deck[pos] : nil }
+
+    private var labelText: String {
+        guard let t = current else { return "" }
+        return firstPerson ? "I can see a \(t.label)" : t.label
+    }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if let tile = current {
-                VStack(spacing: 20) {
+            if let _ = current {
+                VStack(spacing: 24) {
                     Spacer()
                     if let img = image {
                         Image(uiImage: img)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: 720, maxHeight: 540)
-                            .clipShape(RoundedRectangle(cornerRadius: 32))
-                            .shadow(radius: 30)
+                            .frame(maxWidth: 760, maxHeight: 560)
+                            .clipShape(RoundedRectangle(cornerRadius: 28))
+                            .shadow(radius: 28)
                     } else {
                         ProgressView().tint(.white)
                     }
-                    Text(tile.label)
-                        .font(.system(size: 72, weight: .bold, design: .rounded))
+                    Text(labelText)
+                        .font(.system(size: 60, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
                     Spacer()
-                    Text("Tap anywhere for the next one")
-                        .font(.callout)
-                        .foregroundStyle(.white.opacity(0.5))
-                        .padding(.bottom, 30)
                 }
             } else {
-                Text("No tiles to show")
+                Text("No pictures to show here yet")
                     .foregroundStyle(.white)
             }
 
-            // Exit affordance — big enough for a parent to find quickly, far
-            // enough from the center that a kid mashing the screen won't hit
-            // it by accident.
+            // Exit — top-right, away from the center a kid taps to advance.
             VStack {
                 HStack {
                     Spacer()
-                    Button {
-                        onExit()
-                    } label: {
+                    Button { onExit() } label: {
                         Image(systemName: "xmark")
                             .font(.title2.weight(.bold))
                             .foregroundStyle(.white)
                             .padding(14)
-                            .background(Color.white.opacity(0.18))
+                            .background(Color.white.opacity(0.16))
                             .clipShape(Circle())
                     }
-                    .padding(.top, 18)
-                    .padding(.trailing, 18)
+                    .padding(.top, 18).padding(.trailing, 18)
                 }
                 Spacer()
             }
-
-            ConfettiView(running: celebrating)
         }
         .contentShape(Rectangle())
-        .onTapGesture { advance() }
+        .onTapGesture { advance() }     // tap advances early
         .task { setup() }
-        .onDisappear { GameAudio.shared.stopMusic() }
-        .task(id: index) { await loadCurrent() }
+        .onDisappear {
+            advanceTask?.cancel()
+            limitTask?.cancel()
+            GameAudio.shared.stopMusic()
+        }
+        .task(id: pos) { await loadCurrent() }
     }
 
     private func setup() {
-        // Use the same scope resolver as matching so sections / cat:<id> /
-        // ranges all work, not just a bare numeric id.
-        tiles = board.tilesForScope(session.scope, from: session.from, to: session.to)
-            .filter { $0.imageKey?.isEmpty == false }
+        deck = board.tilesForScope(session.scope, from: session.from, to: session.to)
+            .filter { $0.imageKey?.isEmpty == false && !$0.label.isEmpty }
             .shuffled()
-            .prefix(40).map { $0 }
-        GameAudio.shared.startMusic(childId: auth.childSlug)
+        pos = 0
+        GameAudio.shared.startMusic(childId: auth.childSlug, override: session.music)
+        scheduleAdvance()
+        startLimitIfNeeded()
     }
 
     private func loadCurrent() async {
         image = nil
-        guard let key = current?.imageKey, !key.isEmpty else { return }
-        if let img = await MediaCache.shared.image(for: key) {
+        guard let t = current else { return }
+        if let key = t.imageKey, !key.isEmpty,
+           let img = await MediaCache.shared.image(for: key) {
             await MainActor.run { self.image = img }
         }
-        // Play the tile's audio as it appears.
-        if let t = current {
-            await TilePlayer.shared.play(t)
+        await TilePlayer.shared.play(t)     // speak the word/phrase
+    }
+
+    /// Auto-advance after `secondsPerImage`. Re-armed each slide.
+    private func scheduleAdvance() {
+        advanceTask?.cancel()
+        advanceTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(secondsPerImage * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run { advance() }
         }
     }
 
     private func advance() {
-        if index + 1 < tiles.count {
-            index += 1
-        } else {
-            // End of deck — celebrate with confetti + a vocalized cheer, then close.
-            celebrating = true
-            GameAudio.shared.playCheer(childId: auth.childSlug)
-            Task {
-                try? await Task.sleep(nanoseconds: 2_400_000_000)
-                onExit()
-            }
+        guard !deck.isEmpty else { return }
+        pos = (pos + 1) % deck.count   // loop forever until the limit / exit
+        scheduleAdvance()
+    }
+
+    private func startLimitIfNeeded() {
+        guard let mins = session.limitMin, mins > 0 else { return }
+        limitTask?.cancel()
+        limitTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(mins * 60 * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run { onExit() }
         }
     }
 }

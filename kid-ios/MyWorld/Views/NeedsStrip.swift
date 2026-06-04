@@ -5,6 +5,11 @@ import SwiftUI
 /// drink, more, all done, …) one tap away no matter which column has focus.
 /// All Needs-section tiles show up here in display_order.
 struct NeedsStrip: View {
+    /// The uniform board tile size — passed in so Needs tiles match the
+    /// People/Nouns/Verbs tiles exactly (the web does the same, sizing each
+    /// Needs tile to width ÷ total-tiles-across).
+    let tileSize: CGFloat
+
     @Environment(BoardStore.self) private var board
     @Environment(DisplayPrefs.self) private var prefs
 
@@ -18,13 +23,10 @@ struct NeedsStrip: View {
             }
     }
 
-    /// Width of each Needs tile.
-    private let tileWidth: CGFloat = 104
-
     /// Height hugs the content: the square image, plus the label band only
     /// when labels are shown, plus the vertical padding. No dead space.
     private var stripHeight: CGFloat {
-        tileWidth + (prefs.hideLabels ? 0 : 24) + 16
+        tileSize + (prefs.hideLabels ? 0 : 24) + 16
     }
 
     var body: some View {
@@ -32,15 +34,15 @@ struct NeedsStrip: View {
             EmptyView()
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: BoardMetrics.tileGap) {
                     ForEach(tiles) { tile in
                         TileView(tile: tile) { t in
                             Task { await TilePlayer.shared.play(t) }
                         }
-                        .frame(width: tileWidth)
+                        .frame(width: tileSize)
                     }
                 }
-                .padding(.horizontal, 10)
+                .padding(.horizontal, BoardMetrics.columnPad)
                 .padding(.vertical, 8)
             }
             .frame(height: stripHeight)

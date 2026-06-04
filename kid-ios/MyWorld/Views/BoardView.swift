@@ -29,24 +29,28 @@ struct BoardView: View {
                       showSettings: $showSettings)
 
             GeometryReader { geo in
-                let layout = computeLayout(in: geo.size.width)
-                HStack(spacing: 0) {
-                    let visible = visibleColumns
-                    ForEach(Array(visible.enumerated()), id: \.element) { idx, section in
-                        SectionColumn(section: section, tileSize: layout.tile)
-                            .frame(width: BoardMetrics.columnWidth(across: prefs.across(section),
-                                                                   tile: layout.tile))
-                        if idx < visible.count - 1 { Divider() }
+                // One uniform tile size for the WHOLE board — columns and the
+                // Needs strip — so every child-facing tile matches in size.
+                let tile = computeLayout(in: geo.size.width).tile
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        let visible = visibleColumns
+                        ForEach(Array(visible.enumerated()), id: \.element) { idx, section in
+                            SectionColumn(section: section, tileSize: tile)
+                                .frame(width: BoardMetrics.columnWidth(across: prefs.across(section),
+                                                                       tile: tile))
+                            if idx < visible.count - 1 { Divider() }
+                        }
+                        // Push columns left; freed space becomes whitespace.
+                        Spacer(minLength: 0)
                     }
-                    // Push columns to the left; leftover board space (when a
-                    // column is removed or narrowed) becomes whitespace here.
-                    Spacer(minLength: 0)
-                }
-            }
+                    .frame(maxHeight: .infinity)
 
-            if prefs.showNeeds {
-                Divider()
-                NeedsStrip()
+                    if prefs.showNeeds {
+                        Divider()
+                        NeedsStrip(tileSize: tile)
+                    }
+                }
             }
         }
         .background(Color(hex: "#fff7fb"))
@@ -57,8 +61,10 @@ struct BoardView: View {
                 switch session.mode {
                 case .matching:
                     MatchingView(session: session) { endGame() }
-                case .slideshow, .celebration:
+                case .slideshow:
                     SlideshowView(session: session) { endGame() }
+                case .celebration:
+                    CelebrationView { endGame() }
                 }
             }
         }

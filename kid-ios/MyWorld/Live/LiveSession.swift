@@ -14,6 +14,9 @@ struct LiveCommand: Codable, Equatable {
     let to: Double?
     let sample: Double?       // pick this many at random from the range
     let limitMin: Double?     // auto-end the lesson after this many minutes
+    let secondsPerImage: Double?   // slideshow pacing
+    let labelStyle: String?        // "plain" | "first_person"
+    let music: String?             // music override (path)
     let ts: Double?
 }
 
