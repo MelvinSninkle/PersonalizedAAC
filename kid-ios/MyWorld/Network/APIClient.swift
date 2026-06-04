@@ -66,6 +66,11 @@ struct APIClient {
         try await getJSON("/api/sync?childId=\(percentEscape(childId))")
     }
 
+    /// GET /api/live?childId=<slug> — facilitator command poll.
+    func live(childId: String) async throws -> LiveStatus {
+        try await getJSON("/api/live?childId=\(percentEscape(childId))")
+    }
+
     /// GET /api/media?key=<key> — streams blob bytes. Used for images + audio.
     func media(key: String) async throws -> (Data, String) {
         let (data, resp) = try await request(method: "GET",

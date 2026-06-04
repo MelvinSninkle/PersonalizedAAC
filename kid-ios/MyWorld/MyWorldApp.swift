@@ -6,6 +6,8 @@ struct MyWorldApp: App {
     @State private var auth  = AuthManager()
     @State private var board = BoardStore()
     @State private var prefs = DisplayPrefs()
+    @State private var live  = LiveSession()
+    @State private var game  = GameController()
 
     init() {
         setupAudioSession()
@@ -17,6 +19,8 @@ struct MyWorldApp: App {
                 .environment(auth)
                 .environment(board)
                 .environment(prefs)
+                .environment(live)
+                .environment(game)
                 .statusBarHidden(true)
                 .persistentSystemOverlays(.hidden)
         }

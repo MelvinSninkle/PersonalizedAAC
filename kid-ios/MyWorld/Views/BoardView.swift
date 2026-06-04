@@ -10,6 +10,8 @@ struct BoardView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(BoardStore.self)  private var board
     @Environment(DisplayPrefs.self) private var prefs
+    @Environment(LiveSession.self) private var live
+    @Environment(GameController.self) private var game
 
     @State private var showSettings = false
     @State private var showDisplay  = false
@@ -46,8 +48,35 @@ struct BoardView: View {
         .background(Color(hex: "#fff7fb"))
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showDisplay)  { DisplaySettingsView() }
-        .task         { await board.refresh(childId: auth.childSlug) }
-        .refreshable  { await board.refresh(childId: auth.childSlug) }
+        .fullScreenCover(item: gameSessionBinding) { session in
+            switch session.mode {
+            case .slideshow, .celebration:
+                SlideshowView(session: session) { game.stop() }
+            case .matching:
+                // Matching lands in the next commit — for now slideshow stands in.
+                SlideshowView(session: session) { game.stop() }
+            }
+        }
+        .task {
+            await board.refresh(childId: auth.childSlug)
+            live.start(childId: auth.childSlug)
+        }
+        .onDisappear { live.stop() }
+        .refreshable { await board.refresh(childId: auth.childSlug) }
+        .onChange(of: live.latest) { _, cmd in
+            guard let cmd else { return }
+            game.apply(cmd)
+            live.acknowledge()
+        }
+    }
+
+    /// Binding adapter that lets `fullScreenCover(item:)` observe the
+    /// optional GameController.Session — the cover only presents when non-nil.
+    private var gameSessionBinding: Binding<GameController.Session?> {
+        Binding(
+            get: { game.current },
+            set: { newValue in if newValue == nil { game.stop() } }
+        )
     }
 
     /// Computes the px-widths for People / Nouns / Verbs given which columns
