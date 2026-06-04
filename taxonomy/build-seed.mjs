@@ -1378,6 +1378,209 @@ group('Needs', 'Social', 'Classroom', 'needs.social.school', { mode: 'concept', 
   ['centers_time',   'centers',        'a friendly young child at a small classroom table with manipulatives, focused smile', { notes: 'Canonical illustration; school-team skeleton in TIER 18 lets the teacher swap to their actual room.' }],
 ]);
 
+// =============================================================================
+// TIER 36 — LONG-TAIL BREADTH (TD Snap symbol-library parity, age-appropriate)
+// Categories filled in after sanity-checking what a 3-7 year old reaches for
+// daily that we still didn't have: L/R, tech the kid sees on the iPad, more
+// foods, more animals, professions, geography, money, more time slices.
+// All Stage 5+ broadening; everything audience='universal' unless noted.
+// =============================================================================
+
+// Directional / spatial — L/R is the surprisingly absent gap.
+group('Needs', '', 'Direction', 'needs.direction', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['left',   'left',   'a friendly young child standing facing the viewer pointing clearly to their left with one hand, a soft directional arrow following'],
+  ['right',  'right',  'a friendly young child standing facing the viewer pointing clearly to their right with one hand, a soft directional arrow following'],
+  ['top',    'top',    'a friendly young child reaching up toward the top of a small stack of three colorful blocks, the top block highlighted'],
+  ['bottom', 'bottom', 'a friendly young child crouching beside a small stack of three colorful blocks, the bottom block highlighted'],
+  ['middle', 'middle', 'a friendly young child standing between two small trees, with a soft circle around them indicating "in the middle"'],
+  ['front',  'front',  'a friendly young child standing in front of a small house with a forward-pointing soft arrow at their feet'],
+  ['back',   'back',   'a friendly young child standing behind a small tree, peeking around, with a soft backward arrow indicating "back"'],
+  ['side',   'side',   'a friendly young child standing beside a small tree with one hand touching it, soft "next to" indicator'],
+]);
+
+// Expressive verbs the existing verbs.actions set misses.
+group('Verbs', 'Actions', 'Expressive', 'verbs.actions.expr', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['laugh',   'laugh',   'a friendly young child laughing brightly with both hands on belly, eyes squeezed shut in giggles'],
+  ['cry',     'cry',     'a friendly young child with a gentle sad face and a single soft tear (gentle, not distressing)'],
+  ['smile',   'smile',   'a friendly young child with a wide warm smile, head-and-shoulders framing'],
+  ['frown',   'frown',   'a friendly young child with a small gentle frown and downturned mouth (not distressed)'],
+  ['shout',   'shout',   'a friendly young child with cupped hands around their mouth, calling out loudly, soft sound waves'],
+  ['whisper', 'whisper', 'a friendly young child leaning in with one hand cupped beside their mouth, sharing a secret'],
+  ['squeeze', 'squeeze', 'a friendly young child gently squeezing a small stuffed animal with both hands'],
+  ['pinch',   'pinch',   'a friendly young child gently pinching a small soft object between thumb and finger'],
+  ['bounce',  'bounce',  'a friendly young child mid-bounce on a soft mat, soft motion lines, joyful smile'],
+  ['roll',    'roll',    'a friendly young child rolling sideways on a soft grassy lawn, soft motion lines, giggling'],
+]);
+
+// Tech / devices the AAC kid sees every day.
+group('Nouns', 'Home', 'Tech', 'nouns.home.tech', { mode: 'object', photo: 'none', ...EXT }, [
+  ['phone',      'phone',      "a single small friendly smartphone with a colorful screen, plain background"],
+  ['laptop',     'laptop',     'a single small friendly laptop computer with the lid open and a colorful screen, plain background'],
+  ['tablet',     'tablet',     'a single small friendly tablet with a colorful screen, plain background'],
+  ['headphones', 'headphones', 'a single pair of friendly over-ear headphones in a cheerful color, plain background'],
+  ['charger',    'charger',    'a single small friendly phone charger cable with a plug on one end, plain background'],
+  ['remote',     'remote',     'a single small TV remote with a few colorful buttons, plain background'],
+  ['camera',     'camera',     'a single small friendly cartoon camera with a soft round lens, plain background'],
+  ['button',     'button',     'a single large round friendly button, slightly raised, plain background'],
+  ['screen',     'screen',     'a single small friendly device screen showing a soft colorful gradient, plain background'],
+  ['speaker',    'speaker',    'a single small friendly bluetooth speaker with a cheerful color, plain background'],
+]);
+
+// Long-tail animals (the next chunk after the existing Pets/Farm/Sea/Forest/…).
+group('Nouns', 'Animals', 'Reptiles & Amphibians', 'nouns.animals.reptiles', { mode: 'object', photo: 'none', ...EXT }, [
+  ['frog',       'frog',       'a friendly cartoon green frog with big eyes, sitting on a small lily pad'],
+  ['toad',       'toad',       'a friendly cartoon brown toad with bumpy skin, small smile, plain background'],
+  ['alligator',  'alligator',  'a friendly cartoon green alligator with a small smile (not scary), short legs visible'],
+  ['crocodile',  'crocodile',  'a friendly cartoon green crocodile with a small smile (not scary), short legs visible'],
+  ['gecko',      'gecko',      'a friendly cartoon spotted gecko clinging to a small branch, big curious eyes'],
+  ['chameleon',  'chameleon',  'a friendly cartoon green chameleon with a curled tail, soft color gradient, big eyes'],
+]);
+group('Nouns', 'Animals', 'More mammals', 'nouns.animals.mammals.more', { mode: 'object', photo: 'none', ...EXT }, [
+  ['beaver',     'beaver',     'a friendly cartoon brown beaver with a flat tail and small front teeth, gentle smile'],
+  ['otter',      'otter',      'a friendly cartoon brown otter floating on its back, holding a small stone on its tummy'],
+  ['hedgehog',   'hedgehog',   'a friendly cartoon brown hedgehog with soft spines and a tiny round nose'],
+  ['cheetah',    'cheetah',    'a friendly cartoon spotted cheetah with a long tail, mid-run with soft motion lines'],
+  ['leopard',    'leopard',    'a friendly cartoon spotted leopard sitting on a small branch, gentle smile'],
+  ['jaguar',     'jaguar',     'a friendly cartoon spotted jaguar sitting calmly, gentle smile'],
+  ['sloth',      'sloth',      'a friendly cartoon brown sloth hanging from a small branch with a sleepy smile'],
+  ['mouse_a',    'mouse',      'a friendly cartoon gray mouse with round ears and a small smile, plain background', { notes: 'The animal — distinct from the computer mouse device.' }],
+  ['bat',        'bat',        'a friendly cartoon brown bat with small wings, hanging upside-down with a small smile'],
+  ['chipmunk',   'chipmunk',   'a friendly cartoon brown chipmunk with stripes on its back, holding a tiny acorn'],
+  ['skunk',      'skunk',      'a friendly cartoon black-and-white skunk with a bushy tail and a small smile (gentle)'],
+  ['opossum',    'opossum',    'a friendly cartoon gray opossum with a long tail and a gentle smile'],
+]);
+
+// Long-tail food meals — the cultural-staples chunk.
+group('Nouns', 'Food', 'Meals more', 'nouns.food.meals.more', { mode: 'object', photo: 'none', ...EXT }, [
+  ['hamburger',  'hamburger',  'a single classic hamburger with a sesame seed bun, lettuce, and cheese visible'],
+  ['hot_dog',    'hot dog',    'a single hot dog in a bun with a small line of ketchup on top', { pron: 'hot dog' }],
+  ['taco',       'taco',       'a single soft taco with colorful filling visible, folded'],
+  ['burrito',    'burrito',    'a single rolled burrito wrapped in a soft tortilla, plain background'],
+  ['soup',       'soup',       'a single small bowl of warm soup with a friendly steam swirl above'],
+  ['salad',      'salad',      'a single small bowl of fresh mixed salad with bright green leaves and red tomato'],
+  ['noodles',    'noodles',    'a single small bowl of noodles with a soft steam swirl above, chopsticks beside'],
+  ['fries',      'fries',      'a single small paper cup of golden french fries'],
+  ['dumpling',   'dumpling',   'a single small steamed dumpling with a soft pleated top, plain background'],
+  ['sushi',      'sushi',      'a single piece of sushi (rice topped with a small piece of salmon), plain background'],
+]);
+
+// Long-tail fruits + vegetables.
+group('Nouns', 'Food', 'Fruit more', 'nouns.food.fruit.extra', { mode: 'object', photo: 'none', ...EXT }, [
+  ['lemon',       'lemon',       'a single bright yellow lemon with a small green leaf'],
+  ['lime',        'lime',        'a single bright green lime with a small green leaf'],
+  ['avocado',     'avocado',     'a single avocado halved, showing the bright green flesh and round pit'],
+  ['coconut',     'coconut',     'a single whole brown coconut with three small dots on the shell'],
+  ['plum',        'plum',        'a single purple plum with a small green leaf'],
+  ['pomegranate', 'pomegranate', 'a single bright red pomegranate cut open showing ruby seeds inside'],
+]);
+group('Nouns', 'Food', 'Veg more', 'nouns.food.veg.extra', { mode: 'object', photo: 'none', ...EXT }, [
+  ['spinach',     'spinach',     'a single small bunch of fresh dark green spinach leaves'],
+  ['eggplant',    'eggplant',    'a single large purple eggplant with a small green stem'],
+  ['zucchini',    'zucchini',    'a single long green zucchini, plain background'],
+  ['cauliflower', 'cauliflower', 'a single head of white cauliflower with a few small green leaves'],
+  ['squash',      'squash',      'a single bright orange butternut squash, plain background'],
+  ['asparagus',   'asparagus',   'a single small bundle of green asparagus spears tied with a small string'],
+]);
+
+// Clothing extension.
+group('Nouns', 'Clothes', 'Extended', 'nouns.clothes.extra', { mode: 'object', photo: 'none', ...EXT }, [
+  ['dress',      'dress',      "a single small cheerful child's dress on a hanger"],
+  ['skirt',      'skirt',      'a single small bright skirt on a hanger'],
+  ['shorts',     'shorts',     'a single pair of small bright cotton shorts'],
+  ['swimsuit',   'swimsuit',   "a single small one-piece child's swimsuit with a fun pattern"],
+  ['hoodie',     'hoodie',     "a single cozy child's hoodie with the hood up, laid flat"],
+  ['slippers',   'slippers',   "a single pair of small fluffy child's slippers"],
+  ['boots',      'boots',      "a single pair of small child's boots, plain background"],
+  ['sandals',    'sandals',    "a single pair of small child's sandals"],
+  ['gloves',     'gloves',     'a single pair of warm winter gloves, plain background'],
+  ['robe',       'robe',       "a single cozy small child's bathrobe with a tied belt"],
+]);
+
+// Professions / community workers.
+group('People', 'Community', 'Workers', 'people.community.workers', { mode: 'person', photo: 'none', ...EXT }, [
+  ['dentist',      'dentist',      'a friendly cartoon dentist in a white coat holding a small toothbrush, gentle smile'],
+  ['vet',          'vet',          'a friendly cartoon veterinarian in a blue coat gently holding a small cartoon puppy', { pron: 'vet' }],
+  ['mechanic',     'mechanic',     'a friendly cartoon mechanic in coveralls holding a small wrench, soft smile'],
+  ['librarian',    'librarian',    'a friendly cartoon librarian holding a small stack of picture books, soft smile'],
+  ['chef',         'chef',         'a friendly cartoon chef in a tall white hat holding a small wooden spoon, big smile'],
+  ['farmer',       'farmer',       'a friendly cartoon farmer in overalls holding a small basket of vegetables, big smile'],
+  ['mail_carrier', 'mail carrier', 'a friendly cartoon mail carrier with a satchel of letters, big friendly wave', { pron: 'mail carrier' }],
+  ['plumber',      'plumber',      'a friendly cartoon plumber holding a small wrench beside a small sink, soft smile'],
+  ['firefighter',  'firefighter',  'a friendly cartoon firefighter in a bright red helmet, holding a small hose, big smile'],
+  ['police',       'police officer','a friendly cartoon police officer with a friendly wave, soft uniform, gentle smile', { pron: 'police officer' }],
+]);
+
+// Time precision additions.
+group('Needs', 'Time', 'Units', 'needs.time.units', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['second',   'second',   'a friendly stopwatch with the second hand sweeping, a single tick marked'],
+  ['week',     'week',     'a friendly small weekly calendar showing seven boxes in a row, one highlighted'],
+  ['year',     'year',     'a friendly small twelve-month calendar wheel, soft pastel colors'],
+  ['weekend',  'weekend',  'a friendly calendar with Saturday and Sunday highlighted in warm color, sun above'],
+  ['weekday',  'weekday',  'a friendly calendar with Monday through Friday highlighted in cool color'],
+  ['tonight',  'tonight',  'a friendly calendar with today highlighted plus a small crescent moon icon indicating evening'],
+]);
+
+// Additional feelings — the layer above the 19 we have.
+group('Needs', 'Feelings', 'Extended', 'needs.feelings.extra', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['jealous',      'jealous',      'a friendly young child watching another child enjoy a toy with a small thoughtful look (gentle)'],
+  ['disappointed', 'disappointed', 'a friendly young child looking down at an empty hand with a small soft sigh, gentle expression'],
+  ['grateful',     'grateful',     'a friendly young child with hands clasped at chest and a warm soft smile, small soft heart above'],
+  ['brave',        'brave',        'a friendly young child standing tall with chest out and a confident determined smile, soft cape on the shoulders'],
+  ['curious',      'curious',      'a friendly young child leaning forward with wide eyes inspecting a small flower, finger to chin'],
+  ['hopeful',      'hopeful',      'a friendly young child looking up at the sky with a small soft star above, gentle hopeful smile'],
+  ['shy',          'shy',          'a friendly young child peeking out from behind a parent\'s leg with a small bashful smile'],
+]);
+
+// Adverbs as a NEW category — manner + frequency words.
+group('Needs', 'Adverbs', '', 'needs.adverbs', { mode: 'concept', photo: 'none', ...EXT }, [
+  ['quickly',    'quickly',    'a friendly young child mid-run with strong soft motion lines indicating speed'],
+  ['slowly',     'slowly',     'a friendly young child taking a single careful step, with a small soft sleepy snail beside them'],
+  ['carefully',  'carefully',  'a friendly young child carefully carrying a stack of three blocks, tongue out in focus'],
+  ['gently',     'gently',     'a friendly young child softly petting a small cartoon bunny with one finger'],
+  ['loudly',     'loudly',     'a friendly young child cupping hands around mouth shouting out, large soft sound waves'],
+  ['quietly',    'quietly',    'a friendly young child tiptoeing on bare feet with a finger to lips'],
+  ['always',     'always',     'a friendly clock face with both hands sweeping continuously, soft motion circle around it'],
+  ['never',      'never',      'a soft cheerful red diagonal "no" line through a small clock face'],
+  ['sometimes',  'sometimes',  'a friendly clock face with a small soft shrug-emoji beside it'],
+  ['almost',     'almost',     'a friendly young child nearly reaching a small cheerful object on a shelf, fingertips just short'],
+]);
+
+// Geography mini.
+group('Nouns', 'Places', 'Geography', 'nouns.places.geo', { mode: 'object', photo: 'none', ...EXT }, [
+  ['country',  'country',  'a single small friendly globe with one country highlighted in a warm color'],
+  ['city',     'city',     'a single small friendly skyline of a few tall buildings, soft sky behind'],
+  ['town',     'town',     'a single small friendly cluster of small buildings with a church steeple, plain background'],
+  ['street',   'street',   'a single small friendly empty street with sidewalks and a stoplight, plain background'],
+  ['map',      'map',      'a single small friendly folded paper map with a few colorful regions and a small star'],
+  ['flag',     'flag',     'a single small friendly cartoon flag on a pole, plain background (generic — no specific country)'],
+  ['ocean',    'ocean',    'a single calm ocean horizon with soft blue water and a few gentle waves'],
+  ['mountain', 'mountain', 'a single tall friendly cartoon mountain with a soft snow cap, plain background'],
+  ['river',    'river',    'a single calm blue river winding through soft green banks, plain background'],
+  ['beach',    'beach',    'a single small friendly beach scene — soft sand, a small bucket, calm waves at the edge'],
+  ['lake',     'lake',     'a single small calm lake surrounded by soft green grass, plain background'],
+  ['forest',   'forest',   'a single small friendly forest scene — a few tall trees and a soft green floor'],
+]);
+
+// Money / shopping basics.
+group('Nouns', 'Money', '', 'nouns.money', { mode: 'object', photo: 'none', ...EXT }, [
+  ['money',    'money',    'a small friendly stack of paper bills with a few coins beside it'],
+  ['dollar',   'dollar',   'a single small friendly cartoon dollar bill, plain background'],
+  ['coin',     'coin',     'a single small friendly silver coin with a soft sparkle'],
+  ['wallet',   'wallet',   'a single small friendly leather wallet, plain background'],
+  ['receipt',  'receipt',  'a single small paper receipt with a few short lines on it'],
+  ['list',     'list',     'a single small notepad with a few items checked off in a small list'],
+  ['cart',     'cart',     'a single small friendly shopping cart with a few groceries inside'],
+  ['change',   'change',   'a small handful of coins of different sizes, plain background'],
+]);
+
+// Body parts extension — the ones still missing.
+group('Nouns', 'Body', 'Joints', 'nouns.body.joints', { mode: 'object', photo: 'none', ...EXT }, [
+  ['ankle',    'ankle',    "a friendly young child's bare foot showing the ankle joint clearly, soft cartoon style"],
+  ['hip',      'hip',      "a friendly young child with one hand on their hip, standing in a relaxed pose"],
+  ['waist',    'waist',    "a friendly young child standing with both hands on their waist"],
+  ['knuckle',  'knuckle',  "a friendly young child's clenched hand showing the knuckles clearly, soft cartoon style"],
+]);
+
 
 const COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs']);
 const MODES = new Set(['child_as_subject', 'object', 'person', 'concept']);
