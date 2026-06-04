@@ -8,6 +8,7 @@ struct SlideshowView: View {
     let onExit: () -> Void
 
     @Environment(BoardStore.self) private var board
+    @Environment(AuthManager.self) private var auth
 
     @State private var index: Int = 0
     @State private var tiles: [Tile] = []
@@ -76,20 +77,18 @@ struct SlideshowView: View {
         .contentShape(Rectangle())
         .onTapGesture { advance() }
         .task { setup() }
+        .onDisappear { GameAudio.shared.stopMusic() }
         .task(id: index) { await loadCurrent() }
     }
 
     private func setup() {
-        // Build the slide deck from the scoped category. "all" or nil → every tile.
-        let pool: [Tile]
-        if let scope = session.scope, let scopeId = Int(scope) {
-            // Numeric category id was passed — pull that category's tiles.
-            pool = board.tiles.filter { $0.categoryId == scopeId }
-        } else {
-            pool = board.tiles
-        }
-        // Shuffle for variety, cap so a kid can finish.
-        tiles = pool.shuffled().prefix(40).map { $0 }
+        // Use the same scope resolver as matching so sections / cat:<id> /
+        // ranges all work, not just a bare numeric id.
+        tiles = board.tilesForScope(session.scope, from: session.from, to: session.to)
+            .filter { $0.imageKey?.isEmpty == false }
+            .shuffled()
+            .prefix(40).map { $0 }
+        GameAudio.shared.startMusic(childId: auth.childSlug)
     }
 
     private func loadCurrent() async {
@@ -108,8 +107,9 @@ struct SlideshowView: View {
         if index + 1 < tiles.count {
             index += 1
         } else {
-            // End of deck — celebrate, then close.
+            // End of deck — celebrate with confetti + a vocalized cheer, then close.
             celebrating = true
+            GameAudio.shared.playCheer(childId: auth.childSlug)
             Task {
                 try? await Task.sleep(nanoseconds: 2_400_000_000)
                 onExit()

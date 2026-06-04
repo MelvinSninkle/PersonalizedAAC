@@ -18,6 +18,7 @@ struct MatchingView: View {
     @Environment(BoardStore.self) private var board
     @Environment(LiveSession.self) private var live
     @Environment(GameController.self) private var game
+    @Environment(AuthManager.self) private var auth
 
     @State private var targets: [Tile] = []
     @State private var index = 0
@@ -62,7 +63,10 @@ struct MatchingView: View {
             ConfettiView(running: celebrating)
         }
         .task { setup() }
-        .onDisappear { limitTask?.cancel() }
+        .onDisappear {
+            limitTask?.cancel()
+            GameAudio.shared.stopMusic()
+        }
         .onChange(of: index) { _, _ in publishState() }
         .onChange(of: game.inGameCommand) { _, cmd in handleCommand(cmd) }
     }
@@ -158,9 +162,22 @@ struct MatchingView: View {
         targets = picked
         index = 0
         correctCount = 0
-        finished = targets.isEmpty
-        startRound()
+        if targets.isEmpty {
+            finishGame()
+        } else {
+            GameAudio.shared.startMusic(childId: auth.childSlug)   // background music
+            startRound()
+        }
         startLimitTimerIfNeeded()
+    }
+
+    /// End the lesson: stop polling state to ended, play the vocalized cheer
+    /// over the still-playing music (the music stops when the view exits).
+    private func finishGame() {
+        guard !finished else { return }
+        finished = true
+        live.setEnded(currentPayload())
+        GameAudio.shared.playCheer(childId: auth.childSlug)
     }
 
     /// Reset per-round state, build choices, announce the target.
@@ -202,19 +219,18 @@ struct MatchingView: View {
             advance(after: 0.95)
         } else {
             // Wrong → escalate a hint on the CORRECT tile, replay the word.
+            // Two attempts total: 1st miss highlights the answer (wiggle +
+            // yellow glow) and re-announces; 2nd miss reveals + moves on.
             misses += 1
-            switch misses {
-            case 1:
+            if misses == 1 {
+                glowCorrect = true
                 wiggleCorrectId = target.id
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { wiggleCorrectId = nil }
-            case 2:
-                glowCorrect = true
-            default:        // 3rd miss → reveal + move on
-                glowCorrect = true
+                announceTarget()
+            } else {        // 2nd miss → answer already glowing, move on
                 locked = true
                 advance(after: 0.9)
             }
-            if misses < 3 { announceTarget() }
         }
     }
 
@@ -229,8 +245,7 @@ struct MatchingView: View {
                 index += 1
                 startRound()
             } else {
-                finished = true
-                live.setEnded(currentPayload())
+                finishGame()
             }
         }
     }
@@ -242,10 +257,7 @@ struct MatchingView: View {
         limitTask = Task {
             try? await Task.sleep(nanoseconds: nanos)
             guard !Task.isCancelled else { return }
-            await MainActor.run {
-                finished = true
-                live.setEnded(currentPayload())
-            }
+            await MainActor.run { finishGame() }
         }
     }
 

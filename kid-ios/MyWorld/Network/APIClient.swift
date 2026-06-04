@@ -129,6 +129,36 @@ struct APIClient {
         return try? JSONDecoder().decode(DisplayPrefsData.self, from: kdData)
     }
 
+    /// Reward settings (cheer phrases + background music) the parent set via
+    /// the web rewards panel, stored under settings.rewards.
+    struct RewardSettings {
+        var phrases: [String]
+        var music: String?
+    }
+
+    func fetchRewards(childId: String) async -> RewardSettings {
+        let settings = await childSettings(childId: childId)
+        let rw = settings["rewards"] as? [String: Any]
+        let phrases = (rw?["phrases"] as? [String])?.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? []
+        let music = rw?["music"] as? String
+        return RewardSettings(phrases: phrases, music: music)
+    }
+
+    /// POST /api/tts { text, emotion } → audio/mpeg bytes (ElevenLabs voice).
+    func tts(text: String, emotion: String = "excited") async -> Data? {
+        guard let body = try? JSONSerialization.data(withJSONObject: ["text": text, "emotion": emotion]) else { return nil }
+        guard let (data, _) = try? await request(method: "POST", path: "/api/tts",
+                                                 body: body, contentType: "application/json") else { return nil }
+        return data
+    }
+
+    /// GET a static audio asset (e.g. "/audio/color-tap-learn.mp3").
+    func fetchAudioData(path: String) async -> Data? {
+        let p = path.hasPrefix("/") ? path : "/" + path
+        guard let (data, _) = try? await request(method: "GET", path: p, body: nil) else { return nil }
+        return data
+    }
+
     /// Merge-safe write of display prefs: read the current settings blob, set
     /// only the `kidDisplay` key, write the whole thing back. Avoids clobbering
     /// the web app's schedule / reward settings stored in the same blob.
