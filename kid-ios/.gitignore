@@ -1,0 +1,21 @@
+# XcodeGen generates this from project.yml — never commit it.
+*.xcodeproj/
+*.xcworkspace/
+
+# Build outputs
+build/
+DerivedData/
+.build/
+
+# Per-user state
+*.xcuserstate
+xcuserdata/
+
+# Swift Package Manager
+Packages/
+Package.pins
+Package.resolved
+.swiftpm/
+
+# Misc
+.DS_Store

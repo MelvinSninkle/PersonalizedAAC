@@ -1,0 +1,57 @@
+# XcodeGen spec — generates MyWorld.xcodeproj from this file.
+# Regenerate after editing:   xcodegen generate   (run inside kid-ios/)
+# Install xcodegen once:      brew install xcodegen
+
+name: MyWorld
+options:
+  bundleIdPrefix: io.andrewpeterson
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""               # set this in Xcode the first time
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_PREVIEWS: YES
+    SWIFT_STRICT_CONCURRENCY: minimal
+
+targets:
+  MyWorld:
+    type: application
+    platform: iOS
+    sources:
+      - path: MyWorld
+        excludes:
+          - "**/*.md"
+    info:
+      path: MyWorld/Info.plist
+      properties:
+        CFBundleDisplayName: My World
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: ""
+        UIRequiresFullScreen: true
+        UIStatusBarHidden: true
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+        UIBackgroundModes:
+          - audio
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.andrewpeterson.myworld
+        TARGETED_DEVICE_FAMILY: "1,2"     # iPhone + iPad
+        SUPPORTS_MACCATALYST: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIRequiresFullScreen: YES

@@ -145,7 +145,19 @@ Encoded in `api/_lib/access.js`:
 
 ---
 
-## Native iOS shell (Capacitor)
+## Native iOS kid app (SwiftUI) — `kid-ios/`
+
+The kid-facing board is being rewritten as a native SwiftUI app to eliminate the WKWebView touch lag (300ms click delay, double-tap-to-zoom, gesture fights) that makes the iPad feel sluggish for a child tapping at speed. Parents, therapists, and admins keep using the web app.
+
+The Swift project lives in `kid-ios/` with its own [README](kid-ios/README.md). It calls the same `/api/auth/login`, `/api/sync`, `/api/media`, `/api/events`, `/api/live`, `/api/tts` endpoints as the web app — no server changes — and uses cookie-based auth via `URLSession` + `HTTPCookieStorage`.
+
+The Xcode project is generated from `kid-ios/project.yml` via [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen && cd kid-ios && xcodegen generate`), so the `.xcodeproj` is gitignored and we avoid hand-maintained `pbxproj` diffs.
+
+The Capacitor shell below stays in the repo as the parent/therapist surface and as a fallback for the kid surface until the native app is fully migrated.
+
+---
+
+## Capacitor iOS shell (parent / therapist / fallback)
 
 `capacitor.config.json` points the WKWebView at the live URL:
 
