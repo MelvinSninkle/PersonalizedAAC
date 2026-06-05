@@ -12,6 +12,7 @@ import SwiftUI
 struct HeaderBar: View {
     @Environment(AuthManager.self) private var auth
     @Environment(DisplayPrefs.self) private var prefs
+    @Environment(AddTileQueue.self) private var addQueue
 
     @Binding var editMode: Bool
     @Binding var showDisplay: Bool
@@ -88,10 +89,15 @@ struct HeaderBar: View {
         HStack(spacing: 8) {
             if editMode {
                 // Native add-tile flow lives here so a busy parent doesn't
-                // have to bounce out to Safari to add a tile. Camera/library
-                // → AI describe → art → voice → review → save. Lands in
-                // Needs by default; review screen lets her pick a category.
-                pillButton("➕ New tile") { showAddTile = true }
+                // have to bounce out to Safari. Camera/library → AI describe →
+                // art → voice → auto-add, all in a background queue so she can
+                // keep snapping. The pill shows a live count while tiles are
+                // still rendering (they finish + land on the board even if she
+                // closes the sheet).
+                let rendering = addQueue.jobs.filter { $0.phase == .working }.count
+                pillButton(rendering > 0 ? "⏳ \(rendering) rendering" : "➕ New tile") {
+                    showAddTile = true
+                }
                 pillButton("⚙ Display")  { showDisplay = true }
                 if let slug = auth.user?.slug {
                     pillLink(label: "👪 Parent",

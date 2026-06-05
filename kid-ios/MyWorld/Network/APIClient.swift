@@ -241,6 +241,31 @@ struct APIClient {
         catch { throw APIError.decoding(error) }
     }
 
+    /// PUT /api/items?id= — updates an existing tile. Used by the tray edit to
+    /// fix a wrong AI name / pronunciation / placement after a tile has already
+    /// auto-added to the board. `categoryId` is always sent (null = top level)
+    /// so a move to the Needs strip sticks; omit `soundKey` to leave the voice
+    /// untouched.
+    func updateItem(id: Int,
+                    label: String,
+                    section: String,
+                    categoryId: Int?,
+                    soundKey: String?,
+                    childId: String) async throws -> Tile {
+        var body: [String: Any] = [
+            "label":      label,
+            "section":    section,
+            "categoryId": categoryId ?? NSNull(),
+            "childId":    childId,
+        ]
+        if let soundKey { body["soundKey"] = soundKey }
+        let bodyData = try JSONSerialization.data(withJSONObject: body)
+        let (data, _) = try await request(method: "PUT", path: "/api/items?id=\(id)",
+                                          body: bodyData, contentType: "application/json")
+        do { return try JSONDecoder().decode(Tile.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
     /// Fire-and-forget POST to any path that doesn't need a body or response —
     /// used for things like `/api/play-request?childId=...`.
     func postEmpty(path: String) async {

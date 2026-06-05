@@ -24,9 +24,10 @@ struct CameraPicker: UIViewControllerRepresentable {
         let vc = UIImagePickerController()
         // .camera is the only mode we want here — the library path is handled
         // separately by PhotosPicker (which is native SwiftUI and pickier
-        // about permissions).
+        // about permissions). Fall back to the library on the Simulator / a
+        // device with no camera so the flow is still testable.
         vc.sourceType = UIImagePickerController.isSourceTypeAvailable(.camera) ? .camera : .photoLibrary
-        vc.cameraDevice = .rear
+        if vc.sourceType == .camera { vc.cameraDevice = .rear }
         vc.allowsEditing = false
         vc.delegate = context.coordinator
         return vc
@@ -34,6 +35,11 @@ struct CameraPicker: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
 
+    // NOTE: the coordinator does NOT call `picker.dismiss()`. Dismissal is the
+    // caller's job via the `.sheet(isPresented:)` binding it flips inside
+    // `onCapture`. Self-dismissing here leaves that binding stuck `true`, which
+    // silently breaks the *next* "Take a photo" tap — exactly the rapid-fire
+    // case this whole flow exists for.
     final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let parent: CameraPicker
         init(_ parent: CameraPicker) { self.parent = parent }
@@ -41,13 +47,11 @@ struct CameraPicker: UIViewControllerRepresentable {
         func imagePickerController(_ picker: UIImagePickerController,
                                    didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             let image = (info[.originalImage] as? UIImage)
-            picker.dismiss(animated: true) {
-                self.parent.onCapture(image.flatMap { Self.downscaledJPEG($0) })
-            }
+            parent.onCapture(image.flatMap { Self.downscaledJPEG($0) })
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            picker.dismiss(animated: true) { self.parent.onCapture(nil) }
+            parent.onCapture(nil)
         }
 
         /// Downscale to at most 1024px on the long edge and re-encode as JPEG

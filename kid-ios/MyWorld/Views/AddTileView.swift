@@ -1,319 +1,234 @@
 import SwiftUI
 import PhotosUI
-import AVFoundation
+import UIKit
 
-/// Native "Add a tile" flow for the iPad/iPhone app.
+/// Native "Add tiles" flow, built for a parent with two kids hanging off her.
 ///
-/// Designed for the case where the parent has two kids on her and 8 seconds
-/// to make a tile: the photo comes first, and the AI fills in everything
-/// else automatically. She reviews the AI's suggestion, fixes anything that
-/// looks wrong, and taps Save once.
+/// The slow part (image generation, ~20–40s) never blocks her. She picks where
+/// the batch goes once, then snaps; each photo becomes a background job with its
+/// own progress ring in the tray and auto-adds to the board when it finishes.
+/// She can keep shooting the whole time, or close the sheet and let the tiles
+/// finish landing on their own.
 ///
-///   1. Source picker         — Camera / Photo Library (confirmation dialog)
-///   2. Photo arrives         — kicks off the AI chain:
-///        a. /api/describe-image  → label + phonetic spelling
-///        b. /api/generate-image  → styled artwork
-///        c. /api/tts             → voice
-///   3. Review                — editable label + phrase + art style + section
-///                              + category. A play button previews the voice.
-///   4. Save                  — uploads art + voice + creates the item, then
-///                              refreshes the board.
-///
-/// On any single-step failure the view shows a clear inline error with a
-/// "Try again" button rather than dumping the user back to the start.
+///   ┌─ Adding to: [Needs|People|Nouns|Verbs]  Folder ▾  Style ▾ ─┐
+///   │  [ 📷 Take a photo ]   [ 🖼 Choose from Photos ]            │
+///   │  ── In progress ──                                          │
+///   │  [photo] Banana          🔊 Making the voice…       ◔       │
+///   │  [photo] On the board ✓  tap to rename               ✓      │
+///   └────────────────────────────────────────────────────────────┘
 struct AddTileView: View {
-    /// Where the new tile lands by default. Caller can prefill these based on
-    /// what part of the board the parent is currently looking at; the review
-    /// screen lets her change them.
     var defaultSection: BoardSection = .needs
     var defaultCategoryId: Int?     = nil
     let onDone: () -> Void
 
-    @Environment(BoardStore.self)  private var board
-    @Environment(AuthManager.self) private var auth
+    @Environment(BoardStore.self)   private var board
+    @Environment(AuthManager.self)  private var auth
+    @Environment(AddTileQueue.self) private var queue
 
-    // -- Flow state
-    @State private var phase: Phase = .pickingSource
-    @State private var showCamera   = false
-    @State private var libraryItem: PhotosPickerItem?
-
-    // -- Captured data
-    @State private var photoJPEG: Data?
-    @State private var aiImagePNG: Data?
-    @State private var aiSoundMP3: Data?
-
-    // -- Editable review fields
-    @State private var label  = ""
-    @State private var phrase = ""
-    @State private var style: ArtStyle = .threeD
+    // Batch destination — chosen once, applied to every photo until changed.
     @State private var section: BoardSection = .needs
     @State private var categoryId: Int?
-    @State private var emotion = "default"
+    @State private var style: ArtStyle = .threeD
 
-    @State private var errorText: String?
-    /// Kept alive on the view so AVAudioPlayer doesn't get released mid-clip.
-    @State private var previewPlayer: AVAudioPlayer?
+    // Picker presentation
+    @State private var showCamera  = false
+    @State private var showLibrary = false
+    @State private var libraryItem: PhotosPickerItem?
 
-    private let api = APIClient()
-
-    enum Phase: Equatable {
-        case pickingSource          // confirmation dialog open
-        case processing(String)     // progress string ("Looking at the photo…")
-        case reviewing
-        case saving
-    }
-
-    /// Five art-styles, mirroring the web's dropdown. The `prompt` value goes
-    /// to /api/generate-image as the `style` query param; the `label` is what
-    /// the parent sees.
-    enum ArtStyle: String, CaseIterable, Identifiable {
-        case threeD, pictureBook, watercolor, soft, felted
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .threeD:      return "3D Animated"
-            case .pictureBook: return "Picture Book"
-            case .watercolor:  return "Watercolor"
-            case .soft:        return "Soft Storybook"
-            case .felted:      return "Felted"
-            }
-        }
-        var prompt: String {
-            switch self {
-            case .threeD:      return "Pixar-style 3D animated render"
-            case .pictureBook: return "flat picture-book illustration"
-            case .watercolor:  return "soft watercolor illustration"
-            case .soft:        return "gentle soft storybook illustration"
-            case .felted:      return "needle-felted wool craft"
-            }
-        }
-    }
+    @State private var editingJob: TileJob?
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Color(hex: "#fff7fb").ignoresSafeArea()
-                contentForPhase
-            }
-            .navigationTitle("Add a tile")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel", role: .cancel) { onDone() }
+                ScrollView {
+                    VStack(spacing: 18) {
+                        destinationCard
+                        captureButtons
+                        tray
+                    }
+                    .padding(16)
+                    // Attached here (not alongside the camera sheet) so each
+                    // view owns a single .sheet — stacking two on one view is
+                    // unreliable on older iOS. The library picker rides along
+                    // here too, away from the camera sheet.
+                    .photosPicker(isPresented: $showLibrary, selection: $libraryItem, matching: .images)
+                    .sheet(item: $editingJob) { job in
+                        TileEditSheet(job: job)
+                    }
                 }
             }
-            // PhotosPicker lives at the root so it can present regardless of
-            // which sub-view kicked it off.
-            .photosPicker(isPresented: $showLibrary,
-                          selection: $libraryItem,
-                          matching: .images)
+            .navigationTitle("Add tiles")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { onDone() }
+                        .font(.system(size: 16, weight: .semibold))
+                }
+            }
             .sheet(isPresented: $showCamera) {
+                // Flip the binding ourselves so the sheet actually dismisses and
+                // a second tap re-opens the camera (the picker no longer self-
+                // dismisses — see CameraPicker).
                 CameraPicker { data in
-                    if let data { photoArrived(data) }
+                    showCamera = false
+                    if let data { enqueue(data) }
                 }
                 .ignoresSafeArea()
             }
             .onChange(of: libraryItem) { _, newItem in
                 guard let newItem else { return }
                 Task {
-                    if let data = try? await newItem.loadTransferable(type: Data.self) {
-                        photoArrived(data)
-                    }
-                    libraryItem = nil
+                    if let data = try? await newItem.loadTransferable(type: Data.self) { enqueue(data) }
+                    libraryItem = nil   // allow picking again immediately
                 }
             }
             .task {
                 section = defaultSection
                 categoryId = defaultCategoryId
+                // Reopening the sheet starts the tray clean, but keep anything
+                // still rendering visible so she can watch it land.
+                queue.pruneFinished()
             }
         }
     }
 
-    // MARK: -- Per-phase content
+    // MARK: -- Destination
+
+    private var destinationCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("THESE TILES GO TO")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Color(hex: "#999"))
+
+            Picker("Section", selection: $section) {
+                ForEach([BoardSection.needs, .people, .nouns, .verbs]) { s in
+                    Text(sectionLabel(s)).tag(s)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: section) { _, _ in categoryId = nil }
+
+            HStack(spacing: 12) {
+                let folders = board.roots(in: section)
+                if !folders.isEmpty {
+                    Menu {
+                        Button("Top level") { categoryId = nil }
+                        ForEach(folders, id: \.id) { c in
+                            Button(c.label) { categoryId = c.id }
+                        }
+                    } label: {
+                        menuChip(icon: "folder", text: folderName(folders))
+                    }
+                }
+                Menu {
+                    ForEach(ArtStyle.allCases) { s in
+                        Button(s.label) { style = s }
+                    }
+                } label: {
+                    menuChip(icon: "paintpalette", text: style.label)
+                }
+                Spacer()
+            }
+        }
+        .padding(14)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+    }
+
+    private func menuChip(icon: String, text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+            Text(text).lineLimit(1)
+            Image(systemName: "chevron.down").font(.system(size: 10))
+        }
+        .font(.system(size: 14, weight: .semibold))
+        .foregroundStyle(Color(hex: "#ad1457"))
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Color(hex: "#fce4ef"))
+        .clipShape(Capsule())
+    }
+
+    // MARK: -- Capture
+
+    private var captureButtons: some View {
+        HStack(spacing: 12) {
+            Button { showCamera = true } label: {
+                captureLabel(icon: "camera.fill", text: "Take a photo", filled: true)
+            }
+            .buttonStyle(.plain)
+
+            Button { showLibrary = true } label: {
+                captureLabel(icon: "photo.on.rectangle", text: "Choose photo", filled: false)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func captureLabel(icon: String, text: String, filled: Bool) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon).font(.system(size: 26))
+            Text(text).font(.system(size: 15, weight: .semibold))
+        }
+        .frame(maxWidth: .infinity, minHeight: 84)
+        .foregroundStyle(filled ? .white : Color(hex: "#ad1457"))
+        .background(filled ? Color(hex: "#ff1493") : Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color(hex: "#ff1493"), lineWidth: filled ? 0 : 2)
+        )
+    }
+
+    // MARK: -- Tray
 
     @ViewBuilder
-    private var contentForPhase: some View {
-        switch phase {
-        case .pickingSource:
-            sourcePicker
-        case .processing(let label):
-            processingView(label)
-        case .reviewing:
-            reviewView
-        case .saving:
-            processingView("Saving the tile…")
-        }
-    }
-
-    /// Phase 1: the parent lands here. Two big buttons — no decisions before
-    /// the photo.
-    private var sourcePicker: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Image(systemName: "camera.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(Color(hex: "#ad1457"))
-            Text("Snap a photo or pick one.\nWe'll do the rest.")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(hex: "#ad1457"))
+    private var tray: some View {
+        if !queue.jobs.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("TILES")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(hex: "#999"))
+                ForEach(queue.jobs) { job in
+                    JobCard(job: job,
+                            onTap:   { tapped(job) },
+                            onRetry: { queue.retry(job, board: board) },
+                            onRemove:{ queue.remove(job) })
+                }
+            }
+        } else {
+            Text("Snap a photo of anything — a snack, a toy, a person — and we'll turn it into a tile while you line up the next one.")
+                .font(.system(size: 14))
+                .foregroundStyle(Color(hex: "#aa7"))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
-
-            Button { showCamera = true } label: {
-                Label("Take a photo", systemImage: "camera.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .foregroundStyle(.white)
-                    .background(Color(hex: "#ff1493"))
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 28)
-
-            Button {
-                // Tap → open PhotosPicker. We can't bind `.photosPicker` to a
-                // Bool directly; we use libraryItem as the trigger via a flag
-                // and the .photosPicker modifier above handles presentation.
-                showLibrary = true
-            } label: {
-                Label("Choose from Photos", systemImage: "photo.on.rectangle")
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .foregroundStyle(Color(hex: "#ad1457"))
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(Color(hex: "#ff1493"), lineWidth: 2)
-                    )
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 28)
-
-            if let err = errorText {
-                Text(err)
-                    .font(.system(size: 14))
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 28)
-            }
-            Spacer()
+                .padding(.top, 8)
         }
     }
 
-    /// Phase 2: a friendly progress screen the parent can glance at without
-    /// stopping what she's doing. The status string updates as the chain
-    /// progresses.
-    private func processingView(_ status: String) -> some View {
-        VStack(spacing: 18) {
-            Spacer()
-            ProgressView()
-                .scaleEffect(1.5)
-                .tint(Color(hex: "#ad1457"))
-            Text(status)
-                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(hex: "#ad1457"))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-            Spacer()
+    private func tapped(_ job: TileJob) {
+        // Done → rename; needs-a-name → name it. (Error cards use their button.)
+        if job.phase == .done || (job.phase == .needsAttention && job.errorText == nil) {
+            editingJob = job
         }
     }
 
-    /// Phase 3: review + tweak. The AI fills everything in; she just confirms.
-    private var reviewView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                if let png = aiImagePNG, let img = UIImage(data: png) {
-                    Image(uiImage: img)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
-                        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
-                        .padding(.horizontal, 8)
-                }
+    // MARK: -- Helpers
 
-                Group {
-                    fieldLabel("Tile name")
-                    TextField("e.g. Mom", text: $label)
-                        .textFieldStyle(.roundedBorder)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.words)
-
-                    fieldLabel("How to pronounce it")
-                    HStack {
-                        TextField("e.g. buh-NAN-uh", text: $phrase)
-                            .textFieldStyle(.roundedBorder)
-                            .autocorrectionDisabled()
-                        Button {
-                            Task { await previewVoice() }
-                        } label: {
-                            Image(systemName: "play.circle.fill")
-                                .font(.system(size: 30))
-                                .foregroundStyle(Color(hex: "#ff1493"))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(phrase.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-
-                    fieldLabel("Art style")
-                    Picker("Art style", selection: $style) {
-                        ForEach(ArtStyle.allCases) { s in Text(s.label).tag(s) }
-                    }
-                    .pickerStyle(.menu)
-                    .onChange(of: style) { _, _ in Task { await regenerateArt() } }
-
-                    fieldLabel("Where on the board")
-                    Picker("Section", selection: $section) {
-                        ForEach([BoardSection.needs, .people, .nouns, .verbs]) { s in
-                            Text(sectionLabel(s)).tag(s)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: section) { _, _ in categoryId = nil }
-
-                    let categoriesInSection = board.roots(in: section)
-                    if !categoriesInSection.isEmpty {
-                        fieldLabel("Folder (optional)")
-                        Picker("Folder", selection: $categoryId) {
-                            Text("(Top level)").tag(Int?.none)
-                            ForEach(categoriesInSection, id: \.id) { c in
-                                Text(c.label).tag(Int?.some(c.id))
-                            }
-                        }
-                        .pickerStyle(.menu)
-                    }
-                }
-
-                if let err = errorText {
-                    Text(err)
-                        .font(.system(size: 14))
-                        .foregroundStyle(.red)
-                }
-
-                Button {
-                    Task { await save() }
-                } label: {
-                    Text("Save tile")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .frame(maxWidth: .infinity, minHeight: 56)
-                        .foregroundStyle(.white)
-                        .background(canSave ? Color(hex: "#ff1493") : Color.gray.opacity(0.4))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-                .buttonStyle(.plain)
-                .disabled(!canSave)
-            }
-            .padding(20)
-        }
+    private func enqueue(_ data: Data) {
+        queue.enqueue(photoJPEG: data,
+                      section: section,
+                      categoryId: categoryId,
+                      style: style,
+                      emotion: "default",
+                      prefilledLabel: "",
+                      childId: auth.childSlug,
+                      board: board)
     }
 
-    private func fieldLabel(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(Color(hex: "#888"))
-            .textCase(.uppercase)
-            .padding(.top, 4)
+    private func folderName(_ folders: [Category]) -> String {
+        guard let id = categoryId, let c = folders.first(where: { $0.id == id }) else { return "Top level" }
+        return c.label
     }
 
     private func sectionLabel(_ s: BoardSection) -> String {
@@ -324,145 +239,110 @@ struct AddTileView: View {
         case .verbs:  return "Verbs"
         }
     }
+}
 
-    // MARK: -- Picker plumbing
+// MARK: -- Tray card
 
-    @State private var showLibrary = false
+/// One row in the tray. Shows the captured photo with a live progress ring while
+/// the AI chain runs, a checkmark once it's on the board, or a name/retry prompt
+/// when it needs a hand.
+private struct JobCard: View {
+    @Bindable var job: TileJob
+    let onTap: () -> Void
+    let onRetry: () -> Void
+    let onRemove: () -> Void
 
-    // MARK: -- AI chain
-
-    /// Photo arrived from either camera or library — run the AI chain.
-    private func photoArrived(_ jpeg: Data) {
-        photoJPEG = jpeg
-        errorText = nil
-        Task { await runAIChain() }
-    }
-
-    private func runAIChain() async {
-        guard let photo = photoJPEG else { return }
-        do {
-            // 1) Vision: auto-name + phonetic. Best-effort — if it returns
-            // empty (e.g. org isn't verified for vision), we surface a clear
-            // message and let the parent type a label in the review screen.
-            phase = .processing("🔍 Looking at the photo…")
-            let desc = (try? await api.describeImage(photoJPEG: photo)) ?? .init(label: "", pronunciation: "")
-            if !desc.label.isEmpty       { label  = desc.label }
-            if !desc.pronunciation.isEmpty { phrase = desc.pronunciation }
-
-            // 2) Art. We need *some* label hint for gpt-image-1; fall back to
-            // a generic "object" so the flow doesn't dead-end on vision miss.
-            phase = .processing("🎨 Creating the artwork…\n(this can take ~20–40 seconds)")
-            // Empty label is OK — server prompt falls back to "the main subject".
-            aiImagePNG = try await api.generateImage(photoJPEG: photo,
-                                                    label: label,
-                                                    style: style.prompt,
-                                                    childId: auth.childSlug)
-
-            // 3) Voice. Phrase wins; label is the fallback.
-            phase = .processing("🔊 Recording the voice…")
-            let speak = !phrase.isEmpty ? phrase : (label.isEmpty ? "" : label)
-            if !speak.isEmpty {
-                aiSoundMP3 = try? await api.synthesizeSpeech(text: speak, emotion: emotion)
-            }
-
-            phase = .reviewing
-        } catch {
-            errorText = friendly(error)
-            phase = .pickingSource     // bounce back to retry
-        }
-    }
-
-    /// Re-render the art whenever the parent changes the style picker.
-    private func regenerateArt() async {
-        guard let photo = photoJPEG else { return }
-        do {
-            phase = .processing("🎨 Re-styling the artwork…")
-            // Empty label is OK — server prompt falls back to "the main subject".
-            aiImagePNG = try await api.generateImage(photoJPEG: photo,
-                                                    label: label,
-                                                    style: style.prompt,
-                                                    childId: auth.childSlug)
-            phase = .reviewing
-        } catch {
-            errorText = friendly(error)
-            phase = .reviewing
-        }
-    }
-
-    /// Play back the current phrase via TTS so the parent can confirm the
-    /// pronunciation before saving. Doesn't replace the persisted voice —
-    /// that's freshly generated on Save with whatever's in the phrase field.
-    private func previewVoice() async {
-        let text = phrase.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return }
-        do {
-            let mp3 = try await api.synthesizeSpeech(text: text, emotion: emotion)
-            aiSoundMP3 = mp3
-            let player = try AVAudioPlayer(data: mp3)
-            player.volume = 1.0
-            player.prepareToPlay()
-            player.play()
-            previewPlayer = player
-        } catch {
-            errorText = friendly(error)
-        }
-    }
-
-    // MARK: -- Save
-
-    private var canSave: Bool {
-        aiImagePNG != nil &&
-        !label.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
-    private func save() async {
-        guard let png = aiImagePNG else { return }
-        let trimmedLabel  = label.trimmingCharacters(in: .whitespaces)
-        let trimmedPhrase = phrase.trimmingCharacters(in: .whitespaces)
-        phase = .saving
-        errorText = nil
-        do {
-            // Always re-TTS with the current phrase so any post-AI edits to
-            // the pronunciation field actually take effect. Cheap (~1-2s).
-            let speak = !trimmedPhrase.isEmpty ? trimmedPhrase : trimmedLabel
-            let mp3 = try await api.synthesizeSpeech(text: speak, emotion: emotion)
-
-            // Upload both blobs in parallel.
-            async let imageKeyT = api.uploadBlob(png, kind: "item-image", ext: "png", contentType: "image/png")
-            async let soundKeyT = api.uploadBlob(mp3, kind: "item-sound", ext: "mp3", contentType: "audio/mpeg")
-            let imageKey = try await imageKeyT
-            let soundKey = try await soundKeyT
-
-            _ = try await api.createItem(section: section.rawValue,
-                                         categoryId: categoryId,
-                                         label: trimmedLabel,
-                                         imageKey: imageKey,
-                                         soundKey: soundKey,
-                                         keepAspect: false,
-                                         description: nil,
-                                         childId: auth.childSlug)
-            await board.refresh(childId: auth.childSlug)
-            onDone()
-        } catch {
-            errorText = friendly(error)
-            phase = .reviewing
-        }
-    }
-
-    private func friendly(_ error: Error) -> String {
-        if let api = error as? APIError {
-            switch api {
-            case .badStatus(_, let body):
-                if body.range(of: "must be verified", options: .caseInsensitive) != nil {
-                    return "Your OpenAI organization isn't verified for image generation. Open platform.openai.com → Settings → Organization → Verify, then try again."
+    var body: some View {
+        HStack(spacing: 12) {
+            thumbnail
+            VStack(alignment: .leading, spacing: 3) {
+                Text(titleText)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#333"))
+                    .lineLimit(1)
+                Text(job.errorText ?? job.statusText)
+                    .font(.system(size: 13))
+                    .foregroundStyle(job.errorText != nil ? .red : Color(hex: "#888"))
+                    .lineLimit(2)
+                if isError {
+                    HStack(spacing: 14) {
+                        Button("Retry",  action: onRetry).font(.system(size: 14, weight: .semibold))
+                        Button("Remove", role: .destructive, action: onRemove).font(.system(size: 14))
+                    }
+                    .padding(.top, 2)
                 }
-                return body.isEmpty ? "Server error." : String(body.prefix(180))
-            case .notAuthenticated: return "Signed out — log in and try again."
-            case .transport(let e): return "Network problem: \(e.localizedDescription)"
-            case .invalidResponse:  return "Unexpected server response."
-            case .decoding:         return "Couldn't read the server's response."
+            }
+            Spacer()
+            trailing
+        }
+        .padding(12)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
+        .contentShape(Rectangle())
+        .onTapGesture { onTap() }
+    }
+
+    private var thumbnail: some View {
+        Image(uiImage: job.thumbnail)
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: 56, height: 56)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.black.opacity(0.06), lineWidth: 1)
+            )
+            .opacity(job.phase == .working ? 0.7 : 1)
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        switch job.phase {
+        case .working:
+            ProgressRing(progress: job.progress)
+                .frame(width: 30, height: 30)
+        case .done:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 26))
+                .foregroundStyle(.green)
+        case .needsAttention:
+            if isError {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.orange)
+            } else {
+                Image(systemName: "pencil.circle.fill")
+                    .font(.system(size: 26))
+                    .foregroundStyle(Color(hex: "#ff1493"))
             }
         }
-        return error.localizedDescription
+    }
+
+    private var isError: Bool { job.phase == .needsAttention && job.errorText != nil }
+
+    private var titleText: String {
+        if !job.label.isEmpty { return job.label }
+        switch job.phase {
+        case .working:        return "New tile"
+        case .done:           return "New tile"
+        case .needsAttention: return isError ? "Couldn't finish" : "Needs a name"
+        }
+    }
+}
+
+/// A circular progress ring that animates smoothly toward `progress` (0…1).
+private struct ProgressRing: View {
+    let progress: Double
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color(hex: "#fce4ef"), lineWidth: 4)
+            Circle()
+                .trim(from: 0, to: max(0.02, progress))
+                .stroke(Color(hex: "#ff1493"), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.easeInOut(duration: 0.4), value: progress)
+        }
     }
 }
