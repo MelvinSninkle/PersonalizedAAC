@@ -45,6 +45,12 @@ targets:
           - audio
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: false
+        # Camera + Photos are required for the in-app "Add a tile" flow.
+        # Without these strings, iOS silently denies access and the picker
+        # never appears, which reads to the parent as "the button is broken."
+        NSCameraUsageDescription: "Take photos of the things you want your child to see on the board — pets, family, snacks, places. The app turns each photo into a styled tile with the AI."
+        NSPhotoLibraryUsageDescription: "Choose photos from your library to add as tiles on the board. The app turns each photo into a styled tile with the AI."
+        NSMicrophoneUsageDescription: "Record your own voice for a tile so your child hears you (and not the AI) say the word."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.andrewpeterson.myworld

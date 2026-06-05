@@ -17,6 +17,7 @@ struct HeaderBar: View {
     @Binding var showDisplay: Bool
     @Binding var showSettings: Bool
     @State private var showUnlock = false
+    @State private var showAddTile = false
 
     var title: String { "\(prettyChildName(auth.user?.slug))'s World" }
     private var hex: String { prefs.colorHeaderText }
@@ -48,6 +49,9 @@ struct HeaderBar: View {
         }
         .sheet(isPresented: $showUnlock) {
             UnlockSheet { editMode = true }
+        }
+        .sheet(isPresented: $showAddTile) {
+            AddTileView { showAddTile = false }
         }
     }
 
@@ -83,7 +87,12 @@ struct HeaderBar: View {
     private var trailingControls: some View {
         HStack(spacing: 8) {
             if editMode {
-                pillButton("⚙ Display") { showDisplay = true }
+                // Native add-tile flow lives here so a busy parent doesn't
+                // have to bounce out to Safari to add a tile. Camera/library
+                // → AI describe → art → voice → review → save. Lands in
+                // Needs by default; review screen lets her pick a category.
+                pillButton("➕ New tile") { showAddTile = true }
+                pillButton("⚙ Display")  { showDisplay = true }
                 if let slug = auth.user?.slug {
                     pillLink(label: "👪 Parent",
                              url: URL(string: "https://aac.andrewpeterson.io/parent/\(slug)")!)
