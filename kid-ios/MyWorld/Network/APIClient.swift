@@ -184,12 +184,13 @@ struct APIClient {
     /// with the chosen OpenAI image model. Returns the raw PNG bytes. ~20-40s.
     func generateImage(photoJPEG: Data, label: String, style: String, model: String, childId: String) async throws -> Data {
         let path = "/api/generate-image?label=\(percentEscape(label))&style=\(percentEscape(style))&model=\(percentEscape(model))&childId=\(percentEscape(childId))"
-        // Match the server's 180s ceiling (with a few seconds of grace) — the
-        // default 60s URLRequest timeout was firing before gpt-image-1.5/2 at
-        // high quality could finish.
+        // 320s = Vercel's 300s function ceiling plus a 20s grace window, so a
+        // near-the-edge response still arrives intact rather than the iPad
+        // giving up first. gpt-image-1.5/-2 at high quality + high fidelity can
+        // legitimately run 60-120s; the headroom is there for the long tail.
         let (data, _) = try await request(method: "POST", path: path,
                                           body: photoJPEG, contentType: "image/jpeg",
-                                          timeout: 200)
+                                          timeout: 320)
         return data
     }
 
