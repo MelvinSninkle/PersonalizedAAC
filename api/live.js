@@ -67,6 +67,11 @@ export default async function handler(req, res) {
           })) : null,
           from: Number.isFinite(b.from) ? b.from : null,
           to: Number.isFinite(b.to) ? b.to : null,
+          sample: Number.isFinite(b.sample) ? b.sample : null,   // random N from the range
+          // PRD §3 mercy bridge: when a facilitator marks a pass, the iPad
+          // needs to know how many attempts the round took so its game-log
+          // attempt row carries the right attempts_taken (1=first try, 2+=mercy).
+          attemptsTaken: Number.isFinite(b.attemptsTaken) ? b.attemptsTaken : null,
           ts: Date.now(),
         };
         const json = JSON.stringify(cmdObj);

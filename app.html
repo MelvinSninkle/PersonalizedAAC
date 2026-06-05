@@ -1073,6 +1073,9 @@
       <input type="checkbox" id="item-pin">
       <label for="item-pin">Pin to top (e.g. for Fletcher)</label>
     </div>
+    <label for="item-description" style="margin-top:14px;">Description for Auditory Comprehension game (optional)</label>
+    <textarea id="item-description" rows="2" placeholder='e.g. "Lives in a field, has four legs, eats grass." Spoken aloud — the child picks the matching tile.' style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font:inherit;box-sizing:border-box;"></textarea>
+    <div style="font-size:12px;color:#666;margin-top:4px;">If left blank the game falls back to "Who or what is the [tile name]?"</div>
     <div class="error" id="item-error"></div>
     <div class="button-row">
       <button class="danger" id="item-delete" style="display:none;">Delete</button>
@@ -1097,6 +1100,15 @@
     <div class="checkbox-row" id="cat-apply-items-row" style="display:none;">
       <input type="checkbox" id="cat-apply-items">
       <label for="cat-apply-items">Also apply this ratio setting to every item &amp; subcategory inside</label>
+    </div>
+    <label for="cat-kind">Category type</label>
+    <select id="cat-kind" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font-size:15px;">
+      <option value="">Normal</option>
+      <option value="location">📍 Location (a place — speaks its name, shows its rooms)</option>
+      <option value="room">🚪 Room (short-press speaks, long-press opens its contents)</option>
+    </select>
+    <div class="hint" style="font-size:12px;color:#666;margin-top:4px;">
+      Use this on the Nouns side for places that have rooms inside. Example: Places → Home (location) → Kitchen (room) → toaster, fridge…
     </div>
     <div class="error" id="cat-error"></div>
     <div class="button-row">
@@ -2300,6 +2312,7 @@
           id: c.id, section: c.section, label: c.label,
           parentId: c.parentId, order: c.order,
           imageKey: c.imageKey, keepAspect: !!c.keepAspect,
+          kind: c.kind || null,
         });
       }
       for (const it of (data.items || [])) {
@@ -2307,6 +2320,8 @@
           id: it.id, section: it.section, categoryId: it.categoryId, label: it.label,
           order: it.order, pinned: !!it.pinned,
           imageKey: it.imageKey, soundKey: it.soundKey, keepAspect: !!it.keepAspect,
+          description: it.description || null,                    // PRD §5 auditory-comp prompt
+          taxonomySlug: it.taxonomySlug || null,                  // PRD §11 skill anchor
         });
       }
       t.oncomplete = () => res();
@@ -2417,7 +2432,7 @@
     return { key: res.key, blob: finalBlob };
   }
 
-  async function serverCreateCategory({ section, label, parentId, image, keepAspect, order }) {
+  async function serverCreateCategory({ section, label, parentId, image, keepAspect, kind, order }) {
     const up = await uploadIfBlob('image', image, 'cat-image');
     const saved = await apiJSON('/api/categories', {
       method: 'POST',
@@ -2425,6 +2440,7 @@
         section, label, parentId: parentId ?? null, order: order ?? Date.now(),
         imageKey: up?.key || null,
         keepAspect: !!keepAspect,
+        kind: kind ?? null,
         childId: CHILD_ID,
       }),
     });
@@ -2433,13 +2449,14 @@
     return saved;
   }
 
-  async function serverUpdateCategory(old, { label, parentId, image, keepAspect, order }) {
+  async function serverUpdateCategory(old, { label, parentId, image, keepAspect, kind, order }) {
     const up = await uploadIfBlob('image', image, 'cat-image');
     const body = { childId: CHILD_ID };
     if (label !== undefined) body.label = label;
     if (parentId !== undefined) body.parentId = parentId;
     if (order !== undefined) body.order = order;
     if (keepAspect !== undefined) body.keepAspect = !!keepAspect;
+    if (kind !== undefined) body.kind = kind;
     if (up) { body.imageKey = up.key; }
     const saved = await apiJSON('/api/categories?id=' + old.id + '&childId=' + encodeURIComponent(CHILD_ID), {
       method: 'PUT',
@@ -2472,7 +2489,7 @@
     }
   }
 
-  async function serverCreateItem({ section, categoryId, label, image, sound, keepAspect, order, pinned }) {
+  async function serverCreateItem({ section, categoryId, label, image, sound, keepAspect, order, pinned, description }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const saved = await apiJSON('/api/items', {
@@ -2483,6 +2500,7 @@
         imageKey: upImg?.key || null,
         soundKey: upSnd?.key || null,
         keepAspect: !!keepAspect,
+        description: description ?? null,
         childId: CHILD_ID,
       }),
     });
@@ -2492,7 +2510,7 @@
     return saved;
   }
 
-  async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned }) {
+  async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned, description }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const body = { childId: CHILD_ID };
@@ -2501,6 +2519,7 @@
     if (order !== undefined) body.order = order;
     if (pinned !== undefined) body.pinned = !!pinned;
     if (keepAspect !== undefined) body.keepAspect = !!keepAspect;
+    if (description !== undefined) body.description = description;     // PRD §5 auditory-comp prompt
     if (upImg) { body.imageKey = upImg.key; }
     if (upSnd) { body.soundKey = upSnd.key; }
     const saved = await apiJSON('/api/items?id=' + old.id + '&childId=' + encodeURIComponent(CHILD_ID), {
@@ -2549,6 +2568,7 @@
     document.getElementById('item-phrase').value = item?.label || '';
     document.getElementById('item-emotion').value = 'default';
     document.getElementById('item-keep-aspect').checked = !!item?.keepAspect;
+    document.getElementById('item-description').value = item?.description || '';
     const ist = document.getElementById('item-image-status');
     ist.textContent = item?.imageKey ? 'Current image will be kept' : 'No image selected';
     ist.className = 'file-status' + (item?.imageKey ? ' has-file' : '');
@@ -2699,6 +2719,7 @@
     const label = document.getElementById('item-label').value.trim();
     const pinned = document.getElementById('item-pin').checked;
     const keepAspect = document.getElementById('item-keep-aspect').checked;
+    const description = document.getElementById('item-description').value.trim();   // PRD §5
     const errEl = document.getElementById('item-error');
     errEl.textContent = '';
 
@@ -2717,6 +2738,7 @@
           image: pendingImage,
           sound: pendingSound,
           keepAspect,
+          description,
           pinned: editingItemSection === 'people' ? pinned : undefined,
         });
       } else {
@@ -2727,6 +2749,7 @@
           image: pendingImage,
           sound: pendingSound,
           keepAspect,
+          description,
           order: Date.now(),
           pinned: editingItemSection === 'people' ? pinned : false,
         });
@@ -2780,6 +2803,7 @@
     document.getElementById('cat-label').value = cat?.label || '';
     document.getElementById('cat-image').value = '';
     document.getElementById('cat-keep-aspect').checked = !!cat?.keepAspect;
+    document.getElementById('cat-kind').value = cat?.kind || '';
     document.getElementById('cat-apply-items').checked = false;
     document.getElementById('cat-apply-items-row').style.display = cat ? 'flex' : 'none';
     const cist = document.getElementById('cat-image-status');
@@ -2806,6 +2830,7 @@
   document.getElementById('cat-save').addEventListener('click', async () => {
     const label = document.getElementById('cat-label').value.trim();
     const keepAspect = document.getElementById('cat-keep-aspect').checked;
+    const kind = document.getElementById('cat-kind').value || null;
     const errEl = document.getElementById('cat-error');
     errEl.textContent = '';
     if (!label) { errEl.textContent = 'Please enter a category name'; return; }
@@ -2822,6 +2847,7 @@
           label,
           image: pendingCatImage,
           keepAspect,
+          kind,
         });
         if (document.getElementById('cat-apply-items').checked) {
           saveBtn.textContent = 'Applying…';
@@ -2844,6 +2870,7 @@
           parentId: editingCatParentId,
           image: pendingCatImage,
           keepAspect,
+          kind,
           order: Date.now(),
         });
         activeCategoryId[editingCatSection] = saved.id;
@@ -4147,8 +4174,25 @@
     if (url) { const v = gVoice(); v.src = url; v.currentTime = 0; v.play().catch(() => {}); }
   }
 
+  // PRD §3.2 mercy semantics — `correct` is binary per slide (any pass within
+  // the mercy ceiling counts as a full pass). attemptsTaken is recorded
+  // independently so trend analysis can still see motor improvement (fewer
+  // attempts over time) without penalizing the pass.
   function logAttempt(correct) {
-    G.attempts.push({ category: G.target.section, label: G.target.label, itemId: G.target.id, correct, inputMethod: 'tap', misses: G.misses, occurredAt: new Date().toISOString() });
+    const attemptsTaken = Math.max(1, (G.misses || 0) + (correct ? 1 : 0));
+    G.attempts.push({
+      category: G.target.section,
+      label: G.target.label,
+      itemId: G.target.id,
+      taxonomySlug: G.target.taxonomySlug || null,
+      correct,
+      inputMethod: 'tap',
+      misses: G.misses,
+      attemptsTaken,
+      distractorCount: Math.max(0, ((G.settings && G.settings.choices) || 3) - 1),
+      childGenerated: false,                // 'tap' is the button method
+      occurredAt: new Date().toISOString(),
+    });
   }
 
   function onPick(el, choice) {
@@ -4158,7 +4202,8 @@
       el.classList.add('correct');
       document.querySelectorAll('.game-choice').forEach(x => { if (x !== el) x.classList.add('dim'); });
       chime();
-      logAttempt(G.misses === 0);
+      // PRD §3.2 mercy cutover: 2nd- or 3rd-attempt pass is a FULL PASS.
+      logAttempt(true);
       publishState();
       setTimeout(() => { G.i++; nextRound(); }, 950);
     } else {
@@ -4434,7 +4479,25 @@
     const correctEl = [...document.querySelectorAll('.game-choice')].find(x => Number(x.dataset.id) === G.target.id);
     if (correctEl) { correctEl.classList.add('correct'); document.querySelectorAll('.game-choice').forEach(x => { if (x !== correctEl) x.classList.add('dim'); }); }
     chime();
-    G.attempts.push({ category: G.target.section, label: G.target.label, itemId: G.target.id, correct: G.misses === 0, inputMethod: method, misses: G.misses, occurredAt: new Date().toISOString() });
+    // PRD §4: a facilitator mark IS a pass + the input method (verbal /
+    // gesture / object / physical). Mercy semantic applies — credit the
+    // pass regardless of how many failed taps preceded the mark.
+    const m = (typeof method === 'string' && method) ? method : 'verbal';
+    const childGenerated = m !== 'tap';
+    const attemptsTaken = Math.max(1, (G.misses || 0) + 1);
+    G.attempts.push({
+      category: G.target.section,
+      label: G.target.label,
+      itemId: G.target.id,
+      taxonomySlug: G.target.taxonomySlug || null,
+      correct: true,
+      inputMethod: m,
+      misses: G.misses,
+      attemptsTaken,
+      distractorCount: Math.max(0, ((G.settings && G.settings.choices) || 3) - 1),
+      childGenerated,
+      occurredAt: new Date().toISOString(),
+    });
     publishState();
     setTimeout(() => { G.i++; nextRound(); }, 950);
   }
@@ -4451,10 +4514,28 @@
   async function logSession() {
     if (!G.session || !G.attempts.length) return;
     const correct = G.attempts.filter(a => a.correct).length;
+    // PRD §3 honest scoring: denominator is what was attempted, not the
+    // full deck. PRD §11 skill anchor: pick the most-common taxonomy slug
+    // across the played slides (falls back server-side to label).
+    const slidesAttempted = G.attempts.length;
+    const itemCount = (G.queue && G.queue.length) || slidesAttempted;
+    const skillCounts = {};
+    for (const a of G.attempts) { if (a.taxonomySlug) skillCounts[a.taxonomySlug] = (skillCounts[a.taxonomySlug] || 0) + 1; }
+    const skillSlug = Object.entries(skillCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
     const payload = {
-      childId: CHILD_ID, mode: G.session.mode, category: G.session.category,
-      startedAt: G.session.startedAt, endedAt: new Date().toISOString(),
-      correctCount: correct, itemCount: G.attempts.length, attempts: G.attempts, auto: !!G.sequence,
+      childId: CHILD_ID,
+      mode: G.session.mode,
+      category: G.session.category,
+      startedAt: G.session.startedAt,
+      endedAt: new Date().toISOString(),
+      correctCount: correct,
+      itemCount,                                  // full game length
+      slidesAttempted,                            // PRD §3.1 honest denominator
+      scoringVersion: 2,                          // PRD §3 mercy cutover stamp
+      endReason: G.ended ? 'completed' : (G.standby ? 'facilitator_stop' : 'child_quit'),
+      skillSlug,
+      attempts: G.attempts,
+      auto: !!G.sequence,
     };
     try { await apiFetch('/api/game-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); } catch (_) {}
   }

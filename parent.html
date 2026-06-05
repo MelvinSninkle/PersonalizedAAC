@@ -307,7 +307,25 @@
       </div>
     </div>
     <div class="mode">
-      <div class="icon">🎉</div><span class="tag">Mode 5 · Reward</span>
+      <div class="icon">👂</div><span class="tag">Mode 5 · Active</span>
+      <h3>Auditory Comprehension</h3>
+      <p>Hear a description ("lives in a field, four legs, eats grass") and pick the matching picture. Builds receptive comprehension and inference, not just word-to-image recognition.</p>
+      <div class="actions">
+        <button class="btn primary" data-launch="Auditory Comprehension">Start</button>
+        <button class="btn ghost" data-config="Auditory Comprehension">Configure</button>
+      </div>
+    </div>
+    <div class="mode">
+      <div class="icon">🗣️</div><span class="tag">Mode 6 · Active</span>
+      <h3>Expressive Naming</h3>
+      <p>An image alone — no audio prompt. Fletcher names it unaided (voice / gesture / object). You mark the response from your phone. This is the ideal: unprompted expressive production.</p>
+      <div class="actions">
+        <button class="btn primary" data-launch="Expressive Naming">Start</button>
+        <button class="btn ghost" data-config="Expressive Naming">Configure</button>
+      </div>
+    </div>
+    <div class="mode">
+      <div class="icon">🎉</div><span class="tag">Mode 7 · Reward</span>
       <h3>Celebration</h3>
       <p>Yellow flowers burst and your recorded voice cheers Fletcher on. Plays at session end.</p>
       <div class="actions">
@@ -330,6 +348,34 @@
     <h2>Accuracy by category · last 30 days</h2>
     <p class="hint">Where Fletcher is right now. The trend over time is in the chart pinned at the top.</p>
     <div class="bars" id="mastery"></div>
+  </div>
+
+  <!-- SKILL INSIGHTS (PRD §7) -->
+  <div class="section-label">Skill insights</div>
+  <div class="panel" style="padding:8px 14px;">
+    <p class="hint" style="margin:8px 4px 12px;">Joint-attention narrative per skill — refreshed nightly. <strong>"Joint attention improving"</strong> means the spikes are coming closer together (knowledge is becoming more reachable). <strong>"Present but inconsistent"</strong> means the knowledge is there but access is sporadic. <strong>"Mastered"</strong> means ≥2 spikes within 14 days with at least one via voice / gesture / object. Insights flagged <strong>"Consider evaluation"</strong> have reached the 50-exposure ceiling without mastery — only a therapist can dismiss those.</p>
+    <div id="insights-body">
+      <div class="muted" style="padding:14px;color:#888;">No skill insights yet — they appear after the first spike events land and the nightly cron runs.</div>
+    </div>
+  </div>
+
+  <!-- MASTERY MOMENTS (PRD §6) -->
+  <div class="section-label">Mastery moments</div>
+  <div class="panel" style="padding:8px 14px;">
+    <p class="hint" style="margin:8px 4px 12px;">Sessions where Fletcher cleared his own baseline by 2 or 3 standard deviations, or got 100%. <strong>The knowledge is in there</strong> — these moments are how mastery actually surfaces for autistic learners. Spikes via voice / gesture / object carry the strongest evidence and are flagged with the 🗣️ icon.</p>
+    <div id="spikes-body">
+      <div class="muted" style="padding:14px;color:#888;">No spike events yet — these appear once Fletcher has ≥10 sessions in any (skill, mode) bucket and clears the 2σ threshold (or hits 100%).</div>
+    </div>
+  </div>
+
+  <!-- EXPOSURE SCHEDULE (PRD §8) -->
+  <div class="section-label">Exposure schedule</div>
+  <div class="panel" style="padding:8px 14px;">
+    <p class="hint" style="margin:8px 4px 12px;">What's coming up next per skill, ordered by what's due soonest. Each row shows the spaced-repetition stage (10 → 50 ceiling) and how many exposures have landed so far. "Tightened" means the schedule clusters closer because the spike threshold isn't met yet.</p>
+    <table id="exposure-table">
+      <thead><tr><th>Skill</th><th>Stage</th><th>Progress</th><th>Status</th><th>Next due</th></tr></thead>
+      <tbody id="exposure-body"><tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No exposure protocols yet — they appear once a slideshow or scored session runs for a tile with a canonical skill anchor.</td></tr></tbody>
+    </table>
   </div>
 
   <!-- RECENT SESSIONS -->
@@ -816,7 +862,163 @@
     }
     if (a.mastery && a.mastery.length) renderMastery(a.mastery.map(m => [m.name, m.pct]));
     if (a.recentSessions && a.recentSessions.length) renderRecent(a.recentSessions);
+    renderSpikes(a.recentSpikes || []);
   }
+
+  // PRD §6: render the most recent spike events as a chip stack. Each chip
+  // shows kind (2σ / 3σ / 100%), skill, mode, and "child-generated" marker.
+  function renderSpikes(list) {
+    const el = document.getElementById('spikes-body');
+    if (!el) return;
+    if (!list.length) {
+      el.innerHTML = '<div class="muted" style="padding:14px;color:#888;">No spike events yet — these appear once Fletcher has ≥10 sessions in any (skill, mode) bucket and clears the 2σ threshold (or hits 100%).</div>';
+      return;
+    }
+    const KIND = {
+      perfect_pass: { label: '100%',  bg: '#fef3c7', fg: '#92400e' },
+      spike_3sigma: { label: '3σ',    bg: '#dcfce7', fg: '#166534' },
+      spike_2sigma: { label: '2σ',    bg: '#dbeafe', fg: '#1e40af' },
+    };
+    const niceSkill = (s) => s ? s.split('.').slice(-1)[0].replace(/_/g, ' ') : '—';
+    const niceAt = (iso) => {
+      const ms = Date.now() - new Date(iso).getTime();
+      if (ms < 60 * 60 * 1000) return Math.max(1, Math.round(ms / 60000)) + ' min ago';
+      if (ms < 24 * 60 * 60 * 1000) return Math.round(ms / 3600000) + 'h ago';
+      return Math.round(ms / 86400000) + 'd ago';
+    };
+    el.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px;padding:10px 4px;">' +
+      list.map(s => {
+        const k = KIND[s.kind] || { label: s.kind, bg: '#eee', fg: '#333' };
+        const cg = s.childGeneratedOnly ? ' 🗣️' : '';
+        const pct = s.observedPct != null ? Math.round(s.observedPct * 100) + '%' : '';
+        return `<div style="background:${k.bg};color:${k.fg};border-radius:14px;padding:8px 12px;font-size:13px;line-height:1.35;">
+          <div style="font-weight:700;">${k.label}${cg} · ${pct}</div>
+          <div>${niceSkill(s.skillSlug)} · ${s.modeLabel || s.mode || ''}</div>
+          <div style="opacity:.7;font-size:11px;">${niceAt(s.at)}</div>
+        </div>`;
+      }).join('') + '</div>';
+  }
+  // PRD §8: Exposure schedule panel. Lightweight call alongside analytics —
+  // returns the next-due list per skill, ordered by what's coming up first.
+  // Idempotent renderer; safe to call repeatedly.
+  function renderExposureSchedule(protocols) {
+    const body = document.getElementById('exposure-body');
+    if (!body) return;
+    if (!protocols || !protocols.length) {
+      body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No exposure protocols yet — they appear once a slideshow or scored session runs for a tile with a canonical skill anchor.</td></tr>';
+      return;
+    }
+    const niceSkill = (s) => s.split('.').slice(-1)[0].replace(/_/g, ' ');
+    const statusLabel = {
+      intro: 'Intro burst', spacing: 'Spacing',
+      mastered: '✓ Mastered', eval_flagged: '⚠ Consider eval',
+    };
+    const dueLabel = (iso) => {
+      if (!iso) return '—';
+      const ms = new Date(iso).getTime() - Date.now();
+      if (ms <= 0) return 'due now';
+      const m = Math.round(ms / 60000);
+      if (m < 60)  return 'in ' + m + ' min';
+      const h = Math.round(m / 60);
+      if (h < 24)  return 'in ' + h + 'h';
+      const d = Math.round(h / 24);
+      return 'in ' + d + 'd';
+    };
+    body.innerHTML = protocols.map(p => {
+      const spacing = p.spacingMode === 'tightened' ? ' · <em>tightened</em>' : '';
+      return `<tr>
+        <td>${niceSkill(p.skillSlug)}</td>
+        <td>Stage ${p.stage} <span style="color:#888;font-size:12px;">(→${p.targetCount})</span>${spacing}</td>
+        <td>${p.currentCount} / ${p.targetCount}</td>
+        <td>${statusLabel[p.status] || p.status}</td>
+        <td>${p.status === 'mastered' ? '—' : dueLabel(p.nextDueAt)}</td>
+      </tr>`;
+    }).join('');
+  }
+  async function loadExposureSchedule() {
+    try {
+      const tok = localStorage.getItem('aacToken');
+      const headers = tok ? { Authorization: 'Bearer ' + tok } : {};
+      const r = await fetch('/api/exposure-schedule?childId=' + encodeURIComponent(slug), { headers, credentials: 'same-origin' });
+      if (!r.ok) return;
+      const d = await r.json();
+      renderExposureSchedule(d.protocols || []);
+    } catch (_) { /* dashboard already rendered other tiles; this is best-effort */ }
+  }
+
+  // PRD §7: consolidated joint-attention insights, refreshed by the daily cron.
+  // Renders one card per (skill, mode), with a dismiss button for therapists
+  // on consider-eval entries.
+  let CURRENT_ROLE = null;
+  async function whoAmI() {
+    try {
+      const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const d = await r.json();
+      CURRENT_ROLE = (d && d.user && d.user.role) || null;
+    } catch (_) {}
+  }
+  function renderInsights(list) {
+    const el = document.getElementById('insights-body');
+    if (!el) return;
+    if (!list.length) {
+      el.innerHTML = '<div class="muted" style="padding:14px;color:#888;">No skill insights yet — they appear after the first spike events land and the nightly cron runs.</div>';
+      return;
+    }
+    const niceSkill = (s) => s ? s.split('.').slice(-1)[0].replace(/_/g, ' ') : '—';
+    const niceLabel = {
+      mastered: { text: '✓ Mastered',                        bg: '#dcfce7', fg: '#166534' },
+      joint_attention_improving: { text: '↑ Joint attention improving', bg: '#dbeafe', fg: '#1e40af' },
+      present_but_inconsistent: { text: 'Present but inconsistent',     bg: '#fef3c7', fg: '#92400e' },
+      consider_eval: { text: '⚠ Consider evaluation',         bg: '#fee2e2', fg: '#991b1b' },
+    };
+    const canDismiss = CURRENT_ROLE === 'therapist' || CURRENT_ROLE === 'admin' || CURRENT_ROLE === 'school_team';
+    el.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;padding:10px 4px;">' +
+      list.map(ins => {
+        const k = niceLabel[ins.label] || { text: ins.label, bg: '#eee', fg: '#333' };
+        const evalBadge = (ins.considerEval && !ins.dismissedAt)
+          ? `<span style="display:inline-block;background:#fee2e2;color:#991b1b;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;margin-left:6px;">⚠ Consider evaluation</span>` : '';
+        const dismissBtn = (ins.considerEval && !ins.dismissedAt && canDismiss)
+          ? `<button data-dismiss-id="${ins.id}" style="margin-left:6px;font-size:12px;padding:2px 10px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;">Dismiss</button>` : '';
+        const dismissed = ins.dismissedAt
+          ? `<span style="opacity:.55;font-size:11px;margin-left:6px;">dismissed by ${ins.dismissedBy || 'therapist'}</span>` : '';
+        const niceMode = ins.mode === 'expressive_naming' ? 'Expressive Naming'
+                       : ins.mode === 'auditory_comprehension' ? 'Auditory Comprehension'
+                       : ins.mode === 'facilitated' ? 'Facilitated' : 'Self-Paced';
+        return `<div style="background:${k.bg};color:${k.fg};border-radius:14px;padding:10px 14px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div style="font-weight:700;font-size:14px;">${niceSkill(ins.skillSlug)} · ${niceMode}</div>
+          <div style="background:rgba(255,255,255,.6);color:${k.fg};border-radius:8px;padding:2px 10px;font-size:12px;font-weight:700;">${k.text}</div>
+          ${evalBadge}${dismissBtn}${dismissed}
+        </div>`;
+      }).join('') + '</div>';
+    el.querySelectorAll('[data-dismiss-id]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = Number(btn.getAttribute('data-dismiss-id'));
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          await fetch('/api/skill-insights', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ id, action: 'dismiss' }),
+          });
+          loadInsights();
+        } catch (_) { btn.disabled = false; btn.textContent = 'Dismiss'; }
+      });
+    });
+  }
+  async function loadInsights() {
+    try {
+      if (CURRENT_ROLE == null) await whoAmI();
+      const tok = localStorage.getItem('aacToken');
+      const headers = tok ? { Authorization: 'Bearer ' + tok } : {};
+      const r = await fetch('/api/skill-insights?childId=' + encodeURIComponent(slug), { headers, credentials: 'same-origin' });
+      if (!r.ok) return;
+      const d = await r.json();
+      renderInsights(d.insights || []);
+    } catch (_) {}
+  }
+
   // Granularity (day/week/month). Uses the session cookie; empty/401 → sample.
   let gran = localStorage.getItem('aacGran') || 'day';
   async function loadAnalytics() {
@@ -827,6 +1029,8 @@
       if (!r.ok) return;
       applyAnalytics(await r.json());
       renderChart(currentTab);
+      loadExposureSchedule();
+      loadInsights();
     } catch (_) { /* keep sample data */ }
   }
   (function initGran() {
@@ -849,6 +1053,8 @@
   const goBtn = document.getElementById('modal-go');
   const MODE_KEY = {
     'Self-Paced Matching Game': 'self_paced', 'Facilitated Matching Game': 'facilitated',
+    'Auditory Comprehension': 'auditory_comprehension',
+    'Expressive Naming': 'expressive_naming',
     'Learn Slideshow': 'learn_slideshow', 'Exposure Slideshow': 'exposure_slideshow', 'Celebration': 'celebration',
   };
   const SECT_LABEL = { people: 'People', nouns: 'Nouns', verbs: 'Verbs' };
@@ -962,8 +1168,15 @@
     const scope = scopeEl ? scopeEl.value : 'all';
     const musicEl = body.querySelector('#lc-music'); if (musicEl) cmd.music = musicEl.value;
     const limEl = body.querySelector('#lc-limit'); if (limEl) { const v = parseInt(limEl.value, 10); if (Number.isFinite(v)) cmd.limitMin = v; }
-    if (mode === 'self_paced' || mode === 'facilitated') {
+    if (mode === 'self_paced' || mode === 'facilitated' || mode === 'auditory_comprehension') {
+      // Same choice-grid configuration as matching — these all show N tiles
+      // on the iPad and credit the right one. Expressive Naming has no
+      // grid so it skips this.
       const ch = body.querySelector('#lc-choices'); cmd.choices = ch ? (parseInt(ch.value, 10) || 3) : 3;
+      cmd.scope = scope;
+    } else if (mode === 'expressive_naming') {
+      // No on-screen choices in expressive naming — the iPad just shows the
+      // target image and the facilitator marks the response. PRD §5.
       cmd.scope = scope;
     } else if (mode === 'learn_slideshow' || mode === 'exposure_slideshow') {
       cmd.scope = scope;

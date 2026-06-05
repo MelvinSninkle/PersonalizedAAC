@@ -11,5 +11,11 @@
     { "source": "/accept-invite", "destination": "/accept-invite.html" },
     { "source": "/onboard/:slug", "destination": "/onboard.html" },
     { "source": "/onboard", "destination": "/onboard.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/refresh-insights",
+      "schedule": "0 8 * * *"
+    }
   ]
 }

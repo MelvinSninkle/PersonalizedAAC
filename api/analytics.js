@@ -11,6 +11,9 @@ import { sql } from './_lib/db.js';
 const MODE_LABEL = {
   self_paced: 'Self-Paced Game',
   facilitated: 'Facilitated',
+  // PRD §5 — the three scored game modes.
+  auditory_comprehension: 'Auditory Comprehension',
+  expressive_naming: 'Expressive Naming',
   learn_slideshow: 'Learn Slideshow',
   exposure_slideshow: 'Exposure',
   celebration: 'Celebration',
@@ -47,7 +50,17 @@ export default async function handler(req, res) {
   const idx = (b) => (N - 1) - b; // bucket 0 = current period → last slot
   const db = sql();
 
-  const out = { bucket, labels: labelsFor(N, G.unit), use: { series: [] }, games: { series: [] }, time: { series: [] }, mastery: [], recentSessions: [] };
+  const out = {
+    bucket, labels: labelsFor(N, G.unit),
+    use: { series: [] },
+    games: { series: [] },               // byCategory (legacy back-compat)
+    gamesBySkill: { series: [] },        // PRD §11 — bucketed by taxonomy_slug
+    gamesByMode: { series: [] },         // PRD §5.1 — bucketed by session mode
+    time: { series: [] },
+    mastery: [],
+    recentSessions: [],
+    recentSpikes: [],                    // PRD §6 mastery signal
+  };
 
   // ---- USE: taps per category per bucket ----
   try {
@@ -81,25 +94,99 @@ export default async function handler(req, res) {
   // ---- GAMES: accuracy per category per bucket (carry-forward fill) ----
   try {
     const rows = await db`
-      SELECT category AS name,
-             floor(extract(epoch from (now() - occurred_at)) / ${SECS})::int AS bucket,
+      SELECT a.category AS name,
+             floor(extract(epoch from (now() - a.occurred_at)) / ${SECS})::int AS bucket,
              count(*)::int AS total,
-             sum(case when correct then 1 else 0 end)::int AS ok
-      FROM game_attempts
-      WHERE child_id = ${childId} AND category IS NOT NULL
-        AND occurred_at >= now() - ${SPAN} * interval '1 second'
+             sum(case when a.correct then 1 else 0 end)::int AS ok,
+             min(coalesce(s.scoring_version, 1))::int AS min_sv
+      FROM game_attempts a
+      LEFT JOIN sessions s ON s.id = a.session_id
+      WHERE a.child_id = ${childId} AND a.category IS NOT NULL
+        AND a.occurred_at >= now() - ${SPAN} * interval '1 second'
       GROUP BY 1, 2`;
     const byCat = new Map();
+    const legacyBuckets = new Map();
     for (const r of rows) {
       const b = Number(r.bucket);
       if (b < 0 || b >= N) continue;
-      if (!byCat.has(r.name)) byCat.set(r.name, new Array(N).fill(null));
+      if (!byCat.has(r.name)) {
+        byCat.set(r.name, new Array(N).fill(null));
+        legacyBuckets.set(r.name, new Array(N).fill(false));
+      }
       byCat.get(r.name)[idx(b)] = Math.round((Number(r.ok) / Number(r.total)) * 100);
+      // PRD §3 cutover: mark any bucket whose data includes a pre-v2 session
+      // so charts can dot-line / footnote it.
+      if (Number(r.min_sv) < 2) legacyBuckets.get(r.name)[idx(b)] = true;
     }
     out.games.series = [...byCat.entries()].map(([name, raw]) => {
       const data = []; let last = 0;
       for (let i = 0; i < N; i++) { if (raw[i] != null) last = raw[i]; data.push(last); }
-      return { name, data };
+      return { name, data, legacyScoring: legacyBuckets.get(name) };
+    }).sort((a, b) => b.data[N - 1] - a.data[N - 1]);
+  } catch (_) { /* */ }
+
+  // ---- GAMES BY SKILL: accuracy per skill_slug per bucket ----
+  // PRD §11 anchors mastery to taxonomy_slug. Falls back to label so custom-
+  // board items still surface; sessions inherit mode for the byMode pivot.
+  // Carries scoring_version so charts can dot-line / footnote legacy buckets.
+  try {
+    const rows = await db`
+      SELECT COALESCE(NULLIF(a.taxonomy_slug, ''), a.label) AS name,
+             s.mode AS mode,
+             floor(extract(epoch from (now() - a.occurred_at)) / ${SECS})::int AS bucket,
+             count(*)::int AS total,
+             sum(case when a.correct then 1 else 0 end)::int AS ok,
+             min(coalesce(s.scoring_version, 1))::int AS min_sv
+      FROM game_attempts a
+      LEFT JOIN sessions s ON s.id = a.session_id
+      WHERE a.child_id = ${childId} AND COALESCE(NULLIF(a.taxonomy_slug, ''), a.label) IS NOT NULL
+        AND a.occurred_at >= now() - ${SPAN} * interval '1 second'
+      GROUP BY 1, 2, 3`;
+    const bySkill = new Map();
+    const legacy = new Map();
+    for (const r of rows) {
+      const b = Number(r.bucket);
+      if (b < 0 || b >= N) continue;
+      if (!bySkill.has(r.name)) {
+        bySkill.set(r.name, new Array(N).fill(null));
+        legacy.set(r.name, new Array(N).fill(false));
+      }
+      bySkill.get(r.name)[idx(b)] = Math.round((Number(r.ok) / Number(r.total)) * 100);
+      if (Number(r.min_sv) < 2) legacy.get(r.name)[idx(b)] = true;
+    }
+    out.gamesBySkill.series = [...bySkill.entries()].map(([name, raw]) => {
+      const data = []; let last = 0;
+      for (let i = 0; i < N; i++) { if (raw[i] != null) last = raw[i]; data.push(last); }
+      return { name, data, legacyScoring: legacy.get(name) };
+    }).sort((a, b) => b.data[N - 1] - a.data[N - 1]);
+  } catch (_) { /* */ }
+
+  // ---- GAMES BY MODE: accuracy per session mode per bucket ----
+  // PRD §5.1: each mode is a qualitatively different measurement; surface the
+  // overall trend by mode so a child who excels at auditory comprehension but
+  // struggles with expressive naming is visible.
+  try {
+    const rows = await db`
+      SELECT s.mode AS mode,
+             floor(extract(epoch from (now() - a.occurred_at)) / ${SECS})::int AS bucket,
+             count(*)::int AS total,
+             sum(case when a.correct then 1 else 0 end)::int AS ok
+      FROM game_attempts a
+      LEFT JOIN sessions s ON s.id = a.session_id
+      WHERE a.child_id = ${childId} AND s.mode IS NOT NULL
+        AND a.occurred_at >= now() - ${SPAN} * interval '1 second'
+      GROUP BY 1, 2`;
+    const byMode = new Map();
+    for (const r of rows) {
+      const b = Number(r.bucket);
+      if (b < 0 || b >= N) continue;
+      if (!byMode.has(r.mode)) byMode.set(r.mode, new Array(N).fill(null));
+      byMode.get(r.mode)[idx(b)] = Math.round((Number(r.ok) / Number(r.total)) * 100);
+    }
+    out.gamesByMode.series = [...byMode.entries()].map(([mode, raw]) => {
+      const data = []; let last = 0;
+      for (let i = 0; i < N; i++) { if (raw[i] != null) last = raw[i]; data.push(last); }
+      return { name: MODE_LABEL[mode] || mode, mode, data };
     }).sort((a, b) => b.data[N - 1] - a.data[N - 1]);
   } catch (_) { /* */ }
 
@@ -156,20 +243,59 @@ export default async function handler(req, res) {
       return SCOPE_LABEL[scope] || scope;
     };
     const rows = await db`
-      SELECT mode, category, started_at, ended_at, correct_count, item_count
+      SELECT mode, category, started_at, ended_at, correct_count, item_count,
+             slides_attempted, end_reason, scoring_version
       FROM sessions WHERE child_id = ${childId}
       ORDER BY started_at DESC LIMIT 8`;
     out.recentSessions = rows.map(r => {
-      const scored = r.mode === 'self_paced' || r.mode === 'facilitated';
+      // PRD §3.1 honest denominator. Mercy/quit-aware: a session that bailed
+      // at slide 5/12 reports "X / 5", not "X / 12".
+      const scored = r.mode === 'self_paced' || r.mode === 'facilitated'
+                  || r.mode === 'auditory_comprehension' || r.mode === 'expressive_naming';
+      const denom = Number.isFinite(Number(r.slides_attempted)) && r.slides_attempted != null
+        ? Number(r.slides_attempted)
+        : Number(r.item_count);
       const mins = r.ended_at ? Math.max(1, Math.round((new Date(r.ended_at) - new Date(r.started_at)) / 60000)) : null;
       return {
         date: new Date(r.started_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         mode: MODE_LABEL[r.mode] || r.mode,
         category: resolveScope(r.category),
-        result: scored && r.item_count ? `${r.correct_count} / ${r.item_count}` : '—',
+        result: scored && denom ? `${r.correct_count} / ${denom}` : '—',
         length: mins ? `${mins} min` : '—',
+        // PRD §3 cutover marker: dashboards can dot-line / footnote pre-v2 rows.
+        scoringVersion: Number(r.scoring_version) || 1,
+        endReason: r.end_reason || null,
       };
     });
+    out.hasLegacyScoring = out.recentSessions.some(s => s.scoringVersion < 2);
+  } catch (_) { /* */ }
+
+  // ---- RECENT SPIKES (PRD §6 mastery signal) ----
+  // Last 14 flags for this child, newest first. Joined to sessions so the
+  // dashboard can show "X 3σ spike on horse · auditory comprehension · 2 days ago".
+  try {
+    const rows = await db`
+      SELECT f.kind, f.sigma, f.observed_pct, f.baseline_mu, f.baseline_sigma,
+             f.child_generated_only, f.created_at,
+             s.skill_slug, s.mode
+      FROM session_flags f
+      JOIN sessions s ON s.id = f.session_id
+      WHERE s.child_id = ${childId}
+        AND f.created_at >= now() - interval '60 days'
+      ORDER BY f.created_at DESC
+      LIMIT 14`;
+    out.recentSpikes = rows.map(r => ({
+      kind: r.kind,                                          // 'spike_2sigma' | 'spike_3sigma' | 'perfect_pass'
+      sigma: r.sigma == null ? null : Number(r.sigma),
+      observedPct: r.observed_pct == null ? null : Number(r.observed_pct),
+      baselineMu: r.baseline_mu == null ? null : Number(r.baseline_mu),
+      baselineSigma: r.baseline_sigma == null ? null : Number(r.baseline_sigma),
+      childGeneratedOnly: !!r.child_generated_only,
+      skillSlug: r.skill_slug || null,
+      mode: r.mode || null,
+      modeLabel: r.mode ? (MODE_LABEL[r.mode] || r.mode) : null,
+      at: r.created_at,
+    }));
   } catch (_) { /* */ }
 
   res.setHeader('Cache-Control', 'no-store');

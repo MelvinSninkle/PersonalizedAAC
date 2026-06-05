@@ -266,8 +266,26 @@
         <input id="live-to" type="number" min="1" inputmode="numeric" placeholder="to #" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;">
       </div>
     </div>
+    <div class="field"><label>Pick a few at random (optional) — great for short lessons</label>
+      <select id="live-sample">
+        <option value="">Use all of them, in order</option>
+        <option value="3">3 random</option>
+        <option value="5" selected>5 random</option>
+        <option value="8">8 random</option>
+        <option value="10">10 random</option>
+      </select>
+    </div>
     <div class="field"><label>Choices per round</label>
       <select id="live-choices"><option value="2">2 (easier)</option><option value="3" selected>3</option><option value="4">4</option></select>
+    </div>
+    <div class="field"><label>Time limit</label>
+      <select id="live-limit">
+        <option value="" selected>No limit</option>
+        <option value="1">1 minute</option>
+        <option value="2">2 minutes</option>
+        <option value="3">3 minutes</option>
+        <option value="4">4 minutes</option>
+      </select>
     </div>
     <button class="btn primary" id="live-start">Start on Fletcher's tablet</button>
   </div>
@@ -534,7 +552,9 @@
   }
   populateLiveScope();
   document.getElementById('live-cat').addEventListener('change', (e) => {
-    document.getElementById('live-range-row').style.display = e.target.value.startsWith('cat:') ? 'block' : 'none';
+    // Range applies to any specific scope (a section or a category) — only
+    // "Everything" has no meaningful 1..N ordering to slice.
+    document.getElementById('live-range-row').style.display = (e.target.value && e.target.value !== 'all') ? 'block' : 'none';
   });
 
   document.querySelectorAll('.mark').forEach(b => b.addEventListener('click', () => liveCmd('mark', { method: b.dataset.method })));
@@ -545,12 +565,17 @@
     const scope = document.getElementById('live-cat').value || 'all';
     const choices = parseInt(document.getElementById('live-choices').value, 10) || 3;
     const extra = { scope, choices };
-    if (scope.startsWith('cat:')) {
+    // Range (from/to) applies to any specific scope, not just categories.
+    if (scope !== 'all') {
       const from = parseInt(document.getElementById('live-from').value, 10);
       const to = parseInt(document.getElementById('live-to').value, 10);
       if (Number.isFinite(from)) extra.from = from;
       if (Number.isFinite(to)) extra.to = to;
     }
+    const sample = parseInt(document.getElementById('live-sample').value, 10);
+    if (Number.isFinite(sample) && sample > 0) extra.sample = sample;
+    const limit = parseInt(document.getElementById('live-limit').value, 10);
+    if (Number.isFinite(limit) && limit > 0) extra.limitMin = limit;
     liveCmd('start', extra);
   });
 })();

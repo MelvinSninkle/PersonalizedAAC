@@ -76,6 +76,18 @@ export default async function handler(req, res) {
     await db`ALTER TABLE categories ALTER COLUMN child_id DROP NOT NULL`;
     await db`ALTER TABLE items      ALTER COLUMN child_id DROP NOT NULL`;
 
+    // Category "kind" — special-render hint for the kid app. Two values today:
+    //   'location' → a place (Home, Grandma's). Tap a location chip and the
+    //                tablet speaks its name + shows its children as ROOMS.
+    //   'room'     → a room (Kitchen, Bedroom). Short-press speaks its name;
+    //                long-press opens the room's interior (its items) in an
+    //                overlay; long-press the same room again to back out.
+    // null/missing = normal category. This is what lets a parent build a tidy
+    // "Places" tree (Places → Home → Kitchen → toaster) without nesting
+    // chip-strips four levels deep.
+    await db`ALTER TABLE categories ADD COLUMN IF NOT EXISTS kind TEXT`;
+    await db`CREATE INDEX IF NOT EXISTS categories_kind_idx ON categories(kind)`;
+
     // Which template categories are visible on which child's board. A 'removed'
     // row records that a parent has overridden the visibility for their child;
     // re-sharing by the owner flips it back to 'active'.
@@ -220,6 +232,126 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS game_attempts_session_idx  ON game_attempts(session_id)`;
     await db`CREATE INDEX IF NOT EXISTS game_attempts_occurred_idx ON game_attempts(occurred_at)`;
     await db`CREATE INDEX IF NOT EXISTS game_attempts_category_idx ON game_attempts(category)`;
+
+    // ---- Learning Engine spine (PRD §3, §4, §6, §7) ----
+    // Phase 1 of the data + scoring overhaul: add the columns + empty tables
+    // that the later phases (mercy cutover, spike detection, exposure engine,
+    // skill insights) will fill in. All migrations idempotent + additive so
+    // existing dashboards/payloads keep working unchanged.
+
+    // Sessions: dynamic denominator (slides actually attempted, not full
+    // length), why the session ended, the canonical skill anchor, and a
+    // scoring-version stamp so dashboards can mark the mercy-mechanic
+    // cutover cleanly.
+    await db`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS slides_attempted INT`;
+    await db`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS end_reason       TEXT`;
+    await db`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS skill_slug       TEXT`;
+    await db`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS scoring_version  INT NOT NULL DEFAULT 1`;
+    await db`CREATE INDEX IF NOT EXISTS sessions_skill_slug_idx       ON sessions(skill_slug)`;
+    await db`CREATE INDEX IF NOT EXISTS sessions_scoring_version_idx  ON sessions(scoring_version)`;
+
+    // PRD §5 Auditory Comprehension: optional description on items for the
+    // "hear a description, pick the picture" mode. Empty/missing falls back
+    // to "Who/what is the [label]?" in the game view.
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS description TEXT`;
+
+    // Per-attempt mercy + difficulty + child-generated method flag.
+    // attempts_taken defaults to 1 (back-compat: every legacy attempt was
+    // recorded as "took one try"). child_generated is NULL on legacy rows
+    // so analytics can distinguish "not tracked" from "explicitly tap".
+    await db`ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS attempts_taken   INT NOT NULL DEFAULT 1`;
+    await db`ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS distractor_count INT`;
+    await db`ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS child_generated  BOOLEAN`;
+
+    // Per-session mastery flags: 2σ / 3σ / perfect_pass, plus a parallel row
+    // computed on the child-generated-only subset (voice/gesture/object).
+    // Empty in Phase 1; Phase 6's inline spike check fills it.
+    await db`
+      CREATE TABLE IF NOT EXISTS session_flags (
+        id BIGSERIAL PRIMARY KEY,
+        session_id BIGINT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,                          -- 'spike_2sigma' | 'spike_3sigma' | 'perfect_pass'
+        sigma NUMERIC,
+        observed_pct NUMERIC,
+        baseline_mu NUMERIC,
+        baseline_sigma NUMERIC,
+        child_generated_only BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
+    await db`CREATE INDEX IF NOT EXISTS session_flags_session_idx ON session_flags(session_id)`;
+    await db`CREATE INDEX IF NOT EXISTS session_flags_kind_idx    ON session_flags(kind, created_at)`;
+
+    // Consolidated per-skill narrative ("joint attention improving",
+    // "present but inconsistent", "mastered", "consider_eval"). One row per
+    // (child, skill, mode); Phase 7 refreshes via daily cron.
+    await db`
+      CREATE TABLE IF NOT EXISTS skill_insights (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL,
+        skill_slug TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        label TEXT NOT NULL,
+        evidence JSONB,
+        consider_eval BOOLEAN NOT NULL DEFAULT FALSE,
+        dismissed_at TIMESTAMPTZ,
+        dismissed_by TEXT,
+        generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (child_id, skill_slug, mode)
+      )`;
+    await db`CREATE INDEX IF NOT EXISTS skill_insights_child_idx ON skill_insights(child_id, generated_at DESC)`;
+    await db`CREATE INDEX IF NOT EXISTS skill_insights_eval_idx  ON skill_insights(consider_eval) WHERE consider_eval = TRUE`;
+
+    // Adaptive exposure engine (Phases 5 + 7). Empty until Phase 5 wires the
+    // slideshow + /api/exposure-tick to write to them.
+    await db`
+      CREATE TABLE IF NOT EXISTS exposure_protocols (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL,
+        skill_slug TEXT NOT NULL,
+        stage INT NOT NULL DEFAULT 1,                -- 1..5 → 10/20/30/40/50 ceiling
+        target_count INT NOT NULL DEFAULT 10,
+        current_count INT NOT NULL DEFAULT 0,
+        spacing_mode TEXT NOT NULL DEFAULT 'standard',  -- 'standard' | 'tightened'
+        status TEXT NOT NULL DEFAULT 'intro',         -- 'intro' | 'spacing' | 'mastered' | 'eval_flagged'
+        next_due_at TIMESTAMPTZ,
+        last_seen_at TIMESTAMPTZ,
+        mastered_at  TIMESTAMPTZ,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (child_id, skill_slug)
+      )`;
+    await db`CREATE INDEX IF NOT EXISTS exposure_protocols_due_idx ON exposure_protocols(child_id, next_due_at)`;
+
+    await db`
+      CREATE TABLE IF NOT EXISTS exposure_events (
+        id BIGSERIAL PRIMARY KEY,
+        protocol_id BIGINT NOT NULL REFERENCES exposure_protocols(id) ON DELETE CASCADE,
+        session_id BIGINT REFERENCES sessions(id) ON DELETE SET NULL,
+        source TEXT NOT NULL DEFAULT 'slideshow',   -- 'slideshow' | 'game' | 'free_use'
+        occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
+    await db`CREATE INDEX IF NOT EXISTS exposure_events_protocol_idx ON exposure_events(protocol_id, occurred_at DESC)`;
+
+    // ---- One-shot backfill: sessions.skill_slug from game_attempts ----
+    // PRD §11 anchors mastery/spike math to taxonomy_slug. Sessions logged
+    // before Phase 2 didn't carry it on the session row; recover it as the
+    // most-common taxonomy_slug across the session's attempts (NULL when the
+    // session has no slugged attempts — analytics falls back to label).
+    // Idempotent: only fills rows where skill_slug IS NULL.
+    await db`
+      UPDATE sessions s SET skill_slug = sub.slug
+      FROM (
+        SELECT session_id, slug FROM (
+          SELECT a.session_id,
+                 NULLIF(a.taxonomy_slug, '') AS slug,
+                 count(*) AS n,
+                 row_number() OVER (PARTITION BY a.session_id ORDER BY count(*) DESC) AS rn
+          FROM game_attempts a
+          WHERE a.taxonomy_slug IS NOT NULL AND a.taxonomy_slug <> ''
+          GROUP BY a.session_id, a.taxonomy_slug
+        ) ranked
+        WHERE ranked.rn = 1
+      ) sub
+      WHERE s.id = sub.session_id AND s.skill_slug IS NULL`;
 
     // ---- AI image generation: cost/volume log + per-child reference images ----
     await db`
