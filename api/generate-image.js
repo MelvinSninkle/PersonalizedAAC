@@ -27,27 +27,63 @@ async function readBlob(key) {
   return { buffer: Buffer.concat(chunks), contentType: result.blob.contentType || 'image/jpeg' };
 }
 
-// Fallback for when OpenAI's safety system blocks EDITING the source photo
-// (copyrighted / branded subjects — Superman, branded toys, logos, mascots).
-// Generates a fresh, GENERIC illustration of the label from text only (no input
-// photo), so the parent still gets a usable placeholder tile instead of a hard
-// failure. Returns { ok, data?, prompt?, detail? }.
-async function generateGenericPlaceholder(apiKey, label, style) {
-  const subject = label ? `"${label}"` : 'the subject';
+// Ask the vision model to describe ONLY the generic physical object in the photo
+// (shape, colors, materials, layout), explicitly excluding any branded /
+// copyrighted character, mascot, or logo. Used to steer the copyright fallback
+// so the generic image still resembles the REAL item (a playset, a toy) — just
+// without the part that tripped the safety block.
+async function describePhotoNeutral(apiKey, buffer, contentType) {
+  const dataUrl = `data:${contentType};base64,${buffer.toString('base64')}`;
   const prompt =
-    `Create a simple, friendly illustration representing ${subject} for a young child's ` +
-    `communication app, in a ${style} look. Make it a GENERIC, ORIGINAL depiction: do NOT draw any ` +
-    `specific copyrighted, trademarked, or branded character, mascot, logo, or product. If ${subject} ` +
-    `names a branded character or product, draw a generic everyday version of that kind of thing ` +
-    `instead (for example, a generic superhero, or a generic toy car). Center the subject on a soft, ` +
-    `uncluttered background with bright friendly colors and a gentle, age-appropriate look. ` +
+    'Describe the single main physical object in this photo for re-illustration: its overall shape, ' +
+    'colors, materials, and layout, in one concise sentence. IMPORTANT: do NOT name, reference, or ' +
+    'describe any copyrighted, trademarked, or branded character, mascot, logo, or product — describe ' +
+    'only the plain generic object. No brand names. Plain text only.';
+  try {
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
+        ] }],
+        max_tokens: 120,
+      }),
+    });
+    if (!resp.ok) return '';
+    const data = await resp.json().catch(() => null);
+    const txt = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    return typeof txt === 'string' ? txt.trim().slice(0, 400) : '';
+  } catch (_) { return ''; }
+}
+
+// Fallback for when OpenAI's safety system blocks EDITING the source photo
+// (copyrighted / branded subjects — Superman, Mario playsets, branded toys).
+// We first have vision describe the REAL object in neutral terms, then generate
+// a fresh generic illustration from that description — so the tile still looks
+// like the actual toy, just without the branded character — and crucially we do
+// NOT seed the prompt with example subjects (that is what made a Mario playset
+// come back with a superhero next to it). No input photo (that tripped the
+// block). Returns { ok, data?, prompt?, detail? }.
+async function generateGenericPlaceholder(apiKey, label, style, buffer, contentType) {
+  const neutral = await describePhotoNeutral(apiKey, buffer, contentType);
+  const subject = label ? `"${label}"` : 'the subject';
+  const resemble = neutral ? ` Make it closely resemble this real object: ${neutral}` : '';
+  const prompt =
+    `Create a simple, friendly ${style} illustration of ${subject} for a young child's communication ` +
+    `app.${resemble} Draw ONLY a generic, original, unbranded object — do NOT include any copyrighted, ` +
+    `trademarked, or branded character, mascot, logo, or product, and do NOT add any extra characters, ` +
+    `figures, or mascots that are not physically part of the object itself. Center the subject on a ` +
+    `soft, uncluttered background with bright friendly colors and a gentle, age-appropriate look. ` +
     `Do not include any text, words, or letters.`;
   let resp;
   try {
     resp = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1024', n: 1 }),
+      body: JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1024', quality: 'high', n: 1 }),
     });
   } catch (err) {
     return { ok: false, detail: String(err.message || err) };
@@ -123,6 +159,10 @@ export default async function handler(req, res) {
     fd.append('prompt', prompt);
     fd.append('size', '1024x1024');
     fd.append('n', '1');
+    // Best quality, and preserve the real photo's likeness/details (faces, the
+    // actual toy) instead of a loose re-imagining. Both raise per-image cost.
+    fd.append('quality', 'high');
+    fd.append('input_fidelity', 'high');
     fd.append('image[]', new Blob([buffer], { type: req.headers['content-type'] || 'image/jpeg' }), 'photo.jpg');
     refBufs.forEach((rb, i) => fd.append('image[]', new Blob([rb.buffer], { type: rb.contentType }), `ref${i}.jpg`));
 
@@ -146,7 +186,7 @@ export default async function handler(req, res) {
         res.status(upstream.status).json({ error: 'Image generation failed', detail: detail.slice(0, 500) });
         return;
       }
-      const fb = await generateGenericPlaceholder(apiKey, label, style);
+      const fb = await generateGenericPlaceholder(apiKey, label, style, buffer, req.headers['content-type'] || 'image/jpeg');
       if (!fb.ok) {
         res.status(upstream.status).json({
           error: 'Image generation failed',
