@@ -7,7 +7,10 @@ import { get } from '@vercel/blob';
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
 
-export const config = { api: { bodyParser: false }, maxDuration: 60 };
+// gpt-image-1.5 / -2 at high quality + input_fidelity:high can run 60-90s for
+// an edit; 60s was too tight and produced timeouts on the iPad. 180s gives
+// OpenAI room to finish while staying under Vercel Pro's 300s ceiling.
+export const config = { api: { bodyParser: false }, maxDuration: 180 };
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_REFS = 3;

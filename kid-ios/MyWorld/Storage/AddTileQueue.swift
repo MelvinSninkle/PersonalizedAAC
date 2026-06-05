@@ -259,10 +259,11 @@ final class AddTileQueue {
                 if job.pronunciation.isEmpty,  !desc.pronunciation.isEmpty { job.pronunciation = desc.pronunciation }
             }
 
-            // 2) Stylized art (~20–40s). The slow step — the ring eases toward
-            //    0.85 over ~28s and holds there if the API runs long.
+            // 2) Stylized art (~20-90s depending on model + quality). The slow
+            //    step — the ring eases toward 0.85 over ~60s (covers gpt-image-
+            //    1.5/2 at high) and parks there if the API runs longer.
             job.statusText = "🎨 Painting the picture…"
-            let png = try await animating(job, to: 0.85, over: 28, {
+            let png = try await animating(job, to: 0.85, over: 60, {
                 try await self.api.generateImage(photoJPEG: job.photoJPEG,
                                                  label: job.label,
                                                  style: job.style.prompt,
