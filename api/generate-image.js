@@ -175,10 +175,14 @@ export default async function handler(req, res) {
     fd.append('prompt', prompt);
     fd.append('size', '1024x1024');
     fd.append('n', '1');
-    // Best quality, and preserve the real photo's likeness/details (faces, the
-    // actual toy) instead of a loose re-imagining. Both raise per-image cost.
+    // Best quality, and (for the older models only) preserve the real photo's
+    // likeness/details. `input_fidelity` is a gpt-image-1/-1.5 parameter;
+    // gpt-image-2 rejects it ("does not support the 'input_fidelity' parameter")
+    // because its agentic pipeline handles edit fidelity differently.
     fd.append('quality', 'high');
-    fd.append('input_fidelity', 'high');
+    if (model === 'gpt-image-1' || model === 'gpt-image-1.5') {
+      fd.append('input_fidelity', 'high');
+    }
     fd.append('image[]', new Blob([buffer], { type: req.headers['content-type'] || 'image/jpeg' }), 'photo.jpg');
     refBufs.forEach((rb, i) => fd.append('image[]', new Blob([rb.buffer], { type: rb.contentType }), `ref${i}.jpg`));
 
