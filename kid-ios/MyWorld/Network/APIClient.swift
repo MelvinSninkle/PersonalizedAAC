@@ -184,8 +184,13 @@ struct APIClient {
     /// with the chosen OpenAI image model. Returns the raw PNG bytes. ~20-40s.
     func generateImage(photoJPEG: Data, label: String, style: String, model: String, childId: String) async throws -> Data {
         let path = "/api/generate-image?label=\(percentEscape(label))&style=\(percentEscape(style))&model=\(percentEscape(model))&childId=\(percentEscape(childId))"
+        // 320s = Vercel's 300s function ceiling plus a 20s grace window, so a
+        // near-the-edge response still arrives intact rather than the iPad
+        // giving up first. gpt-image-1.5/-2 at high quality + high fidelity can
+        // legitimately run 60-120s; the headroom is there for the long tail.
         let (data, _) = try await request(method: "POST", path: path,
-                                          body: photoJPEG, contentType: "image/jpeg")
+                                          body: photoJPEG, contentType: "image/jpeg",
+                                          timeout: 320)
         return data
     }
 
@@ -400,7 +405,8 @@ struct APIClient {
     private func request(method: String,
                          path: String,
                          body: Data?,
-                         contentType: String? = nil) async throws -> (Data, URLResponse) {
+                         contentType: String? = nil,
+                         timeout: TimeInterval? = nil) async throws -> (Data, URLResponse) {
         guard let url = URL(string: origin + path) else {
             throw APIError.invalidResponse
         }
@@ -409,6 +415,10 @@ struct APIClient {
         req.httpBody = body
         if let contentType { req.setValue(contentType, forHTTPHeaderField: "Content-Type") }
         req.httpShouldHandleCookies = true   // default, but explicit
+        // URLRequest default is 60s; image generation legitimately runs longer
+        // (gpt-image-1.5/2 high quality + input_fidelity:high) so we let callers
+        // raise it per-request. Other endpoints keep the 60s default.
+        if let timeout { req.timeoutInterval = timeout }
 
         let session = URLSession.shared
         let pair: (Data, URLResponse)

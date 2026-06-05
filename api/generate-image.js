@@ -7,7 +7,11 @@ import { get } from '@vercel/blob';
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
 
-export const config = { api: { bodyParser: false }, maxDuration: 60 };
+// gpt-image-1.5 / -2 at high quality + input_fidelity:high can legitimately run
+// 60-120s for an edit. 300s is Vercel Pro's hard ceiling for serverless
+// functions and gives plenty of headroom for the slowest model/quality combos
+// without ever cutting OpenAI off mid-generation.
+export const config = { api: { bodyParser: false }, maxDuration: 300 };
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_REFS = 3;
