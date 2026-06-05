@@ -91,6 +91,7 @@ The control surface for Andrew:
   - Drag categories or tiles to reorder / reparent — including **across sections** (the dragged subtree's `section` updates).
   - **Multi-select tiles** via checkbox; drag any one of them to move the whole selection together.
   - **✎ on any tile / category / subcategory** opens the **full Add/Edit modal** in edit mode: change label, swap the image (regenerate from a new photo, or upload), regenerate the voice with a tweaked phrase, toggle Pin-to-top, flip keep-aspect, or delete. **+ tile / + Category / + subcategory** open the same modal in add mode. The voice section hides for categories. Add and Edit are the same surface on both the kid board and the parent organizer.
+- **Review new tiles** — when a bulk photo import (from the iOS app or web) finishes, a panel at the top of the dashboard surfaces the AI-named tiles (art + a play-the-voice button + editable name / pronunciation) to confirm, rename, or remove. See *Making tiles from photos*.
 - **Reference images for AI tile generation** — uploaded photos used as style/subject references for `/api/generate-image`.
 - **Backup** — download a JSON of the entire board with images/audio base64-embedded.
 - **Admin-only**: a `🧬 Taxonomy` link in the top-right opens the workbench at `/admin/taxonomy.html`. Surfaced only when `/api/auth/me` returns role `admin`; other parents never see it.
@@ -149,11 +150,42 @@ Encoded in `api/_lib/access.js`:
 
 The kid-facing board is being rewritten as a native SwiftUI app to eliminate the WKWebView touch lag (300ms click delay, double-tap-to-zoom, gesture fights) that makes the iPad feel sluggish for a child tapping at speed. Parents, therapists, and admins keep using the web app.
 
-The Swift project lives in `kid-ios/` with its own [README](kid-ios/README.md). It calls the same `/api/auth/login`, `/api/sync`, `/api/media`, `/api/events`, `/api/live`, `/api/tts` endpoints as the web app — no server changes — and uses cookie-based auth via `URLSession` + `HTTPCookieStorage`.
+The Swift project lives in `kid-ios/` with its own [README](kid-ios/README.md). It calls the same `/api/auth/login`, `/api/sync`, `/api/media`, `/api/events`, `/api/live`, `/api/tts` endpoints as the web app, and — for the in-app **parent edit mode** that makes tiles from photos — also `/api/describe-image`, `/api/generate-image`, `/api/upload`, and `/api/items`. Auth is cookie-based via `URLSession` + `HTTPCookieStorage`. The only backend change it needs is the additive `items.needs_review` flag (see *Making tiles from photos*).
+
+Edit mode (long-press the lock) now exposes a native **+ New tile** flow and an **Add several from Photos** bulk import — so a parent no longer has to bounce out to Safari to add tiles. The full dashboard (analytics, schedules, organizer) still lives on the web. Camera + Photos usage strings are baked into `Info.plist` from `project.yml`, so the picker actually opens (without them iOS silently denies access).
 
 The Xcode project is generated from `kid-ios/project.yml` via [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen && cd kid-ios && xcodegen generate`), so the `.xcodeproj` is gitignored and we avoid hand-maintained `pbxproj` diffs.
 
 The Capacitor shell below stays in the repo as the parent/therapist surface and as a fallback for the kid surface until the native app is fully migrated.
+
+---
+
+## Making tiles from photos
+
+Turning a real photo into a board tile is a first-class flow on every surface, built around one AI pipeline:
+
+1. **`/api/describe-image`** — vision suggests a 1–2 word label + a phonetic spelling tuned for TTS.
+2. **`/api/generate-image`** — re-illustrates the photo in the chosen art style (3D / picture-book / watercolor / soft / felted), steered by the child's reference images.
+3. **`/api/tts`** — records the voice from the phonetic spelling (or the label).
+4. Review → **`/api/items`** saves the tile (art + voice uploaded via `/api/upload`).
+
+A parent's typed name / pronunciation **always supersedes** the AI's.
+
+### Where it shows up
+
+- **Web, single tile** (`parent.html` organizer + `app.html` edit mode): *photo first* — tap the magic button and the label + pronunciation auto-fill; you review and Save. (The old "type a label first" gate is gone, and the hidden file input no longer no-ops on iOS Safari.)
+- **Web, bulk folder** (`app.html`): pick a folder of images; each is named + illustrated into an editable list you review before saving as a category.
+- **Native, single tile** (iOS edit mode → **+ New tile**): system camera or Photos, then the same describe → art → voice → review → Save chain.
+- **Native, bulk import** (iOS → **Add several from Photos**): multi-select up to 50; each photo renders as a **background job** with its own progress ring (max 3 in flight, so a 20-photo batch doesn't fire 20 image generations at once) and auto-adds to the board as it finishes — so a parent can keep snapping/picking without waiting on a render.
+
+### The review queue (`items.needs_review`)
+
+Bulk-imported tiles land on the board immediately (the child sees them right away) but are flagged **`needs_review = true`** — one server-side flag that powers a review pass on *both* surfaces:
+
+- **Native**: when a whole batch finishes rendering, a **"✨ N new tiles ready — Review"** banner pops on the board (even if the Add-Tiles sheet was closed). It opens a review sheet — each tile's art, a ▶ to hear its voice, and editable name + pronunciation.
+- **Web**: a matching **"New tiles to review"** panel at the top of the parent dashboard.
+
+On either, **Save & confirm** clears the flag (`PUT /api/items` with `needsReview:false`) and re-records the voice for anything renamed; per-tile Remove deletes it. Single-tile adds (web or native) are never flagged. The column is additive — run `POST /api/init` once after deploy to apply it.
 
 ---
 
@@ -303,7 +335,7 @@ Generated by `taxonomy/build-seed.mjs` from structured vocabulary + one shared p
 | Endpoint | Purpose |
 |---|---|
 | `GET/POST /api/sync` | Pull all categories + items for a child |
-| `POST/PUT/DELETE /api/items` | Tile CRUD (supports cross-section moves via `section`) |
+| `POST/PUT/DELETE /api/items` | Tile CRUD (cross-section moves via `section`; `needsReview` flag drives the bulk-import review queue) |
 | `POST/PUT/DELETE /api/categories` | Category CRUD (PUT with `section + cascade:true` rewrites whole subtree's section) |
 | `POST /api/upload?kind=&ext=` | Upload an image/audio blob to Vercel Blob, returns `{ key }` |
 | `GET /api/media?key=` | Stream a stored blob |
@@ -441,6 +473,7 @@ All photos / audio of real people live in Vercel Blob behind authenticated `/api
 - **Therapist "Build a Custom Board" editor.** Ownership column shipped; the editor that uses it (and surfaces a per-tile "Remove from <child>'s board" parent-override action) lands after enforcement.
 
 ### Open / deferred
+- **Pre-naming a bulk import.** A parent's name / pronunciation supersedes the AI in the *review* step, not before the AI runs; a per-photo "name these first" grid is a possible add. Pronunciation is consumed by TTS at save time, not stored as its own column, so re-recording a voice means re-typing the pronunciation.
 - **Status bar / contentInset** behavior on iOS depends on the Info.plist + the `@capacitor/status-bar` plugin being installed; see the iOS section.
 - **Scheduled-prompt triggers off `settings.schedule`** (board chooses what to show based on time + location) is intentionally not wired yet — the editor captures the data; the runtime is next.
 - **Per-concept mastery & progressive growth.** `game_attempts.category` currently stores the section, not the canonical taxonomy slug — once tiles carry `taxonomy_slug`, mastery rolls up per concept and drives "grow the board as the child masters levels."
