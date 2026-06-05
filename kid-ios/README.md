@@ -7,10 +7,13 @@ stay on the web app — this app is just the board Fletcher actually taps on.
 zoom, gesture fights with the kid's actual taps). Native UIKit/SwiftUI gesture
 handlers fire on the touch-down event with no delay — that's the whole point.
 
-Backend untouched: this app calls the same `/api/auth/login`, `/api/sync`,
-`/api/media`, `/api/events`, `/api/live`, `/api/tts` endpoints as the web app.
-Auth is cookie-based via `URLSession` + `HTTPCookieStorage` (same flow as
-Safari, just from a native client).
+Backend: this app calls the same `/api/auth/login`, `/api/sync`, `/api/media`,
+`/api/events`, `/api/live`, `/api/tts` endpoints as the web app, plus — for the
+in-app tile editor — `/api/describe-image`, `/api/generate-image`, `/api/upload`,
+and `/api/items` (create / update / delete). The only schema change it relies on
+is the additive `items.needs_review` flag for the bulk-import review queue (run
+`POST /api/init` once to apply it). Auth is cookie-based via `URLSession` +
+`HTTPCookieStorage` (same flow as Safari, just from a native client).
 
 ## Setup on a fresh Mac
 
@@ -88,7 +91,43 @@ These come next (when the v0 is stable on Fletcher's iPad):
 - Game modes (matching, slideshow, celebration)
 - Routines / scheduled prompts ("do you need the potty?")
 - Reward animations
-- Parent edit mode (long-press → opens `/parent/<slug>` in Safari for v1; native editor later)
+
+Now shipped (see *Tile authoring* below): a native **parent edit mode** —
+long-press the lock, then **+ New tile** or **Add several from Photos** — so a
+parent can add tiles without bouncing out to Safari. The full dashboard
+(analytics, schedules, organizer) still opens on the web.
+
+## Tile authoring (parent edit mode)
+
+Long-press the lock → edit mode → **+ New tile** (single) or **Add several from
+Photos** (bulk). Both run the same chain: photo → `/api/describe-image`
+(auto name + phonetic) → `/api/generate-image` (styled art) → `/api/tts` (voice)
+→ review → `/api/items`.
+
+- **Background render with progress rings.** Captures return instantly; each
+  photo becomes a `TileJob` in an app-level `AddTileQueue` (max 3 rendering at
+  once) so a parent can keep snapping/picking while tiles render. The header
+  pill shows a live "⏳ N rendering" count.
+- **Bulk = reviewable.** Bulk-imported tiles auto-add to the board flagged
+  `needs_review`; when the batch finishes, a banner on the board opens a review
+  sheet (art + hear-the-voice + editable name / pronunciation). The same queue
+  surfaces on the web parent dashboard. A typed name/pronunciation supersedes
+  the AI's.
+
+Relevant files:
+
+```
+Storage/AddTileQueue.swift   TileJob + queue: AI chain, concurrency gate, batch + review notice
+Storage/ImageDownscale.swift Shared photo → ≤1024px JPEG helper
+Views/AddTileView.swift      Add-Tiles sheet: destination, capture buttons, render tray
+Views/TileEditSheet.swift    Fix/name a single tile (create-or-update)
+Views/BatchReviewView.swift  Review queue sheet for needs_review tiles
+Views/CameraPicker.swift     UIImagePickerController bridge (system camera)
+Views/HeaderBar.swift        Edit-mode pills incl. + New tile + the rendering badge
+```
+
+Camera/Photos usage strings live in `project.yml` (baked into `Info.plist` on
+`xcodegen generate`) — without them iOS silently denies the picker.
 
 ## Testing on Fletcher's iPad
 

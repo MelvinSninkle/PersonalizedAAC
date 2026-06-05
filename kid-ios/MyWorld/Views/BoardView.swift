@@ -24,6 +24,14 @@ struct BoardView: View {
     @State private var showDisplay  = false
     @State private var editMode     = false
     @State private var showBatchReview = false
+    /// An in-grid "+ Add tile" tap; carries which section/folder to pre-select.
+    @State private var addTileRequest: AddTileRequest?
+
+    struct AddTileRequest: Identifiable {
+        let id = UUID()
+        let section: BoardSection
+        let categoryId: Int?
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +47,11 @@ struct BoardView: View {
                     HStack(spacing: 0) {
                         let visible = visibleColumns
                         ForEach(Array(visible.enumerated()), id: \.element) { idx, section in
-                            SectionColumn(section: section, tileSize: tile)
+                            SectionColumn(section: section, tileSize: tile,
+                                          editMode: editMode,
+                                          onAdd: { sec, catId in
+                                              addTileRequest = AddTileRequest(section: sec, categoryId: catId)
+                                          })
                                 .frame(width: BoardMetrics.columnWidth(across: prefs.across(section),
                                                                        tile: tile))
                             if idx < visible.count - 1 { Divider() }
@@ -51,7 +63,9 @@ struct BoardView: View {
 
                     if prefs.showNeeds {
                         Divider()
-                        NeedsStrip(tileSize: tile)
+                        NeedsStrip(tileSize: tile,
+                                   editMode: editMode,
+                                   onAdd: { addTileRequest = AddTileRequest(section: .needs, categoryId: nil) })
                     }
                 }
             }
@@ -63,6 +77,11 @@ struct BoardView: View {
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showDisplay)  { DisplaySettingsView() }
         .sheet(isPresented: $showBatchReview) { BatchReviewView { showBatchReview = false } }
+        .sheet(item: $addTileRequest) { req in
+            AddTileView(defaultSection: req.section, defaultCategoryId: req.categoryId) {
+                addTileRequest = nil
+            }
+        }
         .fullScreenCover(item: gameSessionBinding) { session in
             Group {
                 switch session.mode {

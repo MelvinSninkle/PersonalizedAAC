@@ -17,18 +17,26 @@ import UIKit
 ///   │  [photo] On the board ✓  tap to rename               ✓      │
 ///   └────────────────────────────────────────────────────────────┘
 struct AddTileView: View {
-    var defaultSection: BoardSection = .needs
-    var defaultCategoryId: Int?     = nil
     let onDone: () -> Void
 
     @Environment(BoardStore.self)   private var board
     @Environment(AuthManager.self)  private var auth
     @Environment(AddTileQueue.self) private var queue
 
-    // Batch destination — chosen once, applied to every photo until changed.
-    @State private var section: BoardSection = .needs
+    // Batch destination — seeded from where the "+ Add tile" cell was tapped,
+    // then applied to every photo until changed. These MUST be seeded in init
+    // (not .task): assigning `section` after the view exists trips the
+    // onChange(of: section) handler below, which clears `categoryId` — that's
+    // what was resetting the pre-selected folder back to "Top level".
+    @State private var section: BoardSection
     @State private var categoryId: Int?
     @State private var style: ArtStyle = .threeD
+
+    init(defaultSection: BoardSection = .needs, defaultCategoryId: Int? = nil, onDone: @escaping () -> Void) {
+        self.onDone = onDone
+        _section = State(initialValue: defaultSection)
+        _categoryId = State(initialValue: defaultCategoryId)
+    }
 
     // Picker presentation
     @State private var showCamera  = false
@@ -93,10 +101,9 @@ struct AddTileView: View {
                 Task { await startBulkImport(picked) }
             }
             .task {
-                section = defaultSection
-                categoryId = defaultCategoryId
-                // Reopening the sheet starts the tray clean, but keep anything
-                // still rendering visible so she can watch it land.
+                // Destination is seeded in init now (see above). Reopening the
+                // sheet starts the tray clean, but keep anything still rendering
+                // visible so she can watch it land.
                 queue.pruneFinished()
             }
         }
@@ -119,15 +126,15 @@ struct AddTileView: View {
             .onChange(of: section) { _, _ in categoryId = nil }
 
             HStack(spacing: 12) {
-                let folders = board.roots(in: section)
+                let folders = folderOptions(section)
                 if !folders.isEmpty {
                     Menu {
                         Button("Top level") { categoryId = nil }
-                        ForEach(folders, id: \.id) { c in
-                            Button(c.label) { categoryId = c.id }
+                        ForEach(folders) { f in
+                            Button(f.depth > 0 ? "— " + f.label : f.label) { categoryId = f.id }
                         }
                     } label: {
-                        menuChip(icon: "folder", text: folderName(folders))
+                        menuChip(icon: "folder", text: folderName())
                     }
                 }
                 Menu {
@@ -283,9 +290,26 @@ struct AddTileView: View {
                            board: board)
     }
 
-    private func folderName(_ folders: [Category]) -> String {
-        guard let id = categoryId, let c = folders.first(where: { $0.id == id }) else { return "Top level" }
-        return c.label
+    private struct FolderOption: Identifiable { let id: Int; let label: String; let depth: Int }
+
+    /// Top-level categories plus their subcategories (indented). Lets a "+ Add
+    /// tile" tap from inside a subcategory pre-select the right folder, and lets
+    /// the parent retarget anywhere in the section.
+    private func folderOptions(_ section: BoardSection) -> [FolderOption] {
+        var out: [FolderOption] = []
+        for root in board.roots(in: section) {
+            out.append(FolderOption(id: root.id, label: root.label, depth: 0))
+            for sub in board.children(of: root) {
+                out.append(FolderOption(id: sub.id, label: sub.label, depth: 1))
+            }
+        }
+        return out
+    }
+
+    private func folderName() -> String {
+        guard let id = categoryId,
+              let f = folderOptions(section).first(where: { $0.id == id }) else { return "Top level" }
+        return f.label
     }
 
     private func sectionLabel(_ s: BoardSection) -> String {
