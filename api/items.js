@@ -66,16 +66,21 @@ async function create(req, res, db, user) {
   // Falls back to "Who/what is the [label]?" in the game view when unset.
   const description = typeof b.description === 'string' ? b.description.slice(0, 500) : null;
 
+  // Bulk imports add the tile to the board straight away but flag it for the
+  // parent's review queue (see init.js). Single-tile adds leave it false.
+  const needsReview = !!b.needsReview;
+
   const rows = await db`
     INSERT INTO items
       (section, category_id, label, image_url, image_key, sound_url, sound_key,
-       keep_aspect, display_order, pinned, child_id, owner_user_id, description, updated_at)
+       keep_aspect, display_order, pinned, child_id, owner_user_id, description,
+       needs_review, updated_at)
     VALUES
       (${section}, ${categoryId}, ${label},
        ${b.imageUrl ?? null}, ${b.imageKey ?? null},
        ${b.soundUrl ?? null}, ${b.soundKey ?? null},
        ${!!b.keepAspect}, ${b.order ?? Date.now()}, ${!!b.pinned},
-       ${childId}, ${ownerUserId}, ${description}, NOW())
+       ${childId}, ${ownerUserId}, ${description}, ${needsReview}, NOW())
     RETURNING *
   `;
   res.status(200).json(rowToItem(rows[0]));
@@ -97,6 +102,9 @@ async function update(req, res, db, user) {
   // PRD §5: description is updatable. `undefined` = leave the existing value
   // alone; explicit "" clears it back to the fallback prompt in the game.
   const description = (req.body || {}).description;
+  // Review queue: confirming a bulk-imported tile sends needsReview:false to
+  // drop it from the parent's review list. `undefined` leaves it unchanged.
+  const needsReview = (req.body || {}).needsReview;
   const rows = await db`
     UPDATE items SET
       label         = COALESCE(${label ?? null},      label),
@@ -110,6 +118,7 @@ async function update(req, res, db, user) {
       display_order = COALESCE(${order ?? null},      display_order),
       pinned        = ${pinned === undefined ? old.pinned : !!pinned},
       description   = ${description === undefined ? old.description : (typeof description === 'string' ? description.slice(0, 500) : null)},
+      needs_review  = ${needsReview === undefined ? old.needs_review : !!needsReview},
       updated_at    = NOW()
     WHERE id = ${id}
     RETURNING *
