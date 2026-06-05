@@ -159,6 +159,131 @@ struct APIClient {
         _ = try? await request(method: "POST", path: "/api/exposure-tick", body: body, contentType: "application/json")
     }
 
+    // MARK: -- /api/describe-image, /api/generate-image, /api/tts, /api/upload, /api/items
+    //
+    // Endpoints used by AddTileView. Errors are thrown as APIError so the view
+    // can surface them inline (a busy parent needs to know exactly what to do
+    // next, not a 500-char stack dump).
+
+    struct DescribeResult: Codable {
+        let label: String
+        let pronunciation: String
+    }
+
+    /// POST /api/describe-image — OpenAI vision suggests a 1-2 word label and
+    /// a phonetic spelling tuned for TTS. Best-effort; if the org isn't
+    /// verified for vision, returns empty strings.
+    func describeImage(photoJPEG: Data) async throws -> DescribeResult {
+        let (data, _) = try await request(method: "POST", path: "/api/describe-image",
+                                          body: photoJPEG, contentType: "image/jpeg")
+        do { return try JSONDecoder().decode(DescribeResult.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
+    /// POST /api/generate-image — re-illustrates the photo in the given style.
+    /// Returns the raw PNG bytes from gpt-image-1. ~20-40s typical.
+    func generateImage(photoJPEG: Data, label: String, style: String, childId: String) async throws -> Data {
+        let path = "/api/generate-image?label=\(percentEscape(label))&style=\(percentEscape(style))&childId=\(percentEscape(childId))"
+        let (data, _) = try await request(method: "POST", path: path,
+                                          body: photoJPEG, contentType: "image/jpeg")
+        return data
+    }
+
+    /// POST /api/tts — speaks `text` in the given emotion via ElevenLabs.
+    /// Returns the raw MP3 bytes. Throws on failure so the caller can surface
+    /// an inline error (the legacy `tts` below returns Data? for fire-and-
+    /// forget callers like GameAudio that don't need to know what went wrong).
+    func synthesizeSpeech(text: String, emotion: String) async throws -> Data {
+        let body = try JSONSerialization.data(withJSONObject: ["text": text, "emotion": emotion])
+        let (data, _) = try await request(method: "POST", path: "/api/tts",
+                                          body: body, contentType: "application/json")
+        return data
+    }
+
+    struct UploadResult: Codable { let key: String }
+
+    /// POST /api/upload — uploads raw bytes to private Vercel Blob storage
+    /// and returns the storage key the server will use in /api/media.
+    func uploadBlob(_ bytes: Data, kind: String, ext: String, contentType: String) async throws -> String {
+        let path = "/api/upload?kind=\(percentEscape(kind))&ext=\(percentEscape(ext))"
+        let (data, _) = try await request(method: "POST", path: path,
+                                          body: bytes, contentType: contentType)
+        return (try JSONDecoder().decode(UploadResult.self, from: data)).key
+    }
+
+    /// POST /api/items — creates a new tile row. Returns the saved Tile
+    /// (with its server-assigned id) so the caller can insert it into the
+    /// in-memory BoardStore without waiting for a full /api/sync.
+    func createItem(section: String,
+                    categoryId: Int?,
+                    label: String,
+                    imageKey: String,
+                    soundKey: String?,
+                    keepAspect: Bool,
+                    description: String?,
+                    needsReview: Bool = false,
+                    childId: String) async throws -> Tile {
+        var body: [String: Any] = [
+            "section":     section,
+            "label":       label,
+            "imageKey":    imageKey,
+            "keepAspect":  keepAspect,
+            "childId":     childId,
+            "order":       Int(Date().timeIntervalSince1970 * 1000),
+            "pinned":      false,
+            "needsReview": needsReview,
+        ]
+        if let categoryId  { body["categoryId"]  = categoryId }
+        if let soundKey    { body["soundKey"]    = soundKey }
+        if let description { body["description"] = description }
+        let bodyData = try JSONSerialization.data(withJSONObject: body)
+        let (data, _) = try await request(method: "POST", path: "/api/items",
+                                          body: bodyData, contentType: "application/json")
+        do { return try JSONDecoder().decode(Tile.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
+    /// How a tile update should treat the category field. The server leaves
+    /// the value untouched unless we send a `categoryId` key, so we can't use a
+    /// plain `Int?` (nil would be ambiguous between "top level" and "leave it").
+    enum CategoryUpdate {
+        case unchanged
+        case set(Int?)   // nil = move to top level / Needs strip
+    }
+
+    /// PUT /api/items?id= — updates an existing tile. Only the fields you pass
+    /// are changed (the server COALESCEs the rest). Used by the tray edit (fix
+    /// a wrong AI name / placement) and by the review queue (`needsReview:
+    /// false` to confirm a bulk-imported tile).
+    func updateItem(id: Int,
+                    label: String? = nil,
+                    section: String? = nil,
+                    category: CategoryUpdate = .unchanged,
+                    soundKey: String? = nil,
+                    needsReview: Bool? = nil,
+                    childId: String) async throws -> Tile {
+        var body: [String: Any] = ["childId": childId]
+        if let label   { body["label"]   = label }
+        if let section { body["section"] = section }
+        switch category {
+        case .unchanged:      break
+        case .set(let catId): body["categoryId"] = catId ?? NSNull()
+        }
+        if let soundKey    { body["soundKey"]    = soundKey }
+        if let needsReview { body["needsReview"] = needsReview }
+        let bodyData = try JSONSerialization.data(withJSONObject: body)
+        let (data, _) = try await request(method: "PUT", path: "/api/items?id=\(id)",
+                                          body: bodyData, contentType: "application/json")
+        do { return try JSONDecoder().decode(Tile.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
+    /// DELETE /api/items?id= — removes a tile (and its blobs server-side). Used
+    /// by the review queue's "Remove" action.
+    func deleteItem(id: Int) async throws {
+        _ = try await request(method: "DELETE", path: "/api/items?id=\(id)", body: nil)
+    }
+
     /// Fire-and-forget POST to any path that doesn't need a body or response —
     /// used for things like `/api/play-request?childId=...`.
     func postEmpty(path: String) async {

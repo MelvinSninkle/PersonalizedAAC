@@ -255,6 +255,14 @@ export default async function handler(req, res) {
     // to "Who/what is the [label]?" in the game view.
     await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS description TEXT`;
 
+    // Bulk photo import review queue. A tile created by the iOS/web bulk import
+    // is added to the board immediately (so the child sees it) but flagged
+    // needs_review = TRUE so the parent gets a "review these AI-named tiles"
+    // queue on BOTH surfaces (native review sheet + web parent dashboard).
+    // Confirming a tile clears the flag; single-tile adds never set it.
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS needs_review BOOLEAN NOT NULL DEFAULT FALSE`;
+    await db`CREATE INDEX IF NOT EXISTS items_needs_review_idx ON items(child_id, needs_review)`;
+
     // Per-attempt mercy + difficulty + child-generated method flag.
     // attempts_taken defaults to 1 (back-compat: every legacy attempt was
     // recorded as "took one try"). child_generated is NULL on legacy rows

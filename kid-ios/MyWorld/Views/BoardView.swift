@@ -18,10 +18,12 @@ struct BoardView: View {
     @Environment(LiveSession.self) private var live
     @Environment(GameController.self) private var game
     @Environment(Scheduler.self) private var scheduler
+    @Environment(AddTileQueue.self) private var addQueue
 
     @State private var showSettings = false
     @State private var showDisplay  = false
     @State private var editMode     = false
+    @State private var showBatchReview = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,8 +58,11 @@ struct BoardView: View {
         }
         .background(Color(hex: "#fff7fb"))
         .overlay(alignment: .top) { scheduledPromptOverlay }
+        .overlay(alignment: .bottom) { reviewBanner }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: addQueue.pendingReviewNotice)
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showDisplay)  { DisplaySettingsView() }
+        .sheet(isPresented: $showBatchReview) { BatchReviewView { showBatchReview = false } }
         .fullScreenCover(item: gameSessionBinding) { session in
             Group {
                 switch session.mode {
@@ -124,6 +129,52 @@ struct BoardView: View {
                     onDismiss: { scheduler.acknowledge() }
                 )
             }
+        }
+    }
+
+    /// "Your bulk import is ready — review N tiles" banner. Pops from the
+    /// bottom once a whole multi-photo batch has finished rendering (even if the
+    /// parent already closed the Add-Tiles sheet). Tapping Review opens the
+    /// native review sheet; ✕ defers it (the tiles are already on the board and
+    /// still flagged, so the web dashboard can review them too).
+    @ViewBuilder
+    private var reviewBanner: some View {
+        if let notice = addQueue.pendingReviewNotice {
+            HStack(spacing: 12) {
+                Text("✨")
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(notice.count) new \(notice.count == 1 ? "tile" : "tiles") ready")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                    Text("Review the names & voices")
+                        .font(.system(size: 12)).opacity(0.85)
+                }
+                Spacer()
+                Button {
+                    addQueue.pendingReviewNotice = nil
+                    showBatchReview = true
+                } label: {
+                    Text("Review")
+                        .font(.system(size: 14, weight: .bold))
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Color.white)
+                        .foregroundStyle(Color(hex: "#ad1457"))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                Button { addQueue.pendingReviewNotice = nil } label: {
+                    Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white.opacity(0.9))
+            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .foregroundStyle(.white)
+            .background(Color(hex: "#ff1493"))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 

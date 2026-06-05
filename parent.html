@@ -250,6 +250,21 @@
   <h1 class="page-title fred" style="margin-top:24px;">Hi Andrew 👋</h1>
   <p class="page-sub">Here's how <strong id="child-name">Fletcher</strong> is doing. Start a learning mode below, or review progress. <em>Fletcher never sees this screen.</em></p>
 
+  <!-- BULK-IMPORT REVIEW QUEUE — tiles imported in bulk (iOS app or web) land
+       on the board right away but flagged needs_review; surfaced here so the
+       parent can confirm / rename / remove. Hidden when the queue is empty. -->
+  <div class="panel" id="review-panel" style="display:none;border:2px solid var(--pink);background:#fff;">
+    <h2>✨ New tiles to review
+      <span id="review-count" style="display:inline-block;min-width:22px;text-align:center;background:var(--pink);color:#fff;border-radius:999px;font-size:13px;padding:1px 8px;vertical-align:middle;">0</span>
+    </h2>
+    <p class="hint">Just imported from photos. Each was named &amp; voiced with AI — listen, fix anything that's off, then confirm. <strong>Whatever you type wins over the AI.</strong></p>
+    <div id="review-list"></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;">
+      <button class="btn primary" id="review-confirm-all">Save &amp; confirm all</button>
+      <span class="hint" id="review-status" style="margin:0;"></span>
+    </div>
+  </div>
+
   <!-- OVERVIEW -->
   <div class="section-label">This week</div>
   <div class="stats">
@@ -669,9 +684,12 @@
       </div>
       <!-- No `capture`: lets iOS offer Take Photo OR Photo Library (camera-only
            forced too narrow a flow). Native app needs NSCameraUsageDescription +
-           NSPhotoLibraryUsageDescription in Info.plist for either to work. -->
-      <input type="file" id="tile-photo" accept="image/*" style="display:none;">
-      <button class="btn primary" id="tile-magic" style="width:100%;">📷 Choose photo &amp; make it</button>
+           NSPhotoLibraryUsageDescription in Info.plist for either to work.
+           NOTE: `display:none` causes the picker to no-op on some iOS Safari
+           versions; use the off-screen 1×1 trick so the input still receives
+           the synthetic click reliably. -->
+      <input type="file" id="tile-photo" accept="image/*" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
+      <button class="btn primary" id="tile-magic" style="width:100%;">📷 Take a photo &amp; we'll do the rest</button>
       <p class="hint" id="tile-magic-status" style="margin:8px 0 0;">—</p>
       <img id="tile-preview" alt="" style="display:none;width:100%;max-width:180px;border-radius:12px;margin-top:8px;">
     </div>
@@ -1432,32 +1450,73 @@
     prev.src = u; prev.style.display = 'block'; prev.addEventListener('load', () => URL.revokeObjectURL(u), { once: true });
   }
   document.getElementById('tile-style').addEventListener('change', (e) => { try { localStorage.setItem('aacStyle', e.target.value); } catch (_) {} });
+  // Photo-first add-tile flow. Tap → photo picker. Once a photo lands, we run
+  // describe-image (auto-name + phonetic), then generate-image (styled art),
+  // then tts (voice). No "type a label first" gate — busy parents who can't
+  // pause to type get the whole tile from one tap. Each step's failure stops
+  // the chain with a clear inline error; the user can fix what's wrong (e.g.
+  // tweak the label) and re-tap Save without re-shooting.
   document.getElementById('tile-magic').addEventListener('click', () => {
-    const label = document.getElementById('tile-label').value.trim();
-    if (!label) { tileSetErr('Type a label first'); document.getElementById('tile-label').focus(); return; }
-    tileSetErr(''); document.getElementById('tile-photo').click();
+    tileSetErr('');
+    document.getElementById('tile-photo').click();
   });
   document.getElementById('tile-photo').addEventListener('change', async (e) => {
     const file = e.target.files[0]; e.target.value = ''; if (!file) return;
-    const label = document.getElementById('tile-label').value.trim();
     const style = document.getElementById('tile-style').value;
     const emotion = document.getElementById('tile-emotion').value;
-    // Phrase overrides label for the voice (pronunciation tweaks like "Cheery-ohs"
-    // when the label is "Cheerios"); falls back to the label.
-    const phrase = (document.getElementById('tile-phrase').value || '').trim() || label;
     const statusEl = document.getElementById('tile-magic-status');
     const btn = document.getElementById('tile-magic'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Working…';
     tileSetErr('');
     try {
-      statusEl.textContent = '🎨 Creating the artwork… (~20–40s)';
+      // 1) Downscale once; reuse the same bytes for describe + generate.
       const photo = await downscale(file, 1024, 0.85);
+
+      // 2) Auto-name + phonetic spelling. Best-effort: if vision fails (e.g.
+      // org not verified), fall back to whatever the parent has typed in the
+      // label field — the rest of the flow can still run.
+      statusEl.textContent = '🔍 Looking at the photo…';
+      let label = document.getElementById('tile-label').value.trim();
+      let phrase = (document.getElementById('tile-phrase').value || '').trim();
+      try {
+        const dr = await fetch('/api/describe-image', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
+        if (dr.ok) {
+          const d = await dr.json();
+          if (d.label && !label)            { label = d.label;            document.getElementById('tile-label').value = label; }
+          if (d.pronunciation && !phrase)   { phrase = d.pronunciation;   document.getElementById('tile-phrase').value = phrase; }
+        }
+      } catch (_) { /* vision is best-effort */ }
+
+      // If we *still* don't have a label, we can't generate art (model needs a
+      // subject hint). Surface that as a clear, actionable message.
+      if (!label) {
+        statusEl.textContent = '—';
+        tileSetErr("Couldn't name the photo automatically — type a label and tap the button again.");
+        document.getElementById('tile-label').focus();
+        return;
+      }
+
+      // 3) Stylized art via gpt-image-1.
+      statusEl.textContent = '🎨 Creating the artwork… (~20–40s)';
       const ir = await fetch('/api/generate-image?label=' + encodeURIComponent(label) + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(slug), { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
-      if (!ir.ok) { const d = await ir.text(); throw new Error('Image — ' + d.slice(0, 160)); }
+      if (!ir.ok) {
+        const d = await ir.text();
+        // Common: OpenAI org isn't identity-verified → 403 on /v1/images/edits.
+        // Make that obvious instead of buried in a 500-char dump.
+        const hint = /must be verified/i.test(d)
+          ? "OpenAI organization isn't verified for image generation. Open platform.openai.com → Settings → Organization → Verify, then try again."
+          : d.slice(0, 160);
+        throw new Error('Image — ' + hint);
+      }
       tilePendingImage = await ir.blob(); tileShowPreview(tilePendingImage);
+
+      // 4) Voice via ElevenLabs (phrase wins; otherwise speak the label).
       statusEl.textContent = '🔊 Making the voice…';
-      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: phrase, emotion }) });
+      const speakText = phrase || label;
+      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: speakText, emotion }) });
       if (tr.ok) { tilePendingSound = await tr.blob(); document.getElementById('tile-sound-status').textContent = 'AI voice ready ✓'; }
-      statusEl.textContent = '✅ Ready — tap Save tile.';
+      else { /* voice is best-effort; user can still hit "Generate audio" again */ }
+
+      statusEl.textContent = '✅ Ready — review the name, then tap Save tile.';
     } catch (err) { statusEl.textContent = '—'; tileSetErr('Could not make the tile: ' + (err.message || err)); }
     finally { btn.disabled = false; btn.textContent = pv; }
   });
@@ -1699,6 +1758,93 @@
     await loadSharedBoards();
   });
   loadSharedBoards();
+
+  // ---- Bulk-import review queue ----
+  // Tiles imported in bulk (iOS app or web) auto-add to the board but carry
+  // needsReview = true. We surface them here so the parent can confirm, rename,
+  // or remove. Confirming clears the flag (PUT needsReview:false); renaming (or
+  // a custom pronunciation) re-records the ElevenLabs voice. Her input always
+  // supersedes whatever the AI suggested.
+  let REVIEW_ITEMS = [];
+  async function reviewTTS(text, emotion) {
+    const r = await fetch('/api/tts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({ text, emotion: emotion || 'default' }),
+    });
+    if (!r.ok) throw new Error('voice ' + r.status);
+    return await r.blob();
+  }
+  async function loadReviewQueue() {
+    const panel = document.getElementById('review-panel'); if (!panel) return;
+    try {
+      const d = await orgApi('/api/sync?childId=' + encodeURIComponent(slug));
+      REVIEW_ITEMS = (d.items || []).filter(it => it.needsReview);
+    } catch (_) { REVIEW_ITEMS = []; }
+    if (!REVIEW_ITEMS.length) { panel.style.display = 'none'; return; }
+    panel.style.display = '';
+    document.getElementById('review-count').textContent = REVIEW_ITEMS.length;
+    document.getElementById('review-list').innerHTML = REVIEW_ITEMS.map(it => {
+      const img = it.imageKey ? '/api/media?key=' + encodeURIComponent(it.imageKey) : '';
+      const audio = it.soundKey ? '/api/media?key=' + encodeURIComponent(it.soundKey) : '';
+      return '<div class="rv-row" data-id="' + it.id + '" style="display:flex;gap:12px;align-items:center;background:#fff7fb;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px;">'
+        + (img
+            ? '<div style="width:64px;height:64px;border-radius:10px;background-image:url(' + img + ');background-size:cover;background-position:center;flex:none;"></div>'
+            : '<div style="width:64px;height:64px;border-radius:10px;background:#fce4ec;flex:none;"></div>')
+        + '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;">'
+          + '<input class="rv-name" value="' + schEsc(it.label) + '" placeholder="Name" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;">'
+          + '<input class="rv-pron" value="" placeholder="Pronounce it (optional, e.g. buh-NAN-uh)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:12px;">'
+        + '</div>'
+        + (audio ? '<button class="btn ghost rv-play" data-audio="' + audio + '" title="Hear the voice">▶</button>' : '')
+        + '<button class="btn ghost rv-remove" style="color:#dc2626;">Remove</button>'
+      + '</div>';
+    }).join('');
+  }
+  (function wireReviewQueue() {
+    const list = document.getElementById('review-list'); if (!list) return;
+    list.addEventListener('click', async (e) => {
+      const play = e.target.closest('.rv-play');
+      if (play) { try { new Audio(play.dataset.audio).play(); } catch (_) {} return; }
+      const rm = e.target.closest('.rv-remove');
+      if (rm) {
+        const row = rm.closest('.rv-row'); const id = row.dataset.id;
+        if (!confirm('Remove this tile from the board?')) return;
+        rm.disabled = true;
+        try { await fetch('/api/items?id=' + id, { method: 'DELETE', credentials: 'same-origin' }); } catch (_) {}
+        await loadReviewQueue();
+      }
+    });
+    document.getElementById('review-confirm-all').addEventListener('click', async () => {
+      const status = document.getElementById('review-status');
+      const btn = document.getElementById('review-confirm-all');
+      btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Saving…';
+      const rows = Array.from(document.querySelectorAll('#review-list .rv-row'));
+      try {
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i]; const id = row.dataset.id;
+          const orig = (REVIEW_ITEMS.find(it => String(it.id) === String(id)) || {}).label || '';
+          const name = row.querySelector('.rv-name').value.trim();
+          const pron = row.querySelector('.rv-pron').value.trim();
+          status.textContent = 'Saving ' + (i + 1) + ' of ' + rows.length + '…';
+          const body = { childId: slug, needsReview: false };
+          const nameChanged = name && name !== orig;
+          if (nameChanged) body.label = name;
+          // Re-voice only when she renamed it or typed a pronunciation.
+          if (nameChanged || pron) {
+            try {
+              const mp3 = await reviewTTS(pron || name || orig);
+              body.soundKey = await tileUpload(mp3, 'sound', 'mp3', 'audio/mpeg');
+            } catch (_) { /* keep the AI voice if re-record fails */ }
+          }
+          await orgApi('/api/items?id=' + id, { method: 'PUT', body: JSON.stringify(body) });
+        }
+        status.textContent = '✅ All set!';
+        await loadReviewQueue();
+      } catch (err) {
+        status.textContent = 'Error: ' + (err.message || err);
+      } finally { btn.disabled = false; btn.textContent = pv; }
+    });
+  })();
+  loadReviewQueue();
 
   // ---- Reference images (steer AI tile generation) ----
   const refGrid = document.getElementById('ref-grid');

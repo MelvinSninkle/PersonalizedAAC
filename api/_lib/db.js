@@ -62,5 +62,6 @@ export function rowToItem(r) {
     ownerUserId: r.owner_user_id == null ? null : Number(r.owner_user_id),
     taxonomySlug: r.taxonomy_slug || null,
     description: r.description || null,
+    needsReview: !!r.needs_review,
   };
 }

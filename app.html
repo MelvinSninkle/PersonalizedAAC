@@ -1036,9 +1036,12 @@
       <!-- No `capture` attr: iOS then offers Take Photo OR Photo Library, which is
            more flexible and avoids the forced-rear-camera failures we hit. The
            NATIVE app still needs NSCameraUsageDescription + NSPhotoLibraryUsageDescription
-           in Info.plist or the OS silently blocks both. -->
-      <input type="file" id="item-photo-capture" accept="image/*" style="display:none;">
-      <button type="button" id="item-magic" style="margin-top:10px;width:100%;padding:12px;border:none;border-radius:8px;background:#ff1493;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">📷 Take photo &amp; make tile</button>
+           in Info.plist or the OS silently blocks both.
+           NOTE: `display:none` makes the synthetic click flake on iOS Safari
+           in some versions; the off-screen 1×1 keeps the input live without
+           any visible footprint. -->
+      <input type="file" id="item-photo-capture" accept="image/*" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
+      <button type="button" id="item-magic" style="margin-top:10px;width:100%;padding:12px;border:none;border-radius:8px;background:#ff1493;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">📷 Take a photo &amp; we'll do the rest</button>
       <div class="file-status" id="item-magic-status" style="margin-top:8px;">—</div>
       <img id="item-magic-preview" alt="" style="display:none;width:100%;max-width:200px;border-radius:10px;margin-top:8px;">
     </div>
@@ -2656,20 +2659,18 @@
   document.getElementById('item-style').addEventListener('change', (e) => {
     try { localStorage.setItem('aacStyle', e.target.value); } catch (_) {}
   });
+  // Photo-first flow (matches /parent dashboard). Tap → photo picker. Once a
+  // photo lands we run describe-image (auto-name + phonetic), then
+  // generate-image, then tts. No "type a label first" gate.
   document.getElementById('item-magic').addEventListener('click', () => {
-    const errEl = document.getElementById('item-error');
-    errEl.textContent = '';
-    const label = document.getElementById('item-label').value.trim();
-    if (!label) { errEl.textContent = 'Type a label first'; document.getElementById('item-label').focus(); return; }
+    document.getElementById('item-error').textContent = '';
     document.getElementById('item-photo-capture').click();
   });
   document.getElementById('item-photo-capture').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
-    const label = document.getElementById('item-label').value.trim();
     const style = document.getElementById('item-style').value;
-    const phrase = document.getElementById('item-phrase').value.trim() || label;
     const errEl = document.getElementById('item-error');
     const statusEl = document.getElementById('item-magic-status');
     const btn = document.getElementById('item-magic');
@@ -2679,13 +2680,41 @@
     const prevText = btn.textContent;
     btn.textContent = 'Working…';
     try {
-      // 1) Stylize the photo into the chosen art style.
-      statusEl.textContent = '🎨 Creating the artwork… (this can take ~20–40s)';
       const photo = await compressImage(file);
+
+      // 1) Auto-name + phonetic. Best-effort; falls back to whatever the
+      // parent typed in the label field if vision fails or org isn't verified.
+      statusEl.textContent = '🔍 Looking at the photo…';
+      let label  = document.getElementById('item-label').value.trim();
+      let phrase = document.getElementById('item-phrase').value.trim();
+      try {
+        const dr = await apiFetch('/api/describe-image', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
+        if (dr.ok) {
+          const d = await dr.json();
+          if (d.label && !label)            { label  = d.label;          document.getElementById('item-label').value  = label; }
+          if (d.pronunciation && !phrase)   { phrase = d.pronunciation;  document.getElementById('item-phrase').value = phrase; }
+        }
+      } catch (_) { /* vision is best-effort */ }
+
+      if (!label) {
+        statusEl.textContent = '—';
+        errEl.textContent = "Couldn't name the photo automatically — type a label and tap the button again.";
+        document.getElementById('item-label').focus();
+        return;
+      }
+
+      // 2) Stylize the photo into the chosen art style.
+      statusEl.textContent = '🎨 Creating the artwork… (~20–40s)';
       const ir = await apiFetch('/api/generate-image?label=' + encodeURIComponent(label) + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(CHILD_ID), {
         method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo,
       });
-      if (!ir.ok) { const d = await ir.text(); throw new Error('Image — ' + d.slice(0, 200)); }
+      if (!ir.ok) {
+        const d = await ir.text();
+        const hint = /must be verified/i.test(d)
+          ? "OpenAI organization isn't verified for image generation. Open platform.openai.com → Settings → Organization → Verify, then try again."
+          : d.slice(0, 200);
+        throw new Error('Image — ' + hint);
+      }
       pendingImage = await ir.blob();
       const purl = URL.createObjectURL(pendingImage);
       preview.src = purl; preview.style.display = 'block';
@@ -2693,18 +2722,20 @@
       const ist = document.getElementById('item-image-status');
       ist.textContent = 'AI image ready'; ist.className = 'file-status has-file';
 
-      // 2) Generate the voice from the phrase (defaults to the label).
+      // 3) Voice (phrase wins; otherwise speak the label).
       statusEl.textContent = '🔊 Recording the voice…';
+      const speakText = phrase || label;
       const tr = await apiFetch('/api/tts', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: phrase, emotion: document.getElementById('item-emotion').value }),
+        body: JSON.stringify({ text: speakText, emotion: document.getElementById('item-emotion').value }),
       });
-      if (!tr.ok) { const d = await tr.text(); throw new Error('Voice — ' + d.slice(0, 200)); }
-      pendingSound = await tr.blob();
-      const sst = document.getElementById('item-sound-status');
-      sst.textContent = 'AI voice ready'; sst.className = 'file-status has-file';
+      if (tr.ok) {
+        pendingSound = await tr.blob();
+        const sst = document.getElementById('item-sound-status');
+        sst.textContent = 'AI voice ready'; sst.className = 'file-status has-file';
+      } /* else: voice is best-effort; user can still hit "Generate audio" */
 
-      statusEl.textContent = '✅ Ready — review and tap Save.';
+      statusEl.textContent = '✅ Ready — review the name, then tap Save.';
     } catch (err) {
       statusEl.textContent = '—';
       errEl.textContent = 'Could not make the tile: ' + (err.message || err);

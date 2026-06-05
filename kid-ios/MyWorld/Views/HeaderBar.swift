@@ -12,11 +12,13 @@ import SwiftUI
 struct HeaderBar: View {
     @Environment(AuthManager.self) private var auth
     @Environment(DisplayPrefs.self) private var prefs
+    @Environment(AddTileQueue.self) private var addQueue
 
     @Binding var editMode: Bool
     @Binding var showDisplay: Bool
     @Binding var showSettings: Bool
     @State private var showUnlock = false
+    @State private var showAddTile = false
 
     var title: String { "\(prettyChildName(auth.user?.slug))'s World" }
     private var hex: String { prefs.colorHeaderText }
@@ -48,6 +50,9 @@ struct HeaderBar: View {
         }
         .sheet(isPresented: $showUnlock) {
             UnlockSheet { editMode = true }
+        }
+        .sheet(isPresented: $showAddTile) {
+            AddTileView { showAddTile = false }
         }
     }
 
@@ -83,7 +88,17 @@ struct HeaderBar: View {
     private var trailingControls: some View {
         HStack(spacing: 8) {
             if editMode {
-                pillButton("⚙ Display") { showDisplay = true }
+                // Native add-tile flow lives here so a busy parent doesn't
+                // have to bounce out to Safari. Camera/library → AI describe →
+                // art → voice → auto-add, all in a background queue so she can
+                // keep snapping. The pill shows a live count while tiles are
+                // still rendering (they finish + land on the board even if she
+                // closes the sheet).
+                let rendering = addQueue.jobs.filter { $0.phase == .working }.count
+                pillButton(rendering > 0 ? "⏳ \(rendering) rendering" : "➕ New tile") {
+                    showAddTile = true
+                }
+                pillButton("⚙ Display")  { showDisplay = true }
                 if let slug = auth.user?.slug {
                     pillLink(label: "👪 Parent",
                              url: URL(string: "https://aac.andrewpeterson.io/parent/\(slug)")!)
