@@ -250,6 +250,21 @@
   <h1 class="page-title fred" style="margin-top:24px;">Hi Andrew 👋</h1>
   <p class="page-sub">Here's how <strong id="child-name">Fletcher</strong> is doing. Start a learning mode below, or review progress. <em>Fletcher never sees this screen.</em></p>
 
+  <!-- BULK-IMPORT REVIEW QUEUE — tiles imported in bulk (iOS app or web) land
+       on the board right away but flagged needs_review; surfaced here so the
+       parent can confirm / rename / remove. Hidden when the queue is empty. -->
+  <div class="panel" id="review-panel" style="display:none;border:2px solid var(--pink);background:#fff;">
+    <h2>✨ New tiles to review
+      <span id="review-count" style="display:inline-block;min-width:22px;text-align:center;background:var(--pink);color:#fff;border-radius:999px;font-size:13px;padding:1px 8px;vertical-align:middle;">0</span>
+    </h2>
+    <p class="hint">Just imported from photos. Each was named &amp; voiced with AI — listen, fix anything that's off, then confirm. <strong>Whatever you type wins over the AI.</strong></p>
+    <div id="review-list"></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;">
+      <button class="btn primary" id="review-confirm-all">Save &amp; confirm all</button>
+      <span class="hint" id="review-status" style="margin:0;"></span>
+    </div>
+  </div>
+
   <!-- OVERVIEW -->
   <div class="section-label">This week</div>
   <div class="stats">
@@ -1743,6 +1758,93 @@
     await loadSharedBoards();
   });
   loadSharedBoards();
+
+  // ---- Bulk-import review queue ----
+  // Tiles imported in bulk (iOS app or web) auto-add to the board but carry
+  // needsReview = true. We surface them here so the parent can confirm, rename,
+  // or remove. Confirming clears the flag (PUT needsReview:false); renaming (or
+  // a custom pronunciation) re-records the ElevenLabs voice. Her input always
+  // supersedes whatever the AI suggested.
+  let REVIEW_ITEMS = [];
+  async function reviewTTS(text, emotion) {
+    const r = await fetch('/api/tts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({ text, emotion: emotion || 'default' }),
+    });
+    if (!r.ok) throw new Error('voice ' + r.status);
+    return await r.blob();
+  }
+  async function loadReviewQueue() {
+    const panel = document.getElementById('review-panel'); if (!panel) return;
+    try {
+      const d = await orgApi('/api/sync?childId=' + encodeURIComponent(slug));
+      REVIEW_ITEMS = (d.items || []).filter(it => it.needsReview);
+    } catch (_) { REVIEW_ITEMS = []; }
+    if (!REVIEW_ITEMS.length) { panel.style.display = 'none'; return; }
+    panel.style.display = '';
+    document.getElementById('review-count').textContent = REVIEW_ITEMS.length;
+    document.getElementById('review-list').innerHTML = REVIEW_ITEMS.map(it => {
+      const img = it.imageKey ? '/api/media?key=' + encodeURIComponent(it.imageKey) : '';
+      const audio = it.soundKey ? '/api/media?key=' + encodeURIComponent(it.soundKey) : '';
+      return '<div class="rv-row" data-id="' + it.id + '" style="display:flex;gap:12px;align-items:center;background:#fff7fb;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px;">'
+        + (img
+            ? '<div style="width:64px;height:64px;border-radius:10px;background-image:url(' + img + ');background-size:cover;background-position:center;flex:none;"></div>'
+            : '<div style="width:64px;height:64px;border-radius:10px;background:#fce4ec;flex:none;"></div>')
+        + '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;">'
+          + '<input class="rv-name" value="' + schEsc(it.label) + '" placeholder="Name" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;">'
+          + '<input class="rv-pron" value="" placeholder="Pronounce it (optional, e.g. buh-NAN-uh)" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:12px;">'
+        + '</div>'
+        + (audio ? '<button class="btn ghost rv-play" data-audio="' + audio + '" title="Hear the voice">▶</button>' : '')
+        + '<button class="btn ghost rv-remove" style="color:#dc2626;">Remove</button>'
+      + '</div>';
+    }).join('');
+  }
+  (function wireReviewQueue() {
+    const list = document.getElementById('review-list'); if (!list) return;
+    list.addEventListener('click', async (e) => {
+      const play = e.target.closest('.rv-play');
+      if (play) { try { new Audio(play.dataset.audio).play(); } catch (_) {} return; }
+      const rm = e.target.closest('.rv-remove');
+      if (rm) {
+        const row = rm.closest('.rv-row'); const id = row.dataset.id;
+        if (!confirm('Remove this tile from the board?')) return;
+        rm.disabled = true;
+        try { await fetch('/api/items?id=' + id, { method: 'DELETE', credentials: 'same-origin' }); } catch (_) {}
+        await loadReviewQueue();
+      }
+    });
+    document.getElementById('review-confirm-all').addEventListener('click', async () => {
+      const status = document.getElementById('review-status');
+      const btn = document.getElementById('review-confirm-all');
+      btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Saving…';
+      const rows = Array.from(document.querySelectorAll('#review-list .rv-row'));
+      try {
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i]; const id = row.dataset.id;
+          const orig = (REVIEW_ITEMS.find(it => String(it.id) === String(id)) || {}).label || '';
+          const name = row.querySelector('.rv-name').value.trim();
+          const pron = row.querySelector('.rv-pron').value.trim();
+          status.textContent = 'Saving ' + (i + 1) + ' of ' + rows.length + '…';
+          const body = { childId: slug, needsReview: false };
+          const nameChanged = name && name !== orig;
+          if (nameChanged) body.label = name;
+          // Re-voice only when she renamed it or typed a pronunciation.
+          if (nameChanged || pron) {
+            try {
+              const mp3 = await reviewTTS(pron || name || orig);
+              body.soundKey = await tileUpload(mp3, 'sound', 'mp3', 'audio/mpeg');
+            } catch (_) { /* keep the AI voice if re-record fails */ }
+          }
+          await orgApi('/api/items?id=' + id, { method: 'PUT', body: JSON.stringify(body) });
+        }
+        status.textContent = '✅ All set!';
+        await loadReviewQueue();
+      } catch (err) {
+        status.textContent = 'Error: ' + (err.message || err);
+      } finally { btn.disabled = false; btn.textContent = pv; }
+    });
+  })();
+  loadReviewQueue();
 
   // ---- Reference images (steer AI tile generation) ----
   const refGrid = document.getElementById('ref-grid');
