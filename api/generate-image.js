@@ -27,6 +27,37 @@ async function readBlob(key) {
   return { buffer: Buffer.concat(chunks), contentType: result.blob.contentType || 'image/jpeg' };
 }
 
+// Fallback for when OpenAI's safety system blocks EDITING the source photo
+// (copyrighted / branded subjects — Superman, branded toys, logos, mascots).
+// Generates a fresh, GENERIC illustration of the label from text only (no input
+// photo), so the parent still gets a usable placeholder tile instead of a hard
+// failure. Returns { ok, data?, prompt?, detail? }.
+async function generateGenericPlaceholder(apiKey, label, style) {
+  const subject = label ? `"${label}"` : 'the subject';
+  const prompt =
+    `Create a simple, friendly illustration representing ${subject} for a young child's ` +
+    `communication app, in a ${style} look. Make it a GENERIC, ORIGINAL depiction: do NOT draw any ` +
+    `specific copyrighted, trademarked, or branded character, mascot, logo, or product. If ${subject} ` +
+    `names a branded character or product, draw a generic everyday version of that kind of thing ` +
+    `instead (for example, a generic superhero, or a generic toy car). Center the subject on a soft, ` +
+    `uncluttered background with bright friendly colors and a gentle, age-appropriate look. ` +
+    `Do not include any text, words, or letters.`;
+  let resp;
+  try {
+    resp = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1024', n: 1 }),
+    });
+  } catch (err) {
+    return { ok: false, detail: String(err.message || err) };
+  }
+  if (!resp.ok) return { ok: false, detail: (await resp.text().catch(() => '')).slice(0, 300) };
+  const data = await resp.json().catch(() => null);
+  const b64 = data && data.data && data.data[0] && data.data[0].b64_json;
+  return b64 ? { ok: true, data, prompt } : { ok: false, detail: 'No image returned from fallback' };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -100,12 +131,32 @@ export default async function handler(req, res) {
       headers: { Authorization: 'Bearer ' + apiKey },
       body: fd,
     });
-    if (!upstream.ok) {
+
+    let data, usedPrompt = prompt, genericFallback = false;
+    if (upstream.ok) {
+      data = await upstream.json();
+    } else {
       const detail = await upstream.text().catch(() => '');
-      res.status(upstream.status).json({ error: 'Image generation failed', detail: detail.slice(0, 500) });
-      return;
+      // The safety system blocks editing a photo of a copyrighted/branded
+      // subject (Superman, branded toys, logos…). Instead of hard-failing, retry
+      // from scratch as a GENERIC illustration of the label — no input photo — so
+      // the parent still gets a usable placeholder tile.
+      const isSafety = /safety system|content[_ ]?policy|moderation_blocked|rejected|violat/i.test(detail);
+      if (!isSafety) {
+        res.status(upstream.status).json({ error: 'Image generation failed', detail: detail.slice(0, 500) });
+        return;
+      }
+      const fb = await generateGenericPlaceholder(apiKey, label, style);
+      if (!fb.ok) {
+        res.status(upstream.status).json({
+          error: 'Image generation failed',
+          detail: 'Photo blocked by the safety system (likely a copyrighted/branded subject), and the generic fallback also failed: ' + (fb.detail || ''),
+        });
+        return;
+      }
+      data = fb.data; usedPrompt = fb.prompt; genericFallback = true;
     }
-    const data = await upstream.json();
+
     const b64 = data && data.data && data.data[0] && data.data[0].b64_json;
     if (!b64) { res.status(502).json({ error: 'No image returned from generator' }); return; }
 
@@ -128,7 +179,7 @@ export default async function handler(req, res) {
         INSERT INTO image_generations
           (child_id, actor_email, actor_role, label, style, prompt, reference_keys, size, input_tokens, output_tokens, cost_cents)
         VALUES (${childId}, ${auth.user.email || null}, ${auth.user.role || null}, ${label || null}, ${style},
-                ${prompt}, ${refKeys}, '1024x1024', ${inTok}, ${outTok}, ${costCents})
+                ${usedPrompt}, ${refKeys}, '1024x1024', ${inTok}, ${outTok}, ${costCents})
       `;
     } catch (_) { /* logging is non-fatal */ }
 
@@ -136,6 +187,9 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Content-Length', out.length);
     res.setHeader('Cache-Control', 'no-store');
+    // Lets the client note (if it wants) that this tile is a generic stand-in
+    // because the original photo was blocked for copyright.
+    if (genericFallback) res.setHeader('X-Generic-Fallback', '1');
     res.status(200).send(out);
   } catch (err) {
     res.status(502).json({ error: 'Generator request failed', detail: String(err.message || err) });
