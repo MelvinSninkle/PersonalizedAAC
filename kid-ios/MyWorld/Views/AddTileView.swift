@@ -17,18 +17,26 @@ import UIKit
 ///   │  [photo] On the board ✓  tap to rename               ✓      │
 ///   └────────────────────────────────────────────────────────────┘
 struct AddTileView: View {
-    var defaultSection: BoardSection = .needs
-    var defaultCategoryId: Int?     = nil
     let onDone: () -> Void
 
     @Environment(BoardStore.self)   private var board
     @Environment(AuthManager.self)  private var auth
     @Environment(AddTileQueue.self) private var queue
 
-    // Batch destination — chosen once, applied to every photo until changed.
-    @State private var section: BoardSection = .needs
+    // Batch destination — seeded from where the "+ Add tile" cell was tapped,
+    // then applied to every photo until changed. These MUST be seeded in init
+    // (not .task): assigning `section` after the view exists trips the
+    // onChange(of: section) handler below, which clears `categoryId` — that's
+    // what was resetting the pre-selected folder back to "Top level".
+    @State private var section: BoardSection
     @State private var categoryId: Int?
     @State private var style: ArtStyle = .threeD
+
+    init(defaultSection: BoardSection = .needs, defaultCategoryId: Int? = nil, onDone: @escaping () -> Void) {
+        self.onDone = onDone
+        _section = State(initialValue: defaultSection)
+        _categoryId = State(initialValue: defaultCategoryId)
+    }
 
     // Picker presentation
     @State private var showCamera  = false
@@ -93,10 +101,9 @@ struct AddTileView: View {
                 Task { await startBulkImport(picked) }
             }
             .task {
-                section = defaultSection
-                categoryId = defaultCategoryId
-                // Reopening the sheet starts the tray clean, but keep anything
-                // still rendering visible so she can watch it land.
+                // Destination is seeded in init now (see above). Reopening the
+                // sheet starts the tray clean, but keep anything still rendering
+                // visible so she can watch it land.
                 queue.pruneFinished()
             }
         }
