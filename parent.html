@@ -669,9 +669,12 @@
       </div>
       <!-- No `capture`: lets iOS offer Take Photo OR Photo Library (camera-only
            forced too narrow a flow). Native app needs NSCameraUsageDescription +
-           NSPhotoLibraryUsageDescription in Info.plist for either to work. -->
-      <input type="file" id="tile-photo" accept="image/*" style="display:none;">
-      <button class="btn primary" id="tile-magic" style="width:100%;">📷 Choose photo &amp; make it</button>
+           NSPhotoLibraryUsageDescription in Info.plist for either to work.
+           NOTE: `display:none` causes the picker to no-op on some iOS Safari
+           versions; use the off-screen 1×1 trick so the input still receives
+           the synthetic click reliably. -->
+      <input type="file" id="tile-photo" accept="image/*" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
+      <button class="btn primary" id="tile-magic" style="width:100%;">📷 Take a photo &amp; we'll do the rest</button>
       <p class="hint" id="tile-magic-status" style="margin:8px 0 0;">—</p>
       <img id="tile-preview" alt="" style="display:none;width:100%;max-width:180px;border-radius:12px;margin-top:8px;">
     </div>
@@ -1432,32 +1435,73 @@
     prev.src = u; prev.style.display = 'block'; prev.addEventListener('load', () => URL.revokeObjectURL(u), { once: true });
   }
   document.getElementById('tile-style').addEventListener('change', (e) => { try { localStorage.setItem('aacStyle', e.target.value); } catch (_) {} });
+  // Photo-first add-tile flow. Tap → photo picker. Once a photo lands, we run
+  // describe-image (auto-name + phonetic), then generate-image (styled art),
+  // then tts (voice). No "type a label first" gate — busy parents who can't
+  // pause to type get the whole tile from one tap. Each step's failure stops
+  // the chain with a clear inline error; the user can fix what's wrong (e.g.
+  // tweak the label) and re-tap Save without re-shooting.
   document.getElementById('tile-magic').addEventListener('click', () => {
-    const label = document.getElementById('tile-label').value.trim();
-    if (!label) { tileSetErr('Type a label first'); document.getElementById('tile-label').focus(); return; }
-    tileSetErr(''); document.getElementById('tile-photo').click();
+    tileSetErr('');
+    document.getElementById('tile-photo').click();
   });
   document.getElementById('tile-photo').addEventListener('change', async (e) => {
     const file = e.target.files[0]; e.target.value = ''; if (!file) return;
-    const label = document.getElementById('tile-label').value.trim();
     const style = document.getElementById('tile-style').value;
     const emotion = document.getElementById('tile-emotion').value;
-    // Phrase overrides label for the voice (pronunciation tweaks like "Cheery-ohs"
-    // when the label is "Cheerios"); falls back to the label.
-    const phrase = (document.getElementById('tile-phrase').value || '').trim() || label;
     const statusEl = document.getElementById('tile-magic-status');
     const btn = document.getElementById('tile-magic'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Working…';
     tileSetErr('');
     try {
-      statusEl.textContent = '🎨 Creating the artwork… (~20–40s)';
+      // 1) Downscale once; reuse the same bytes for describe + generate.
       const photo = await downscale(file, 1024, 0.85);
+
+      // 2) Auto-name + phonetic spelling. Best-effort: if vision fails (e.g.
+      // org not verified), fall back to whatever the parent has typed in the
+      // label field — the rest of the flow can still run.
+      statusEl.textContent = '🔍 Looking at the photo…';
+      let label = document.getElementById('tile-label').value.trim();
+      let phrase = (document.getElementById('tile-phrase').value || '').trim();
+      try {
+        const dr = await fetch('/api/describe-image', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
+        if (dr.ok) {
+          const d = await dr.json();
+          if (d.label && !label)            { label = d.label;            document.getElementById('tile-label').value = label; }
+          if (d.pronunciation && !phrase)   { phrase = d.pronunciation;   document.getElementById('tile-phrase').value = phrase; }
+        }
+      } catch (_) { /* vision is best-effort */ }
+
+      // If we *still* don't have a label, we can't generate art (model needs a
+      // subject hint). Surface that as a clear, actionable message.
+      if (!label) {
+        statusEl.textContent = '—';
+        tileSetErr("Couldn't name the photo automatically — type a label and tap the button again.");
+        document.getElementById('tile-label').focus();
+        return;
+      }
+
+      // 3) Stylized art via gpt-image-1.
+      statusEl.textContent = '🎨 Creating the artwork… (~20–40s)';
       const ir = await fetch('/api/generate-image?label=' + encodeURIComponent(label) + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(slug), { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
-      if (!ir.ok) { const d = await ir.text(); throw new Error('Image — ' + d.slice(0, 160)); }
+      if (!ir.ok) {
+        const d = await ir.text();
+        // Common: OpenAI org isn't identity-verified → 403 on /v1/images/edits.
+        // Make that obvious instead of buried in a 500-char dump.
+        const hint = /must be verified/i.test(d)
+          ? "OpenAI organization isn't verified for image generation. Open platform.openai.com → Settings → Organization → Verify, then try again."
+          : d.slice(0, 160);
+        throw new Error('Image — ' + hint);
+      }
       tilePendingImage = await ir.blob(); tileShowPreview(tilePendingImage);
+
+      // 4) Voice via ElevenLabs (phrase wins; otherwise speak the label).
       statusEl.textContent = '🔊 Making the voice…';
-      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: phrase, emotion }) });
+      const speakText = phrase || label;
+      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: speakText, emotion }) });
       if (tr.ok) { tilePendingSound = await tr.blob(); document.getElementById('tile-sound-status').textContent = 'AI voice ready ✓'; }
-      statusEl.textContent = '✅ Ready — tap Save tile.';
+      else { /* voice is best-effort; user can still hit "Generate audio" again */ }
+
+      statusEl.textContent = '✅ Ready — review the name, then tap Save tile.';
     } catch (err) { statusEl.textContent = '—'; tileSetErr('Could not make the tile: ' + (err.message || err)); }
     finally { btn.disabled = false; btn.textContent = pv; }
   });
