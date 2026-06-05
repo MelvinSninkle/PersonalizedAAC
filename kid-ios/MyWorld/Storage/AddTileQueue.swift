@@ -50,6 +50,12 @@ final class TileJob: Identifiable {
     let style: ArtStyle
     let emotion: String
     let childId: String
+    /// Non-nil when this job is part of a multi-photo bulk import. Used to fire
+    /// the "review N tiles" notice once the whole batch has settled.
+    let batchId: UUID?
+    /// Bulk-imported tiles auto-add to the board but ask the parent to review;
+    /// single snaps are final on save. Drives the `needsReview` flag on create.
+    let needsReview: Bool
 
     enum Phase: Equatable {
         case working          // AI chain in flight (progress ring)
@@ -73,7 +79,8 @@ final class TileJob: Identifiable {
     var savedTileId: Int?
 
     init(thumbnail: UIImage, photoJPEG: Data, section: BoardSection,
-         categoryId: Int?, style: ArtStyle, emotion: String, childId: String) {
+         categoryId: Int?, style: ArtStyle, emotion: String, childId: String,
+         batchId: UUID? = nil, needsReview: Bool = false) {
         self.thumbnail = thumbnail
         self.photoJPEG = photoJPEG
         self.section = section
@@ -81,7 +88,16 @@ final class TileJob: Identifiable {
         self.style = style
         self.emotion = emotion
         self.childId = childId
+        self.batchId = batchId
+        self.needsReview = needsReview
     }
+}
+
+/// Fired when a bulk import finishes so the board can pop a "review these"
+/// banner. Identifiable so it can drive a SwiftUI alert/sheet/banner.
+struct ReviewNotice: Identifiable, Equatable {
+    let id = UUID()
+    let count: Int        // how many tiles in the batch landed successfully
 }
 
 /// App-level queue that runs `TileJob`s. Lives in the environment (created in
@@ -96,9 +112,21 @@ final class AddTileQueue {
 
     private let api = APIClient()
 
+    // Concurrency gate. A bulk import of 20 photos must NOT fire 20 image
+    // generations at once — that invites rate limits and runs up cost. We keep
+    // at most `maxConcurrent` jobs rendering and queue the rest; the tray still
+    // feels parallel (3 rings spinning) without hammering the API.
+    private let maxConcurrent = 3
+    private var inFlight = 0
+    private var waiting: [(TileJob, BoardStore)] = []
+
     /// True while anything is still rendering — used to badge the board header
     /// so the parent knows tiles are still on the way after closing the sheet.
     var hasActiveJobs: Bool { jobs.contains { $0.phase == .working } }
+
+    /// Set when a bulk import settles; the board watches this to pop the review
+    /// banner. Cleared when the parent opens or dismisses the review.
+    var pendingReviewNotice: ReviewNotice?
 
     // MARK: -- Enqueue / manage
 
@@ -110,17 +138,70 @@ final class AddTileQueue {
                  emotion: String,
                  prefilledLabel: String,
                  childId: String,
-                 board: BoardStore) -> TileJob {
+                 board: BoardStore,
+                 batchId: UUID? = nil,
+                 needsReview: Bool = false) -> TileJob {
         let thumb = UIImage(data: photoJPEG) ?? UIImage()
         let job = TileJob(thumbnail: thumb, photoJPEG: photoJPEG, section: section,
-                          categoryId: categoryId, style: style, emotion: emotion, childId: childId)
+                          categoryId: categoryId, style: style, emotion: emotion,
+                          childId: childId, batchId: batchId, needsReview: needsReview)
         job.label = prefilledLabel
         jobs.insert(job, at: 0)
-        Task { await process(job, board: board) }
+        schedule(job, board: board)
         return job
     }
 
-    func remove(_ job: TileJob) { jobs.removeAll { $0.id == job.id } }
+    /// Start the job now if there's a free slot, else hold it until one frees.
+    private func schedule(_ job: TileJob, board: BoardStore) {
+        guard inFlight < maxConcurrent else {
+            waiting.append((job, board))
+            job.statusText = "Waiting its turn…"
+            return
+        }
+        inFlight += 1
+        Task { await runAndRelease(job, board: board) }
+    }
+
+    private func runAndRelease(_ job: TileJob, board: BoardStore) async {
+        await process(job, board: board)
+        inFlight -= 1
+        if !waiting.isEmpty {
+            let (next, nextBoard) = waiting.removeFirst()
+            inFlight += 1
+            Task { await runAndRelease(next, board: nextBoard) }
+        }
+    }
+
+    /// Enqueue a whole photo-library multi-selection as one reviewable batch.
+    /// Every photo renders in the background (auto-adding to the board with the
+    /// review flag set); when the last one settles, `pendingReviewNotice` fires
+    /// so the parent gets the "review N tiles" prompt.
+    func enqueueBatch(photos: [Data],
+                      section: BoardSection,
+                      categoryId: Int?,
+                      style: ArtStyle,
+                      emotion: String,
+                      childId: String,
+                      board: BoardStore) {
+        let batchId = UUID()
+        for photo in photos {
+            _ = enqueue(photoJPEG: photo,
+                        section: section,
+                        categoryId: categoryId,
+                        style: style,
+                        emotion: emotion,
+                        prefilledLabel: "",
+                        childId: childId,
+                        board: board,
+                        batchId: batchId,
+                        needsReview: true)
+        }
+    }
+
+    func remove(_ job: TileJob) {
+        jobs.removeAll { $0.id == job.id }
+        waiting.removeAll { $0.0.id == job.id }   // drop it if still queued
+    }
 
     /// Drop finished cards (they're already on the board). Called when the sheet
     /// reopens so the tray starts clean but still shows anything mid-flight.
@@ -131,7 +212,7 @@ final class AddTileQueue {
         job.progress = 0
         job.errorText = nil
         job.statusText = "Trying again…"
-        Task { await process(job, board: board) }
+        schedule(job, board: board)
     }
 
     // MARK: -- The chain
@@ -193,17 +274,33 @@ final class AddTileQueue {
                                                 soundKey: soundKey,
                                                 keepAspect: false,
                                                 description: nil,
+                                                needsReview: job.needsReview,
                                                 childId: job.childId)
             job.savedTileId = tile.id
             job.progress = 1.0
             job.phase = .done
-            job.statusText = "✅ On the board"
+            job.statusText = job.needsReview ? "✅ On the board — needs review" : "✅ On the board"
             await board.refresh(childId: job.childId)
         } catch {
             job.phase = .needsAttention
             job.errorText = friendly(error)
             job.statusText = "Didn't finish"
         }
+        // Whether it landed or stumbled, check if this was the last straggler
+        // in a bulk import — if so, prompt the parent to review the batch.
+        checkBatchCompletion(job.batchId)
+    }
+
+    /// Fire the review notice once every job in a bulk batch has stopped
+    /// working (done or needs-attention). Counts only the ones that made it
+    /// onto the board.
+    private func checkBatchCompletion(_ batchId: UUID?) {
+        guard let batchId else { return }
+        let inBatch = jobs.filter { $0.batchId == batchId }
+        guard !inBatch.isEmpty, inBatch.allSatisfy({ $0.phase != .working }) else { return }
+        let landed = inBatch.filter { $0.phase == .done }.count
+        guard landed > 0 else { return }
+        pendingReviewNotice = ReviewNotice(count: landed)
     }
 
     /// Run `work`, easing `job.progress` from its current value toward `ceiling`

@@ -46,26 +46,14 @@ struct CameraPicker: UIViewControllerRepresentable {
 
         func imagePickerController(_ picker: UIImagePickerController,
                                    didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            let image = (info[.originalImage] as? UIImage)
-            parent.onCapture(image.flatMap { Self.downscaledJPEG($0) })
+            // Re-encode to JPEG bytes, then run the shared downscale so a camera
+            // shot matches the size of a library pick.
+            let jpeg = (info[.originalImage] as? UIImage)?.jpegData(compressionQuality: 0.95)
+            parent.onCapture(jpeg.flatMap { downscaleJPEG($0) })
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.onCapture(nil)
-        }
-
-        /// Downscale to at most 1024px on the long edge and re-encode as JPEG
-        /// quality 0.85. Matches the web `downscale()` helper so the server
-        /// (and the AI cost meter) sees the same payload size from either
-        /// surface.
-        private static func downscaledJPEG(_ image: UIImage, maxDim: CGFloat = 1024, quality: CGFloat = 0.85) -> Data? {
-            let size = image.size
-            let longest = max(size.width, size.height)
-            let scale = longest > maxDim ? maxDim / longest : 1
-            let target = CGSize(width: round(size.width * scale), height: round(size.height * scale))
-            let renderer = UIGraphicsImageRenderer(size: target, format: UIGraphicsImageRendererFormat.default())
-            let scaled = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: target)) }
-            return scaled.jpegData(compressionQuality: quality)
         }
     }
 }

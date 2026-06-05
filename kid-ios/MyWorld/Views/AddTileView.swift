@@ -34,6 +34,10 @@ struct AddTileView: View {
     @State private var showCamera  = false
     @State private var showLibrary = false
     @State private var libraryItem: PhotosPickerItem?
+    // Multi-select bulk import
+    @State private var showMultiLibrary = false
+    @State private var libraryItems: [PhotosPickerItem] = []
+    @State private var importing = false
 
     @State private var editingJob: TileJob?
 
@@ -45,12 +49,13 @@ struct AddTileView: View {
                     VStack(spacing: 18) {
                         destinationCard
                         captureButtons
+                        bulkImportButton
                         tray
                     }
                     .padding(16)
                     // Attached here (not alongside the camera sheet) so each
                     // view owns a single .sheet — stacking two on one view is
-                    // unreliable on older iOS. The library picker rides along
+                    // unreliable on older iOS. The library pickers ride along
                     // here too, away from the camera sheet.
                     .photosPicker(isPresented: $showLibrary, selection: $libraryItem, matching: .images)
                     .sheet(item: $editingJob) { job in
@@ -82,6 +87,10 @@ struct AddTileView: View {
                     if let data = try? await newItem.loadTransferable(type: Data.self) { enqueue(data) }
                     libraryItem = nil   // allow picking again immediately
                 }
+            }
+            .onChange(of: libraryItems) { _, picked in
+                guard !picked.isEmpty else { return }
+                Task { await startBulkImport(picked) }
             }
             .task {
                 section = defaultSection
@@ -166,6 +175,31 @@ struct AddTileView: View {
         }
     }
 
+    private var bulkImportButton: some View {
+        Button { showMultiLibrary = true } label: {
+            HStack(spacing: 10) {
+                if importing {
+                    ProgressView().tint(Color(hex: "#ad1457"))
+                    Text("Loading photos…")
+                } else {
+                    Image(systemName: "square.grid.2x2.fill")
+                    Text("Add several from Photos")
+                }
+            }
+            .font(.system(size: 15, weight: .semibold))
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .foregroundStyle(Color(hex: "#ad1457"))
+            .background(Color(hex: "#fce4ef"))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .disabled(importing)
+        // Attached to its own button (separate view) so the multi-select picker
+        // doesn't share a view with the single-photo picker.
+        .photosPicker(isPresented: $showMultiLibrary, selection: $libraryItems,
+                      maxSelectionCount: 50, matching: .images)
+    }
+
     private func captureLabel(icon: String, text: String, filled: Bool) -> some View {
         VStack(spacing: 6) {
             Image(systemName: icon).font(.system(size: 26))
@@ -224,6 +258,29 @@ struct AddTileView: View {
                       prefilledLabel: "",
                       childId: auth.childSlug,
                       board: board)
+    }
+
+    /// Load every picked photo's bytes, downscale, and hand the whole set to the
+    /// queue as one reviewable batch. The picker hands back lightweight item
+    /// references; the actual image bytes load here.
+    private func startBulkImport(_ items: [PhotosPickerItem]) async {
+        importing = true
+        defer { importing = false; libraryItems = [] }
+        var photos: [Data] = []
+        for item in items {
+            if let raw = try? await item.loadTransferable(type: Data.self),
+               let jpeg = downscaleJPEG(raw, maxDim: 1024, quality: 0.85) {
+                photos.append(jpeg)
+            }
+        }
+        guard !photos.isEmpty else { return }
+        queue.enqueueBatch(photos: photos,
+                           section: section,
+                           categoryId: categoryId,
+                           style: style,
+                           emotion: "default",
+                           childId: auth.childSlug,
+                           board: board)
     }
 
     private func folderName(_ folders: [Category]) -> String {

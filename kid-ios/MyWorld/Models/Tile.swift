@@ -21,6 +21,10 @@ struct Tile: Codable, Identifiable, Hashable {
     /// Comprehension mode (e.g. "lives in a field, four legs, eats grass").
     /// Falls back to "Who/what is the [label]?" in the view when empty.
     let description: String?
+    /// True while a bulk-imported tile is awaiting the parent's review. The
+    /// tile is already live on the board; this just surfaces it in the review
+    /// queue. Cleared when the parent confirms it.
+    let needsReview: Bool
 
     enum CodingKeys: String, CodingKey {
         case id, section, label
@@ -36,6 +40,7 @@ struct Tile: Codable, Identifiable, Hashable {
         case ownerUserId
         case taxonomySlug
         case description
+        case needsReview
     }
 
     init(from decoder: Decoder) throws {
@@ -56,5 +61,6 @@ struct Tile: Codable, Identifiable, Hashable {
         ownerUserId = try c.decodeIfPresent(Int.self, forKey: .ownerUserId)
         taxonomySlug = try c.decodeIfPresent(String.self, forKey: .taxonomySlug)
         description = try c.decodeIfPresent(String.self, forKey: .description)
+        needsReview = try c.decodeIfPresent(Bool.self, forKey: .needsReview) ?? false
     }
 }

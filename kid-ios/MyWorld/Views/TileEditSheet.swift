@@ -159,7 +159,7 @@ struct TileEditSheet: View {
                 _ = try await api.updateItem(id: tileId,
                                              label: trimmedLabel,
                                              section: section.rawValue,
-                                             categoryId: categoryId,
+                                             category: .set(categoryId),
                                              soundKey: soundKey,
                                              childId: auth.childSlug)
             } else {

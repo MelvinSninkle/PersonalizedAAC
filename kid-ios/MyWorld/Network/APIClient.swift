@@ -221,15 +221,17 @@ struct APIClient {
                     soundKey: String?,
                     keepAspect: Bool,
                     description: String?,
+                    needsReview: Bool = false,
                     childId: String) async throws -> Tile {
         var body: [String: Any] = [
-            "section":    section,
-            "label":      label,
-            "imageKey":   imageKey,
-            "keepAspect": keepAspect,
-            "childId":    childId,
-            "order":      Int(Date().timeIntervalSince1970 * 1000),
-            "pinned":     false,
+            "section":     section,
+            "label":       label,
+            "imageKey":    imageKey,
+            "keepAspect":  keepAspect,
+            "childId":     childId,
+            "order":       Int(Date().timeIntervalSince1970 * 1000),
+            "pinned":      false,
+            "needsReview": needsReview,
         ]
         if let categoryId  { body["categoryId"]  = categoryId }
         if let soundKey    { body["soundKey"]    = soundKey }
@@ -241,29 +243,45 @@ struct APIClient {
         catch { throw APIError.decoding(error) }
     }
 
-    /// PUT /api/items?id= — updates an existing tile. Used by the tray edit to
-    /// fix a wrong AI name / pronunciation / placement after a tile has already
-    /// auto-added to the board. `categoryId` is always sent (null = top level)
-    /// so a move to the Needs strip sticks; omit `soundKey` to leave the voice
-    /// untouched.
+    /// How a tile update should treat the category field. The server leaves
+    /// the value untouched unless we send a `categoryId` key, so we can't use a
+    /// plain `Int?` (nil would be ambiguous between "top level" and "leave it").
+    enum CategoryUpdate {
+        case unchanged
+        case set(Int?)   // nil = move to top level / Needs strip
+    }
+
+    /// PUT /api/items?id= — updates an existing tile. Only the fields you pass
+    /// are changed (the server COALESCEs the rest). Used by the tray edit (fix
+    /// a wrong AI name / placement) and by the review queue (`needsReview:
+    /// false` to confirm a bulk-imported tile).
     func updateItem(id: Int,
-                    label: String,
-                    section: String,
-                    categoryId: Int?,
-                    soundKey: String?,
+                    label: String? = nil,
+                    section: String? = nil,
+                    category: CategoryUpdate = .unchanged,
+                    soundKey: String? = nil,
+                    needsReview: Bool? = nil,
                     childId: String) async throws -> Tile {
-        var body: [String: Any] = [
-            "label":      label,
-            "section":    section,
-            "categoryId": categoryId ?? NSNull(),
-            "childId":    childId,
-        ]
-        if let soundKey { body["soundKey"] = soundKey }
+        var body: [String: Any] = ["childId": childId]
+        if let label   { body["label"]   = label }
+        if let section { body["section"] = section }
+        switch category {
+        case .unchanged:      break
+        case .set(let catId): body["categoryId"] = catId ?? NSNull()
+        }
+        if let soundKey    { body["soundKey"]    = soundKey }
+        if let needsReview { body["needsReview"] = needsReview }
         let bodyData = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await request(method: "PUT", path: "/api/items?id=\(id)",
                                           body: bodyData, contentType: "application/json")
         do { return try JSONDecoder().decode(Tile.self, from: data) }
         catch { throw APIError.decoding(error) }
+    }
+
+    /// DELETE /api/items?id= — removes a tile (and its blobs server-side). Used
+    /// by the review queue's "Remove" action.
+    func deleteItem(id: Int) async throws {
+        _ = try await request(method: "DELETE", path: "/api/items?id=\(id)", body: nil)
     }
 
     /// Fire-and-forget POST to any path that doesn't need a body or response —
