@@ -180,10 +180,10 @@ struct APIClient {
         catch { throw APIError.decoding(error) }
     }
 
-    /// POST /api/generate-image — re-illustrates the photo in the given style.
-    /// Returns the raw PNG bytes from gpt-image-1. ~20-40s typical.
-    func generateImage(photoJPEG: Data, label: String, style: String, childId: String) async throws -> Data {
-        let path = "/api/generate-image?label=\(percentEscape(label))&style=\(percentEscape(style))&childId=\(percentEscape(childId))"
+    /// POST /api/generate-image — re-illustrates the photo in the given style
+    /// with the chosen OpenAI image model. Returns the raw PNG bytes. ~20-40s.
+    func generateImage(photoJPEG: Data, label: String, style: String, model: String, childId: String) async throws -> Data {
+        let path = "/api/generate-image?label=\(percentEscape(label))&style=\(percentEscape(style))&model=\(percentEscape(model))&childId=\(percentEscape(childId))"
         let (data, _) = try await request(method: "POST", path: path,
                                           body: photoJPEG, contentType: "image/jpeg")
         return data

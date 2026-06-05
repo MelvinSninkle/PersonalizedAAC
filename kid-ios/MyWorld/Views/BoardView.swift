@@ -77,7 +77,9 @@ struct BoardView: View {
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showDisplay)  { DisplaySettingsView() }
         .sheet(isPresented: $showBatchReview) { BatchReviewView { showBatchReview = false } }
-        .sheet(item: $addTileRequest) { req in
+        // Full-screen so the board + its header don't bleed through behind the
+        // add UI (a centered form sheet looked cluttered on iPad).
+        .fullScreenCover(item: $addTileRequest) { req in
             AddTileView(defaultSection: req.section, defaultCategoryId: req.categoryId) {
                 addTileRequest = nil
             }

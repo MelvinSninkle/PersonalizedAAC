@@ -3,6 +3,28 @@ import SwiftUI
 import UIKit
 import Observation
 
+/// Which OpenAI image model to generate with — selectable from the add-tile UI
+/// so a parent can experiment. `apiValue` is sent to /api/generate-image as the
+/// `model` param (server allow-lists these).
+enum ImageModel: String, CaseIterable, Identifiable {
+    case v1, v15, v2
+    var id: String { rawValue }
+    var apiValue: String {
+        switch self {
+        case .v1:  return "gpt-image-1"
+        case .v15: return "gpt-image-1.5"
+        case .v2:  return "gpt-image-2"
+        }
+    }
+    var label: String {
+        switch self {
+        case .v1:  return "Model 1 · cheapest"
+        case .v15: return "Model 1.5 · ~13¢"
+        case .v2:  return "Model 2 · best, ~21¢"
+        }
+    }
+}
+
 /// Art styles offered when generating a tile. `prompt` is what we send to
 /// /api/generate-image as the `style` param; `label` is the parent-facing name.
 /// Mirrors the web dashboard's style dropdown.
@@ -48,6 +70,8 @@ final class TileJob: Identifiable {
     var section: BoardSection
     var categoryId: Int?
     let style: ArtStyle
+    /// OpenAI image model id (e.g. "gpt-image-1.5") chosen for this tile.
+    let model: String
     let emotion: String
     let childId: String
     /// Non-nil when this job is part of a multi-photo bulk import. Used to fire
@@ -79,13 +103,14 @@ final class TileJob: Identifiable {
     var savedTileId: Int?
 
     init(thumbnail: UIImage, photoJPEG: Data, section: BoardSection,
-         categoryId: Int?, style: ArtStyle, emotion: String, childId: String,
+         categoryId: Int?, style: ArtStyle, model: String, emotion: String, childId: String,
          batchId: UUID? = nil, needsReview: Bool = false) {
         self.thumbnail = thumbnail
         self.photoJPEG = photoJPEG
         self.section = section
         self.categoryId = categoryId
         self.style = style
+        self.model = model
         self.emotion = emotion
         self.childId = childId
         self.batchId = batchId
@@ -135,6 +160,7 @@ final class AddTileQueue {
                  section: BoardSection,
                  categoryId: Int?,
                  style: ArtStyle,
+                 model: String,
                  emotion: String,
                  prefilledLabel: String,
                  childId: String,
@@ -143,7 +169,7 @@ final class AddTileQueue {
                  needsReview: Bool = false) -> TileJob {
         let thumb = UIImage(data: photoJPEG) ?? UIImage()
         let job = TileJob(thumbnail: thumb, photoJPEG: photoJPEG, section: section,
-                          categoryId: categoryId, style: style, emotion: emotion,
+                          categoryId: categoryId, style: style, model: model, emotion: emotion,
                           childId: childId, batchId: batchId, needsReview: needsReview)
         job.label = prefilledLabel
         jobs.insert(job, at: 0)
@@ -180,6 +206,7 @@ final class AddTileQueue {
                       section: BoardSection,
                       categoryId: Int?,
                       style: ArtStyle,
+                      model: String,
                       emotion: String,
                       childId: String,
                       board: BoardStore) {
@@ -189,6 +216,7 @@ final class AddTileQueue {
                         section: section,
                         categoryId: categoryId,
                         style: style,
+                        model: model,
                         emotion: emotion,
                         prefilledLabel: "",
                         childId: childId,
@@ -238,6 +266,7 @@ final class AddTileQueue {
                 try await self.api.generateImage(photoJPEG: job.photoJPEG,
                                                  label: job.label,
                                                  style: job.style.prompt,
+                                                 model: job.model,
                                                  childId: job.childId)
             })
             job.imagePNG = png
