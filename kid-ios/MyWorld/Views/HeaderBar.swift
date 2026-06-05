@@ -51,7 +51,9 @@ struct HeaderBar: View {
         .sheet(isPresented: $showUnlock) {
             UnlockSheet { editMode = true }
         }
-        .sheet(isPresented: $showAddTile) {
+        // Full-screen (not a form sheet) so the board + its header don't bleed
+        // through behind the add UI on iPad.
+        .fullScreenCover(isPresented: $showAddTile) {
             AddTileView { showAddTile = false }
         }
     }

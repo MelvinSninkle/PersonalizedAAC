@@ -31,6 +31,7 @@ struct AddTileView: View {
     @State private var section: BoardSection
     @State private var categoryId: Int?
     @State private var style: ArtStyle = .threeD
+    @State private var model: ImageModel = .v15
 
     init(defaultSection: BoardSection = .needs, defaultCategoryId: Int? = nil, onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -38,12 +39,10 @@ struct AddTileView: View {
         _categoryId = State(initialValue: defaultCategoryId)
     }
 
-    // Picker presentation
+    // Picker presentation. One library picker handles both single and multi —
+    // pick one photo or many from the same "Choose photo(s)" button.
     @State private var showCamera  = false
     @State private var showLibrary = false
-    @State private var libraryItem: PhotosPickerItem?
-    // Multi-select bulk import
-    @State private var showMultiLibrary = false
     @State private var libraryItems: [PhotosPickerItem] = []
     @State private var importing = false
 
@@ -57,15 +56,13 @@ struct AddTileView: View {
                     VStack(spacing: 18) {
                         destinationCard
                         captureButtons
-                        bulkImportButton
                         tray
                     }
                     .padding(16)
-                    // Attached here (not alongside the camera sheet) so each
-                    // view owns a single .sheet — stacking two on one view is
-                    // unreliable on older iOS. The library pickers ride along
-                    // here too, away from the camera sheet.
-                    .photosPicker(isPresented: $showLibrary, selection: $libraryItem, matching: .images)
+                    // One picker, up to 50 — pick a single photo or many. Routed
+                    // to a single add or a reviewable batch based on the count.
+                    .photosPicker(isPresented: $showLibrary, selection: $libraryItems,
+                                  maxSelectionCount: 50, matching: .images)
                     .sheet(item: $editingJob) { job in
                         TileEditSheet(job: job)
                     }
@@ -89,16 +86,9 @@ struct AddTileView: View {
                 }
                 .ignoresSafeArea()
             }
-            .onChange(of: libraryItem) { _, newItem in
-                guard let newItem else { return }
-                Task {
-                    if let data = try? await newItem.loadTransferable(type: Data.self) { enqueue(data) }
-                    libraryItem = nil   // allow picking again immediately
-                }
-            }
             .onChange(of: libraryItems) { _, picked in
                 guard !picked.isEmpty else { return }
-                Task { await startBulkImport(picked) }
+                Task { await importPicked(picked) }
             }
             .task {
                 // Destination is seeded in init now (see above). Reopening the
@@ -125,26 +115,36 @@ struct AddTileView: View {
             .pickerStyle(.segmented)
             .onChange(of: section) { _, _ in categoryId = nil }
 
-            HStack(spacing: 12) {
-                let folders = folderOptions(section)
-                if !folders.isEmpty {
+            // Horizontal scroll so the chips (folder / style / model — the model
+            // label is long) never overflow or get clipped on a narrow sheet.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    let folders = folderOptions(section)
+                    if !folders.isEmpty {
+                        Menu {
+                            Button("Top level") { categoryId = nil }
+                            ForEach(folders) { f in
+                                Button(f.depth > 0 ? "— " + f.label : f.label) { categoryId = f.id }
+                            }
+                        } label: {
+                            menuChip(icon: "folder", text: folderName())
+                        }
+                    }
                     Menu {
-                        Button("Top level") { categoryId = nil }
-                        ForEach(folders) { f in
-                            Button(f.depth > 0 ? "— " + f.label : f.label) { categoryId = f.id }
+                        ForEach(ArtStyle.allCases) { s in
+                            Button(s.label) { style = s }
                         }
                     } label: {
-                        menuChip(icon: "folder", text: folderName())
+                        menuChip(icon: "paintpalette", text: style.label)
+                    }
+                    Menu {
+                        ForEach(ImageModel.allCases) { m in
+                            Button(m.label) { model = m }
+                        }
+                    } label: {
+                        menuChip(icon: "wand.and.stars", text: model.label)
                     }
                 }
-                Menu {
-                    ForEach(ArtStyle.allCases) { s in
-                        Button(s.label) { style = s }
-                    }
-                } label: {
-                    menuChip(icon: "paintpalette", text: style.label)
-                }
-                Spacer()
             }
         }
         .padding(14)
@@ -174,42 +174,27 @@ struct AddTileView: View {
                 captureLabel(icon: "camera.fill", text: "Take a photo", filled: true)
             }
             .buttonStyle(.plain)
+            .disabled(importing)
 
+            // One button for the library: pick a single photo or many. One photo
+            // → a single tile; several → a reviewable batch.
             Button { showLibrary = true } label: {
-                captureLabel(icon: "photo.on.rectangle", text: "Choose photo", filled: false)
+                captureLabel(icon: importing ? nil : "photo.on.rectangle",
+                             text: importing ? "Loading…" : "Choose photo(s)",
+                             filled: false, busy: importing)
             }
             .buttonStyle(.plain)
+            .disabled(importing)
         }
     }
 
-    private var bulkImportButton: some View {
-        Button { showMultiLibrary = true } label: {
-            HStack(spacing: 10) {
-                if importing {
-                    ProgressView().tint(Color(hex: "#ad1457"))
-                    Text("Loading photos…")
-                } else {
-                    Image(systemName: "square.grid.2x2.fill")
-                    Text("Add several from Photos")
-                }
-            }
-            .font(.system(size: 15, weight: .semibold))
-            .frame(maxWidth: .infinity, minHeight: 52)
-            .foregroundStyle(Color(hex: "#ad1457"))
-            .background(Color(hex: "#fce4ef"))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-        }
-        .buttonStyle(.plain)
-        .disabled(importing)
-        // Attached to its own button (separate view) so the multi-select picker
-        // doesn't share a view with the single-photo picker.
-        .photosPicker(isPresented: $showMultiLibrary, selection: $libraryItems,
-                      maxSelectionCount: 50, matching: .images)
-    }
-
-    private func captureLabel(icon: String, text: String, filled: Bool) -> some View {
+    private func captureLabel(icon: String?, text: String, filled: Bool, busy: Bool = false) -> some View {
         VStack(spacing: 6) {
-            Image(systemName: icon).font(.system(size: 26))
+            if busy {
+                ProgressView().tint(Color(hex: "#ad1457"))
+            } else if let icon {
+                Image(systemName: icon).font(.system(size: 26))
+            }
             Text(text).font(.system(size: 15, weight: .semibold))
         }
         .frame(maxWidth: .infinity, minHeight: 84)
@@ -256,21 +241,22 @@ struct AddTileView: View {
 
     // MARK: -- Helpers
 
+    /// A single photo (camera, or one library pick) → one tile, no review flag.
     private func enqueue(_ data: Data) {
         queue.enqueue(photoJPEG: data,
                       section: section,
                       categoryId: categoryId,
                       style: style,
+                      model: model.apiValue,
                       emotion: "default",
                       prefilledLabel: "",
                       childId: auth.childSlug,
                       board: board)
     }
 
-    /// Load every picked photo's bytes, downscale, and hand the whole set to the
-    /// queue as one reviewable batch. The picker hands back lightweight item
-    /// references; the actual image bytes load here.
-    private func startBulkImport(_ items: [PhotosPickerItem]) async {
+    /// Library selection. Loads + downscales the bytes, then routes by count:
+    /// one photo → a single tile (no review); several → a reviewable batch.
+    private func importPicked(_ items: [PhotosPickerItem]) async {
         importing = true
         defer { importing = false; libraryItems = [] }
         var photos: [Data] = []
@@ -281,13 +267,18 @@ struct AddTileView: View {
             }
         }
         guard !photos.isEmpty else { return }
-        queue.enqueueBatch(photos: photos,
-                           section: section,
-                           categoryId: categoryId,
-                           style: style,
-                           emotion: "default",
-                           childId: auth.childSlug,
-                           board: board)
+        if photos.count == 1 {
+            enqueue(photos[0])
+        } else {
+            queue.enqueueBatch(photos: photos,
+                               section: section,
+                               categoryId: categoryId,
+                               style: style,
+                               model: model.apiValue,
+                               emotion: "default",
+                               childId: auth.childSlug,
+                               board: board)
+        }
     }
 
     private struct FolderOption: Identifiable { let id: Int; let label: String; let depth: Int }

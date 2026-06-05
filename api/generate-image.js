@@ -17,6 +17,9 @@ const MAX_REFS = 3;
 // gpt-image-1, so this is a drop-in swap. Bump to 'gpt-image-2' (~$0.21/image,
 // newest/best) here if you ever want the top tier.
 const IMAGE_MODEL = 'gpt-image-1.5';
+// Models the client is allowed to request via ?model= (for experimenting from
+// the add-tile UI). Anything else falls back to the default above.
+const ALLOWED_MODELS = ['gpt-image-1', 'gpt-image-1.5', 'gpt-image-2'];
 // Approx pricing for the configured model, USD per 1M tokens (cost log only).
 const PRICE = { text: 5, imageIn: 10, out: 40 };
 
@@ -73,7 +76,7 @@ async function describePhotoNeutral(apiKey, buffer, contentType) {
 // NOT seed the prompt with example subjects (that is what made a Mario playset
 // come back with a superhero next to it). No input photo (that tripped the
 // block). Returns { ok, data?, prompt?, detail? }.
-async function generateGenericPlaceholder(apiKey, label, style, buffer, contentType) {
+async function generateGenericPlaceholder(apiKey, model, label, style, buffer, contentType) {
   const neutral = await describePhotoNeutral(apiKey, buffer, contentType);
   const subject = label ? `"${label}"` : 'the subject';
   const resemble = neutral ? ` Make it closely resemble this real object: ${neutral}` : '';
@@ -89,7 +92,7 @@ async function generateGenericPlaceholder(apiKey, label, style, buffer, contentT
     resp = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: IMAGE_MODEL, prompt, size: '1024x1024', quality: 'high', n: 1 }),
+      body: JSON.stringify({ model, prompt, size: '1024x1024', quality: 'high', n: 1 }),
     });
   } catch (err) {
     return { ok: false, detail: String(err.message || err) };
@@ -119,6 +122,9 @@ export default async function handler(req, res) {
   const label = String((req.query && req.query.label) || '').slice(0, 80).trim();
   const style = String((req.query && req.query.style) || 'illustrated').slice(0, 80).trim();
   const childId = String((req.query && req.query.childId) || 'fletcherpeterson').slice(0, 64);
+  // Per-request model override from the UI; falls back to the default.
+  const reqModel = String((req.query && req.query.model) || '').trim();
+  const model = ALLOWED_MODELS.includes(reqModel) ? reqModel : IMAGE_MODEL;
 
   let buffer;
   try {
@@ -161,7 +167,7 @@ export default async function handler(req, res) {
   let costCents = null, inTok = null, outTok = null;
   try {
     const fd = new FormData();
-    fd.append('model', IMAGE_MODEL);
+    fd.append('model', model);
     fd.append('prompt', prompt);
     fd.append('size', '1024x1024');
     fd.append('n', '1');
@@ -192,7 +198,7 @@ export default async function handler(req, res) {
         res.status(upstream.status).json({ error: 'Image generation failed', detail: detail.slice(0, 500) });
         return;
       }
-      const fb = await generateGenericPlaceholder(apiKey, label, style, buffer, req.headers['content-type'] || 'image/jpeg');
+      const fb = await generateGenericPlaceholder(apiKey, model, label, style, buffer, req.headers['content-type'] || 'image/jpeg');
       if (!fb.ok) {
         res.status(upstream.status).json({
           error: 'Image generation failed',
