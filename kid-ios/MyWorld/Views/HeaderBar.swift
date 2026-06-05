@@ -88,15 +88,15 @@ struct HeaderBar: View {
     private var trailingControls: some View {
         HStack(spacing: 8) {
             if editMode {
-                // Native add-tile flow lives here so a busy parent doesn't
-                // have to bounce out to Safari. Camera/library → AI describe →
-                // art → voice → auto-add, all in a background queue so she can
-                // keep snapping. The pill shows a live count while tiles are
-                // still rendering (they finish + land on the board even if she
-                // closes the sheet).
+                // Adding tiles now happens from the dashed "+ Add tile" cells in
+                // the board grid (discoverable, pre-set to the section you're
+                // looking at). The header only surfaces a live render-status pill
+                // while photos are still processing — tap it to open the tray and
+                // watch progress / fix any that stumbled. Tiles finish + land on
+                // the board even if this is dismissed.
                 let rendering = addQueue.jobs.filter { $0.phase == .working }.count
-                pillButton(rendering > 0 ? "⏳ \(rendering) rendering" : "➕ New tile") {
-                    showAddTile = true
+                if rendering > 0 {
+                    pillButton("⏳ \(rendering) rendering") { showAddTile = true }
                 }
                 pillButton("⚙ Display")  { showDisplay = true }
                 if let slug = auth.user?.slug {

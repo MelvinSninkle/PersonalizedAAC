@@ -119,15 +119,15 @@ struct AddTileView: View {
             .onChange(of: section) { _, _ in categoryId = nil }
 
             HStack(spacing: 12) {
-                let folders = board.roots(in: section)
+                let folders = folderOptions(section)
                 if !folders.isEmpty {
                     Menu {
                         Button("Top level") { categoryId = nil }
-                        ForEach(folders, id: \.id) { c in
-                            Button(c.label) { categoryId = c.id }
+                        ForEach(folders) { f in
+                            Button(f.depth > 0 ? "— " + f.label : f.label) { categoryId = f.id }
                         }
                     } label: {
-                        menuChip(icon: "folder", text: folderName(folders))
+                        menuChip(icon: "folder", text: folderName())
                     }
                 }
                 Menu {
@@ -283,9 +283,26 @@ struct AddTileView: View {
                            board: board)
     }
 
-    private func folderName(_ folders: [Category]) -> String {
-        guard let id = categoryId, let c = folders.first(where: { $0.id == id }) else { return "Top level" }
-        return c.label
+    private struct FolderOption: Identifiable { let id: Int; let label: String; let depth: Int }
+
+    /// Top-level categories plus their subcategories (indented). Lets a "+ Add
+    /// tile" tap from inside a subcategory pre-select the right folder, and lets
+    /// the parent retarget anywhere in the section.
+    private func folderOptions(_ section: BoardSection) -> [FolderOption] {
+        var out: [FolderOption] = []
+        for root in board.roots(in: section) {
+            out.append(FolderOption(id: root.id, label: root.label, depth: 0))
+            for sub in board.children(of: root) {
+                out.append(FolderOption(id: sub.id, label: sub.label, depth: 1))
+            }
+        }
+        return out
+    }
+
+    private func folderName() -> String {
+        guard let id = categoryId,
+              let f = folderOptions(section).first(where: { $0.id == id }) else { return "Top level" }
+        return f.label
     }
 
     private func sectionLabel(_ s: BoardSection) -> String {

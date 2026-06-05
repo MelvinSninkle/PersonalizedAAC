@@ -12,6 +12,10 @@ import SwiftUI
 struct SectionColumn: View {
     let section: BoardSection
     let tileSize: CGFloat
+    /// When unlocked, the grid grows a dashed "+ Add tile" cell at the end that
+    /// opens the add flow pre-set to this section + whatever folder is showing.
+    var editMode: Bool = false
+    var onAdd: (BoardSection, Int?) -> Void = { _, _ in }
 
     @Environment(BoardStore.self) private var board
     @Environment(DisplayPrefs.self) private var prefs
@@ -115,6 +119,10 @@ struct SectionColumn: View {
                         Task { await TilePlayer.shared.play(t) }
                     }
                     .frame(width: tileSize)
+                }
+                if editMode {
+                    AddTileCell(size: tileSize) { onAdd(section, effectiveCategory?.id) }
+                        .frame(width: tileSize)
                 }
             }
             .padding(.horizontal, BoardMetrics.columnPad)

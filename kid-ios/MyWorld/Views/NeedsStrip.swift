@@ -9,6 +9,10 @@ struct NeedsStrip: View {
     /// People/Nouns/Verbs tiles exactly (the web does the same, sizing each
     /// Needs tile to width ÷ total-tiles-across).
     let tileSize: CGFloat
+    /// When unlocked, the strip grows a dashed "+ Add tile" cell that opens the
+    /// add flow pre-set to the Needs section.
+    var editMode: Bool = false
+    var onAdd: () -> Void = {}
 
     @Environment(BoardStore.self) private var board
     @Environment(DisplayPrefs.self) private var prefs
@@ -30,7 +34,9 @@ struct NeedsStrip: View {
     }
 
     var body: some View {
-        if tiles.isEmpty {
+        // Locked + empty → nothing. Unlocked → always show the strip so the
+        // "+ Add tile" cell is reachable even before any Needs tiles exist.
+        if tiles.isEmpty && !editMode {
             EmptyView()
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
@@ -40,6 +46,10 @@ struct NeedsStrip: View {
                             Task { await TilePlayer.shared.play(t) }
                         }
                         .frame(width: tileSize)
+                    }
+                    if editMode {
+                        AddTileCell(size: tileSize) { onAdd() }
+                            .frame(width: tileSize)
                     }
                 }
                 .padding(.horizontal, BoardMetrics.columnPad)
