@@ -11,7 +11,13 @@ export const config = { api: { bodyParser: false }, maxDuration: 60 };
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_REFS = 3;
-// gpt-image-1 pricing, USD per 1M tokens.
+// OpenAI image model. gpt-image-1.5 (Dec 2025) is the current value-tier model
+// (~$0.13/image at high quality) and is much better at edits — it keeps faces /
+// the real object consistent. Same /v1/images/* endpoints + params as the old
+// gpt-image-1, so this is a drop-in swap. Bump to 'gpt-image-2' (~$0.21/image,
+// newest/best) here if you ever want the top tier.
+const IMAGE_MODEL = 'gpt-image-1.5';
+// Approx pricing for the configured model, USD per 1M tokens (cost log only).
 const PRICE = { text: 5, imageIn: 10, out: 40 };
 
 async function readBlob(key) {
@@ -83,7 +89,7 @@ async function generateGenericPlaceholder(apiKey, label, style, buffer, contentT
     resp = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1024', quality: 'high', n: 1 }),
+      body: JSON.stringify({ model: IMAGE_MODEL, prompt, size: '1024x1024', quality: 'high', n: 1 }),
     });
   } catch (err) {
     return { ok: false, detail: String(err.message || err) };
@@ -155,7 +161,7 @@ export default async function handler(req, res) {
   let costCents = null, inTok = null, outTok = null;
   try {
     const fd = new FormData();
-    fd.append('model', 'gpt-image-1');
+    fd.append('model', IMAGE_MODEL);
     fd.append('prompt', prompt);
     fd.append('size', '1024x1024');
     fd.append('n', '1');
