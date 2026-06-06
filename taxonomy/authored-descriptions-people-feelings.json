@@ -17,9 +17,9 @@
  "people.team.therapist": ["A therapist is a special helper who works with you to learn and grow.", "They play games with you to help you talk, move, or feel calm.", "Try it like this: 'I see my therapist today.'"],
 
  "needs.feelings.tired": ["Tired is the heavy, sleepy feeling when your body wants to rest.", "Your eyes droop and you might yawn — you need a break or a nap.", "Try it like this: 'I'm tired' or 'I want to rest.'"],
- "needs.feelings.more.embarrassed": ["Embarrassed is the warm, shy feeling when you wish no one had seen.", "Your cheeks get hot and you might want to hide a little.", "Try it like this: 'I feel embarrassed.'"],
- "needs.feelings.more.confused": ["Confused is the mixed-up feeling when something doesn't make sense.", "You're not sure what's going on, and you need it explained.", "Try it like this: 'I'm confused' or 'I don't get it.'"],
- "needs.feelings.more.bored": ["Bored is the antsy feeling when there's nothing fun to do.", "You wish you had something to play with or somewhere to go.", "Try it like this: 'I'm bored' or 'I want something to do.'"],
+ "needs.feelings.more.embarrassed": ["Embarrassed is the warm, shy feeling that makes you wish the moment was private.", "Your cheeks get hot and you might want to hide a little.", "Try it like this: 'I feel embarrassed.'"],
+ "needs.feelings.more.confused": ["Confused is the mixed-up feeling that means you need it explained another way.", "Your brain is asking for more clues so it can put the pieces together.", "Try it like this: 'I'm confused' or 'Can you show me again?'"],
+ "needs.feelings.more.bored": ["Bored is the antsy feeling that means your body is ready for something fun.", "You're looking for an adventure, a toy, or a place to go.", "Try it like this: 'I'm bored' or 'I want something to do.'"],
  "needs.feelings.more.nervous": ["Nervous is the jittery feeling when you're worried about something.", "Your tummy flutters and your hands might feel wiggly.", "Try it like this: 'I feel nervous.'"],
  "needs.feelings.more.lonely": ["Lonely is the sad feeling when you wish someone were with you.", "You want company — a friend, a hug, or someone to play.", "Try it like this: 'I feel lonely' or 'I want someone.'"],
  "needs.feelings.more.angry": ["Angry is the hot, big feeling when something is unfair or wrong.", "Your body gets tight and you might want to stomp or yell.", "Try it like this: 'I'm angry' or 'I'm so mad.'"],
@@ -46,7 +46,7 @@
  "personal.therapy.quiet_space": ["A quiet space is a calm, soft spot to settle your body.", "You can go there to breathe and feel calm when things are too much.", "Try it like this: 'I need the quiet space.'"],
  "personal.therapy.therapy_toy": ["This is the toy you love best in the therapy room.", "You get to play with it as a treat for your hard work.", "Try it like this: 'I want my favorite toy.'"],
 
- "personal.family.bedtime_routine": ["Bedtime is when the day ends and you go to sleep.", "You put on pajamas, brush your teeth, and snuggle in.", "Try it like this: 'It's bedtime' or 'I'm not sleepy yet.'"],
+ "personal.family.bedtime_routine": ["Bedtime is when the day ends and you go to sleep.", "You put on pajamas, brush your teeth, and snuggle in.", "Try it like this: 'It's bedtime' or 'One more book, please.'"],
  "personal.family.grandma_house": ["Grandma's house is the place where your grandma lives.", "You visit to see her, get hugs, and feel cozy.", "Try it like this: 'We're going to Grandma's house.'"],
  "personal.family.grandpa_house": ["Grandpa's house is the place where your grandpa lives.", "You visit to see him, play, and feel cozy.", "Try it like this: 'We're going to Grandpa's house.'"],
  "personal.family.comfort_object": ["Your lovey is the special soft thing you snuggle for comfort.", "It might be a blanket or a stuffed animal you love best.", "Try it like this: 'I want my lovey.'"],
