@@ -567,6 +567,97 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS taxonomy_audit_ts_idx     ON taxonomy_audit(ts DESC)`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_audit_action_idx ON taxonomy_audit(action)`;
 
+    // ---- Admin Lab (/admin/lab.html): prompt + style + model QC workbench ----
+    // Style guides are admin-uploaded reference images used as the visual style
+    // anchor when generating canonical taxonomy images. Distinct from per-child
+    // reference_images (which are a kid's own photos). One singleton lab_settings
+    // row holds the master wrapper prompt + global model defaults. model_routes
+    // maps a scope (e.g. category=People) to a preferred model; per-row override
+    // wins over routes which win over master defaults. tile_generations is the
+    // per-tile QC gallery; image_generations remains the cost log of record.
+    await db`
+      CREATE TABLE IF NOT EXISTS style_guides (
+        id BIGSERIAL PRIMARY KEY,
+        label TEXT NOT NULL,
+        description TEXT,
+        blob_url TEXT NOT NULL,
+        blob_key TEXT,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_by TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS style_guides_active_idx ON style_guides(active)`;
+    await db`CREATE INDEX IF NOT EXISTS style_guides_sort_idx   ON style_guides(sort_order)`;
+
+    await db`
+      CREATE TABLE IF NOT EXISTS lab_settings (
+        id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+        master_prompt TEXT NOT NULL DEFAULT '',
+        model_defaults JSONB NOT NULL DEFAULT '{}'::jsonb,
+        size_default TEXT NOT NULL DEFAULT '1024x1024',
+        notes TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_by TEXT
+      )
+    `;
+    // Seed the singleton row with a starter master prompt the user can edit later.
+    await db`
+      INSERT INTO lab_settings (id, master_prompt, model_defaults, size_default)
+      VALUES (
+        1,
+        'Generate a child-friendly illustration in the visual style of the attached style reference image.
+
+Subject: {content}
+
+Tile label: "{label}" — bake the label as clean, large, sans-serif text along the bottom edge of the image, on a soft contrasting band that does not obscure the subject. The label must be spelled exactly and easy for a non-reader to associate with the picture.
+
+Composition: centered subject, generous negative space, simple uncluttered background. Friendly, warm, never frightening. {no_face_rule}
+
+Size: {size}. No watermarks, no extra text other than the tile label.',
+        '{"default":"gpt-image-1.5","face_safe":"gpt-image-2"}'::jsonb,
+        '1024x1024'
+      )
+      ON CONFLICT (id) DO NOTHING
+    `;
+
+    await db`
+      CREATE TABLE IF NOT EXISTS model_routes (
+        id BIGSERIAL PRIMARY KEY,
+        scope_kind TEXT NOT NULL,
+        scope_value TEXT NOT NULL,
+        model TEXT NOT NULL,
+        priority INTEGER NOT NULL DEFAULT 100,
+        notes TEXT,
+        created_by TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS model_routes_lookup_idx   ON model_routes(scope_kind, scope_value)`;
+    await db`CREATE INDEX IF NOT EXISTS model_routes_priority_idx ON model_routes(priority DESC)`;
+
+    await db`
+      CREATE TABLE IF NOT EXISTS tile_generations (
+        id BIGSERIAL PRIMARY KEY,
+        taxonomy_id TEXT NOT NULL,
+        style_guide_id BIGINT REFERENCES style_guides(id) ON DELETE SET NULL,
+        model TEXT NOT NULL,
+        prompt_used TEXT,
+        blob_url TEXT NOT NULL,
+        blob_key TEXT,
+        rating SMALLINT,
+        marked_best BOOLEAN NOT NULL DEFAULT FALSE,
+        notes TEXT,
+        cost_cents NUMERIC(12,4),
+        created_by TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS tile_generations_taxonomy_idx ON tile_generations(taxonomy_id, created_at DESC)`;
+    await db`CREATE INDEX IF NOT EXISTS tile_generations_best_idx     ON tile_generations(taxonomy_id, marked_best)`;
+    await db`CREATE INDEX IF NOT EXISTS tile_generations_style_idx    ON tile_generations(style_guide_id)`;
+
     // ---- Private-preview invite codes (redeemed at /welcome via /api/invite) ----
     await db`
       CREATE TABLE IF NOT EXISTS invite_codes (
