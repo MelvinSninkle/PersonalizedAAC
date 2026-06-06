@@ -1,0 +1,792 @@
+{
+ "nouns.colors.red": [
+  "Red is a color you can see all around you.",
+  "Things like a fire truck and a strawberry are red.",
+  "You can say 'I see red!' or 'I want the red one.'"
+ ],
+ "nouns.colors.blue": [
+  "Blue is a color you can see all around you.",
+  "Things like the sky and the ocean are blue.",
+  "You can say 'I see blue!' or 'I want the blue one.'"
+ ],
+ "nouns.colors.green": [
+  "Green is a color you can see all around you.",
+  "Things like grass and a leaf are green.",
+  "You can say 'I see green!' or 'I want the green one.'"
+ ],
+ "nouns.colors.yellow": [
+  "Yellow is a color you can see all around you.",
+  "Things like the sun and a banana are yellow.",
+  "You can say 'I see yellow!' or 'I want the yellow one.'"
+ ],
+ "nouns.colors.orange": [
+  "Orange is a color you can see all around you.",
+  "Things like an orange and a pumpkin are orange.",
+  "You can say 'I see orange!' or 'I want the orange one.'"
+ ],
+ "nouns.colors.purple": [
+  "Purple is a color you can see all around you.",
+  "Things like a grape and a plum are purple.",
+  "You can say 'I see purple!' or 'I want the purple one.'"
+ ],
+ "nouns.colors.pink": [
+  "Pink is a color you can see all around you.",
+  "Things like a flower and bubblegum are pink.",
+  "You can say 'I see pink!' or 'I want the pink one.'"
+ ],
+ "nouns.colors.black": [
+  "Black is a color you can see all around you.",
+  "Things like the night sky and a tire are black.",
+  "You can say 'I see black!' or 'I want the black one.'"
+ ],
+ "nouns.colors.white": [
+  "White is a color you can see all around you.",
+  "Things like snow and a cloud are white.",
+  "You can say 'I see white!' or 'I want the white one.'"
+ ],
+ "nouns.colors.brown": [
+  "Brown is a color you can see all around you.",
+  "Things like a tree trunk and chocolate are brown.",
+  "You can say 'I see brown!' or 'I want the brown one.'"
+ ],
+ "needs.numbers.one": [
+  "One is the number 1.",
+  "It is the very first counting number, right before two.",
+  "You can count to one or hold up one finger."
+ ],
+ "needs.numbers.two": [
+  "Two is the number 2.",
+  "It comes after one and before three.",
+  "You can count to 2 or hold up 2 fingers."
+ ],
+ "needs.numbers.three": [
+  "Three is the number 3.",
+  "It comes after two and before four.",
+  "You can count to 3 or hold up 3 fingers."
+ ],
+ "needs.numbers.four": [
+  "Four is the number 4.",
+  "It comes after three and before five.",
+  "You can count to 4 or hold up 4 fingers."
+ ],
+ "needs.numbers.five": [
+  "Five is the number 5.",
+  "It comes after four and before six.",
+  "You can count to 5 or hold up 5 fingers."
+ ],
+ "needs.numbers.six": [
+  "Six is the number 6.",
+  "It comes after five and before seven.",
+  "You can count to 6 or hold up 6 fingers."
+ ],
+ "needs.numbers.seven": [
+  "Seven is the number 7.",
+  "It comes after six and before eight.",
+  "You can count to 7 or hold up 7 fingers."
+ ],
+ "needs.numbers.eight": [
+  "Eight is the number 8.",
+  "It comes after seven and before nine.",
+  "You can count to 8 or hold up 8 fingers."
+ ],
+ "needs.numbers.nine": [
+  "Nine is the number 9.",
+  "It comes after eight and before ten.",
+  "You can count to 9 or hold up 9 fingers."
+ ],
+ "needs.numbers.ten": [
+  "Ten is the number 10.",
+  "It comes after nine and before eleven.",
+  "You can count to 10 or hold up 10 fingers."
+ ],
+ "needs.abc.a": [
+  "A is a letter in the alphabet.",
+  "It makes the 'ah or ay' sound.",
+  "You can find A in words like 'apple' and 'ant'."
+ ],
+ "needs.abc.b": [
+  "B is a letter in the alphabet.",
+  "It makes the 'buh' sound.",
+  "You can find B in words like 'ball' and 'bear'."
+ ],
+ "needs.abc.c": [
+  "C is a letter in the alphabet.",
+  "It makes the 'kuh' sound.",
+  "You can find C in words like 'cat' and 'cup'."
+ ],
+ "needs.abc.d": [
+  "D is a letter in the alphabet.",
+  "It makes the 'duh' sound.",
+  "You can find D in words like 'dog' and 'duck'."
+ ],
+ "needs.abc.e": [
+  "E is a letter in the alphabet.",
+  "It makes the 'eh or ee' sound.",
+  "You can find E in words like 'egg' and 'elephant'."
+ ],
+ "needs.abc.f": [
+  "F is a letter in the alphabet.",
+  "It makes the 'fff' sound.",
+  "You can find F in words like 'fish' and 'fox'."
+ ],
+ "needs.abc.g": [
+  "G is a letter in the alphabet.",
+  "It makes the 'guh' sound.",
+  "You can find G in words like 'goat' and 'goose'."
+ ],
+ "needs.abc.h": [
+  "H is a letter in the alphabet.",
+  "It makes the 'huh' sound.",
+  "You can find H in words like 'hat' and 'hand'."
+ ],
+ "needs.abc.i": [
+  "I is a letter in the alphabet.",
+  "It makes the 'ih or eye' sound.",
+  "You can find I in words like 'igloo' and 'ice'."
+ ],
+ "needs.abc.j": [
+  "J is a letter in the alphabet.",
+  "It makes the 'juh' sound.",
+  "You can find J in words like 'jam' and 'jump'."
+ ],
+ "needs.abc.k": [
+  "K is a letter in the alphabet.",
+  "It makes the 'kuh' sound.",
+  "You can find K in words like 'kite' and 'key'."
+ ],
+ "needs.abc.l": [
+  "L is a letter in the alphabet.",
+  "It makes the 'lll' sound.",
+  "You can find L in words like 'lion' and 'leaf'."
+ ],
+ "needs.abc.m": [
+  "M is a letter in the alphabet.",
+  "It makes the 'mmm' sound.",
+  "You can find M in words like 'mom' and 'moon'."
+ ],
+ "needs.abc.n": [
+  "N is a letter in the alphabet.",
+  "It makes the 'nnn' sound.",
+  "You can find N in words like 'nose' and 'net'."
+ ],
+ "needs.abc.o": [
+  "O is a letter in the alphabet.",
+  "It makes the 'ah or oh' sound.",
+  "You can find O in words like 'octopus' and 'orange'."
+ ],
+ "needs.abc.p": [
+  "P is a letter in the alphabet.",
+  "It makes the 'puh' sound.",
+  "You can find P in words like 'pig' and 'pen'."
+ ],
+ "needs.abc.q": [
+  "Q is a letter in the alphabet.",
+  "It makes the 'kwuh' sound.",
+  "You can find Q in words like 'queen' and 'quack'."
+ ],
+ "needs.abc.r": [
+  "R is a letter in the alphabet.",
+  "It makes the 'rrr' sound.",
+  "You can find R in words like 'rabbit' and 'red'."
+ ],
+ "needs.abc.s": [
+  "S is a letter in the alphabet.",
+  "It makes the 'sss' sound.",
+  "You can find S in words like 'sun' and 'snake'."
+ ],
+ "needs.abc.t": [
+  "T is a letter in the alphabet.",
+  "It makes the 'tuh' sound.",
+  "You can find T in words like 'top' and 'toe'."
+ ],
+ "needs.abc.u": [
+  "U is a letter in the alphabet.",
+  "It makes the 'uh or you' sound.",
+  "You can find U in words like 'umbrella' and 'up'."
+ ],
+ "needs.abc.v": [
+  "V is a letter in the alphabet.",
+  "It makes the 'vvv' sound.",
+  "You can find V in words like 'van' and 'violin'."
+ ],
+ "needs.abc.w": [
+  "W is a letter in the alphabet.",
+  "It makes the 'wuh' sound.",
+  "You can find W in words like 'water' and 'wave'."
+ ],
+ "needs.abc.x": [
+  "X is a letter in the alphabet.",
+  "It makes the 'ks' sound.",
+  "You can find X in words like 'fox' and 'box'."
+ ],
+ "needs.abc.y": [
+  "Y is a letter in the alphabet.",
+  "It makes the 'yuh' sound.",
+  "You can find Y in words like 'yes' and 'yellow'."
+ ],
+ "needs.abc.z": [
+  "Z is a letter in the alphabet.",
+  "It makes the 'zzz' sound.",
+  "You can find Z in words like 'zebra' and 'zoo'."
+ ],
+ "needs.numbers.n_11": [
+  "Eleven is the number 11.",
+  "It comes after ten and before twelve.",
+  "Eleven is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_12": [
+  "Twelve is the number 12.",
+  "It comes after eleven and before thirteen.",
+  "Twelve is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_13": [
+  "Thirteen is the number 13.",
+  "It comes after twelve and before fourteen.",
+  "Thirteen is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_14": [
+  "Fourteen is the number 14.",
+  "It comes after thirteen and before fifteen.",
+  "Fourteen is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_15": [
+  "Fifteen is the number 15.",
+  "It comes after fourteen and before sixteen.",
+  "Fifteen is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_16": [
+  "Sixteen is the number 16.",
+  "It comes after fifteen and before seventeen.",
+  "Sixteen is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_17": [
+  "Seventeen is the number 17.",
+  "It comes after sixteen and before eighteen.",
+  "Seventeen is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_18": [
+  "Eighteen is the number 18.",
+  "It comes after seventeen and before nineteen.",
+  "Eighteen is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_19": [
+  "Nineteen is the number 19.",
+  "It comes after eighteen and before twenty.",
+  "Nineteen is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_20": [
+  "Twenty is the number 20.",
+  "It comes after nineteen and before twenty-one.",
+  "Twenty is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_21": [
+  "Twenty-one is the number 21.",
+  "It comes after twenty and before twenty-two.",
+  "Twenty-one is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_22": [
+  "Twenty-two is the number 22.",
+  "It comes after twenty-one and before twenty-three.",
+  "Twenty-two is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_23": [
+  "Twenty-three is the number 23.",
+  "It comes after twenty-two and before twenty-four.",
+  "Twenty-three is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_24": [
+  "Twenty-four is the number 24.",
+  "It comes after twenty-three and before twenty-five.",
+  "Twenty-four is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_25": [
+  "Twenty-five is the number 25.",
+  "It comes after twenty-four and before twenty-six.",
+  "Twenty-five is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_26": [
+  "Twenty-six is the number 26.",
+  "It comes after twenty-five and before twenty-seven.",
+  "Twenty-six is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_27": [
+  "Twenty-seven is the number 27.",
+  "It comes after twenty-six and before twenty-eight.",
+  "Twenty-seven is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_28": [
+  "Twenty-eight is the number 28.",
+  "It comes after twenty-seven and before twenty-nine.",
+  "Twenty-eight is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_29": [
+  "Twenty-nine is the number 29.",
+  "It comes after twenty-eight and before thirty.",
+  "Twenty-nine is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_30": [
+  "Thirty is the number 30.",
+  "It comes after twenty-nine and before thirty-one.",
+  "Thirty is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_31": [
+  "Thirty-one is the number 31.",
+  "It comes after thirty and before thirty-two.",
+  "Thirty-one is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_32": [
+  "Thirty-two is the number 32.",
+  "It comes after thirty-one and before thirty-three.",
+  "Thirty-two is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_33": [
+  "Thirty-three is the number 33.",
+  "It comes after thirty-two and before thirty-four.",
+  "Thirty-three is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_34": [
+  "Thirty-four is the number 34.",
+  "It comes after thirty-three and before thirty-five.",
+  "Thirty-four is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_35": [
+  "Thirty-five is the number 35.",
+  "It comes after thirty-four and before thirty-six.",
+  "Thirty-five is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_36": [
+  "Thirty-six is the number 36.",
+  "It comes after thirty-five and before thirty-seven.",
+  "Thirty-six is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_37": [
+  "Thirty-seven is the number 37.",
+  "It comes after thirty-six and before thirty-eight.",
+  "Thirty-seven is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_38": [
+  "Thirty-eight is the number 38.",
+  "It comes after thirty-seven and before thirty-nine.",
+  "Thirty-eight is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_39": [
+  "Thirty-nine is the number 39.",
+  "It comes after thirty-eight and before forty.",
+  "Thirty-nine is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_40": [
+  "Forty is the number 40.",
+  "It comes after thirty-nine and before forty-one.",
+  "Forty is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_41": [
+  "Forty-one is the number 41.",
+  "It comes after forty and before forty-two.",
+  "Forty-one is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_42": [
+  "Forty-two is the number 42.",
+  "It comes after forty-one and before forty-three.",
+  "Forty-two is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_43": [
+  "Forty-three is the number 43.",
+  "It comes after forty-two and before forty-four.",
+  "Forty-three is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_44": [
+  "Forty-four is the number 44.",
+  "It comes after forty-three and before forty-five.",
+  "Forty-four is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_45": [
+  "Forty-five is the number 45.",
+  "It comes after forty-four and before forty-six.",
+  "Forty-five is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_46": [
+  "Forty-six is the number 46.",
+  "It comes after forty-five and before forty-seven.",
+  "Forty-six is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_47": [
+  "Forty-seven is the number 47.",
+  "It comes after forty-six and before forty-eight.",
+  "Forty-seven is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_48": [
+  "Forty-eight is the number 48.",
+  "It comes after forty-seven and before forty-nine.",
+  "Forty-eight is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_49": [
+  "Forty-nine is the number 49.",
+  "It comes after forty-eight and before fifty.",
+  "Forty-nine is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_50": [
+  "Fifty is the number 50.",
+  "It comes after forty-nine and before fifty-one.",
+  "Fifty is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_51": [
+  "Fifty-one is the number 51.",
+  "It comes after fifty and before fifty-two.",
+  "Fifty-one is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_52": [
+  "Fifty-two is the number 52.",
+  "It comes after fifty-one and before fifty-three.",
+  "Fifty-two is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_53": [
+  "Fifty-three is the number 53.",
+  "It comes after fifty-two and before fifty-four.",
+  "Fifty-three is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_54": [
+  "Fifty-four is the number 54.",
+  "It comes after fifty-three and before fifty-five.",
+  "Fifty-four is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_55": [
+  "Fifty-five is the number 55.",
+  "It comes after fifty-four and before fifty-six.",
+  "Fifty-five is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_56": [
+  "Fifty-six is the number 56.",
+  "It comes after fifty-five and before fifty-seven.",
+  "Fifty-six is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_57": [
+  "Fifty-seven is the number 57.",
+  "It comes after fifty-six and before fifty-eight.",
+  "Fifty-seven is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_58": [
+  "Fifty-eight is the number 58.",
+  "It comes after fifty-seven and before fifty-nine.",
+  "Fifty-eight is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_59": [
+  "Fifty-nine is the number 59.",
+  "It comes after fifty-eight and before sixty.",
+  "Fifty-nine is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_60": [
+  "Sixty is the number 60.",
+  "It comes after fifty-nine and before sixty-one.",
+  "Sixty is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_61": [
+  "Sixty-one is the number 61.",
+  "It comes after sixty and before sixty-two.",
+  "Sixty-one is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_62": [
+  "Sixty-two is the number 62.",
+  "It comes after sixty-one and before sixty-three.",
+  "Sixty-two is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_63": [
+  "Sixty-three is the number 63.",
+  "It comes after sixty-two and before sixty-four.",
+  "Sixty-three is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_64": [
+  "Sixty-four is the number 64.",
+  "It comes after sixty-three and before sixty-five.",
+  "Sixty-four is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_65": [
+  "Sixty-five is the number 65.",
+  "It comes after sixty-four and before sixty-six.",
+  "Sixty-five is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_66": [
+  "Sixty-six is the number 66.",
+  "It comes after sixty-five and before sixty-seven.",
+  "Sixty-six is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_67": [
+  "Sixty-seven is the number 67.",
+  "It comes after sixty-six and before sixty-eight.",
+  "Sixty-seven is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_68": [
+  "Sixty-eight is the number 68.",
+  "It comes after sixty-seven and before sixty-nine.",
+  "Sixty-eight is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_69": [
+  "Sixty-nine is the number 69.",
+  "It comes after sixty-eight and before seventy.",
+  "Sixty-nine is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_70": [
+  "Seventy is the number 70.",
+  "It comes after sixty-nine and before seventy-one.",
+  "Seventy is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_71": [
+  "Seventy-one is the number 71.",
+  "It comes after seventy and before seventy-two.",
+  "Seventy-one is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_72": [
+  "Seventy-two is the number 72.",
+  "It comes after seventy-one and before seventy-three.",
+  "Seventy-two is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_73": [
+  "Seventy-three is the number 73.",
+  "It comes after seventy-two and before seventy-four.",
+  "Seventy-three is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_74": [
+  "Seventy-four is the number 74.",
+  "It comes after seventy-three and before seventy-five.",
+  "Seventy-four is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_75": [
+  "Seventy-five is the number 75.",
+  "It comes after seventy-four and before seventy-six.",
+  "Seventy-five is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_76": [
+  "Seventy-six is the number 76.",
+  "It comes after seventy-five and before seventy-seven.",
+  "Seventy-six is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_77": [
+  "Seventy-seven is the number 77.",
+  "It comes after seventy-six and before seventy-eight.",
+  "Seventy-seven is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_78": [
+  "Seventy-eight is the number 78.",
+  "It comes after seventy-seven and before seventy-nine.",
+  "Seventy-eight is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_79": [
+  "Seventy-nine is the number 79.",
+  "It comes after seventy-eight and before eighty.",
+  "Seventy-nine is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_80": [
+  "Eighty is the number 80.",
+  "It comes after seventy-nine and before eighty-one.",
+  "Eighty is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_81": [
+  "Eighty-one is the number 81.",
+  "It comes after eighty and before eighty-two.",
+  "Eighty-one is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_82": [
+  "Eighty-two is the number 82.",
+  "It comes after eighty-one and before eighty-three.",
+  "Eighty-two is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_83": [
+  "Eighty-three is the number 83.",
+  "It comes after eighty-two and before eighty-four.",
+  "Eighty-three is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_84": [
+  "Eighty-four is the number 84.",
+  "It comes after eighty-three and before eighty-five.",
+  "Eighty-four is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_85": [
+  "Eighty-five is the number 85.",
+  "It comes after eighty-four and before eighty-six.",
+  "Eighty-five is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_86": [
+  "Eighty-six is the number 86.",
+  "It comes after eighty-five and before eighty-seven.",
+  "Eighty-six is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_87": [
+  "Eighty-seven is the number 87.",
+  "It comes after eighty-six and before eighty-eight.",
+  "Eighty-seven is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_88": [
+  "Eighty-eight is the number 88.",
+  "It comes after eighty-seven and before eighty-nine.",
+  "Eighty-eight is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_89": [
+  "Eighty-nine is the number 89.",
+  "It comes after eighty-eight and before ninety.",
+  "Eighty-nine is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_90": [
+  "Ninety is the number 90.",
+  "It comes after eighty-nine and before ninety-one.",
+  "Ninety is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_91": [
+  "Ninety-one is the number 91.",
+  "It comes after ninety and before ninety-two.",
+  "Ninety-one is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_92": [
+  "Ninety-two is the number 92.",
+  "It comes after ninety-one and before ninety-three.",
+  "Ninety-two is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_93": [
+  "Ninety-three is the number 93.",
+  "It comes after ninety-two and before ninety-four.",
+  "Ninety-three is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_94": [
+  "Ninety-four is the number 94.",
+  "It comes after ninety-three and before ninety-five.",
+  "Ninety-four is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_95": [
+  "Ninety-five is the number 95.",
+  "It comes after ninety-four and before ninety-six.",
+  "Ninety-five is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_96": [
+  "Ninety-six is the number 96.",
+  "It comes after ninety-five and before ninety-seven.",
+  "Ninety-six is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_97": [
+  "Ninety-seven is the number 97.",
+  "It comes after ninety-six and before ninety-eight.",
+  "Ninety-seven is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_98": [
+  "Ninety-eight is the number 98.",
+  "It comes after ninety-seven and before ninety-nine.",
+  "Ninety-eight is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_99": [
+  "Ninety-nine is the number 99.",
+  "It comes after ninety-eight and before one hundred.",
+  "Ninety-nine is a bigger number — you reach it when you count a lot."
+ ],
+ "needs.numbers.n_100": [
+  "One hundred is the number 100.",
+  "It comes after ninety-nine — it is ten tens all together.",
+  "One hundred is a lot! You count to one hundred when you count a big group."
+ ],
+ "nouns.colors.more.gray": [
+  "Gray is a color you can see all around you.",
+  "Things like an elephant and a rain cloud are gray.",
+  "You can say 'I see gray!' or 'I want the gray one.'"
+ ],
+ "nouns.colors.more.gold": [
+  "Gold is a color you can see all around you.",
+  "Things like a shiny crown and a coin are gold.",
+  "You can say 'I see gold!' or 'I want the gold one.'"
+ ],
+ "nouns.colors.more.silver": [
+  "Silver is a color you can see all around you.",
+  "Things like a spoon and a shiny key are silver.",
+  "You can say 'I see silver!' or 'I want the silver one.'"
+ ],
+ "nouns.colors.more.lime": [
+  "Lime is a color you can see all around you.",
+  "Things like a lime and bright grass are lime.",
+  "You can say 'I see lime!' or 'I want the lime one.'"
+ ],
+ "nouns.colors.more.teal": [
+  "Teal is a color you can see all around you.",
+  "Things like a peacock feather and shallow sea water are teal.",
+  "You can say 'I see teal!' or 'I want the teal one.'"
+ ],
+ "nouns.colors.more.navy": [
+  "Navy is a color you can see all around you.",
+  "Things like a dark blue sky and blue jeans are navy.",
+  "You can say 'I see navy!' or 'I want the navy one.'"
+ ],
+ "nouns.colors.more.peach": [
+  "Peach is a color you can see all around you.",
+  "Things like a peach and a sunset are peach.",
+  "You can say 'I see peach!' or 'I want the peach one.'"
+ ],
+ "nouns.colors.more.tan": [
+  "Tan is a color you can see all around you.",
+  "Things like sand and a teddy bear are tan.",
+  "You can say 'I see tan!' or 'I want the tan one.'"
+ ],
+ "nouns.shapes.circle": [
+  "A circle is a shape.",
+  "It is perfectly round with no corners.",
+  "You can find a circle in a ball or a wheel."
+ ],
+ "nouns.shapes.square": [
+  "A square is a shape.",
+  "It has four equal sides and four corners.",
+  "You can find a square in a window or a cracker."
+ ],
+ "nouns.shapes.triangle": [
+  "A triangle is a shape.",
+  "It has three sides and three corners.",
+  "You can find a triangle in a slice of pizza or a party hat."
+ ],
+ "nouns.shapes.rectangle": [
+  "A rectangle is a shape.",
+  "It has four sides — two long and two short.",
+  "You can find a rectangle in a door or a book."
+ ],
+ "nouns.shapes.oval": [
+  "An oval is a shape.",
+  "It is like a stretched-out circle, shaped like an egg.",
+  "You can find an oval in an egg."
+ ],
+ "nouns.shapes.diamond": [
+  "A diamond is a shape.",
+  "It has four points and looks like a tilted square.",
+  "You can find a diamond in a kite."
+ ],
+ "nouns.shapes.heart": [
+  "A heart is a shape.",
+  "It has two bumps on top and a point at the bottom.",
+  "You can find a heart in a valentine."
+ ],
+ "nouns.shapes.star": [
+  "A star is a shape.",
+  "It has five pointy points.",
+  "You can find a star in a star up in the sky."
+ ],
+ "nouns.shapes.crescent": [
+  "A crescent is a shape.",
+  "It is a curved sliver.",
+  "You can find a crescent in the moon at night."
+ ],
+ "nouns.shapes.hexagon": [
+  "A hexagon is a shape.",
+  "It has six straight sides.",
+  "You can find a hexagon in a honeycomb."
+ ],
+ "nouns.shapes.octagon": [
+  "An octagon is a shape.",
+  "It has eight sides.",
+  "You can find an octagon in a stop sign."
+ ],
+ "nouns.shapes.pentagon": [
+  "A pentagon is a shape.",
+  "It has five sides.",
+  "You can find a pentagon in a drawing of a house."
+ ],
+ "nouns.shapes.arrow": [
+  "An arrow is a shape.",
+  "It is a line with a point that shows which way to go.",
+  "You can find an arrow in a sign pointing the way."
+ ],
+ "nouns.shapes.cross": [
+  "A cross is a shape.",
+  "It has one line up-and-down and one line across.",
+  "You can find a cross in a plus sign."
+ ]
+}
