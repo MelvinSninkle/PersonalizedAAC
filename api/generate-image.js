@@ -90,9 +90,11 @@ async function generateGenericPlaceholder(apiKey, model, label, style, buffer, c
     `trademarked, or branded character, mascot, logo, or product, and do NOT add any extra characters, ` +
     `figures, or mascots that are not physically part of the object itself. Center the subject on a ` +
     `soft, uncluttered background with bright friendly colors and a gentle, age-appropriate look. ` +
-    `Do not include any text, words, or letters. ` +
-    // Match the main edit prompt: no face on an inanimate object unless the
-    // real thing has one (AAC tiles must look like the real object).
+    // Match the main edit prompt: caption the word into the art, spelled exactly.
+    (label
+      ? `At the very bottom, add a clean caption band with the word or phrase “${label}”, spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered and easy to read; put no other text anywhere else. `
+      : `Do not include any text, words, or letters. `) +
+    // No face on an inanimate object unless the real thing has one.
     `If the object is inanimate, do NOT add eyes, mouths, faces, or smiles — draw it as a plain ` +
     `object, not a cartoon character.`;
   let resp;
@@ -166,16 +168,23 @@ export default async function handler(req, res) {
   const refClause = refBufs.length
     ? ` Use the additional reference image(s) only as a guide for the art style — do not copy their content.`
     : '';
+  // Parent's call: bake the word INTO the art (the newer models render text
+  // cleanly), instead of a separate text band under the tile, which looked bad.
+  // The `label` field stays the canonical source for speech/games/teaching;
+  // this caption is purely visual. Spell it exactly to avoid a misspelled tile.
+  const captionClause = label
+    ? ` At the very bottom of the image, add a clean horizontal caption band and write the word or phrase “${label}” in it — spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered and large enough for a young child to read. Put NO other text, words, or letters anywhere else in the image.`
+    : ` Do not include any text, words, or letters in the image.`;
   const prompt =
     `Re-illustrate this photograph as a ${style} of ${subject} for a young child's ` +
     `communication app. Keep ${subject} clearly recognizable and centered, on a simple, ` +
     `soft, uncluttered background, with bright friendly colors and a gentle, age-appropriate ` +
-    `look. Do not include any text, words, or letters in the image. ` +
+    `look.` + captionClause +
     // No anthropomorphizing inanimate objects. Without this, gpt-image models
     // routinely add cartoon eyes/smiles to things like ducks (the rubber-toy
     // kind), rockers, vehicles, food, etc. — fine for some toys, but wrong for
     // an AAC board where the tile must represent the REAL object the child sees.
-    `If ${subject} is an inanimate object, draw it exactly as it appears in the photo — do NOT add ` +
+    ` If ${subject} is an inanimate object, draw it exactly as it appears in the photo — do NOT add ` +
     `eyes, mouths, faces, smiles, or other cartoon human features. Only draw a face if a face is ` +
     `physically present on the real object in the photo.` + refClause;
 
