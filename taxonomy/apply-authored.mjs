@@ -7,7 +7,7 @@
 // Keyed by id (slug) so duplicate labels (e.g. two "pepper") never collide.
 // Re-runnable / idempotent. Run after editing either JSON:  node taxonomy/apply-authored.mjs
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -22,7 +22,11 @@ const cell=(s)=>{s=s==null?'':String(s);return /[",\n]/.test(s)?'"'+s.replace(/"
 const toCSV=(rows)=>rows.map(r=>r.map(cell).join(',')).join('\n')+'\n';
 const load=(p)=>existsSync(p)?JSON.parse(readFileSync(p,'utf8')):{};
 
-const desc = load(join(HERE,'authored-descriptions.json'));
+// Merge every authored-descriptions*.json batch file (one per category group).
+const desc = {};
+for (const f of readdirSync(HERE).filter((f) => /^authored-descriptions.*\.json$/.test(f))) {
+  Object.assign(desc, JSON.parse(readFileSync(join(HERE, f), 'utf8')));
+}
 const cats = load(join(HERE,'category-fixes.json'));
 
 const rows = parseCSV(readFileSync(CSV,'utf8'));
