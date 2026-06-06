@@ -49,6 +49,17 @@ Rules:
 - Never invent specifics you cannot possibly know.
 Respond with strict JSON only: {"descriptions":["...","..."]}.`;
 
+// A few hand-authored exemplars (noun / verb / adjective) so generated rows
+// match the VOICE we settled on — the feel, not just the rules.
+const EXEMPLARS = [
+  { role: 'user', content: 'Word: "fork". Board section: Nouns. Category: Home. This word is a thing (noun).' },
+  { role: 'assistant', content: '{"descriptions":["You use this to pick up food and bring it to your mouth.","It has long pointy parts at the end called tines.","It sits by your plate with a spoon and a knife when you eat."]}' },
+  { role: 'user', content: 'Word: "jump". Board section: Verbs. This word is an action (verb).' },
+  { role: 'assistant', content: '{"descriptions":["When you jump, you push off the ground with both feet and go up in the air.","Your knees bend down first, then spring you up high.","You can jump over a puddle, on the floor, or on a trampoline."]}' },
+  { role: 'user', content: 'Word: "big". Board section: Needs. Category: Describing. This word is a describing word (adjective).' },
+  { role: 'assistant', content: '{"descriptions":["\'Big\' means it takes up a lot of space. The opposite is little.","An elephant is big, a tall tree is big, a school bus is big.","You can say \'a big truck!\' or \'I want the big one.\'"]}' },
+];
+
 // ---- tiny RFC4180 CSV ----
 function parseCSV(t) {
   const rows = []; let f = [], cur = '', q = false;
@@ -120,7 +131,7 @@ async function generate(apiKey, label, column, category) {
     headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'gpt-4o-mini',
-      messages: [{ role: 'system', content: VOICE }, { role: 'user', content: userMsg }],
+      messages: [{ role: 'system', content: VOICE }, ...EXEMPLARS, { role: 'user', content: userMsg }],
       response_format: { type: 'json_object' }, max_tokens: 300, temperature: 0.5,
     }),
   });
