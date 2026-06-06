@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1400, initial-scale=1">
+<title>Lab — Fletcher's World</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6fa; color: #222; }
+  body { display: flex; flex-direction: column; min-height: 100vh; }
+  header {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px;
+    background: #2c3e50; color: white;
+    box-shadow: 0 2px 6px rgba(0,0,0,.15);
+  }
+  header h1 {
+    margin: 0; font-size: 22px; font-weight: 600;
+    font-family: 'Fredoka', ui-rounded, system-ui, sans-serif;
+  }
+  header .right { display: flex; gap: 8px; align-items: center; }
+  header button, header a.btn {
+    background: #4a90e2; color: white; border: none;
+    border-radius: 6px; padding: 8px 14px; font-size: 14px; font-weight: 600;
+    cursor: pointer; text-decoration: none; display: inline-block;
+  }
+  header button:hover, header a.btn:hover { background: #3a7bc8; }
+  header button.secondary { background: #557fa3; }
+  header button.secondary:hover { background: #406285; }
+  header .stat { font-size: 13px; opacity: .85; margin-right: 8px; }
+
+  /* Collapsible top panels */
+  .panels { padding: 14px 16px; display: grid; grid-template-columns: 1.2fr 1.8fr 1fr; gap: 12px; align-items: stretch; }
+  .panel { background: white; border: 1px solid #e2e6ec; border-radius: 10px; padding: 12px 14px; min-height: 220px; max-height: 380px; display: flex; flex-direction: column; }
+  .panel h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .4px; color: #557fa3; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+  .panel h2 .count { color: #2c3e50; opacity: .6; font-weight: 600; font-size: 12px; }
+  .panel-body { flex: 1; min-height: 0; overflow: auto; }
+  .panel-actions { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* Style guides gallery */
+  .sg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+  .sg-card { border: 1px solid #e2e6ec; border-radius: 8px; padding: 6px; background: #fafbfd; position: relative; cursor: pointer; }
+  .sg-card.active { border-color: #4a90e2; box-shadow: 0 0 0 2px rgba(74,144,226,.15); }
+  .sg-card.inactive { opacity: .45; }
+  .sg-card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 5px; background: #ddd; }
+  .sg-card .label { font-size: 12px; font-weight: 600; margin-top: 4px; word-wrap: break-word; }
+  .sg-card .row { display: flex; gap: 4px; margin-top: 4px; }
+  .sg-card .row button { flex: 1; font-size: 10px; padding: 2px 4px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer; }
+  .sg-add { border: 2px dashed #c0cad6; border-radius: 8px; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 28px; color: #557fa3; cursor: pointer; background: #fafbfd; }
+  .sg-add:hover { background: #eef4fb; color: #4a90e2; border-color: #4a90e2; }
+
+  /* Master prompt */
+  #masterPrompt { width: 100%; height: 100%; min-height: 200px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; padding: 8px; border: 1px solid #ccc; border-radius: 6px; resize: none; }
+  .token-help { font-size: 11px; color: #557fa3; margin-top: 4px; }
+  .token-help code { background: #eef4fb; padding: 1px 5px; border-radius: 3px; font-family: ui-monospace, monospace; font-size: 11px; color: #2c3e50; }
+
+  /* Model routes */
+  .routes-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .routes-table th, .routes-table td { padding: 4px 6px; border-bottom: 1px solid #eee; text-align: left; }
+  .routes-table th { background: #f4f6fa; font-size: 11px; text-transform: uppercase; color: #557fa3; }
+  .routes-table td.actions { text-align: right; }
+  .routes-table button { background: none; border: none; cursor: pointer; color: #c0392b; font-weight: 600; }
+  .route-form { display: grid; grid-template-columns: 1fr 1.2fr 1fr 60px auto; gap: 6px; align-items: center; margin-top: 6px; }
+  .route-form select, .route-form input { font-size: 12px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; }
+  .route-form button { background: #4a90e2; color: white; border: none; border-radius: 4px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+
+  /* Walker layout */
+  main { display: grid; grid-template-columns: 240px 1fr; gap: 12px; padding: 0 16px 80px; }
+  aside.filters { background: white; border: 1px solid #e2e6ec; border-radius: 10px; padding: 12px; align-self: start; position: sticky; top: 12px; max-height: calc(100vh - 90px); overflow: auto; }
+  aside.filters h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .4px; color: #557fa3; font-weight: 700; }
+  aside.filters label { display: block; font-size: 11px; text-transform: uppercase; color: #557fa3; font-weight: 600; margin-top: 10px; margin-bottom: 4px; }
+  aside.filters select, aside.filters input { width: 100%; padding: 6px 8px; font-size: 13px; border: 1px solid #ccc; border-radius: 6px; }
+  aside.filters .stats { margin-top: 14px; font-size: 12px; color: #557fa3; line-height: 1.6; }
+
+  #walker { display: flex; flex-direction: column; gap: 10px; }
+  .tile-card { background: white; border: 1px solid #e2e6ec; border-radius: 10px; padding: 14px; display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; }
+  .tile-card .meta { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .tile-card .head { display: flex; align-items: center; gap: 10px; }
+  .tile-card .head .id { font-family: ui-monospace, monospace; font-size: 11px; color: #999; }
+  .tile-card .head .label { font-size: 18px; font-weight: 700; color: #2c3e50; }
+  .tile-card .head .badge { background: #eef4fb; color: #4a90e2; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase; }
+  .tile-card .field-row { display: flex; gap: 6px; align-items: center; }
+  .tile-card .field-row label { font-size: 11px; text-transform: uppercase; color: #557fa3; font-weight: 600; flex: 0 0 100px; }
+  .tile-card input[type="text"], .tile-card textarea, .tile-card select {
+    flex: 1; padding: 4px 8px; font-size: 13px; border: 1px solid #ddd; border-radius: 5px; font-family: inherit;
+  }
+  .tile-card textarea { font-family: ui-monospace, monospace; font-size: 12px; min-height: 60px; resize: vertical; }
+  .tile-card .desc-list { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .tile-card .actions { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .tile-card .actions button {
+    background: #4a90e2; color: white; border: none; border-radius: 5px; padding: 6px 10px; font-size: 12px; cursor: pointer; font-weight: 600;
+  }
+  .tile-card .actions button:hover { background: #3a7bc8; }
+  .tile-card .actions button.secondary { background: #95a5a6; }
+  .tile-card .actions button.secondary:hover { background: #7f8c8d; }
+  .tile-card .actions button.save { background: #27ae60; }
+  .tile-card .actions button.save:hover { background: #1f8a4d; }
+  .tile-card .actions button.cost { background: #f39c12; }
+  .tile-card .actions button.cost:hover { background: #d6890f; }
+  .tile-card .actions .cost-hint { font-size: 11px; color: #95a5a6; align-self: center; margin-left: 2px; }
+
+  /* Image strip */
+  .strip { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; align-items: flex-start; }
+  .gen { position: relative; width: 130px; }
+  .gen img { width: 130px; height: 130px; object-fit: cover; border-radius: 6px; background: #ddd; cursor: pointer; border: 2px solid transparent; }
+  .gen.best img { border-color: #f1c40f; box-shadow: 0 0 0 2px rgba(241,196,15,.2); }
+  .gen .gen-meta { font-size: 10px; color: #557fa3; margin-top: 2px; display: flex; justify-content: space-between; gap: 4px; }
+  .gen .gen-meta .style { font-weight: 700; color: #2c3e50; }
+  .gen .gen-meta .model { font-family: ui-monospace, monospace; }
+  .gen .gen-actions { display: flex; gap: 2px; margin-top: 2px; }
+  .gen .gen-actions button { flex: 1; font-size: 10px; padding: 2px; background: white; border: 1px solid #ddd; border-radius: 3px; cursor: pointer; }
+  .gen .gen-actions button.star { color: #f1c40f; }
+  .gen .gen-actions button.del  { color: #c0392b; }
+  .gen.loading { display: flex; align-items: center; justify-content: center; width: 130px; height: 130px; border-radius: 6px; background: #eef4fb; color: #4a90e2; font-size: 11px; }
+  .gen.error  { display: flex; align-items: center; justify-content: center; width: 130px; height: 130px; border-radius: 6px; background: #fdecec; color: #c0392b; font-size: 11px; text-align: center; padding: 6px; }
+
+  /* Footer cost meter */
+  .footer-meter {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    background: white; border-top: 1px solid #e2e6ec;
+    padding: 10px 20px; display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 -2px 8px rgba(0,0,0,.08); z-index: 50;
+  }
+  .footer-meter .meter-stat { font-size: 14px; color: #2c3e50; }
+  .footer-meter .meter-stat strong { color: #e67e22; font-size: 16px; }
+  .footer-meter .actions { display: flex; gap: 8px; }
+  .footer-meter button { background: #557fa3; color: white; border: none; border-radius: 5px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  .footer-meter button:hover { background: #406285; }
+
+  /* Modal (used for upload + image enlarge) */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+  .modal-backdrop.show { display: flex; }
+  .modal { background: white; border-radius: 10px; padding: 22px; max-width: 720px; width: 100%; max-height: 90vh; overflow: auto; box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+  .modal h3 { margin: 0 0 14px; font-size: 18px; }
+  .modal label { display: block; margin: 12px 0 4px; font-weight: 600; font-size: 13px; color: #444; }
+  .modal input[type="text"], .modal textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; font-family: inherit;
+  }
+  .modal .actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+  .modal .actions button { padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; }
+  .modal .actions button.primary { background: #4a90e2; color: white; }
+  .modal .actions button.secondary { background: #ecf0f1; color: #2c3e50; }
+
+  .saved-flash { color: #27ae60; font-size: 12px; margin-left: 6px; }
+  .err-flash { color: #c0392b; font-size: 12px; margin-left: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Lab</h1>
+  <div class="right">
+    <span class="stat" id="stat-tiles">— tiles</span>
+    <span class="stat" id="stat-gens">— images generated</span>
+    <button class="secondary" id="btn-snapshot">Snapshot now</button>
+    <a class="btn" href="/api/admin/taxonomy-export-csv" id="btn-export">Export CSV</a>
+    <a class="btn" href="/admin/taxonomy.html">Workbench</a>
+  </div>
+</header>
+
+<section class="panels">
+  <!-- Style guides -->
+  <div class="panel">
+    <h2>Style guides <span class="count" id="sg-count">0</span></h2>
+    <div class="panel-body">
+      <div class="sg-grid" id="sg-grid"></div>
+    </div>
+  </div>
+
+  <!-- Master prompt -->
+  <div class="panel">
+    <h2>Master prompt
+      <span><button id="btn-save-prompt" style="background:#4a90e2;color:white;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;">Save</button>
+            <span id="prompt-status"></span></span>
+    </h2>
+    <div class="panel-body" style="display:flex;flex-direction:column;gap:6px;">
+      <textarea id="masterPrompt" spellcheck="false"></textarea>
+      <div class="token-help">
+        Tokens: <code>{content}</code> <code>{label}</code> <code>{size}</code>
+        <code>{no_face_rule}</code> <code>{style_image}</code> <code>{reference}</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- Model routes -->
+  <div class="panel">
+    <h2>Model routes <span class="count" id="route-count">0</span></h2>
+    <div class="panel-body">
+      <table class="routes-table" id="routes-table">
+        <thead><tr><th>Scope</th><th>Value</th><th>Model</th><th>Pri</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="route-form">
+        <select id="rt-kind">
+          <option value="category">category</option>
+          <option value="subcategory">subcategory</option>
+          <option value="section">section</option>
+          <option value="audience">audience</option>
+          <option value="tile">tile id</option>
+        </select>
+        <input id="rt-value" placeholder="e.g. Food">
+        <select id="rt-model">
+          <option>gpt-image-1.5</option>
+          <option>gpt-image-2</option>
+          <option>gpt-image-1</option>
+        </select>
+        <input id="rt-prio" type="number" value="100" min="0" max="1000">
+        <button id="rt-add">Add</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main>
+  <aside class="filters">
+    <h2>Filters</h2>
+    <label>Section</label>
+    <select id="f-section"><option value="">All</option></select>
+    <label>Category</label>
+    <select id="f-category"><option value="">All</option></select>
+    <label>Audience</label>
+    <select id="f-audience"><option value="">All</option></select>
+    <label>Image status</label>
+    <select id="f-image">
+      <option value="">All</option>
+      <option value="missing">No generations</option>
+      <option value="has">Has at least one</option>
+      <option value="best">Has a best ⭐</option>
+    </select>
+    <label>Search label</label>
+    <input id="f-search" type="search" placeholder="apple, brother, …">
+    <label>Page size</label>
+    <select id="f-page-size">
+      <option value="25">25 per page</option>
+      <option value="50" selected>50 per page</option>
+      <option value="100">100 per page</option>
+    </select>
+    <div class="stats" id="filter-stats"></div>
+  </aside>
+
+  <div id="walker"></div>
+</main>
+
+<div class="footer-meter">
+  <div class="meter-stat">Session cost: <strong id="cost-meter">$0.00</strong> · <span id="cost-count">0 generations</span></div>
+  <div class="actions">
+    <button id="btn-prev">‹ Prev page</button>
+    <span id="page-indicator" style="font-size:12px;color:#557fa3;align-self:center;">page 1</span>
+    <button id="btn-next">Next page ›</button>
+  </div>
+</div>
+
+<!-- Upload style guide modal -->
+<div class="modal-backdrop" id="sg-upload-modal">
+  <div class="modal">
+    <h3>Add a style guide</h3>
+    <label>Label (e.g. Pixar 3D, Watercolor, Bluey flat)</label>
+    <input id="sgu-label" type="text" placeholder="Style name">
+    <label>Description (optional)</label>
+    <textarea id="sgu-desc" rows="2" placeholder="Notes about this style"></textarea>
+    <label>Reference image</label>
+    <input id="sgu-file" type="file" accept="image/*">
+    <div class="actions">
+      <button class="secondary" id="sgu-cancel">Cancel</button>
+      <button class="primary" id="sgu-save">Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- Enlarge image modal -->
+<div class="modal-backdrop" id="enlarge-modal" onclick="this.classList.remove('show')">
+  <img id="enlarge-img" style="max-width:90vw;max-height:90vh;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.5);" alt="">
+</div>
+
+<script>
+//
+// Lab — admin-only image-generation QC tool.
+// All state lives in the DB; this script is a thin client.
+//
+const $ = (id) => document.getElementById(id);
+
+// ---- session cost meter -------------------------------------------------
+let costAccum = 0, costCount = 0;
+function addCost(cents) {
+  if (cents == null) return;
+  costAccum += Number(cents);
+  costCount++;
+  $('cost-meter').textContent = '$' + (costAccum / 100).toFixed(2);
+  $('cost-count').textContent = costCount + ' generation' + (costCount === 1 ? '' : 's');
+}
+
+// ---- HTTP helpers -------------------------------------------------------
+async function api(method, path, body) {
+  const opts = { method, headers: {} };
+  if (body !== undefined) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(path, opts);
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  if (!res.ok) throw new Error((data && (data.error || data.detail)) || ('HTTP ' + res.status));
+  return data;
+}
+
+// ---- style guides -------------------------------------------------------
+let styleGuides = [];        // [{id,label,blobUrl,active,...}]
+let activeStyleIds = new Set();
+
+async function loadStyleGuides() {
+  const r = await api('GET', '/api/admin/style-guides');
+  styleGuides = r.styleGuides || [];
+  activeStyleIds = new Set(styleGuides.filter(s => s.active).map(s => s.id));
+  $('sg-count').textContent = styleGuides.length;
+  renderStyleGuides();
+}
+
+function renderStyleGuides() {
+  const grid = $('sg-grid');
+  grid.innerHTML = '';
+  for (const s of styleGuides) {
+    const card = document.createElement('div');
+    card.className = 'sg-card ' + (s.active ? 'active' : 'inactive');
+    card.innerHTML = `
+      <img src="${s.blobUrl}" alt="${escapeHtml(s.label)}">
+      <div class="label">${escapeHtml(s.label)}</div>
+      <div class="row">
+        <button data-act="toggle">${s.active ? 'Active' : 'Inactive'}</button>
+        <button data-act="delete">✕</button>
+      </div>`;
+    card.querySelector('[data-act="toggle"]').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await api('PATCH', `/api/admin/style-guides?id=${s.id}`, { active: !s.active });
+      await loadStyleGuides();
+      renderTiles();
+    });
+    card.querySelector('[data-act="delete"]').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete "${s.label}"?`)) return;
+      await api('DELETE', `/api/admin/style-guides?id=${s.id}`);
+      await loadStyleGuides();
+      renderTiles();
+    });
+    grid.appendChild(card);
+  }
+  const add = document.createElement('div');
+  add.className = 'sg-add';
+  add.textContent = '+';
+  add.title = 'Add a style guide';
+  add.addEventListener('click', openUploadModal);
+  grid.appendChild(add);
+}
+
+// ---- style guide upload -------------------------------------------------
+function openUploadModal() {
+  $('sgu-label').value = '';
+  $('sgu-desc').value = '';
+  $('sgu-file').value = '';
+  $('sg-upload-modal').classList.add('show');
+}
+$('sgu-cancel').addEventListener('click', () => $('sg-upload-modal').classList.remove('show'));
+$('sgu-save').addEventListener('click', async () => {
+  const label = $('sgu-label').value.trim();
+  const desc = $('sgu-desc').value.trim();
+  const file = $('sgu-file').files[0];
+  if (!label) { alert('Label required'); return; }
+  if (!file) { alert('Pick an image'); return; }
+  $('sgu-save').disabled = true; $('sgu-save').textContent = 'Uploading…';
+  try {
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+    const up = await fetch(`/api/upload?kind=style&ext=${ext}`, {
+      method: 'POST', headers: { 'Content-Type': file.type || 'image/jpeg' }, body: file,
+    });
+    if (!up.ok) throw new Error(`upload failed: ${up.status}`);
+    const { key } = await up.json();
+    await api('POST', '/api/admin/style-guides', { label, blobKey: key, description: desc });
+    $('sg-upload-modal').classList.remove('show');
+    await loadStyleGuides();
+    renderTiles();
+  } catch (err) {
+    alert('Upload failed: ' + err.message);
+  } finally {
+    $('sgu-save').disabled = false; $('sgu-save').textContent = 'Upload';
+  }
+});
+
+// ---- lab settings (master prompt) ---------------------------------------
+let labSettings = { masterPrompt: '', modelDefaults: {}, sizeDefault: '1024x1024' };
+async function loadLabSettings() {
+  const r = await api('GET', '/api/admin/lab-settings');
+  labSettings = r.settings || labSettings;
+  $('masterPrompt').value = labSettings.masterPrompt || '';
+}
+$('btn-save-prompt').addEventListener('click', async () => {
+  const t = $('masterPrompt').value;
+  try {
+    await api('PUT', '/api/admin/lab-settings', { masterPrompt: t });
+    labSettings.masterPrompt = t;
+    flashStatus('prompt-status', 'saved', 'saved-flash');
+  } catch (err) {
+    flashStatus('prompt-status', err.message, 'err-flash');
+  }
+});
+
+// ---- model routes -------------------------------------------------------
+let modelRoutes = [];
+async function loadModelRoutes() {
+  const r = await api('GET', '/api/admin/model-routes');
+  modelRoutes = r.routes || [];
+  $('route-count').textContent = modelRoutes.length;
+  renderModelRoutes();
+}
+function renderModelRoutes() {
+  const tbody = $('routes-table').querySelector('tbody');
+  tbody.innerHTML = '';
+  for (const r of modelRoutes) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(r.scopeKind)}</td><td>${escapeHtml(r.scopeValue)}</td><td><code>${escapeHtml(r.model)}</code></td><td>${r.priority}</td><td class="actions"><button>✕</button></td>`;
+    tr.querySelector('button').addEventListener('click', async () => {
+      await api('DELETE', `/api/admin/model-routes?id=${r.id}`);
+      await loadModelRoutes();
+    });
+    tbody.appendChild(tr);
+  }
+}
+$('rt-add').addEventListener('click', async () => {
+  const scopeKind = $('rt-kind').value;
+  const scopeValue = $('rt-value').value.trim();
+  const model = $('rt-model').value;
+  const priority = parseInt($('rt-prio').value, 10) || 100;
+  if (!scopeValue) { alert('Scope value required'); return; }
+  try {
+    await api('POST', '/api/admin/model-routes', { scopeKind, scopeValue, model, priority });
+    $('rt-value').value = '';
+    await loadModelRoutes();
+  } catch (err) { alert(err.message); }
+});
+
+// ---- taxonomy walker ----------------------------------------------------
+let tiles = [];                 // raw taxonomy rows from API (camelCase)
+let filtered = [];              // after filter pass
+let page = 0;                   // 0-indexed
+const PAGE_SIZE = () => parseInt($('f-page-size').value, 10) || 50;
+let genCache = {};              // taxonomyId -> [generation]
+
+async function loadTaxonomy() {
+  const r = await api('GET', '/api/admin/taxonomy');
+  tiles = r.rows || r.items || r.taxonomy || r || [];
+  $('stat-tiles').textContent = tiles.length + ' tiles';
+  // populate filter dropdowns
+  const sections = [...new Set(tiles.map(t => t.column).filter(Boolean))].sort();
+  const categories = [...new Set(tiles.map(t => t.category).filter(Boolean))].sort();
+  const audiences = [...new Set(tiles.map(t => t.audience).filter(Boolean))].sort();
+  fillSelect($('f-section'), sections);
+  fillSelect($('f-category'), categories);
+  fillSelect($('f-audience'), audiences);
+  applyFilters();
+}
+
+function fillSelect(sel, values) {
+  const cur = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  for (const v of values) {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = v;
+    sel.appendChild(o);
+  }
+  sel.value = cur;
+}
+
+function applyFilters() {
+  const sec = $('f-section').value;
+  const cat = $('f-category').value;
+  const aud = $('f-audience').value;
+  const img = $('f-image').value;
+  const q = $('f-search').value.trim().toLowerCase();
+  filtered = tiles.filter(t => {
+    if (sec && t.column !== sec) return false;
+    if (cat && t.category !== cat) return false;
+    if (aud && t.audience !== aud) return false;
+    if (q && !(t.label || '').toLowerCase().includes(q) && !(t.id || '').toLowerCase().includes(q)) return false;
+    if (img === 'missing' && (genCache[t.id] || []).length) return false;
+    if (img === 'has' && !(genCache[t.id] || []).length) return false;
+    if (img === 'best' && !(genCache[t.id] || []).some(g => g.markedBest)) return false;
+    return true;
+  });
+  page = 0;
+  $('filter-stats').textContent = `${filtered.length} of ${tiles.length} match`;
+  renderTiles();
+}
+
+['f-section','f-category','f-audience','f-image','f-page-size'].forEach(id => $(id).addEventListener('change', applyFilters));
+$('f-search').addEventListener('input', debounce(applyFilters, 200));
+
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+function renderTiles() {
+  const walker = $('walker');
+  walker.innerHTML = '';
+  const start = page * PAGE_SIZE();
+  const slice = filtered.slice(start, start + PAGE_SIZE());
+  for (const t of slice) walker.appendChild(renderTileCard(t));
+  $('page-indicator').textContent = `page ${page + 1} of ${Math.max(1, Math.ceil(filtered.length / PAGE_SIZE()))}`;
+  // Lazy-load generations for the tiles visible this page
+  slice.forEach(t => loadGenerations(t.id));
+}
+
+$('btn-prev').addEventListener('click', () => { if (page > 0) { page--; renderTiles(); window.scrollTo({top: 0, behavior: 'smooth'}); } });
+$('btn-next').addEventListener('click', () => { if ((page + 1) * PAGE_SIZE() < filtered.length) { page++; renderTiles(); window.scrollTo({top: 0, behavior: 'smooth'}); } });
+
+function renderTileCard(t) {
+  const card = document.createElement('div');
+  card.className = 'tile-card';
+  card.dataset.id = t.id;
+  const clueRows = (t.descriptiveClues || []).map((c, i) =>
+    `<input type="text" data-clue-idx="${i}" value="${escapeAttr(c || '')}" placeholder="Clue ${i + 1}">`
+  ).join('');
+  const extraClue = `<input type="text" data-clue-idx="new" placeholder="+ add clue">`;
+
+  card.innerHTML = `
+    <div class="meta">
+      <div class="head">
+        <span class="label" contenteditable="true" data-field="label">${escapeHtml(t.label || '')}</span>
+        <span class="badge">${escapeHtml(t.column || '')}</span>
+        <span class="badge" style="background:#fcecd9;color:#e67e22;">${escapeHtml(t.category || '')}</span>
+        <span class="id">${escapeHtml(t.id)}</span>
+      </div>
+      <div class="field-row">
+        <label>Content prompt</label>
+        <textarea data-field="promptTemplate" rows="3">${escapeHtml(t.promptTemplate || '')}</textarea>
+      </div>
+      <div class="field-row">
+        <label>Teaching clues</label>
+        <div class="desc-list">${clueRows}${extraClue}</div>
+      </div>
+      <div class="field-row">
+        <label>Model override</label>
+        <select data-field="modelOverride">
+          <option value="">(use route / default)</option>
+          <option>gpt-image-1.5</option>
+          <option>gpt-image-2</option>
+          <option>gpt-image-1</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button class="save" data-act="save">Save edits</button>
+        <button data-act="gen-current">Generate (current style)</button>
+        <button class="cost" data-act="gen-all">Generate ALL active</button>
+        <span class="cost-hint" id="cost-hint-${escapeAttr(t.id)}"></span>
+        <span class="saved-flash" data-save-status></span>
+      </div>
+    </div>
+    <div>
+      <h2 style="margin:0 0 6px;font-size:11px;text-transform:uppercase;color:#557fa3;letter-spacing:.4px;">Generations</h2>
+      <div class="strip" data-strip="${escapeAttr(t.id)}"></div>
+    </div>`;
+
+  // wire it up
+  card.querySelector('[data-act="save"]').addEventListener('click', () => saveEdits(t.id, card));
+  card.querySelector('[data-act="gen-current"]').addEventListener('click', () => {
+    const sg = currentStyleId();
+    if (!sg) { alert('Select a style by clicking one in the gallery, or activate at least one.'); return; }
+    generateOne(t.id, sg, card);
+  });
+  card.querySelector('[data-act="gen-all"]').addEventListener('click', () => generateAllActive(t.id, card));
+
+  updateCostHint(t.id);
+  return card;
+}
+
+// Track which single style is the "current" one (last-clicked). Defaults to first active.
+let currentStyleClickId = null;
+function currentStyleId() {
+  if (currentStyleClickId && activeStyleIds.has(currentStyleClickId)) return currentStyleClickId;
+  return styleGuides.find(s => s.active)?.id || null;
+}
+
+function updateCostHint(tileId) {
+  const hint = $(`cost-hint-${tileId}`);
+  if (!hint) return;
+  const n = [...activeStyleIds].length;
+  if (n === 0) { hint.textContent = '(no active style)'; return; }
+  hint.textContent = `~$${(n * 0.15).toFixed(2)} for ${n} ${n === 1 ? 'style' : 'styles'}`;
+}
+
+// ---- saving edits -------------------------------------------------------
+async function saveEdits(tileId, card) {
+  const label = card.querySelector('[data-field="label"]').textContent.trim();
+  const promptTemplate = card.querySelector('[data-field="promptTemplate"]').value;
+  const clueInputs = card.querySelectorAll('[data-clue-idx]');
+  const descriptiveClues = [...clueInputs].map(i => i.value.trim()).filter(Boolean);
+  try {
+    await api('PUT', `/api/admin/taxonomy?id=${encodeURIComponent(tileId)}`, {
+      label, promptTemplate, descriptiveClues,
+    });
+    flashStatus(card.querySelector('[data-save-status]'), 'saved', 'saved-flash');
+    const t = tiles.find(x => x.id === tileId);
+    if (t) { t.label = label; t.promptTemplate = promptTemplate; t.descriptiveClues = descriptiveClues; }
+  } catch (err) {
+    flashStatus(card.querySelector('[data-save-status]'), err.message, 'err-flash');
+  }
+}
+
+// ---- generations --------------------------------------------------------
+async function loadGenerations(tileId) {
+  try {
+    const r = await api('GET', `/api/admin/tile-generations?taxonomyId=${encodeURIComponent(tileId)}`);
+    genCache[tileId] = r.generations || [];
+    renderStrip(tileId);
+  } catch (_) {}
+}
+
+function renderStrip(tileId) {
+  const strip = document.querySelector(`[data-strip="${cssEscape(tileId)}"]`);
+  if (!strip) return;
+  const gens = genCache[tileId] || [];
+  strip.innerHTML = '';
+  for (const g of gens) {
+    const div = document.createElement('div');
+    div.className = 'gen' + (g.markedBest ? ' best' : '');
+    const styleLabel = (styleGuides.find(s => s.id === g.styleGuideId) || {}).label || 'no style';
+    div.innerHTML = `
+      <img src="${g.blobUrl}" alt="" loading="lazy">
+      <div class="gen-meta"><span class="style">${escapeHtml(styleLabel)}</span><span class="model">${escapeHtml(g.model)}</span></div>
+      <div class="gen-actions">
+        <button class="star" title="Mark best">${g.markedBest ? '★' : '☆'}</button>
+        <button class="del" title="Delete">✕</button>
+      </div>`;
+    div.querySelector('img').addEventListener('click', () => {
+      $('enlarge-img').src = g.blobUrl;
+      $('enlarge-modal').classList.add('show');
+    });
+    div.querySelector('.star').addEventListener('click', async () => {
+      await api('PATCH', `/api/admin/tile-generations?id=${g.id}`, { markedBest: !g.markedBest });
+      await loadGenerations(tileId);
+    });
+    div.querySelector('.del').addEventListener('click', async () => {
+      if (!confirm('Delete this generation?')) return;
+      await api('DELETE', `/api/admin/tile-generations?id=${g.id}`);
+      await loadGenerations(tileId);
+    });
+    strip.appendChild(div);
+  }
+}
+
+async function generateOne(tileId, styleGuideId, card) {
+  const strip = card.querySelector(`[data-strip="${cssEscape(tileId)}"]`);
+  const ph = document.createElement('div');
+  ph.className = 'gen loading';
+  ph.textContent = 'Generating…';
+  strip.prepend(ph);
+
+  const modelOverride = card.querySelector('[data-field="modelOverride"]').value || undefined;
+  try {
+    const r = await api('POST', '/api/admin/lab-generate', {
+      taxonomyId: tileId,
+      styleGuideId,
+      model: modelOverride,
+    });
+    addCost(r.generation.costCents);
+    await loadGenerations(tileId);
+  } catch (err) {
+    ph.className = 'gen error';
+    ph.textContent = 'Failed: ' + (err.message || 'error');
+  }
+}
+
+async function generateAllActive(tileId, card) {
+  const ids = [...activeStyleIds];
+  if (!ids.length) { alert('No active styles. Add one or mark an existing one active.'); return; }
+  for (const sgId of ids) {
+    await generateOne(tileId, sgId, card);
+  }
+}
+
+// ---- header buttons -----------------------------------------------------
+$('btn-snapshot').addEventListener('click', async () => {
+  const label = prompt('Snapshot label?', 'lab-' + new Date().toISOString().slice(0, 16));
+  if (!label) return;
+  try {
+    await api('POST', '/api/admin/taxonomy-snapshots', { label, note: 'manual snapshot from /admin/lab' });
+    alert('Snapshot created');
+  } catch (err) { alert('Snapshot failed: ' + err.message); }
+});
+
+// ---- style guide click-to-select-current -------------------------------
+document.addEventListener('click', (e) => {
+  const card = e.target.closest('.sg-card');
+  if (card && card.parentElement?.id === 'sg-grid') {
+    const idx = [...$('sg-grid').children].indexOf(card);
+    const s = styleGuides[idx];
+    if (s && s.active) { currentStyleClickId = s.id; renderStyleGuides(); /* visual feedback later */ }
+  }
+});
+
+// ---- utilities ----------------------------------------------------------
+function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s) { return escapeHtml(s).replace(/`/g, '&#96;'); }
+function cssEscape(s) { return String(s).replace(/([^\w-])/g, '\\$1'); }
+function flashStatus(target, msg, cls) {
+  const el = typeof target === 'string' ? $(target) : target;
+  if (!el) return;
+  el.textContent = msg; el.className = cls;
+  setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2500);
+}
+
+// ---- boot ---------------------------------------------------------------
+(async function boot() {
+  try {
+    await Promise.all([loadStyleGuides(), loadLabSettings(), loadModelRoutes()]);
+    await loadTaxonomy();
+  } catch (err) {
+    document.body.innerHTML = `<div style="padding:40px;font-family:system-ui;color:#c0392b;">
+      <h1>Lab failed to load</h1>
+      <p>${escapeHtml(err.message || String(err))}</p>
+      <p>Most common cause: your account isn't <code>role='admin'</code>, or the database migrations haven't run.
+      Hit <a href="/api/init" target="_blank">/api/init</a> with admin auth, then flip your row to role='admin' in Neon.</p>
+      <p><a href="/login.html">Log in</a></p>
+    </div>`;
+  }
+})();
+</script>
+</body>
+</html>
