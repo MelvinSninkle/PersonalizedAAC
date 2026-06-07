@@ -77,6 +77,18 @@
   aside.filters .stats { margin-top: 14px; font-size: 12px; color: #557fa3; line-height: 1.6; }
 
   #walker { display: flex; flex-direction: column; gap: 10px; }
+  .cat-row { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid #e2e6ec; border-radius: 6px; background: #fafbfd; font-size: 12px; }
+  .cat-row.missing { background: #fef7e0; border-color: #f5d486; }
+  .cat-row.ok { background: #e6f4ea; border-color: #b6dfc0; }
+  .cat-row.parent-missing { background: #fde9e6; border-color: #f3b8b1; }
+  .cat-row .thumb { width: 36px; height: 36px; border-radius: 4px; background: #ddd; object-fit: cover; flex-shrink: 0; }
+  .cat-row .thumb-empty { width: 36px; height: 36px; border-radius: 4px; background: #e2e6ec; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #95a5a6; font-size: 18px; }
+  .cat-row .lbl { flex: 1; min-width: 0; }
+  .cat-row .lbl .name { font-weight: 600; color: #2c3e50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cat-row .lbl .crumb { font-size: 10px; color: #95a5a6; }
+  .cat-row button { font-size: 11px; padding: 3px 6px; border: 1px solid #c0cad6; background: white; border-radius: 4px; cursor: pointer; }
+  .cat-row button:hover { border-color: #4a90e2; color: #4a90e2; }
+  .cat-row button:disabled { opacity: .5; cursor: not-allowed; }
   .tile-card { background: white; border: 1px solid #e2e6ec; border-radius: 10px; padding: 14px; display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; }
   .tile-card .meta { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .tile-card .head { display: flex; align-items: center; gap: 10px; }
@@ -158,6 +170,9 @@
     <button class="secondary" id="btn-migrate" title="Re-run /api/init. Idempotent.">⚙️ Run migrations</button>
     <button class="secondary" id="btn-snapshot">Snapshot now</button>
     <a class="btn" href="/api/admin/taxonomy-export-csv" id="btn-export">Export CSV</a>
+    <label style="font-size:11px;color:#557fa3;display:flex;align-items:center;gap:4px;">🚀 Board:
+      <input id="publish-child" value="fletcherpeterson" title="Publish goes live on this child's board" style="width:128px;font-size:11px;padding:3px 6px;border:1px solid #cdd6e0;border-radius:4px;">
+    </label>
     <a class="btn" href="/admin/taxonomy.html">Workbench</a>
   </div>
 </header>
@@ -213,6 +228,18 @@
       </div>
     </div>
   </div>
+</section>
+
+<section style="border:1px solid #cdd6e0;background:#fff;border-radius:8px;padding:14px;margin:0 16px 14px;">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+    <h2 style="margin:0;font-size:13px;letter-spacing:.4px;color:#557fa3;text-transform:uppercase;">Board categories <span id="cats-target" style="color:#95a5a6;font-weight:400;text-transform:none;letter-spacing:0;"></span></h2>
+    <span class="stat" id="cats-stat">— total</span>
+    <label style="font-size:11px;color:#557fa3;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="cats-only-missing"> only missing or no image</label>
+    <span style="flex:1;"></span>
+    <span style="font-size:11px;color:#95a5a6;">Create category chips here BEFORE generating tiles in that category — publish blocks otherwise.</span>
+  </div>
+  <div id="cats-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;"></div>
+  <input type="file" id="cat-upload-input" accept="image/png,image/jpeg,image/webp" style="display:none;">
 </section>
 
 <main>
@@ -446,6 +473,106 @@ let filtered = [];              // after filter pass
 let page = 0;                   // 0-indexed
 const PAGE_SIZE = () => parseInt($('f-page-size').value, 10) || 50;
 let genCache = {};              // taxonomyId -> [generation]
+// What the publish-target child already has, so the Lab can show "on board",
+// offer to port existing art, and warn when a category chip isn't there yet.
+let boardState = { bySlug: new Map(), byKey: new Map(), catSet: new Set() };
+let catList = [];     // [{section,label,parentLabel,hasImage,imageKey,boardId,parentMissing,tileCount}]
+async function loadBoardState() {
+  const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
+  try {
+    const [bs, cs] = await Promise.all([
+      api('GET', '/api/admin/lab-board-state?childId=' + encodeURIComponent(childId)),
+      api('GET', '/api/admin/lab-categories?childId=' + encodeURIComponent(childId)),
+    ]);
+    const next = { bySlug: new Map(), byKey: new Map(), catSet: new Set() };
+    for (const it of bs.items || []) {
+      if (it.taxonomy_slug) next.bySlug.set(it.taxonomy_slug, it);
+      next.byKey.set((it.section || '').toLowerCase() + '|' + (it.label || '').toLowerCase(), it);
+    }
+    for (const c of bs.categories || []) next.catSet.add((c.section || '').toLowerCase() + '|' + (c.label || '').toLowerCase());
+    boardState = next;
+    catList = cs.rows || [];
+    renderCategoryPanel();
+  } catch (_) { /* keep prior state on failure */ }
+}
+
+function renderCategoryPanel() {
+  const list = $('cats-list');
+  const target = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
+  $('cats-target').textContent = '· on ' + target;
+  if (!list) return;
+  const onlyMissing = $('cats-only-missing') && $('cats-only-missing').checked;
+  const rows = catList.filter(r => !onlyMissing || !r.hasImage);
+  const total = catList.length, withImg = catList.filter(r => r.hasImage).length, missingChip = catList.filter(r => !r.boardId).length;
+  $('cats-stat').textContent = `${withImg}/${total} have images · ${missingChip} not yet on board`;
+  list.innerHTML = '';
+  for (const r of rows) {
+    const div = document.createElement('div');
+    const state = r.parentMissing ? 'parent-missing' : (r.hasImage ? 'ok' : 'missing');
+    div.className = 'cat-row ' + state;
+    const thumb = r.imageKey
+      ? `<img class="thumb" src="/api/media?key=${encodeURIComponent(r.imageKey)}" alt="">`
+      : `<div class="thumb-empty">·</div>`;
+    const crumb = `${r.section}${r.parentLabel ? ` › ${escapeHtml(r.parentLabel)}` : ''} · ${r.tileCount} tiles`;
+    const status = r.parentMissing ? `⚠ need "${escapeHtml(r.parentLabel)}" first` : (r.hasImage ? '✓ chip · image' : (r.boardId ? '⚠ chip, no image' : '— not on board'));
+    div.innerHTML = `
+      ${thumb}
+      <div class="lbl"><div class="name">${escapeHtml(r.label)}</div><div class="crumb">${crumb} — ${status}</div></div>
+      <button data-act="cat-upload" ${r.parentMissing ? 'disabled' : ''} title="Upload an image you already made">⬆</button>
+      <button data-act="cat-generate" ${r.parentMissing ? 'disabled' : ''} title="Generate with AI">✨</button>`;
+    div.querySelector('[data-act="cat-upload"]').addEventListener('click', () => triggerCategoryUpload(r));
+    div.querySelector('[data-act="cat-generate"]').addEventListener('click', () => generateCategory(r, div));
+    list.appendChild(div);
+  }
+}
+
+let _pendingCatUpload = null;
+function triggerCategoryUpload(row) {
+  _pendingCatUpload = row;
+  const input = $('cat-upload-input');
+  input.value = '';
+  input.click();
+}
+async function uploadCategory(row, file) {
+  const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
+  const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+  const qs = new URLSearchParams({ childId, section: row.section, label: row.label, ext });
+  if (row.parentLabel) qs.set('parent', row.parentLabel);
+  try {
+    const res = await fetch('/api/admin/lab-category-upload?' + qs.toString(), {
+      method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
+    });
+    if (!res.ok) { let d = {}; try { d = await res.json(); } catch (_) {} throw new Error(d.error || ('HTTP ' + res.status)); }
+    await loadBoardState();   // refreshes the panel and tile cards' "make X first" notes
+    renderTiles();
+  } catch (err) { alert('Category upload failed: ' + (err.message || err)); }
+}
+async function generateCategory(row, div) {
+  const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
+  const orig = div.innerHTML;
+  div.innerHTML = `<div style="padding:6px 4px;color:#557fa3;">✨ generating "${escapeHtml(row.label)}"…</div>`;
+  try {
+    const r = await api('POST', '/api/admin/lab-category-generate', {
+      childId, section: row.section, label: row.label, parent: row.parentLabel || undefined,
+    });
+    addCost(r.costCents || 0);
+    await loadBoardState();
+    renderTiles();
+  } catch (err) {
+    div.innerHTML = orig;
+    alert('Category generate failed: ' + (err.message || err));
+  }
+}
+function decorateBoardNote(t, card) {
+  const note = card.querySelector('[data-board-note]');
+  if (!note) return;
+  const sec = (t.column || '').toLowerCase();
+  const onBoard = boardState.bySlug.get(t.id) || boardState.byKey.get(sec + '|' + (t.label || '').toLowerCase());
+  const catOk = !t.category || boardState.catSet.has(sec + '|' + (t.category || '').toLowerCase());
+  if (onBoard) { note.textContent = onBoard.image_key ? '✓ on board · image' : '✓ on board'; note.style.color = '#137333'; note.style.background = '#e6f4ea'; }
+  else if (!catOk) { note.textContent = '⚠ make "' + (t.category || '') + '" category first'; note.style.color = '#9a6700'; note.style.background = '#fef7e0'; }
+  else { note.textContent = ''; note.style.background = 'transparent'; }
+}
 
 async function loadTaxonomy() {
   const r = await api('GET', '/api/admin/taxonomy');
@@ -511,6 +638,12 @@ function renderTiles() {
 
 $('btn-prev').addEventListener('click', () => { if (page > 0) { page--; renderTiles(); window.scrollTo({top: 0, behavior: 'smooth'}); } });
 $('btn-next').addEventListener('click', () => { if ((page + 1) * PAGE_SIZE() < filtered.length) { page++; renderTiles(); window.scrollTo({top: 0, behavior: 'smooth'}); } });
+$('publish-child').addEventListener('change', async () => { await loadBoardState(); renderTiles(); });
+$('cats-only-missing').addEventListener('change', renderCategoryPanel);
+$('cat-upload-input').addEventListener('change', (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (f && _pendingCatUpload) { const row = _pendingCatUpload; _pendingCatUpload = null; uploadCategory(row, f); }
+});
 
 function renderTileCard(t) {
   const card = document.createElement('div');
@@ -528,6 +661,7 @@ function renderTileCard(t) {
         <span class="badge">${escapeHtml(t.column || '')}</span>
         <span class="badge" style="background:#fcecd9;color:#e67e22;">${escapeHtml(t.category || '')}</span>
         <span class="id">${escapeHtml(t.id)}</span>
+        <span class="id" data-board-note style="background:transparent;"></span>
       </div>
       <div class="field-row">
         <label>Content prompt</label>
@@ -550,6 +684,10 @@ function renderTileCard(t) {
         <button class="save" data-act="save">Save edits</button>
         <button data-act="gen-current">Generate (current style)</button>
         <button class="cost" data-act="gen-all">Generate ALL active</button>
+        <button data-act="upload" title="Attach an image you already made as a candidate for this tile">⬆ Upload image</button>
+        <input type="file" data-act="upload-input" accept="image/png,image/jpeg,image/webp" style="display:none;">
+        <button data-act="publish" title="Publish this tile's ★ best image LIVE to the board">🚀 Push live</button>
+        <button data-act="port" title="Pull this child's existing board image in as a candidate">⬇ Port from board</button>
         <span class="cost-hint" id="cost-hint-${escapeAttr(t.id)}"></span>
         <span class="saved-flash" data-save-status></span>
       </div>
@@ -567,6 +705,12 @@ function renderTileCard(t) {
     generateOne(t.id, sg, card);
   });
   card.querySelector('[data-act="gen-all"]').addEventListener('click', () => generateAllActive(t.id, card));
+  const upInput = card.querySelector('[data-act="upload-input"]');
+  card.querySelector('[data-act="upload"]').addEventListener('click', () => upInput.click());
+  upInput.addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadImage(t.id, f, card); });
+  card.querySelector('[data-act="publish"]').addEventListener('click', () => publishTile(t.id, card));
+  card.querySelector('[data-act="port"]').addEventListener('click', () => portImage(t.id, card));
+  decorateBoardNote(t, card);
 
   updateCostHint(t.id);
   return card;
@@ -677,6 +821,55 @@ async function generateAllActive(tileId, card) {
   }
 }
 
+// ---- upload an already-made image as a candidate (no OpenAI, no cost) ----
+async function uploadImage(tileId, file, card) {
+  const strip = card.querySelector(`[data-strip="${cssEscape(tileId)}"]`);
+  const ph = document.createElement('div');
+  ph.className = 'gen loading';
+  ph.textContent = 'Uploading…';
+  if (strip) strip.prepend(ph);
+  try {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    const res = await fetch(`/api/admin/lab-upload-image?taxonomyId=${encodeURIComponent(tileId)}&ext=${encodeURIComponent(ext)}`, {
+      method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
+    });
+    if (!res.ok) { let d = {}; try { d = await res.json(); } catch (_) {} throw new Error(d.error || ('HTTP ' + res.status)); }
+    await loadGenerations(tileId);   // appears in the strip; review it and click ★ to make it canonical
+  } catch (err) {
+    ph.className = 'gen error';
+    ph.textContent = 'Upload failed: ' + (err.message || err);
+  }
+}
+
+// ---- port an image the child already has into the library as a candidate -
+async function portImage(tileId, card) {
+  const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
+  const status = card.querySelector('[data-save-status]');
+  flashStatus(status, 'porting…', 'saved-flash');
+  try {
+    await api('POST', '/api/admin/lab-port-image', { taxonomyId: tileId, childId });
+    await loadGenerations(tileId);   // ported image is now a candidate — review and ★ it
+    flashStatus(status, '⬇ ported board image', 'saved-flash');
+  } catch (err) {
+    flashStatus(status, err.message, 'err-flash');
+  }
+}
+
+// ---- publish a tile's best image LIVE to a child's board ----------------
+async function publishTile(tileId, card) {
+  const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
+  const status = card.querySelector('[data-save-status]');
+  const gens = genCache[tileId] || [];
+  if (!gens.some(g => g.markedBest)) { flashStatus(status, 'mark a ★ best image first', 'err-flash'); return; }
+  flashStatus(status, 'publishing…', 'saved-flash');
+  try {
+    const r = await api('POST', '/api/admin/lab-publish-tile', { taxonomyId: tileId, childId });
+    flashStatus(status, r.created ? `🚀 live on ${childId}` : `🚀 updated on ${childId}`, 'saved-flash');
+  } catch (err) {
+    flashStatus(status, err.message, 'err-flash');
+  }
+}
+
 // ---- header buttons -----------------------------------------------------
 $('btn-migrate').addEventListener('click', async () => {
   if (!confirm('Re-run /api/init? Safe to run multiple times.')) return;
@@ -721,7 +914,7 @@ function flashStatus(target, msg, cls) {
 // ---- boot ---------------------------------------------------------------
 (async function boot() {
   try {
-    await Promise.all([loadStyleGuides(), loadLabSettings(), loadModelRoutes()]);
+    await Promise.all([loadStyleGuides(), loadLabSettings(), loadModelRoutes(), loadBoardState()]);
     await loadTaxonomy();
   } catch (err) {
     document.body.innerHTML = `<div style="padding:40px;font-family:system-ui;color:#c0392b;">

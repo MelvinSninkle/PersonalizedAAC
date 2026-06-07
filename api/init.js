@@ -728,6 +728,39 @@ Size: {size}. No watermarks, no extra text other than the tile label.',
     await db`CREATE INDEX IF NOT EXISTS waitlist_email_idx   ON waitlist(email)`;
     await db`CREATE INDEX IF NOT EXISTS waitlist_created_idx ON waitlist(created_at DESC)`;
 
+    // ---- People identities: name vs. relationship (docs/people-data-model.md) ----
+    // The real person behind the People-section tiles. Separates the spoken/shown
+    // name (display_name) from the actual given name, and captures a structured
+    // relationship to the child (+ which side of the family), pronoun, and birth
+    // order — so a sibling can be distinguished ("Brother 1", "Brother 2") and a
+    // feature can ask for "the child's mother" and get her name + photo + pronoun.
+    // Owns the stylized reference photo + voice clip. relationship values live in
+    // api/_lib/relationships.js.
+    await db`
+      CREATE TABLE IF NOT EXISTS persons (
+        id            BIGSERIAL PRIMARY KEY,
+        child_id      TEXT NOT NULL,
+        display_name  TEXT NOT NULL,                  -- shown + spoken on the tile ("Papa Gary", "Mama")
+        given_name    TEXT,                           -- the real first name ("Gary", "Jane")
+        relationship  TEXT NOT NULL DEFAULT 'other',  -- mother | father | grandfather | brother | …
+        side          TEXT,                           -- 'maternal' | 'paternal' | NULL
+        pronoun       TEXT,                           -- 'she' | 'he' | 'they' | NULL
+        birth_order   INTEGER,                        -- among siblings; lower = older
+        is_self       BOOLEAN NOT NULL DEFAULT FALSE, -- the child whose board this is
+        reference_key TEXT,                           -- stylized subject-anchor photo
+        voice_key     TEXT,                           -- TTS clip
+        pronunciation TEXT,                           -- "say it as…" phonetic
+        notes         TEXT,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS persons_child_idx ON persons(child_id)`;
+    await db`CREATE INDEX IF NOT EXISTS persons_rel_idx   ON persons(child_id, relationship)`;
+    // People-section tiles point at the person they depict (nullable: only people tiles use it).
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS person_id BIGINT REFERENCES persons(id)`;
+    await db`CREATE INDEX IF NOT EXISTS items_person_idx ON items(person_id)`;
+
     res.status(200).json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Init failed', detail: String(err.message || err) });
