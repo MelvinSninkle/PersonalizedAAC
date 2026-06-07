@@ -7,6 +7,7 @@ import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { isValidRelationship, relationshipNeedsSide } from './_lib/relationships.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
 
@@ -42,6 +43,12 @@ export default async function handler(req, res) {
   const role = q.role === 'parent' ? 'parent' : 'child';
   const name = String(q.name || '').slice(0, 200).trim();
   const pronunciation = String(q.pronunciation || '').slice(0, 200).trim();
+  // People model (docs/people-data-model.md): structured identity for this person.
+  const relationship = String(q.relationship || '').slice(0, 40).trim().toLowerCase();
+  const side = (q.side === 'maternal' || q.side === 'paternal') ? q.side : null;
+  const givenName = String(q.given || '').slice(0, 120).trim();
+  const pronoun = (q.pronoun === 'she' || q.pronoun === 'he' || q.pronoun === 'they') ? q.pronoun : null;
+  const birthOrder = (Number.isFinite(+q.birthOrder) && +q.birthOrder > 0) ? Math.floor(+q.birthOrder) : null;
 
   let buffer;
   try {
@@ -109,6 +116,43 @@ export default async function handler(req, res) {
           VALUES ('people', ${catId}, ${name}, ${key}, ${soundKey}, FALSE, ${Date.now()}, ${pinned}, ${childId}, NOW()) RETURNING id`;
         itemId = Number(it[0].id);
       }
+
+      // 4) Upsert the structured person behind this tile (docs/people-data-model.md)
+      //    and link the tile to it. New captures arrive with a relationship once the
+      //    onboarding picker sends it; until then child → self, grown-up → other.
+      await db`
+        CREATE TABLE IF NOT EXISTS persons (
+          id BIGSERIAL PRIMARY KEY, child_id TEXT NOT NULL, display_name TEXT NOT NULL,
+          given_name TEXT, relationship TEXT NOT NULL DEFAULT 'other', side TEXT, pronoun TEXT,
+          birth_order INTEGER, is_self BOOLEAN NOT NULL DEFAULT FALSE, reference_key TEXT,
+          voice_key TEXT, pronunciation TEXT, notes TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`;
+      await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS person_id BIGINT REFERENCES persons(id)`;
+      const isSelf = role === 'child' || relationship === 'self';
+      const rel = isValidRelationship(relationship) ? relationship : (isSelf ? 'self' : 'other');
+      const relSide = relationshipNeedsSide(rel) ? side : null;
+      const pex = await db`SELECT id FROM persons WHERE child_id = ${childId} AND lower(display_name) = lower(${name}) LIMIT 1`;
+      let personId;
+      if (pex.length) {
+        personId = pex[0].id;
+        await db`
+          UPDATE persons SET
+            given_name = COALESCE(NULLIF(${givenName}, ''), given_name), relationship = ${rel}, side = ${relSide},
+            pronoun = COALESCE(${pronoun}, pronoun), birth_order = COALESCE(${birthOrder}, birth_order),
+            is_self = ${isSelf}, reference_key = ${key}, voice_key = COALESCE(${soundKey}, voice_key),
+            pronunciation = COALESCE(NULLIF(${pronunciation}, ''), pronunciation), updated_at = NOW()
+          WHERE id = ${personId}`;
+      } else {
+        const pr = await db`
+          INSERT INTO persons
+            (child_id, display_name, given_name, relationship, side, pronoun, birth_order, is_self, reference_key, voice_key, pronunciation)
+          VALUES
+            (${childId}, ${name}, ${givenName || null}, ${rel}, ${relSide}, ${pronoun}, ${birthOrder}, ${isSelf}, ${key}, ${soundKey}, ${pronunciation || null})
+          RETURNING id`;
+        personId = pr[0].id;
+      }
+      await db`UPDATE items SET person_id = ${personId}, updated_at = NOW() WHERE id = ${itemId}`;
     }
 
     res.setHeader('Cache-Control', 'no-store');
