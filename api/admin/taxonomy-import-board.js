@@ -126,7 +126,24 @@ export default async function handler(req, res) {
       VALUES (${ACTOR}, 'board-import', ${summary}, ${snapshotLabel})
     `;
 
-    res.status(200).json({ ok: true, childId, inserted, skipped, errors, snapshotLabel });
+    // Surface WHY rows failed. With a systematic problem (e.g. a missing column
+    // after a schema change) all 750 errors are the same message, so collapse to
+    // distinct messages with counts + an example slug — far more useful than a
+    // raw count, and keeps the response small.
+    const byMessage = new Map();
+    for (const e of errors) {
+      const m = byMessage.get(e.error);
+      if (m) { m.count++; } else { byMessage.set(e.error, { error: e.error, count: 1, exampleSlug: e.slug }); }
+    }
+    const errorSummary = [...byMessage.values()].sort((a, b) => b.count - a.count);
+
+    res.status(200).json({
+      ok: true, childId, inserted, skipped,
+      errorCount: errors.length,
+      errorSummary,                 // distinct messages + counts + example slug
+      errors: errors.slice(0, 25),  // first few raw rows for detail
+      snapshotLabel,
+    });
   } catch (err) {
     res.status(500).json({ error: 'Board import failed', detail: String(err.message || err) });
   }

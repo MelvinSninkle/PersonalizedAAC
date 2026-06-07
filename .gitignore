@@ -7,6 +7,7 @@ Sounds/
 !package-lock.json
 !vercel.json
 !capacitor.config.json
+!taxonomy/*.json
 
 # Capacitor native build artifacts (the ios/ project itself is generated on the Mac)
 ios/App/Pods/

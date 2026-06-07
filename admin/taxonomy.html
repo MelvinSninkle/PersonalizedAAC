@@ -181,6 +181,7 @@
   <div class="right">
     <span class="stat" id="stat">—</span>
     <button class="secondary" id="btn-new">+ New row</button>
+    <button class="secondary" id="btn-migrate" title="Re-run /api/init to create or update any missing tables/columns. Idempotent.">⚙️ Run migrations</button>
     <button class="secondary" id="btn-import">Import…</button>
     <button class="secondary" id="btn-import-board" title="Seed the taxonomy from a child's current live board">Import live board…</button>
     <button class="secondary" id="btn-backfill" title="Link a child's existing tiles to canonical taxonomy slugs">🔗 Backfill slugs…</button>
@@ -998,6 +999,21 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     await bfRun(true);
   });
 
+  // ---- Run /api/init (idempotent schema migration) ----
+  document.getElementById('btn-migrate').addEventListener('click', async () => {
+    if (!confirm('Re-run /api/init? This creates any missing tables/columns. Safe to run multiple times.')) return;
+    const btn = document.getElementById('btn-migrate');
+    btn.disabled = true; btn.textContent = 'Migrating…';
+    try {
+      const r = await api('/api/init', { method: 'POST' });
+      alert('Migrations ran. ' + (r.ok ? 'OK.' : JSON.stringify(r)));
+    } catch (e) {
+      alert('Migration failed: ' + (e.message || e));
+    } finally {
+      btn.disabled = false; btn.textContent = '⚙️ Run migrations';
+    }
+  });
+
   // ---- Import from a child's live board (seed the taxonomy with "the current one") ----
   document.getElementById('btn-import-board').addEventListener('click', async () => {
     const child = prompt("Import which child's live board into the taxonomy as DRAFT rows?", 'fletcherpeterson');
@@ -1006,7 +1022,16 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     try {
       const r = await api('/api/admin/taxonomy-import-board?childId=' + encodeURIComponent(child.trim()), { method: 'POST' });
       await loadRows();
-      alert(`Imported ${r.inserted} new draft rows · skipped ${r.skipped} · ${r.errors.length} error(s).\nSnapshot: ${r.snapshotLabel}\n\nThey're tagged status=draft — review prompts, set subject_mode / parent_photo / core, then publish.`);
+      const errCount = r.errorCount != null ? r.errorCount : (r.errors ? r.errors.length : 0);
+      let msg = `Imported ${r.inserted} new draft rows · skipped ${r.skipped} · ${errCount} error(s).\nSnapshot: ${r.snapshotLabel}`;
+      if (errCount && r.errorSummary && r.errorSummary.length) {
+        msg += `\n\nWhy rows failed:\n` + r.errorSummary
+          .slice(0, 5)
+          .map(e => `  • ${e.count}×  ${e.error}  (e.g. "${e.exampleSlug}")`)
+          .join('\n');
+      }
+      msg += `\n\nDrafts are tagged status=draft — review prompts, set subject_mode / parent_photo / core, then publish.`;
+      alert(msg);
     } catch (e) {
       alert('Board import failed: ' + (e.message || e));
     }
