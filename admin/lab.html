@@ -550,6 +550,8 @@ function renderTileCard(t) {
         <button class="save" data-act="save">Save edits</button>
         <button data-act="gen-current">Generate (current style)</button>
         <button class="cost" data-act="gen-all">Generate ALL active</button>
+        <button data-act="upload" title="Attach an image you already made as a candidate for this tile">⬆ Upload image</button>
+        <input type="file" data-act="upload-input" accept="image/png,image/jpeg,image/webp" style="display:none;">
         <span class="cost-hint" id="cost-hint-${escapeAttr(t.id)}"></span>
         <span class="saved-flash" data-save-status></span>
       </div>
@@ -567,6 +569,9 @@ function renderTileCard(t) {
     generateOne(t.id, sg, card);
   });
   card.querySelector('[data-act="gen-all"]').addEventListener('click', () => generateAllActive(t.id, card));
+  const upInput = card.querySelector('[data-act="upload-input"]');
+  card.querySelector('[data-act="upload"]').addEventListener('click', () => upInput.click());
+  upInput.addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadImage(t.id, f, card); });
 
   updateCostHint(t.id);
   return card;
@@ -674,6 +679,26 @@ async function generateAllActive(tileId, card) {
   if (!ids.length) { alert('No active styles. Add one or mark an existing one active.'); return; }
   for (const sgId of ids) {
     await generateOne(tileId, sgId, card);
+  }
+}
+
+// ---- upload an already-made image as a candidate (no OpenAI, no cost) ----
+async function uploadImage(tileId, file, card) {
+  const strip = card.querySelector(`[data-strip="${cssEscape(tileId)}"]`);
+  const ph = document.createElement('div');
+  ph.className = 'gen loading';
+  ph.textContent = 'Uploading…';
+  if (strip) strip.prepend(ph);
+  try {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    const res = await fetch(`/api/admin/lab-upload-image?taxonomyId=${encodeURIComponent(tileId)}&ext=${encodeURIComponent(ext)}`, {
+      method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
+    });
+    if (!res.ok) { let d = {}; try { d = await res.json(); } catch (_) {} throw new Error(d.error || ('HTTP ' + res.status)); }
+    await loadGenerations(tileId);   // appears in the strip; review it and click ★ to make it canonical
+  } catch (err) {
+    ph.className = 'gen error';
+    ph.textContent = 'Upload failed: ' + (err.message || err);
   }
 }
 
