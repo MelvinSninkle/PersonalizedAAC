@@ -155,6 +155,7 @@
   <div class="right">
     <span class="stat" id="stat-tiles">— tiles</span>
     <span class="stat" id="stat-gens">— images generated</span>
+    <button class="secondary" id="btn-migrate" title="Re-run /api/init. Idempotent.">⚙️ Run migrations</button>
     <button class="secondary" id="btn-snapshot">Snapshot now</button>
     <a class="btn" href="/api/admin/taxonomy-export-csv" id="btn-export">Export CSV</a>
     <a class="btn" href="/admin/taxonomy.html">Workbench</a>
@@ -677,6 +678,16 @@ async function generateAllActive(tileId, card) {
 }
 
 // ---- header buttons -----------------------------------------------------
+$('btn-migrate').addEventListener('click', async () => {
+  if (!confirm('Re-run /api/init? Safe to run multiple times.')) return;
+  const b = $('btn-migrate'); b.disabled = true; b.textContent = 'Migrating…';
+  try {
+    await api('POST', '/api/init');
+    alert('Migrations ran successfully.');
+  } catch (err) { alert('Migration failed: ' + err.message); }
+  finally { b.disabled = false; b.textContent = '⚙️ Run migrations'; }
+});
+
 $('btn-snapshot').addEventListener('click', async () => {
   const label = prompt('Snapshot label?', 'lab-' + new Date().toISOString().slice(0, 16));
   if (!label) return;
