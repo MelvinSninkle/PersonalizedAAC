@@ -89,6 +89,26 @@
   .cat-row button { font-size: 11px; padding: 3px 6px; border: 1px solid #c0cad6; background: white; border-radius: 4px; cursor: pointer; }
   .cat-row button:hover { border-color: #4a90e2; color: #4a90e2; }
   .cat-row button:disabled { opacity: .5; cursor: not-allowed; }
+  .scene { margin-top: 6px; border: 1px solid #e2e6ec; border-radius: 8px; background: #fbfcfe; padding: 0 8px; }
+  .scene > summary { cursor: pointer; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; color: #557fa3; font-weight: 700; padding: 7px 2px; list-style: none; }
+  .scene > summary::-webkit-details-marker { display: none; }
+  .scene > summary::before { content: '🎭 '; }
+  .scene[open] > summary { border-bottom: 1px solid #eef1f6; }
+  .scene .body { padding: 8px 2px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .subj-row { display: flex; gap: 6px; align-items: center; }
+  .subj-row .role { flex: 0 0 18px; height: 18px; border-radius: 9px; background: #4a90e2; color: #fff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .subj-row select { flex: 0 0 auto; max-width: 200px; font-size: 12px; padding: 3px 4px; }
+  .subj-row input[type="text"] { flex: 1; min-width: 60px; font-size: 12px; padding: 3px 6px; border: 1px solid #d6dde6; border-radius: 4px; }
+  .subj-row .tag { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: #e6f4ea; color: #2e7d4f; white-space: nowrap; }
+  .subj-row .tag.warn { background: #fef3c7; color: #9a6b00; }
+  .subj-row button.x { flex: 0 0 auto; border: none; background: transparent; color: #c0392b; cursor: pointer; font-size: 14px; padding: 0 4px; }
+  .scene .scene-line { display: flex; gap: 6px; align-items: center; }
+  .scene .scene-line input { flex: 1; font-size: 12px; padding: 4px 6px; border: 1px solid #d6dde6; border-radius: 4px; }
+  .scene .scene-actions { display: flex; gap: 6px; align-items: center; }
+  .scene .scene-actions button { font-size: 12px; padding: 4px 10px; border-radius: 5px; border: none; cursor: pointer; }
+  .scene .scene-actions .add { background: #eef4fb; color: #2c6cb0; border: 1px solid #cfe0f3; }
+  .scene .scene-actions .go { background: #8e44ad; color: #fff; }
+  .scene .scene-actions .go:hover { background: #7a3795; }
   .tile-card { background: white; border: 1px solid #e2e6ec; border-radius: 10px; padding: 14px; display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; }
   .tile-card .meta { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .tile-card .head { display: flex; align-items: center; gap: 10px; }
@@ -480,10 +500,12 @@ let catList = [];     // [{section,label,parentLabel,hasImage,imageKey,boardId,p
 async function loadBoardState() {
   const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
   try {
-    const [bs, cs] = await Promise.all([
+    const [bs, cs, ps] = await Promise.all([
       api('GET', '/api/admin/lab-board-state?childId=' + encodeURIComponent(childId)),
       api('GET', '/api/admin/lab-categories?childId=' + encodeURIComponent(childId)),
+      api('GET', '/api/persons?childId=' + encodeURIComponent(childId)).catch(() => ({ persons: [] })),
     ]);
+    personsList = (ps && ps.persons) || [];
     const next = { bySlug: new Map(), byKey: new Map(), catSet: new Set() };
     for (const it of bs.items || []) {
       if (it.taxonomy_slug) next.bySlug.set(it.taxonomy_slug, it);
@@ -691,6 +713,20 @@ function renderTileCard(t) {
         <span class="cost-hint" id="cost-hint-${escapeAttr(t.id)}"></span>
         <span class="saved-flash" data-save-status></span>
       </div>
+      <details class="scene">
+        <summary>Scene / people — match style + real subjects</summary>
+        <div class="body">
+          <div data-subjects></div>
+          <div class="scene-line">
+            <input type="text" data-scene placeholder="Scene / composition (e.g. 'A and B hugging outside')">
+          </div>
+          <div class="scene-actions">
+            <button class="add" data-act="scene-add">+ add person</button>
+            <button class="go" data-act="scene-go">✨ Generate scene</button>
+            <span class="cost-hint" data-scene-note></span>
+          </div>
+        </div>
+      </details>
     </div>
     <div>
       <h2 style="margin:0 0 6px;font-size:11px;text-transform:uppercase;color:#557fa3;letter-spacing:.4px;">Generations</h2>
@@ -710,6 +746,10 @@ function renderTileCard(t) {
   upInput.addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadImage(t.id, f, card); });
   card.querySelector('[data-act="publish"]').addEventListener('click', () => publishTile(t.id, card));
   card.querySelector('[data-act="port"]').addEventListener('click', () => portImage(t.id, card));
+  // Variable scene composer (style + N subjects, each from person-anchor / photo / fresh).
+  card._subjects = [];
+  card.querySelector('[data-act="scene-add"]').addEventListener('click', () => { addSceneSubject(card); });
+  card.querySelector('[data-act="scene-go"]').addEventListener('click', () => generateScene(t.id, card));
   decorateBoardNote(t, card);
 
   updateCostHint(t.id);
@@ -818,6 +858,104 @@ async function generateAllActive(tileId, card) {
   if (!ids.length) { alert('No active styles. Add one or mark an existing one active.'); return; }
   for (const sgId of ids) {
     await generateOne(tileId, sgId, card);
+  }
+}
+
+// ---- variable scene composer: style + N subjects (person-anchor / photo / fresh) ----
+let personsList = [];   // [{ id, display_name, given_name, reference_key, relationship }]
+function subjectOptions(sel) {
+  const peep = personsList.map(p => {
+    const v = 'person:' + p.id;
+    const anchor = p.reference_key ? ' ✓anchor' : ' (no anchor)';
+    return `<option value="${v}" ${sel === v ? 'selected' : ''}>${escapeHtml(p.display_name || p.given_name || ('#' + p.id))}${anchor}</option>`;
+  }).join('');
+  return `${peep ? `<optgroup label="People">${peep}</optgroup>` : ''}` +
+    `<option value="photo" ${sel === 'photo' ? 'selected' : ''}>Upload a photo…</option>` +
+    `<option value="fresh" ${sel === 'fresh' ? 'selected' : ''}>Fresh — describe only</option>`;
+}
+function selValForSubject(s) {
+  if (s.kind === 'person') return 'person:' + s.personId;
+  return s.kind; // 'photo' | 'fresh'
+}
+function addSceneSubject(card) {
+  const def = personsList[0]
+    ? { kind: 'person', personId: personsList[0].id, label: personsList[0].given_name || personsList[0].display_name || '' }
+    : { kind: 'fresh', label: '' };
+  card._subjects.push(def);
+  renderSceneRows(card);
+}
+function renderSceneRows(card) {
+  const host = card.querySelector('[data-subjects]');
+  if (!host) return;
+  host.innerHTML = '';
+  card._subjects.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'subj-row';
+    const role = String.fromCharCode(65 + i);
+    let tag = '';
+    if (s.kind === 'person') { const p = personsList.find(x => x.id === s.personId); tag = p && p.reference_key ? '<span class="tag">match anchor</span>' : '<span class="tag warn">no anchor → generic</span>'; }
+    else if (s.kind === 'photo') tag = s.blobKey ? '<span class="tag">photo ✓</span>' : '<span class="tag warn">choose a photo</span>';
+    else tag = '<span class="tag warn">text only</span>';
+    row.innerHTML = `
+      <span class="role">${role}</span>
+      <select data-subj-src>${subjectOptions(selValForSubject(s))}</select>
+      <input type="text" data-subj-label placeholder="name in scene" value="${escapeAttr(s.label || '')}">
+      ${tag}
+      ${s.kind === 'photo' ? '<input type="file" accept="image/png,image/jpeg,image/webp" data-subj-file style="display:none;">' : ''}
+      <button class="x" title="remove" data-subj-del>✕</button>`;
+    row.querySelector('[data-subj-src]').addEventListener('change', (e) => {
+      const v = e.target.value;
+      if (v.startsWith('person:')) { s.kind = 'person'; s.personId = parseInt(v.slice(7), 10); s.blobKey = undefined;
+        const p = personsList.find(x => x.id === s.personId); if (p && !s.label) s.label = p.given_name || p.display_name || ''; }
+      else if (v === 'photo') { s.kind = 'photo'; s.personId = undefined; }
+      else { s.kind = 'fresh'; s.personId = undefined; s.blobKey = undefined; }
+      renderSceneRows(card);
+    });
+    row.querySelector('[data-subj-label]').addEventListener('input', (e) => { s.label = e.target.value; });
+    row.querySelector('[data-subj-del]').addEventListener('click', () => { card._subjects.splice(i, 1); renderSceneRows(card); });
+    const fileEl = row.querySelector('[data-subj-file]');
+    if (fileEl) {
+      // the photo tag ("choose a photo" / "photo ✓") doubles as the file picker trigger
+      const trigger = row.querySelector('.tag');
+      if (trigger) { trigger.style.cursor = 'pointer'; trigger.title = 'pick / replace photo'; trigger.addEventListener('click', () => fileEl.click()); }
+      fileEl.addEventListener('change', async (e) => {
+        const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+        const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
+        try {
+          const res = await fetch(`/api/upload?kind=image&ext=${encodeURIComponent(ext)}`, { method: 'POST', headers: { 'Content-Type': f.type || 'application/octet-stream' }, body: f });
+          const d = await res.json(); if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+          s.blobKey = d.key; renderSceneRows(card);
+        } catch (err) { alert('Photo upload failed: ' + (err.message || err)); }
+      });
+    }
+    host.appendChild(row);
+  });
+}
+async function generateScene(tileId, card) {
+  const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
+  const subjects = (card._subjects || []).map(s => {
+    if (s.kind === 'person') return { label: s.label || undefined, source: { type: 'person', personId: s.personId } };
+    if (s.kind === 'photo')  return { label: s.label || undefined, source: { type: 'photo', blobKey: s.blobKey } };
+    return { label: s.label || undefined, source: { type: 'fresh' } };
+  });
+  if (!subjects.length) { alert('Add at least one person to the scene.'); return; }
+  const missingPhoto = card._subjects.find(s => s.kind === 'photo' && !s.blobKey);
+  if (missingPhoto) { alert('One photo subject has no image yet — click "choose a photo".'); return; }
+  const scene = card.querySelector('[data-scene]')?.value.trim() || undefined;
+  const note = card.querySelector('[data-scene-note]');
+  const strip = card.querySelector(`[data-strip="${cssEscape(tileId)}"]`);
+  const ph = document.createElement('div'); ph.className = 'gen loading'; ph.textContent = 'Composing scene…';
+  if (strip) strip.prepend(ph);
+  if (note) note.textContent = 'generating…';
+  const modelOverride = card.querySelector('[data-field="modelOverride"]').value || undefined;
+  try {
+    const r = await api('POST', '/api/admin/lab-generate-scene', { taxonomyId: tileId, childId, subjects, scene, model: modelOverride });
+    addCost(r.generation.costCents);
+    if (note) note.textContent = r.subjects.map(s => `${s.role}:${s.resolved}`).join('  ');
+    await loadGenerations(tileId);
+  } catch (err) {
+    ph.className = 'gen error'; ph.textContent = 'Failed: ' + (err.message || 'error');
+    if (note) note.textContent = '';
   }
 }
 
