@@ -347,27 +347,10 @@ export default async function handler(req, res) {
       )`;
     await db`CREATE INDEX IF NOT EXISTS exposure_events_protocol_idx ON exposure_events(protocol_id, occurred_at DESC)`;
 
-    // ---- One-shot backfill: sessions.skill_slug from game_attempts ----
-    // PRD §11 anchors mastery/spike math to taxonomy_slug. Sessions logged
-    // before Phase 2 didn't carry it on the session row; recover it as the
-    // most-common taxonomy_slug across the session's attempts (NULL when the
-    // session has no slugged attempts — analytics falls back to label).
-    // Idempotent: only fills rows where skill_slug IS NULL.
-    await db`
-      UPDATE sessions s SET skill_slug = sub.slug
-      FROM (
-        SELECT session_id, slug FROM (
-          SELECT a.session_id,
-                 NULLIF(a.taxonomy_slug, '') AS slug,
-                 count(*) AS n,
-                 row_number() OVER (PARTITION BY a.session_id ORDER BY count(*) DESC) AS rn
-          FROM game_attempts a
-          WHERE a.taxonomy_slug IS NOT NULL AND a.taxonomy_slug <> ''
-          GROUP BY a.session_id, a.taxonomy_slug
-        ) ranked
-        WHERE ranked.rn = 1
-      ) sub
-      WHERE s.id = sub.session_id AND s.skill_slug IS NULL`;
+    // NOTE: the sessions.skill_slug backfill that reads game_attempts.taxonomy_slug
+    // is deferred to AFTER the keystone column-adds below (§14), because it depends
+    // on game_attempts.taxonomy_slug existing. Running it here failed on any DB
+    // where that column hadn't been added yet ("column a.taxonomy_slug does not exist").
 
     // ---- AI image generation: cost/volume log + per-child reference images ----
     await db`
@@ -537,6 +520,29 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS items_taxonomy_slug_idx         ON items(taxonomy_slug)`;
     await db`CREATE INDEX IF NOT EXISTS categories_taxonomy_slug_idx    ON categories(taxonomy_slug)`;
     await db`CREATE INDEX IF NOT EXISTS game_attempts_taxonomy_slug_idx ON game_attempts(taxonomy_slug)`;
+
+    // ---- One-shot backfill: sessions.skill_slug from game_attempts ----
+    // PRD §11 anchors mastery/spike math to taxonomy_slug. Sessions logged
+    // before Phase 2 didn't carry it on the session row; recover it as the
+    // most-common taxonomy_slug across the session's attempts (NULL when the
+    // session has no slugged attempts — analytics falls back to label).
+    // Idempotent: only fills rows where skill_slug IS NULL. MUST run after the
+    // game_attempts.taxonomy_slug column-add directly above — it reads that column.
+    await db`
+      UPDATE sessions s SET skill_slug = sub.slug
+      FROM (
+        SELECT session_id, slug FROM (
+          SELECT a.session_id,
+                 NULLIF(a.taxonomy_slug, '') AS slug,
+                 count(*) AS n,
+                 row_number() OVER (PARTITION BY a.session_id ORDER BY count(*) DESC) AS rn
+          FROM game_attempts a
+          WHERE a.taxonomy_slug IS NOT NULL AND a.taxonomy_slug <> ''
+          GROUP BY a.session_id, a.taxonomy_slug
+        ) ranked
+        WHERE ranked.rn = 1
+      ) sub
+      WHERE s.id = sub.session_id AND s.skill_slug IS NULL`;
 
     // Point-in-time snapshots so any bulk op or restore is itself reversible.
     await db`
