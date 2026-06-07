@@ -83,6 +83,7 @@
         <div class="thumb" id="parent-thumb">Tap to add a grown-up's photo</div>
         <input id="parent-name-input" type="text" placeholder="Name (e.g. Mom)" style="margin-top:8px;">
         <input id="parent-pron-input" type="text" placeholder="Say it as… (optional)" style="margin-top:6px;font-size:12px;color:#666;">
+        <select id="parent-rel" title="Relationship to the child" style="margin-top:6px;width:100%;font-size:12px;padding:5px;border:1px solid #e6c9d6;border-radius:6px;color:#555;"></select>
         <button class="btn ghost tiny" id="parent-take" style="margin-top:6px;">📸 Take / choose</button>
       </div>
     </div>
@@ -90,6 +91,24 @@
     <button class="btn" id="ob-continue" disabled>Continue to the walk-through →</button>
     <input type="file" id="child-input" accept="image/*" capture="user" style="display:none;">
     <input type="file" id="parent-input" accept="image/*" capture="user" style="display:none;">
+  </div>
+
+  <!-- STEP 1b — optional: more family -->
+  <div class="panel" id="ob-family">
+    <h3 class="fred">Add more family <span style="font-weight:400;color:#999;font-size:14px;">· optional</span></h3>
+    <p class="note">Grandparents, brothers and sisters, anyone else. Snap a photo and say who they are — you can always do this later from the parent dashboard.</p>
+    <div id="famx-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
+    <div id="famx-form" style="display:none;border:1px solid #f0d9e2;border-radius:12px;padding:12px;margin-bottom:10px;">
+      <div class="thumb" id="famx-thumb" style="cursor:pointer;">Tap to add a photo</div>
+      <input type="file" id="famx-input" accept="image/*" capture="user" style="display:none;">
+      <div id="famx-picker" style="margin-top:10px;"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button class="btn" id="famx-save">Add this person</button>
+        <button class="btn ghost" id="famx-cancel">Cancel</button>
+      </div>
+      <div id="famx-msg" class="note" style="margin-top:8px;min-height:16px;"></div>
+    </div>
+    <button class="btn ghost" id="famx-add">＋ Add a family member</button>
   </div>
 
   <!-- STEP 2 — walk the house -->
@@ -112,6 +131,7 @@
 
 <audio id="ob-audio" preload="none"></audio>
 
+<script src="/people-picker.js"></script>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -164,8 +184,11 @@
     msg.textContent = 'Making ' + name + ' in your style… (about 30 seconds)';
     try {
       const blob = await downscale(file);
+      const relSel = $(role + '-rel');
+      const relationship = role === 'child' ? 'self' : (relSel ? relSel.value : '');
       const qs = '?childId=' + encodeURIComponent(slug) + '&style=' + encodeURIComponent($('ob-style').value) +
-        '&role=' + role + '&name=' + encodeURIComponent(name) + '&pronunciation=' + encodeURIComponent(pron);
+        '&role=' + role + '&name=' + encodeURIComponent(name) + '&pronunciation=' + encodeURIComponent(pron) +
+        (relationship ? '&relationship=' + encodeURIComponent(relationship) : '');
       const r = await fetch('/api/onboard-subject' + qs, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
       const { key } = await r.json();
@@ -183,6 +206,65 @@
   $('parent-thumb').addEventListener('click', () => $('parent-input').click());
   $('child-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) renderSubject('child', f); });
   $('parent-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) renderSubject('parent', f); });
+
+  // ---- Step 1b: optional "add more family" (people model) ----
+  let famxFile = null, famxPicker = null;
+  (async () => {
+    try {
+      const o = await PeoplePicker.getOptions();
+      const sel = $('parent-rel');
+      if (sel) sel.innerHTML = o.relationships.filter(r => !r.self).map(r => `<option value="${r.value}">${r.label}</option>`).join('');
+    } catch (_) { /* offline default is fine */ }
+  })();
+  async function famxOpen() {
+    $('famx-form').style.display = 'block';
+    $('famx-add').style.display = 'none';
+    if (!famxPicker) famxPicker = await PeoplePicker.mount($('famx-picker'), {});
+  }
+  function famxClose() {
+    $('famx-form').style.display = 'none';
+    $('famx-add').style.display = '';
+    famxFile = null;
+    $('famx-thumb').textContent = 'Tap to add a photo';
+    $('famx-msg').textContent = '';
+    if (famxPicker) famxPicker.reset();
+  }
+  $('famx-add').addEventListener('click', famxOpen);
+  $('famx-cancel').addEventListener('click', famxClose);
+  $('famx-thumb').addEventListener('click', () => $('famx-input').click());
+  $('famx-input').addEventListener('change', (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    famxFile = f;
+    $('famx-thumb').innerHTML = '<img src="' + URL.createObjectURL(f) + '" alt="" style="max-width:96px;max-height:96px;border-radius:10px;">';
+  });
+  $('famx-save').addEventListener('click', async () => {
+    const v = famxPicker ? famxPicker.getValues() : null;
+    if (!v || !v.displayName) { $('famx-msg').textContent = 'Add a name first.'; return; }
+    if (!famxFile) { $('famx-msg').textContent = 'Add a photo first.'; return; }
+    $('famx-msg').textContent = 'Making ' + v.displayName + ' in your style… (about 30 seconds)';
+    $('famx-save').disabled = true;
+    try {
+      const blob = await downscale(famxFile);
+      const qs = '?childId=' + encodeURIComponent(slug) + '&style=' + encodeURIComponent($('ob-style').value) +
+        '&role=parent&name=' + encodeURIComponent(v.displayName) +
+        '&relationship=' + encodeURIComponent(v.relationship) +
+        (v.side ? '&side=' + encodeURIComponent(v.side) : '') +
+        (v.givenName ? '&given=' + encodeURIComponent(v.givenName) : '') +
+        (v.pronoun ? '&pronoun=' + encodeURIComponent(v.pronoun) : '') +
+        (v.birthOrder ? '&birthOrder=' + encodeURIComponent(v.birthOrder) : '');
+      const r = await fetch('/api/onboard-subject' + qs, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
+      const { key } = await r.json();
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:14px;';
+      row.innerHTML = '<img src="/api/media?key=' + encodeURIComponent(key) + '" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;"><span>' + v.displayName + ' · ' + v.relationship + (v.side ? ' (' + v.side + ')' : '') + '</span>';
+      $('famx-list').appendChild(row);
+      famxClose();
+    } catch (err) {
+      $('famx-msg').textContent = 'Could not add: ' + (err.message || err);
+    } finally { $('famx-save').disabled = false; }
+  });
 
   let pollTimer = null;
   $('ob-continue').addEventListener('click', () => {

@@ -40,7 +40,9 @@ export default async function handler(req, res) {
   const q = req.query || {};
   const childId = String(q.childId || 'fletcherpeterson').slice(0, 64);
   const style = String(q.style || '').slice(0, 80);
-  const role = q.role === 'parent' ? 'parent' : 'child';
+  // Only 'child' is the child (pinned, is_self, face on the Family chip); every
+  // other captured person — a parent, grandparent, sibling — is a grown-up subject.
+  const role = q.role === 'child' ? 'child' : 'parent';
   const name = String(q.name || '').slice(0, 200).trim();
   const pronunciation = String(q.pronunciation || '').slice(0, 200).trim();
   // People model (docs/people-data-model.md): structured identity for this person.

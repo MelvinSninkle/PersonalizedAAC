@@ -581,6 +581,16 @@
     <span id="backup-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
   </div>
 
+  <!-- FAMILY / PEOPLE — name vs. relationship (docs/people-data-model.md) -->
+  <div class="section-label">Family &amp; people</div>
+  <div class="panel">
+    <h2>Family on <span id="family-child-name">your child</span>'s board</h2>
+    <p class="hint">Who each person is to your child — their name and relationship. We use this to call people by name in slideshows and to describe relationships. Add grandparents, brothers and sisters, anyone.</p>
+    <div id="family-list" style="display:flex;flex-direction:column;gap:8px;margin:12px 0;"></div>
+    <button class="btn primary" id="family-add">＋ Add family member</button>
+    <span id="family-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
+  </div>
+
   <!-- REFERENCE IMAGES — steer how AI tiles are generated from a photo -->
   <div class="section-label">Reference images for AI tiles</div>
   <div class="panel">
@@ -605,6 +615,24 @@
       <button class="btn ghost" id="modal-save">Save</button>
       <button class="btn primary" id="modal-go">Start session</button>
     </div>
+  </div>
+</div>
+
+<!-- FAMILY MODAL -->
+<div class="scrim" id="family-scrim">
+  <div class="modal" style="max-width:480px;max-height:90vh;overflow:auto;">
+    <button class="x" id="family-x" aria-label="Close">×</button>
+    <h3 class="fred" id="family-modal-title">Add family member</h3>
+    <p class="sub">A photo makes a tile for them; the details power name + relationship features.</p>
+    <div class="thumb" id="family-thumb" style="cursor:pointer;width:96px;height:96px;display:grid;place-items:center;border:1px dashed #e6c9d6;border-radius:12px;color:#999;font-size:12px;text-align:center;margin-bottom:12px;">Tap to add / change photo</div>
+    <input type="file" id="family-photo" accept="image/*" capture="user" style="display:none;">
+    <div id="family-picker"></div>
+    <div class="foot">
+      <button class="btn" id="family-delete" style="color:#dc2626;margin-right:auto;display:none;">Remove</button>
+      <button class="btn ghost" id="family-cancel">Cancel</button>
+      <button class="btn primary" id="family-save">Save</button>
+    </div>
+    <div id="family-modal-msg" style="font-size:13px;color:var(--muted);margin-top:8px;min-height:16px;"></div>
   </div>
 </div>
 
@@ -719,6 +747,7 @@
   </div>
 </div>
 
+<script src="/people-picker.js"></script>
 <script src="/schedule-editor.js"></script>
 <script>
 (() => {
@@ -1907,6 +1936,111 @@
     } catch (err) { refMsgSet('Upload failed: ' + (err.message || err), true); }
   });
   loadRefs();
+
+  // ---- Family & people management (people model; docs/people-data-model.md) ----
+  (function () {
+    const listEl = document.getElementById('family-list');
+    const scrim  = document.getElementById('family-scrim');
+    const msg    = document.getElementById('family-msg');
+    const mmsg   = document.getElementById('family-modal-msg');
+    const thumb  = document.getElementById('family-thumb');
+    const photoInput = document.getElementById('family-photo');
+    let picker = null, editing = null, photoFile = null;
+
+    function relLabel(p) {
+      return (p.relationship || 'other') + (p.side ? ' (' + p.side + ')' : '') + (p.is_self ? ' · the child' : '');
+    }
+    function render(persons) {
+      listEl.innerHTML = persons.length ? persons.map(p => `
+        <div style="display:flex;align-items:center;gap:10px;background:#fafafa;border:1px solid #f0e6ea;border-radius:10px;padding:8px;">
+          ${p.reference_key ? `<img src="/api/media?key=${encodeURIComponent(p.reference_key)}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;">` : '<div style="width:40px;height:40px;border-radius:8px;background:#f0e6ea;"></div>'}
+          <div style="flex:1;"><strong>${p.display_name}</strong> <span style="color:#9ca3af;font-size:13px;">${relLabel(p)}</span></div>
+          <button class="btn ghost" data-edit="${p.id}">Edit</button>
+        </div>`).join('') : '<div style="font-size:13px;color:#9ca3af;">No family added yet.</div>';
+    }
+    let lastPersons = [];
+    async function load() {
+      try {
+        const r = await fetch('/api/persons?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+        if (!r.ok) { if (r.status === 403) msg.textContent = 'Sign in as a parent to manage family.'; return; }
+        const d = await r.json();
+        lastPersons = d.persons || [];
+        render(lastPersons);
+      } catch (_) { /* ignore */ }
+    }
+    async function open(person) {
+      editing = person || null;
+      photoFile = null;
+      document.getElementById('family-modal-title').textContent = person ? 'Edit family member' : 'Add family member';
+      document.getElementById('family-delete').style.display = person ? '' : 'none';
+      thumb.innerHTML = (person && person.reference_key)
+        ? `<img src="/api/media?key=${encodeURIComponent(person.reference_key)}" alt="" style="width:96px;height:96px;border-radius:12px;object-fit:cover;">`
+        : 'Tap to add / change photo';
+      mmsg.textContent = '';
+      if (!picker) picker = await PeoplePicker.mount(document.getElementById('family-picker'), {});
+      picker.reset();
+      if (person) picker.setValues(person);
+      scrim.classList.add('open');
+    }
+    function close() { scrim.classList.remove('open'); }
+
+    document.getElementById('family-add').addEventListener('click', () => open(null));
+    document.getElementById('family-x').addEventListener('click', close);
+    document.getElementById('family-cancel').addEventListener('click', close);
+    scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
+    thumb.addEventListener('click', () => photoInput.click());
+    photoInput.addEventListener('change', (e) => {
+      const f = e.target.files[0]; e.target.value = '';
+      if (!f) return; photoFile = f;
+      thumb.innerHTML = '<img src="' + URL.createObjectURL(f) + '" alt="" style="width:96px;height:96px;border-radius:12px;object-fit:cover;">';
+    });
+    listEl.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-edit]'); if (!b) return;
+      const p = lastPersons.find(x => String(x.id) === b.dataset.edit);
+      if (p) open(p);
+    });
+    document.getElementById('family-delete').addEventListener('click', async () => {
+      if (!editing || !confirm('Remove ' + editing.display_name + ' from the family list? (Their board tile stays.)')) return;
+      try {
+        await fetch('/api/persons?id=' + editing.id + '&childId=' + encodeURIComponent(slug), { method: 'DELETE', credentials: 'same-origin' });
+        close(); load();
+      } catch (err) { mmsg.textContent = 'Could not remove: ' + (err.message || err); }
+    });
+    document.getElementById('family-save').addEventListener('click', async () => {
+      const v = picker ? picker.getValues() : null;
+      if (!v || !v.displayName) { mmsg.textContent = 'Add a name first.'; return; }
+      const saveBtn = document.getElementById('family-save'); saveBtn.disabled = true;
+      try {
+        if (photoFile) {
+          // New/changed photo → stylize + (re)make the tile + person via the onboarding endpoint.
+          mmsg.textContent = 'Making ' + v.displayName + ' in your style… (about 30 seconds)';
+          let style = ''; try { style = localStorage.getItem('aacStyle') || ''; } catch (_) {}
+          const blob = await downscale(photoFile);
+          const qs = '?childId=' + encodeURIComponent(slug) + (style ? '&style=' + encodeURIComponent(style) : '') +
+            '&role=parent&name=' + encodeURIComponent(v.displayName) +
+            '&relationship=' + encodeURIComponent(v.relationship) +
+            (v.side ? '&side=' + encodeURIComponent(v.side) : '') +
+            (v.givenName ? '&given=' + encodeURIComponent(v.givenName) : '') +
+            (v.pronoun ? '&pronoun=' + encodeURIComponent(v.pronoun) : '') +
+            (v.birthOrder ? '&birthOrder=' + encodeURIComponent(v.birthOrder) : '');
+          const r = await fetch('/api/onboard-subject' + qs, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
+          if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
+        } else {
+          // Details only → upsert the person record (no photo change).
+          const body = { childId: slug, displayName: v.displayName, relationship: v.relationship, side: v.side, pronoun: v.pronoun, birthOrder: v.birthOrder, givenName: v.givenName };
+          if (editing) body.id = editing.id;
+          const r = await fetch('/api/persons', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body) });
+          if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
+        }
+        close(); load();
+      } catch (err) { mmsg.textContent = 'Could not save: ' + (err.message || err); }
+      finally { saveBtn.disabled = false; }
+    });
+
+    const nm = document.getElementById('family-child-name');
+    if (nm && typeof pretty !== 'undefined' && pretty) nm.textContent = pretty;
+    load();
+  })();
 
   // ---- Reward cheers + game music (shared with the kid app via same-origin localStorage) ----
   const CHEER_KEY = 'aacGameSettings';
