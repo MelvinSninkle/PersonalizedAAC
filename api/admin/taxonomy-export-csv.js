@@ -6,11 +6,13 @@
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 
+// Column order matches taxonomy/seed-core-v1.csv EXACTLY so an export can be
+// committed straight back over the seed file with a clean git diff.
 const HEADER = [
-  'id', 'section', 'category', 'subcategory', 'label', 'pronunciation', 'prompt_template',
-  'subject_mode', 'parent_photo_behavior', 'phase', 'core', 'audience', 'authoring_kind',
-  'growth_stage', 'meal_context', 'is_gestalt', 'gestalt_type', 'gestalt_meaning',
-  'gestalt_target_words', 'descriptive_clues', 'place_kind', 'status',
+  'id', 'column', 'category', 'subcategory', 'label', 'pronunciation', 'subject_mode',
+  'parent_photo_behavior', 'phase', 'core', 'growth_stage', 'meal_context', 'is_gestalt',
+  'gestalt_type', 'gestalt_meaning', 'gestalt_target_words', 'descriptive_clues',
+  'audience', 'authoring_kind', 'status', 'prompt_template', 'notes',
 ];
 
 function csvField(v) {
@@ -34,10 +36,10 @@ export default async function handler(req, res) {
   try {
     const db = sql();
     const rows = await db`
-      SELECT id, column_name AS section, category, subcategory, label, pronunciation, prompt_template,
-             subject_mode, parent_photo_behavior, phase, core, audience, authoring_kind,
-             growth_stage, meal_context, is_gestalt, gestalt_type, gestalt_meaning,
-             gestalt_target_words, descriptive_clues, place_kind, status
+      SELECT id, column_name, category, subcategory, label, pronunciation, subject_mode,
+             parent_photo_behavior, phase, core, growth_stage, meal_context, is_gestalt,
+             gestalt_type, gestalt_meaning, gestalt_target_words, descriptive_clues,
+             audience, authoring_kind, status, prompt_template, notes
       FROM taxonomy
       WHERE archived = FALSE
       ORDER BY column_name, category, subcategory NULLS FIRST, id
@@ -46,18 +48,15 @@ export default async function handler(req, res) {
     for (const r of rows) {
       lines.push([
         csvField(r.id),
-        csvField(r.section),
+        csvField(r.column_name),
         csvField(r.category),
         csvField(r.subcategory),
         csvField(r.label),
         csvField(r.pronunciation),
-        csvField(r.prompt_template),
         csvField(r.subject_mode),
         csvField(r.parent_photo_behavior),
         csvField(r.phase),
         csvField(r.core ? 'true' : 'false'),
-        csvField(r.audience),
-        csvField(r.authoring_kind),
         csvField(r.growth_stage),
         csvField(r.meal_context),
         csvField(r.is_gestalt ? 'true' : 'false'),
@@ -65,8 +64,11 @@ export default async function handler(req, res) {
         csvField(r.gestalt_meaning),
         csvField(joinArray(r.gestalt_target_words)),
         csvField(joinArray(r.descriptive_clues)),
-        csvField(r.place_kind),
+        csvField(r.audience),
+        csvField(r.authoring_kind),
         csvField(r.status),
+        csvField(r.prompt_template),
+        csvField(r.notes),
       ].join(','));
     }
     const body = lines.join('\n') + '\n';

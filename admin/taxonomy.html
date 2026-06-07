@@ -1006,7 +1006,16 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     try {
       const r = await api('/api/admin/taxonomy-import-board?childId=' + encodeURIComponent(child.trim()), { method: 'POST' });
       await loadRows();
-      alert(`Imported ${r.inserted} new draft rows · skipped ${r.skipped} · ${r.errors.length} error(s).\nSnapshot: ${r.snapshotLabel}\n\nThey're tagged status=draft — review prompts, set subject_mode / parent_photo / core, then publish.`);
+      const errCount = r.errorCount != null ? r.errorCount : (r.errors ? r.errors.length : 0);
+      let msg = `Imported ${r.inserted} new draft rows · skipped ${r.skipped} · ${errCount} error(s).\nSnapshot: ${r.snapshotLabel}`;
+      if (errCount && r.errorSummary && r.errorSummary.length) {
+        msg += `\n\nWhy rows failed:\n` + r.errorSummary
+          .slice(0, 5)
+          .map(e => `  • ${e.count}×  ${e.error}  (e.g. "${e.exampleSlug}")`)
+          .join('\n');
+      }
+      msg += `\n\nDrafts are tagged status=draft — review prompts, set subject_mode / parent_photo / core, then publish.`;
+      alert(msg);
     } catch (e) {
       alert('Board import failed: ' + (e.message || e));
     }
