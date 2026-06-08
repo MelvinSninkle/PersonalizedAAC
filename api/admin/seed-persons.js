@@ -53,12 +53,15 @@ export default async function handler(req, res) {
     // anchorless even though it has a visible image on the board.
     const anchorKeyFor = (it) => {
       if (it.image_key) return it.image_key;
-      const u = it.image_url || '';
-      const m = u.match(/[?&]key=([^&]+)/);
+      const u = (it.image_url || '').trim();
+      if (!u) return null;
+      const m = u.match(/[?&]key=([^&]+)/);           // /api/media?key=<KEY> (the house convention)
       if (m) return decodeURIComponent(m[1]);
-      // some legacy rows store the raw key directly in image_url
-      if (u && !/^https?:|^\//.test(u)) return u;
-      return null;
+      if (u.startsWith('data:')) return null;          // inline data URL — not a blob key
+      if (/^https?:\/\//i.test(u)) {                   // full blob URL — the key is the pathname
+        try { return new URL(u).pathname.replace(/^\/+/, ''); } catch (_) { return null; }
+      }
+      return u.replace(/^\/+/, '');                    // bare / relative path — treat as the key
     };
 
     const linked = [], skipped = [];
@@ -98,6 +101,8 @@ export default async function handler(req, res) {
         label: display, relationship: rel, side: side || null, personId: Number(personId),
         anchored: !!anchor,
         anchorSource: anchor ? (item.image_key ? 'image_key' : 'image_url') : null,
+        // raw sample only when we couldn't resolve a key — lets us see the format
+        imageUrlSample: anchor ? null : ((item.image_url || '').slice(0, 80) || null),
       });
     }
 
