@@ -1047,13 +1047,24 @@ $('btn-people').addEventListener('click', async () => {
     const r = await api('POST', '/api/admin/seed-persons?childId=' + encodeURIComponent(childId));
     await loadBoardState();                                // refresh personsList + anchors → composer + flags update
     renderTiles();
-    const anchored = personsList.filter(p => p.reference_key).length;
+    const linked = r.linked || [];
+    const anchored = linked.filter(p => p.anchored).length;
     const skipped = (r.skipped || []).length;
-    alert(`People set up for ${childId}.\n` +
-      `Linked ${r.linkedCount} ${r.linkedCount === 1 ? 'identity' : 'identities'}, ${anchored} with a likeness anchor.` +
-      (skipped ? `\n${skipped} skipped (no matching People tile).` : '') +
-      (anchored < (r.linkedCount || 0) ? `\n\nPeople without an anchor need a picture on their People tile first.` : '') +
-      `\n\nNow generate a {reference} tile to pull the anchor.`);
+    // Per-person breakdown so it's obvious which People tiles have an image and
+    // which don't — the anchor IS the People tile's already-stylized art, so a
+    // missing one means that tile has no picture yet (not that you need to upload
+    // a raw photo somewhere else).
+    const lines = linked.map(p => `  ${p.anchored ? '✓' : '—'} ${p.label}${p.anchored ? ` (anchor: ${p.anchorSource})` : ' (People tile has no image)'}`);
+    const missing = linked.filter(p => !p.anchored).map(p => p.label);
+    alert(
+      `People set up for ${childId}.\n` +
+      `Linked ${linked.length} ${linked.length === 1 ? 'identity' : 'identities'}, ${anchored} with a likeness anchor.\n\n` +
+      lines.join('\n') +
+      (skipped ? `\n\n${skipped} skipped (no matching People tile): ${(r.skipped || []).map(s => s.label).join(', ')}` : '') +
+      (missing.length
+        ? `\n\nTo anchor ${missing.join(', ')}: put an image on their People tile (generate or upload directly on the board), then re-run "Set up people".`
+        : `\n\nNow generate a {reference} tile to pull the anchor.`)
+    );
   } catch (err) { alert('Set up people failed: ' + (err.message || err)); }
   finally { b.disabled = false; b.textContent = orig; }
 });
