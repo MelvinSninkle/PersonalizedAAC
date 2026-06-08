@@ -6,6 +6,8 @@
 // game, and the taxonomy `descriptive_clues` backfill. Auth-gated; needs
 // OPENAI_API_KEY.
 import { checkAuth } from './_lib/auth.js';
+import { sql } from './_lib/db.js';
+import { familyPhrase, relationshipIsSibling } from './_lib/relationships.js';
 
 export const config = { maxDuration: 30 };
 
@@ -50,6 +52,37 @@ export default async function handler(req, res) {
   if (!label) { res.status(400).json({ error: 'label required' }); return; }
   const section = String(b.section || '').toLowerCase().slice(0, 40);
   const category = String(b.category || '').slice(0, 80);
+  const childId = String(b.childId || '').slice(0, 64).trim();
+
+  // People are DATA, not guesswork: when this is a specific child's People tile and
+  // we have a structured persons row, build the relationship description deterministically
+  // (correct side, given name) instead of asking the model to infer it from the label.
+  if (section === 'people' && childId) {
+    try {
+      const db = sql();
+      const person = (await db`
+        SELECT display_name, given_name, relationship, side, pronoun, birth_order, is_self
+        FROM persons WHERE child_id = ${childId} AND lower(display_name) = lower(${label}) LIMIT 1`)[0];
+      if (person) {
+        let qualifier;
+        if (relationshipIsSibling(person.relationship) && person.birth_order != null) {
+          const self = (await db`SELECT birth_order FROM persons WHERE child_id = ${childId} AND is_self = TRUE LIMIT 1`)[0];
+          if (self && self.birth_order != null && self.birth_order !== person.birth_order) {
+            qualifier = person.birth_order > self.birth_order ? 'little' : 'big';
+          }
+        }
+        const phrase = familyPhrase(person, { siblingQualifier: qualifier });
+        let descriptions = null;
+        if (person.is_self) {
+          descriptions = [`That's you${person.given_name ? `, ${person.given_name}` : ''}!`];
+        } else if (phrase) {
+          descriptions = [`${person.display_name} is ${phrase}.`];
+        }
+        if (descriptions) { res.setHeader('Cache-Control', 'no-store'); res.status(200).json({ descriptions, source: 'persons' }); return; }
+      }
+      // person not found / relationship has no natural phrase → fall through to the model.
+    } catch (_) { /* missing persons table or query error → fall through to the model */ }
+  }
 
   // Tell the model what kind of word this is so it picks the right pattern.
   // Caller can override with an explicit `kind`; otherwise infer from section.

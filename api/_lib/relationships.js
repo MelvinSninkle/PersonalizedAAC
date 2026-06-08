@@ -51,3 +51,40 @@ export function siblingDisplay(value, rank, total) {
   const base = relationshipLabel(value);
   return (total && total > 1 && rank) ? `${base} ${rank}` : base;
 }
+
+// Plain, child-directed family phrase from a persons-style row. Used wherever we
+// describe a person TO the child (teaching descriptions, learn-mode) so the wording
+// is DRIVEN by the structured relationship/side instead of being guessed from a label.
+//   { relationship:'grandmother', side:'maternal' }              → "your grandma on your mom's side"
+//   { relationship:'brother' } + { siblingQualifier:'little' }   → "your little brother"
+// Returns null when a relationship has no natural child-facing phrase (caller decides).
+export function familyPhrase(p, opts = {}) {
+  const rel = String((p && p.relationship) || '').toLowerCase();
+  const side = (p && p.side === 'maternal') ? "your mom's side"
+             : (p && p.side === 'paternal') ? "your dad's side" : null;
+  const onSide = side ? ` on ${side}` : '';
+  const q = opts.siblingQualifier ? `${opts.siblingQualifier} ` : '';
+  switch (rel) {
+    case 'self':         return 'you';
+    case 'mother':       return 'your mom';
+    case 'father':       return 'your dad';
+    case 'stepmother':   return 'your stepmom';
+    case 'stepfather':   return 'your stepdad';
+    case 'sister':       return `your ${q}sister`;
+    case 'brother':      return `your ${q}brother`;
+    case 'stepsister':   return `your ${q}stepsister`;
+    case 'stepbrother':  return `your ${q}stepbrother`;
+    case 'half_sister':  return `your ${q}half-sister`;
+    case 'half_brother': return `your ${q}half-brother`;
+    case 'grandmother':  return `your grandma${onSide}`;
+    case 'grandfather':  return `your grandpa${onSide}`;
+    case 'aunt':         return `your aunt${onSide}`;
+    case 'uncle':        return `your uncle${onSide}`;
+    case 'cousin':       return `your cousin${onSide}`;
+    case 'guardian':
+    case 'caregiver':    return 'someone who takes care of you';
+    case 'family_friend':return 'a friend of your family';
+    case 'pet':          return 'your pet';
+    default:             return null;
+  }
+}

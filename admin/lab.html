@@ -1054,7 +1054,9 @@ $('btn-people').addEventListener('click', async () => {
     // which don't — the anchor IS the People tile's already-stylized art, so a
     // missing one means that tile has no picture yet (not that you need to upload
     // a raw photo somewhere else).
-    const lines = linked.map(p => `  ${p.anchored ? '✓' : '—'} ${p.label}${p.anchored ? ` (anchor: ${p.anchorSource})` : (p.imageUrlSample ? ` (couldn't read image_url: ${p.imageUrlSample})` : ' (People tile has no image)')}`);
+    const rel = (p) => p.relationship + (p.side ? `, ${p.side}` : '');
+    const lines = linked.map(p => `  ${p.anchored ? '✓' : '—'} ${p.label} — ${rel(p)}` +
+      (p.anchored ? `  [anchor ✓]` : (p.imageUrlSample ? `  [couldn't read image_url: ${p.imageUrlSample}]` : `  [no image]`)));
     const missing = linked.filter(p => !p.anchored).map(p => p.label);
     alert(
       `People set up for ${childId}.\n` +
