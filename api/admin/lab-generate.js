@@ -115,16 +115,22 @@ export default async function handler(req, res) {
   let subjectExpected = false;   // a person was expected → caller can warn if no anchor
   if (childId && (section === 'people' || mentionsRef)) {
     subjectExpected = true;
-    const prow = section === 'people'
-      ? (await db`SELECT given_name, display_name, reference_key FROM persons
-                  WHERE child_id = ${childId} AND lower(display_name) = lower(${tax.label}) AND reference_key IS NOT NULL LIMIT 1`)[0]
-      : (await db`SELECT given_name, display_name, reference_key FROM persons
-                  WHERE child_id = ${childId} AND is_self = TRUE AND reference_key IS NOT NULL LIMIT 1`)[0];
-    if (prow && prow.reference_key) {
-      try {
-        const buf = await readBlob(prow.reference_key);
-        subject = { buf, key: prow.reference_key, name: prow.given_name || prow.display_name || 'the child' };
-      } catch (_) { /* anchor unreadable → fall back to generic */ }
+    try {
+      const prow = section === 'people'
+        ? (await db`SELECT given_name, display_name, reference_key FROM persons
+                    WHERE child_id = ${childId} AND lower(display_name) = lower(${tax.label}) AND reference_key IS NOT NULL LIMIT 1`)[0]
+        : (await db`SELECT given_name, display_name, reference_key FROM persons
+                    WHERE child_id = ${childId} AND is_self = TRUE AND reference_key IS NOT NULL LIMIT 1`)[0];
+      if (prow && prow.reference_key) {
+        try {
+          const buf = await readBlob(prow.reference_key);
+          subject = { buf, key: prow.reference_key, name: prow.given_name || prow.display_name || 'the child' };
+        } catch (_) { /* anchor unreadable → fall back to generic */ }
+      }
+    } catch (err) {
+      // Missing persons table / query error must NOT 500 the whole generation —
+      // degrade to a generic subject and carry on.
+      console.error('[lab-generate] subject anchor lookup failed (continuing generic):', String(err.message || err));
     }
   }
 

@@ -188,6 +188,7 @@
     <span class="stat" id="stat-tiles">— tiles</span>
     <span class="stat" id="stat-gens">— images generated</span>
     <button class="secondary" id="btn-migrate" title="Re-run /api/init. Idempotent.">⚙️ Run migrations</button>
+    <button class="secondary" id="btn-people" title="Create the persons table + populate this board's family identities and likeness anchors from its People tiles. Idempotent.">👤 Set up people</button>
     <button class="secondary" id="btn-snapshot">Snapshot now</button>
     <a class="btn" href="/api/admin/taxonomy-export-csv" id="btn-export">Export CSV</a>
     <label style="font-size:11px;color:#557fa3;display:flex;align-items:center;gap:4px;">🚀 Board:
@@ -1031,6 +1032,30 @@ $('btn-migrate').addEventListener('click', async () => {
     alert('Migrations ran successfully.');
   } catch (err) { alert('Migration failed: ' + err.message); }
   finally { b.disabled = false; b.textContent = '⚙️ Run migrations'; }
+});
+
+// One-click people setup for the current board target: ensure the persons table
+// exists (/api/init), then seed family identities + likeness anchors from the
+// board's People tiles. Anchors come from each People tile's image, so a person
+// only gets an anchor if their tile already has a picture.
+$('btn-people').addEventListener('click', async () => {
+  const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
+  if (!confirm(`Set up people for "${childId}"?\nRuns /api/init, then seeds family identities + likeness anchors from this board's People tiles. Safe to re-run.`)) return;
+  const b = $('btn-people'); b.disabled = true; const orig = b.textContent; b.textContent = 'Setting up…';
+  try {
+    await api('POST', '/api/init');                        // ensure the persons table exists
+    const r = await api('POST', '/api/admin/seed-persons?childId=' + encodeURIComponent(childId));
+    await loadBoardState();                                // refresh personsList + anchors → composer + flags update
+    renderTiles();
+    const anchored = personsList.filter(p => p.reference_key).length;
+    const skipped = (r.skipped || []).length;
+    alert(`People set up for ${childId}.\n` +
+      `Linked ${r.linkedCount} ${r.linkedCount === 1 ? 'identity' : 'identities'}, ${anchored} with a likeness anchor.` +
+      (skipped ? `\n${skipped} skipped (no matching People tile).` : '') +
+      (anchored < (r.linkedCount || 0) ? `\n\nPeople without an anchor need a picture on their People tile first.` : '') +
+      `\n\nNow generate a {reference} tile to pull the anchor.`);
+  } catch (err) { alert('Set up people failed: ' + (err.message || err)); }
+  finally { b.disabled = false; b.textContent = orig; }
 });
 
 $('btn-snapshot').addEventListener('click', async () => {
