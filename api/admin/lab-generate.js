@@ -104,7 +104,13 @@ export default async function handler(req, res) {
   const size = sizeOverride || settings.size_default || '1024x1024';
 
   // 4. Compose the prompt
-  const content = contentOverride || tax.prompt_template || `An illustration of ${tax.label}.`;
+  let content = contentOverride || tax.prompt_template || `An illustration of ${tax.label}.`;
+  // The taxonomy prompt_template carries {style}/{reference}/{parent_photo} tokens
+  // meant for the per-child generator (where {reference} = the actual child). The Lab
+  // builds the SHARED library with no specific child, so resolve them to a generic
+  // subject here — otherwise they leak into the prompt literally (e.g. "A {style} of
+  // {reference}"). To depict a real person, use the Scene/people composer instead.
+  content = fillTemplate(content, { style: 'picture', reference: 'a friendly young child', parent_photo: '' });
   let prompt;
   if (promptOverride) {
     prompt = promptOverride;
@@ -146,7 +152,8 @@ export default async function handler(req, res) {
       });
       if (!upstream.ok) {
         const detail = await upstream.text().catch(() => '');
-        res.status(upstream.status).json({ error: 'OpenAI edits failed', detail: detail.slice(0, 500) });
+        console.error('[lab-generate] edits failed', upstream.status, 'model=' + model, detail);
+        res.status(upstream.status).json({ error: 'OpenAI edits failed', detail: detail.slice(0, 1000) });
         return;
       }
       data = await upstream.json();
@@ -158,7 +165,8 @@ export default async function handler(req, res) {
       });
       if (!upstream.ok) {
         const detail = await upstream.text().catch(() => '');
-        res.status(upstream.status).json({ error: 'OpenAI generations failed', detail: detail.slice(0, 500) });
+        console.error('[lab-generate] generations failed', upstream.status, 'model=' + model, detail);
+        res.status(upstream.status).json({ error: 'OpenAI generations failed', detail: detail.slice(0, 1000) });
         return;
       }
       data = await upstream.json();
