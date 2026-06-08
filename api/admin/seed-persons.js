@@ -44,8 +44,25 @@ export default async function handler(req, res) {
     await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS person_id BIGINT REFERENCES persons(id)`;
 
     const people = await db`
-      SELECT id, label, image_key, sound_key, person_id
+      SELECT id, label, image_key, image_url, sound_key, person_id
       FROM items WHERE child_id = ${childId} AND section = 'people'`;
+
+    // Older flows set image_url ('/api/media?key=…' or a bare key) without image_key.
+    // The anchor must be a Blob KEY (the generator calls readBlob on it), so extract
+    // it from the URL when image_key isn't set — otherwise the People tile looks
+    // anchorless even though it has a visible image on the board.
+    const anchorKeyFor = (it) => {
+      if (it.image_key) return it.image_key;
+      const u = (it.image_url || '').trim();
+      if (!u) return null;
+      const m = u.match(/[?&]key=([^&]+)/);           // /api/media?key=<KEY> (the house convention)
+      if (m) return decodeURIComponent(m[1]);
+      if (u.startsWith('data:')) return null;          // inline data URL — not a blob key
+      if (/^https?:\/\//i.test(u)) {                   // full blob URL — the key is the pathname
+        try { return new URL(u).pathname.replace(/^\/+/, ''); } catch (_) { return null; }
+      }
+      return u.replace(/^\/+/, '');                    // bare / relative path — treat as the key
+    };
 
     const linked = [], skipped = [];
     for (const [labelKey, spec] of Object.entries(mapping)) {
@@ -55,6 +72,7 @@ export default async function handler(req, res) {
       const rel = isValidRelationship(spec.relationship) ? spec.relationship : 'other';
       const side = relationshipNeedsSide(rel) ? (spec.side || null) : null;
       const display = item.label;
+      const anchor = anchorKeyFor(item);
 
       const ex = await db`SELECT id FROM persons WHERE child_id = ${childId} AND lower(display_name) = lower(${display}) LIMIT 1`;
       let personId;
@@ -65,7 +83,7 @@ export default async function handler(req, res) {
             given_name = ${spec.given_name || null}, relationship = ${rel}, side = ${side},
             pronoun = ${spec.pronoun || null}, birth_order = ${spec.birth_order ?? null},
             is_self = ${!!spec.is_self},
-            reference_key = COALESCE(${item.image_key || null}, reference_key),
+            reference_key = COALESCE(${anchor}, reference_key),
             voice_key = COALESCE(${item.sound_key || null}, voice_key), updated_at = NOW()
           WHERE id = ${personId}`;
       } else {
@@ -74,12 +92,18 @@ export default async function handler(req, res) {
             (child_id, display_name, given_name, relationship, side, pronoun, birth_order, is_self, reference_key, voice_key)
           VALUES
             (${childId}, ${display}, ${spec.given_name || null}, ${rel}, ${side}, ${spec.pronoun || null},
-             ${spec.birth_order ?? null}, ${!!spec.is_self}, ${item.image_key || null}, ${item.sound_key || null})
+             ${spec.birth_order ?? null}, ${!!spec.is_self}, ${anchor}, ${item.sound_key || null})
           RETURNING id`;
         personId = p[0].id;
       }
       await db`UPDATE items SET person_id = ${personId}, updated_at = NOW() WHERE id = ${item.id}`;
-      linked.push({ label: display, relationship: rel, side: side || null, personId: Number(personId) });
+      linked.push({
+        label: display, relationship: rel, side: side || null, personId: Number(personId),
+        anchored: !!anchor,
+        anchorSource: anchor ? (item.image_key ? 'image_key' : 'image_url') : null,
+        // raw sample only when we couldn't resolve a key — lets us see the format
+        imageUrlSample: anchor ? null : ((item.image_url || '').slice(0, 80) || null),
+      });
     }
 
     res.setHeader('Cache-Control', 'no-store');
