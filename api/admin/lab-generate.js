@@ -68,6 +68,7 @@ export default async function handler(req, res) {
   const b = (typeof req.body === 'object' && req.body) || {};
   const taxonomyId = String(b.taxonomyId || '').trim();
   if (!taxonomyId) { res.status(400).json({ error: 'taxonomyId required' }); return; }
+  const childId = String(b.childId || '').slice(0, 64).trim();  // board target → resolve subject anchors
   const explicitStyleId = b.styleGuideId != null ? parseInt(b.styleGuideId, 10) : null;
   const modelOverride = typeof b.model === 'string' && ALLOWED_MODELS.has(b.model) ? b.model : null;
   const promptOverride = typeof b.promptOverride === 'string' ? b.promptOverride : null;
@@ -103,14 +104,34 @@ export default async function handler(req, res) {
   const model = modelOverride || (await resolveModelForRow(db, tax, settings.model_defaults || {}));
   const size = sizeOverride || settings.size_default || '1024x1024';
 
-  // 4. Compose the prompt
+  // 4. Resolve an optional SUBJECT anchor — an already-created image we reference so
+  //    the model holds a consistent likeness. subject_mode is largely unset in the
+  //    seed, so the reliable "this depicts a person" signals are: a People-section
+  //    tile (a specific named person) OR a {reference} token in the prompt (the child).
   let content = contentOverride || tax.prompt_template || `An illustration of ${tax.label}.`;
-  // The taxonomy prompt_template carries {style}/{reference}/{parent_photo} tokens
-  // meant for the per-child generator (where {reference} = the actual child). The Lab
-  // builds the SHARED library with no specific child, so resolve them to a generic
-  // subject here — otherwise they leak into the prompt literally (e.g. "A {style} of
-  // {reference}"). To depict a real person, use the Scene/people composer instead.
-  content = fillTemplate(content, { style: 'picture', reference: 'a friendly young child', parent_photo: '' });
+  const section = String(tax.column_name || '').toLowerCase();
+  const mentionsRef = /\{reference\}/i.test(content);
+  let subject = null;            // { buf, key, name }
+  let subjectExpected = false;   // a person was expected → caller can warn if no anchor
+  if (childId && (section === 'people' || mentionsRef)) {
+    subjectExpected = true;
+    const prow = section === 'people'
+      ? (await db`SELECT given_name, display_name, reference_key FROM persons
+                  WHERE child_id = ${childId} AND lower(display_name) = lower(${tax.label}) AND reference_key IS NOT NULL LIMIT 1`)[0]
+      : (await db`SELECT given_name, display_name, reference_key FROM persons
+                  WHERE child_id = ${childId} AND is_self = TRUE AND reference_key IS NOT NULL LIMIT 1`)[0];
+    if (prow && prow.reference_key) {
+      try {
+        const buf = await readBlob(prow.reference_key);
+        subject = { buf, key: prow.reference_key, name: prow.given_name || prow.display_name || 'the child' };
+      } catch (_) { /* anchor unreadable → fall back to generic */ }
+    }
+  }
+
+  // {reference} → the named subject when we have an anchor, else a generic child so the
+  // token never leaks literally; {style}/{parent_photo} resolved too.
+  const refPhrase = subject ? subject.name : 'a friendly young child';
+  content = fillTemplate(content, { style: 'picture', reference: refPhrase, parent_photo: '' });
   let prompt;
   if (promptOverride) {
     prompt = promptOverride;
@@ -119,26 +140,32 @@ export default async function handler(req, res) {
       content,
       label: tax.label || '',
       size,
-      no_face_rule: noFaceRule(tax.category),
-      style_image: style ? `(style reference: ${style.label})` : '',
-      reference: style ? `(style reference: ${style.label})` : '',
+      no_face_rule: subject ? '' : noFaceRule(tax.category),   // a real person SHOULD have a face
+      style_image: style ? '(match the art style of the style-reference image)' : '',
+      reference: subject ? `(keep the likeness of ${subject.name} from the reference photo)` : '',
     });
   } else {
     // Fallback if no master prompt is configured yet.
-    prompt = `Generate a child-friendly illustration. Subject: ${content}. Bake the label "${tax.label}" along the bottom edge in clean sans-serif. ${noFaceRule(tax.category)}`;
+    prompt = `Generate a child-friendly illustration. Subject: ${content}. Bake the label "${tax.label}" along the bottom edge in clean sans-serif. ${subject ? '' : noFaceRule(tax.category)}`;
   }
 
-  // 5. Read the style guide image bytes (if we have one)
+  // 5. Read the style guide bytes, then assemble the ordered image[] (style first,
+  //    subject second) plus a positional legend so the model knows which is which.
   let styleBuf = null;
   if (style && style.blob_key) {
     try { styleBuf = await readBlob(style.blob_key); }
     catch (err) { /* missing blob is not fatal — drop to text-only generation */ }
   }
+  const images = [];
+  const legend = [];
+  if (styleBuf) { images.push({ buf: styleBuf, name: 'style.jpg' }); legend.push(`Image ${images.length} is the STYLE reference — copy its art style only, not its content.`); }
+  if (subject) { images.push({ buf: subject.buf, name: 'subject.jpg' }); legend.push(`Image ${images.length} shows ${subject.name} — keep this person's face and likeness clearly recognizable.`); }
+  if (legend.length) prompt += '\n\n' + legend.join(' ');
 
-  // 6. Call OpenAI — edits if we have a style ref, generations otherwise
+  // 6. Call OpenAI — edits if we have any reference image, generations otherwise.
   let data, costCents = null, inTok = null, outTok = null;
   try {
-    if (styleBuf) {
+    if (images.length) {
       const fd = new FormData();
       fd.append('model', model);
       fd.append('prompt', prompt);
@@ -146,7 +173,7 @@ export default async function handler(req, res) {
       fd.append('n', '1');
       fd.append('quality', 'high');
       if (model === 'gpt-image-1' || model === 'gpt-image-1.5') fd.append('input_fidelity', 'high');
-      fd.append('image[]', new Blob([styleBuf.buffer], { type: styleBuf.contentType }), 'style.jpg');
+      for (const im of images) fd.append('image[]', new Blob([im.buf.buffer], { type: im.buf.contentType }), im.name);
       const upstream = await fetch('https://api.openai.com/v1/images/edits', {
         method: 'POST', headers: { Authorization: 'Bearer ' + apiKey }, body: fd,
       });
@@ -205,13 +232,14 @@ export default async function handler(req, res) {
       await db`
         INSERT INTO image_generations
           (child_id, actor_email, actor_role, label, style, prompt, reference_keys, size, input_tokens, output_tokens, cost_cents)
-        VALUES (${'__lab__'}, ${gate.email}, 'admin', ${tax.label}, ${style ? style.label : 'lab'},
-                ${prompt}, ${style && style.blob_key ? [style.blob_key] : []}, ${size}, ${inTok}, ${outTok}, ${costCents})
+        VALUES (${childId || '__lab__'}, ${gate.email}, 'admin', ${tax.label}, ${style ? style.label : 'lab'},
+                ${prompt}, ${[style && style.blob_key, subject && subject.key].filter(Boolean)}, ${size}, ${inTok}, ${outTok}, ${costCents})
       `;
     } catch (_) { /* cost log is best-effort */ }
 
     res.status(200).json({
       ok: true,
+      subject: { expected: subjectExpected, referenced: !!subject, name: subject ? subject.name : null },
       generation: {
         id: gen[0].id,
         taxonomyId: gen[0].taxonomy_id,
