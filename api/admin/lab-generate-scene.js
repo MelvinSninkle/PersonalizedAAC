@@ -132,7 +132,10 @@ export default async function handler(req, res) {
   }
 
   const people = resolved.map(r => `Person ${r.role} (${r.label})`).join(', ');
-  const scene = sceneText || tax.prompt_template || `${people} together`;
+  // Fall back to the tile's prompt_template, but strip the per-child generator's
+  // {style}/{reference}/{parent_photo} tokens so they don't reach OpenAI literally.
+  const scene = (sceneText || tax.prompt_template || `${people} together`)
+    .replace(/\{style\}/gi, 'picture').replace(/\{reference\}/gi, people).replace(/\{parent_photo\}/gi, '');
   const caption = tax.label
     ? `At the very bottom, add a clean caption band with the text "${tax.label}" spelled EXACTLY, in a simple friendly rounded sans-serif, centered. Put no other text, words, or letters anywhere else.`
     : `Do not include any text, words, or letters in the image.`;
@@ -165,14 +168,14 @@ export default async function handler(req, res) {
       const upstream = await fetch('https://api.openai.com/v1/images/edits', {
         method: 'POST', headers: { Authorization: 'Bearer ' + apiKey }, body: fd,
       });
-      if (!upstream.ok) { const detail = await upstream.text().catch(() => ''); res.status(upstream.status).json({ error: 'OpenAI edits failed', detail: detail.slice(0, 500) }); return; }
+      if (!upstream.ok) { const detail = await upstream.text().catch(() => ''); console.error('[lab-generate-scene] edits failed', upstream.status, 'model=' + model, 'images=' + images.length, detail); res.status(upstream.status).json({ error: 'OpenAI edits failed', detail: detail.slice(0, 1000) }); return; }
       data = await upstream.json();
     } else {
       const upstream = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST', headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, prompt, size, quality: 'high', n: 1 }),
       });
-      if (!upstream.ok) { const detail = await upstream.text().catch(() => ''); res.status(upstream.status).json({ error: 'OpenAI generations failed', detail: detail.slice(0, 500) }); return; }
+      if (!upstream.ok) { const detail = await upstream.text().catch(() => ''); console.error('[lab-generate-scene] generations failed', upstream.status, 'model=' + model, detail); res.status(upstream.status).json({ error: 'OpenAI generations failed', detail: detail.slice(0, 1000) }); return; }
       data = await upstream.json();
     }
 

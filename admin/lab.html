@@ -350,7 +350,13 @@ async function api(method, path, body) {
   const res = await fetch(path, opts);
   let data = null;
   try { data = await res.json(); } catch (_) {}
-  if (!res.ok) throw new Error((data && (data.error || data.detail)) || ('HTTP ' + res.status));
+  if (!res.ok) {
+    // Surface the upstream detail (e.g. the exact OpenAI rejection), not just the
+    // generic "OpenAI edits failed" — and log the full payload to the console.
+    if (data) console.error('API error', res.status, path, data);
+    const msg = data ? [data.error, data.detail].filter(Boolean).join(' — ') : ('HTTP ' + res.status);
+    throw new Error(msg || ('HTTP ' + res.status));
+  }
   return data;
 }
 
@@ -839,13 +845,21 @@ async function generateOne(tileId, styleGuideId, card) {
   strip.prepend(ph);
 
   const modelOverride = card.querySelector('[data-field="modelOverride"]').value || undefined;
+  const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
   try {
     const r = await api('POST', '/api/admin/lab-generate', {
       taxonomyId: tileId,
+      childId,
       styleGuideId,
       model: modelOverride,
     });
     addCost(r.generation.costCents);
+    // If this tile depicts a person but no anchor image was found, flag it — the art
+    // came back generic, and this is a tile you'll need to personalize per child.
+    if (r.subject && r.subject.expected && !r.subject.referenced) {
+      const note = card.querySelector('[data-board-note]');
+      if (note) { note.textContent = '⚠ person tile · no anchor → generic'; note.style.color = '#9a6700'; note.style.background = '#fef7e0'; }
+    }
     await loadGenerations(tileId);
   } catch (err) {
     ph.className = 'gen error';
