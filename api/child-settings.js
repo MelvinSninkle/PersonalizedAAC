@@ -6,6 +6,7 @@
 // Auth-gated; writes are limited to parent/therapist/admin (not the child view).
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 
 async function ensureTable(db) {
   await db`
@@ -23,6 +24,7 @@ export default async function handler(req, res) {
   const childId = String((req.query && req.query.childId) || 'fletcherpeterson').slice(0, 64);
   const db = sql();
   try { await ensureTable(db); } catch (_) {}
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
   if (req.method === 'GET') {
     try {

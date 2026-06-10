@@ -8,6 +8,7 @@
 // Auth-gated (session cookie or admin token).
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 
 export default async function handler(req, res) {
   const auth = await checkAuth(req);
@@ -19,6 +20,7 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
+    if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
     await db`
       CREATE TABLE IF NOT EXISTS live_sessions (
         child_id TEXT PRIMARY KEY,

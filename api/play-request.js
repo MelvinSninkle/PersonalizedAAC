@@ -4,6 +4,7 @@
 // Auth-gated; the tablet posts with its Bearer token, the parent reads with cookies.
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 import { sendToTokens, apnsConfigured } from './_lib/apns.js';
 
 async function ensureTable(db) {
@@ -21,6 +22,7 @@ export default async function handler(req, res) {
   const childId = String((req.query && req.query.childId) || auth.user.slug || 'fletcherpeterson').slice(0, 64);
   const db = sql();
   try { await ensureTable(db); } catch (_) {}
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
   if (req.method === 'GET') {
     try {

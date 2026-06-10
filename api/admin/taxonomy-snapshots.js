@@ -5,7 +5,7 @@
 //   POST  { label, note }            → create a snapshot of the current state
 //   POST  ?id=N&action=restore       → restore (auto-creates a pre-restore snapshot)
 //   DELETE ?id=N                     → delete (immutable to edit, deletable)
-import { checkAuth } from '../_lib/auth.js';
+import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 
 const ACTOR = 'admin';
@@ -24,8 +24,8 @@ function snapshotOut(r, includePayload) {
 }
 
 export default async function handler(req, res) {
-  const auth = await checkAuth(req);
-  if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
+  const gate = await requireAdmin(req, res);
+  if (!gate.ok) return;
 
   try {
     const db = sql();

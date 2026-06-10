@@ -9,6 +9,7 @@
 //   DELETE /api/persons?id=&childId=         → remove the person row (tile is left as-is).
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild, isParentOf } from './_lib/access.js';
 import { isValidRelationship, relationshipNeedsSide } from './_lib/relationships.js';
 
 export default async function handler(req, res) {
@@ -20,6 +21,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const childId = String((req.query && req.query.childId) || '').slice(0, 64);
       if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
+      if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
       const persons = await db`
         SELECT p.id, p.child_id, p.display_name, p.given_name, p.relationship, p.side, p.pronoun,
                p.birth_order, p.is_self, p.reference_key, p.pronunciation,
@@ -37,6 +39,7 @@ export default async function handler(req, res) {
       const childId = String(b.childId || '').slice(0, 64);
       const displayName = String(b.displayName || '').slice(0, 200).trim();
       if (!childId || !displayName) { res.status(400).json({ error: 'childId and displayName required' }); return; }
+      if (auth.user.role !== 'admin' && !(await isParentOf(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
       const relationship = isValidRelationship(b.relationship) ? b.relationship : 'other';
       const side = (relationshipNeedsSide(relationship) && (b.side === 'maternal' || b.side === 'paternal')) ? b.side : null;
       const pronoun = (b.pronoun === 'she' || b.pronoun === 'he' || b.pronoun === 'they') ? b.pronoun : null;
@@ -70,11 +73,13 @@ export default async function handler(req, res) {
 
     if (req.method === 'DELETE') {
       const id = Number((req.query && req.query.id) || 0);
-      const childId = String((req.query && req.query.childId) || '').slice(0, 64);
       if (!id) { res.status(400).json({ error: 'id required' }); return; }
-      await db`UPDATE items SET person_id = NULL WHERE person_id = ${id}`;
-      if (childId) await db`DELETE FROM persons WHERE id = ${id} AND child_id = ${childId}`;
-      else         await db`DELETE FROM persons WHERE id = ${id}`;
+      const rows = await db`SELECT child_id FROM persons WHERE id = ${id} LIMIT 1`;
+      if (!rows.length) { res.status(404).json({ error: 'Not found' }); return; }
+      const childId = rows[0].child_id;
+      if (auth.user.role !== 'admin' && !(await isParentOf(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+      await db`UPDATE items SET person_id = NULL WHERE person_id = ${id} AND child_id = ${childId}`;
+      await db`DELETE FROM persons WHERE id = ${id} AND child_id = ${childId}`;
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ ok: true });
       return;

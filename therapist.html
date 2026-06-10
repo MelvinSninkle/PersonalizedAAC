@@ -377,6 +377,7 @@
     return 10 * mag;
   }
   const W = 340, H = 200, PADL = 22, PADR = 10, PADT = 12, PADB = 22;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
   function renderChart(key) {
     const cfg = SERIES[key];
     const labels = cfg.labels || WEEKS;
@@ -403,10 +404,10 @@
     document.getElementById('ins-svg').innerHTML = svg;
     document.getElementById('ins-sub').innerHTML = cfg.sub + (cfg.sample ? ' <span class="ins-badge">sample</span>' : '');
     document.getElementById('ins-legend').innerHTML = drawn.map(s =>
-      `<span class="lg"><i style="background:${s.color}"></i>${s.name} <b>${s.data[n - 1]}${cfg.unit}</b></span>`).join('');
+      `<span class="lg"><i style="background:${s.color}"></i>${esc(s.name)} <b>${s.data[n - 1]}${cfg.unit}</b></span>`).join('');
     const starred = cfg.list.filter(cfg.star);
     document.getElementById('ins-stars').innerHTML = starred.length
-      ? `<span class="lbl">${cfg.starLabel}</span>` + starred.map(s => `<span class="ins-star">⭐ ${s.name}</span>`).join('')
+      ? `<span class="lbl">${cfg.starLabel}</span>` + starred.map(s => `<span class="ins-star">⭐ ${esc(s.name)}</span>`).join('')
       : '';
   }
   SERIES.use.sample = SERIES.games.sample = SERIES.time.sample = true;
@@ -428,7 +429,7 @@
   function renderMastery(list) {
     document.getElementById('mastery').innerHTML = list.map(([name, pct]) => `
     <div class="bar-row">
-      <span>${name}</span>
+      <span>${esc(name)}</span>
       <span class="bar-track"><span class="bar-fill" style="width:${pct}%"></span></span>
       <span class="pct">${pct}%</span>
     </div>`).join('');

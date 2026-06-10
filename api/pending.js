@@ -10,6 +10,7 @@ import { put, del } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
 
@@ -101,6 +102,7 @@ export default async function handler(req, res) {
   const db = sql();
   try { await ensureTable(db); } catch (_) {}
   const childId = String((req.query && req.query.childId) || 'fletcherpeterson').slice(0, 64);
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
   if (req.method === 'GET') {
     try {

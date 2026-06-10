@@ -7,6 +7,7 @@ import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 import { isValidRelationship, relationshipNeedsSide } from './_lib/relationships.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
@@ -51,6 +52,8 @@ export default async function handler(req, res) {
   const givenName = String(q.given || '').slice(0, 120).trim();
   const pronoun = (q.pronoun === 'she' || q.pronoun === 'he' || q.pronoun === 'they') ? q.pronoun : null;
   const birthOrder = (Number.isFinite(+q.birthOrder) && +q.birthOrder > 0) ? Math.floor(+q.birthOrder) : null;
+
+  if (!(await canAccessChild(auth.user, childId))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
   let buffer;
   try {

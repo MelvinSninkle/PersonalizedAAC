@@ -4,6 +4,8 @@
 // an object URL).
 import { get } from '@vercel/blob';
 import { checkAuth } from './_lib/auth.js';
+import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -20,6 +22,32 @@ export default async function handler(req, res) {
   if (!key) {
     res.status(400).json({ error: 'key required' });
     return;
+  }
+
+  // Ownership: a key found in any child-scoped table is private to those
+  // children — the caller must have access to at least one (admins pass).
+  // A key found nowhere is a shared library asset (taxonomy / style guides)
+  // and any authenticated user may load it. One round-trip; on DB error we
+  // fail OPEN (log + serve) so a hiccup never blanks the child's board.
+  try {
+    const db = sql();
+    const owners = await db`
+      SELECT DISTINCT child_id FROM (
+        SELECT child_id FROM items WHERE image_key = ${key} OR sound_key = ${key}
+        UNION ALL SELECT child_id FROM categories WHERE image_key = ${key}
+        UNION ALL SELECT child_id FROM persons WHERE reference_key = ${key} OR voice_key = ${key}
+        UNION ALL SELECT child_id FROM reference_images WHERE blob_key = ${key}
+        UNION ALL SELECT child_id FROM pending_tiles WHERE source_key = ${key} OR image_key = ${key} OR sound_key = ${key}
+      ) t WHERE child_id IS NOT NULL LIMIT 20`;
+    if (owners.length) {
+      let allowed = false;
+      for (const o of owners) {
+        if (await canAccessChild(auth.user, o.child_id, db)) { allowed = true; break; }
+      }
+      if (!allowed) { res.status(403).json({ error: 'Forbidden' }); return; }
+    }
+  } catch (err) {
+    console.error('media ownership check failed:', String(err.message || err));
   }
 
   let result;

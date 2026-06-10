@@ -3,6 +3,7 @@
 // No FK to items so deletes don't lose history.
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 
 const MAX_BATCH = 1000;
 const VALID_ROLES = new Set(['student', 'teacher', 'parent']);
@@ -57,6 +58,9 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
+    for (const cid of new Set(rows.map(r => r.childId))) {
+      if (!(await canAccessChild(auth.user, cid, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+    }
     // Sequential INSERTs keep this simple; bulk volume is tiny (a few taps/sec at most).
     for (const r of rows) {
       await db`

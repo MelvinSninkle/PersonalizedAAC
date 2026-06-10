@@ -8,6 +8,7 @@
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
 import { tickExposure } from './_lib/exposure.js';
+import { canAccessChild } from './_lib/access.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -22,7 +23,9 @@ export default async function handler(req, res) {
   const sessionId = Number.isFinite(b.sessionId) ? Math.trunc(b.sessionId) : null;
 
   try {
-    const protocol = await tickExposure(sql(), { childId, skillSlug, source, sessionId });
+    const db = sql();
+    if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+    const protocol = await tickExposure(db, { childId, skillSlug, source, sessionId });
     res.status(200).json({ ok: true, protocol });
   } catch (err) {
     res.status(500).json({ error: 'Tick failed', detail: String(err.message || err) });

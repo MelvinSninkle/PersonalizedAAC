@@ -4,6 +4,7 @@
 import { del } from '@vercel/blob';
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { isParentOf } from './_lib/access.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -20,6 +21,7 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
+    if (auth.user.role !== 'admin' && !(await isParentOf(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
     const rows = await db`SELECT * FROM pending_tiles WHERE id = ${id} AND child_id = ${childId}`;
     if (!rows.length) { res.status(404).json({ error: 'Draft not found' }); return; }
     const d = rows[0];

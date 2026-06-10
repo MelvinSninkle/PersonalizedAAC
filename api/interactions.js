@@ -4,6 +4,7 @@
 //   GET  ?childId=&limit=   → recent answers, newest first (parent dashboard)
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 import { apnsConfigured, sendToTokens } from './_lib/apns.js';
 
 async function ensureTable(db) {
@@ -35,6 +36,7 @@ export default async function handler(req, res) {
     const prompt = typeof b.prompt === 'string' ? b.prompt.slice(0, 300) : null;
     const response = typeof b.response === 'string' ? b.response.slice(0, 200) : null;
     const scheduleId = typeof b.scheduleId === 'string' ? b.scheduleId.slice(0, 64) : null;
+    if (!(await canAccessChild(auth.user, cid, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
     try {
       const rows = await db`
         INSERT INTO interaction_log (child_id, kind, prompt, response, schedule_id)
@@ -57,6 +59,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'GET') {
+    if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
     const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
     try {
       const rows = await db`
