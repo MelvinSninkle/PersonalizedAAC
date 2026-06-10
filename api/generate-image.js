@@ -5,7 +5,9 @@
 // estimated cost (from the model's token usage). Auth-gated; needs OPENAI_API_KEY.
 import { get } from '@vercel/blob';
 import { checkAuth } from './_lib/auth.js';
+import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
+import { geminiKey, geminiDefaultModel, isGeminiModel, geminiCostCents, geminiGenerateImage } from './_lib/gemini.js';
 
 // gpt-image-1.5 / -2 at high quality + input_fidelity:high can legitimately run
 // 60-120s for an edit. 300s is Vercel Pro's hard ceiling for serverless
@@ -22,7 +24,8 @@ const MAX_REFS = 3;
 // newest/best) here if you ever want the top tier.
 const IMAGE_MODEL = 'gpt-image-1.5';
 // Models the client is allowed to request via ?model= (for experimenting from
-// the add-tile UI). Anything else falls back to the default above.
+// the add-tile UI). Any gemini-* id is also accepted (see _lib/gemini.js), and
+// 'nano-banana' is a friendly alias for the configured Gemini default.
 const ALLOWED_MODELS = ['gpt-image-1', 'gpt-image-1.5', 'gpt-image-2'];
 // Approx pricing for the configured model, USD per 1M tokens (cost log only).
 const PRICE = { text: 5, imageIn: 10, out: 40 };
@@ -134,7 +137,23 @@ export default async function handler(req, res) {
   const childId = String((req.query && req.query.childId) || 'fletcherpeterson').slice(0, 64);
   // Per-request model override from the UI; falls back to the default.
   const reqModel = String((req.query && req.query.model) || '').trim();
-  const model = ALLOWED_MODELS.includes(reqModel) ? reqModel : IMAGE_MODEL;
+  const model = reqModel === 'nano-banana' ? geminiDefaultModel()
+    : ALLOWED_MODELS.includes(reqModel) ? reqModel
+    : isGeminiModel(reqModel) ? reqModel
+    : IMAGE_MODEL;
+
+  if (!(await canAccessChild(auth.user, childId))) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  // Spend guard — cap an account's generations per rolling day, across all
+  // models, so a leaked or abused login can't run an unbounded AI bill.
+  const DAILY_LIMIT = Number(process.env.IMAGE_GEN_DAILY_LIMIT || 150);
+  if (auth.user.role !== 'admin') {
+    try {
+      const db = sql();
+      const q = await db`SELECT COUNT(*)::int AS n FROM image_generations WHERE actor_email = ${auth.user.email} AND created_at > NOW() - INTERVAL '24 hours'`;
+      if (((q[0] && q[0].n) || 0) >= DAILY_LIMIT) { res.status(429).json({ error: 'Daily image-generation limit reached', limit: DAILY_LIMIT }); return; }
+    } catch (_) { /* quota check is best-effort — never block on a counting error */ }
+  }
 
   let buffer;
   try {
@@ -190,67 +209,87 @@ export default async function handler(req, res) {
 
   let costCents = null, inTok = null, outTok = null;
   try {
-    const fd = new FormData();
-    fd.append('model', model);
-    fd.append('prompt', prompt);
-    fd.append('size', '1024x1024');
-    fd.append('n', '1');
-    // Best quality, and (for the older models only) preserve the real photo's
-    // likeness/details. `input_fidelity` is a gpt-image-1/-1.5 parameter;
-    // gpt-image-2 rejects it ("does not support the 'input_fidelity' parameter")
-    // because its agentic pipeline handles edit fidelity differently.
-    fd.append('quality', 'high');
-    if (model === 'gpt-image-1' || model === 'gpt-image-1.5') {
-      fd.append('input_fidelity', 'high');
-    }
-    fd.append('image[]', new Blob([buffer], { type: req.headers['content-type'] || 'image/jpeg' }), 'photo.jpg');
-    refBufs.forEach((rb, i) => fd.append('image[]', new Blob([rb.buffer], { type: rb.contentType }), `ref${i}.jpg`));
+    let b64, usedPrompt = prompt, genericFallback = false;
 
-    const upstream = await fetch('https://api.openai.com/v1/images/edits', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + apiKey },
-      body: fd,
-    });
-
-    let data, usedPrompt = prompt, genericFallback = false;
-    if (upstream.ok) {
-      data = await upstream.json();
+    if (isGeminiModel(model)) {
+      // Gemini ("Nano Banana") path — one JSON call; the photo and the child's
+      // reference images ride along as inline images. Same prompt as OpenAI.
+      const gKey = geminiKey();
+      if (!gKey) { res.status(500).json({ error: 'GEMINI_API_KEY env var not configured' }); return; }
+      const g = await geminiGenerateImage({
+        apiKey: gKey, model, prompt,
+        images: [
+          { buffer, contentType: req.headers['content-type'] || 'image/jpeg' },
+          ...refBufs.map((rb) => ({ buffer: rb.buffer, contentType: rb.contentType })),
+        ],
+      });
+      if (!g.ok) { res.status(g.status === 429 ? 429 : 502).json({ error: 'Gemini generation failed', detail: g.detail }); return; }
+      b64 = g.b64; inTok = g.inputTokens; outTok = g.outputTokens;
+      costCents = geminiCostCents(model);
     } else {
-      const detail = await upstream.text().catch(() => '');
-      // The safety system blocks editing a photo of a copyrighted/branded
-      // subject (Superman, branded toys, logos…). Instead of hard-failing, retry
-      // from scratch as a GENERIC illustration of the label — no input photo — so
-      // the parent still gets a usable placeholder tile.
-      const isSafety = /safety system|content[_ ]?policy|moderation_blocked|rejected|violat/i.test(detail);
-      if (!isSafety) {
-        res.status(upstream.status).json({ error: 'Image generation failed', detail: detail.slice(0, 500) });
-        return;
+      const fd = new FormData();
+      fd.append('model', model);
+      fd.append('prompt', prompt);
+      fd.append('size', '1024x1024');
+      fd.append('n', '1');
+      // Best quality, and (for the older models only) preserve the real photo's
+      // likeness/details. `input_fidelity` is a gpt-image-1/-1.5 parameter;
+      // gpt-image-2 rejects it ("does not support the 'input_fidelity' parameter")
+      // because its agentic pipeline handles edit fidelity differently.
+      fd.append('quality', 'high');
+      if (model === 'gpt-image-1' || model === 'gpt-image-1.5') {
+        fd.append('input_fidelity', 'high');
       }
-      const fb = await generateGenericPlaceholder(apiKey, model, label, style, buffer, req.headers['content-type'] || 'image/jpeg');
-      if (!fb.ok) {
-        res.status(upstream.status).json({
-          error: 'Image generation failed',
-          detail: 'Photo blocked by the safety system (likely a copyrighted/branded subject), and the generic fallback also failed: ' + (fb.detail || ''),
-        });
-        return;
+      fd.append('image[]', new Blob([buffer], { type: req.headers['content-type'] || 'image/jpeg' }), 'photo.jpg');
+      refBufs.forEach((rb, i) => fd.append('image[]', new Blob([rb.buffer], { type: rb.contentType }), `ref${i}.jpg`));
+
+      const upstream = await fetch('https://api.openai.com/v1/images/edits', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey },
+        body: fd,
+      });
+
+      let data;
+      if (upstream.ok) {
+        data = await upstream.json();
+      } else {
+        const detail = await upstream.text().catch(() => '');
+        // The safety system blocks editing a photo of a copyrighted/branded
+        // subject (Superman, branded toys, logos…). Instead of hard-failing, retry
+        // from scratch as a GENERIC illustration of the label — no input photo — so
+        // the parent still gets a usable placeholder tile.
+        const isSafety = /safety system|content[_ ]?policy|moderation_blocked|rejected|violat/i.test(detail);
+        if (!isSafety) {
+          res.status(upstream.status).json({ error: 'Image generation failed', detail: detail.slice(0, 500) });
+          return;
+        }
+        const fb = await generateGenericPlaceholder(apiKey, model, label, style, buffer, req.headers['content-type'] || 'image/jpeg');
+        if (!fb.ok) {
+          res.status(upstream.status).json({
+            error: 'Image generation failed',
+            detail: 'Photo blocked by the safety system (likely a copyrighted/branded subject), and the generic fallback also failed: ' + (fb.detail || ''),
+          });
+          return;
+        }
+        data = fb.data; usedPrompt = fb.prompt; genericFallback = true;
       }
-      data = fb.data; usedPrompt = fb.prompt; genericFallback = true;
+
+      b64 = data && data.data && data.data[0] && data.data[0].b64_json;
+
+      // Estimate cost from token usage (falls back to a flat estimate).
+      const u = (data && data.usage) || {};
+      const det = u.input_tokens_details || {};
+      inTok = u.input_tokens ?? null;
+      outTok = u.output_tokens ?? null;
+      if (u.output_tokens != null) {
+        const dollars = ((det.text_tokens || 0) * PRICE.text + (det.image_tokens || 0) * PRICE.imageIn + (u.output_tokens || 0) * PRICE.out) / 1e6;
+        costCents = dollars * 100;
+      } else {
+        costCents = 4; // ~$0.04 fallback for a 1024² image
+      }
     }
 
-    const b64 = data && data.data && data.data[0] && data.data[0].b64_json;
     if (!b64) { res.status(502).json({ error: 'No image returned from generator' }); return; }
-
-    // Estimate cost from token usage (falls back to a flat estimate).
-    const u = (data && data.usage) || {};
-    const det = u.input_tokens_details || {};
-    inTok = u.input_tokens ?? null;
-    outTok = u.output_tokens ?? null;
-    if (u.output_tokens != null) {
-      const dollars = ((det.text_tokens || 0) * PRICE.text + (det.image_tokens || 0) * PRICE.imageIn + (u.output_tokens || 0) * PRICE.out) / 1e6;
-      costCents = dollars * 100;
-    } else {
-      costCents = 4; // ~$0.04 fallback for a 1024² image
-    }
 
     // Log the generation (best-effort; never block the response).
     try {

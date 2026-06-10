@@ -12,6 +12,7 @@
 import { put, get } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { requireAdmin } from '../_lib/admin.js';
+import { geminiKey, isGeminiModel, geminiCostCents, geminiGenerateImage } from '../_lib/gemini.js';
 import { sql } from '../_lib/db.js';
 import { resolveModelForRow } from './model-routes.js';
 
@@ -70,7 +71,7 @@ export default async function handler(req, res) {
   if (!taxonomyId) { res.status(400).json({ error: 'taxonomyId required' }); return; }
   const childId = String(b.childId || '').slice(0, 64).trim();  // board target → resolve subject anchors
   const explicitStyleId = b.styleGuideId != null ? parseInt(b.styleGuideId, 10) : null;
-  const modelOverride = typeof b.model === 'string' && ALLOWED_MODELS.has(b.model) ? b.model : null;
+  const modelOverride = typeof b.model === 'string' && (ALLOWED_MODELS.has(b.model) || isGeminiModel(b.model)) ? b.model : null;
   const promptOverride = typeof b.promptOverride === 'string' ? b.promptOverride : null;
   const contentOverride = typeof b.contentOverride === 'string' ? b.contentOverride : null;
   const sizeOverride = typeof b.size === 'string' ? b.size.trim() : null;
@@ -168,10 +169,26 @@ export default async function handler(req, res) {
   if (subject) { images.push({ buf: subject.buf, name: 'subject.jpg' }); legend.push(`Image ${images.length} shows ${subject.name} — keep this person's face and likeness clearly recognizable.`); }
   if (legend.length) prompt += '\n\n' + legend.join(' ');
 
-  // 6. Call OpenAI — edits if we have any reference image, generations otherwise.
+  // 6. Call the provider — Gemini for gemini-* models (style/subject references
+  //    ride along as inline images, same ordered legend); otherwise OpenAI:
+  //    edits if we have any reference image, generations otherwise.
   let data, costCents = null, inTok = null, outTok = null;
   try {
-    if (images.length) {
+    if (isGeminiModel(model)) {
+      const gKey = geminiKey();
+      if (!gKey) { res.status(500).json({ error: 'GEMINI_API_KEY env var not configured' }); return; }
+      const g = await geminiGenerateImage({
+        apiKey: gKey, model, prompt,
+        images: images.map(im => ({ buffer: im.buf.buffer, contentType: im.buf.contentType })),
+      });
+      if (!g.ok) {
+        console.error('[lab-generate] gemini failed', g.status, 'model=' + model, g.detail);
+        res.status(g.status === 429 ? 429 : 502).json({ error: 'Gemini generation failed', detail: (g.detail || '').slice(0, 1000) });
+        return;
+      }
+      data = { data: [{ b64_json: g.b64 }] };
+      inTok = g.inputTokens; outTok = g.outputTokens; costCents = geminiCostCents(model);
+    } else if (images.length) {
       const fd = new FormData();
       fd.append('model', model);
       fd.append('prompt', prompt);
@@ -208,15 +225,17 @@ export default async function handler(req, res) {
     const b64 = data && data.data && data.data[0] && data.data[0].b64_json;
     if (!b64) { res.status(502).json({ error: 'No image returned from generator' }); return; }
 
-    const u = (data && data.usage) || {};
-    const det = u.input_tokens_details || {};
-    inTok = u.input_tokens ?? null;
-    outTok = u.output_tokens ?? null;
-    if (u.output_tokens != null) {
-      const dollars = ((det.text_tokens || 0) * PRICE.text + (det.image_tokens || 0) * PRICE.imageIn + (u.output_tokens || 0) * PRICE.out) / 1e6;
-      costCents = dollars * 100;
-    } else {
-      costCents = model === 'gpt-image-2' ? 21 : (model === 'gpt-image-1.5' ? 13 : 4);
+    if (costCents == null) {
+      const u = (data && data.usage) || {};
+      const det = u.input_tokens_details || {};
+      inTok = u.input_tokens ?? null;
+      outTok = u.output_tokens ?? null;
+      if (u.output_tokens != null) {
+        const dollars = ((det.text_tokens || 0) * PRICE.text + (det.image_tokens || 0) * PRICE.imageIn + (u.output_tokens || 0) * PRICE.out) / 1e6;
+        costCents = dollars * 100;
+      } else {
+        costCents = model === 'gpt-image-2' ? 21 : (model === 'gpt-image-1.5' ? 13 : 4);
+      }
     }
 
     // 7. Save the PNG to Blob

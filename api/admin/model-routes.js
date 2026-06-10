@@ -14,9 +14,12 @@
 //   DELETE ?id=
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
+import { isGeminiModel } from '../_lib/gemini.js';
 
 const VALID_SCOPES = new Set(['tile', 'category', 'subcategory', 'section', 'audience']);
 const VALID_MODELS = new Set(['gpt-image-1', 'gpt-image-1.5', 'gpt-image-2']);
+// Any gemini-* id is also routable (the Nano Banana tiers) — see _lib/gemini.js.
+const validModel = (m) => VALID_MODELS.has(m) || isGeminiModel(m);
 
 export default async function handler(req, res) {
   const gate = await requireAdmin(req, res);
@@ -61,7 +64,7 @@ async function add(req, res, db, email) {
   const notes = typeof b.notes === 'string' ? b.notes.slice(0, 400) : null;
   if (!VALID_SCOPES.has(scopeKind)) { res.status(400).json({ error: 'invalid scopeKind', allowed: [...VALID_SCOPES] }); return; }
   if (!scopeValue) { res.status(400).json({ error: 'scopeValue required' }); return; }
-  if (!VALID_MODELS.has(model)) { res.status(400).json({ error: 'invalid model', allowed: [...VALID_MODELS] }); return; }
+  if (!validModel(model)) { res.status(400).json({ error: 'invalid model', allowed: [...VALID_MODELS, 'gemini-*'] }); return; }
   const r = await db`
     INSERT INTO model_routes (scope_kind, scope_value, model, priority, notes, created_by)
     VALUES (${scopeKind}, ${scopeValue}, ${model}, ${priority}, ${notes}, ${email})
@@ -75,7 +78,7 @@ async function patch(req, res, db) {
   if (!id) { res.status(400).json({ error: 'id required' }); return; }
   const b = (typeof req.body === 'object' && req.body) || {};
   const fields = {};
-  if (typeof b.model === 'string' && VALID_MODELS.has(b.model)) fields.model = b.model;
+  if (typeof b.model === 'string' && validModel(b.model)) fields.model = b.model;
   if (Number.isInteger(b.priority)) fields.priority = b.priority;
   if (typeof b.notes === 'string' || b.notes === null) fields.notes = b.notes ? String(b.notes).slice(0, 400) : null;
   if (!Object.keys(fields).length) { res.status(400).json({ error: 'no fields to update' }); return; }
