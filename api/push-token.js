@@ -3,6 +3,7 @@
 // so the app should register only when the session role is parent/admin.
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 
 async function ensureTable(db) {
   await db`
@@ -32,6 +33,7 @@ export default async function handler(req, res) {
   try {
     const db = sql();
     await ensureTable(db);
+    if (childId && !(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
     await db`
       INSERT INTO push_tokens (token, child_id, role, platform, user_email, updated_at)
       VALUES (${token}, ${childId}, ${role}, ${platform}, ${auth.user.email || null}, NOW())

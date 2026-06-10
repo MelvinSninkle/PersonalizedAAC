@@ -471,17 +471,19 @@
       </label>
       <img id="sch-image-preview" alt="" style="display:none;width:84px;height:84px;object-fit:cover;border-radius:12px;margin-top:8px;border:1px solid var(--line);">
       <div id="sch-question-row" style="display:none;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:12px;">
           <label style="font-size:13px;font-weight:600;color:var(--ink);">Response A
             <select id="sch-resp-a" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;"><option value="">— none —</option></select>
           </label>
           <label style="font-size:13px;font-weight:600;color:var(--ink);">Response B
             <select id="sch-resp-b" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;"><option value="">— none —</option></select>
           </label>
+          <label style="font-size:13px;font-weight:600;color:var(--ink);">Response C
+            <select id="sch-resp-c" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;"><option value="">— none —</option></select>
+          </label>
         </div>
-        <label style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Show the question for
-          <input id="sch-duration" type="number" min="5" value="60" style="width:90px;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin:0 6px;"> seconds
-        </label>
+        <button type="button" class="btn ghost" id="sch-resp-quick" style="margin-top:8px;">＋ Use Yes / No / I don't know</button>
+        <div style="font-size:12px;color:#6b7280;margin-top:8px;">Left empty, the question automatically offers Yes / No / "I don't know" using the child's own tiles when they exist. The question is asked, asked once more after 30 seconds if there's no answer, then quietly puts itself away.</div>
       </div>
       <div id="sch-scope-row" style="display:none;margin-top:12px;">
         <div style="font-size:13px;font-weight:600;color:var(--ink);">Games (played in order — child taps to start each)</div>
@@ -848,10 +850,10 @@
     document.getElementById('ins-svg').innerHTML = svg;
     document.getElementById('ins-sub').innerHTML = cfg.sub + (cfg.sample ? ' <span class="ins-badge">sample</span>' : '');
     document.getElementById('ins-legend').innerHTML = drawn.map(s =>
-      `<span class="lg"><i style="background:${s.color}"></i>${s.name} <b>${s.data[n - 1]}${cfg.unit}</b></span>`).join('');
+      `<span class="lg"><i style="background:${s.color}"></i>${schEsc(s.name)} <b>${s.data[n - 1]}${cfg.unit}</b></span>`).join('');
     const starred = cfg.list.filter(cfg.star);
     document.getElementById('ins-stars').innerHTML = starred.length
-      ? `<span class="lbl">${cfg.starLabel}</span>` + starred.map(s => `<span class="ins-star">⭐ ${s.name}</span>`).join('')
+      ? `<span class="lbl">${cfg.starLabel}</span>` + starred.map(s => `<span class="ins-star">⭐ ${schEsc(s.name)}</span>`).join('')
       : '';
   }
   SERIES.use.sample = SERIES.games.sample = SERIES.time.sample = true;
@@ -875,7 +877,7 @@
   function renderMastery(list) {
     document.getElementById('mastery').innerHTML = list.map(([name, pct]) => `
     <div class="bar-row">
-      <span>${name}</span>
+      <span>${schEsc(name)}</span>
       <span class="bar-track"><span class="bar-fill" style="width:${pct}%"></span></span>
       <span class="pct">${pct}%</span>
     </div>`).join('');
@@ -891,7 +893,7 @@
     if (!tb) return;
     const chipFor = m => /Game|Facilitated/.test(m) ? 'game' : (/Exposure/.test(m) ? 'expo' : 'slide');
     tb.innerHTML = rows.map(r =>
-      `<tr><td>${r.date}</td><td><span class="chip ${chipFor(r.mode)}">${r.mode}</span></td><td>${r.category}</td><td>${r.result === '—' ? '—' : '<span class="pill-acc hi">' + r.result + '</span>'}</td><td>${r.length}</td></tr>`).join('');
+      `<tr><td>${schEsc(r.date)}</td><td><span class="chip ${chipFor(r.mode)}">${schEsc(r.mode)}</span></td><td>${schEsc(r.category)}</td><td>${r.result === '—' ? '—' : '<span class="pill-acc hi">' + schEsc(r.result) + '</span>'}</td><td>${schEsc(r.length)}</td></tr>`).join('');
   }
   function applyAnalytics(a) {
     const labels = a.labels || WEEKS;
@@ -1953,8 +1955,8 @@
     function render(persons) {
       listEl.innerHTML = persons.length ? persons.map(p => `
         <div style="display:flex;align-items:center;gap:10px;background:#fafafa;border:1px solid #f0e6ea;border-radius:10px;padding:8px;">
-          ${p.reference_key ? `<img src="/api/media?key=${encodeURIComponent(p.reference_key)}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;">` : '<div style="width:40px;height:40px;border-radius:8px;background:#f0e6ea;"></div>'}
-          <div style="flex:1;"><strong>${p.display_name}</strong> <span style="color:#9ca3af;font-size:13px;">${relLabel(p)}</span></div>
+          ${p.reference_key ? `<img src="/api/media?key=${schEsc(encodeURIComponent(p.reference_key))}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;">` : '<div style="width:40px;height:40px;border-radius:8px;background:#f0e6ea;"></div>'}
+          <div style="flex:1;"><strong>${schEsc(p.display_name)}</strong> <span style="color:#9ca3af;font-size:13px;">${schEsc(relLabel(p))}</span></div>
           <button class="btn ghost" data-edit="${p.id}">Edit</button>
         </div>`).join('') : '<div style="font-size:13px;color:#9ca3af;">No family added yet.</div>';
     }
@@ -1974,7 +1976,7 @@
       document.getElementById('family-modal-title').textContent = person ? 'Edit family member' : 'Add family member';
       document.getElementById('family-delete').style.display = person ? '' : 'none';
       thumb.innerHTML = (person && person.reference_key)
-        ? `<img src="/api/media?key=${encodeURIComponent(person.reference_key)}" alt="" style="width:96px;height:96px;border-radius:12px;object-fit:cover;">`
+        ? `<img src="/api/media?key=${schEsc(encodeURIComponent(person.reference_key))}" alt="" style="width:96px;height:96px;border-radius:12px;object-fit:cover;">`
         : 'Tap to add / change photo';
       mmsg.textContent = '';
       if (!picker) picker = await PeoplePicker.mount(document.getElementById('family-picker'), {});
@@ -2179,13 +2181,16 @@
     if (imgSel) imgSel.value = s.imageKey || '';
     updateSchedPreview();
     const resps = Array.isArray(s.responses) ? s.responses : [];
-    [document.getElementById('sch-resp-a'), document.getElementById('sch-resp-b')].forEach((sel, idx) => {
+    [document.getElementById('sch-resp-a'), document.getElementById('sch-resp-b'), document.getElementById('sch-resp-c')].forEach((sel, idx) => {
       if (!sel) return;
       const rv = resps[idx];
       if (rv && rv.imageKey && !Array.from(sel.options).some(o => o.value === rv.imageKey)) { const o = document.createElement('option'); o.value = rv.imageKey; o.dataset.label = rv.label || ''; o.textContent = rv.label || 'Tile'; sel.appendChild(o); }
-      sel.value = (rv && rv.imageKey) || '';
+      // label-only response (no tile picked — the board borrows the child's own tile by word)
+      if (rv && !rv.imageKey && rv.label && !Array.from(sel.options).some(o => o.value === 'label:' + rv.label.toLowerCase())) {
+        const o = document.createElement('option'); o.value = 'label:' + rv.label.toLowerCase(); o.dataset.label = rv.label; o.dataset.labelonly = '1'; o.textContent = rv.label + ' (word only)'; sel.appendChild(o);
+      }
+      sel.value = rv ? (rv.imageKey || (rv.label ? 'label:' + rv.label.toLowerCase() : '')) : '';
     });
-    document.getElementById('sch-duration').value = s.durationSec || 60;
     buildDays(Array.isArray(s.days) ? s.days : null);
     document.getElementById('sch-delete').style.display = schEditIndex >= 0 ? 'block' : 'none';
     syncSchedRows();
@@ -2232,6 +2237,7 @@
       const imgSel = document.getElementById('sch-image'); if (imgSel) imgSel.innerHTML = '<option value="">No picture</option>' + tileOpts;
       const ra = document.getElementById('sch-resp-a'); if (ra) ra.innerHTML = '<option value="">— none —</option>' + tileOpts;
       const rb = document.getElementById('sch-resp-b'); if (rb) rb.innerHTML = '<option value="">— none —</option>' + tileOpts;
+      const rc = document.getElementById('sch-resp-c'); if (rc) rc.innerHTML = '<option value="">— none —</option>' + tileOpts;
     } catch (_) {}
   }
   const schedAddBtn = document.getElementById('sched-add');
@@ -2242,6 +2248,23 @@
     document.getElementById('sch-timing').addEventListener('change', syncSchedRows);
     document.getElementById('sch-image').addEventListener('change', updateSchedPreview);
     document.getElementById('sch-add-game').addEventListener('click', () => buildGameRow('all'));
+    // One tap fills the three responses with Yes / No / "I don't know" — using the
+    // child's matching board tiles when they exist, plain spoken words otherwise.
+    document.getElementById('sch-resp-quick').addEventListener('click', () => {
+      const want = [['yes', 'Yes'], ['no', 'No'], ["i don't know", "I don't know"]];
+      ['sch-resp-a', 'sch-resp-b', 'sch-resp-c'].forEach((id, i) => {
+        const sel = document.getElementById(id); if (!sel) return;
+        const [w, display] = want[i];
+        let opt = Array.from(sel.options).find(o => (o.dataset.label || '').trim().toLowerCase() === w);
+        if (!opt) {
+          opt = document.createElement('option');
+          opt.value = 'label:' + w; opt.dataset.label = display; opt.dataset.labelonly = '1';
+          opt.textContent = display + ' (word only)';
+          sel.appendChild(opt);
+        }
+        sel.value = opt.value;
+      });
+    });
     document.getElementById('sch-save').addEventListener('click', async () => {
       const type = document.getElementById('sch-type').value;
       const timing = document.getElementById('sch-timing').value;
@@ -2259,9 +2282,13 @@
       if (type === 'game') { const sc = Array.from(document.querySelectorAll('#sch-games .sch-game-scope')).map(x => x.value).filter(Boolean); sch.scopes = sc.length ? sc : ['all']; }
       if (type === 'question') {
         const resps = [];
-        ['sch-resp-a', 'sch-resp-b'].forEach(id => { const sel = document.getElementById(id), o = sel && sel.selectedOptions[0]; if (o && o.value) resps.push({ imageKey: o.value, label: o.dataset.label || '' }); });
+        ['sch-resp-a', 'sch-resp-b', 'sch-resp-c'].forEach(id => {
+          const sel = document.getElementById(id), o = sel && sel.selectedOptions[0];
+          if (!o || !o.value) return;
+          if (o.dataset.labelonly) resps.push({ label: o.dataset.label || '' });
+          else resps.push({ imageKey: o.value, label: o.dataset.label || '' });
+        });
         sch.responses = resps;
-        sch.durationSec = Math.max(5, parseInt(document.getElementById('sch-duration').value, 10) || 60);
       }
       if (timing === 'interval') sch.intervalMin = Math.max(1, parseInt(document.getElementById('sch-interval').value, 10) || 45);
       else sch.times = document.getElementById('sch-times').value.split(',').map(x => x.trim()).filter(x => /^\d{1,2}:\d{2}$/.test(x)).slice(0, 12);

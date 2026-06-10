@@ -10,6 +10,7 @@
 // a clinician can clear it.
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 
 export default async function handler(req, res) {
   const auth = await checkAuth(req);
@@ -19,6 +20,7 @@ export default async function handler(req, res) {
     const db = sql();
     if (req.method === 'GET') {
       const childId = String((req.query && req.query.childId) || 'fletcherpeterson').slice(0, 64);
+      if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
       const rows = await db`
         SELECT id, child_id, skill_slug, mode, label, evidence,
                consider_eval, dismissed_at, dismissed_by, generated_at
@@ -59,6 +61,9 @@ export default async function handler(req, res) {
       if (!Number.isFinite(id) || action !== 'dismiss') {
         res.status(400).json({ error: 'id + action="dismiss" required' }); return;
       }
+      const owner = await db`SELECT child_id FROM skill_insights WHERE id = ${id} LIMIT 1`;
+      if (!owner.length) { res.status(404).json({ error: 'Not found' }); return; }
+      if (!(await canAccessChild(auth.user, owner[0].child_id, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
       await db`
         UPDATE skill_insights
         SET dismissed_at = NOW(),

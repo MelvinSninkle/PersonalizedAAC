@@ -7,6 +7,7 @@
 //                          masteredAt }, ...] }
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -18,6 +19,7 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
+    if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
     const rows = await db`
       SELECT id, skill_slug, stage, target_count, current_count, spacing_mode,
              status, next_due_at, last_seen_at, mastered_at, created_at

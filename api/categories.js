@@ -89,6 +89,27 @@ async function update(req, res, db, user) {
     res.status(403).json({ error: 'No edit access' }); return;
   }
 
+  // Re-parent guard: never under itself or its own subtree, never across
+  // child/owner scopes (would leak the subtree onto another board).
+  if (parentId !== undefined && parentId != null && Number(parentId) !== Number(old.parent_id)) {
+    const pid = Number(parentId);
+    if (!Number.isFinite(pid)) { res.status(400).json({ error: 'Invalid parentId' }); return; }
+    const np = await db`SELECT child_id, owner_user_id FROM categories WHERE id = ${pid} LIMIT 1`;
+    if (!np.length) { res.status(400).json({ error: 'Parent category not found' }); return; }
+    if ((np[0].child_id ?? null) !== (old.child_id ?? null)
+      || String(np[0].owner_user_id ?? '') !== String(old.owner_user_id ?? '')) {
+      res.status(400).json({ error: 'Parent belongs to a different board scope' }); return;
+    }
+    const cyc = await db`
+      WITH RECURSIVE tree AS (
+        SELECT id FROM categories WHERE id = ${id}
+        UNION ALL
+        SELECT c.id FROM categories c JOIN tree t ON c.parent_id = t.id
+      )
+      SELECT 1 FROM tree WHERE id = ${pid} LIMIT 1`;
+    if (cyc.length) { res.status(400).json({ error: 'Cannot move a category inside itself or its descendants' }); return; }
+  }
+
   const rows = await db`
     UPDATE categories SET
       label         = COALESCE(${label ?? null},   label),

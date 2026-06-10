@@ -3,6 +3,7 @@
 // the client (a failed log never blocks gameplay).
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 import { apnsConfigured, sendToTokens } from './_lib/apns.js';
 import { tickExposure } from './_lib/exposure.js';
 import { detectSpikes } from './_lib/spike.js';
@@ -39,6 +40,7 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
+    if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
     // Last-ditch skill_slug fallback: if the session didn't carry one but at
     // least one attempt did, use the first one we see (taxonomySlug field on
     // the attempt — see backfill in attempt insert below).

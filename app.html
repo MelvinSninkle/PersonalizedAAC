@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Fletcher's World</title>
+<title>My World</title>
 <script>
   // Per-device default view: a parent/therapist device opens straight to its
   // view (set once via the first-run prompt). Runs before render to avoid a
@@ -26,9 +26,20 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Fletcher's World">
+<meta name="apple-mobile-web-app-title" content="My World">
 <meta name="theme-color" content="#ff1493">
 <link rel="manifest" href="/manifest.webmanifest">
+<script>
+  // Point the manifest + (later) the titles at THIS child. The manifest start_url
+  // was hardcoded to one child, so any other family's installed PWA launched into
+  // the wrong board. The personalized "<Name>'s World" title is applied in-page
+  // after an authenticated fetch — the public manifest stays generic on purpose
+  // so child names can't be enumerated by slug.
+  (function () { try {
+    var m = location.pathname.match(/^\/u\/([^\/]+)/);
+    if (m) { var l = document.querySelector('link[rel="manifest"]'); if (l) l.href = '/api/manifest?child=' + m[1]; }
+  } catch (e) {} })();
+</script>
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -955,7 +966,7 @@
     <button id="login-btn" aria-label="Login" title="Login">🔒</button>
     <h1>
       <img class="hdr-icon" src="/icons/myworld-globe.png" alt="">
-      <span>Fletcher's World</span>
+      <span class="cwt">My World</span>
     </h1>
     <button id="play-request-btn" class="btn-play-req" title="Tell a grown-up you want to play">🙋 Play with me</button>
   </div>
@@ -1074,7 +1085,7 @@
     </div>
     <div class="checkbox-row" id="pin-row" style="display:none;">
       <input type="checkbox" id="item-pin">
-      <label for="item-pin">Pin to top (e.g. for Fletcher)</label>
+      <label for="item-pin">Pin to top (e.g. for <span class="cn">your child</span>)</label>
     </div>
     <label for="item-description" style="margin-top:14px;">Description for Auditory Comprehension game (optional)</label>
     <textarea id="item-description" rows="2" placeholder='e.g. "Lives in a field, has four legs, eats grass." Spoken aloud — the child picks the matching tile.' style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font:inherit;box-sizing:border-box;"></textarea>
@@ -1221,7 +1232,7 @@
     <label style="margin-top:18px;">Default view for this device</label>
     <div style="font-size:12px;color:#666;margin:4px 0 6px;">When the app opens on this device, go straight to:</div>
     <select id="disp-device-role" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;width:100%;box-sizing:border-box;">
-      <option value="child">Fletcher's board (this view)</option>
+      <option value="child" id="opt-child-view">This child's board (this view)</option>
       <option value="parent">Parent dashboard</option>
       <option value="therapist">Therapist view</option>
     </select>
@@ -1237,7 +1248,7 @@
     <h3>Who uses this device?</h3>
     <div style="font-size:14px;color:#666;margin:6px 0 18px;">We'll open straight to the right view next time. You can change this later under ⚙ Display.</div>
     <div style="display:flex;flex-direction:column;gap:10px;">
-      <button class="role-pick" data-role="child" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🧒 Fletcher — the communication board</button>
+      <button class="role-pick" data-role="child" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🧒 <span class="cn">Your child</span> — the communication board</button>
       <button class="role-pick" data-role="parent" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">👪 Parent — the dashboard</button>
       <button class="role-pick" data-role="therapist" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🩺 Therapist — the facilitator view</button>
     </div>
@@ -1275,7 +1286,7 @@
 <div class="modal-backdrop" id="game-setup">
   <div class="modal">
     <h3>Start a game</h3>
-    <div style="font-size:13px;color:#666;margin-bottom:8px;">Self-paced matching: Fletcher hears a word and taps the matching picture. There are no wrong-answer sounds — ever.</div>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">Self-paced matching: <span class="cn">your child</span> hears a word and taps the matching picture. There are no wrong-answer sounds — ever.</div>
     <label for="game-scope">What to practice</label>
     <select id="game-scope" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
       <option value="all" selected>Everything</option>
@@ -1312,7 +1323,7 @@
 <div class="modal-backdrop" id="rewards-modal">
   <div class="modal">
     <h3>🎁 Rewards &amp; music</h3>
-    <div style="font-size:13px;color:#666;margin-bottom:8px;">When Fletcher finishes, flowers burst and he hears one of these cheers in your voice. Type the phrases you want — we record them in your voice and save them so they work offline.</div>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">When <span class="cn">your child</span> finishes, flowers burst and they hear one of these cheers in your voice. Type the phrases you want — we record them in your voice and save them so they work offline.</div>
     <label for="rewards-phrases">Cheer phrases (one per line)</label>
     <textarea id="rewards-phrases" rows="5" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;"></textarea>
     <label for="rewards-music">Background music</label>
@@ -1362,6 +1373,39 @@
   const SLUG_RE = /^\/u\/([^\/]+)/;
   const __slugMatch = window.location.pathname.match(SLUG_RE);
   const CHILD_ID = __slugMatch ? decodeURIComponent(__slugMatch[1]) : 'fletcherpeterson';
+
+  // The child's first name — drives "<Name>'s World" titles, role labels, and
+  // reward cheers. Comes from the persons row with is_self (the canonical source),
+  // cached per-child in localStorage so a returning device personalizes instantly
+  // and offline. English possessive: names ending in s take a bare apostrophe
+  // (Carlos' World), everything else 's (Fletcher's World).
+  let CHILD_NAME = '';
+  try { CHILD_NAME = localStorage.getItem('aacChildName:' + CHILD_ID) || ''; } catch (_) {}
+  function possessive(n) { return /s$/i.test(n) ? n + "'" : n + "'s"; }
+  function applyChildName() {
+    const title = CHILD_NAME ? possessive(CHILD_NAME) + ' World' : 'My World';
+    document.title = title;
+    const m = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (m) m.setAttribute('content', title);
+    document.querySelectorAll('.cwt').forEach(el => { el.textContent = title; });
+    if (CHILD_NAME) document.querySelectorAll('.cn').forEach(el => { el.textContent = CHILD_NAME; });
+    const opt = document.getElementById('opt-child-view');
+    if (opt) opt.textContent = (CHILD_NAME ? possessive(CHILD_NAME) : "This child's") + ' board (this view)';
+  }
+  async function loadChildName() {
+    try {
+      const r = await apiFetch('/api/persons?childId=' + encodeURIComponent(CHILD_ID));
+      if (!r.ok) return;
+      const d = await r.json();
+      const self = (d.persons || []).find(p => p.is_self);
+      const nm = self ? String(self.given_name || self.display_name || '').trim() : '';
+      if (nm && nm !== CHILD_NAME) {
+        CHILD_NAME = nm;
+        try { localStorage.setItem('aacChildName:' + CHILD_ID, nm); } catch (_) {}
+        applyChildName();
+      }
+    } catch (_) {}
+  }
   if (!__slugMatch) {
     // Save the inferred default so the redirect-stub at "/" knows where to send
     // this device, then bounce to the canonical URL.
@@ -2104,6 +2148,27 @@
   let speaking = false;
   let speakTimer = null;
   let _lastTapAt = 0;
+
+  // Track the last touch anywhere so background work (resync re-render) can wait
+  // until the child is idle instead of reshuffling the board under their finger.
+  let _lastUserAct = 0;
+  document.addEventListener('pointerdown', () => { _lastUserAct = Date.now(); }, { capture: true, passive: true });
+
+  // iOS only allows audio after a user gesture. The first tap "blesses" both
+  // players with a silent clip, so scheduled prompts can speak later even if the
+  // child hasn't tapped a sound tile yet this session.
+  const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  document.addEventListener('pointerdown', function bless() {
+    document.removeEventListener('pointerdown', bless, true);
+    [document.getElementById('audio-player'), gVoice()].forEach(a => {
+      try {
+        if (!a || a.src) return;   // already used this session → already blessed
+        a.src = SILENT_WAV;
+        const p = a.play();
+        if (p && p.then) p.then(() => a.pause()).catch(() => {});
+      } catch (_) {}
+    });
+  }, { capture: true });
   function tapSpeak(item, categoryName, subcategoryName) {
     const now = Date.now();
     if (now - _lastTapAt < 250) return;   // swallow an accidental double-tap / bounce
@@ -2388,6 +2453,10 @@
       if (!(data.categories || []).length && !(data.items || []).length) return;   // never wipe to empty
       const sig = structSig(data);
       if (sig === _lastSig) { precacheAllMedia(); return; }   // unchanged → just keep media warm (retries failures)
+      // Structure changed — but never re-render under a child who touched the
+      // board in the last 30s or has a question card open. Leave _lastSig stale
+      // so the next tick retries once they're idle.
+      if (Date.now() - _lastUserAct < 30000 || document.getElementById('sched-nudge')) return;
       _lastSig = sig;
       await hydrateFromServer(data);
       await renderAll();
@@ -3886,17 +3955,21 @@
 
   // ===== Game mode (self-paced matching; shared runtime for all games) =====
   const GAME_KEY = 'aacGameSettings';
-  const DEFAULT_REWARDS = ["Hooray, Fletcher! I'm so proud of you!", "You did it, buddy!", "Way to go, Fletcher!"];
+  function defaultRewards() {
+    return CHILD_NAME
+      ? [`Hooray, ${CHILD_NAME}! I'm so proud of you!`, 'You did it, buddy!', `Way to go, ${CHILD_NAME}!`]
+      : ["Hooray! I'm so proud of you!", 'You did it, buddy!', 'Way to go, buddy!'];
+  }
   function gameSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(GAME_KEY) || '{}');
       return {
-        phrases: Array.isArray(s.phrases) && s.phrases.length ? s.phrases : DEFAULT_REWARDS,
+        phrases: Array.isArray(s.phrases) && s.phrases.length ? s.phrases : defaultRewards(),
         music: typeof s.music === 'string' ? s.music : '/audio/color-tap-learn.mp3',
         choices: s.choices || 3,
         limitMin: Number.isFinite(s.limitMin) ? s.limitMin : 15,
       };
-    } catch (_) { return { phrases: DEFAULT_REWARDS, music: '/audio/color-tap-learn.mp3', choices: 3, limitMin: 15 }; }
+    } catch (_) { return { phrases: defaultRewards(), music: '/audio/color-tap-learn.mp3', choices: 3, limitMin: 15 }; }
   }
   function saveGameSettings(patch) {
     const next = { ...gameSettings(), ...patch };
@@ -3988,6 +4061,20 @@
     gameSeq = scopes;
     showGameNudgeCard(text, s.imageKey);
   }
+  // Find the child's own board tile for a response word ("yes", "no") so question
+  // cards reuse the exact picture + recorded voice the child already knows —
+  // consistent visuals/motor patterns matter more than novel art here.
+  async function findBoardTile(label) {
+    const want = String(label || '').trim().toLowerCase();
+    if (!want) return null;
+    for (const sec of ['needs', 'people', 'nouns', 'verbs']) {
+      try {
+        const hit = (await getAllItems(sec)).find(i => String(i.label || '').trim().toLowerCase() === want);
+        if (hit) return hit;
+      } catch (_) {}
+    }
+    return null;
+  }
   function schedQuestion(s, text) {
     if (document.getElementById('sched-nudge')) return;
     const o = document.createElement('div'); o.id = 'sched-nudge';
@@ -4003,25 +4090,48 @@
     const h = document.createElement('div'); h.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-size:24px;font-weight:700;color:#ad1457;margin-bottom:20px;'; h.textContent = text; card.appendChild(h);
     const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:14px;justify-content:center;flex-wrap:wrap;';
     let responses = Array.isArray(s.responses) ? s.responses.filter(r => r && (r.label || r.imageKey)) : [];
-    if (!responses.length) responses = [{ label: 'Yes' }, { label: 'No' }];
+    if (!responses.length) responses = [{ label: 'Yes' }, { label: 'No' }, { label: "I don't know" }];
     let answered = false;
+    const logResponse = (resp) => apiFetch('/api/interactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ childId: CHILD_ID, kind: 'question', prompt: text, response: resp, scheduleId: s.id || '' }) }).catch(() => {});
     responses.forEach(resp => {
       const btn = document.createElement('button');
       btn.style.cssText = 'border:3px solid #fce4ec;border-radius:20px;background:#fff;cursor:pointer;padding:14px;display:flex;flex-direction:column;align-items:center;gap:8px;min-width:118px;';
-      if (resp.imageKey) { const ri = document.createElement('img'); ri.style.cssText = 'width:96px;height:96px;object-fit:cover;border-radius:14px;'; getMediaURL(resp.imageKey).then(u => { if (u) ri.src = u; }).catch(() => {}); btn.appendChild(ri); }
+      const ri = document.createElement('img');
+      ri.style.cssText = 'width:96px;height:96px;object-fit:cover;border-radius:14px;display:none;';
+      btn.appendChild(ri);
+      if (resp.imageKey) {
+        getMediaURL(resp.imageKey).then(u => { if (u) { ri.src = u; ri.style.display = ''; } }).catch(() => {});
+      } else if (resp.label) {
+        // no picture configured → borrow the child's own tile for this word
+        findBoardTile(resp.label).then(it => {
+          if (!it) return;
+          resp._tile = it;
+          if (it.imageKey) getMediaURL(it.imageKey).then(u => { if (u) { ri.src = u; ri.style.display = ''; } }).catch(() => {});
+        }).catch(() => {});
+      }
       const rl = document.createElement('div'); rl.textContent = resp.label || ''; rl.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:18px;color:#1f2937;'; btn.appendChild(rl);
       btn.addEventListener('click', () => {
         if (answered) return; answered = true;
+        clearTimeout(reAskT); clearTimeout(stopT);
         o.remove();
-        if (resp.label) rewardAudioURL(resp.label).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {});
-        apiFetch('/api/interactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ childId: CHILD_ID, kind: 'question', prompt: text, response: resp.label || '', scheduleId: s.id || '' }) }).catch(() => {});
+        // Speak the answer in the child's own tile voice when we have it.
+        if (resp._tile && resp._tile.soundKey) playSound(resp._tile);
+        else if (resp.label) rewardAudioURL(resp.label).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {});
+        logResponse(resp.label || '');
       });
       row.appendChild(btn);
     });
     card.appendChild(row); o.appendChild(card); document.body.appendChild(o);
-    rewardAudioURL(text).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {});
-    const dur = Math.max(5, Number(s.durationSec) || 60) * 1000;
-    setTimeout(() => { const el = document.getElementById('sched-nudge'); if (el) el.remove(); }, dur);
+    const speakPrompt = () => rewardAudioURL(text).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {});
+    speakPrompt();
+    // Ask once; if no answer, ask once more at 30s; at 60s put the card away
+    // quietly and log that there was no response.
+    const reAskT = setTimeout(() => { if (!answered) speakPrompt(); }, 30000);
+    const stopT = setTimeout(() => {
+      if (answered) return; answered = true;
+      const el = document.getElementById('sched-nudge'); if (el) el.remove();
+      logResponse('no_response');
+    }, 60000);
   }
   async function schedFire(s) {
     if (G.running || speaking) return;
@@ -4347,7 +4457,7 @@
   async function playCelebration(onDone) {
     if (G.running) return;
     const cel = document.getElementById('game-celebrate'); if (!cel) return;
-    const s = gameSettings(), phrases = s.phrases && s.phrases.length ? s.phrases : DEFAULT_REWARDS;
+    const s = gameSettings(), phrases = s.phrases && s.phrases.length ? s.phrases : defaultRewards();
     const phrase = phrases[Math.floor(Math.random() * phrases.length)] || 'Hooray!';
     document.getElementById('game-celebrate-msg').textContent = phrase;
     cel.classList.add('show'); spawnFlowers(cel);
@@ -4657,7 +4767,7 @@
   document.getElementById('rewards-cancel').addEventListener('click', () => document.getElementById('rewards-modal').classList.remove('show'));
   document.getElementById('rewards-test').addEventListener('click', async () => {
     const lines = document.getElementById('rewards-phrases').value.split('\n').map(x => x.trim()).filter(Boolean);
-    const phrase = lines[0] || DEFAULT_REWARDS[0];
+    const phrase = lines[0] || defaultRewards()[0];
     const btn = document.getElementById('rewards-test'); btn.disabled = true; const prev = btn.textContent; btn.textContent = '…';
     const url = await rewardAudioURL(phrase);
     if (url) { const v = gVoice(); v.src = url; v.play().catch(() => {}); }
@@ -4666,7 +4776,7 @@
   });
   document.getElementById('rewards-save').addEventListener('click', async () => {
     const lines = document.getElementById('rewards-phrases').value.split('\n').map(x => x.trim()).filter(Boolean);
-    const phrases = lines.length ? lines.slice(0, 12) : DEFAULT_REWARDS;
+    const phrases = lines.length ? lines.slice(0, 12) : defaultRewards();
     saveGameSettings({ phrases, music: document.getElementById('rewards-music').value });
     const btn = document.getElementById('rewards-save'); btn.disabled = true; const prev = btn.textContent; btn.textContent = 'Saving…';
     for (const ph of phrases) { await rewardAudioURL(ph); }   // pre-cache in your voice for offline
@@ -4696,6 +4806,7 @@
     try {
       step = 'display'; loadDisplay(); applyDisplay();
       step = 'session'; try { await loadSession(); } catch (e) { console.error('session', e); }
+      step = 'name'; applyChildName(); loadChildName().catch(() => {});   // cached name instantly; fresh name when online
       step = 'open-db'; db = await openDB();
       step = 'migrate'; await migrateLegacyItems();
       step = 'render-local'; await renderAll();   // paint instantly from cache (if any)

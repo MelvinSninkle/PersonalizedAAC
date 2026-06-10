@@ -7,6 +7,7 @@
 // 30-day mastery and recent sessions. Each section degrades to [] on error.
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 
 const MODE_LABEL = {
   self_paced: 'Self-Paced Game',
@@ -49,6 +50,7 @@ export default async function handler(req, res) {
   const zeros = () => new Array(N).fill(0);
   const idx = (b) => (N - 1) - b; // bucket 0 = current period → last slot
   const db = sql();
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
   const out = {
     bucket, labels: labelsFor(N, G.unit),

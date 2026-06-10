@@ -10,6 +10,7 @@
 // field carried through to the client lets the parent/therapist UIs gate edits.
 import { checkAuth } from './_lib/auth.js';
 import { sql, rowToCategory, rowToItem } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -26,6 +27,7 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
+    if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
     // The shared-template subtree, computed once and joined twice.
     //   - seeds: template roots in category_shares for this child (status=active)
     //   - descendants: every category whose parent is in the subtree (child_id IS NULL)

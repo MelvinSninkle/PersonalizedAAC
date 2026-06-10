@@ -5,13 +5,13 @@
 //   until   — ISO timestamp upper bound
 //   q       — free-text match against summary / note / row_ids
 //   limit   — default 500, max 2000
-import { checkAuth } from '../_lib/auth.js';
+import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') { res.status(405).json({ error: 'Method not allowed' }); return; }
-  const auth = await checkAuth(req);
-  if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
+  const gate = await requireAdmin(req, res);
+  if (!gate.ok) return;
 
   const actions = typeof req.query.action === 'string' && req.query.action
     ? req.query.action.split(',').map(s => s.trim()).filter(Boolean)

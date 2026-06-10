@@ -55,6 +55,10 @@ async function list(req, res) {
     res.status(auth.status).json({ error: auth.error });
     return;
   }
+  if (auth.user.role !== 'admin') {
+    res.status(403).json({ error: 'Forbidden: admin role required' });
+    return;
+  }
   try {
     const db = sql();
     const rows = await db`

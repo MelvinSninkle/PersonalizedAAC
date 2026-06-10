@@ -7,6 +7,7 @@
 // OPENAI_API_KEY.
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { canAccessChild } from './_lib/access.js';
 import { familyPhrase, relationshipIsSibling } from './_lib/relationships.js';
 
 export const config = { maxDuration: 30 };
@@ -53,6 +54,7 @@ export default async function handler(req, res) {
   const section = String(b.section || '').toLowerCase().slice(0, 40);
   const category = String(b.category || '').slice(0, 80);
   const childId = String(b.childId || '').slice(0, 64).trim();
+  if (childId && !(await canAccessChild(auth.user, childId))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
   // People are DATA, not guesswork: when this is a specific child's People tile and
   // we have a structured persons row, build the relationship description deterministically
