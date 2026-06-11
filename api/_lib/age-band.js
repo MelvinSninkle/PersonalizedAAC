@@ -33,3 +33,19 @@ export function tileFitsAge(tileBand, childBand) {
   if (!childBand) return true;
   return (BAND_RANK[tileBand] ?? 99) <= (BAND_RANK[childBand] ?? -1);
 }
+
+// Higher-ranked of two bands (used to resolve natural-band vs parent/mastery-
+// advanced override): a 14-month-old whose parent has unlocked '18-30m' should
+// see the 18-30m board.
+export function higherBand(a, b) {
+  const ra = a ? (BAND_RANK[a] ?? -1) : -1;
+  const rb = b ? (BAND_RANK[b] ?? -1) : -1;
+  return ra >= rb ? (a || null) : (b || null);
+}
+
+// The next band up from `band`, or null if already at the top.
+export function nextBand(band) {
+  const r = BAND_RANK[band];
+  if (r == null || r >= AGE_BANDS.length - 1) return null;
+  return AGE_BANDS[r + 1];
+}

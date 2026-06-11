@@ -487,6 +487,15 @@ export default async function handler(req, res) {
     // old isn't shown clutter. NULL on rows where the family decides (Personalize).
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS acquisition_age TEXT`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_age_idx ON taxonomy(acquisition_age)`;
+    // Special-day events: full-screen celebration scenes (not tiles) that show
+    // on the day, personalized with the child + close family. `event_key` is
+    // one of the resolver keys in api/_lib/event-dates.js (fixed-date holidays
+    // like 'christmas', computed ones like 'easter' / 'thanksgiving', and the
+    // per-child 'birthday'). prompt_template uses {reference}, {family_adult},
+    // and {family_all} the same way the regular tile generator does.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS is_event BOOLEAN NOT NULL DEFAULT FALSE`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS event_key TEXT`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_event_idx ON taxonomy(event_key) WHERE is_event = TRUE`;
     // meal_context (food only): one of breakfast/lunch/dinner/snack/anytime.
     // Drives mode-based default-category in the Nouns column (§4.2).
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS meal_context TEXT`;
@@ -786,6 +795,13 @@ Size: {size}. No watermarks, no extra text other than the tile label.',
       )
     `;
     await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS birth_date DATE`;
+    // Parent-set or auto-mastery-set unlock: 'show me at least this far up the
+    // age-band ladder, even if the child's birth date suggests younger.' Only
+    // meaningful on the is_self row; resolved alongside birth_date in age-band.
+    await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS advanced_to_band TEXT`;
+    await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS advanced_at TIMESTAMPTZ`;
+    // 'parent' (manual unlock) | 'mastery' (auto-advanced from assessment perf)
+    await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS advanced_reason TEXT`;
     await db`CREATE INDEX IF NOT EXISTS persons_child_idx ON persons(child_id)`;
     await db`CREATE INDEX IF NOT EXISTS persons_rel_idx   ON persons(child_id, relationship)`;
     // People-section tiles point at the person they depict (nullable: only people tiles use it).

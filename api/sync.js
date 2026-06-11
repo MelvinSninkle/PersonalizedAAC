@@ -11,7 +11,7 @@
 import { checkAuth } from './_lib/auth.js';
 import { sql, rowToCategory, rowToItem } from './_lib/db.js';
 import { canAccessChild } from './_lib/access.js';
-import { bandForBirthDate, tileFitsAge } from './_lib/age-band.js';
+import { bandForBirthDate, tileFitsAge, higherBand } from './_lib/age-band.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -71,8 +71,10 @@ export default async function handler(req, res) {
     let appliedBand = null;
     const showAll = String(req.query.showAllVocab || '').trim() === '1';
     if (!showAll) {
-      const meRow = (await db`SELECT birth_date FROM persons WHERE child_id = ${childId} AND is_self = TRUE AND birth_date IS NOT NULL LIMIT 1`)[0];
-      const band = meRow ? bandForBirthDate(meRow.birth_date) : null;
+      const meRow = (await db`SELECT birth_date, advanced_to_band FROM persons WHERE child_id = ${childId} AND is_self = TRUE LIMIT 1`)[0];
+      const natural = meRow && meRow.birth_date ? bandForBirthDate(meRow.birth_date) : null;
+      const advanced = meRow ? (meRow.advanced_to_band || null) : null;
+      const band = higherBand(natural, advanced);
       if (band) {
         appliedBand = band;
         const slugs = [...new Set(items.map(i => i.taxonomy_slug).filter(Boolean))];
