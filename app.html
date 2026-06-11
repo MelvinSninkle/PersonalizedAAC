@@ -4169,6 +4169,74 @@
     setInterval(() => { syncChildSettings().catch(() => {}); }, 300000);
   }
 
+  // Special-day celebration: a big full-screen modal that fires once per
+  // event-day with a personalized scene (child + close family). Generation is
+  // lazy and idempotent — the same Christmas image loads instantly on every
+  // subsequent open that day. Dismissal is per-event-day so re-opening the
+  // board doesn't replay the modal; tap-to-close, never auto-dismisses.
+  function celebrationDismissedKey(year, eventKey) { return 'aacCeleb:' + year + ':' + eventKey; }
+  function isCelebrationDismissed(year, eventKey) {
+    try { return localStorage.getItem(celebrationDismissedKey(year, eventKey)) === '1'; } catch (_) { return false; }
+  }
+  function markCelebrationDismissed(year, eventKey) {
+    try { localStorage.setItem(celebrationDismissedKey(year, eventKey), '1'); } catch (_) {}
+  }
+  function showCelebration(label, blobUrl) {
+    if (document.getElementById('celeb-modal')) return;
+    const o = document.createElement('div'); o.id = 'celeb-modal';
+    o.style.cssText = 'position:fixed;inset:0;z-index:2600;display:flex;align-items:center;justify-content:center;background:rgba(173,20,87,.55);backdrop-filter:blur(6px);';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:28px;padding:22px;max-width:520px;width:92%;box-shadow:0 28px 80px rgba(0,0,0,.35);text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px;';
+    if (blobUrl) {
+      const img = document.createElement('img');
+      img.src = blobUrl;
+      img.alt = label;
+      img.style.cssText = 'width:100%;max-width:460px;aspect-ratio:1/1;object-fit:cover;border-radius:20px;background:#fce4ec;';
+      card.appendChild(img);
+    } else {
+      const ph = document.createElement('div');
+      ph.style.cssText = 'width:200px;height:200px;border-radius:20px;background:#fce4ec;display:flex;align-items:center;justify-content:center;font-size:48px;';
+      ph.textContent = '🎉';
+      card.appendChild(ph);
+    }
+    const h = document.createElement('div');
+    h.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:28px;color:#ad1457;line-height:1.2;';
+    h.textContent = label;
+    card.appendChild(h);
+    const close = document.createElement('button');
+    close.textContent = 'Tap to close';
+    close.style.cssText = 'border:none;border-radius:999px;background:#ff1493;color:#fff;font-weight:700;font-size:18px;padding:12px 26px;cursor:pointer;';
+    close.addEventListener('click', () => o.remove());
+    card.appendChild(close);
+    o.appendChild(card); document.body.appendChild(o);
+    // Speak the greeting in the parent's reward voice.
+    try { rewardAudioURL(label).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {}); } catch (_) {}
+  }
+  async function checkCelebration() {
+    try {
+      const r = await apiFetch('/api/celebrate?childId=' + encodeURIComponent(CHILD_ID));
+      if (!r.ok) return;
+      const d = await r.json();
+      for (const ev of d.events || []) {
+        if (isCelebrationDismissed(ev.year, ev.eventKey)) continue;
+        if (G.running || SLIDE.running || editMode) return;
+        let blobKey = ev.blobKey;
+        if (!blobKey) {
+          // Lazy-generate the personalized image — first iPad open of the day.
+          try {
+            const gen = await apiFetch('/api/celebrate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ childId: CHILD_ID, eventKey: ev.eventKey }) });
+            if (gen.ok) { const g = await gen.json(); blobKey = g.blobKey || null; }
+          } catch (_) {}
+        }
+        const url = blobKey ? await getMediaURL(blobKey) : null;
+        showCelebration(ev.label, url);
+        markCelebrationDismissed(ev.year, ev.eventKey);
+        return;   // one celebration at a time — the rest (rare overlap) wait for the next day boot
+      }
+    } catch (_) {}
+  }
+
   // Reward audio: cache TTS by phrase so cheers play instantly and offline.
   async function rewardAudioURL(text) {
     const key = 'tts:' + text;
@@ -4846,7 +4914,11 @@
       // Keep the tile tree + offline voice cache current with phone-side edits:
       // re-pull every couple of minutes, and whenever the iPad regains focus.
       setInterval(() => { resyncIfChanged().catch(() => {}); }, 120000);
-      document.addEventListener('visibilitychange', () => { if (!document.hidden) resyncIfChanged().catch(() => {}); });
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) { resyncIfChanged().catch(() => {}); checkCelebration().catch(() => {}); } });
+      // Check for special-day celebrations (birthday, holidays). Cheap GET; if
+      // today matches, we lazily generate the personalized scene and show a
+      // big full-screen modal once that day (suppress after the first dismiss).
+      checkCelebration().catch(() => {});
     } catch (err) {
       clearTimeout(watchdog);
       bootBanner('Load error at "' + step + '": ' + (err.message || err), true);
