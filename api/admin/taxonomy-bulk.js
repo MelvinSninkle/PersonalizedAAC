@@ -12,7 +12,7 @@ import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
 
 const ACTOR = 'admin';
-const VALID_COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs']);
+const VALID_COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs', 'Events']);
 const VALID_SUBJECT_MODES = new Set(['child_as_subject', 'object', 'person', 'concept']);
 const VALID_PARENT_PHOTO = new Set(['override', 'supplement', 'none']);
 const VALID_STATUS = new Set(['draft', 'published']);

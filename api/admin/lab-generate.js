@@ -170,7 +170,10 @@ export default async function handler(req, res) {
   // token never leaks literally; {family_adult}/{style}/{parent_photo} resolved too.
   const refPhrase = subject ? subject.name : 'a friendly young child';
   const famPhrase = famSubject ? famSubject.name : 'a warm, friendly adult family member';
-  content = fillTemplate(content, { style: 'picture', reference: refPhrase, family_adult: famPhrase, parent_photo: '' });
+  // {family_all} → generic phrasing for whole-family scenes (event tiles like
+  // Christmas / birthday). We don't pass more than two anchored faces yet —
+  // the model fills in believable extras around the anchored child + adult.
+  content = fillTemplate(content, { style: 'picture', reference: refPhrase, family_adult: famPhrase, family_all: 'the whole family gathered close around', parent_photo: '' });
   let prompt;
   if (promptOverride) {
     prompt = promptOverride;
