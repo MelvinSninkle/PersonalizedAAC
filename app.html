@@ -2447,7 +2447,8 @@
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     _resyncing = true;
     try {
-      const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
+      const showAll = (() => { try { return localStorage.getItem('aacShowAllVocab') === '1'; } catch (_) { return false; } })();
+      const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID) + (showAll ? '&showAllVocab=1' : ''));
       if (!r.ok) return;
       const data = await r.json();
       if (!(data.categories || []).length && !(data.items || []).length) return;   // never wipe to empty
@@ -4815,7 +4816,8 @@
       // so an empty/failed response never wipes the cached pictures.
       step = 'sync';
       try {
-        const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
+        const showAll = (() => { try { return localStorage.getItem('aacShowAllVocab') === '1'; } catch (_) { return false; } })();
+        const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID) + (showAll ? '&showAllVocab=1' : ''));
         if (r.ok) {
           const data = await r.json();
           const nc = (data.categories || []).length, ni = (data.items || []).length;

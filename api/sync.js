@@ -11,6 +11,7 @@
 import { checkAuth } from './_lib/auth.js';
 import { sql, rowToCategory, rowToItem } from './_lib/db.js';
 import { canAccessChild } from './_lib/access.js';
+import { bandForBirthDate, tileFitsAge } from './_lib/age-band.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -60,10 +61,35 @@ export default async function handler(req, res) {
       SELECT i.* FROM items i
       WHERE i.child_id IS NULL AND i.category_id IN (SELECT id FROM shared_tree)
       ORDER BY display_order, id`;
+    // Age-band filter: when the child has a birth date AND the parent hasn't
+    // turned the filter off ('show all vocabulary'), drop items whose canonical
+    // taxonomy row sits above the child's current band. Items without a
+    // taxonomy_slug (personal photos, custom additions) are always kept — the
+    // family put them there on purpose. Categories are never filtered (the
+    // empty section would just be visible scaffolding the parent can fill).
+    let outItems = items;
+    let appliedBand = null;
+    const showAll = String(req.query.showAllVocab || '').trim() === '1';
+    if (!showAll) {
+      const meRow = (await db`SELECT birth_date FROM persons WHERE child_id = ${childId} AND is_self = TRUE AND birth_date IS NOT NULL LIMIT 1`)[0];
+      const band = meRow ? bandForBirthDate(meRow.birth_date) : null;
+      if (band) {
+        appliedBand = band;
+        const slugs = [...new Set(items.map(i => i.taxonomy_slug).filter(Boolean))];
+        const bandBySlug = new Map();
+        if (slugs.length) {
+          const rows = await db`SELECT id, acquisition_age FROM taxonomy WHERE id = ANY(${slugs})`;
+          for (const r of rows) bandBySlug.set(r.id, r.acquisition_age || null);
+        }
+        outItems = items.filter(i => !i.taxonomy_slug || tileFitsAge(bandBySlug.get(i.taxonomy_slug) || null, band));
+      }
+    }
+
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
       categories: cats.map(rowToCategory),
-      items: items.map(rowToItem),
+      items: outItems.map(rowToItem),
+      ageFilter: { applied: !!appliedBand, band: appliedBand, hiddenCount: items.length - outItems.length },
     });
   } catch (err) {
     res.status(500).json({ error: 'Sync failed', detail: String(err.message || err) });
