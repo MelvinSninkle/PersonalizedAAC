@@ -458,6 +458,12 @@ export default async function handler(req, res) {
     // a gate — parents/SLPs can surface anything at any stage. NULL = stage_5plus.
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS growth_stage TEXT`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_growth_idx ON taxonomy(growth_stage)`;
+    // acquisition_age: the developmental band at which a typical child learns this
+    // word (CDI/Brown's-stages bands: 12-18m, 18-30m, 2-3y, 3-4y, 4y+). Advisory
+    // like growth_stage; drives early-intervention board filtering so a 14-month-
+    // old isn't shown clutter. NULL on rows where the family decides (Personalize).
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS acquisition_age TEXT`;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_age_idx ON taxonomy(acquisition_age)`;
     // meal_context (food only): one of breakfast/lunch/dinner/snack/anytime.
     // Drives mode-based default-category in the Nouns column (§4.2).
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS meal_context TEXT`;
