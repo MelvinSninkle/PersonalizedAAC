@@ -6,6 +6,7 @@
 // Lab and have it go live on Fletcher's board as I go" step. Admin-gated.
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
+import { archivePriorImage } from '../_lib/image-history.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -59,11 +60,18 @@ export default async function handler(req, res) {
       }
     }
     // 3) Upsert the live item (match by taxonomy_slug first, else same label in section).
-    const found = await db`SELECT id FROM items WHERE child_id = ${childId} AND section = ${section}
+    const found = await db`SELECT id, image_key, label, section FROM items WHERE child_id = ${childId} AND section = ${section}
       AND (taxonomy_slug = ${taxonomyId} OR lower(label) = lower(${label})) LIMIT 1`;
     let itemId, created = false;
     if (found.length) {
       itemId = found[0].id;
+      if (found[0].image_key && found[0].image_key !== imageKey) {
+        await archivePriorImage({
+          db, childId, itemId, oldKey: found[0].image_key,
+          label: found[0].label, section: found[0].section, source: 'lab',
+          who: gate.email || null,
+        });
+      }
       await db`UPDATE items SET label = ${label}, image_key = ${imageKey}, category_id = ${targetCatId},
         taxonomy_slug = ${taxonomyId}, needs_review = FALSE, updated_at = NOW() WHERE id = ${itemId}`;
     } else {

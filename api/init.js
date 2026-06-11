@@ -374,6 +374,29 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS image_generations_actor_idx   ON image_generations(actor_email)`;
     await db`CREATE INDEX IF NOT EXISTS image_generations_created_idx ON image_generations(created_at DESC)`;
 
+    // Every previous picture a tile has ever had. We never delete a Blob when a
+    // tile's image_key changes — the old key gets archived here so the parent
+    // can scroll back through the visual memorabilia of their child's board
+    // (Grandma at 14 months, Grandma at 3 years, the dog they used to have…).
+    // ON DELETE SET NULL on item_id so history outlives the tile that owned it.
+    await db`
+      CREATE TABLE IF NOT EXISTS item_image_history (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL,
+        item_id BIGINT REFERENCES items(id) ON DELETE SET NULL,
+        item_label TEXT,                              -- snapshotted at archive time so deleted-tile history is still readable
+        section TEXT,
+        blob_key TEXT NOT NULL,
+        prompt TEXT,
+        model TEXT,
+        source TEXT,                                  -- 'generated' | 'uploaded' | 'onboarding' | 'lab' | 'pending'
+        archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        archived_by TEXT
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS item_image_history_child_idx   ON item_image_history(child_id, archived_at DESC)`;
+    await db`CREATE INDEX IF NOT EXISTS item_image_history_item_idx    ON item_image_history(item_id, archived_at DESC)`;
+
     await db`
       CREATE TABLE IF NOT EXISTS reference_images (
         id BIGSERIAL PRIMARY KEY,
@@ -757,10 +780,12 @@ Size: {size}. No watermarks, no extra text other than the tile label.',
         voice_key     TEXT,                           -- TTS clip
         pronunciation TEXT,                           -- "say it as…" phonetic
         notes         TEXT,
+        birth_date    DATE,                           -- on the is_self row, drives age-band board filtering
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS birth_date DATE`;
     await db`CREATE INDEX IF NOT EXISTS persons_child_idx ON persons(child_id)`;
     await db`CREATE INDEX IF NOT EXISTS persons_rel_idx   ON persons(child_id, relationship)`;
     // People-section tiles point at the person they depict (nullable: only people tiles use it).

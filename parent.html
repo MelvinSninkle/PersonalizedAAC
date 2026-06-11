@@ -530,6 +530,39 @@
     <button class="btn ghost" id="answers-reload" style="margin-top:10px;">↻ Refresh</button>
   </div>
 
+  <!-- AGE BAND -->
+  <div class="section-label">What's on the board</div>
+  <div class="panel" id="age-panel">
+    <h2>Vocabulary level <span id="age-current-band" style="font-weight:400;color:#6b7280;font-size:14px;"></span></h2>
+    <p class="hint">An early-intervention board hides words that aren't age-appropriate yet, so the board starts focused and grows with your child. <span class="cn">Your child</span>'s birth date drives this — change it any time. Words you've added on your own are never filtered.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;">
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-size:13px;font-weight:600;color:var(--ink);">Birth date</span>
+        <input id="age-birth" type="date" style="padding:8px;border:1px solid var(--line);border-radius:10px;font:inherit;">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink);">
+        <input id="age-show-all" type="checkbox">
+        Show all vocabulary on the board (skip the age filter)
+      </label>
+      <button class="btn" id="age-save">Save</button>
+      <span id="age-msg" style="color:#6b7280;font-size:13px;"></span>
+    </div>
+  </div>
+
+  <!-- ALBUM -->
+  <div class="section-label">Picture album</div>
+  <div class="panel" id="album-panel">
+    <h2>Pictures your board has held <span id="album-count" style="font-weight:400;color:#6b7280;font-size:14px;"></span></h2>
+    <p class="hint">Every time a tile gets a new picture, the old one is saved here. Tap a tile to see its history; scroll the timeline for a chronological view of <span class="cn">your child</span>'s board memorabilia.</p>
+    <div style="display:flex;gap:8px;margin:8px 0 12px;">
+      <button class="btn" id="album-mode-tiles" data-mode="by-tile">By tile</button>
+      <button class="btn ghost" id="album-mode-time" data-mode="timeline">Timeline</button>
+      <button class="btn ghost" id="album-reload" style="margin-left:auto;">↻ Refresh</button>
+    </div>
+    <div id="album-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;"></div>
+    <div id="album-empty" class="hint" style="display:none;padding:20px 0;text-align:center;">No pictures yet. As tiles get regenerated, the old versions will appear here.</div>
+  </div>
+
   <!-- ORGANIZE -->
   <div class="section-label">Organize the board</div>
   <div class="panel">
@@ -2310,6 +2343,149 @@
   }
   const ansReload = document.getElementById('answers-reload'); if (ansReload) ansReload.addEventListener('click', loadAnswers);
   loadAnswers();
+
+  // ----- Age band: birth date + show-all toggle -----
+  let agePersonId = null, ageMeRow = null;
+  const ageBand = (() => {
+    const months = (b) => {
+      const d = new Date(b); if (isNaN(d)) return null;
+      const n = new Date(); let m = (n.getFullYear() - d.getFullYear()) * 12 + (n.getMonth() - d.getMonth());
+      if (n.getDate() < d.getDate()) m -= 1; return m;
+    };
+    return (birth) => {
+      const m = months(birth); if (m == null) return null;
+      if (m < 18) return '12-18m'; if (m < 30) return '18-30m'; if (m < 36) return '2-3y'; if (m < 48) return '3-4y'; return '4y+';
+    };
+  })();
+  function ageBandLabel(b) {
+    return { '12-18m': '12–18 months · first words', '18-30m': '18–30 months · vocabulary burst', '2-3y': '2–3 years · sentence emergence', '3-4y': '3–4 years · grammar developing', '4y+': '4 years and up · refined language' }[b] || '—';
+  }
+  async function loadAgePanel() {
+    try {
+      const r = await fetch('/api/persons?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const d = await r.json();
+      const me = (d.persons || []).find(p => p.is_self);
+      if (me) { agePersonId = me.id; ageMeRow = me; if (me.birth_date) document.getElementById('age-birth').value = String(me.birth_date).slice(0, 10); }
+      try { document.getElementById('age-show-all').checked = localStorage.getItem('aacShowAllVocab') === '1'; } catch (_) {}
+      const b = me && me.birth_date ? ageBand(me.birth_date) : null;
+      document.getElementById('age-current-band').textContent = b ? '· board is showing ' + ageBandLabel(b) + ' and earlier' : '· (no birth date set yet — showing every vocabulary band)';
+    } catch (_) {}
+  }
+  document.getElementById('age-save').addEventListener('click', async () => {
+    const msg = document.getElementById('age-msg'); msg.textContent = 'Saving…';
+    const birth = document.getElementById('age-birth').value || '';
+    const showAll = document.getElementById('age-show-all').checked;
+    try {
+      try { localStorage.setItem('aacShowAllVocab', showAll ? '1' : '0'); } catch (_) {}
+      if (birth && !/^\d{4}-\d{2}-\d{2}$/.test(birth)) { msg.textContent = 'Birth date must be a valid date.'; return; }
+      if (birth) {
+        const body = { childId: slug, isSelf: true, relationship: 'self', birthDate: birth };
+        if (agePersonId) body.id = agePersonId;
+        if (ageMeRow && ageMeRow.display_name) body.displayName = ageMeRow.display_name;
+        else { msg.textContent = "Add your child's photo and name in onboarding first."; return; }
+        const r = await fetch('/api/persons', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body) });
+        if (!r.ok) { const d = await r.json().catch(() => ({})); msg.textContent = 'Could not save: ' + (d.error || r.status); return; }
+      }
+      msg.textContent = 'Saved. The board will use this on the next sync.';
+      await loadAgePanel();
+    } catch (err) { msg.textContent = 'Could not save: ' + (err.message || err); }
+  });
+  loadAgePanel();
+
+  // ----- Album: tile-image history -----
+  let albumMode = 'by-tile';
+  const albumGrid = document.getElementById('album-grid');
+  const albumEmpty = document.getElementById('album-empty');
+  const albumCount = document.getElementById('album-count');
+  function albumSetMode(mode) {
+    albumMode = mode;
+    document.getElementById('album-mode-tiles').classList.toggle('ghost', mode !== 'by-tile');
+    document.getElementById('album-mode-time').classList.toggle('ghost', mode !== 'timeline');
+    loadAlbum();
+  }
+  function albumThumb(blobKey, label, captionExtra) {
+    const a = document.createElement('a');
+    a.href = '/api/media?key=' + encodeURIComponent(blobKey);
+    a.target = '_blank'; a.rel = 'noopener';
+    a.style.cssText = 'display:block;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;text-decoration:none;color:inherit;';
+    const img = document.createElement('img');
+    img.src = '/api/media?key=' + encodeURIComponent(blobKey);
+    img.alt = label || '';
+    img.loading = 'lazy';
+    img.style.cssText = 'width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#f3f4f6;';
+    const cap = document.createElement('div');
+    cap.style.cssText = 'padding:6px 8px;font-size:13px;line-height:1.25;';
+    cap.innerHTML = '<div style="font-weight:600;">' + schEsc(label || '') + '</div>' +
+      (captionExtra ? '<div style="color:#6b7280;font-size:11px;margin-top:2px;">' + schEsc(captionExtra) + '</div>' : '');
+    a.appendChild(img); a.appendChild(cap);
+    return a;
+  }
+  function albumWhen(iso) {
+    if (!iso) return '';
+    try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (_) { return ''; }
+  }
+  async function loadAlbum() {
+    if (!albumGrid) return;
+    albumGrid.innerHTML = '<div class="hint">Loading…</div>';
+    try {
+      const r = await fetch('/api/album?childId=' + encodeURIComponent(slug) + '&mode=' + albumMode + '&limit=300', { credentials: 'same-origin' });
+      if (!r.ok) { albumGrid.innerHTML = '<div class="hint" style="color:#9b1c1c;">Could not load album (' + r.status + ').</div>'; return; }
+      const d = await r.json();
+      albumGrid.innerHTML = '';
+      let totalShown = 0;
+      if (albumMode === 'timeline') {
+        const entries = d.entries || [];
+        if (!entries.length) { albumEmpty.style.display = ''; albumCount.textContent = ''; return; }
+        albumEmpty.style.display = 'none';
+        for (const e of entries) {
+          albumGrid.appendChild(albumThumb(e.blobKey, e.label || '(untitled)', albumWhen(e.when) + (e.kind === 'current' ? ' · current' : '')));
+          totalShown++;
+        }
+      } else {
+        const tiles = d.tiles || [];
+        if (!tiles.length) { albumEmpty.style.display = ''; albumCount.textContent = ''; return; }
+        albumEmpty.style.display = 'none';
+        // Each tile becomes a "stack" card: the current image plus a small count of
+        // older versions. Tapping the count expands inline.
+        albumGrid.style.gridTemplateColumns = 'repeat(auto-fill,minmax(160px,1fr))';
+        for (const t of tiles) {
+          const card = document.createElement('div');
+          card.style.cssText = 'border:1px solid var(--line);border-radius:14px;background:#fff;padding:10px;display:flex;flex-direction:column;gap:8px;';
+          const top = t.current ? albumThumb(t.current.blobKey, t.label || '(untitled)', 'current · ' + albumWhen(t.current.when)) : null;
+          if (top) { top.style.border = 'none'; card.appendChild(top); }
+          if (t.history && t.history.length) {
+            const sub = document.createElement('div');
+            sub.style.cssText = 'font-size:12px;color:#6b7280;cursor:pointer;user-select:none;';
+            sub.textContent = '＋ ' + t.history.length + ' older version' + (t.history.length === 1 ? '' : 's');
+            const stack = document.createElement('div');
+            stack.style.cssText = 'display:none;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;';
+            for (const h of t.history) {
+              const mini = albumThumb(h.blobKey, '', albumWhen(h.when));
+              mini.style.borderRadius = '8px';
+              mini.querySelector('img').style.aspectRatio = '1/1';
+              stack.appendChild(mini);
+            }
+            sub.addEventListener('click', () => {
+              const open = stack.style.display === 'grid';
+              stack.style.display = open ? 'none' : 'grid';
+              sub.textContent = (open ? '＋ ' : '− ') + t.history.length + ' older version' + (t.history.length === 1 ? '' : 's');
+            });
+            card.appendChild(sub); card.appendChild(stack);
+            totalShown += 1 + t.history.length;
+          } else if (t.current) { totalShown += 1; }
+          albumGrid.appendChild(card);
+        }
+      }
+      albumCount.textContent = '· ' + totalShown + ' picture' + (totalShown === 1 ? '' : 's');
+    } catch (err) {
+      albumGrid.innerHTML = '<div class="hint" style="color:#9b1c1c;">Could not load album: ' + schEsc(String(err.message || err)) + '</div>';
+    }
+  }
+  document.getElementById('album-mode-tiles').addEventListener('click', () => albumSetMode('by-tile'));
+  document.getElementById('album-mode-time').addEventListener('click', () => albumSetMode('timeline'));
+  document.getElementById('album-reload').addEventListener('click', loadAlbum);
+  loadAlbum();
 
   // ---- Register this device for push (native parent app only; no-op in a browser) ----
   // The server tags the token with the signed-in role, and only parent/admin
