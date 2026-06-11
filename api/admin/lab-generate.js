@@ -112,7 +112,9 @@ export default async function handler(req, res) {
   let content = contentOverride || tax.prompt_template || `An illustration of ${tax.label}.`;
   const section = String(tax.column_name || '').toLowerCase();
   const mentionsRef = /\{reference\}/i.test(content);
+  const mentionsFam = /\{family_adult\}/i.test(content);
   let subject = null;            // { buf, key, name }
+  let famSubject = null;         // { buf, key, name } — a close adult family member
   let subjectExpected = false;   // a person was expected → caller can warn if no anchor
   if (childId && (section === 'people' || mentionsRef)) {
     subjectExpected = true;
@@ -135,10 +137,40 @@ export default async function handler(req, res) {
     }
   }
 
+  // {family_adult} → a close family member's likeness anchor. Body parts and
+  // caregiving/comfort concepts read better on the adult the child looks at all
+  // day than on the child themselves. STRICTLY close family — parents/step-
+  // parents/guardians first, then grandparents — never family friends, outside
+  // caregivers, or anyone else on the board. Fallback chain: anchored close
+  // adult → the child's own anchor → a generic unnamed adult, so the tile
+  // always renders and the generic variant stays shareable across children.
+  if (childId && mentionsFam) {
+    subjectExpected = true;
+    try {
+      const prow = (await db`
+        SELECT given_name, display_name, reference_key FROM persons
+        WHERE child_id = ${childId} AND reference_key IS NOT NULL
+          AND relationship IN ('mother','father','stepmother','stepfather','guardian','grandmother','grandfather')
+        ORDER BY array_position(ARRAY['mother','father','stepmother','stepfather','guardian','grandmother','grandfather']::text[], relationship)
+        LIMIT 1`)[0]
+        || (await db`SELECT given_name, display_name, reference_key FROM persons
+                     WHERE child_id = ${childId} AND is_self = TRUE AND reference_key IS NOT NULL LIMIT 1`)[0];
+      if (prow && prow.reference_key) {
+        try {
+          const buf = await readBlob(prow.reference_key);
+          famSubject = { buf, key: prow.reference_key, name: prow.given_name || prow.display_name || 'a family member' };
+        } catch (_) { /* unreadable anchor → generic adult */ }
+      }
+    } catch (err) {
+      console.error('[lab-generate] family anchor lookup failed (continuing generic):', String(err.message || err));
+    }
+  }
+
   // {reference} → the named subject when we have an anchor, else a generic child so the
-  // token never leaks literally; {style}/{parent_photo} resolved too.
+  // token never leaks literally; {family_adult}/{style}/{parent_photo} resolved too.
   const refPhrase = subject ? subject.name : 'a friendly young child';
-  content = fillTemplate(content, { style: 'picture', reference: refPhrase, parent_photo: '' });
+  const famPhrase = famSubject ? famSubject.name : 'a warm, friendly adult family member';
+  content = fillTemplate(content, { style: 'picture', reference: refPhrase, family_adult: famPhrase, parent_photo: '' });
   let prompt;
   if (promptOverride) {
     prompt = promptOverride;
@@ -147,7 +179,7 @@ export default async function handler(req, res) {
       content,
       label: tax.label || '',
       size,
-      no_face_rule: subject ? '' : noFaceRule(tax.category),   // a real person SHOULD have a face
+      no_face_rule: (subject || famSubject || mentionsRef || mentionsFam) ? '' : noFaceRule(tax.category),   // a real person SHOULD have a face
       style_image: style ? '(match the art style of the style-reference image)' : '',
       reference: subject ? `(keep the likeness of ${subject.name} from the reference photo)` : '',
     });
@@ -167,6 +199,7 @@ export default async function handler(req, res) {
   const legend = [];
   if (styleBuf) { images.push({ buf: styleBuf, name: 'style.jpg' }); legend.push(`Image ${images.length} is the STYLE reference — copy its art style only, not its content.`); }
   if (subject) { images.push({ buf: subject.buf, name: 'subject.jpg' }); legend.push(`Image ${images.length} shows ${subject.name} — keep this person's face and likeness clearly recognizable.`); }
+  if (famSubject) { images.push({ buf: famSubject.buf, name: 'family.jpg' }); legend.push(`Image ${images.length} shows ${famSubject.name} — keep this person's face and likeness clearly recognizable.`); }
   if (legend.length) prompt += '\n\n' + legend.join(' ');
 
   // 6. Call the provider — Gemini for gemini-* models (style/subject references
@@ -264,7 +297,10 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       ok: true,
-      subject: { expected: subjectExpected, referenced: !!subject, name: subject ? subject.name : null },
+      subject: {
+        expected: subjectExpected, referenced: !!subject, name: subject ? subject.name : null,
+        family: mentionsFam ? { referenced: !!famSubject, name: famSubject ? famSubject.name : null } : null,
+      },
       generation: {
         id: gen[0].id,
         taxonomyId: gen[0].taxonomy_id,
