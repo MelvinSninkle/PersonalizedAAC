@@ -5,6 +5,7 @@ import SwiftUI
 /// changes happen on the web parent dashboard, which we open in Safari.
 struct SettingsView: View {
     @Environment(AuthManager.self) private var auth
+    @Environment(DeviceMode.self)  private var mode
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -20,6 +21,15 @@ struct SettingsView: View {
                     }
                 }
                 Section("Parent dashboard") {
+                    Button {
+                        mode.role = .parent
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Image(systemName: "person.crop.circle.fill")
+                            Text("Switch this device to the Parent app")
+                        }
+                    }
                     Link(destination: parentURL) {
                         HStack {
                             Image(systemName: "safari")

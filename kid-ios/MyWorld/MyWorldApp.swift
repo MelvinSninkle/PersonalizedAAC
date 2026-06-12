@@ -10,6 +10,7 @@ struct MyWorldApp: App {
     @State private var game      = GameController()
     @State private var scheduler = Scheduler()
     @State private var addQueue  = AddTileQueue()
+    @State private var mode      = DeviceMode()
 
     init() {
         setupAudioSession()
@@ -25,6 +26,7 @@ struct MyWorldApp: App {
                 .environment(game)
                 .environment(scheduler)
                 .environment(addQueue)
+                .environment(mode)
                 .statusBarHidden(true)
                 .persistentSystemOverlays(.hidden)
         }

@@ -1,0 +1,175 @@
+import Foundation
+
+/// Parent-app endpoints, kept in their own extension so the kid-board surface
+/// of APIClient stays unchanged. Everything here talks to routes that already
+/// exist on the web backend — no client-specific server code.
+extension APIClient {
+
+    // MARK: -- /api/message-to-board (PRD §4.7)
+
+    struct MessageToken: Codable, Identifiable, Hashable {
+        var id: String { word + (imageKey ?? "-") }
+        let word: String
+        let itemId: Int?
+        let imageKey: String?
+        let soundKey: String?
+        let text: Bool?
+        let holdMs: Double?
+    }
+
+    struct MessageResult: Codable {
+        let ok: Bool
+        let tokens: [MessageToken]
+        let matched: Int
+        let total: Int
+    }
+
+    /// Tokenizes the text against the child's board tiles server-side and
+    /// publishes the sequence to the iPad through the live channel. The
+    /// returned tokens are the preview ("this is how the child will see it").
+    func sendMessageToBoard(childId: String, text: String) async throws -> MessageResult {
+        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "text": text])
+        let (data, _) = try await request(method: "POST", path: "/api/message-to-board",
+                                          body: body, contentType: "application/json")
+        do { return try JSONDecoder().decode(MessageResult.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
+    // MARK: -- /api/live commands (phone side — publish, not poll)
+
+    /// Push a facilitator command to the child's iPad: start a game, end it.
+    /// Mirrors the JSON therapist.html/parent.html publish via POST kind=cmd.
+    func publishLiveCommand(childId: String, _ cmd: [String: Any]) async throws {
+        var dict: [String: Any] = ["kind": "cmd"]
+        for (k, v) in cmd { dict[k] = v }
+        let body = try JSONSerialization.data(withJSONObject: dict)
+        _ = try await request(method: "POST",
+                              path: "/api/live?childId=\(percentEscapeParent(childId))",
+                              body: body, contentType: "application/json")
+    }
+
+    // MARK: -- /api/analytics (PRD §4.5)
+
+    /// Loosely-typed analytics payload: the endpoint returns several series and
+    /// we only decode the parts the v1 stats screen renders. The server
+    /// PRE-FORMATS these for display (mastery.pct is 0-100; session fields are
+    /// ready-made strings like "4 / 5" and "12 min"), so the phone renders them
+    /// verbatim — no client-side math to drift out of step with the web.
+    struct AnalyticsResponse: Codable {
+        struct MasteryRow: Codable, Identifiable {
+            var id: String { name }
+            let name: String
+            let pct: Int           // 0-100, server-rounded
+        }
+        struct SessionRow: Codable, Identifiable {
+            var id: String { (date ?? "") + (mode ?? "") + (result ?? "") }
+            let date: String?      // "Jun 12"
+            let mode: String?      // human label ("Matching")
+            let category: String?  // resolved scope label
+            let result: String?    // "4 / 5" or "—"
+            let length: String?    // "12 min" or "—"
+        }
+        let mastery: [MasteryRow]
+        let recentSessions: [SessionRow]
+    }
+
+    func analytics(childId: String) async throws -> AnalyticsResponse {
+        let (data, _) = try await request(method: "GET",
+                                          path: "/api/analytics?childId=\(percentEscapeParent(childId))",
+                                          body: nil)
+        do { return try JSONDecoder().decode(AnalyticsResponse.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
+    // MARK: -- /api/album (picture memorabilia)
+
+    struct AlbumEntry: Codable, Identifiable {
+        var id: String { blobKey + (when ?? "") }
+        let label: String?
+        let section: String?
+        let blobKey: String
+        let when: String?
+        let kind: String?       // 'current' | 'history'
+    }
+    struct AlbumResponse: Codable {
+        let entries: [AlbumEntry]?
+    }
+
+    func albumTimeline(childId: String, limit: Int = 200) async throws -> [AlbumEntry] {
+        let (data, _) = try await request(method: "GET",
+                                          path: "/api/album?childId=\(percentEscapeParent(childId))&mode=timeline&limit=\(limit)",
+                                          body: nil)
+        do { return try JSONDecoder().decode(AlbumResponse.self, from: data).entries ?? [] }
+        catch { throw APIError.decoding(error) }
+    }
+
+    // MARK: -- /api/advance-band (vocabulary level)
+
+    struct BandStatus: Codable {
+        struct Mastery: Codable {
+            let correct: Int
+            let total: Int
+            let ready: Bool
+            let lookbackDays: Int
+            let minAttempts: Int
+        }
+        let current: String?
+        let natural: String?
+        let advanced: String?
+        let next: String?
+        let readyToAdvance: Bool?
+        let mastery: Mastery?
+    }
+
+    func bandStatus(childId: String) async throws -> BandStatus {
+        let (data, _) = try await request(method: "GET",
+                                          path: "/api/advance-band?childId=\(percentEscapeParent(childId))",
+                                          body: nil)
+        do { return try JSONDecoder().decode(BandStatus.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
+    func advanceBand(childId: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "reason": "parent"])
+        _ = try await request(method: "POST", path: "/api/advance-band",
+                              body: body, contentType: "application/json")
+    }
+
+    // MARK: -- schedules (merge-safe write, mirrors saveDisplayPrefs)
+
+    /// Write the schedules array back into child_settings without clobbering
+    /// the other keys the web app stores in the same blob.
+    func saveSchedules(childId: String, _ schedules: [[String: Any]]) async {
+        guard let (data, _) = try? await request(
+                method: "GET",
+                path: "/api/child-settings?childId=\(percentEscapeParent(childId))",
+                body: nil),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return }
+        var settings = (root["settings"] as? [String: Any]) ?? [:]
+        settings["schedules"] = schedules
+        guard let body = try? JSONSerialization.data(withJSONObject: ["settings": settings]) else { return }
+        _ = try? await request(method: "POST",
+                               path: "/api/child-settings?childId=\(percentEscapeParent(childId))",
+                               body: body, contentType: "application/json")
+    }
+
+    /// Raw schedules as dictionaries — used by the editor so unknown fields
+    /// written by the web round-trip untouched.
+    func fetchRawSchedules(childId: String) async -> [[String: Any]] {
+        guard let (data, _) = try? await request(
+                method: "GET",
+                path: "/api/child-settings?childId=\(percentEscapeParent(childId))",
+                body: nil),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let settings = root["settings"] as? [String: Any]
+        else { return [] }
+        return (settings["schedules"] as? [[String: Any]]) ?? []
+    }
+
+    // MARK: -- plumbing (extension can't see the private helper in APIClient)
+
+    fileprivate func percentEscapeParent(_ s: String) -> String {
+        s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? s
+    }
+}

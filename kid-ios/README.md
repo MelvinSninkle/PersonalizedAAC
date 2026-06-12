@@ -1,7 +1,33 @@
-# My World — native iOS kid app
+# My World — native iOS app (one app, two display modes)
 
-Native SwiftUI rewrite of the kid surface only. Parent / therapist / admin
-stay on the web app — this app is just the board Fletcher actually taps on.
+Native SwiftUI app with **two faces of the same binary** (PRD §1.2):
+
+- **Child board** — the communication board, used on a dedicated iPad in
+  Guided Access. The original surface of this app.
+- **Parent app** — a phone-first home screen (also fine on iPad) for a parent
+  on the go: add a tile, quick board, start a game, stats, schedules,
+  message the board, the picture album.
+
+On first launch after login the app asks "Who uses this device?" and stores
+the answer (`UserDefaults.deviceRole`). Switching later:
+parent → child: gear → "Use as the child's board".
+child → parent: triple-tap the header → Settings → "Switch this device to the
+Parent app". Existing installs see the picker once after updating.
+
+Therapist / admin / Lab stay on the web app by design.
+
+## Parent app surface (`MyWorld/Parent/`)
+
+| Screen | Endpoint(s) |
+| --- | --- |
+| Add a tile | reuses the iPad's `AddTileQueue` chain (describe → generate → tts → items) |
+| Quick board (PRD §4.3) | the same `BoardView`, full screen; long-press the lock pill 1.2s to exit |
+| Start a game (PRD §4.4) | `POST /api/live` kind=cmd (`start` / `end`); tablet presence via status age |
+| Message the board (PRD §4.7) | `POST /api/message-to-board` → token preview strip |
+| Stats (PRD §4.5) | `GET /api/analytics` (server pre-formats; the phone renders verbatim) |
+| Schedules (PRD §4.6) | `child_settings.schedules` round-trip (raw dicts so web-authored fields survive) |
+| Album | `GET /api/album?mode=timeline` |
+| Vocabulary level | `GET/POST /api/advance-band` (current band + parent unlock) |
 
 **Why native:** WKWebView taps lag on iPad (300ms click delay, double-tap-to-
 zoom, gesture fights with the kid's actual taps). Native UIKit/SwiftUI gesture
