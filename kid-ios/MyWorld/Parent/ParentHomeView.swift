@@ -10,10 +10,12 @@ struct ParentHomeView: View {
     @Environment(BoardStore.self)   private var board
     @Environment(DeviceMode.self)   private var mode
     @Environment(AddTileQueue.self) private var addQueue
+    @Environment(ParentLive.self)   private var parentLive
 
     @State private var showAddTile  = false
     @State private var showQuickBoard = false
     @State private var showSettings = false
+    @State private var showFacilitator = false
 
     private let columns = [GridItem(.adaptive(minimum: 160), spacing: 14)]
 
@@ -87,6 +89,19 @@ struct ParentHomeView: View {
                 // Hydrate the board once so Quick Board / game scopes / message
                 // previews have data without each screen re-syncing.
                 await board.refresh(childId: auth.childSlug)
+                // App-wide live poller — drives the auto-popping facilitator
+                // overlay from anywhere in the parent app.
+                parentLive.start(childId: auth.childSlug)
+            }
+            // PRD: when a facilitated game session starts on the iPad — from
+            // here, from the child's tablet, from the web console, or from a
+            // scheduled game nudge — the adult UI loads automatically over
+            // whatever the parent is doing.
+            .onChange(of: parentLive.isRunning) { _, running in
+                showFacilitator = running
+            }
+            .fullScreenCover(isPresented: $showFacilitator) {
+                FacilitatorView()
             }
         }
     }

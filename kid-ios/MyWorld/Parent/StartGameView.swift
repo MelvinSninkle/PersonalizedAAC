@@ -1,28 +1,28 @@
 import SwiftUI
 
-/// PRD §4.4 + parity with the web therapist console. Two phases on one screen:
-///
-///   • SET UP  — pick a game mode, scope, sample size, choices, time limit;
-///                tap Start to launch on the child's iPad.
-///   • RUNNING — live mirror of the iPad: the current target tile + correct
-///                count + 'mark' buttons (Tapped / Said / Object) + Skip /
-///                Next / End. Mirrors therapist.html's facilitator marks so
-///                a verbal or physical response can be counted just like a tap.
-///
-/// Both phases share one live poll (~1.5s — same cadence as web therapist).
+/// PRD §4.4 — pick a game, configure it, launch it on the iPad. Every option
+/// the backend's live channel supports is exposed here (mode / scope / range
+/// / sample / choices / time limit / slideshow pacing / first-person framing
+/// / music override). Once the game starts, ParentLive flips isRunning and
+/// the FacilitatorView pops automatically over the whole parent app — this
+/// screen's only job is the SETUP phase.
 struct StartGameView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(BoardStore.self)  private var board
+    @Environment(ParentLive.self)  private var live
 
     private let api = APIClient()
 
     enum GameMode: String, CaseIterable, Identifiable {
-        case matching, slideshow, auditory_comprehension, expressive_naming, celebration
+        // Names match the backend's GameController dispatch (see iPad's
+        // Live/GameController.swift `parseMode`). Each is a real iPad game.
+        case matching, learn_slideshow, exposure_slideshow, auditory_comprehension, expressive_naming, celebration
         var id: String { rawValue }
         var label: String {
             switch self {
             case .matching:               return "Matching"
-            case .slideshow:              return "Slideshow"
+            case .learn_slideshow:        return "Learn slideshow"
+            case .exposure_slideshow:     return "Exposure slideshow"
             case .auditory_comprehension: return "Listening (auditory)"
             case .expressive_naming:      return "Expressive naming"
             case .celebration:            return "Celebration"
@@ -31,203 +31,113 @@ struct StartGameView: View {
         var blurb: String {
             switch self {
             case .matching:               return "Hear a word, tap the matching picture. No wrong-answer sounds — ever."
-            case .slideshow:              return "Calm watch-and-listen flashcards."
+            case .learn_slideshow:        return "Calm watch-and-listen flashcards (\"This is a dog.\")."
+            case .exposure_slideshow:     return "Same pacing, first-person framing (\"This is your dog.\") for self-modeling."
             case .auditory_comprehension: return "Hear a clue (\"lives in a field, eats grass\"), find the tile it describes."
             case .expressive_naming:      return "The child sees a picture and names what they see."
             case .celebration:            return "Flowers and cheers — celebrate a moment."
             }
         }
         var usesChoices: Bool { self == .matching || self == .auditory_comprehension }
+        var isSlideshow:  Bool { self == .learn_slideshow || self == .exposure_slideshow }
     }
 
-    // Setup state
+    // Backend-supported settings, all on this one screen.
     @State private var mode: GameMode = .matching
     @State private var scope = "all"
     @State private var rangeFrom = ""
     @State private var rangeTo = ""
-    @State private var sample = 5         // 0 = use all in order
+    @State private var sample = 5            // 0 = use all in order
     @State private var choices = 3
-    @State private var limitMin = 0       // 0 = no limit
+    @State private var limitMin = 0          // 0 = no limit
+    @State private var secondsPerImage = 4   // slideshow only
+    @State private var labelStyle = "plain"  // "plain" | "first_person" — exposed for matching/slideshow
+    @State private var musicOverride: String? = nil   // path, e.g. "/audio/color-tap-learn.mp3"
 
-    // Live state
-    @State private var status: LiveStatus?
     @State private var sendState: SendState = .idle
-    @State private var pollTask: Task<Void, Never>?
     enum SendState: Equatable { case idle, sending, sent, failed(String) }
-
-    // A running session is one whose published status is 'running' AND whose
-    // heartbeat is recent enough that the tablet is still alive.
-    private var isRunning: Bool { status?.status == "running" && (status?.age ?? 99) < 8 }
-    private var tabletOnline: Bool { (status?.age ?? 99) < 8 && status?.status != "idle" }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
                 tabletPill
-                if isRunning {
-                    livePanel
-                } else {
-                    setupPanel
+                modeCard
+                scopeCard
+                settingsCard
+                if mode.isSlideshow { slideshowCard }
+                startButton
+                if case .failed(let why) = sendState {
+                    Text("Could not start: \(why)")
+                        .font(.footnote).foregroundStyle(.red)
+                } else if sendState == .sent {
+                    Text("Sent — the facilitator screen will open the moment the iPad starts.")
+                        .font(.footnote).foregroundStyle(Color(hex: Brand.muted))
                 }
             }
             .padding(16)
         }
-        .background(Color(hex: "#fff7fb"))
+        .background(Color(hex: Brand.bg))
         .navigationTitle("Start a game")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            pollTask = Task { await pollLoop() }
-        }
-        .onDisappear { pollTask?.cancel() }
     }
 
-    // MARK: -- Tablet presence pill
+    // MARK: -- Cards
 
     private var tabletPill: some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(tabletOnline ? Color(hex: "#16a34a") : Color(hex: "#9ca3af"))
+                .fill(live.tabletOnline ? Color(hex: Brand.good) : Color(hex: Brand.faint))
                 .frame(width: 10, height: 10)
-            Text(tabletOnline ? "Tablet connected" : "Waiting for tablet…")
+            Text(live.tabletOnline ? "Tablet connected" : "Waiting for tablet…")
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(hex: "#1f2937"))
+                .foregroundStyle(Color(hex: Brand.ink))
             Spacer()
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(.white, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#f3c6da"), lineWidth: 1))
+        .background(
+            live.tabletOnline ? Color(hex: Brand.goodBg) : Color(hex: Brand.card),
+            in: RoundedRectangle(cornerRadius: 14)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(live.tabletOnline ? Color(hex: Brand.goodLine) : Color(hex: Brand.line),
+                        lineWidth: 1)
+        )
     }
 
-    // MARK: -- Setup phase
-
-    private var setupPanel: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            // Mode
-            sectionHeader("Game")
-            modePicker
+    private var modeCard: some View {
+        cardSection(label: "GAME") {
+            menuRow(title: "Mode", value: mode.label) {
+                ForEach(GameMode.allCases) { m in
+                    Button(m.label) { mode = m }
+                }
+            }
             Text(mode.blurb)
-                .font(.footnote).foregroundStyle(Color(hex: "#6b7280"))
+                .font(.footnote)
+                .foregroundStyle(Color(hex: Brand.muted))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 
-            // Scope
-            sectionHeader("Words")
-            scopePicker
-
-            // Optional from/to range (web parity: only when scope is specific)
+    private var scopeCard: some View {
+        cardSection(label: "WORDS") {
+            menuRow(title: "Practice", value: scopeLabel) {
+                Section("Sections") {
+                    Button("Everything") { scope = "all" }
+                    Button("People")     { scope = "people" }
+                    Button("Nouns")      { scope = "nouns" }
+                    Button("Verbs")      { scope = "verbs" }
+                    Button("Needs")      { scope = "needs" }
+                }
+                Section("Categories") {
+                    ForEach(rootCategories, id: \.id) { c in
+                        Button("\(c.section.label) — \(c.label)") { scope = "cat:\(c.id)" }
+                    }
+                }
+            }
             if scope != "all" {
                 rangeRow
             }
-
-            // Sample, Choices, Limit
-            settingRow(
-                title: "Pick a few at random",
-                trailing: AnyView(
-                    Picker("", selection: $sample) {
-                        Text("All, in order").tag(0)
-                        Text("3 random").tag(3)
-                        Text("5 random").tag(5)
-                        Text("8 random").tag(8)
-                        Text("10 random").tag(10)
-                    }
-                    .pickerStyle(.menu)
-                    .tint(Color(hex: "#ad1457"))
-                )
-            )
-            if mode.usesChoices {
-                settingRow(
-                    title: "Choices on screen",
-                    trailing: AnyView(
-                        Stepper("\(choices)", value: $choices, in: 2...4)
-                            .labelsHidden()
-                    )
-                )
-            }
-            settingRow(
-                title: "Time limit",
-                trailing: AnyView(
-                    Picker("", selection: $limitMin) {
-                        Text("No limit").tag(0)
-                        Text("1 minute").tag(1)
-                        Text("2 minutes").tag(2)
-                        Text("3 minutes").tag(3)
-                        Text("4 minutes").tag(4)
-                    }
-                    .pickerStyle(.menu)
-                    .tint(Color(hex: "#ad1457"))
-                )
-            )
-
-            // Start button
-            Button { Task { await start() } } label: {
-                HStack(spacing: 8) {
-                    if sendState == .sending { ProgressView().tint(.white) }
-                    Text(sendState == .sending ? "Starting…" : "Start on the iPad")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Color(hex: "#ff1493"), in: RoundedRectangle(cornerRadius: 999))
-                .foregroundStyle(.white)
-            }
-            .disabled(sendState == .sending || !tabletOnline)
-
-            if case .failed(let why) = sendState {
-                Text("Could not start: \(why)").font(.footnote).foregroundStyle(.red)
-            } else if sendState == .sent {
-                Text("Sent — the game should start on the iPad in a moment.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-        }
-        .padding(16)
-        .background(.white, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(hex: "#f3c6da"), lineWidth: 1))
-    }
-
-    private var modePicker: some View {
-        Menu {
-            ForEach(GameMode.allCases) { m in
-                Button(m.label) { mode = m }
-            }
-        } label: {
-            HStack {
-                Text("Mode").font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#374151"))
-                Spacer()
-                Text(mode.label).font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#ad1457"))
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 11)).foregroundStyle(Color(hex: "#ad1457"))
-            }
-            .padding(12)
-            .background(Color(hex: "#fff7fb"), in: RoundedRectangle(cornerRadius: 12))
-        }
-    }
-
-    private var scopePicker: some View {
-        Menu {
-            Section("Sections") {
-                Button("Everything") { scope = "all" }
-                Button("People")     { scope = "people" }
-                Button("Nouns")      { scope = "nouns" }
-                Button("Verbs")      { scope = "verbs" }
-                Button("Needs")      { scope = "needs" }
-            }
-            Section("Categories") {
-                ForEach(rootCategories, id: \.id) { c in
-                    Button("\(c.section.label) — \(c.label)") { scope = "cat:\(c.id)" }
-                }
-            }
-        } label: {
-            HStack {
-                Text("Practice").font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#374151"))
-                Spacer()
-                Text(scopeLabel).font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#ad1457"))
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 11)).foregroundStyle(Color(hex: "#ad1457"))
-            }
-            .padding(12)
-            .background(Color(hex: "#fff7fb"), in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -235,13 +145,13 @@ struct StartGameView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Limit to a range (optional)")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color(hex: "#374151"))
+                .foregroundStyle(Color(hex: Brand.ink))
             HStack {
                 TextField("from #", text: $rangeFrom)
                     .keyboardType(.numberPad)
                     .padding(10)
                     .background(Color(hex: "#fff7fb"), in: RoundedRectangle(cornerRadius: 10))
-                Text("to").foregroundStyle(.secondary)
+                Text("to").foregroundStyle(Color(hex: Brand.muted))
                 TextField("to #", text: $rangeTo)
                     .keyboardType(.numberPad)
                     .padding(10)
@@ -250,139 +160,117 @@ struct StartGameView: View {
         }
     }
 
-    private func sectionHeader(_ t: String) -> some View {
-        Text(t.uppercased())
-            .font(.system(size: 11, weight: .bold))
-            .tracking(0.5)
-            .foregroundStyle(Color(hex: "#9d174d"))
+    private var settingsCard: some View {
+        cardSection(label: "ROUND") {
+            menuRow(title: "Pick a few at random", value: sampleLabel) {
+                Button("All, in order")  { sample = 0 }
+                Button("3 random")       { sample = 3 }
+                Button("5 random")       { sample = 5 }
+                Button("8 random")       { sample = 8 }
+                Button("10 random")      { sample = 10 }
+            }
+            if mode.usesChoices {
+                stepperRow(title: "Choices on screen", value: $choices, range: 2...4)
+            }
+            menuRow(title: "Time limit", value: limitLabel) {
+                Button("No limit")  { limitMin = 0 }
+                Button("1 minute")  { limitMin = 1 }
+                Button("2 minutes") { limitMin = 2 }
+                Button("3 minutes") { limitMin = 3 }
+                Button("4 minutes") { limitMin = 4 }
+            }
+        }
     }
 
-    private func settingRow(title: String, trailing: AnyView) -> some View {
+    private var slideshowCard: some View {
+        cardSection(label: "SLIDESHOW") {
+            stepperRow(title: "Seconds per image", value: $secondsPerImage, range: 2...10)
+            menuRow(title: "Label style", value: labelStyle == "first_person" ? "First person (\"This is your…\")" : "Plain (\"This is a…\")") {
+                Button("Plain")        { labelStyle = "plain" }
+                Button("First person") { labelStyle = "first_person" }
+            }
+            menuRow(title: "Background music", value: musicLabel) {
+                Button("Default")              { musicOverride = nil }
+                Button("Color tap (calm)")     { musicOverride = "/audio/color-tap-learn.mp3" }
+                Button("Silence")              { musicOverride = "" }
+            }
+        }
+    }
+
+    private var startButton: some View {
+        Button { Task { await start() } } label: {
+            HStack(spacing: 8) {
+                if sendState == .sending {
+                    ProgressView().tint(.white)
+                }
+                Text(sendState == .sending ? "Starting…" : "Start on the iPad")
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color(hex: Brand.pink), in: RoundedRectangle(cornerRadius: 999))
+            .foregroundStyle(.white)
+            .shadow(color: Color(hex: Brand.pink).opacity(0.35), radius: 8, y: 3)
+        }
+        .disabled(sendState == .sending || !live.tabletOnline)
+        .padding(.top, 4)
+    }
+
+    // MARK: -- Reusable card primitives — keep visual rhythm consistent
+
+    private func cardSection<C: View>(label: String, @ViewBuilder content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(label)
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.8)
+                .foregroundStyle(Color(hex: Brand.pink))
+            content()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: Brand.card), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: Brand.line), lineWidth: 1))
+    }
+
+    private func menuRow<M: View>(title: String, value: String, @ViewBuilder menu: () -> M) -> some View {
+        Menu {
+            menu()
+        } label: {
+            HStack {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color(hex: Brand.ink))
+                Spacer()
+                Text(value)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color(hex: Brand.pinkDeep))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(hex: Brand.pinkDeep))
+            }
+            .padding(12)
+            .background(Color(hex: "#fff7fb"), in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private func stepperRow(title: String, value: Binding<Int>, range: ClosedRange<Int>) -> some View {
         HStack {
-            Text(title).font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color(hex: "#374151"))
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color(hex: Brand.ink))
             Spacer()
-            trailing
+            Stepper("\(value.wrappedValue)", value: value, in: range)
+                .labelsHidden()
+            Text("\(value.wrappedValue)")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color(hex: Brand.pinkDeep))
+                .frame(minWidth: 32, alignment: .trailing)
         }
         .padding(12)
         .background(Color(hex: "#fff7fb"), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    // MARK: -- Running phase — facilitator controls + live progress
-
-    private var livePanel: some View {
-        VStack(spacing: 14) {
-            // Live target card.
-            VStack(spacing: 8) {
-                Text("Now on screen")
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(0.5)
-                    .foregroundStyle(Color(hex: "#9d174d"))
-                if let target = livePayload?.target {
-                    targetCard(target)
-                } else {
-                    Text("Waiting for the iPad to show a tile…")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                progressLine
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity)
-            .background(.white, in: RoundedRectangle(cornerRadius: 18))
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(hex: "#f3c6da"), lineWidth: 1))
-
-            // Mark buttons — facilitator counts a non-tap response as correct.
-            VStack(spacing: 10) {
-                sectionHeader("Mark this round")
-                HStack(spacing: 10) {
-                    markButton(method: "tap",    icon: "hand.tap.fill",       label: "Tapped it",    tint: "#1d4ed8")
-                    markButton(method: "verbal", icon: "mouth.fill",          label: "Said it",      tint: "#047857")
-                    markButton(method: "object", icon: "teddybear.fill",      label: "Showed object",tint: "#6d28d9")
-                }
-                HStack(spacing: 10) {
-                    controlButton(action: "skip", label: "Skip",    tint: "#9d174d")
-                    controlButton(action: "next", label: "Next →",  tint: "#4338ca")
-                }
-            }
-            .padding(16)
-            .background(.white, in: RoundedRectangle(cornerRadius: 18))
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(hex: "#f3c6da"), lineWidth: 1))
-
-            Button("End the activity", role: .destructive) {
-                Task { try? await api.publishLiveCommand(childId: auth.childSlug, ["action": "end"]) }
-            }
-            .font(.system(size: 16, weight: .semibold, design: .rounded))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(Color(hex: "#fff0f6"), in: RoundedRectangle(cornerRadius: 999))
-            .foregroundStyle(Color(hex: "#ad1457"))
-        }
-    }
-
-    private func targetCard(_ target: LivePayload.Target) -> some View {
-        HStack(spacing: 14) {
-            if let key = target.imageKey {
-                MediaImage(blobKey: key)
-                    .frame(width: 84, height: 84)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-            } else {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(hex: "#fce4ec"))
-                    .frame(width: 84, height: 84)
-                    .overlay(Text("🎯").font(.system(size: 32)))
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(target.label)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(hex: "#1f2937"))
-                Text(status?.status == "ended" ? "finished 🎉" : "on screen now")
-                    .font(.footnote)
-                    .foregroundStyle(Color(hex: "#6b7280"))
-            }
-            Spacer()
-        }
-    }
-
-    private var progressLine: some View {
-        let i = (livePayload?.i ?? 0) + 1
-        let total = livePayload?.total ?? 0
-        let correct = livePayload?.correctCount ?? 0
-        return Text("Item \(i) of \(total) · \(correct) correct")
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(Color(hex: "#374151"))
-    }
-
-    private func markButton(method: String, icon: String, label: String, tint: String) -> some View {
-        Button {
-            Task { try? await api.publishLiveCommand(childId: auth.childSlug, ["action": "mark", "method": method]) }
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: icon).font(.system(size: 22))
-                Text(label).font(.system(size: 12, weight: .semibold))
-            }
-            .frame(maxWidth: .infinity, minHeight: 64)
-            .background(Color(hex: tint).opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
-            .foregroundStyle(Color(hex: tint))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: tint).opacity(0.25), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func controlButton(action: String, label: String, tint: String) -> some View {
-        Button {
-            Task { try? await api.publishLiveCommand(childId: auth.childSlug, ["action": action]) }
-        } label: {
-            Text(label)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .background(Color(hex: tint).opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
-                .foregroundStyle(Color(hex: tint))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: tint).opacity(0.25), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: -- helpers
+    // MARK: -- Computed labels
 
     private var rootCategories: [Category] {
         BoardSection.allCases.flatMap { board.roots(in: $0) }
@@ -396,43 +284,51 @@ struct StartGameView: View {
         case "verbs":  return "Verbs"
         case "needs":  return "Needs"
         default:
-            if let id = Int(scope.dropFirst(4)), scope.hasPrefix("cat:"),
+            if scope.hasPrefix("cat:"),
+               let id = Int(scope.dropFirst(4)),
                let c = rootCategories.first(where: { $0.id == id }) {
                 return c.label
             }
             return "Category"
         }
     }
+    private var sampleLabel: String { sample == 0 ? "All, in order" : "\(sample) random" }
+    private var limitLabel: String  { limitMin == 0 ? "No limit" : "\(limitMin) min" }
+    private var musicLabel: String {
+        switch musicOverride {
+        case nil:                          return "Default"
+        case .some(""):                    return "Silence"
+        case .some(let p) where p.contains("color-tap-learn"): return "Color tap (calm)"
+        case .some(let p):                 return p
+        }
+    }
 
-    private var livePayload: LivePayload? { status?.payload }
+    // MARK: -- Start
 
     private func start() async {
         sendState = .sending
-        var cmd: [String: Any] = ["action": "start",
-                                   "mode": mode.rawValue,
-                                   "scope": scope,
-                                   "choices": choices]
+        var cmd: [String: Any] = [
+            "action": "start",
+            "mode":   mode.rawValue,
+            "scope":  scope,
+        ]
+        if mode.usesChoices { cmd["choices"] = choices }
         if scope != "all" {
             if let f = Int(rangeFrom) { cmd["from"] = f }
-            if let t = Int(rangeTo)   { cmd["to"] = t }
+            if let t = Int(rangeTo)   { cmd["to"]   = t }
         }
         if sample > 0   { cmd["sample"]   = sample }
         if limitMin > 0 { cmd["limitMin"] = limitMin }
+        if mode.isSlideshow {
+            cmd["secondsPerImage"] = secondsPerImage
+            cmd["labelStyle"]      = labelStyle
+            if let m = musicOverride { cmd["music"] = m }
+        }
         do {
             try await api.publishLiveCommand(childId: auth.childSlug, cmd)
             sendState = .sent
         } catch {
             sendState = .failed(error.localizedDescription)
-        }
-    }
-
-    private func pollLoop() async {
-        // 1.5s — same cadence as the web therapist console.
-        while !Task.isCancelled {
-            if let s = try? await api.live(childId: auth.childSlug) {
-                await MainActor.run { self.status = s }
-            }
-            try? await Task.sleep(for: .seconds(1.5))
         }
     }
 }
