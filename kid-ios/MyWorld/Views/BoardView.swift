@@ -19,6 +19,7 @@ struct BoardView: View {
     @Environment(GameController.self) private var game
     @Environment(Scheduler.self) private var scheduler
     @Environment(AddTileQueue.self) private var addQueue
+    @Environment(AutoTeachRunner.self) private var autoTeach
 
     @State private var showSettings = false
     @State private var showDisplay  = false
@@ -118,10 +119,12 @@ struct BoardView: View {
             await board.refresh(childId: auth.childSlug)
             live.start(childId: auth.childSlug)
             scheduler.start(childId: auth.childSlug)
+            autoTeach.start(childId: auth.childSlug)
         }
         .onDisappear {
             live.stop()
             scheduler.stop()
+            autoTeach.stop()
         }
         .refreshable {
             await board.refresh(childId: auth.childSlug)

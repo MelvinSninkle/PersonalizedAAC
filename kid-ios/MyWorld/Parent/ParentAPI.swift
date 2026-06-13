@@ -261,6 +261,97 @@ extension APIClient {
         catch { throw APIError.decoding(error) }
     }
 
+    // MARK: -- /api/auto-teach (PRD: automatic slideshow + game teaching)
+
+    struct AutoTeachSettings: Codable, Hashable {
+        var enabled: Bool
+        var cadence: String          // conservative | standard | intensive
+        var tier: String             // under3 | 3to5 | 5plus
+        var dailyGameAt: String      // "HH:MM"
+        var cooldownMin: Int
+        var batchSize: Int
+    }
+    struct AutoTeachGates: Codable {
+        let enabled: Bool
+        let inBlackout: Bool
+        let recentlyActive: Bool
+        let cooldownLeftMin: Int
+        let budgetUsedMin: Int
+        let budgetCapMin: Int
+        let budgetExhausted: Bool
+    }
+    struct AutoTeachMastery: Codable, Identifiable, Hashable {
+        var id: String { category }
+        let category: String
+        let active: Int
+        let acquired: Int
+        let mastered: Int
+        let maintenance: Int
+        let unmet: Int
+        let total: Int
+    }
+    struct AutoTeachState: Codable {
+        let settings: AutoTeachSettings
+        let gates: AutoTeachGates
+        let mastery: [AutoTeachMastery]
+    }
+    func autoTeachState(childId: String) async throws -> AutoTeachState {
+        let (data, _) = try await request(
+            method: "GET",
+            path: "/api/auto-teach/state?childId=\(percentEscapeParent(childId))",
+            body: nil
+        )
+        do { return try JSONDecoder().decode(AutoTeachState.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+    /// Saves the autoTeach blob under child_settings.autoTeach, preserving
+    /// every other key the web app may have written.
+    func saveAutoTeach(childId: String, _ settings: AutoTeachSettings) async {
+        guard let (data, _) = try? await request(
+                method: "GET",
+                path: "/api/child-settings?childId=\(percentEscapeParent(childId))",
+                body: nil),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return }
+        var all = (root["settings"] as? [String: Any]) ?? [:]
+        if let enc = try? JSONEncoder().encode(settings),
+           let obj = try? JSONSerialization.jsonObject(with: enc) {
+            all["autoTeach"] = obj
+        }
+        guard let body = try? JSONSerialization.data(withJSONObject: ["settings": all]) else { return }
+        _ = try? await request(method: "POST",
+                               path: "/api/child-settings?childId=\(percentEscapeParent(childId))",
+                               body: body, contentType: "application/json")
+    }
+
+    struct AutoTeachTile: Codable, Identifiable, Hashable {
+        var id: String { slug }
+        let slug: String
+        let label: String?
+        let category: String?
+        let bucket: String?
+    }
+    struct AutoTeachSession: Codable {
+        let microSec: Int
+        let sessionMaxMin: Int
+        let labelStyle: String
+        let source: String
+    }
+    struct AutoTeachNextResponse: Codable {
+        let ok: Bool
+        let reason: String?
+        let mode: String?
+        let tiles: [AutoTeachTile]?
+        let session: AutoTeachSession?
+    }
+    func autoTeachNext(childId: String, mode: String) async throws -> AutoTeachNextResponse {
+        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "mode": mode])
+        let (data, _) = try await request(method: "POST", path: "/api/auto-teach/next",
+                                          body: body, contentType: "application/json")
+        do { return try JSONDecoder().decode(AutoTeachNextResponse.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
     // MARK: -- schedules (merge-safe write, mirrors saveDisplayPrefs)
 
     /// Write the schedules array back into child_settings without clobbering

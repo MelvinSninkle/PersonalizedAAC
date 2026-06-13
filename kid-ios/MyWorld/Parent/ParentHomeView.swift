@@ -53,6 +53,10 @@ struct ParentHomeView: View {
                         navCard(icon: "photo.on.rectangle.angled", tint: "#ad1457",
                                 title: "Album",
                                 subtitle: "Every picture, every year") { AlbumView() }
+
+                        navCard(icon: "sparkles.rectangle.stack.fill", tint: "#9d174d",
+                                title: "Auto-teach",
+                                subtitle: "Hands-off slideshow + daily game") { AutoTeachView() }
                     }
 
                     if addQueue.hasActiveJobs {
