@@ -13,6 +13,7 @@ struct HeaderBar: View {
     @Environment(AuthManager.self) private var auth
     @Environment(DisplayPrefs.self) private var prefs
     @Environment(AddTileQueue.self) private var addQueue
+    @Environment(DeviceMode.self) private var mode
 
     @Binding var editMode: Bool
     @Binding var showDisplay: Bool
@@ -101,9 +102,15 @@ struct HeaderBar: View {
                     pillButton("⏳ \(rendering) rendering") { showAddTile = true }
                 }
                 pillButton("⚙ Display")  { showDisplay = true }
+                // Switch THIS device to the native parent app. Lives in edit
+                // mode (reached by long-pressing the lock) so it's discoverable
+                // for a parent but unreachable for the child. The role persists,
+                // so the device stays in parent mode until switched back.
+                pillButton("🧑 Parent app") {
+                    editMode = false
+                    mode.role = .parent
+                }
                 if let slug = auth.user?.slug {
-                    pillLink(label: "👪 Parent",
-                             url: URL(string: "https://aac.andrewpeterson.io/parent/\(slug)")!)
                     pillLink(label: "🩺 Therapist",
                              url: URL(string: "https://aac.andrewpeterson.io/therapist/\(slug)")!)
                 }

@@ -10,9 +10,21 @@ struct LoginView: View {
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
-            Text("My World")
-                .font(.system(size: 56, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(hex: "#ff1493"))
+            // The My World "tap to talk" logo — the same globe mark the board
+            // header and the web app use, bundled in Assets.xcassets.
+            Image("MyWorldLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 132, height: 132)
+                .accessibilityLabel("My World")
+            VStack(spacing: 2) {
+                Text("My World")
+                    .font(.system(size: 46, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(hex: "#ff1493"))
+                Text("Tap to Talk")
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(hex: "#ad1457").opacity(0.75))
+            }
             Text("Sign in to your child's board")
                 .font(.title3)
                 .foregroundStyle(.secondary)
