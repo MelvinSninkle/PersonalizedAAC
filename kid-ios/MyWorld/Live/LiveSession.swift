@@ -59,6 +59,10 @@ struct LiveStatus: Codable {
     let cmd: LiveCommand?
     let cmdSeq: Int
     let age: Int?
+    /// The tablet's currently-published state — the on-screen tile + counters
+    /// the facilitator phone renders. Optional because the row may exist with
+    /// just a queued command and no state yet.
+    let payload: LivePayload?
 }
 
 /// Two jobs:
