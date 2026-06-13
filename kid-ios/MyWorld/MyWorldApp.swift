@@ -29,6 +29,10 @@ struct MyWorldApp: App {
                 .environment(mode)
                 .statusBarHidden(true)
                 .persistentSystemOverlays(.hidden)
+                // The whole app uses a fixed light pink palette (matching the
+                // web app + board). Pin to light so semantic colors don't flip
+                // to white-on-white when the device is in Dark Mode.
+                .preferredColorScheme(.light)
         }
     }
 

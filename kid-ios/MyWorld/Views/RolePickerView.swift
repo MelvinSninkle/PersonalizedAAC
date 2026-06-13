@@ -10,9 +10,12 @@ struct RolePickerView: View {
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
-            Image(systemName: "globe.americas.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(Color(hex: "#ff1493"))
+            Image("MyWorldLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 84, height: 84)
+                .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
             Text("Who uses this device?")
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: "#ad1457"))
@@ -37,7 +40,7 @@ struct RolePickerView: View {
             Spacer()
             Text("You can change this any time in Settings.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color(hex: "#9ca3af"))
                 .padding(.bottom, 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -56,16 +59,16 @@ struct RolePickerView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color(hex: "#1f2937"))
                         .multilineTextAlignment(.leading)
                     Text(subtitle)
                         .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color(hex: "#6b7280"))
                         .multilineTextAlignment(.leading)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color(hex: "#c9b3bf"))
             }
             .padding(16)
             .background(.white, in: RoundedRectangle(cornerRadius: 18))
