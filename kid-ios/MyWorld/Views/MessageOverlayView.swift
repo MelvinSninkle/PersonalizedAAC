@@ -27,21 +27,27 @@ struct MessageOverlayView: View {
                 Spacer()
                 // The sentence strip — auto-scrolls to whichever token is
                 // currently speaking so it stays in view on long messages.
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .center, spacing: 14) {
-                            ForEach(Array(tokens.enumerated()), id: \.offset) { i, t in
-                                tokenView(token: t, active: i == index, position: i)
-                                    .id(i)
+                // A GeometryReader gives us the available screen width so the
+                // inner HStack can be center-aligned within at-least-screen-
+                // width: short messages sit dead center, long ones scroll.
+                GeometryReader { geo in
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(alignment: .center, spacing: 14) {
+                                ForEach(Array(tokens.enumerated()), id: \.offset) { i, t in
+                                    tokenView(token: t, active: i == index, position: i)
+                                        .id(i)
+                                }
                             }
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 18)
+                            .frame(minWidth: geo.size.width, alignment: .center)
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 18)
-                    }
-                    .onChange(of: index) { _, new in
-                        guard new >= 0 else { return }
-                        withAnimation(.easeInOut(duration: 0.35)) {
-                            proxy.scrollTo(new, anchor: .center)
+                        .onChange(of: index) { _, new in
+                            guard new >= 0 else { return }
+                            withAnimation(.easeInOut(duration: 0.35)) {
+                                proxy.scrollTo(new, anchor: .center)
+                            }
                         }
                     }
                 }
@@ -120,7 +126,10 @@ struct MessageOverlayView: View {
                 .font(.system(size: active ? 18 : 14, weight: active ? .bold : .semibold,
                               design: .rounded))
                 .foregroundStyle(.white.opacity(active ? 1 : 0.7))
+                .multilineTextAlignment(.center)
                 .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: size)
         }
     }
 
