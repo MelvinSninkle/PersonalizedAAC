@@ -802,6 +802,26 @@ Size: {size}. No watermarks, no extra text other than the tile label.',
     await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS advanced_at TIMESTAMPTZ`;
     // 'parent' (manual unlock) | 'mastery' (auto-advanced from assessment perf)
     await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS advanced_reason TEXT`;
+
+    // Sign in with Apple. apple_user_id is the stable identifier from Apple's
+    // JWT 'sub' claim; we keep it separate from the email because Apple may
+    // return a private-relay address that the user can revoke later.
+    await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_user_id TEXT UNIQUE`;
+    await db`CREATE INDEX IF NOT EXISTS users_apple_idx ON users(apple_user_id) WHERE apple_user_id IS NOT NULL`;
+
+    // Onboarding progress — durable per-account, so a parent who starts on
+    // the web and finishes on the phone (or vice versa) picks up exactly
+    // where they left off. step values are the ordered flow keys:
+    //   'account' | 'child' | 'child_photo' | 'parent_photo' | 'seed_core' | 'complete'
+    await db`
+      CREATE TABLE IF NOT EXISTS onboarding_progress (
+        user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        child_id TEXT,
+        step TEXT NOT NULL DEFAULT 'account',
+        data JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
     await db`CREATE INDEX IF NOT EXISTS persons_child_idx ON persons(child_id)`;
     await db`CREATE INDEX IF NOT EXISTS persons_rel_idx   ON persons(child_id, relationship)`;
     // People-section tiles point at the person they depict (nullable: only people tiles use it).

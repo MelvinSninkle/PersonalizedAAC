@@ -162,11 +162,17 @@ export default async function handler(req, res) {
 
   // Spend guard — cap an account's generations per rolling day, across all
   // models, so a leaked or abused login can't run an unbounded AI bill.
+  // Onboarding (draft retries + the one-time core seed) is EXEMPT so a parent
+  // can iterate on portrait retries without burning their monthly credits.
   const DAILY_LIMIT = Number(process.env.IMAGE_GEN_DAILY_LIMIT || 150);
   if (auth.user.role !== 'admin') {
     try {
       const db = sql();
-      const q = await db`SELECT COUNT(*)::int AS n FROM image_generations WHERE actor_email = ${auth.user.email} AND created_at > NOW() - INTERVAL '24 hours'`;
+      const q = await db`
+        SELECT COUNT(*)::int AS n FROM image_generations
+        WHERE actor_email = ${auth.user.email}
+          AND created_at > NOW() - INTERVAL '24 hours'
+          AND COALESCE(actor_role, '') NOT IN ('onboarding_draft', 'onboarding_seed')`;
       if (((q[0] && q[0].n) || 0) >= DAILY_LIMIT) { res.status(429).json({ error: 'Daily image-generation limit reached', limit: DAILY_LIMIT }); return; }
     } catch (_) { /* quota check is best-effort — never block on a counting error */ }
   }
