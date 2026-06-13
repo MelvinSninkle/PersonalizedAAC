@@ -91,11 +91,12 @@ async function generateGenericPlaceholder(apiKey, model, label, style, buffer, c
     `Create a simple, friendly ${style} illustration of ${subject} for a young child's communication ` +
     `app.${resemble} Draw ONLY a generic, original, unbranded object — do NOT include any copyrighted, ` +
     `trademarked, or branded character, mascot, logo, or product, and do NOT add any extra characters, ` +
-    `figures, or mascots that are not physically part of the object itself. Center the subject on a ` +
-    `soft, uncluttered background with bright friendly colors and a gentle, age-appropriate look. ` +
-    // Match the main edit prompt: caption the word into the art, spelled exactly.
+    `figures, or mascots that are not physically part of the object itself. CENTER the subject both ` +
+    `horizontally and vertically, filling roughly 65-75% of the frame, on a clean flat background of ` +
+    `a soft pastel pink, with bright friendly colors and a gentle, age-appropriate look. ` +
+    // Match the main edit prompt: caption the word into the art, ONE LINE.
     (label
-      ? `At the very bottom, add a clean caption band with the word or phrase “${label}”, spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered and easy to read; put no other text anywhere else. `
+      ? `At the very bottom, add a clean caption band with the word or phrase “${label}”, spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered, on ONE SINGLE LINE; if the word is long, shrink the font to fit on one line — do NOT wrap or break the text across multiple lines. Put no other text anywhere else. `
       : `Do not include any text, words, or letters. `) +
     // No face on an inanimate object unless the real thing has one.
     `If the object is inanimate, do NOT add eyes, mouths, faces, or smiles — draw it as a plain ` +
@@ -141,6 +142,22 @@ export default async function handler(req, res) {
     : ALLOWED_MODELS.includes(reqModel) ? reqModel
     : isGeminiModel(reqModel) ? reqModel
     : IMAGE_MODEL;
+
+  // Background color (PRD: parent-pickable on every tile). Accepts a name
+  // ('pink', 'mint', 'yellow', 'blue', 'peach', 'white') OR a hex color
+  // ('#ffe4ef'); the model is told the exact named/hex shade so the result
+  // is consistent across generations.
+  const BG_PRESETS = {
+    pink:   { hex: '#ffe4ef', phrase: 'a soft pastel pink' },
+    mint:   { hex: '#dcefe2', phrase: 'a soft pastel mint green' },
+    yellow: { hex: '#fff4cc', phrase: 'a soft pastel cream yellow' },
+    blue:   { hex: '#e3e8ff', phrase: 'a soft pastel periwinkle blue' },
+    peach:  { hex: '#ffe4cc', phrase: 'a soft pastel peach' },
+    white:  { hex: '#f8f8f8', phrase: 'a clean off-white' },
+  };
+  const rawBg = String((req.query && req.query.bg) || '').trim().toLowerCase();
+  const bg = BG_PRESETS[rawBg]
+    || (/^#?[0-9a-f]{6}$/i.test(rawBg) ? { hex: rawBg.startsWith('#') ? rawBg : '#' + rawBg, phrase: `the exact color ${rawBg.startsWith('#') ? rawBg : '#' + rawBg}` } : null);
 
   if (!(await canAccessChild(auth.user, childId))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
@@ -191,14 +208,23 @@ export default async function handler(req, res) {
   // cleanly), instead of a separate text band under the tile, which looked bad.
   // The `label` field stays the canonical source for speech/games/teaching;
   // this caption is purely visual. Spell it exactly to avoid a misspelled tile.
+  // CRITICAL: keep the caption text on ONE SINGLE LINE. If the word is too
+  // long for the band's width, the model MUST shrink the font size to fit on
+  // one line — never wrap, break, or stack the word across two lines, which
+  // looks broken on a tile that's already small on the iPad.
   const captionClause = label
-    ? ` At the very bottom of the image, add a clean horizontal caption band and write the word or phrase “${label}” in it — spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered and large enough for a young child to read. Put NO other text, words, or letters anywhere else in the image.`
+    ? ` At the very bottom of the image, add a clean horizontal caption band and write the word or phrase “${label}” in it — spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered, on ONE SINGLE LINE that fits inside the band; if the word is long, shrink the font size so it still fits on one line, DO NOT wrap, break, hyphenate, or stack the text across multiple lines. Put NO other text, words, or letters anywhere else in the image.`
     : ` Do not include any text, words, or letters in the image.`;
+  // Background: parent-pickable preset (or hex). If unset, the model defaults
+  // to the soft pastel pink that matches the board's brand palette.
+  const bgPhrase = bg ? bg.phrase : 'a soft pastel pink';
   const prompt =
     `Re-illustrate this photograph as a ${style} of ${subject} for a young child's ` +
-    `communication app. Keep ${subject} clearly recognizable and centered, on a simple, ` +
-    `soft, uncluttered background, with bright friendly colors and a gentle, age-appropriate ` +
-    `look.` + captionClause +
+    `communication app. CENTER ${subject} both horizontally and vertically in the frame, ` +
+    `filling roughly 65-75% of the image so there's even breathing room on all four sides — ` +
+    `the subject must be the obvious focal point, not pushed to a corner or cropped at an ` +
+    `edge. Place ${subject} on a clean, simple background of ${bgPhrase} (a flat color, ` +
+    `not a scene), with bright friendly colors and a gentle, age-appropriate look.` + captionClause +
     // No anthropomorphizing inanimate objects. Without this, gpt-image models
     // routinely add cartoon eyes/smiles to things like ducks (the rubber-toy
     // kind), rockers, vehicles, food, etc. — fine for some toys, but wrong for
