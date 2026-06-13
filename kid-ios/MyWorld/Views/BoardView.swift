@@ -24,6 +24,7 @@ struct BoardView: View {
     @State private var showDisplay  = false
     @State private var editMode     = false
     @State private var showBatchReview = false
+    @State private var pendingMessage: [MessageToken]?
     /// An in-grid "+ Add tile" tap; carries which section/folder to pre-select.
     @State private var addTileRequest: AddTileRequest?
 
@@ -73,6 +74,16 @@ struct BoardView: View {
         .background(Color(hex: "#fff7fb"))
         .overlay(alignment: .top) { scheduledPromptOverlay }
         .overlay(alignment: .bottom) { reviewBanner }
+        .fullScreenCover(isPresented: Binding(
+            get: { pendingMessage != nil },
+            set: { if !$0 { pendingMessage = nil } }
+        )) {
+            if let toks = pendingMessage {
+                MessageOverlayView(tokens: toks, childId: auth.childSlug) {
+                    pendingMessage = nil
+                }
+            }
+        }
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: addQueue.pendingReviewNotice)
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showDisplay)  { DisplaySettingsView() }
@@ -118,7 +129,14 @@ struct BoardView: View {
         }
         .onChange(of: live.latest) { _, cmd in
             guard let cmd else { return }
-            game.apply(cmd)
+            // PRD §4.7: a "message" command renders the parent's text as a
+            // tile sequence. Doesn't go through GameController — it's an
+            // overlay-only experience.
+            if cmd.action == "message", let toks = cmd.tokens, !toks.isEmpty {
+                pendingMessage = toks
+            } else {
+                game.apply(cmd)
+            }
             live.acknowledge()
         }
         // Pause the scheduler tick while a game / unlock / settings sheet is up

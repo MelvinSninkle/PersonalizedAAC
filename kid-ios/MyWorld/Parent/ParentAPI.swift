@@ -69,8 +69,16 @@ extension APIClient {
             let result: String?    // "4 / 5" or "—"
             let length: String?    // "12 min" or "—"
         }
+        struct UseSeries: Codable, Identifiable, Hashable {
+            var id: String { name }
+            let name: String
+            let data: [Int]
+        }
+        struct UsePayload: Codable { let series: [UseSeries] }
+        let labels: [String]
         let mastery: [MasteryRow]
         let recentSessions: [SessionRow]
+        let use: UsePayload
     }
 
     func analytics(childId: String) async throws -> AnalyticsResponse {
@@ -83,7 +91,7 @@ extension APIClient {
 
     // MARK: -- /api/album (picture memorabilia)
 
-    struct AlbumEntry: Codable, Identifiable {
+    struct AlbumEntry: Codable, Identifiable, Hashable {
         var id: String { blobKey + (when ?? "") }
         let label: String?
         let section: String?
@@ -91,15 +99,23 @@ extension APIClient {
         let when: String?
         let kind: String?       // 'current' | 'history'
     }
-    struct AlbumResponse: Codable {
-        let entries: [AlbumEntry]?
+    struct AlbumTile: Codable, Identifiable, Hashable {
+        var id: String { (itemId.map(String.init) ?? "l:") + (label ?? "") + (section ?? "") }
+        let itemId: Int?
+        let label: String?
+        let section: String?      // 'people' | 'nouns' | 'verbs' | 'needs' | 'events' | …
+        let current: AlbumEntry?
+        let history: [AlbumEntry]
+    }
+    struct AlbumByTileResponse: Codable {
+        let tiles: [AlbumTile]
     }
 
-    func albumTimeline(childId: String, limit: Int = 200) async throws -> [AlbumEntry] {
+    func albumByTile(childId: String, limit: Int = 600) async throws -> [AlbumTile] {
         let (data, _) = try await request(method: "GET",
-                                          path: "/api/album?childId=\(percentEscapeParent(childId))&mode=timeline&limit=\(limit)",
+                                          path: "/api/album?childId=\(percentEscapeParent(childId))&mode=by-tile&limit=\(limit)",
                                           body: nil)
-        do { return try JSONDecoder().decode(AlbumResponse.self, from: data).entries ?? [] }
+        do { return try JSONDecoder().decode(AlbumByTileResponse.self, from: data).tiles }
         catch { throw APIError.decoding(error) }
     }
 

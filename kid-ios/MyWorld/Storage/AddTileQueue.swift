@@ -3,24 +3,30 @@ import SwiftUI
 import UIKit
 import Observation
 
-/// Which OpenAI image model to generate with — selectable from the add-tile UI
-/// so a parent can experiment. `apiValue` is sent to /api/generate-image as the
-/// `model` param (server allow-lists these).
+/// Which image model to generate with — selectable from the add-tile UI so a
+/// parent can experiment. `apiValue` is sent to /api/generate-image as the
+/// `model` param (server allow-lists these; gemini-* routes to Nano Banana).
 enum ImageModel: String, CaseIterable, Identifiable {
-    case v1, v15, v2
+    // Default first — Nano Banana is cheapest AND strongest at keeping a
+    // person's likeness from a reference photo.
+    case nanoBanana, nanoBananaPro, gpt15, gpt2, gpt1
     var id: String { rawValue }
     var apiValue: String {
         switch self {
-        case .v1:  return "gpt-image-1"
-        case .v15: return "gpt-image-1.5"
-        case .v2:  return "gpt-image-2"
+        case .nanoBanana:    return "gemini-2.5-flash-image"
+        case .nanoBananaPro: return "gemini-3-pro-image-preview"
+        case .gpt15:         return "gpt-image-1.5"
+        case .gpt2:          return "gpt-image-2"
+        case .gpt1:          return "gpt-image-1"
         }
     }
     var label: String {
         switch self {
-        case .v1:  return "Model 1 · cheapest"
-        case .v15: return "Model 1.5 · ~13¢"
-        case .v2:  return "Model 2 · best, ~21¢"
+        case .nanoBanana:    return "Nano Banana · ~4¢ (default)"
+        case .nanoBananaPro: return "Nano Banana Pro · ~13¢"
+        case .gpt15:         return "GPT Image 1.5 · ~13¢"
+        case .gpt2:          return "GPT Image 2 · ~21¢"
+        case .gpt1:          return "GPT Image 1 · cheapest"
         }
     }
 }

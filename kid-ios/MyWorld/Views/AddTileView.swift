@@ -31,7 +31,7 @@ struct AddTileView: View {
     @State private var section: BoardSection
     @State private var categoryId: Int?
     @State private var style: ArtStyle = .threeD
-    @State private var model: ImageModel = .v15
+    @State private var model: ImageModel = .nanoBanana
 
     init(defaultSection: BoardSection = .needs, defaultCategoryId: Int? = nil, onDone: @escaping () -> Void) {
         self.onDone = onDone
