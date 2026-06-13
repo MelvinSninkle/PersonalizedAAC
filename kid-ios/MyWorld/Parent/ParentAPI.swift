@@ -69,8 +69,41 @@ extension APIClient {
             let result: String?    // "4 / 5" or "—"
             let length: String?    // "12 min" or "—"
         }
+        struct UseSeries: Codable, Identifiable, Hashable {
+            var id: String { name }
+            let name: String
+            let data: [Int]
+        }
+        struct GameSeries: Codable, Identifiable, Hashable {
+            var id: String { name }
+            let name: String
+            let data: [Double]      // accuracy 0-100 per bucket
+        }
+        struct UsePayload: Codable { let series: [UseSeries] }
+        struct GamesPayload: Codable { let series: [GameSeries] }
+
+        // Forgiving decoder: every section optional, missing → empty default.
+        // Important because the server's analytics endpoint may degrade any
+        // single section to [] on error; we never want one weak signal to
+        // hide the rest.
+        let labels: [String]
         let mastery: [MasteryRow]
         let recentSessions: [SessionRow]
+        let use: UsePayload
+        let games: GamesPayload
+
+        enum CodingKeys: String, CodingKey {
+            case labels, mastery, recentSessions, use, games
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            labels         = (try? c.decode([String].self, forKey: .labels))         ?? []
+            mastery        = (try? c.decode([MasteryRow].self, forKey: .mastery))    ?? []
+            recentSessions = (try? c.decode([SessionRow].self, forKey: .recentSessions)) ?? []
+            use            = (try? c.decode(UsePayload.self, forKey: .use))          ?? UsePayload(series: [])
+            games          = (try? c.decode(GamesPayload.self, forKey: .games))      ?? GamesPayload(series: [])
+        }
     }
 
     func analytics(childId: String) async throws -> AnalyticsResponse {
@@ -83,7 +116,7 @@ extension APIClient {
 
     // MARK: -- /api/album (picture memorabilia)
 
-    struct AlbumEntry: Codable, Identifiable {
+    struct AlbumEntry: Codable, Identifiable, Hashable {
         var id: String { blobKey + (when ?? "") }
         let label: String?
         let section: String?
@@ -91,15 +124,23 @@ extension APIClient {
         let when: String?
         let kind: String?       // 'current' | 'history'
     }
-    struct AlbumResponse: Codable {
-        let entries: [AlbumEntry]?
+    struct AlbumTile: Codable, Identifiable, Hashable {
+        var id: String { (itemId.map(String.init) ?? "l:") + (label ?? "") + (section ?? "") }
+        let itemId: Int?
+        let label: String?
+        let section: String?      // 'people' | 'nouns' | 'verbs' | 'needs' | 'events' | …
+        let current: AlbumEntry?
+        let history: [AlbumEntry]
+    }
+    struct AlbumByTileResponse: Codable {
+        let tiles: [AlbumTile]
     }
 
-    func albumTimeline(childId: String, limit: Int = 200) async throws -> [AlbumEntry] {
+    func albumByTile(childId: String, limit: Int = 600) async throws -> [AlbumTile] {
         let (data, _) = try await request(method: "GET",
-                                          path: "/api/album?childId=\(percentEscapeParent(childId))&mode=timeline&limit=\(limit)",
+                                          path: "/api/album?childId=\(percentEscapeParent(childId))&mode=by-tile&limit=\(limit)",
                                           body: nil)
-        do { return try JSONDecoder().decode(AlbumResponse.self, from: data).entries ?? [] }
+        do { return try JSONDecoder().decode(AlbumByTileResponse.self, from: data).tiles }
         catch { throw APIError.decoding(error) }
     }
 

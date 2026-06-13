@@ -22,6 +22,21 @@ struct LiveCommand: Codable, Equatable {
     /// before I marked this." Used by MatchingView to log attempts_taken.
     let attemptsTaken: Int?
     let ts: Double?
+    /// "message" action only (PRD §4.7): the parent's text resolved to a
+    /// sequence of board tiles, with the original word and the tile media to
+    /// play. Words the board doesn't have arrive with `text: true`.
+    let text: String?
+    let tokens: [MessageToken]?
+}
+
+/// One step of a parent's "message to the board" sequence.
+struct MessageToken: Codable, Equatable {
+    let word: String
+    let itemId: Int?
+    let imageKey: String?
+    let soundKey: String?
+    let text: Bool?
+    let holdMs: Double?
 }
 
 /// What the tablet publishes back so the facilitator phone can render progress.
@@ -44,6 +59,10 @@ struct LiveStatus: Codable {
     let cmd: LiveCommand?
     let cmdSeq: Int
     let age: Int?
+    /// The tablet's currently-published state — the on-screen tile + counters
+    /// the facilitator phone renders. Optional because the row may exist with
+    /// just a queued command and no state yet.
+    let payload: LivePayload?
 }
 
 /// Two jobs:

@@ -3,24 +3,30 @@ import SwiftUI
 import UIKit
 import Observation
 
-/// Which OpenAI image model to generate with — selectable from the add-tile UI
-/// so a parent can experiment. `apiValue` is sent to /api/generate-image as the
-/// `model` param (server allow-lists these).
+/// Which image model to generate with — selectable from the add-tile UI so a
+/// parent can experiment. `apiValue` is sent to /api/generate-image as the
+/// `model` param (server allow-lists these; gemini-* routes to Nano Banana).
 enum ImageModel: String, CaseIterable, Identifiable {
-    case v1, v15, v2
+    // Default first — Nano Banana is cheapest AND strongest at keeping a
+    // person's likeness from a reference photo.
+    case nanoBanana, nanoBananaPro, gpt15, gpt2, gpt1
     var id: String { rawValue }
     var apiValue: String {
         switch self {
-        case .v1:  return "gpt-image-1"
-        case .v15: return "gpt-image-1.5"
-        case .v2:  return "gpt-image-2"
+        case .nanoBanana:    return "gemini-2.5-flash-image"
+        case .nanoBananaPro: return "gemini-3-pro-image-preview"
+        case .gpt15:         return "gpt-image-1.5"
+        case .gpt2:          return "gpt-image-2"
+        case .gpt1:          return "gpt-image-1"
         }
     }
     var label: String {
         switch self {
-        case .v1:  return "Model 1 · cheapest"
-        case .v15: return "Model 1.5 · ~13¢"
-        case .v2:  return "Model 2 · best, ~21¢"
+        case .nanoBanana:    return "Nano Banana · ~4¢ (default)"
+        case .nanoBananaPro: return "Nano Banana Pro · ~13¢"
+        case .gpt15:         return "GPT Image 1.5 · ~13¢"
+        case .gpt2:          return "GPT Image 2 · ~21¢"
+        case .gpt1:          return "GPT Image 1 · cheapest"
         }
     }
 }
@@ -72,6 +78,9 @@ final class TileJob: Identifiable {
     let style: ArtStyle
     /// OpenAI image model id (e.g. "gpt-image-1.5") chosen for this tile.
     let model: String
+    /// Background-color preset name ('pink', 'mint', 'yellow', 'blue', 'peach',
+    /// 'white') — passed to /api/generate-image as ?bg=. Empty = model default.
+    let bg: String
     let emotion: String
     let childId: String
     /// Non-nil when this job is part of a multi-photo bulk import. Used to fire
@@ -103,14 +112,15 @@ final class TileJob: Identifiable {
     var savedTileId: Int?
 
     init(thumbnail: UIImage, photoJPEG: Data, section: BoardSection,
-         categoryId: Int?, style: ArtStyle, model: String, emotion: String, childId: String,
-         batchId: UUID? = nil, needsReview: Bool = false) {
+         categoryId: Int?, style: ArtStyle, model: String, bg: String, emotion: String,
+         childId: String, batchId: UUID? = nil, needsReview: Bool = false) {
         self.thumbnail = thumbnail
         self.photoJPEG = photoJPEG
         self.section = section
         self.categoryId = categoryId
         self.style = style
         self.model = model
+        self.bg = bg
         self.emotion = emotion
         self.childId = childId
         self.batchId = batchId
@@ -161,6 +171,7 @@ final class AddTileQueue {
                  categoryId: Int?,
                  style: ArtStyle,
                  model: String,
+                 bg: String = "pink",
                  emotion: String,
                  prefilledLabel: String,
                  childId: String,
@@ -169,8 +180,9 @@ final class AddTileQueue {
                  needsReview: Bool = false) -> TileJob {
         let thumb = UIImage(data: photoJPEG) ?? UIImage()
         let job = TileJob(thumbnail: thumb, photoJPEG: photoJPEG, section: section,
-                          categoryId: categoryId, style: style, model: model, emotion: emotion,
-                          childId: childId, batchId: batchId, needsReview: needsReview)
+                          categoryId: categoryId, style: style, model: model, bg: bg,
+                          emotion: emotion, childId: childId, batchId: batchId,
+                          needsReview: needsReview)
         job.label = prefilledLabel
         jobs.insert(job, at: 0)
         schedule(job, board: board)
@@ -207,6 +219,7 @@ final class AddTileQueue {
                       categoryId: Int?,
                       style: ArtStyle,
                       model: String,
+                      bg: String = "pink",
                       emotion: String,
                       childId: String,
                       board: BoardStore) {
@@ -217,6 +230,7 @@ final class AddTileQueue {
                         categoryId: categoryId,
                         style: style,
                         model: model,
+                        bg: bg,
                         emotion: emotion,
                         prefilledLabel: "",
                         childId: childId,
@@ -269,6 +283,7 @@ final class AddTileQueue {
                                                  label: job.label,
                                                  style: job.style.prompt,
                                                  model: job.model,
+                                                 bg: job.bg,
                                                  childId: job.childId)
             })
             job.imagePNG = png

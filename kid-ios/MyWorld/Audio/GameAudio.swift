@@ -78,7 +78,9 @@ final class GameAudio {
     private var speakPlayer: AVAudioPlayer?
     func speak(_ text: String, childId: String) {
         Task {
-            guard let data = await api.tts(text: text, emotion: "default") else { return }
+            // Disk-cache hit on the second+ playback of a phrase — slideshows
+            // and scheduled prompts replay the same captions a lot.
+            guard let data = await SpeechCache.shared.data(text: text, emotion: "default", api: api) else { return }
             do {
                 let p = try AVAudioPlayer(data: data)
                 p.volume = 1.0
@@ -96,7 +98,7 @@ final class GameAudio {
             let rewards = await api.fetchRewards(childId: childId)
             let phrases = rewards.phrases.isEmpty ? Self.defaultPhrases : rewards.phrases
             let phrase = phrases.randomElement() ?? "Hooray!"
-            guard let data = await api.tts(text: phrase, emotion: "excited") else { return }
+            guard let data = await SpeechCache.shared.data(text: phrase, emotion: "excited", api: api) else { return }
             do {
                 let p = try AVAudioPlayer(data: data)
                 p.volume = 1.0

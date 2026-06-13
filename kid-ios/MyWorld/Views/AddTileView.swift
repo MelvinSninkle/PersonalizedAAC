@@ -31,7 +31,11 @@ struct AddTileView: View {
     @State private var section: BoardSection
     @State private var categoryId: Int?
     @State private var style: ArtStyle = .threeD
-    @State private var model: ImageModel = .v15
+    @State private var model: ImageModel = .nanoBanana
+    /// Background-color preset for the generated tile. Defaults to pink to
+    /// match the board brand; the user picks a different one per batch when
+    /// they want some variety across categories.
+    @State private var bg: TileBackground = .pink
 
     init(defaultSection: BoardSection = .needs, defaultCategoryId: Int? = nil, onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -144,6 +148,28 @@ struct AddTileView: View {
                     } label: {
                         menuChip(icon: "wand.and.stars", text: model.label)
                     }
+                    Menu {
+                        ForEach(TileBackground.allCases) { c in
+                            Button {
+                                bg = c
+                            } label: {
+                                Label(c.label, systemImage: "circle.fill")
+                                    .foregroundStyle(Color(hex: c.hex))
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(Color(hex: bg.hex))
+                                .frame(width: 14, height: 14)
+                                .overlay(Circle().stroke(Color(hex: "#ad1457").opacity(0.3), lineWidth: 1))
+                            Text(bg.label)
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color(hex: "#ad1457"))
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Color(hex: "#fce4ec"), in: Capsule())
+                    }
                 }
             }
         }
@@ -248,6 +274,7 @@ struct AddTileView: View {
                       categoryId: categoryId,
                       style: style,
                       model: model.apiValue,
+                      bg: bg.rawValue,
                       emotion: "default",
                       prefilledLabel: "",
                       childId: auth.childSlug,
@@ -275,6 +302,7 @@ struct AddTileView: View {
                                categoryId: categoryId,
                                style: style,
                                model: model.apiValue,
+                               bg: bg.rawValue,
                                emotion: "default",
                                childId: auth.childSlug,
                                board: board)
