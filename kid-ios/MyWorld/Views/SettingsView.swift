@@ -41,6 +41,7 @@ struct SettingsView: View {
                     Button("Clear local cache") {
                         Task {
                             await MediaCache.shared.clear()
+                            await SpeechCache.shared.clear()
                             dismiss()
                         }
                     }
