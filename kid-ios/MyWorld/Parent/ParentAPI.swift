@@ -74,11 +74,36 @@ extension APIClient {
             let name: String
             let data: [Int]
         }
+        struct GameSeries: Codable, Identifiable, Hashable {
+            var id: String { name }
+            let name: String
+            let data: [Double]      // accuracy 0-100 per bucket
+        }
         struct UsePayload: Codable { let series: [UseSeries] }
+        struct GamesPayload: Codable { let series: [GameSeries] }
+
+        // Forgiving decoder: every section optional, missing → empty default.
+        // Important because the server's analytics endpoint may degrade any
+        // single section to [] on error; we never want one weak signal to
+        // hide the rest.
         let labels: [String]
         let mastery: [MasteryRow]
         let recentSessions: [SessionRow]
         let use: UsePayload
+        let games: GamesPayload
+
+        enum CodingKeys: String, CodingKey {
+            case labels, mastery, recentSessions, use, games
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            labels         = (try? c.decode([String].self, forKey: .labels))         ?? []
+            mastery        = (try? c.decode([MasteryRow].self, forKey: .mastery))    ?? []
+            recentSessions = (try? c.decode([SessionRow].self, forKey: .recentSessions)) ?? []
+            use            = (try? c.decode(UsePayload.self, forKey: .use))          ?? UsePayload(series: [])
+            games          = (try? c.decode(GamesPayload.self, forKey: .games))      ?? GamesPayload(series: [])
+        }
     }
 
     func analytics(childId: String) async throws -> AnalyticsResponse {
