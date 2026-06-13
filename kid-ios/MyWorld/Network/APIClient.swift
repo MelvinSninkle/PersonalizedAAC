@@ -402,11 +402,13 @@ struct APIClient {
         catch { throw APIError.decoding(error) }
     }
 
-    private func request(method: String,
-                         path: String,
-                         body: Data?,
-                         contentType: String? = nil,
-                         timeout: TimeInterval? = nil) async throws -> (Data, URLResponse) {
+    // Internal (not private) so feature extensions in other files — e.g. the
+    // parent-app endpoints in Parent/ParentAPI.swift — can reuse the plumbing.
+    func request(method: String,
+                 path: String,
+                 body: Data?,
+                 contentType: String? = nil,
+                 timeout: TimeInterval? = nil) async throws -> (Data, URLResponse) {
         guard let url = URL(string: origin + path) else {
             throw APIError.invalidResponse
         }

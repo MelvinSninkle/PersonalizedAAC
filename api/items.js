@@ -12,6 +12,7 @@ import { del } from '@vercel/blob';
 import { checkAuth } from './_lib/auth.js';
 import { sql, rowToItem } from './_lib/db.js';
 import { canEditContent, isParentOf } from './_lib/access.js';
+import { archivePriorImage } from './_lib/image-history.js';
 
 export default async function handler(req, res) {
   const auth = await checkAuth(req);
@@ -114,6 +115,16 @@ async function update(req, res, db, user) {
   const descriptions = Array.isArray(rawDescriptions)
     ? rawDescriptions.filter((s) => typeof s === 'string').map((s) => s.slice(0, 240)).slice(0, 6)
     : undefined;
+  // Archive the previous picture before we overwrite it — the parent's album
+  // depends on us never losing a tile's prior face.
+  if (imageKey && old.image_key && imageKey !== old.image_key) {
+    await archivePriorImage({
+      db, childId: old.child_id, itemId: old.id, oldKey: old.image_key,
+      label: old.label, section: old.section, source: 'edit',
+      who: user && user.email || null,
+    });
+  }
+
   const rows = await db`
     UPDATE items SET
       label         = COALESCE(${label ?? null},      label),

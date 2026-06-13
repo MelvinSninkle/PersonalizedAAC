@@ -2447,7 +2447,8 @@
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     _resyncing = true;
     try {
-      const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
+      const showAll = (() => { try { return localStorage.getItem('aacShowAllVocab') === '1'; } catch (_) { return false; } })();
+      const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID) + (showAll ? '&showAllVocab=1' : ''));
       if (!r.ok) return;
       const data = await r.json();
       if (!(data.categories || []).length && !(data.items || []).length) return;   // never wipe to empty
@@ -4168,6 +4169,160 @@
     setInterval(() => { syncChildSettings().catch(() => {}); }, 300000);
   }
 
+  // Special-day celebration: a big full-screen modal that fires once per
+  // event-day with a personalized scene (child + close family). Generation is
+  // lazy and idempotent — the same Christmas image loads instantly on every
+  // subsequent open that day. Dismissal is per-event-day so re-opening the
+  // board doesn't replay the modal; tap-to-close, never auto-dismisses.
+  function celebrationDismissedKey(year, eventKey) { return 'aacCeleb:' + year + ':' + eventKey; }
+  function isCelebrationDismissed(year, eventKey) {
+    try { return localStorage.getItem(celebrationDismissedKey(year, eventKey)) === '1'; } catch (_) { return false; }
+  }
+  function markCelebrationDismissed(year, eventKey) {
+    try { localStorage.setItem(celebrationDismissedKey(year, eventKey), '1'); } catch (_) {}
+  }
+  function showCelebration(label, blobUrl) {
+    if (document.getElementById('celeb-modal')) return;
+    const o = document.createElement('div'); o.id = 'celeb-modal';
+    o.style.cssText = 'position:fixed;inset:0;z-index:2600;display:flex;align-items:center;justify-content:center;background:rgba(173,20,87,.55);backdrop-filter:blur(6px);';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:28px;padding:22px;max-width:520px;width:92%;box-shadow:0 28px 80px rgba(0,0,0,.35);text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px;';
+    if (blobUrl) {
+      const img = document.createElement('img');
+      img.src = blobUrl;
+      img.alt = label;
+      img.style.cssText = 'width:100%;max-width:460px;aspect-ratio:1/1;object-fit:cover;border-radius:20px;background:#fce4ec;';
+      card.appendChild(img);
+    } else {
+      const ph = document.createElement('div');
+      ph.style.cssText = 'width:200px;height:200px;border-radius:20px;background:#fce4ec;display:flex;align-items:center;justify-content:center;font-size:48px;';
+      ph.textContent = '🎉';
+      card.appendChild(ph);
+    }
+    const h = document.createElement('div');
+    h.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:28px;color:#ad1457;line-height:1.2;';
+    h.textContent = label;
+    card.appendChild(h);
+    const close = document.createElement('button');
+    close.textContent = 'Tap to close';
+    close.style.cssText = 'border:none;border-radius:999px;background:#ff1493;color:#fff;font-weight:700;font-size:18px;padding:12px 26px;cursor:pointer;';
+    close.addEventListener('click', () => o.remove());
+    card.appendChild(close);
+    o.appendChild(card); document.body.appendChild(o);
+    // Speak the greeting in the parent's reward voice.
+    try { rewardAudioURL(label).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } }).catch(() => {}); } catch (_) {}
+  }
+  async function checkCelebration() {
+    try {
+      const r = await apiFetch('/api/celebrate?childId=' + encodeURIComponent(CHILD_ID));
+      if (!r.ok) return;
+      const d = await r.json();
+      for (const ev of d.events || []) {
+        if (isCelebrationDismissed(ev.year, ev.eventKey)) continue;
+        if (G.running || SLIDE.running || editMode) return;
+        let blobKey = ev.blobKey;
+        if (!blobKey) {
+          // Lazy-generate the personalized image — first iPad open of the day.
+          try {
+            const gen = await apiFetch('/api/celebrate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ childId: CHILD_ID, eventKey: ev.eventKey }) });
+            if (gen.ok) { const g = await gen.json(); blobKey = g.blobKey || null; }
+          } catch (_) {}
+        }
+        const url = blobKey ? await getMediaURL(blobKey) : null;
+        showCelebration(ev.label, url);
+        markCelebrationDismissed(ev.year, ev.eventKey);
+        return;   // one celebration at a time — the rest (rare overlap) wait for the next day boot
+      }
+    } catch (_) {}
+  }
+
+  // Parent message rendered to the board as a sequence of tile images. The
+  // phone POSTs to /api/message-to-board which tokenizes the text against the
+  // child's tile labels and publishes one 'message' command with the resolved
+  // tokens; we render them as a big full-screen sequence so the child sees
+  // each word's tile in turn, hears it in their tile voice (or TTS for words
+  // the board doesn't have), and can tap to skip. Suppressed during a game /
+  // edit / slideshow so it never lands mid-activity.
+  let _messagePlaying = false;
+  async function playMessageSequence(cmd) {
+    if (_messagePlaying || G.running || SLIDE.running || ROUTINE.active || editMode) return;
+    const tokens = Array.isArray(cmd && cmd.tokens) ? cmd.tokens : [];
+    if (!tokens.length) return;
+    _messagePlaying = true;
+
+    const overlay = document.createElement('div'); overlay.id = 'msg-seq';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:2700;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(173,20,87,.55);backdrop-filter:blur(6px);';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:28px;padding:18px;max-width:560px;width:92%;display:flex;flex-direction:column;align-items:center;gap:14px;box-shadow:0 28px 80px rgba(0,0,0,.35);';
+    const stage = document.createElement('div');
+    stage.style.cssText = 'width:100%;aspect-ratio:1/1;max-width:460px;border-radius:22px;background:#fce4ec;display:flex;align-items:center;justify-content:center;overflow:hidden;';
+    const wordEl = document.createElement('div');
+    wordEl.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:32px;color:#ad1457;text-align:center;line-height:1.2;';
+    const progress = document.createElement('div');
+    progress.style.cssText = 'font-size:13px;color:#6b7280;';
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Tap to skip';
+    closeBtn.style.cssText = 'border:none;border-radius:999px;background:#ff1493;color:#fff;font-weight:700;font-size:16px;padding:10px 22px;cursor:pointer;';
+    let cancelled = false;
+    closeBtn.addEventListener('click', () => { cancelled = true; });
+    card.appendChild(stage); card.appendChild(wordEl); card.appendChild(progress); card.appendChild(closeBtn);
+    overlay.appendChild(card); document.body.appendChild(overlay);
+
+    const v = gVoice();
+    try {
+      for (let i = 0; i < tokens.length; i++) {
+        if (cancelled) break;
+        const t = tokens[i] || {};
+        progress.textContent = (i + 1) + ' of ' + tokens.length;
+        wordEl.textContent = t.word || '';
+        // Tile-backed token: show its picture + play its recorded voice.
+        if (t.imageKey) {
+          stage.innerHTML = '';
+          const img = document.createElement('img');
+          img.alt = t.word || '';
+          img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+          stage.appendChild(img);
+          try { const u = await getMediaURL(t.imageKey); if (u) img.src = u; } catch (_) {}
+        } else {
+          // Word the board doesn't have — render the word itself big.
+          stage.innerHTML = '';
+          const big = document.createElement('div');
+          big.style.cssText = 'font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:800;font-size:84px;color:#ad1457;padding:24px;text-align:center;';
+          big.textContent = t.word || '';
+          stage.appendChild(big);
+        }
+        // Speak: tile's recorded audio when available, TTS otherwise.
+        let played = false;
+        if (t.soundKey) {
+          try {
+            const u = await getMediaURL(t.soundKey);
+            if (u) { v.src = u; v.currentTime = 0; await v.play().catch(() => {}); played = true; }
+          } catch (_) {}
+        }
+        if (!played && t.word) {
+          try {
+            const u = await rewardAudioURL(t.word);
+            if (u) { v.src = u; v.currentTime = 0; await v.play().catch(() => {}); played = true; }
+          } catch (_) {}
+        }
+        // Hold the tile on-screen at least holdMs, AND until any playing audio
+        // ends — whichever comes later — so short words don't blur past.
+        const minHold = Math.max(600, Math.min(3000, Number(t.holdMs) || 1400));
+        const start = Date.now();
+        await new Promise((resolve) => {
+          const done = () => { v.removeEventListener('ended', done); resolve(); };
+          if (played && !v.ended) v.addEventListener('ended', done);
+          const left = minHold - (Date.now() - start);
+          setTimeout(() => { v.removeEventListener('ended', done); resolve(); }, Math.max(0, left));
+        });
+      }
+    } finally {
+      overlay.remove();
+      _messagePlaying = false;
+    }
+  }
+
   // Reward audio: cache TTS by phrase so cheers play instantly and offline.
   async function rewardAudioURL(text) {
     const key = 'tts:' + text;
@@ -4574,6 +4729,7 @@
   function applyCmd(cmd) {
     const a = cmd.action;
     if (a === 'start') { startFromCmd(cmd); return; }
+    if (a === 'message') { playMessageSequence(cmd); return; }
     if (a === 'end') {
       abortRoutine();
       if (SLIDE.running) { stopSlideshow({ manual: true }); return; }
@@ -4815,7 +4971,8 @@
       // so an empty/failed response never wipes the cached pictures.
       step = 'sync';
       try {
-        const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID));
+        const showAll = (() => { try { return localStorage.getItem('aacShowAllVocab') === '1'; } catch (_) { return false; } })();
+        const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID) + (showAll ? '&showAllVocab=1' : ''));
         if (r.ok) {
           const data = await r.json();
           const nc = (data.categories || []).length, ni = (data.items || []).length;
@@ -4844,7 +5001,11 @@
       // Keep the tile tree + offline voice cache current with phone-side edits:
       // re-pull every couple of minutes, and whenever the iPad regains focus.
       setInterval(() => { resyncIfChanged().catch(() => {}); }, 120000);
-      document.addEventListener('visibilitychange', () => { if (!document.hidden) resyncIfChanged().catch(() => {}); });
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) { resyncIfChanged().catch(() => {}); checkCelebration().catch(() => {}); } });
+      // Check for special-day celebrations (birthday, holidays). Cheap GET; if
+      // today matches, we lazily generate the personalized scene and show a
+      // big full-screen modal once that day (suppress after the first dismiss).
+      checkCelebration().catch(() => {});
     } catch (err) {
       clearTimeout(watchdog);
       bootBanner('Load error at "' + step + '": ' + (err.message || err), true);

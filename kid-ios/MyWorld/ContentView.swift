@@ -1,13 +1,23 @@
 import SwiftUI
 
+/// Root switch. One app, two display modes (PRD §1.2): after login, the
+/// device renders either the child's board or the parent home screen based on
+/// the role chosen on first run. Same account, same APIs, same stores — just
+/// two faces of the same binary, so an iPhone parent and an iPad child are one
+/// install with different roles.
 struct ContentView: View {
     @Environment(AuthManager.self) private var auth
+    @Environment(DeviceMode.self)  private var mode
 
     var body: some View {
-        if auth.isSignedIn {
-            BoardView()
-        } else {
+        if !auth.isSignedIn {
             LoginView()
+        } else {
+            switch mode.role {
+            case .unset:      RolePickerView()
+            case .childBoard: BoardView()
+            case .parent:     ParentHomeView()
+            }
         }
     }
 }

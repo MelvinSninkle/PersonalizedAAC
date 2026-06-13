@@ -7,12 +7,13 @@ import { sql } from '../_lib/db.js';
 
 const ACTOR = 'admin';
 
-const VALID_COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs']);
+const VALID_COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs', 'Events']);
 const VALID_SUBJECT_MODES = new Set(['child_as_subject', 'object', 'person', 'concept']);
 const VALID_PARENT_PHOTO = new Set(['override', 'supplement', 'none']);
 const VALID_STATUS = new Set(['draft', 'published']);
 const VALID_PHASES = new Set(['v1_core', 'v1_extended', 'v2', 'later']);
 const VALID_GROWTH_STAGES = new Set(['stage_1', 'stage_2', 'stage_3', 'stage_4', 'stage_5plus']);
+const VALID_ACQUISITION_AGES = new Set(['12-18m', '18-30m', '2-3y', '3-4y', '4y+']);
 const VALID_MEAL = new Set(['breakfast', 'lunch', 'dinner', 'snack', 'anytime']);
 const VALID_GESTALT_TYPES = new Set(['compositional', 'category_holding', 'opaque']);
 const VALID_AUDIENCE = new Set(['universal', 'parent', 'therapist', 'school_team', 'family']);
@@ -41,6 +42,7 @@ function rowOut(r) {
     audience: r.audience || 'universal',
     authoringKind: r.authoring_kind || 'canonical',
     growthStage: r.growth_stage || null,
+    acquisitionAge: r.acquisition_age || null,
     mealContext: r.meal_context || null,
     isGestalt: !!r.is_gestalt,
     gestaltType: r.gestalt_type || null,
@@ -179,7 +181,7 @@ async function create(req, res, db) {
   const rows = await db`
     INSERT INTO taxonomy (
       id, column_name, category, subcategory, label, pronunciation,
-      prompt_template, subject_mode, parent_photo_behavior, phase, core, notes,
+      prompt_template, subject_mode, parent_photo_behavior, phase, core, notes, acquisition_age,
       growth_stage, meal_context, is_gestalt, gestalt_type, gestalt_meaning,
       gestalt_target_words, descriptive_clues, representation_levels,
       audience, authoring_kind,
@@ -188,7 +190,7 @@ async function create(req, res, db) {
       ${value.id}, ${value.column}, ${value.category ?? null}, ${value.subcategory ?? null},
       ${value.label}, ${value.pronunciation ?? null},
       ${value.promptTemplate}, ${value.subjectMode}, ${value.parentPhotoBehavior},
-      ${value.phase ?? 'v1_core'}, ${value.core === undefined ? true : value.core}, ${value.notes ?? null},
+      ${value.phase ?? 'v1_core'}, ${value.core === undefined ? true : value.core}, ${value.notes ?? null}, ${value.acquisitionAge ?? null},
       ${value.growthStage ?? null}, ${value.mealContext ?? null},
       ${value.isGestalt ?? false}, ${value.gestaltType ?? null}, ${value.gestaltMeaning ?? null},
       ${value.gestaltTargetWords ?? null}, ${value.descriptiveClues ?? null},
@@ -240,6 +242,7 @@ async function update(req, res, db) {
       core                   = ${value.core                  !== undefined ? value.core                  : old.core},
       notes                  = ${value.notes                 !== undefined ? value.notes                 : old.notes},
       growth_stage           = ${value.growthStage           !== undefined ? value.growthStage           : old.growth_stage},
+      acquisition_age        = ${value.acquisitionAge        !== undefined ? value.acquisitionAge        : old.acquisition_age},
       meal_context           = ${value.mealContext           !== undefined ? value.mealContext           : old.meal_context},
       is_gestalt             = ${value.isGestalt             !== undefined ? value.isGestalt             : old.is_gestalt},
       gestalt_type           = ${value.gestaltType           !== undefined ? value.gestaltType           : old.gestalt_type},

@@ -12,7 +12,7 @@ const HEADER = [
   'id', 'column', 'category', 'subcategory', 'label', 'pronunciation', 'subject_mode',
   'parent_photo_behavior', 'phase', 'core', 'growth_stage', 'meal_context', 'is_gestalt',
   'gestalt_type', 'gestalt_meaning', 'gestalt_target_words', 'descriptive_clues',
-  'audience', 'authoring_kind', 'status', 'prompt_template', 'notes',
+  'audience', 'authoring_kind', 'status', 'prompt_template', 'notes', 'acquisition_age',
 ];
 
 function csvField(v) {
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
       SELECT id, column_name, category, subcategory, label, pronunciation, subject_mode,
              parent_photo_behavior, phase, core, growth_stage, meal_context, is_gestalt,
              gestalt_type, gestalt_meaning, gestalt_target_words, descriptive_clues,
-             audience, authoring_kind, status, prompt_template, notes
+             audience, authoring_kind, status, prompt_template, notes, acquisition_age
       FROM taxonomy
       WHERE archived = FALSE
       ORDER BY column_name, category, subcategory NULLS FIRST, id
@@ -69,6 +69,7 @@ export default async function handler(req, res) {
         csvField(r.status),
         csvField(r.prompt_template),
         csvField(r.notes),
+        csvField(r.acquisition_age),
       ].join(','));
     }
     const body = lines.join('\n') + '\n';

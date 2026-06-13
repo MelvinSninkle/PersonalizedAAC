@@ -12,7 +12,8 @@ const AUTO_SNAPSHOT_THRESHOLD = 50;
 const VALID_STATUS = new Set(['draft', 'published']);
 const VALID_PHASES = new Set(['v1_core', 'v1_extended', 'v2', 'later']);
 const VALID_GROWTH_STAGES = new Set(['stage_1', 'stage_2', 'stage_3', 'stage_4', 'stage_5plus']);
-const VALID_ACTIONS = new Set(['set-status', 'set-phase', 'set-archived', 'set-core', 'set-growth-stage', 'delete']);
+const VALID_ACQUISITION_AGES = new Set(['12-18m', '18-30m', '2-3y', '3-4y', '4y+']);
+const VALID_ACTIONS = new Set(['set-status', 'set-phase', 'set-archived', 'set-core', 'set-growth-stage', 'set-acquisition-age', 'delete']);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -32,6 +33,8 @@ export default async function handler(req, res) {
     { res.status(400).json({ error: `value must be one of ${[...VALID_STATUS].join(',')}` }); return; }
   if (action === 'set-phase' && !VALID_PHASES.has(value))
     { res.status(400).json({ error: `value must be one of ${[...VALID_PHASES].join(',')}` }); return; }
+  if (action === 'set-acquisition-age' && value !== null && !VALID_ACQUISITION_AGES.has(value))
+    return res.status(400).json({ error: 'invalid acquisition_age', allowed: [...VALID_ACQUISITION_AGES] });
   if (action === 'set-growth-stage' && value !== null && !VALID_GROWTH_STAGES.has(value))
     { res.status(400).json({ error: `value must be one of ${[...VALID_GROWTH_STAGES].join(',')} or null` }); return; }
   if (action === 'set-archived') value = !!value;
@@ -95,6 +98,14 @@ export default async function handler(req, res) {
       const rows = await db`
         UPDATE taxonomy
         SET growth_stage = ${value || null}, updated_at = NOW(), updated_by = ${ACTOR}
+        WHERE id = ANY(${ids})
+        RETURNING id
+      `;
+      affected = rows.length;
+    } else if (action === 'set-acquisition-age') {
+      const rows = await db`
+        UPDATE taxonomy
+        SET acquisition_age = ${value || null}, updated_at = NOW(), updated_by = ${ACTOR}
         WHERE id = ANY(${ids})
         RETURNING id
       `;

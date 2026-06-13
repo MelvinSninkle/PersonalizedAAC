@@ -6,6 +6,7 @@
 import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
+import { archivePriorImage } from './_lib/image-history.js';
 import { sql } from './_lib/db.js';
 import { canAccessChild } from './_lib/access.js';
 import { isValidRelationship, relationshipNeedsSide } from './_lib/relationships.js';
@@ -52,6 +53,10 @@ export default async function handler(req, res) {
   const givenName = String(q.given || '').slice(0, 120).trim();
   const pronoun = (q.pronoun === 'she' || q.pronoun === 'he' || q.pronoun === 'they') ? q.pronoun : null;
   const birthOrder = (Number.isFinite(+q.birthOrder) && +q.birthOrder > 0) ? Math.floor(+q.birthOrder) : null;
+  // YYYY-MM-DD only, used to compute the child's current developmental band so
+  // the board can hide vocabulary that isn't age-appropriate yet. Stored only
+  // on the is_self row (role==='child').
+  const birthDate = (role === 'child' && /^\d{4}-\d{2}-\d{2}$/.test(String(q.birthDate || ''))) ? String(q.birthDate) : null;
 
   if (!(await canAccessChild(auth.user, childId))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
@@ -112,8 +117,15 @@ export default async function handler(req, res) {
       }
 
       const pinned = role === 'child';
-      const existing = await db`SELECT id FROM items WHERE child_id = ${childId} AND section = 'people' AND lower(label) = lower(${name}) LIMIT 1`;
+      const existing = await db`SELECT id, image_key, label, section FROM items WHERE child_id = ${childId} AND section = 'people' AND lower(label) = lower(${name}) LIMIT 1`;
       if (existing.length) {
+        if (existing[0].image_key && existing[0].image_key !== key) {
+          await archivePriorImage({
+            db, childId, itemId: existing[0].id, oldKey: existing[0].image_key,
+            label: existing[0].label, section: existing[0].section, source: 'onboarding',
+            who: auth.user && auth.user.email || null,
+          });
+        }
         await db`UPDATE items SET image_key = ${key}, sound_key = ${soundKey}, category_id = ${catId}, pinned = ${pinned}, updated_at = NOW() WHERE id = ${existing[0].id}`;
         itemId = Number(existing[0].id);
       } else {
@@ -146,14 +158,16 @@ export default async function handler(req, res) {
             given_name = COALESCE(NULLIF(${givenName}, ''), given_name), relationship = ${rel}, side = ${relSide},
             pronoun = COALESCE(${pronoun}, pronoun), birth_order = COALESCE(${birthOrder}, birth_order),
             is_self = ${isSelf}, reference_key = ${key}, voice_key = COALESCE(${soundKey}, voice_key),
-            pronunciation = COALESCE(NULLIF(${pronunciation}, ''), pronunciation), updated_at = NOW()
+            pronunciation = COALESCE(NULLIF(${pronunciation}, ''), pronunciation),
+            birth_date = COALESCE(${birthDate}, birth_date),
+            updated_at = NOW()
           WHERE id = ${personId}`;
       } else {
         const pr = await db`
           INSERT INTO persons
-            (child_id, display_name, given_name, relationship, side, pronoun, birth_order, is_self, reference_key, voice_key, pronunciation)
+            (child_id, display_name, given_name, relationship, side, pronoun, birth_order, is_self, reference_key, voice_key, pronunciation, birth_date)
           VALUES
-            (${childId}, ${name}, ${givenName || null}, ${rel}, ${relSide}, ${pronoun}, ${birthOrder}, ${isSelf}, ${key}, ${soundKey}, ${pronunciation || null})
+            (${childId}, ${name}, ${givenName || null}, ${rel}, ${relSide}, ${pronoun}, ${birthOrder}, ${isSelf}, ${key}, ${soundKey}, ${pronunciation || null}, ${birthDate})
           RETURNING id`;
         personId = pr[0].id;
       }

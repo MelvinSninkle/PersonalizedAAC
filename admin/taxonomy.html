@@ -218,6 +218,13 @@
         <button data-act="set-growth-stage" data-val="stage_5plus">Set growth_stage → stage_5plus</button>
         <button data-act="set-growth-stage" data-val="">Clear growth_stage</button>
         <div style="border-top: 1px solid #eef1f6; margin: 4px 0;"></div>
+        <button data-act="set-acquisition-age" data-val="12-18m">Set acquisition_age → 12-18m</button>
+        <button data-act="set-acquisition-age" data-val="18-30m">Set acquisition_age → 18-30m</button>
+        <button data-act="set-acquisition-age" data-val="2-3y">Set acquisition_age → 2-3y</button>
+        <button data-act="set-acquisition-age" data-val="3-4y">Set acquisition_age → 3-4y</button>
+        <button data-act="set-acquisition-age" data-val="4y+">Set acquisition_age → 4y+</button>
+        <button data-act="set-acquisition-age" data-val="">Clear acquisition_age</button>
+        <div style="border-top: 1px solid #eef1f6; margin: 4px 0;"></div>
         <button data-act="delete" style="color: #991b1b;">Delete selected…</button>
       </div>
     </div>
@@ -283,6 +290,17 @@
     <option value="stage_3">stage_3</option>
     <option value="stage_4">stage_4</option>
     <option value="stage_5plus">stage_5plus</option>
+    <option value="__unset">unset only</option>
+  </select>
+
+  <label for="filter-acq-age">Age</label>
+  <select id="filter-acq-age">
+    <option value="">All</option>
+    <option value="12-18m">12-18m · first words</option>
+    <option value="18-30m">18-30m · vocab burst</option>
+    <option value="2-3y">2-3y · sentences</option>
+    <option value="3-4y">3-4y · grammar</option>
+    <option value="4y+">4y+ · refined</option>
     <option value="__unset">unset only</option>
   </select>
 
@@ -409,6 +427,18 @@
           <option value="stage_5plus">stage_5plus · broadening</option>
         </select>
         <div class="help">Default-prominence stage on the standard scaffold. Advisory, never gating.</div>
+      </div>
+      <div>
+        <label for="f-acq-age">acquisition_age</label>
+        <select id="f-acq-age">
+          <option value="">— (unset)</option>
+          <option value="12-18m">12-18m · first words</option>
+          <option value="18-30m">18-30m · vocabulary burst</option>
+          <option value="2-3y">2-3y · sentence emergence</option>
+          <option value="3-4y">3-4y · grammar developing</option>
+          <option value="4y+">4y+ · refined language</option>
+        </select>
+        <div class="help">Approximate developmental band for typical acquisition. Drives early-intervention board filtering.</div>
       </div>
       <div>
         <label for="f-meal">meal_context (food only)</label>
@@ -727,6 +757,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     const status = document.getElementById('filter-status').value;
     const core   = document.getElementById('filter-core').value;
     const growth = document.getElementById('filter-growth').value;
+    const acqAge = document.getElementById('filter-acq-age').value;
     const gest   = document.getElementById('filter-gestalt').value;
     const aud    = document.getElementById('filter-audience').value;
     const kind   = document.getElementById('filter-kind').value;
@@ -738,6 +769,8 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       if (core === 'noncore' && row.core !== false) return false;
       if (growth === '__unset' && row.growthStage) return false;
       else if (growth && growth !== '__unset' && row.growthStage !== growth) return false;
+      if (acqAge === '__unset' && row.acquisitionAge) return false;
+      else if (acqAge && acqAge !== '__unset' && row.acquisitionAge !== acqAge) return false;
       if (gest === 'yes' && !row.isGestalt) return false;
       if (gest === 'no' && row.isGestalt) return false;
       if (aud && row.audience !== aud) return false;
@@ -774,6 +807,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     document.getElementById('f-status').value       = row?.status || 'draft';
     document.getElementById('f-core').value         = (row && row.core === false) ? 'false' : 'true';
     document.getElementById('f-growth').value       = row?.growthStage || '';
+    document.getElementById('f-acq-age').value      = row?.acquisitionAge || '';
     document.getElementById('f-meal').value         = row?.mealContext || '';
     document.getElementById('f-is-gestalt').value   = row && row.isGestalt ? 'true' : 'false';
     document.getElementById('f-gestalt-type').value    = row?.gestaltType || '';
@@ -811,6 +845,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       status: document.getElementById('f-status').value,
       core: document.getElementById('f-core').value === 'true',
       growthStage: document.getElementById('f-growth').value || null,
+      acquisitionAge: document.getElementById('f-acq-age').value || null,
       mealContext: document.getElementById('f-meal').value || null,
       isGestalt: document.getElementById('f-is-gestalt').value === 'true',
       gestaltType: document.getElementById('f-gestalt-type').value || null,
@@ -882,6 +917,8 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       { title: 'phase',         field: 'phase',               width: 105, headerSort: true },
       { title: 'stage',         field: 'growthStage',         width: 95,  headerSort: true,
         formatter: (cell) => { const v = cell.getValue(); return v ? v.replace('stage_', 's') : '—'; } },
+      { title: 'age',           field: 'acquisitionAge',      width: 80,  headerSort: true,
+        formatter: (cell) => cell.getValue() || '—' },
       { title: 'meal',          field: 'mealContext',         width: 80,  headerSort: true,
         formatter: (cell) => cell.getValue() || '' },
       { title: 'G',             field: 'isGestalt',           width: 44,  headerSort: true,
@@ -1078,6 +1115,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
         case 'core':                  out.core = !/^(false|0|no|non[-_]?core|n)$/i.test(String(v).trim()); break;
         case 'archived':              out.archived = /^(true|1|yes)$/i.test(String(v)); break;
         case 'growth_stage':          out.growthStage = v || null; break;
+        case 'acquisition_age':       out.acquisitionAge = v || null; break;
         case 'meal_context':          out.mealContext = v || null; break;
         case 'is_gestalt':            out.isGestalt = /^(true|1|yes|y)$/i.test(String(v).trim()); break;
         case 'gestalt_type':          out.gestaltType = v || null; break;
@@ -1378,6 +1416,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       subject_mode: r.subjectMode, parent_photo_behavior: r.parentPhotoBehavior,
       phase: r.phase, core: r.core === false ? 'false' : 'true',
       growth_stage: r.growthStage || '',
+      acquisition_age: r.acquisitionAge || '',
       meal_context: r.mealContext || '',
       is_gestalt: r.isGestalt ? 'true' : 'false',
       gestalt_type: r.gestaltType || '',
@@ -1488,6 +1527,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     if (act === 'set-archived') body.value = value === 'true';
     if (act === 'set-core') body.value = value === 'true';
     if (act === 'set-growth-stage') body.value = value || null;
+    if (act === 'set-acquisition-age') body.value = value || null;
     try {
       const r = await api('/api/admin/taxonomy-bulkop', { method: 'POST', body });
       await loadRows();

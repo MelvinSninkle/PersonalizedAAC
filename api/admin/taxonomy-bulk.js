@@ -12,12 +12,13 @@ import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
 
 const ACTOR = 'admin';
-const VALID_COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs']);
+const VALID_COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs', 'Events']);
 const VALID_SUBJECT_MODES = new Set(['child_as_subject', 'object', 'person', 'concept']);
 const VALID_PARENT_PHOTO = new Set(['override', 'supplement', 'none']);
 const VALID_STATUS = new Set(['draft', 'published']);
 const VALID_PHASES = new Set(['v1_core', 'v1_extended', 'v2', 'later']);
 const VALID_GROWTH_STAGES = new Set(['stage_1', 'stage_2', 'stage_3', 'stage_4', 'stage_5plus']);
+const VALID_ACQUISITION_AGES = new Set(['12-18m', '18-30m', '2-3y', '3-4y', '4y+']);
 const VALID_MEAL = new Set(['breakfast', 'lunch', 'dinner', 'snack', 'anytime']);
 const VALID_GESTALT_TYPES = new Set(['compositional', 'category_holding', 'opaque']);
 const VALID_AUDIENCE = new Set(['universal', 'parent', 'therapist', 'school_team', 'family']);
@@ -36,6 +37,7 @@ function validateRow(r) {
   if (r.phase && !VALID_PHASES.has(r.phase)) errs.push('phase');
   if (r.status && !VALID_STATUS.has(r.status)) errs.push('status');
   if (r.growthStage && !VALID_GROWTH_STAGES.has(r.growthStage)) errs.push('growthStage');
+  if (r.acquisitionAge && !VALID_ACQUISITION_AGES.has(r.acquisitionAge)) errs.push('acquisitionAge');
   if (r.mealContext && !VALID_MEAL.has(r.mealContext)) errs.push('mealContext');
   if (r.gestaltType && !VALID_GESTALT_TYPES.has(r.gestaltType)) errs.push('gestaltType');
   if (r.audience && !VALID_AUDIENCE.has(r.audience)) errs.push('audience');
@@ -111,6 +113,7 @@ export default async function handler(req, res) {
             core                  = ${core},
             notes                 = ${r.notes ?? null},
             growth_stage          = ${r.growthStage ?? null},
+            acquisition_age       = ${r.acquisitionAge ?? null},
             meal_context          = ${r.mealContext ?? null},
             is_gestalt            = ${isGestalt},
             gestalt_type          = ${r.gestaltType ?? null},
@@ -132,7 +135,7 @@ export default async function handler(req, res) {
           INSERT INTO taxonomy (
             id, column_name, category, subcategory, label, pronunciation,
             prompt_template, subject_mode, parent_photo_behavior, phase, core, notes,
-            growth_stage, meal_context, is_gestalt, gestalt_type, gestalt_meaning,
+            growth_stage, acquisition_age, meal_context, is_gestalt, gestalt_type, gestalt_meaning,
             gestalt_target_words, descriptive_clues, representation_levels,
             audience, authoring_kind,
             status, archived, created_by, updated_by
@@ -141,7 +144,7 @@ export default async function handler(req, res) {
             ${r.label}, ${r.pronunciation ?? null},
             ${r.promptTemplate}, ${r.subjectMode}, ${r.parentPhotoBehavior},
             ${r.phase ?? 'v1_core'}, ${core}, ${r.notes ?? null},
-            ${r.growthStage ?? null}, ${r.mealContext ?? null},
+            ${r.growthStage ?? null}, ${r.acquisitionAge ?? null}, ${r.mealContext ?? null},
             ${isGestalt}, ${r.gestaltType ?? null}, ${r.gestaltMeaning ?? null},
             ${targetWords}, ${clues}, ${repLevels}::jsonb,
             ${audience}, ${authoringKind},
