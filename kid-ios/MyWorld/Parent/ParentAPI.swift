@@ -79,8 +79,15 @@ extension APIClient {
             let name: String
             let data: [Double]      // accuracy 0-100 per bucket
         }
+        struct ModeSeries: Codable, Identifiable, Hashable {
+            var id: String { mode }
+            let name: String      // human label ("Matching")
+            let mode: String      // raw mode id ("self_paced", "auditory_comprehension"…)
+            let data: [Double]    // accuracy 0-100 per bucket
+        }
         struct UsePayload: Codable { let series: [UseSeries] }
         struct GamesPayload: Codable { let series: [GameSeries] }
+        struct GamesByModePayload: Codable { let series: [ModeSeries] }
 
         // Forgiving decoder: every section optional, missing → empty default.
         // Important because the server's analytics endpoint may degrade any
@@ -91,9 +98,10 @@ extension APIClient {
         let recentSessions: [SessionRow]
         let use: UsePayload
         let games: GamesPayload
+        let gamesByMode: GamesByModePayload
 
         enum CodingKeys: String, CodingKey {
-            case labels, mastery, recentSessions, use, games
+            case labels, mastery, recentSessions, use, games, gamesByMode
         }
 
         init(from decoder: Decoder) throws {
@@ -103,6 +111,7 @@ extension APIClient {
             recentSessions = (try? c.decode([SessionRow].self, forKey: .recentSessions)) ?? []
             use            = (try? c.decode(UsePayload.self, forKey: .use))          ?? UsePayload(series: [])
             games          = (try? c.decode(GamesPayload.self, forKey: .games))      ?? GamesPayload(series: [])
+            gamesByMode    = (try? c.decode(GamesByModePayload.self, forKey: .gamesByMode)) ?? GamesByModePayload(series: [])
         }
     }
 
@@ -174,6 +183,82 @@ extension APIClient {
         let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "reason": "parent"])
         _ = try await request(method: "POST", path: "/api/advance-band",
                               body: body, contentType: "application/json")
+    }
+
+    // MARK: -- /api/word-history (PRD §4.5)
+
+    struct WordEvent: Codable, Identifiable, Hashable {
+        let id: Int
+        let label: String
+        let category: String?
+        let section: String?
+        let when: String
+    }
+    struct WordHistoryResponse: Codable {
+        let rows: [WordEvent]
+        let hasMore: Bool
+    }
+    func wordHistory(childId: String, query: String?, since: Date?, until: Date?,
+                     limit: Int = 200, offset: Int = 0) async throws -> WordHistoryResponse {
+        let iso = ISO8601DateFormatter()
+        var path = "/api/word-history?childId=\(percentEscapeParent(childId))&limit=\(limit)&offset=\(offset)"
+        if let q = query?.trimmingCharacters(in: .whitespaces), !q.isEmpty {
+            path += "&q=\(percentEscapeParent(q))"
+        }
+        if let since { path += "&since=\(percentEscapeParent(iso.string(from: since)))" }
+        if let until { path += "&until=\(percentEscapeParent(iso.string(from: until)))" }
+        let (data, _) = try await request(method: "GET", path: path, body: nil)
+        do { return try JSONDecoder().decode(WordHistoryResponse.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
+    // MARK: -- /api/top-words
+
+    struct TopWord: Codable, Identifiable, Hashable {
+        var id: String { label.lowercased() }
+        let label: String
+        let count: Int
+        let category: String?
+        let section: String?
+        let firstAt: String
+        let lastAt: String
+    }
+    struct TopWordsResponse: Codable {
+        let rows: [TopWord]
+        let days: Int
+    }
+    func topWords(childId: String, days: Int = 30, limit: Int = 50) async throws -> TopWordsResponse {
+        let (data, _) = try await request(
+            method: "GET",
+            path: "/api/top-words?childId=\(percentEscapeParent(childId))&days=\(days)&limit=\(limit)",
+            body: nil
+        )
+        do { return try JSONDecoder().decode(TopWordsResponse.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
+    // MARK: -- /api/input-methods — how the child is answering over time
+
+    struct InputMethodSeries: Codable, Identifiable, Hashable {
+        var id: String { method }
+        let method: String
+        let data: [Int]
+    }
+    struct InputMethodCorrect: Codable, Hashable { let ok: Int; let total: Int }
+    struct InputMethodsResponse: Codable {
+        let totals: [String: Int]
+        let correctBy: [String: InputMethodCorrect]
+        let buckets: [String]
+        let series: [InputMethodSeries]
+    }
+    func inputMethods(childId: String, days: Int = 30) async throws -> InputMethodsResponse {
+        let (data, _) = try await request(
+            method: "GET",
+            path: "/api/input-methods?childId=\(percentEscapeParent(childId))&days=\(days)",
+            body: nil
+        )
+        do { return try JSONDecoder().decode(InputMethodsResponse.self, from: data) }
+        catch { throw APIError.decoding(error) }
     }
 
     // MARK: -- schedules (merge-safe write, mirrors saveDisplayPrefs)
