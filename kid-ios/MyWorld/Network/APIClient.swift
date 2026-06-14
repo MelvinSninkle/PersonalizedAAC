@@ -181,9 +181,12 @@ struct APIClient {
     }
 
     /// POST /api/generate-image — re-illustrates the photo in the given style
-    /// with the chosen OpenAI image model. Returns the raw PNG bytes. ~20-40s.
-    func generateImage(photoJPEG: Data, label: String, style: String, model: String, childId: String) async throws -> Data {
-        let path = "/api/generate-image?label=\(percentEscape(label))&style=\(percentEscape(style))&model=\(percentEscape(model))&childId=\(percentEscape(childId))"
+    /// with the chosen image model. `bg` picks the flat background color
+    /// (preset name like 'pink' or a hex). Returns the raw PNG bytes. ~20-40s.
+    func generateImage(photoJPEG: Data, label: String, style: String, model: String,
+                       bg: String?, childId: String) async throws -> Data {
+        var path = "/api/generate-image?label=\(percentEscape(label))&style=\(percentEscape(style))&model=\(percentEscape(model))&childId=\(percentEscape(childId))"
+        if let bg, !bg.isEmpty { path += "&bg=\(percentEscape(bg))" }
         // 320s = Vercel's 300s function ceiling plus a 20s grace window, so a
         // near-the-edge response still arrives intact rather than the iPad
         // giving up first. gpt-image-1.5/-2 at high quality + high fidelity can

@@ -3,14 +3,16 @@ import AVFoundation
 
 @main
 struct MyWorldApp: App {
-    @State private var auth      = AuthManager()
-    @State private var board     = BoardStore()
-    @State private var prefs     = DisplayPrefs()
-    @State private var live      = LiveSession()
-    @State private var game      = GameController()
-    @State private var scheduler = Scheduler()
-    @State private var addQueue  = AddTileQueue()
-    @State private var mode      = DeviceMode()
+    @State private var auth        = AuthManager()
+    @State private var board       = BoardStore()
+    @State private var prefs       = DisplayPrefs()
+    @State private var live        = LiveSession()
+    @State private var game        = GameController()
+    @State private var scheduler   = Scheduler()
+    @State private var addQueue    = AddTileQueue()
+    @State private var mode        = DeviceMode()
+    @State private var parentLive  = ParentLive()
+    @State private var autoTeach   = AutoTeachRunner()
 
     init() {
         setupAudioSession()
@@ -27,8 +29,14 @@ struct MyWorldApp: App {
                 .environment(scheduler)
                 .environment(addQueue)
                 .environment(mode)
+                .environment(parentLive)
+                .environment(autoTeach)
                 .statusBarHidden(true)
                 .persistentSystemOverlays(.hidden)
+                // The whole app uses a fixed light pink palette (matching the
+                // web app + board). Pin to light so semantic colors don't flip
+                // to white-on-white when the device is in Dark Mode.
+                .preferredColorScheme(.light)
         }
     }
 

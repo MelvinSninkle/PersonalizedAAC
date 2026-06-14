@@ -69,8 +69,50 @@ extension APIClient {
             let result: String?    // "4 / 5" or "—"
             let length: String?    // "12 min" or "—"
         }
+        struct UseSeries: Codable, Identifiable, Hashable {
+            var id: String { name }
+            let name: String
+            let data: [Int]
+        }
+        struct GameSeries: Codable, Identifiable, Hashable {
+            var id: String { name }
+            let name: String
+            let data: [Double]      // accuracy 0-100 per bucket
+        }
+        struct ModeSeries: Codable, Identifiable, Hashable {
+            var id: String { mode }
+            let name: String      // human label ("Matching")
+            let mode: String      // raw mode id ("self_paced", "auditory_comprehension"…)
+            let data: [Double]    // accuracy 0-100 per bucket
+        }
+        struct UsePayload: Codable { let series: [UseSeries] }
+        struct GamesPayload: Codable { let series: [GameSeries] }
+        struct GamesByModePayload: Codable { let series: [ModeSeries] }
+
+        // Forgiving decoder: every section optional, missing → empty default.
+        // Important because the server's analytics endpoint may degrade any
+        // single section to [] on error; we never want one weak signal to
+        // hide the rest.
+        let labels: [String]
         let mastery: [MasteryRow]
         let recentSessions: [SessionRow]
+        let use: UsePayload
+        let games: GamesPayload
+        let gamesByMode: GamesByModePayload
+
+        enum CodingKeys: String, CodingKey {
+            case labels, mastery, recentSessions, use, games, gamesByMode
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            labels         = (try? c.decode([String].self, forKey: .labels))         ?? []
+            mastery        = (try? c.decode([MasteryRow].self, forKey: .mastery))    ?? []
+            recentSessions = (try? c.decode([SessionRow].self, forKey: .recentSessions)) ?? []
+            use            = (try? c.decode(UsePayload.self, forKey: .use))          ?? UsePayload(series: [])
+            games          = (try? c.decode(GamesPayload.self, forKey: .games))      ?? GamesPayload(series: [])
+            gamesByMode    = (try? c.decode(GamesByModePayload.self, forKey: .gamesByMode)) ?? GamesByModePayload(series: [])
+        }
     }
 
     func analytics(childId: String) async throws -> AnalyticsResponse {
@@ -83,7 +125,7 @@ extension APIClient {
 
     // MARK: -- /api/album (picture memorabilia)
 
-    struct AlbumEntry: Codable, Identifiable {
+    struct AlbumEntry: Codable, Identifiable, Hashable {
         var id: String { blobKey + (when ?? "") }
         let label: String?
         let section: String?
@@ -91,15 +133,23 @@ extension APIClient {
         let when: String?
         let kind: String?       // 'current' | 'history'
     }
-    struct AlbumResponse: Codable {
-        let entries: [AlbumEntry]?
+    struct AlbumTile: Codable, Identifiable, Hashable {
+        var id: String { (itemId.map(String.init) ?? "l:") + (label ?? "") + (section ?? "") }
+        let itemId: Int?
+        let label: String?
+        let section: String?      // 'people' | 'nouns' | 'verbs' | 'needs' | 'events' | …
+        let current: AlbumEntry?
+        let history: [AlbumEntry]
+    }
+    struct AlbumByTileResponse: Codable {
+        let tiles: [AlbumTile]
     }
 
-    func albumTimeline(childId: String, limit: Int = 200) async throws -> [AlbumEntry] {
+    func albumByTile(childId: String, limit: Int = 600) async throws -> [AlbumTile] {
         let (data, _) = try await request(method: "GET",
-                                          path: "/api/album?childId=\(percentEscapeParent(childId))&mode=timeline&limit=\(limit)",
+                                          path: "/api/album?childId=\(percentEscapeParent(childId))&mode=by-tile&limit=\(limit)",
                                           body: nil)
-        do { return try JSONDecoder().decode(AlbumResponse.self, from: data).entries ?? [] }
+        do { return try JSONDecoder().decode(AlbumByTileResponse.self, from: data).tiles }
         catch { throw APIError.decoding(error) }
     }
 
@@ -133,6 +183,173 @@ extension APIClient {
         let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "reason": "parent"])
         _ = try await request(method: "POST", path: "/api/advance-band",
                               body: body, contentType: "application/json")
+    }
+
+    // MARK: -- /api/word-history (PRD §4.5)
+
+    struct WordEvent: Codable, Identifiable, Hashable {
+        let id: Int
+        let label: String
+        let category: String?
+        let section: String?
+        let when: String
+    }
+    struct WordHistoryResponse: Codable {
+        let rows: [WordEvent]
+        let hasMore: Bool
+    }
+    func wordHistory(childId: String, query: String?, since: Date?, until: Date?,
+                     limit: Int = 200, offset: Int = 0) async throws -> WordHistoryResponse {
+        let iso = ISO8601DateFormatter()
+        var path = "/api/word-history?childId=\(percentEscapeParent(childId))&limit=\(limit)&offset=\(offset)"
+        if let q = query?.trimmingCharacters(in: .whitespaces), !q.isEmpty {
+            path += "&q=\(percentEscapeParent(q))"
+        }
+        if let since { path += "&since=\(percentEscapeParent(iso.string(from: since)))" }
+        if let until { path += "&until=\(percentEscapeParent(iso.string(from: until)))" }
+        let (data, _) = try await request(method: "GET", path: path, body: nil)
+        do { return try JSONDecoder().decode(WordHistoryResponse.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
+    // MARK: -- /api/top-words
+
+    struct TopWord: Codable, Identifiable, Hashable {
+        var id: String { label.lowercased() }
+        let label: String
+        let count: Int
+        let category: String?
+        let section: String?
+        let firstAt: String
+        let lastAt: String
+    }
+    struct TopWordsResponse: Codable {
+        let rows: [TopWord]
+        let days: Int
+    }
+    func topWords(childId: String, days: Int = 30, limit: Int = 50) async throws -> TopWordsResponse {
+        let (data, _) = try await request(
+            method: "GET",
+            path: "/api/top-words?childId=\(percentEscapeParent(childId))&days=\(days)&limit=\(limit)",
+            body: nil
+        )
+        do { return try JSONDecoder().decode(TopWordsResponse.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
+    // MARK: -- /api/input-methods — how the child is answering over time
+
+    struct InputMethodSeries: Codable, Identifiable, Hashable {
+        var id: String { method }
+        let method: String
+        let data: [Int]
+    }
+    struct InputMethodCorrect: Codable, Hashable { let ok: Int; let total: Int }
+    struct InputMethodsResponse: Codable {
+        let totals: [String: Int]
+        let correctBy: [String: InputMethodCorrect]
+        let buckets: [String]
+        let series: [InputMethodSeries]
+    }
+    func inputMethods(childId: String, days: Int = 30) async throws -> InputMethodsResponse {
+        let (data, _) = try await request(
+            method: "GET",
+            path: "/api/input-methods?childId=\(percentEscapeParent(childId))&days=\(days)",
+            body: nil
+        )
+        do { return try JSONDecoder().decode(InputMethodsResponse.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+
+    // MARK: -- /api/auto-teach (PRD: automatic slideshow + game teaching)
+
+    struct AutoTeachSettings: Codable, Hashable {
+        var enabled: Bool
+        var cadence: String          // conservative | standard | intensive
+        var tier: String             // under3 | 3to5 | 5plus
+        var dailyGameAt: String      // "HH:MM"
+        var cooldownMin: Int
+        var batchSize: Int
+    }
+    struct AutoTeachGates: Codable {
+        let enabled: Bool
+        let inBlackout: Bool
+        let recentlyActive: Bool
+        let cooldownLeftMin: Int
+        let budgetUsedMin: Int
+        let budgetCapMin: Int
+        let budgetExhausted: Bool
+    }
+    struct AutoTeachMastery: Codable, Identifiable, Hashable {
+        var id: String { category }
+        let category: String
+        let active: Int
+        let acquired: Int
+        let mastered: Int
+        let maintenance: Int
+        let unmet: Int
+        let total: Int
+    }
+    struct AutoTeachState: Codable {
+        let settings: AutoTeachSettings
+        let gates: AutoTeachGates
+        let mastery: [AutoTeachMastery]
+    }
+    func autoTeachState(childId: String) async throws -> AutoTeachState {
+        let (data, _) = try await request(
+            method: "GET",
+            path: "/api/auto-teach/state?childId=\(percentEscapeParent(childId))",
+            body: nil
+        )
+        do { return try JSONDecoder().decode(AutoTeachState.self, from: data) }
+        catch { throw APIError.decoding(error) }
+    }
+    /// Saves the autoTeach blob under child_settings.autoTeach, preserving
+    /// every other key the web app may have written.
+    func saveAutoTeach(childId: String, _ settings: AutoTeachSettings) async {
+        guard let (data, _) = try? await request(
+                method: "GET",
+                path: "/api/child-settings?childId=\(percentEscapeParent(childId))",
+                body: nil),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return }
+        var all = (root["settings"] as? [String: Any]) ?? [:]
+        if let enc = try? JSONEncoder().encode(settings),
+           let obj = try? JSONSerialization.jsonObject(with: enc) {
+            all["autoTeach"] = obj
+        }
+        guard let body = try? JSONSerialization.data(withJSONObject: ["settings": all]) else { return }
+        _ = try? await request(method: "POST",
+                               path: "/api/child-settings?childId=\(percentEscapeParent(childId))",
+                               body: body, contentType: "application/json")
+    }
+
+    struct AutoTeachTile: Codable, Identifiable, Hashable {
+        var id: String { slug }
+        let slug: String
+        let label: String?
+        let category: String?
+        let bucket: String?
+    }
+    struct AutoTeachSession: Codable {
+        let microSec: Int
+        let sessionMaxMin: Int
+        let labelStyle: String
+        let source: String
+    }
+    struct AutoTeachNextResponse: Codable {
+        let ok: Bool
+        let reason: String?
+        let mode: String?
+        let tiles: [AutoTeachTile]?
+        let session: AutoTeachSession?
+    }
+    func autoTeachNext(childId: String, mode: String) async throws -> AutoTeachNextResponse {
+        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "mode": mode])
+        let (data, _) = try await request(method: "POST", path: "/api/auto-teach/next",
+                                          body: body, contentType: "application/json")
+        do { return try JSONDecoder().decode(AutoTeachNextResponse.self, from: data) }
+        catch { throw APIError.decoding(error) }
     }
 
     // MARK: -- schedules (merge-safe write, mirrors saveDisplayPrefs)

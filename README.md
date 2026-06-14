@@ -1,8 +1,24 @@
-# Personalized AAC — "Fletcher's World"
+# Personalized AAC — "My World"
 
-A communication and learning app built for one specific non-verbal toddler who is a gestalt language processor. It's a multi-view web app (kid board + parent dashboard + therapist view) deployed on Vercel, with a thin Capacitor iOS shell that loads the live site so the iPad picks up web changes instantly.
+A communication and learning app built for non-verbal children who may be gestalt language processors. Two clients (a child board + a parent app) backed by one Vercel API, deployed at `aac.andrewpeterson.io`. The child board is a native SwiftUI app for the iPad; the parent surface lives both as a SwiftUI iPhone view and as a full web dashboard.
 
-> The app started as a single-file HTML AAC board. It has since grown into a full system covering communication, structured games, scheduling, and remote facilitation. This README documents the current shape — see git history for the journey.
+> The app started as a single-file HTML AAC board for one specific child. It has since grown into a full system covering personalized AI tile art, structured games, spaced-repetition auto-teaching, scheduling, remote facilitation, holiday celebrations, and image memorabilia. This README documents the current shape — see git history for the journey.
+
+## Capabilities at a glance
+
+The recent feature waves, in the rough order they shipped:
+
+- **Personalization throughout** — the child's name, the family's faces, the relationships drive both the board art (Nano Banana from a reference photo) and the teaching descriptions (deterministic from the structured `persons` row).
+- **Image album / memorabilia** — every previous tile picture is archived to `item_image_history` on regeneration, organized in the parent app as `People · Words · Verbs · Celebrations` folders so it reads as a scrapbook.
+- **Special-day events** — full-screen celebration scenes on holidays + the child's birthday, lazy-generated per child per year with Nano Banana and dropped into the album as memorabilia.
+- **Developmental age bands** — every taxonomy row carries an `acquisition_age` (12-18m / 18-30m / 2-3y / 3-4y / 4y+) so an early-intervention board hides clutter; parent can unlock the next band manually, or the system advances automatically on a clinical 80/90 mastery rule.
+- **Auto-teach subsystem** — hands-off slideshow + daily game runner with parent-tunable cadence (conservative / standard / intensive), tier (under-3 / 3-5 / 5+), schedule blackouts (sleep / school / meals), recently-active guard, and 30-min cooldown. Tile picker prioritizes unmet age-band words → longest-gap active → acquired-not-mastered → one stretch tile → one maintenance recheck.
+- **Two-tier TTS caching** — every phrase is hashed (`model|voice|emotion|text`) and stored in Vercel Blob server-side AND in a per-device `SpeechCache` so ElevenLabs is hit at most once per unique phrase, ever.
+- **One app, two display modes** — the SwiftUI binary asks "Who uses this device?" on first run and stores the role; same install can be the child board or the parent app, switchable from either side's settings.
+- **Parent app, native** — phone-first SwiftUI home screen with Add a Tile · Quick Board · Start a Game · Message the Board · Stats · Schedules · Album · Auto-teach.
+- **Stats hub** — five focused pages: Top Words, Word History (searchable), Game Accuracy (by category AND by mode), How They Answer (tap / verbal / object / physical / gesture), Mastery & Sessions.
+- **Facilitator UI auto-pops** — when a game session starts on the iPad (from anywhere — phone, iPad, web console, scheduler), `ParentLive` flips and the FacilitatorView appears over whatever the parent was doing. Match the same color cues as the web therapist console (tap blue / verbal green / object purple).
+- **Security baseline** — `canAccessChild` and `isParentOf` now gate every child-scoped endpoint; admin gates on every `api/admin/*`; XSS escaped in dashboards; per-account daily image-generation spend cap.
 
 ---
 
@@ -147,19 +163,98 @@ Encoded in `api/_lib/access.js`:
 
 ---
 
-## Native iOS kid app (SwiftUI) — `kid-ios/`
+## Native iOS app (SwiftUI) — `kid-ios/` (one binary, two modes)
 
-The kid-facing board is being rewritten as a native SwiftUI app to eliminate the WKWebView touch lag (300ms click delay, double-tap-to-zoom, gesture fights) that makes the iPad feel sluggish for a child tapping at speed. Parents, therapists, and admins keep using the web app.
+A single SwiftUI binary in `kid-ios/` runs **both** the child board AND the native parent app, deciding at first launch via a "Who uses this device?" picker stored in `UserDefaults.deviceRole`. Switching later is two taps from either side's settings, so picking wrong is harmless. Therapist + admin + the Lab stay web by design.
 
-The Swift project lives in `kid-ios/` with its own [README](kid-ios/README.md). It calls the same `/api/auth/login`, `/api/sync`, `/api/media`, `/api/events`, `/api/live`, `/api/tts` endpoints as the web app, and — for the in-app **parent edit mode** that makes tiles from photos — also `/api/describe-image`, `/api/generate-image`, `/api/upload`, and `/api/items`. Auth is cookie-based via `URLSession` + `HTTPCookieStorage`. The only backend change it needs is the additive `items.needs_review` flag (see *Making tiles from photos*).
+The Swift project has its own [README](kid-ios/README.md). It calls the same `/api/*` endpoints as the web; auth is cookie-based via `URLSession` + `HTTPCookieStorage`. The Xcode project is generated from `kid-ios/project.yml` via [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen && cd kid-ios && xcodegen generate`).
 
-Edit mode (long-press the lock) now exposes a native **+ New tile** flow and an **Add several from Photos** bulk import — so a parent no longer has to bounce out to Safari to add tiles. The full dashboard (analytics, schedules, organizer) still lives on the web. Camera + Photos usage strings are baked into `Info.plist` from `project.yml`, so the picker actually opens (without them iOS silently denies access).
+### Child board mode
 
-The Xcode project is generated from `kid-ios/project.yml` via [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen && cd kid-ios && xcodegen generate`), so the `.xcodeproj` is gitignored and we avoid hand-maintained `pbxproj` diffs.
+- The original kid-facing reason for the native rewrite — WKWebView's 300ms click delay, double-tap-to-zoom, and gesture fights make a child's taps feel sluggish; UIKit/SwiftUI gestures fire on touch-down with no delay.
+- Edit mode (long-press the lock) carries **+ New tile**, **Add several from Photos** (background queue, up to 3 renders concurrent), **🧑 Parent app** (switch this device to the parent surface), and a Display sheet.
+- Native game runtime: `GameController` dispatches all the modes (matching · learn / exposure slideshow · auditory comprehension · expressive naming · celebration). `SlideshowView` speaks the formed caption through `GameAudio.speak` → `SpeechCache`.
+- `LiveSession` polls `/api/live` and routes commands to `GameController`. The `message` action (PRD §4.7) routes to a separate `MessageOverlayView` that renders the parent's text as a sentence strip — every token visible at once, the active tile scales up and the strip auto-scrolls to keep the speaking word centered, audio plays through tile sound when available else TTS.
+- `AutoTeachRunner` polls `/api/auto-teach/next` every 5 minutes when the board is up; on a positive response it builds a `start` cmd with `scope: "slugs:<csv>"` and dispatches through the same live channel.
+- Special-day celebrations check `/api/celebrate` on boot + visibility change; lazy-generate the personalized scene on the first open of the day; full-screen modal with parent-voice greeting; dismissal is keyed by `(year, event_key)` so re-opening the same day doesn't replay.
+
+### Parent app mode
+
+The home grid (`ParentHomeView`) lays out these cards, each one tap away:
+
+| Card | What it does |
+|---|---|
+| **Add a tile** | Reuses the iPad's `AddTileQueue` chain (describe → generate → tts → items). Background renders, up to 3 concurrent, tile lands on the board even if the parent closes the sheet. New: model picker includes Nano Banana (`gemini-2.5-flash-image`) as the default and Nano Banana Pro (`gemini-3-pro-image-preview`); background-color swatch picker (pink/mint/yellow/blue/peach/white) passed to `/api/generate-image?bg=`. |
+| **Quick board** | Presents the actual `BoardView` full-screen so the child can talk on the parent's phone if the iPad's not available. 1.2s long-press on the labeled "Hold to exit to Parent app" pill returns. |
+| **Start a game** | Setup phase mirrors the web therapist console field-for-field: every mode + scope + range + sample + choices + time limit + slideshow seconds-per-image + label style (plain / first-person) + music override. When a game starts (from here or anywhere), `FacilitatorView` auto-pops as a fullScreenCover. |
+| **Facilitator (auto-pop)** | Live target card, "Item N of M · X correct" progress, the three mark buttons (👆 Tapped · 🗣 Said · 🧸 Showed object — colors match the web), Skip · Next · End. Dismiss with "Hide"; reappears next time a session starts. |
+| **Message the board** | Text → `/api/message-to-board` → tokenized server-side against every tile on the child's board (greedy-longest, so "I love you" resolves to one tile when one exists) → published through `/api/live` as `action: 'message'` → sentence-strip on the iPad. Preview shows the resolved token strip + matched/total. |
+| **Stats** | Hub of five sub-pages — Top Words (ranked + share bars + day-range picker), Word History (search + range + paged event list), Game Accuracy (Swift Charts — per-category line AND per-mode line), How They Answer (stacked share bar + trend per method + accuracy per method), Mastery & Sessions. |
+| **Schedules** | `child_settings.schedules` round-trip on raw dictionaries so question/game prompts authored on the web survive untouched. Toggle / delete / add a simple reminder. |
+| **Album** | `/api/album?mode=by-tile` → folder hub: **People · Words · Verbs · Celebrations**. Open a folder → tile rows with version counts → open a tile → every version newest-first, "Current" badge on the live one. Holiday celebrations from every year land here automatically. |
+| **Auto-teach** | Enable toggle + cadence picker + attention tier + daily game time + cooldown stepper. Live gate status: "Currently a teachable window · Cooldown clear · Today's exposure budget 6/18 min." 5-color stacked bar per category showing maintenance / mastered / acquired / active / unmet. |
+| **Settings** | Current vocabulary band display + the parent unlock button, device-mode switch back to child board, link to web dashboard, sign out, clear local cache (drops both image and speech caches). |
+
+### Colors + branding
+
+`Models/Brand.swift` mirrors the exact CSS custom properties from `therapist.html` / `parent.html` (`--pink #ff1493`, `--pink-deep #ad1457`, `--good #16a34a`, plus the tap/verbal/object mark inks `#1d4ed8 / #047857 / #6d28d9` the web console uses) so a facilitator toggling between web and phone never has to relearn a color cue.
+
+App-wide `.preferredColorScheme(.light)` at the root pins the whole app to the light pink palette — necessary because the design uses fixed hex colors throughout and Dark Mode would flip `.primary`/`.secondary` text to white-on-white on the brand cards.
+
+### Capacitor fallback
 
 The Capacitor shell below stays in the repo as the parent/therapist surface and as a fallback for the kid surface until the native app is fully migrated.
 
 ---
+
+## Personalization + the `persons` data model
+
+The system distinguishes between **tiles** (board buttons) and **persons** (structured identities — relationship, side, given name, pronoun, birth_date, likeness anchor, voice key). A People-section tile is one rendering of a person; the person row is the canonical identity that backs it.
+
+- **`persons.is_self = true`** — the child whose board this is. Carries `birth_date` (drives the age-band filter) and `advanced_to_band` (parent or mastery unlock).
+- **Relationship + side** — `mother | father | grandmother | grandfather | brother | sister | aunt | uncle | guardian | …`, with `side: maternal | paternal` for the ones that need it. Drives the deterministic family phrasing in `_lib/relationships.js` (`familyPhrase()`): `"Grandma Jane is your grandma on your mom's side."`
+- **`reference_key`** — the stylized portrait Blob key that anchors every subsequent generation involving this person. Set the first time the family captures a photo during onboarding (or the Lab's seed-persons), then reused as the `{reference}` token + likeness reference for every later tile gen.
+- **`{family_adult}` token** — body parts and caregiving phrases generate better with the parent's face than the child's. The token resolves through `mother → father → step-parent → guardian → grandparent` with fallbacks to the child's own anchor and a generic adult, so every tile still renders.
+
+The `generate-descriptions` endpoint consumes this structure directly: a People tile description doesn't ask the model "describe Grandma Jane" — it pulls the relationship + side + given_name and writes a deterministic line in the right family-facing wording. The model only handles non-people teaching descriptions.
+
+### Special-day events
+
+`taxonomy.is_event = TRUE` rows are full-screen celebration scenes, not board tiles. Personalized with `{reference}` + `{family_adult}` + `{family_all}` and cached per `(child_id, event_key, year)` in `event_images`. Fourteen US holidays + a per-child birthday seeded by `taxonomy/fill-events.mjs`; the calendar resolver in `api/_lib/event-dates.js` handles fixed-date (Christmas), floating (Easter via Meeus, Mother's Day, Thanksgiving), and per-child birthday matching against `is_self.birth_date`.
+
+The runtime in the SwiftUI iPad checks `/api/celebrate` on boot + visibility change; on a positive hit it lazy-generates and shows a full-screen modal with the parent-voice greeting. Every year's celebration is also archived into `item_image_history` with `source='event'` so the album folders include holidays alongside tile history.
+
+### Developmental age bands
+
+Every taxonomy row carries `acquisition_age` — one of `12-18m`, `18-30m`, `2-3y`, `3-4y`, `4y+` — backfilled by `taxonomy/fill-acquisition-age.mjs` from MacArthur-Bates CDI norms, Banajee core-vocabulary research, and Brown's grammatical stages. The `/api/sync` endpoint reads the `is_self` person's `birth_date` (and `advanced_to_band`) to resolve the child's current effective band and drops items whose linked taxonomy row sits above it. Personal tiles (no `taxonomy_slug`) are never filtered.
+
+Two paths out of the floor band:
+- **Manual unlock** — parent taps "Unlock next" in the parent app's vocabulary panel. POST `/api/advance-band` `{ reason: 'parent' }`.
+- **Mastery auto-advance** — in the last 30 days, ≥ 10 `game_attempts` on tiles in the current band, all correct. POST `/api/advance-band` `{ reason: 'mastery' }` re-verifies server-side so a misbehaving caller can't bypass the data.
+
+### Auto-teach
+
+`api/_lib/auto-teach.js` is a deterministic, read-only picker that says "what should this child learn now?". Two channels — micro-exposure slideshows every N minutes (conservative default 60), one daily game at a parent-chosen time — each with their own gates:
+
+- **Blackout** — outside `[wake, bedtime]`, during `breakfast/lunch/dinner ± 20 min`, or within a school location's day-of-week + time window
+- **Recently active** — child has tapped something in the last 5 minutes
+- **Cooldown** — 30 minutes since the last auto-trigger (configurable)
+- **Budget** — daily exposure-minutes cap per attention tier (8 / 12 / 18 min for under-3 / 3-5 / 5+ on conservative; higher tiers on standard/intensive)
+- **Game window** — game lane fires once per day at `dailyGameAt ± 15 min`
+
+Tile picker priority: unmet age-band tiles → longest-gap active rotation → acquired-not-mastered → one stretch tile from the next band → one biweekly maintenance recheck. Mastery follows the clinical 80/90 rule (80% across 3 sessions = acquired; 90% across 3 + ≥ 5 days retention = mastered; mastered words drop into biweekly maintenance instead of being removed).
+
+The iPad's `AutoTeachRunner` polls `/api/auto-teach/next` every 5 minutes when the board is up and dispatches via the same `/api/live` channel everything else uses, so the activity runs through the existing `GameController` path and the parent's `ParentLive` observable sees it as a normal session.
+
+## Image generation — Nano Banana + the regeneration archive
+
+The image pipeline supports both Google Gemini ("Nano Banana") and OpenAI gpt-image models. Nano Banana is the default for new tiles (~$0.04/image vs $0.13-0.21 for gpt-image-1.5/2) and the strongest at keeping a person's likeness from a reference photo, which is exactly the workload of this app. Model selection routes through `api/admin/model-routes` (per-scope rules) with per-request overrides. The `?bg=` param accepts presets (`pink | mint | yellow | blue | peach | white`) or any 6-digit hex.
+
+Every code path that overwrites `items.image_key` (parent edit, AI regenerate, Lab publish, onboarding re-photograph) calls `_lib/image-history.archivePriorImage` *first*, which snapshots the OLD key + label + section + source + who-archived-it into `item_image_history`. The Blob is never deleted — it's just invisible to the live board — so the parent's album view can scroll back through every face every tile has ever had. `ON DELETE SET NULL` on `item_id` so history outlives the tile it once belonged to.
+
+## TTS caching (two-tier)
+
+`/api/tts` now hashes `(model | voice | emotion | text)` → sha256[:40] and stores the MP3 bytes in private Vercel Blob at `tts/<hash>.mp3`. Cache hits return with `X-TTS-Cache: HIT` and a one-year immutable `Cache-Control`. The same hash recipe drives a per-device `SpeechCache` actor on the iPad under `Documents/speech/<hash>.mp3`, so the first slideshow caption pays the network round-trip and every subsequent playback is a local disk read. ElevenLabs is hit AT MOST ONCE per unique phrase across all users for the cache lifetime. Force-refresh via `?nocache=1` for the Lab.
 
 ## Making tiles from photos
 
@@ -241,7 +336,7 @@ npx cap sync ios
 
 | Layer | What's there |
 |---|---|
-| **Neon Postgres** | `categories`, `items`, `live_sessions`, `child_settings`, `push_tokens`, `play_requests`, `interactions`, `game_attempts`, etc. — source of truth |
+| **Neon Postgres** | `categories`, `items`, `live_sessions`, `child_settings`, `push_tokens`, `play_requests`, `interactions`, `game_attempts`, `persons`, `item_image_history`, `event_images`, `exposure_protocols`, `exposure_events`, etc. — source of truth |
 | **Vercel Blob** | Image and audio bytes (tile images, recorded sounds, reference photos) |
 | **`child_settings.settings` JSONB** | Free-form per-child: `rewards`, `schedule`, `gamePresets`, `routines`, `gameResultsPush`, scheduled prompts |
 | **IndexedDB (tablet)** | Local cache of tiles + media so the board works offline once seeded |
@@ -412,6 +507,17 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `POST /api/push-token` | Register an iOS device token for this user + role |
 | `GET/POST /api/reference-images` | Manage style/subject reference photos |
 | `GET /api/events`, `/api/analytics`, `/api/usage` | Read-side dashboards |
+| `GET /api/word-history?q=&since=&until=&limit=&offset=` | Searchable tap log (drives the Stats hub) |
+| `GET /api/top-words?days=&limit=` | Most-tapped words, grouped by lowercase label, with count + first/last timestamps |
+| `GET /api/input-methods?days=` | Tap / verbal / object / physical / gesture breakdown + bucketed trend |
+| `GET /api/album?mode=timeline\|by-tile` | Memorabilia view: current image of each tile + every previously-archived version |
+| `GET/POST /api/celebrate?childId=` | Today's special-day events for a child (GET); lazy-generate this year's image (POST `{eventKey}`) |
+| `GET /api/manifest?child=` | Per-child PWA manifest so an installed app launches into the right slug |
+| `GET/POST /api/advance-band` | Vocabulary-level state + parent-or-mastery unlock to the next acquisition band |
+| `POST /api/quick-capture` | Phone-friendly raw-photo capture: persists to Blob and creates the items row IMMEDIATELY; AI polish happens via the existing chain afterward |
+| `POST /api/message-to-board` | Tokenize the parent's text against every tile on the child's board and publish a `message` cmd through the live channel |
+| `GET /api/auto-teach/state?childId=` | Settings + gates ("blackout / cooldown / budget") + per-category mastery roll-up |
+| `POST /api/auto-teach/next` | Picks the next batch of taxonomy ids to expose now, OR returns a refusal `{ok:false, reason}` |
 | `GET /api/my-children` | Roster + portrait for every child the signed-in user has access to (drives `/therapist`) |
 | `POST /api/access/invite` | Parent invites a therapist by email (Resend) |
 | `GET /api/access/pending` | Pending invites the signed-in user can act on |
@@ -467,6 +573,9 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `RESEND_API_KEY` | Resend API key (used for therapist-invite emails) |
 | `INVITE_FROM_EMAIL` | Verified Resend `From`, e.g. `My World <hello@aac.andrewpeterson.io>` |
 | `APP_URL` | Public base URL for invite links (defaults to `https://aac.andrewpeterson.io`) |
+| `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | Google AI key for Nano Banana image generation; created at <https://aistudio.google.com> |
+| `GEMINI_IMAGE_MODEL` | Optional override for the default Gemini model id (default `gemini-2.5-flash-image`) |
+| `IMAGE_GEN_DAILY_LIMIT` | Optional per-account daily image-generation cap (default 150; admins exempt) |
 
 After deploying with the env vars set, hit `POST /api/init` once with the `ADMIN_TOKEN` to create the tables.
 
@@ -517,10 +626,33 @@ api/                  Vercel Serverless Functions (see table above)
   _lib/access.js      canAccessChild / isParentOf / canEditContent (multi-tenant)
   _lib/db.js          Neon SQL client + row mappers
   _lib/apns.js        Self-hosted APNs sender (HTTP/2 + ES256 JWT)
+  _lib/gemini.js      Google Nano Banana provider (image generation)
+  _lib/age-band.js    Birth date → developmental band; higherBand resolver
+  _lib/event-dates.js Calendar resolver for holiday + birthday events
+  _lib/relationships.js  Relationship taxonomy + familyPhrase deterministic phrasing
+  _lib/image-history.js  archivePriorImage helper — every regeneration call goes through this
+  _lib/auto-teach.js  Shared core: settings, gates, tile picker, mastery roll-up
   my-children.js      Roster endpoint for the therapist home
+  auto-teach/state.js, next.js   Auto-teach orchestrator endpoints
   admin/taxonomy*.js  Taxonomy workbench backend (CRUD, bulk, snapshots, audit, board-import)
 admin/taxonomy.html   Taxonomy workbench (Tabulator-based editor)
 taxonomy/             Canonical word list — README, build-seed.mjs, seed-core-v1.csv
+  fill-acquisition-age.mjs      Developmental band per row from CDI/Banajee/Brown's
+  fill-events.mjs               14 holiday + per-child birthday Event rows
+  fill-persona-symbols.mjs      Persona personalization + conventional symbol layer
+  fill-descriptions.mjs         Hand-authored teaching descriptions (function words sheet)
+  content/                      Hand-authored content sheets (.md) read by fill-descriptions
+kid-ios/              Native SwiftUI app — one binary, child board AND parent app
+  MyWorld/MyWorldApp.swift      App root, environment wiring
+  MyWorld/ContentView.swift     Role gate → BoardView | ParentHomeView | RolePicker
+  MyWorld/Models/               DeviceMode, Brand, TileBackground, Tile, Category, Schedule, …
+  MyWorld/Views/                BoardView, MessageOverlayView, AddTileView, …
+  MyWorld/Parent/               Parent home + every parent sub-page (Stats hub, Album, Auto-teach, …)
+  MyWorld/Live/                 LiveSession, GameController, Scheduler, AutoTeachRunner
+  MyWorld/Audio/                GameAudio + SpeechCache (TTS disk cache)
+  MyWorld/Storage/              BoardStore, MediaCache, AddTileQueue, ImageDownscale
+  MyWorld/Assets.xcassets/      AppIcon + MyWorldLogo imageset (note: *.xcassets/**/Contents.json
+                                must NOT be gitignored — see .gitignore exceptions)
 icons/                App icon + MyWorld globe used in the header
 audio/                Background music tracks for games
 cap-shell/            Capacitor webDir stub (the real content is served from the URL)
@@ -543,10 +675,17 @@ All photos / audio of real people live in Vercel Blob behind authenticated `/api
 
 ## Known limitations & follow-ups
 
-### In-flight (foundation shipped, finishing work in flight)
-- **Multi-tenant data enforcement.** `canAccessChild` / `canEditContent` and the `child_access` / `access_requests` tables are in place; the data endpoints (`sync`, `items`, `categories`, `live`, `child-settings`, `analytics`, etc.) are being gated by them endpoint-by-endpoint. Until that's across, only admin really exercises the cross-child path.
-- **Parent ↔ therapist invite/request flow.** Schema and helpers exist; the UI (parent invites by email; therapist requests; accept/decline) is the next phase.
-- **Therapist "Build a Custom Board" editor.** Ownership column shipped; the editor that uses it (and surfaces a per-tile "Remove from <child>'s board" parent-override action) lands after enforcement.
+### Security baseline (shipped)
+- **Cross-child IDOR closed.** `canAccessChild` and `isParentOf` now gate every child-scoped endpoint (`sync`, `analytics`, `events`, `interactions`, `live`, `play-request`, `game-log`, `persons`, `child-settings`, `skill-insights`, `pending-approve`, `onboard-subject`, `generate-image`, `generate-descriptions`, `reference-images`, `push-token`, `exposure-*`).
+- **Media gated by ownership.** `/api/media` does a one-UNION lookup over `items`/`categories`/`persons`/`reference_images`/`pending_tiles`, requires access to at least one owning child, fails open on DB error so the board never goes dark from a guard bug.
+- **All `api/admin/*` admin-gated.** `taxonomy-snapshots` and `taxonomy-audit` were the two gaps; closed with `requireAdmin`.
+- **Image-gen spend cap.** Per-account rolling-24h limit (env `IMAGE_GEN_DAILY_LIMIT`, default 150; admins exempt).
+- **XSS escaped in parent/therapist dashboards.** Category names and person display_names were rendered via `innerHTML` and could fire cross-user; wrapped in `schEsc`.
+
+### In-flight
+- **App onboarding flow** — the next focus area; the existing `onboard.html` captures the child's photo + birth date + family, but the flow needs a polish pass and a per-app entry-point for the SwiftUI parent app's first run.
+- **Parent ↔ therapist invite/request UI.** Schema and helpers exist; therapist-facing accept/decline UI is next.
+- **Therapist "Build a Custom Board" editor.** Ownership column shipped; the editor lands after onboarding polish.
 
 ### Open / deferred
 - **Pre-naming a bulk import.** A parent's name / pronunciation supersedes the AI in the *review* step, not before the AI runs; a per-photo "name these first" grid is a possible add. Pronunciation is consumed by TTS at save time, not stored as its own column, so re-recording a voice means re-typing the pronunciation.

@@ -10,12 +10,25 @@ struct LoginView: View {
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
-            Text("My World")
-                .font(.system(size: 56, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(hex: "#ff1493"))
+            // The real app icon as the wordmark, with the rounded-square look.
+            Image("MyWorldLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 116, height: 116)
+                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+                .accessibilityLabel("My World")
+            VStack(spacing: 2) {
+                Text("My World")
+                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(hex: "#ff1493"))
+                Text("Tap to Talk")
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(hex: "#ad1457").opacity(0.8))
+            }
             Text("Sign in to your child's board")
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color(hex: "#6b7280"))
 
             VStack(spacing: 14) {
                 TextField("Email", text: $email)

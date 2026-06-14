@@ -8,6 +8,12 @@ Sounds/
 !vercel.json
 !capacitor.config.json
 !taxonomy/*.json
+# Xcode asset catalogs store image metadata in files named Contents.json — the
+# blanket *.json above was silently dropping them, so new imagesets shipped
+# without their metadata and rendered blank. Always keep these.
+!**/*.xcassets/**/Contents.json
+!**/*.appiconset/Contents.json
+!**/*.imageset/Contents.json
 
 # Capacitor native build artifacts (the ios/ project itself is generated on the Mac)
 ios/App/Pods/

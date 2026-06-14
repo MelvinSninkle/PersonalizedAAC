@@ -142,15 +142,37 @@ export default async function handler(req, res) {
     : isGeminiModel(reqModel) ? reqModel
     : IMAGE_MODEL;
 
+  // Background color (PRD: parent-pickable on every tile). Accepts a name
+  // ('pink', 'mint', 'yellow', 'blue', 'peach', 'white') OR a hex color
+  // ('#ffe4ef'); the model is told the exact named/hex shade so the result
+  // is consistent across generations.
+  const BG_PRESETS = {
+    pink:   { hex: '#ffe4ef', phrase: 'a soft pastel pink' },
+    mint:   { hex: '#dcefe2', phrase: 'a soft pastel mint green' },
+    yellow: { hex: '#fff4cc', phrase: 'a soft pastel cream yellow' },
+    blue:   { hex: '#e3e8ff', phrase: 'a soft pastel periwinkle blue' },
+    peach:  { hex: '#ffe4cc', phrase: 'a soft pastel peach' },
+    white:  { hex: '#f8f8f8', phrase: 'a clean off-white' },
+  };
+  const rawBg = String((req.query && req.query.bg) || '').trim().toLowerCase();
+  const bg = BG_PRESETS[rawBg]
+    || (/^#?[0-9a-f]{6}$/i.test(rawBg) ? { hex: rawBg.startsWith('#') ? rawBg : '#' + rawBg, phrase: `the exact color ${rawBg.startsWith('#') ? rawBg : '#' + rawBg}` } : null);
+
   if (!(await canAccessChild(auth.user, childId))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
   // Spend guard — cap an account's generations per rolling day, across all
   // models, so a leaked or abused login can't run an unbounded AI bill.
+  // Onboarding (draft retries + the one-time core seed) is EXEMPT so a parent
+  // can iterate on portrait retries without burning their monthly credits.
   const DAILY_LIMIT = Number(process.env.IMAGE_GEN_DAILY_LIMIT || 150);
   if (auth.user.role !== 'admin') {
     try {
       const db = sql();
-      const q = await db`SELECT COUNT(*)::int AS n FROM image_generations WHERE actor_email = ${auth.user.email} AND created_at > NOW() - INTERVAL '24 hours'`;
+      const q = await db`
+        SELECT COUNT(*)::int AS n FROM image_generations
+        WHERE actor_email = ${auth.user.email}
+          AND created_at > NOW() - INTERVAL '24 hours'
+          AND COALESCE(actor_role, '') NOT IN ('onboarding_draft', 'onboarding_seed')`;
       if (((q[0] && q[0].n) || 0) >= DAILY_LIMIT) { res.status(429).json({ error: 'Daily image-generation limit reached', limit: DAILY_LIMIT }); return; }
     } catch (_) { /* quota check is best-effort — never block on a counting error */ }
   }
@@ -194,10 +216,13 @@ export default async function handler(req, res) {
   const captionClause = label
     ? ` At the very bottom of the image, add a clean horizontal caption band and write the word or phrase “${label}” in it — spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered and large enough for a young child to read. Put NO other text, words, or letters anywhere else in the image.`
     : ` Do not include any text, words, or letters in the image.`;
+  // Background: parent-pickable preset (or hex). If unset, the model picks
+  // a soft pastel background that fits the brand.
+  const bgPhrase = bg ? bg.phrase : 'a soft pastel';
   const prompt =
     `Re-illustrate this photograph as a ${style} of ${subject} for a young child's ` +
-    `communication app. Keep ${subject} clearly recognizable and centered, on a simple, ` +
-    `soft, uncluttered background, with bright friendly colors and a gentle, age-appropriate ` +
+    `communication app. Keep ${subject} clearly recognizable and centered, on a simple ` +
+    `${bgPhrase} background, with bright friendly colors and a gentle, age-appropriate ` +
     `look.` + captionClause +
     // No anthropomorphizing inanimate objects. Without this, gpt-image models
     // routinely add cartoon eyes/smiles to things like ducks (the rubber-toy

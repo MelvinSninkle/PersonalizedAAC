@@ -5,13 +5,21 @@ import SwiftUI
 /// the role chosen on first run. Same account, same APIs, same stores — just
 /// two faces of the same binary, so an iPhone parent and an iPad child are one
 /// install with different roles.
+///
+/// A brand-new install starts in the onboarding flow (demo → account → child
+/// → photos → seed). The flow short-circuits to the appropriate post-onboard
+/// surface once the server reports step='complete'.
 struct ContentView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(DeviceMode.self)  private var mode
+    @State private var onboardingFinished = false
 
     var body: some View {
-        if !auth.isSignedIn {
-            LoginView()
+        // Pre-signed-in: the demo + account screens live INSIDE the onboarding
+        // flow so a brand-new parent sees the demo before being asked to
+        // create anything. A returning parent already has a session cookie.
+        if !auth.isSignedIn && !onboardingFinished {
+            OnboardingFlow()
         } else {
             switch mode.role {
             case .unset:      RolePickerView()

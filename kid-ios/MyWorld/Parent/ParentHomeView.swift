@@ -10,64 +10,74 @@ struct ParentHomeView: View {
     @Environment(BoardStore.self)   private var board
     @Environment(DeviceMode.self)   private var mode
     @Environment(AddTileQueue.self) private var addQueue
+    @Environment(ParentLive.self)   private var parentLive
 
     @State private var showAddTile  = false
     @State private var showQuickBoard = false
     @State private var showSettings = false
+    @State private var showFacilitator = false
 
     private let columns = [GridItem(.adaptive(minimum: 160), spacing: 14)]
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    header
+                VStack(spacing: 18) {
+                    brandedHeader
 
                     LazyVGrid(columns: columns, spacing: 14) {
                         homeCard(icon: "camera.fill", tint: "#ff1493",
                                  title: "Add a tile",
                                  subtitle: "Snap it, it's on the board") { showAddTile = true }
 
-                        homeCard(icon: "square.grid.3x3.fill", tint: "#7c3aed",
+                        homeCard(icon: "square.grid.3x3.fill", tint: "#ec4899",
                                  title: "Quick board",
                                  subtitle: "The child can talk on this device") { showQuickBoard = true }
 
-                        navCard(icon: "gamecontroller.fill", tint: "#0ea5e9",
+                        navCard(icon: "gamecontroller.fill", tint: "#db2777",
                                 title: "Start a game",
                                 subtitle: "Runs on the child's iPad") { StartGameView() }
 
-                        navCard(icon: "text.bubble.fill", tint: "#16a34a",
+                        navCard(icon: "text.bubble.fill", tint: "#be185d",
                                 title: "Message the board",
                                 subtitle: "Your words as their tiles") { MessageBoardView() }
 
-                        navCard(icon: "chart.bar.fill", tint: "#f59e0b",
+                        navCard(icon: "chart.bar.fill", tint: "#9d174d",
                                 title: "Stats",
                                 subtitle: "Progress & mastery") { StatsView() }
 
-                        navCard(icon: "clock.fill", tint: "#db2777",
+                        navCard(icon: "clock.fill", tint: "#831843",
                                 title: "Schedules",
                                 subtitle: "Prompts & reminders") { SchedulesView() }
 
-                        navCard(icon: "photo.on.rectangle.angled", tint: "#9d174d",
+                        navCard(icon: "photo.on.rectangle.angled", tint: "#ad1457",
                                 title: "Album",
                                 subtitle: "Every picture, every year") { AlbumView() }
+
+                        navCard(icon: "sparkles.rectangle.stack.fill", tint: "#9d174d",
+                                title: "Auto-teach",
+                                subtitle: "Hands-off slideshow + daily game") { AutoTeachView() }
                     }
 
                     if addQueue.hasActiveJobs {
                         Label("Tiles are rendering — they'll land on the board on their own.",
                               systemImage: "hourglass")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color(hex: "#9d174d"))
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .background(Color(hex: "#fce4ec"), in: Capsule())
                     }
                 }
                 .padding(16)
             }
             .background(Color(hex: "#fff7fb"))
-            .navigationTitle("\(prettyChildName(auth.user?.slug))'s World")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showSettings = true } label: { Image(systemName: "gearshape.fill") }
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape.fill")
+                            .foregroundStyle(Color(hex: "#ff1493"))
+                    }
                 }
             }
             .fullScreenCover(isPresented: $showAddTile) {
@@ -83,14 +93,64 @@ struct ParentHomeView: View {
                 // Hydrate the board once so Quick Board / game scopes / message
                 // previews have data without each screen re-syncing.
                 await board.refresh(childId: auth.childSlug)
+                // App-wide live poller — drives the auto-popping facilitator
+                // overlay from anywhere in the parent app.
+                parentLive.start(childId: auth.childSlug)
+            }
+            // PRD: when a facilitated game session starts on the iPad — from
+            // here, from the child's tablet, from the web console, or from a
+            // scheduled game nudge — the adult UI loads automatically over
+            // whatever the parent is doing.
+            .onChange(of: parentLive.isRunning) { _, running in
+                showFacilitator = running
+            }
+            .fullScreenCover(isPresented: $showFacilitator) {
+                FacilitatorView()
             }
         }
     }
 
-    private var header: some View {
-        Text("What do you want to do?")
-            .font(.system(size: 16, weight: .medium, design: .rounded))
-            .foregroundStyle(.secondary)
+    /// Branded header — the app icon + wordmark, then the child-personalized
+    /// title underneath. Soft pink card so it reads as the "My World" brand,
+    /// not a generic settings page.
+    private var brandedHeader: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                Image("MyWorldLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 54, height: 54)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("My World")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(hex: "#ff1493"))
+                    Text("Tap to Talk")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(hex: "#ad1457").opacity(0.8))
+                }
+                Spacer()
+            }
+            Divider().background(Color(hex: "#f3c6da"))
+            HStack {
+                Text("\(prettyChildName(auth.user?.slug))'s World")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(hex: "#1f2937"))
+                Spacer()
+                Text("What do you want to do?")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color(hex: "#9d174d").opacity(0.75))
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(
+            LinearGradient(colors: [Color(hex: "#fff0f6"), Color(hex: "#ffe4ef")],
+                           startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: 22)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color(hex: "#f3c6da"), lineWidth: 1))
     }
 
     private func homeCard(icon: String, tint: String, title: String, subtitle: String,
