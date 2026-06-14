@@ -22,6 +22,10 @@ struct APIClient {
     struct LoginResponse: Codable {
         let ok: Bool
         let user: User
+        /// Only present on /api/auth/apple — true when a brand-new account was
+        /// created (vs. signing into an existing one). Drives whether the
+        /// onboarding flow continues. nil for the email login/register paths.
+        let created: Bool?
         struct User: Codable {
             let email: String
             let role: String

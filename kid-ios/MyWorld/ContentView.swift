@@ -12,13 +12,18 @@ import SwiftUI
 struct ContentView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(DeviceMode.self)  private var mode
-    @State private var onboardingFinished = false
+    @Environment(OnboardingCoordinator.self) private var onboarding
 
     var body: some View {
-        // Pre-signed-in: the demo + account screens live INSIDE the onboarding
-        // flow so a brand-new parent sees the demo before being asked to
-        // create anything. A returning parent already has a session cookie.
-        if !auth.isSignedIn && !onboardingFinished {
+        // Show the onboarding flow when (a) nobody is signed in — a brand-new
+        // parent sees the demo + account screens — OR (b) a brand-new account
+        // was just created and is mid-onboarding (needsOnboarding stays true
+        // until the flow completes, because creating the account flips
+        // isSignedIn which would otherwise drop us out of the flow).
+        //
+        // A RETURNING parent who logs in has needsOnboarding == false and
+        // lands straight on their board / parent home.
+        if !auth.isSignedIn || onboarding.needsOnboarding {
             OnboardingFlow()
         } else {
             switch mode.role {

@@ -7,20 +7,14 @@ import AuthenticationServices
 /// owns navigation + the data the parent has entered so far.
 struct OnboardingFlow: View {
     @Environment(AuthManager.self) private var auth
-    @State private var coord = OnboardingCoordinator()
+    @Environment(OnboardingCoordinator.self) private var coord
 
     var body: some View {
         NavigationStack {
             current
         }
-        .environment(coord)
         .task {
             coord.isAuthenticated = auth.isSignedIn
-            if auth.isSignedIn { await coord.resumeIfPossible() }
-        }
-        .onChange(of: auth.isSignedIn) { _, signedIn in
-            coord.isAuthenticated = signedIn
-            if signedIn { Task { await coord.resumeIfPossible() } }
         }
     }
 
@@ -39,6 +33,30 @@ struct OnboardingFlow: View {
 }
 
 // MARK: -- Shared chrome
+
+/// Compact brand bar shown at the top of every onboarding screen — the app
+/// logo + "My World / Tap to Talk" wordmark, so each page is clearly branded.
+private struct OBBrandBar: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Image("MyWorldLogo")
+                .resizable().scaledToFit()
+                .frame(width: 38, height: 38)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("My World")
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(hex: Brand.pink))
+                Text("Tap to Talk")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(hex: Brand.pinkDeep).opacity(0.8))
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
 
 /// Pink-card section heading used on every onboarding screen so the rhythm
 /// reads as a single flow.
@@ -100,6 +118,7 @@ private struct OnboardingDemoView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                OBBrandBar()
                 OBHeader(eyebrow: "Welcome",
                          title: "A board that sounds like the child it belongs to.",
                          subtitle: "Watch what My World does for a real family. Tap any tile to hear it speak in their voice.")
@@ -141,25 +160,39 @@ private struct OnboardingDemoView: View {
 // MARK: -- Step 2: Account (Apple first, email second)
 
 private struct OnboardingAccountView: View {
+    enum Mode: String, CaseIterable { case login, signup }
+
     @Environment(AuthManager.self) private var auth
     @Environment(OnboardingCoordinator.self) private var coord
+    @State private var mode: Mode = .login           // returning parents are the common case after sign-out
     @State private var email = ""
     @State private var password = ""
+    @State private var confirm = ""
     @State private var busy = false
     @State private var errorText: String?
     private let api = APIClient()
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 20) {
+                OBBrandBar()
                 OBHeader(eyebrow: "Account",
-                         title: "Save your child's board.",
-                         subtitle: "One tap with Apple — no password to remember. Your data stays private to your family.")
+                         title: mode == .login ? "Welcome back." : "Save your child's board.",
+                         subtitle: mode == .login
+                            ? "Log in to the board you already set up."
+                            : "Your data stays private to your family.")
 
-                // Apple sign-in is the big button. Apple App Store Review 4.8
-                // requires SIWA be on at least equal footing with any other
-                // login; we go further and make it primary.
-                SignInWithAppleButton(.signUp) { request in
+                // Log in vs. create — returning parents land here after signing
+                // out and need a way back in.
+                Picker("", selection: $mode) {
+                    Text("Log in").tag(Mode.login)
+                    Text("Create account").tag(Mode.signup)
+                }
+                .pickerStyle(.segmented)
+
+                // Apple works for BOTH modes — it signs in if the account
+                // exists, creates it if not. Primary per App Store Review 4.8.
+                SignInWithAppleButton(mode == .login ? .signIn : .signUp) { request in
                     request.requestedScopes = [.fullName, .email]
                 } onCompletion: { result in
                     Task { await handleApple(result) }
@@ -170,10 +203,6 @@ private struct OnboardingAccountView: View {
 
                 divider
 
-                Text("Or use an email + password")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(hex: Brand.muted))
-
                 VStack(spacing: 10) {
                     TextField("Email", text: $email)
                         .textContentType(.emailAddress)
@@ -182,26 +211,43 @@ private struct OnboardingAccountView: View {
                         .autocorrectionDisabled()
                         .padding(12)
                         .background(.white, in: RoundedRectangle(cornerRadius: 12))
-                    SecureField("Password (at least 8 characters)", text: $password)
-                        .textContentType(.newPassword)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: Brand.line), lineWidth: 1))
+                    SecureField(mode == .login ? "Password" : "Password (at least 8 characters)", text: $password)
+                        .textContentType(mode == .login ? .password : .newPassword)
                         .padding(12)
                         .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: Brand.line), lineWidth: 1))
+                    if mode == .signup {
+                        SecureField("Confirm password", text: $confirm)
+                            .textContentType(.newPassword)
+                            .padding(12)
+                            .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: Brand.line), lineWidth: 1))
+                    }
                 }
 
                 if let e = errorText {
                     Text(e).font(.footnote).foregroundStyle(.red)
                 }
 
-                OBPrimaryButton(title: busy ? "Creating…" : "Continue with email",
-                                busy: busy,
-                                disabled: email.isEmpty || password.count < 8) {
-                    Task { await createEmailAccount() }
+                OBPrimaryButton(title: emailButtonTitle, busy: busy, disabled: !emailFormValid) {
+                    Task { mode == .login ? await logIn() : await createEmailAccount() }
                 }
             }
             .padding(20)
         }
         .background(Color(hex: Brand.bg))
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var emailButtonTitle: String {
+        if busy { return mode == .login ? "Signing in…" : "Creating…" }
+        return mode == .login ? "Log in with email" : "Create account"
+    }
+    private var emailFormValid: Bool {
+        guard !email.isEmpty else { return false }
+        if mode == .login { return !password.isEmpty }
+        return password.count >= 8 && password == confirm
     }
 
     private var divider: some View {
@@ -212,12 +258,14 @@ private struct OnboardingAccountView: View {
         }
     }
 
+    // MARK: -- Auth actions
+
     private func handleApple(_ result: Result<ASAuthorization, Error>) async {
         switch result {
         case .failure(let err):
             errorText = "Apple sign-in failed: \(err.localizedDescription)"
-        case .success(let auth):
-            guard let cred = auth.credential as? ASAuthorizationAppleIDCredential,
+        case .success(let authResult):
+            guard let cred = authResult.credential as? ASAuthorizationAppleIDCredential,
                   let tokenData = cred.identityToken,
                   let token = String(data: tokenData, encoding: .utf8) else {
                 errorText = "Couldn't read Apple identity token."
@@ -228,19 +276,29 @@ private struct OnboardingAccountView: View {
             let name = [cred.fullName?.givenName, cred.fullName?.familyName]
                 .compactMap { $0 }.joined(separator: " ")
             do {
-                _ = try await api.signInWithApple(.init(
+                let resp = try await api.signInWithApple(.init(
                     identityToken: token,
                     fullName: name.isEmpty ? nil : name,
                     email: cred.email
                 ))
-                // The session cookie is now set. AuthManager re-reads it and
-                // OnboardingFlow's onChange advances us past .account.
-                await refreshAuth()
-                coord.isAuthenticated = true
-                coord.go(to: .child)
+                await auth.refreshFromServer()
+                // Brand-new account → continue onboarding; existing → straight
+                // to the board / parent home.
+                finishAuth(created: resp.created ?? false)
             } catch {
                 errorText = "Apple sign-in failed: \(error.localizedDescription)"
             }
+        }
+    }
+
+    private func logIn() async {
+        busy = true; errorText = nil
+        defer { busy = false }
+        await auth.signIn(email: email.trimmingCharacters(in: .whitespaces), password: password)
+        if auth.isSignedIn {
+            finishAuth(created: false)        // existing account → no onboarding
+        } else {
+            errorText = auth.lastError ?? "Invalid email or password."
         }
     }
 
@@ -255,18 +313,22 @@ private struct OnboardingAccountView: View {
             ])
             _ = try await api.request(method: "POST", path: "/api/auth/register",
                                       body: body, contentType: "application/json")
-            await refreshAuth()
-            coord.isAuthenticated = true
-            coord.go(to: .child)
+            await auth.refreshFromServer()
+            finishAuth(created: true)         // new account → onboarding continues
         } catch {
             errorText = "Could not create the account: \(error.localizedDescription)"
         }
     }
 
-    private func refreshAuth() async {
-        // AuthManager rereads the cookie on its next /api/auth/me poll. We
-        // ping it explicitly so the env value updates before navigation.
-        await auth.refreshFromServer()
+    /// After any successful auth: a brand-new account continues the onboarding
+    /// flow (needsOnboarding keeps ContentView on the flow even though we're
+    /// now signed in); an existing account drops out to the board / home.
+    private func finishAuth(created: Bool) {
+        coord.isAuthenticated = true
+        coord.needsOnboarding = created
+        if created { coord.go(to: .child) }
+        // When created == false, ContentView re-renders (isSignedIn flipped,
+        // needsOnboarding false) and shows the role switch automatically.
     }
 }
 
@@ -290,6 +352,7 @@ private struct OnboardingChildView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
+                OBBrandBar()
                 OBHeader(eyebrow: "Step 1 of 4",
                          title: "Tell us about your child.",
                          subtitle: "Their birthday lets the board start with the right vocabulary — and grow with them.")
@@ -410,6 +473,7 @@ private struct OnboardingPhotoView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
+                OBBrandBar()
                 header
 
                 // Illustrative slot — show the before/after transformation
@@ -715,6 +779,7 @@ private struct OnboardingSeedView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                OBBrandBar()
                 OBHeader(
                     eyebrow: "Step 4 of 4",
                     title: "Let's make the first words.",
@@ -796,10 +861,10 @@ private struct OnboardingDoneView: View {
     @Environment(OnboardingCoordinator.self) private var coord
     @Environment(DeviceMode.self) private var mode
     private let api = APIClient()
-    @State private var dismissed = false
 
     var body: some View {
         VStack(spacing: 18) {
+            OBBrandBar().padding(.horizontal, 24)
             Spacer()
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 64))
@@ -816,7 +881,9 @@ private struct OnboardingDoneView: View {
             OBPrimaryButton(title: "Open the parent app", busy: false) {
                 Task {
                     await api.onboardingComplete()
-                    dismissed = true
+                    // Leave the flow: clearing needsOnboarding lets ContentView
+                    // render the role switch / parent home.
+                    coord.needsOnboarding = false
                     mode.role = .parent
                 }
             }

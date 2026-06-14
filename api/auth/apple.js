@@ -108,6 +108,7 @@ export default async function handler(req, res) {
   try {
     const db = sql();
     // 1) Existing SIWA user?
+    let created = false;
     let row = (await db`SELECT id, email, role, child_slug FROM users WHERE apple_user_id = ${appleUserId} LIMIT 1`)[0];
 
     // 2) If not, link to an existing email match (so a parent who registered
@@ -123,6 +124,7 @@ export default async function handler(req, res) {
     // 3) Fresh account. Pick a unique child_slug — fall back with a numeric
     //    suffix on collision.
     if (!row) {
+      created = true;
       let slug = wantSlug;
       for (let i = 2; i < 1000; i++) {
         const taken = await db`SELECT 1 FROM users WHERE child_slug = ${slug} LIMIT 1`;
@@ -145,8 +147,8 @@ export default async function handler(req, res) {
     try { await db`UPDATE users SET last_login_at = NOW() WHERE id = ${row.id}`; } catch (_) {}
     res.status(200).json({
       ok: true,
+      created,                                            // true = brand-new account → continue onboarding
       user: { email: row.email, role: row.role, slug: row.child_slug },
-      isNewAccount: !claims.email_verified ? false : undefined,  // best-effort hint for the client
     });
   } catch (err) {
     res.status(500).json({ error: 'Apple sign-in failed', detail: String(err.message || err) });
