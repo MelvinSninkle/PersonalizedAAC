@@ -54,10 +54,10 @@ struct TopWordsView: View {
     }
 
     private var listCard: some View {
-        let max = rows.first?.count ?? 1
+        let topCount = rows.first?.count ?? 1
         return VStack(spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
-                wordRow(row, rank: i + 1, max: max)
+                wordRow(row, rank: i + 1, topCount: topCount)
                 if i < rows.count - 1 {
                     Divider().background(Color(hex: Brand.line))
                 }
@@ -68,8 +68,8 @@ struct TopWordsView: View {
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: Brand.line), lineWidth: 1))
     }
 
-    private func wordRow(_ row: APIClient.TopWord, rank: Int, max: Int) -> some View {
-        let share = max > 0 ? Double(row.count) / Double(max) : 0
+    private func wordRow(_ row: APIClient.TopWord, rank: Int, topCount: Int) -> some View {
+        let share = topCount > 0 ? Double(row.count) / Double(topCount) : 0
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("\(rank).")
