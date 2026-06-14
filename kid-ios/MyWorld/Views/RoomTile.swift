@@ -15,6 +15,7 @@ struct RoomTile: View {
     let onTap: () -> Void
     let onLongPress: () -> Void
 
+    @Environment(AuthManager.self) private var auth
     @State private var image: UIImage?
 
     var body: some View {
@@ -114,7 +115,13 @@ struct RoomInteriorView: View {
                               spacing: BoardMetrics.tileGap) {
                         ForEach(tiles) { t in
                             TileView(tile: t) { tapped in
-                                Task { await TilePlayer.shared.play(tapped) }
+                                Task {
+                                    await TilePlayer.shared.play(
+                                        tapped,
+                                        childId: auth.childSlug,
+                                        categoryName: category.label
+                                    )
+                                }
                             }
                             .frame(width: tile)
                         }

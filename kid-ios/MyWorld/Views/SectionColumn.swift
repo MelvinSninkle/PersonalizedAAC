@@ -24,6 +24,30 @@ struct SectionColumn: View {
     @State private var selectedSubcategoryId: Int?
     @State private var openRoom: Category?
 
+    /// Top-level category label at the moment of tap — landed alongside the
+    /// event so the analytics Use chart + Top Words grouping work. We resolve
+    /// it from the selected ids rather than effectiveCategory so a tap inside
+    /// a subcategory still attributes to the visible top-level chip.
+    private var activeCategoryName: String? {
+        let roots = board.roots(in: section)
+        return roots.first(where: { $0.id == selectedCategoryId })?.label
+            ?? roots.first?.label
+    }
+    private var activeSubcategoryName: String? {
+        guard let subId = selectedSubcategoryId else { return nil }
+        return board.categories.first(where: { $0.id == subId })?.label
+    }
+    private func playWithLogging(_ t: Tile, fallbackCategory: String? = nil) {
+        Task {
+            await TilePlayer.shared.play(
+                t,
+                childId: auth.childSlug,
+                categoryName: fallbackCategory ?? activeCategoryName,
+                subcategoryName: activeSubcategoryName
+            )
+        }
+    }
+
     private var bandColor: Color { Color(hex: prefs.color(section)).opacity(0.7) }
 
     var body: some View {
@@ -115,9 +139,7 @@ struct SectionColumn: View {
         return ScrollView {
             LazyVGrid(columns: gridCols, alignment: .leading, spacing: BoardMetrics.tileGap) {
                 ForEach(tiles) { tile in
-                    TileView(tile: tile) { t in
-                        Task { await TilePlayer.shared.play(t) }
-                    }
+                    TileView(tile: tile) { t in playWithLogging(t) }
                     .frame(width: tileSize)
                 }
                 if editMode {
@@ -146,7 +168,7 @@ struct SectionColumn: View {
                 LazyVGrid(columns: gridCols, alignment: .leading, spacing: BoardMetrics.tileGap) {
                     ForEach(board.tiles(in: location)) { tile in
                         TileView(tile: tile) { t in
-                            Task { await TilePlayer.shared.play(t) }
+                            playWithLogging(t, fallbackCategory: location.label)
                         }
                         .frame(width: tileSize)
                     }

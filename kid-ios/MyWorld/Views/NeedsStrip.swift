@@ -16,6 +16,7 @@ struct NeedsStrip: View {
 
     @Environment(BoardStore.self) private var board
     @Environment(DisplayPrefs.self) private var prefs
+    @Environment(AuthManager.self) private var auth
 
     private var tiles: [Tile] {
         board.tiles
@@ -43,7 +44,13 @@ struct NeedsStrip: View {
                 HStack(spacing: BoardMetrics.tileGap) {
                     ForEach(tiles) { tile in
                         TileView(tile: tile) { t in
-                            Task { await TilePlayer.shared.play(t) }
+                            Task {
+                                await TilePlayer.shared.play(
+                                    t,
+                                    childId: auth.childSlug,
+                                    categoryName: "Needs"
+                                )
+                            }
                         }
                         .frame(width: tileSize)
                     }
