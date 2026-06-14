@@ -16,7 +16,10 @@ extension APIClient {
         if let n = req.fullName, !n.isEmpty { body["fullName"] = n }
         if let e = req.email, !e.isEmpty { body["email"] = e }
         let data = try JSONSerialization.data(withJSONObject: body)
-        return try await postJSON("/api/auth/apple", body: data)
+        let (respData, _) = try await request(method: "POST", path: "/api/auth/apple",
+                                              body: data, contentType: "application/json")
+        do { return try JSONDecoder().decode(LoginResponse.self, from: respData) }
+        catch { throw APIError.decoding(error) }
     }
 
     // MARK: -- Onboarding state + step writes

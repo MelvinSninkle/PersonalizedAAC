@@ -66,11 +66,13 @@ private struct OBHeader: View {
 }
 
 /// Big pink "continue" button — used as the primary CTA on every step.
+/// `disabled` comes before `action` so callers can still use trailing-closure
+/// syntax for the action (a trailing closure must be the final argument).
 private struct OBPrimaryButton: View {
     let title: String
     let busy: Bool
-    let action: () -> Void
     var disabled: Bool = false
+    let action: () -> Void
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
@@ -190,9 +192,11 @@ private struct OnboardingAccountView: View {
                     Text(e).font(.footnote).foregroundStyle(.red)
                 }
 
-                OBPrimaryButton(title: busy ? "Creating…" : "Continue with email", busy: busy) {
+                OBPrimaryButton(title: busy ? "Creating…" : "Continue with email",
+                                busy: busy,
+                                disabled: email.isEmpty || password.count < 8) {
                     Task { await createEmailAccount() }
-                } disabled: email.isEmpty || password.count < 8
+                }
             }
             .padding(20)
         }
@@ -274,12 +278,13 @@ private struct OnboardingChildView: View {
     @State private var errorText: String?
     private let api = APIClient()
 
-    private let languages: [(code: String, label: String, comingSoon: Bool)] = [
-        ("en", "English",     false),
-        ("es", "Español",     true),
-        ("fr", "Français",    true),
-        ("pt", "Português",   true),
-        ("de", "Deutsch",     true),
+    private struct Lang: Identifiable { let id: String; let label: String; let comingSoon: Bool }
+    private let languages: [Lang] = [
+        .init(id: "en", label: "English",    comingSoon: false),
+        .init(id: "es", label: "Español",    comingSoon: true),
+        .init(id: "fr", label: "Français",   comingSoon: true),
+        .init(id: "pt", label: "Português",  comingSoon: true),
+        .init(id: "de", label: "Deutsch",    comingSoon: true),
     ]
 
     var body: some View {
@@ -312,8 +317,8 @@ private struct OnboardingChildView: View {
                         get: { coord.language },
                         set: { coord.language = $0 }
                     )) {
-                        ForEach(languages, id: \.code) { l in
-                            Text(l.comingSoon ? "\(l.label) — coming soon" : l.label).tag(l.code)
+                        ForEach(languages) { l in
+                            Text(l.comingSoon ? "\(l.label) — coming soon" : l.label).tag(l.id)
                         }
                     }
                     .pickerStyle(.menu)
@@ -340,9 +345,11 @@ private struct OnboardingChildView: View {
                     Text(e).font(.footnote).foregroundStyle(.red)
                 }
 
-                OBPrimaryButton(title: busy ? "Saving…" : "Continue", busy: busy) {
+                OBPrimaryButton(title: busy ? "Saving…" : "Continue",
+                                busy: busy,
+                                disabled: coord.childName.trimmingCharacters(in: .whitespaces).isEmpty) {
                     Task { await save() }
-                } disabled: coord.childName.trimmingCharacters(in: .whitespaces).isEmpty
+                }
             }
             .padding(20)
         }
@@ -431,7 +438,7 @@ private struct OnboardingPhotoView: View {
         .sheet(isPresented: $showPicker) {
             CameraPicker { data in
                 showPicker = false
-                Task { await draft(data) }
+                if let data { Task { await draft(data) } }
             }
         }
     }
