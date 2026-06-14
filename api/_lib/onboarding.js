@@ -43,6 +43,11 @@ export async function setStep(db, uid, step, dataPatch = null) {
 // Tier (attention budget) → auto-teach defaults. Used when seeding child_settings.
 export const TIER_LABELS = new Set(['under3', '3to5', '5plus']);
 
+// Languages the onboarding UI offers. English ships day one; the others are
+// placeholders so a parent can pick their language preference now and the
+// content layer fills in once the translations land.
+export const LANGUAGE_LABELS = new Set(['en', 'es', 'fr', 'pt', 'de']);
+
 // Core taxonomy band defaults to the FIRST set we'll auto-seed for new
 // children. Recommendation per user: only Core 12-18m. ~13 tiles, ~$0.52 in
 // Nano Banana cost; leaves the bulk of the parent's monthly credit cap for

@@ -7,7 +7,7 @@
 import { checkAuth } from '../_lib/auth.js';
 import { isParentOf } from '../_lib/access.js';
 import { sql } from '../_lib/db.js';
-import { ensureProgress, nextStep, setStep, TIER_LABELS } from '../_lib/onboarding.js';
+import { ensureProgress, nextStep, setStep, TIER_LABELS, LANGUAGE_LABELS } from '../_lib/onboarding.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -18,6 +18,7 @@ export default async function handler(req, res) {
   const name = String(b.name || '').slice(0, 80).trim();
   const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(String(b.birthDate || '')) ? String(b.birthDate) : null;
   const tier = TIER_LABELS.has(b.tier) ? b.tier : 'under3';
+  const language = LANGUAGE_LABELS.has(b.language) ? b.language : 'en';
   if (!name) { res.status(400).json({ error: 'name required' }); return; }
   if (!birthDate) { res.status(400).json({ error: 'birthDate (YYYY-MM-DD) required' }); return; }
 
@@ -54,9 +55,12 @@ export default async function handler(req, res) {
       personId = inserted[0].id;
     }
 
-    // Seed child_settings.autoTeach with the picked tier but disabled.
+    // Seed child_settings.autoTeach with the picked tier but disabled, AND
+    // record the family's chosen language at the top level so other surfaces
+    // (TTS, taxonomy filtering when translations land) can read it.
     const csRow = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
     const settings = (csRow && csRow.settings) || {};
+    settings.language = language;
     settings.autoTeach = {
       enabled: false,
       cadence: 'conservative',
@@ -71,7 +75,7 @@ export default async function handler(req, res) {
       ON CONFLICT (child_id) DO UPDATE SET settings = ${settings}::jsonb, updated_at = NOW()`;
 
     await setStep(db, Number(auth.user.uid), nextStep('child'),
-                  { childName: name, birthDate, tier });
+                  { childName: name, birthDate, tier, language });
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({ ok: true, step: nextStep('child'), childId, personId: Number(personId) });
   } catch (err) {

@@ -48,4 +48,21 @@ final class AuthManager {
         SessionStore.save(nil)
         self.user = nil
     }
+
+    /// Re-reads /api/auth/me and caches the result locally. Used by external
+    /// auth flows (Sign in with Apple, account creation) that set the session
+    /// cookie out-of-band and need AuthManager to pick the user up.
+    @MainActor
+    func refreshFromServer() async {
+        do {
+            let me = try await api.me()
+            if let u = me.user {
+                let s = SignedInUser(email: u.email, role: u.role, slug: u.slug)
+                SessionStore.save(s)
+                self.user = s
+                self.childSlug = u.slug ?? self.childSlug
+                self.lastError = nil
+            }
+        } catch { /* leave existing state alone on error */ }
+    }
 }
