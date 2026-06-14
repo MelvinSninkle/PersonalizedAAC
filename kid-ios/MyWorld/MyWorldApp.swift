@@ -13,6 +13,7 @@ struct MyWorldApp: App {
     @State private var mode        = DeviceMode()
     @State private var parentLive  = ParentLive()
     @State private var autoTeach   = AutoTeachRunner()
+    @State private var onboarding  = OnboardingCoordinator()
 
     init() {
         setupAudioSession()
@@ -31,6 +32,7 @@ struct MyWorldApp: App {
                 .environment(mode)
                 .environment(parentLive)
                 .environment(autoTeach)
+                .environment(onboarding)
                 .statusBarHidden(true)
                 .persistentSystemOverlays(.hidden)
                 // The whole app uses a fixed light pink palette (matching the
