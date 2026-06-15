@@ -51,6 +51,10 @@ struct AddTileView: View {
     @State private var importing = false
 
     @State private var editingJob: TileJob?
+    /// A single freshly-captured photo waiting on the "hold on — here's more
+    /// info" review before generation kicks off. Non-nil = the pre-gen sheet is
+    /// up. Bulk imports skip this (they're reviewed after, in BatchReviewView).
+    @State private var pendingCapture: PendingCapture?
 
     var body: some View {
         NavigationStack {
@@ -70,6 +74,19 @@ struct AddTileView: View {
                     .sheet(item: $editingJob) { job in
                         TileEditSheet(job: job)
                     }
+                    // "Hold on a second" — confirm the name and add any extra
+                    // detail before the (slow, costly) generation starts.
+                    .sheet(item: $pendingCapture) { pending in
+                        PreGenerateSheet(
+                            photoJPEG: pending.data,
+                            destination: destinationName(),
+                            onGenerate: { name, detail in
+                                pendingCapture = nil
+                                enqueue(pending.data, name: name, detail: detail)
+                            },
+                            onCancel: { pendingCapture = nil }
+                        )
+                    }
                 }
             }
             .navigationTitle("Add tiles")
@@ -86,7 +103,7 @@ struct AddTileView: View {
                 // dismisses — see CameraPicker).
                 CameraPicker { data in
                     showCamera = false
-                    if let data { enqueue(data) }
+                    if let data { pendingCapture = PendingCapture(data: data) }
                 }
                 .ignoresSafeArea()
             }
@@ -268,7 +285,10 @@ struct AddTileView: View {
     // MARK: -- Helpers
 
     /// A single photo (camera, or one library pick) → one tile, no review flag.
-    private func enqueue(_ data: Data) {
+    /// `name`/`detail` come from the pre-gen review sheet: an empty name lets the
+    /// AI auto-label; `detail` is the parent's optional "here's more info" hint
+    /// passed to generation to steer the art.
+    private func enqueue(_ data: Data, name: String = "", detail: String = "") {
         queue.enqueue(photoJPEG: data,
                       section: section,
                       categoryId: categoryId,
@@ -276,7 +296,8 @@ struct AddTileView: View {
                       model: model.apiValue,
                       bg: bg.rawValue,
                       emotion: "default",
-                      prefilledLabel: "",
+                      prefilledLabel: name.trimmingCharacters(in: .whitespaces),
+                      prefilledDetail: detail.trimmingCharacters(in: .whitespaces),
                       childId: auth.childSlug,
                       board: board)
     }
@@ -295,7 +316,8 @@ struct AddTileView: View {
         }
         guard !photos.isEmpty else { return }
         if photos.count == 1 {
-            enqueue(photos[0])
+            // Single pick → same "hold on, here's more info" review as a snap.
+            pendingCapture = PendingCapture(data: photos[0])
         } else {
             queue.enqueueBatch(photos: photos,
                                section: section,
@@ -329,6 +351,15 @@ struct AddTileView: View {
         guard let id = categoryId,
               let f = folderOptions(section).first(where: { $0.id == id }) else { return "Top level" }
         return f.label
+    }
+
+    /// Human-readable "Needs › Snacks" destination for the pre-gen sheet header,
+    /// so the parent confirms placement before the tile generates.
+    private func destinationName() -> String {
+        let sec = sectionLabel(section)
+        guard let id = categoryId,
+              let f = folderOptions(section).first(where: { $0.id == id }) else { return sec }
+        return "\(sec) › \(f.label)"
     }
 
     private func sectionLabel(_ s: BoardSection) -> String {
@@ -444,5 +475,100 @@ private struct ProgressRing: View {
                 .rotationEffect(.degrees(-90))
                 .animation(.easeInOut(duration: 0.4), value: progress)
         }
+    }
+}
+
+// MARK: -- Pre-generation review
+
+/// A freshly-captured single photo held until the parent confirms its name and
+/// adds any detail. Identifiable so it drives a `.sheet(item:)`.
+struct PendingCapture: Identifiable {
+    let id = UUID()
+    let data: Data
+}
+
+/// "Hold on a second while I give you more info." Shown right after a single
+/// capture, BEFORE the slow/costly generation starts, so the parent can:
+///   • Override the name (leave blank → the AI auto-labels it), and
+///   • Add an optional hint that steers the art ("this is Grandma Sue", "the
+///     red cup, not the blue one", "her favorite stuffed bunny").
+/// Bulk imports skip this and are reviewed afterward in BatchReviewView.
+private struct PreGenerateSheet: View {
+    let photoJPEG: Data
+    let destination: String
+    let onGenerate: (_ name: String, _ detail: String) -> Void
+    let onCancel: () -> Void
+
+    @State private var name = ""
+    @State private var detail = ""
+    @FocusState private var nameFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color(hex: "#fff7fb").ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        if let img = UIImage(data: photoJPEG) {
+                            Image(uiImage: img)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxWidth: .infinity)
+                                .frame(maxHeight: 240)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .shadow(color: .black.opacity(0.1), radius: 8, y: 3)
+                        }
+
+                        label("Where it goes")
+                        Text(destination)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Color(hex: "#ad1457"))
+
+                        label("Name (optional)")
+                        TextField("Leave blank to let us name it", text: $name)
+                            .textFieldStyle(.roundedBorder)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .focused($nameFocused)
+                        Text("Spelled how it should sound — that's what's spoken.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(hex: "#999"))
+
+                        label("Anything we should know? (optional)")
+                        TextField("e.g. \"This is Grandma Sue\" or \"the red cup\"",
+                                  text: $detail, axis: .vertical)
+                            .lineLimit(2...4)
+                            .textFieldStyle(.roundedBorder)
+                            .autocorrectionDisabled()
+                        Text("A quick hint helps the art look right — who or what this is.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(hex: "#999"))
+                    }
+                    .padding(16)
+                }
+            }
+            .navigationTitle("Make a tile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { onCancel() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Generate") { onGenerate(name, detail) }
+                        .font(.system(size: 16, weight: .bold))
+                }
+            }
+            .task {
+                // Tiny delay so the keyboard doesn't fight the sheet animation.
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                nameFocused = true
+            }
+        }
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(Color(hex: "#999"))
     }
 }

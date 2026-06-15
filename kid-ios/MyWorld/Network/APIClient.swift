@@ -171,12 +171,12 @@ struct APIClient {
 
     struct DescribeResult: Codable {
         let label: String
-        let pronunciation: String
     }
 
-    /// POST /api/describe-image — OpenAI vision suggests a 1-2 word label and
-    /// a phonetic spelling tuned for TTS. Best-effort; if the org isn't
-    /// verified for vision, returns empty strings.
+    /// POST /api/describe-image — OpenAI vision suggests a 1-2 word label.
+    /// Best-effort; if the org isn't verified for vision, returns an empty
+    /// label (phonetic-pronunciation generation was removed — TTS speaks from
+    /// the title).
     func describeImage(photoJPEG: Data) async throws -> DescribeResult {
         let (data, _) = try await request(method: "POST", path: "/api/describe-image",
                                           body: photoJPEG, contentType: "image/jpeg")
@@ -188,9 +188,10 @@ struct APIClient {
     /// with the chosen image model. `bg` picks the flat background color
     /// (preset name like 'pink' or a hex). Returns the raw PNG bytes. ~20-40s.
     func generateImage(photoJPEG: Data, label: String, style: String, model: String,
-                       bg: String?, childId: String) async throws -> Data {
+                       bg: String?, detail: String? = nil, childId: String) async throws -> Data {
         var path = "/api/generate-image?label=\(percentEscape(label))&style=\(percentEscape(style))&model=\(percentEscape(model))&childId=\(percentEscape(childId))"
         if let bg, !bg.isEmpty { path += "&bg=\(percentEscape(bg))" }
+        if let detail, !detail.isEmpty { path += "&detail=\(percentEscape(detail))" }
         // 320s = Vercel's 300s function ceiling plus a 20s grace window, so a
         // near-the-edge response still arrives intact rather than the iPad
         // giving up first. gpt-image-1.5/-2 at high quality + high fidelity can

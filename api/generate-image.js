@@ -135,6 +135,10 @@ export default async function handler(req, res) {
   const label = String((req.query && req.query.label) || '').slice(0, 80).trim();
   const style = String((req.query && req.query.style) || 'illustrated').slice(0, 80).trim();
   const childId = String((req.query && req.query.childId) || 'fletcherpeterson').slice(0, 64);
+  // Optional parent-supplied extra detail captured in the "hold on, here's more
+  // info" step before generation — e.g. "the blue cup with dinosaurs". Steers
+  // the illustration without polluting the spoken label.
+  const detail = String((req.query && req.query.detail) || '').slice(0, 200).trim();
   // Per-request model override from the UI; falls back to the default.
   const reqModel = String((req.query && req.query.model) || '').trim();
   const model = reqModel === 'nano-banana' ? geminiDefaultModel()
@@ -219,11 +223,12 @@ export default async function handler(req, res) {
   // Background: parent-pickable preset (or hex). If unset, the model picks
   // a soft pastel background that fits the brand.
   const bgPhrase = bg ? bg.phrase : 'a soft pastel';
+  const detailClause = detail ? ` Important detail from the family: ${detail}.` : '';
   const prompt =
     `Re-illustrate this photograph as a ${style} of ${subject} for a young child's ` +
     `communication app. Keep ${subject} clearly recognizable and centered, on a simple ` +
     `${bgPhrase} background, with bright friendly colors and a gentle, age-appropriate ` +
-    `look.` + captionClause +
+    `look.` + detailClause + captionClause +
     // No anthropomorphizing inanimate objects. Without this, gpt-image models
     // routinely add cartoon eyes/smiles to things like ducks (the rubber-toy
     // kind), rockers, vehicles, food, etc. — fine for some toys, but wrong for

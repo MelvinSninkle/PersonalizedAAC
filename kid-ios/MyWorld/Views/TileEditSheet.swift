@@ -5,12 +5,15 @@ import AVFoundation
 /// Quick edit for a tile in the Add-Tile tray.
 ///
 /// Two jobs, one sheet:
-///   • A finished tile the AI mis-named → fix the label/pronunciation/placement;
-///     saving PUTs the existing row (it's already on the board).
+///   • A finished tile the AI mis-named → fix the label/placement; saving PUTs
+///     the existing row (it's already on the board).
 ///   • A tile the AI couldn't name (vision miss) → type a name; saving creates
 ///     the row for the first time and drops it on the board.
 ///
-/// The art is already rendered either way, so this is just text + a tap.
+/// TTS speaks straight from the title (phonetic-pronunciation generation was
+/// removed — PRD "selection over generation"): if a name sounds wrong, the
+/// parent retypes it the way it should sound. The art is already rendered
+/// either way, so this is just text + a tap.
 struct TileEditSheet: View {
     @Bindable var job: TileJob
 
@@ -19,7 +22,6 @@ struct TileEditSheet: View {
     @Environment(AuthManager.self) private var auth
 
     @State private var label: String = ""
-    @State private var pronunciation: String = ""
     @State private var section: BoardSection = .needs
     @State private var categoryId: Int?
 
@@ -46,16 +48,14 @@ struct TileEditSheet: View {
                         }
 
                         field("Tile name")
-                        TextField("e.g. Banana", text: $label)
-                            .textFieldStyle(.roundedBorder)
-                            .textInputAutocapitalization(.words)
-                            .autocorrectionDisabled()
-
-                        field("How to pronounce it (optional)")
                         HStack {
-                            TextField("e.g. buh-NAN-uh", text: $pronunciation)
+                            TextField("e.g. Banana", text: $label)
                                 .textFieldStyle(.roundedBorder)
+                                .textInputAutocapitalization(.words)
                                 .autocorrectionDisabled()
+                            // Tap to hear how it'll be spoken. If it sounds
+                            // wrong, retype the name the way it should sound —
+                            // there's no separate pronunciation field anymore.
                             Button {
                                 Task { await previewVoice() }
                             } label: {
@@ -65,6 +65,9 @@ struct TileEditSheet: View {
                             }
                             .buttonStyle(.plain)
                         }
+                        Text("Tap ▶ to hear it. If it sounds off, just spell the name how it should sound.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(hex: "#999"))
 
                         field("Where on the board")
                         Picker("Section", selection: $section) {
@@ -110,10 +113,9 @@ struct TileEditSheet: View {
                 }
             }
             .task {
-                label         = job.label
-                pronunciation = job.pronunciation
-                section       = job.section
-                categoryId    = job.categoryId
+                label      = job.label
+                section    = job.section
+                categoryId = job.categoryId
             }
         }
     }
@@ -122,8 +124,7 @@ struct TileEditSheet: View {
 
     @MainActor
     private func previewVoice() async {
-        let trimmed = label.trimmingCharacters(in: .whitespaces)
-        let text = pronunciation.isEmpty ? trimmed : pronunciation
+        let text = label.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
         do {
             let mp3 = try await api.synthesizeSpeech(text: text, emotion: job.emotion)
@@ -146,8 +147,8 @@ struct TileEditSheet: View {
         do {
             // Re-voice only when the spoken text actually changed (or we never
             // had a voice) — saves a TTS round-trip on a pure placement change.
-            let speak = pronunciation.isEmpty ? trimmedLabel : pronunciation
-            let textChanged = trimmedLabel != job.label || pronunciation != job.pronunciation
+            let speak = trimmedLabel
+            let textChanged = trimmedLabel != job.label
             var soundKey: String?
             if job.soundMP3 == nil || textChanged {
                 let mp3 = try await api.synthesizeSpeech(text: speak, emotion: job.emotion)
@@ -186,7 +187,6 @@ struct TileEditSheet: View {
 
             // Reflect the edit back onto the tray card.
             job.label = trimmedLabel
-            job.pronunciation = pronunciation
             job.section = section
             job.categoryId = categoryId
             job.phase = .done

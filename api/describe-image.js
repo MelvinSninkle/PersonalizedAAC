@@ -41,10 +41,12 @@ export default async function handler(req, res) {
 
   const contentType = req.headers['content-type'] || 'image/jpeg';
   const dataUrl = `data:${contentType};base64,${buffer.toString('base64')}`;
+  // Phonetic-pronunciation generation was removed (PRD: "selection over
+  // generation" — TTS speaks straight from the tile title, which the parent
+  // can correct). We only suggest a label now; cheaper + fewer tokens.
   const prompt =
     "You are labeling a photo for a young child's communication (AAC) app. Identify the single main " +
-    "subject. Respond with strict JSON only: {\"label\":\"<1-2 word everyday name, Capitalized>\", " +
-    "\"pronunciation\":\"<simple phonetic spelling for a text-to-speech voice, e.g. buh-NAN-uh>\"}. " +
+    "subject. Respond with strict JSON only: {\"label\":\"<1-2 word everyday name, Capitalized>\"}. " +
     "Keep the label concrete and child-friendly. No extra text.";
 
   try {
@@ -61,7 +63,7 @@ export default async function handler(req, res) {
           ],
         }],
         response_format: { type: 'json_object' },
-        max_tokens: 80,
+        max_tokens: 40,
       }),
     });
     if (!upstream.ok) {
@@ -75,7 +77,6 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
       label: typeof out.label === 'string' ? out.label.slice(0, 80) : '',
-      pronunciation: typeof out.pronunciation === 'string' ? out.pronunciation.slice(0, 120) : '',
     });
   } catch (err) {
     res.status(502).json({ error: 'Vision request failed', detail: String(err.message || err) });

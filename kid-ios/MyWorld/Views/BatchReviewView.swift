@@ -4,12 +4,13 @@ import AVFoundation
 
 /// Review queue for bulk-imported tiles. Every tile flagged `needsReview` (it's
 /// already live on the board) shows here with its AI art, a play button for its
-/// AI voice, and an editable name + optional pronunciation. The parent fixes
-/// anything the AI got wrong and taps "Save & confirm" once; that re-records
-/// the voice for any she renamed and clears the review flag on all of them.
+/// AI voice, and an editable name. The parent fixes anything the AI got wrong
+/// and taps "Save & confirm" once; that re-records the voice for any she
+/// renamed and clears the review flag on all of them.
 ///
-/// Her typed name/pronunciation always supersedes the AI's — that's the whole
-/// point of the review.
+/// TTS speaks straight from the title (phonetic-pronunciation generation was
+/// removed — PRD "selection over generation"): a name that sounds wrong gets
+/// retyped the way it should sound. Her typed name always supersedes the AI's.
 struct BatchReviewView: View {
     let onDone: () -> Void
 
@@ -24,7 +25,6 @@ struct BatchReviewView: View {
         let soundKey: String?
         let originalLabel: String
         var label: String
-        var pronunciation: String = ""
     }
 
     @State private var rows: [Row] = []
@@ -124,15 +124,13 @@ struct BatchReviewView: View {
             for (i, row) in rows.enumerated() {
                 progress = "\(i + 1)/\(rows.count)"
                 let newLabel = row.label.trimmingCharacters(in: .whitespaces)
-                let pron = row.pronunciation.trimmingCharacters(in: .whitespaces)
                 let nameChanged = newLabel != row.originalLabel && !newLabel.isEmpty
 
-                // Re-record the voice only when she renamed it or gave a custom
-                // pronunciation — otherwise keep the AI voice we already made.
+                // Re-record the voice only when she renamed it — otherwise keep
+                // the AI voice we already made. TTS speaks from the title.
                 var soundKey: String?
-                if nameChanged || !pron.isEmpty {
-                    let speak = pron.isEmpty ? newLabel : pron
-                    let mp3 = try await api.synthesizeSpeech(text: speak, emotion: "default")
+                if nameChanged {
+                    let mp3 = try await api.synthesizeSpeech(text: newLabel, emotion: "default")
                     soundKey = try await api.uploadBlob(mp3, kind: "item-sound", ext: "mp3", contentType: "audio/mpeg")
                 }
                 _ = try await api.updateItem(id: row.id,
@@ -169,10 +167,9 @@ private struct ReviewRow: View {
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
                         .font(.system(size: 16, weight: .semibold))
-                    TextField("Pronounce it (optional, e.g. buh-NAN-uh)", text: $row.pronunciation)
-                        .textFieldStyle(.roundedBorder)
-                        .autocorrectionDisabled()
-                        .font(.system(size: 13))
+                    Text("Spelled how it should sound — that's what's spoken.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(hex: "#999"))
                 }
             }
             HStack(spacing: 16) {
