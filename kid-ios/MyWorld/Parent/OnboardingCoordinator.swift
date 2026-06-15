@@ -55,6 +55,12 @@ final class OnboardingCoordinator {
     var language: String = "en"
     var tier: String = "under3"
 
+    /// The art style (a style-guide image id) chosen on the Child step. Applies
+    /// to BOTH the People portraits and the Core starter tiles so the whole board
+    /// shares one look. nil → the server falls back to the first active guide.
+    var styleGuideId: Int?
+    var styleLabel: String = ""
+
     /// The two committed draft keys, for display on later steps.
     var childPortraitKey: String?
     var parentPortraitKey: String?

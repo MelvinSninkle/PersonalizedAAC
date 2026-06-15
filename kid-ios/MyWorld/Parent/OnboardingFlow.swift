@@ -107,6 +107,104 @@ private struct OBPrimaryButton: View {
     }
 }
 
+// MARK: -- Art style picker (shared by the Child step)
+
+/// Horizontal swatch row of the available style guides. The picked style id is
+/// stored on the coordinator and applied to the portraits + the Core seed, so
+/// the whole board shares one look. Defaults to the first style so a look is
+/// always chosen; if no styles are configured the server falls back on its own.
+private struct OBStylePicker: View {
+    @Environment(OnboardingCoordinator.self) private var coord
+    @State private var styles: [APIClient.OnboardingStyle] = []
+    @State private var loading = true
+    private let api = APIClient()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("BOARD ART STYLE")
+                .font(.system(size: 11, weight: .bold)).tracking(0.6)
+                .foregroundStyle(Color(hex: Brand.muted))
+            Text("The look for the whole board — the people portraits and the first words all share it.")
+                .font(.system(size: 12))
+                .foregroundStyle(Color(hex: Brand.muted))
+
+            if loading {
+                HStack(spacing: 8) {
+                    ProgressView().tint(Color(hex: Brand.pink))
+                    Text("Loading styles…").font(.system(size: 13)).foregroundStyle(Color(hex: Brand.muted))
+                }
+            } else if styles.isEmpty {
+                Text("Using the default style.")
+                    .font(.system(size: 13)).foregroundStyle(Color(hex: Brand.muted))
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(styles) { s in
+                            OBStyleSwatch(style: s, selected: coord.styleGuideId == s.id) {
+                                coord.styleGuideId = s.id
+                                coord.styleLabel = s.label
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+        .task {
+            guard styles.isEmpty else { return }
+            defer { loading = false }
+            if let result = try? await api.onboardingStyles() {
+                styles = result
+                if coord.styleGuideId == nil, let first = result.first {
+                    coord.styleGuideId = first.id
+                    coord.styleLabel = first.label
+                }
+            }
+        }
+    }
+}
+
+/// One style swatch — its reference image with the label underneath.
+private struct OBStyleSwatch: View {
+    let style: APIClient.OnboardingStyle
+    let selected: Bool
+    let onTap: () -> Void
+    @State private var image: UIImage?
+    private let api = APIClient()
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 6) {
+                ZStack {
+                    if let image {
+                        Image(uiImage: image).resizable().scaledToFill()
+                    } else {
+                        Color(hex: "#fff7fb").overlay(ProgressView())
+                    }
+                }
+                .frame(width: 84, height: 84)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(selected ? Color(hex: Brand.pink) : Color(hex: Brand.line),
+                                lineWidth: selected ? 3 : 1)
+                )
+                Text(style.label)
+                    .font(.system(size: 11, weight: selected ? .bold : .semibold))
+                    .foregroundStyle(selected ? Color(hex: Brand.pinkDeep) : Color(hex: Brand.muted))
+                    .lineLimit(1)
+            }
+            .frame(width: 92)
+        }
+        .buttonStyle(.plain)
+        .task(id: style.id) {
+            if image == nil, let data = try? await api.onboardingStyleImage(id: style.id) {
+                image = UIImage(data: data)
+            }
+        }
+    }
+}
+
 // MARK: -- Step 1: Demo (space reserved)
 
 /// The first thing a brand-new parent sees. SPACE RESERVED for the actual
@@ -403,6 +501,8 @@ private struct OnboardingChildView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Color(hex: Brand.muted))
                     .padding(.leading, 4)
+
+                OBStylePicker()
 
                 if let e = errorText {
                     Text(e).font(.footnote).foregroundStyle(.red)
@@ -704,7 +804,7 @@ private struct OnboardingPhotoView: View {
         busy = true; errorText = nil
         defer { busy = false }
         do {
-            let key = try await api.onboardingPhotoDraft(jpeg: jpeg)
+            let key = try await api.onboardingPhotoDraft(jpeg: jpeg, styleGuideId: coord.styleGuideId)
             await loadPreview(key: key)
         } catch {
             errorText = "Couldn't render the portrait: \(error.localizedDescription)"
@@ -718,7 +818,7 @@ private struct OnboardingPhotoView: View {
         defer { busy = false }
         attempt += 1
         do {
-            let next = try await api.onboardingPhotoRetry(draftKey: key, attempt: attempt)
+            let next = try await api.onboardingPhotoRetry(draftKey: key, attempt: attempt, styleGuideId: coord.styleGuideId)
             await loadPreview(key: next)
         } catch {
             errorText = "Retry failed: \(error.localizedDescription)"
@@ -786,6 +886,12 @@ private struct OnboardingSeedView: View {
                     subtitle: "We'll generate \(coord.childName.isEmpty ? "your child" : coord.childName)'s 13 most useful first words now. Household items — favorite cup, blanket, stuffed animal — you'll snap as you go."
                 )
 
+                if !coord.styleLabel.isEmpty {
+                    Label("In your \(coord.styleLabel) style", systemImage: "paintpalette.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(hex: Brand.pinkDeep))
+                }
+
                 wordsGrid
 
                 noteCard
@@ -847,7 +953,7 @@ private struct OnboardingSeedView: View {
         busy = true; errorText = nil
         defer { busy = false }
         do {
-            let r = try await api.onboardingSeedCore()
+            let r = try await api.onboardingSeedCore(styleGuideId: coord.styleGuideId)
             queued = r.queuedCount
         } catch {
             errorText = "Could not queue the starter tiles: \(error.localizedDescription)"
