@@ -326,7 +326,7 @@ final class AddTileQueue {
             //    mispronounces it).
             job.statusText = "🔊 Making the voice…"
             let mp3 = try await animating(job, to: 0.93, over: 3, {
-                try await self.api.synthesizeSpeech(text: job.label, emotion: job.emotion)
+                try await self.api.synthesizeSpeech(text: job.label, emotion: job.emotion, childId: job.childId)
             })
             job.soundMP3 = mp3
 

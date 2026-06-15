@@ -130,7 +130,7 @@ struct BatchReviewView: View {
                 // the AI voice we already made. TTS speaks from the title.
                 var soundKey: String?
                 if nameChanged {
-                    let mp3 = try await api.synthesizeSpeech(text: newLabel, emotion: "default")
+                    let mp3 = try await api.synthesizeSpeech(text: newLabel, emotion: "default", childId: auth.childSlug)
                     soundKey = try await api.uploadBlob(mp3, kind: "item-sound", ext: "mp3", contentType: "audio/mpeg")
                 }
                 _ = try await api.updateItem(id: row.id,

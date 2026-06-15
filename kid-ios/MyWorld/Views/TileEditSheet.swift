@@ -128,7 +128,7 @@ struct TileEditSheet: View {
         let text = label.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
         do {
-            let mp3 = try await api.synthesizeSpeech(text: text, emotion: job.emotion)
+            let mp3 = try await api.synthesizeSpeech(text: text, emotion: job.emotion, childId: auth.childSlug)
             job.soundMP3 = mp3
             let player = try AVAudioPlayer(data: mp3)
             player.prepareToPlay(); player.play()
@@ -152,7 +152,7 @@ struct TileEditSheet: View {
             let textChanged = trimmedLabel != job.label
             var soundKey: String?
             if job.soundMP3 == nil || textChanged {
-                let mp3 = try await api.synthesizeSpeech(text: speak, emotion: job.emotion)
+                let mp3 = try await api.synthesizeSpeech(text: speak, emotion: job.emotion, childId: auth.childSlug)
                 job.soundMP3 = mp3
                 soundKey = try await api.uploadBlob(mp3, kind: "item-sound", ext: "mp3", contentType: "audio/mpeg")
             }
@@ -172,7 +172,7 @@ struct TileEditSheet: View {
                 let sKey: String
                 if let soundKey { sKey = soundKey }
                 else {
-                    let mp3 = try await api.synthesizeSpeech(text: speak, emotion: job.emotion)
+                    let mp3 = try await api.synthesizeSpeech(text: speak, emotion: job.emotion, childId: auth.childSlug)
                     sKey = try await api.uploadBlob(mp3, kind: "item-sound", ext: "mp3", contentType: "audio/mpeg")
                 }
                 let tile = try await api.createItem(section: section.rawValue,
@@ -565,7 +565,7 @@ struct BoardTileEditSheet: View {
         let text = label.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
         do {
-            let mp3 = try await api.synthesizeSpeech(text: text, emotion: emotion)
+            let mp3 = try await api.synthesizeSpeech(text: text, emotion: emotion, childId: auth.childSlug)
             let player = try AVAudioPlayer(data: mp3)
             player.prepareToPlay(); player.play()
             previewPlayer = player
@@ -577,7 +577,7 @@ struct BoardTileEditSheet: View {
         let text = label.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
         do {
-            let mp3 = try await api.synthesizeSpeech(text: text, emotion: emotion)
+            let mp3 = try await api.synthesizeSpeech(text: text, emotion: emotion, childId: auth.childSlug)
             stagedSound = mp3
             let player = try AVAudioPlayer(data: mp3)
             player.prepareToPlay(); player.play()
@@ -603,7 +603,7 @@ struct BoardTileEditSheet: View {
                 soundKey = try await api.uploadBlob(mp3, kind: "item-sound", ext: "mp3", contentType: "audio/mpeg")
             } else if labelChanged {
                 // Renamed without an explicit re-record → re-voice from the new title.
-                let mp3 = try await api.synthesizeSpeech(text: newLabel, emotion: emotion)
+                let mp3 = try await api.synthesizeSpeech(text: newLabel, emotion: emotion, childId: auth.childSlug)
                 soundKey = try await api.uploadBlob(mp3, kind: "item-sound", ext: "mp3", contentType: "audio/mpeg")
             }
 

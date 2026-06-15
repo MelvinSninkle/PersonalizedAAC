@@ -27,7 +27,7 @@ import { sql } from '../_lib/db.js';
 import { geminiKey, geminiDefaultModel, geminiGenerateImage } from '../_lib/gemini.js';
 import { ensureProgress, nextStep, setStep } from '../_lib/onboarding.js';
 import { isValidRelationship, relationshipNeedsSide } from '../_lib/relationships.js';
-import { loadStyleGuide } from '../_lib/onboarding-render.js';
+import { loadStyleGuide, loadChildVoiceId, synthesizeVoice } from '../_lib/onboarding-render.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 300 };
 
@@ -212,15 +212,27 @@ export default async function handler(req, res) {
           RETURNING id`;
         catId = ins[0].id;
       }
+      // Voice the People tile in the parent's chosen voice (best-effort).
+      let soundKey = null;
+      try {
+        const voiceId = await loadChildVoiceId(db, childId);
+        const mp3 = await synthesizeVoice({ text: name, voiceId });
+        if (mp3) {
+          soundKey = `onboarding/${childId}/voice/${randomUUID()}.mp3`;
+          await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });
+        }
+      } catch (_) {}
+
       const existingTile = await db`SELECT id FROM items
                                      WHERE child_id = ${childId} AND section = 'people'
                                        AND lower(label) = lower(${name}) LIMIT 1`;
       if (existingTile.length) {
-        await db`UPDATE items SET image_key = ${draftKey}, category_id = ${catId}, pinned = ${isSelf}, updated_at = NOW()
+        await db`UPDATE items SET image_key = ${draftKey}, sound_key = COALESCE(${soundKey}, sound_key),
+                   category_id = ${catId}, pinned = ${isSelf}, updated_at = NOW()
                   WHERE id = ${existingTile[0].id}`;
       } else {
-        await db`INSERT INTO items (section, category_id, label, image_key, keep_aspect, display_order, pinned, child_id, updated_at)
-                  VALUES ('people', ${catId}, ${name}, ${draftKey}, FALSE, ${Date.now()}, ${isSelf}, ${childId}, NOW())`;
+        await db`INSERT INTO items (section, category_id, label, image_key, sound_key, keep_aspect, display_order, pinned, child_id, updated_at)
+                  VALUES ('people', ${catId}, ${name}, ${draftKey}, ${soundKey}, FALSE, ${Date.now()}, ${isSelf}, ${childId}, NOW())`;
       }
 
       // Advance the step.

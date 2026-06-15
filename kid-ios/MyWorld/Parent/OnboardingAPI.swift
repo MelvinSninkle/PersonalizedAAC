@@ -82,13 +82,34 @@ extension APIClient {
         return data
     }
 
+    // MARK: -- Voice picker
+
+    struct OnboardingVoice: Codable, Identifiable, Hashable {
+        let id: String
+        let name: String
+        let description: String?
+        let previewUrl: String?
+    }
+    private struct OnboardingVoicesResult: Codable { let voices: [OnboardingVoice] }
+
+    /// The ElevenLabs voices available to the account — the parent picks how the
+    /// board speaks; the choice is saved to the child and used for every tile.
+    func onboardingVoices() async throws -> [OnboardingVoice] {
+        let (data, _) = try await request(method: "GET", path: "/api/onboarding/voices", body: nil)
+        do { return try JSONDecoder().decode(OnboardingVoicesResult.self, from: data).voices }
+        catch { throw APIError.decoding(error) }
+    }
+
     @discardableResult
-    func onboardingChild(name: String, birthDate: Date, tier: String, language: String) async throws -> [String: Any] {
+    func onboardingChild(name: String, birthDate: Date, tier: String, language: String,
+                         voiceId: String? = nil) async throws -> [String: Any] {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
-        let body = try JSONSerialization.data(withJSONObject: [
+        var payload: [String: Any] = [
             "name": name, "birthDate": f.string(from: birthDate),
             "tier": tier, "language": language,
-        ])
+        ]
+        if let voiceId, !voiceId.isEmpty { payload["voiceId"] = voiceId }
+        let body = try JSONSerialization.data(withJSONObject: payload)
         let (data, _) = try await request(method: "POST", path: "/api/onboarding/child",
                                           body: body, contentType: "application/json")
         return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]

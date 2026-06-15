@@ -131,3 +131,33 @@ export async function mapPool(items, limit, worker) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
   return results;
 }
+
+// ── Voice ──────────────────────────────────────────────────────────────────
+
+// The child's chosen TTS voice id from child_settings (null → caller default).
+export async function loadChildVoiceId(db, childId) {
+  try {
+    const row = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+    const v = row && row.settings && row.settings.voiceId;
+    return (typeof v === 'string' && v) ? v : null;
+  } catch (_) { return null; }
+}
+
+// Synthesize `text` to MP3 via ElevenLabs in the chosen voice. Returns a Buffer
+// or null — best-effort, so a TTS hiccup never fails a tile (the board falls
+// back to the system voice when a tile has no recorded clip).
+export async function synthesizeVoice({ text, voiceId } = {}) {
+  const key = process.env.Fletchers_AAC_Device;
+  if (!key || !text || !String(text).trim()) return null;
+  const vid = voiceId || process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
+  const mid = process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
+  try {
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(vid)}`, {
+      method: 'POST',
+      headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+      body: JSON.stringify({ text: String(text).slice(0, 300), model_id: mid }),
+    });
+    if (!r.ok) return null;
+    return Buffer.from(await r.arrayBuffer());
+  } catch (_) { return null; }
+}

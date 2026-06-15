@@ -1,5 +1,6 @@
 import SwiftUI
 import AuthenticationServices
+import AVFoundation
 
 /// The whole onboarding flow, gathered in one file so the sequence reads
 /// top-to-bottom: Demo → Account → Child → Child photo → Parent photo →
@@ -202,6 +203,124 @@ private struct OBStyleSwatch: View {
                 image = UIImage(data: data)
             }
         }
+    }
+}
+
+/// Horizontal chips of the available TTS voices. The picked voice id is stored
+/// on the coordinator and saved to the child, so every generated tile (the Core
+/// seed + the People portraits + anything the parent adds later) speaks in it.
+/// Each chip has a ▶ that auditions the voice from its preview sample.
+private struct OBVoicePicker: View {
+    @Environment(OnboardingCoordinator.self) private var coord
+    @State private var voices: [APIClient.OnboardingVoice] = []
+    @State private var loading = true
+    @State private var player: AVAudioPlayer?
+    @State private var playingId: String?
+
+    private let api = APIClient()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("BOARD VOICE")
+                .font(.system(size: 11, weight: .bold)).tracking(0.6)
+                .foregroundStyle(Color(hex: Brand.muted))
+            Text("How the board talks — tap ▶ to hear each voice.")
+                .font(.system(size: 12))
+                .foregroundStyle(Color(hex: Brand.muted))
+
+            if loading {
+                HStack(spacing: 8) {
+                    ProgressView().tint(Color(hex: Brand.pink))
+                    Text("Loading voices…").font(.system(size: 13)).foregroundStyle(Color(hex: Brand.muted))
+                }
+            } else if voices.isEmpty {
+                Text("Using the default voice.")
+                    .font(.system(size: 13)).foregroundStyle(Color(hex: Brand.muted))
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(voices) { v in
+                            OBVoiceChip(voice: v,
+                                        selected: coord.voiceId == v.id,
+                                        playing: playingId == v.id,
+                                        onSelect: { coord.voiceId = v.id; coord.voiceName = v.name },
+                                        onPreview: { Task { await preview(v) } })
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+        .task {
+            guard voices.isEmpty else { return }
+            defer { loading = false }
+            if let result = try? await api.onboardingVoices() {
+                voices = result
+                if coord.voiceId == nil, let first = result.first {
+                    coord.voiceId = first.id
+                    coord.voiceName = first.name
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func preview(_ v: APIClient.OnboardingVoice) async {
+        guard let urlStr = v.previewUrl, let url = URL(string: urlStr) else { return }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let p = try AVAudioPlayer(data: data)
+            p.prepareToPlay(); p.play()
+            player = p
+            playingId = v.id
+        } catch { /* a failed preview shouldn't block selection */ }
+    }
+}
+
+/// One voice chip — name + a short descriptor, with a play/stop preview button.
+private struct OBVoiceChip: View {
+    let voice: APIClient.OnboardingVoice
+    let selected: Bool
+    let playing: Bool
+    let onSelect: () -> Void
+    let onPreview: () -> Void
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Button(action: onSelect) {
+                VStack(spacing: 4) {
+                    Image(systemName: "waveform.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundStyle(selected ? Color(hex: Brand.pink) : Color(hex: Brand.muted))
+                    Text(voice.name)
+                        .font(.system(size: 12, weight: selected ? .bold : .semibold))
+                        .foregroundStyle(selected ? Color(hex: Brand.pinkDeep) : Color(hex: Brand.ink))
+                        .lineLimit(1)
+                    if let d = voice.description, !d.isEmpty {
+                        Text(d).font(.system(size: 9)).lineLimit(1)
+                            .foregroundStyle(Color(hex: Brand.muted))
+                    }
+                }
+                .frame(width: 104, height: 78)
+                .padding(.horizontal, 4)
+                .background(selected ? Color(hex: Brand.pink).opacity(0.10) : Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(selected ? Color(hex: Brand.pink) : Color(hex: Brand.line),
+                                lineWidth: selected ? 3 : 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onPreview) {
+                Image(systemName: playing ? "stop.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(Color(hex: Brand.pink))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(width: 104)
     }
 }
 
@@ -503,6 +622,7 @@ private struct OnboardingChildView: View {
                     .padding(.leading, 4)
 
                 OBStylePicker()
+                OBVoicePicker()
 
                 if let e = errorText {
                     Text(e).font(.footnote).foregroundStyle(.red)
@@ -540,7 +660,8 @@ private struct OnboardingChildView: View {
                 name: coord.childName.trimmingCharacters(in: .whitespaces),
                 birthDate: coord.birthDate,
                 tier: coord.tier,
-                language: coord.language
+                language: coord.language,
+                voiceId: coord.voiceId
             )
             coord.go(to: .childPhoto)
         } catch {

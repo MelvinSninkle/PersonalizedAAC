@@ -20,7 +20,8 @@ import { randomUUID } from 'node:crypto';
 import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
 import { ensureProgress, setStep, SEED_BAND, SEED_CATEGORY } from '../_lib/onboarding.js';
-import { loadStyleGuide, loadChildAnchor, renderTaxonomyTile, mapPool } from '../_lib/onboarding-render.js';
+import { loadStyleGuide, loadChildAnchor, renderTaxonomyTile, mapPool,
+         loadChildVoiceId, synthesizeVoice } from '../_lib/onboarding-render.js';
 
 export const config = { maxDuration: 300 };
 
@@ -40,10 +41,11 @@ export default async function handler(req, res) {
     const fromData = p.data && p.data.styleGuideId ? Number(p.data.styleGuideId) : null;
     const styleGuideId = fromQuery || fromData || null;
 
-    const [styleGuide, settingsRows, childAnchor] = await Promise.all([
+    const [styleGuide, settingsRows, childAnchor, childVoiceId] = await Promise.all([
       loadStyleGuide(db, styleGuideId),
       db`SELECT master_prompt, size_default FROM lab_settings WHERE id = 1`,
       loadChildAnchor(db, childId),
+      loadChildVoiceId(db, childId),
     ]);
     const settings = settingsRows[0] || { master_prompt: '', size_default: '1024x1024' };
 
@@ -66,17 +68,27 @@ export default async function handler(req, res) {
       const imageKey = `onboarding/${childId}/core/${randomUUID()}.png`;
       await put(imageKey, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
 
+      // Voice the tile in the parent's chosen voice (best-effort — a TTS miss
+      // leaves sound_key null and the board speaks it with the system voice).
+      let soundKey = null;
+      const mp3 = await synthesizeVoice({ text: tax.label, voiceId: childVoiceId });
+      if (mp3) {
+        soundKey = `onboarding/${childId}/voice/${randomUUID()}.mp3`;
+        await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });
+      }
+
       const section = String(tax.column_name || 'needs').toLowerCase();
       // Upsert by taxonomy_slug so re-running the step doesn't duplicate tiles.
       const existing = await db`SELECT id FROM items WHERE child_id = ${childId} AND taxonomy_slug = ${tax.slug} LIMIT 1`;
       if (existing.length) {
-        await db`UPDATE items SET label = ${tax.label}, image_key = ${imageKey}, section = ${section},
+        await db`UPDATE items SET label = ${tax.label}, image_key = ${imageKey},
+                   sound_key = COALESCE(${soundKey}, sound_key), section = ${section},
                    needs_review = FALSE, updated_at = NOW() WHERE id = ${existing[0].id}`;
       } else {
         await db`INSERT INTO items
-                   (section, category_id, label, image_key, keep_aspect, display_order, pinned,
+                   (section, category_id, label, image_key, sound_key, keep_aspect, display_order, pinned,
                     child_id, taxonomy_slug, needs_review, updated_at)
-                 VALUES (${section}, NULL, ${tax.label}, ${imageKey}, FALSE, ${Date.now()}, FALSE,
+                 VALUES (${section}, NULL, ${tax.label}, ${imageKey}, ${soundKey}, FALSE, ${Date.now()}, FALSE,
                     ${childId}, ${tax.slug}, FALSE, NOW())`;
       }
 

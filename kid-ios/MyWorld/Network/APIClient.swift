@@ -206,8 +206,12 @@ struct APIClient {
     /// Returns the raw MP3 bytes. Throws on failure so the caller can surface
     /// an inline error (the legacy `tts` below returns Data? for fire-and-
     /// forget callers like GameAudio that don't need to know what went wrong).
-    func synthesizeSpeech(text: String, emotion: String) async throws -> Data {
-        let body = try JSONSerialization.data(withJSONObject: ["text": text, "emotion": emotion])
+    /// `childId` lets the server resolve that child's chosen voice
+    /// (child_settings.voiceId) so newly created/edited tiles speak in it.
+    func synthesizeSpeech(text: String, emotion: String, childId: String? = nil) async throws -> Data {
+        var payload: [String: Any] = ["text": text, "emotion": emotion]
+        if let childId, !childId.isEmpty { payload["childId"] = childId }
+        let body = try JSONSerialization.data(withJSONObject: payload)
         let (data, _) = try await request(method: "POST", path: "/api/tts",
                                           body: body, contentType: "application/json")
         return data
