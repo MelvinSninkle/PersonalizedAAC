@@ -13,6 +13,8 @@ struct NeedsStrip: View {
     /// add flow pre-set to the Needs section.
     var editMode: Bool = false
     var onAdd: () -> Void = {}
+    /// Tapping a Needs tile while unlocked opens its editor (bubbled to BoardView).
+    var onEditTile: (Tile) -> Void = { _ in }
 
     @Environment(BoardStore.self) private var board
     @Environment(DisplayPrefs.self) private var prefs
@@ -43,15 +45,17 @@ struct NeedsStrip: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: BoardMetrics.tileGap) {
                     ForEach(tiles) { tile in
-                        TileView(tile: tile) { t in
-                            Task {
-                                await TilePlayer.shared.play(
-                                    t,
-                                    childId: auth.childSlug,
-                                    categoryName: "Needs"
-                                )
-                            }
-                        }
+                        TileView(tile: tile,
+                                 onTap: { t in
+                                     Task {
+                                         await TilePlayer.shared.play(
+                                             t,
+                                             childId: auth.childSlug,
+                                             categoryName: "Needs"
+                                         )
+                                     }
+                                 },
+                                 editMode: editMode, onEdit: onEditTile)
                         .frame(width: tileSize)
                     }
                     if editMode {

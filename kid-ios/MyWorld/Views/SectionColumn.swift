@@ -16,6 +16,9 @@ struct SectionColumn: View {
     /// opens the add flow pre-set to this section + whatever folder is showing.
     var editMode: Bool = false
     var onAdd: (BoardSection, Int?) -> Void = { _, _ in }
+    /// Tapping a tile while unlocked opens its editor (matching the web
+    /// organizer). Bubbled up to BoardView, which presents the edit sheet.
+    var onEditTile: (Tile) -> Void = { _ in }
 
     @Environment(BoardStore.self) private var board
     @Environment(DisplayPrefs.self) private var prefs
@@ -92,7 +95,7 @@ struct SectionColumn: View {
         }
         // Room interior — the child long-pressed a room; long-press exits.
         .fullScreenCover(item: $openRoom) { room in
-            RoomInteriorView(room: room) { openRoom = nil }
+            RoomInteriorView(room: room, editMode: editMode, onEditTile: onEditTile) { openRoom = nil }
         }
     }
 
@@ -139,7 +142,8 @@ struct SectionColumn: View {
         return ScrollView {
             LazyVGrid(columns: gridCols, alignment: .leading, spacing: BoardMetrics.tileGap) {
                 ForEach(tiles) { tile in
-                    TileView(tile: tile) { t in playWithLogging(t) }
+                    TileView(tile: tile, onTap: { t in playWithLogging(t) },
+                             editMode: editMode, onEdit: onEditTile)
                     .frame(width: tileSize)
                 }
                 if editMode {
@@ -167,9 +171,9 @@ struct SectionColumn: View {
                 // No rooms configured — show this location's items like normal.
                 LazyVGrid(columns: gridCols, alignment: .leading, spacing: BoardMetrics.tileGap) {
                     ForEach(board.tiles(in: location)) { tile in
-                        TileView(tile: tile) { t in
-                            playWithLogging(t, fallbackCategory: location.label)
-                        }
+                        TileView(tile: tile,
+                                 onTap: { t in playWithLogging(t, fallbackCategory: location.label) },
+                                 editMode: editMode, onEdit: onEditTile)
                         .frame(width: tileSize)
                     }
                 }

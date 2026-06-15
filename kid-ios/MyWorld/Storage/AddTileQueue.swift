@@ -270,9 +270,10 @@ final class AddTileQueue {
 
     private func process(_ job: TileJob, board: BoardStore) async {
         do {
-            // 1) Vision: auto-name + phonetic spelling. Best-effort — if the org
-            //    isn't verified for vision it returns empties and we lean on the
-            //    label the parent may have pre-typed for the batch.
+            // 1) Vision: auto-name only (no phonetic spelling anymore). Best-
+            //    effort — if the org isn't verified for vision it returns an
+            //    empty label and we lean on the name the parent may have typed
+            //    in the pre-gen review step.
             // Only auto-name if the parent didn't already name it in the
             // "hold on, here's more info" step before generation.
             if job.label.trimmingCharacters(in: .whitespaces).isEmpty {

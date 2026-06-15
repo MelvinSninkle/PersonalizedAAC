@@ -266,13 +266,18 @@ struct APIClient {
 
     /// PUT /api/items?id= — updates an existing tile. Only the fields you pass
     /// are changed (the server COALESCEs the rest). Used by the tray edit (fix
-    /// a wrong AI name / placement) and by the review queue (`needsReview:
-    /// false` to confirm a bulk-imported tile).
+    /// a wrong AI name / placement), the review queue (`needsReview: false` to
+    /// confirm a bulk-imported tile), and the board's full tile editor (image,
+    /// voice, pin, keep-aspect, move, description — matching the web dashboard).
     func updateItem(id: Int,
                     label: String? = nil,
                     section: String? = nil,
                     category: CategoryUpdate = .unchanged,
+                    imageKey: String? = nil,
                     soundKey: String? = nil,
+                    keepAspect: Bool? = nil,
+                    pinned: Bool? = nil,
+                    description: String? = nil,
                     needsReview: Bool? = nil,
                     childId: String) async throws -> Tile {
         var body: [String: Any] = ["childId": childId]
@@ -282,7 +287,13 @@ struct APIClient {
         case .unchanged:      break
         case .set(let catId): body["categoryId"] = catId ?? NSNull()
         }
+        if let imageKey    { body["imageKey"]    = imageKey }
         if let soundKey    { body["soundKey"]    = soundKey }
+        if let keepAspect  { body["keepAspect"]  = keepAspect }
+        if let pinned      { body["pinned"]      = pinned }
+        // Explicit "" clears the description back to the game's fallback prompt;
+        // nil leaves it untouched (so we only send it when the editor changed it).
+        if let description { body["description"] = description }
         if let needsReview { body["needsReview"] = needsReview }
         let bodyData = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await request(method: "PUT", path: "/api/items?id=\(id)",
