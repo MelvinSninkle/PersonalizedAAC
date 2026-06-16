@@ -399,6 +399,17 @@ struct APIClient {
                                path: "/api/persons?id=\(id)&childId=\(percentEscape(childId))", body: nil)
     }
 
+    /// POST /api/square-tiles — set every tile square except those in a
+    /// TV/movies/posters folder. Returns how many were squared vs left as posters.
+    @discardableResult
+    func squareAllTiles(childId: String) async throws -> (squared: Int, posters: Int) {
+        let (data, _) = try await request(method: "POST",
+                                          path: "/api/square-tiles?childId=\(percentEscape(childId))", body: nil)
+        struct R: Codable { let squared: Int; let posters: Int }
+        let r = try JSONDecoder().decode(R.self, from: data)
+        return (r.squared, r.posters)
+    }
+
     /// GET the child's active/recent jobs for the tray.
     func listTileJobs(childId: String) async throws -> [TileJobStatus] {
         let (data, _) = try await request(method: "GET",
