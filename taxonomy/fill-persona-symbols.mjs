@@ -170,6 +170,30 @@ const CORE_GESTURES = {
   'wait': 'sitting with hands folded in their lap, waiting patiently',
 };
 
+// ---- COLOR-CODED EMBODIMENT — the child WEARS the color + HOLDS the symbol ---
+// A small set of words carry a culturally-conventional COLOR, not just a symbol.
+// For these the child embodies it (wears the color shirt, holds the symbol) so
+// the color-coding itself teaches the word: the yes/no check-vs-X convention and
+// the traffic-light trio (stop = red, wait = yellow, go = green). Rendered the
+// SAME way every time, so a child reads "green + check = yes" across the board.
+// Kept deliberately tight — only words with an unambiguous color convention.
+const SYMBOL_OUTFIT = {
+  'yes':  { color: 'green',  pose: 'smiling and nodding yes',                     held: 'a big bold green check mark' },
+  'no':   { color: 'red',    pose: 'shaking their head firmly',                   held: 'a big bold red X' },
+  'stop': { color: 'red',    pose: 'one palm held out flat and firm',             held: 'a red octagon STOP sign' },
+  'wait': { color: 'yellow', pose: 'sitting patiently with hands folded',         held: 'a yellow hourglass' },
+  'go':   { color: 'green',  pose: 'mid-step and pointing forward, ready to move', held: 'a bright green circle' },
+};
+function outfitTemplate(label, oldTemplate) {
+  const o = SYMBOL_OUTFIT[norm(label)];
+  if (!o) return null;
+  const cap = captionOf(oldTemplate, label);
+  return `A {style} of {reference} wearing a bright ${o.color} shirt, ${o.pose}, ` +
+    `holding up ${o.held} clearly toward the viewer. The ${o.color} clothing and the ${o.held} ` +
+    `are the consistent learning cue — render them the exact same way every time this word appears, ` +
+    `and never let them cover the caption. One clear figure on a plain soft pastel background. ${cap}`;
+}
+
 // ---- Affection / comfort phrases — child + family adult TOGETHER ----------
 const TOGETHER = new Set([
   'hug', 'i love you', 'family hug', 'goodnight kiss', 'snuggle', 'cuddle',
@@ -240,12 +264,24 @@ const col = (name) => {
 };
 const CI = { category: col('category'), label: col('label'), template: col('prompt_template'), subjectMode: col('subject_mode') };
 
-const stats = { persona: {}, symbol: 0, skippedPersona: 0, skippedSymbol: 0 };
+const stats = { persona: {}, symbol: 0, outfit: 0, skippedPersona: 0, skippedSymbol: 0 };
 const samples = [];
 for (const r of rows.slice(1)) {
   if (!r[CI.label]) continue;
   const category = r[CI.category], label = r[CI.label];
   const l = norm(label);
+
+  // 0. color-coded embodiment (yes/no/stop/wait/go) — overwrites the gesture +
+  //    beside-symbol template with the "wear the color, hold the symbol" version.
+  //    Deterministic, so re-running is idempotent. Takes the whole row.
+  const outfit = outfitTemplate(label, r[CI.template] || '');
+  if (outfit) {
+    r[CI.template] = outfit;
+    r[CI.subjectMode] = 'child_as_subject';
+    stats.outfit++;
+    if (samples.length < 8) samples.push(`  [OUTFIT / ${label}] ${outfit.slice(0, 150)}…`);
+    continue;
+  }
 
   // 1. persona (skip rows that already carry a person token — idempotent)
   let t = r[CI.template] || '';
@@ -274,6 +310,7 @@ for (const r of rows.slice(1)) {
   }
 }
 
+console.log('color-coded embodiment (wear color + hold symbol):', stats.outfit);
 console.log('persona rewrites by category:', stats.persona);
 console.log('symbol clauses added:', stats.symbol, ' (already present, skipped:', stats.skippedSymbol + ')');
 console.log('rows with existing person tokens left untouched:', stats.skippedPersona);
