@@ -258,6 +258,7 @@
     <h2 style="margin:0;font-size:13px;letter-spacing:.4px;color:#557fa3;text-transform:uppercase;">Board categories <span id="cats-target" style="color:#95a5a6;font-weight:400;text-transform:none;letter-spacing:0;"></span></h2>
     <span class="stat" id="cats-stat">— total</span>
     <label style="font-size:11px;color:#557fa3;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="cats-only-missing"> only missing or no image</label>
+    <button id="cats-fill-all" onclick="fillAllCategoryIcons()" style="font-size:11px;border:1px solid #2d7ff9;background:#eaf2ff;color:#2d7ff9;border-radius:6px;padding:3px 9px;cursor:pointer;">✨ Fill all icons</button>
     <span style="flex:1;"></span>
     <span style="font-size:11px;color:#95a5a6;">Create category chips here BEFORE generating tiles in that category — publish blocks otherwise.</span>
   </div>
@@ -592,6 +593,29 @@ async function generateCategory(row, div) {
   } catch (err) {
     div.innerHTML = orig;
     alert('Category generate failed: ' + (err.message || err));
+  }
+}
+async function fillAllCategoryIcons() {
+  const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
+  if (!confirm('Generate the curated icon for every category/subcategory chip that has none, for ' + childId + '?')) return;
+  const btn = $('cats-fill-all'); if (btn) btn.disabled = true;
+  let total = 0, fails = 0, rounds = 0;
+  try {
+    // Each call fills up to a capped batch; loop until nothing's left (the
+    // missing set shrinks each round). Cap rounds + stop if a round does nothing.
+    while (rounds++ < 40) {
+      if (btn) btn.textContent = `✨ Filling… (${total} done)`;
+      const r = await api('POST', '/api/admin/lab-category-fill', { childId });
+      total += r.generated || 0; fails += r.failed || 0;
+      if (!r.remaining) break;
+      if ((r.generated || 0) === 0) break;   // remaining are all failing — bail
+    }
+    await loadBoardState(); renderTiles();
+    alert(`Done — generated ${total} category icon(s)` + (fails ? `, ${fails} failed (retry to finish).` : '.'));
+  } catch (err) {
+    alert('Fill all icons failed: ' + (err.message || err));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✨ Fill all icons'; }
   }
 }
 function decorateBoardNote(t, card) {

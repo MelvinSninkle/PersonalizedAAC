@@ -575,7 +575,8 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `GET /api/admin/lab-board-state?childId=` | What's already on the child's board, indexed for the walker's "needs X first" hints |
 | `GET /api/admin/lab-categories?childId=` | Every category/subcategory chip the library needs, joined with the child's existing chips (status + image_key) |
 | `POST /api/admin/lab-category-upload` | Upload a chip image — creates the category row if missing |
-| `POST /api/admin/lab-category-generate` | Generate a chip image with the active style guide — creates the category row if missing |
+| `POST /api/admin/lab-category-generate` | Generate one chip image — curated icon (`_lib/category-icons.js`) when the folder is known, generic otherwise; active style guide; creates the category row if missing |
+| `POST /api/admin/lab-category-fill` | Batch: fill the curated icon for every category/subcategory chip on a child's board that has none (paged via `remaining`; `force` to redo all) — the Lab's "✨ Fill all icons" |
 | `GET/PATCH/DELETE /api/admin/tile-generations` | The QC strip: list candidates, star the winner, set rating/notes, delete |
 
 ---
