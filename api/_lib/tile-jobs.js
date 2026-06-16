@@ -91,10 +91,12 @@ async function describeLabel(buffer, contentType) {
 }
 
 // Re-illustrate the source photo in the house style, anchored to the style-guide
-// image so the result matches the board. Returns { ok, b64, prompt, costCents }
-// or { ok:false, detail }.
-export async function renderStyledPhoto({ photo, contentType, label, detail, style, styleGuide, model, bg }) {
+// image so the result matches the board. `section` tunes the subject rule:
+// People keep their face; objects never grow cartoon faces. Returns
+// { ok, b64, prompt, costCents } or { ok:false, detail }.
+export async function renderStyledPhoto({ photo, contentType, label, detail, style, styleGuide, model, bg, section }) {
   const subject = label ? `"${label}"` : 'the main subject';
+  const isPerson = String(section || '').toLowerCase() === 'people';
   const detailClause = detail ? ` Important detail from the family: ${detail}.` : '';
   const captionClause = label
     ? ` At the very bottom, add a clean caption band with the word “${label}”, spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered; put no other text anywhere else.`
@@ -102,13 +104,17 @@ export async function renderStyledPhoto({ photo, contentType, label, detail, sty
   const styleClause = (styleGuide && styleGuide.image)
     ? ` Match the art style of the style-reference image exactly — its palette, linework, shading, and finish — so this tile is consistent with the rest of the board.`
     : '';
+  // People keep their likeness; everything else gets the strict no-faces rule so
+  // a cup/duck/car doesn't come back with cartoon eyes.
+  const subjectRule = isPerson
+    ? ` This is a person — keep their face and likeness clearly recognizable from the source photo.`
+    : ` If ${subject} is an inanimate object, draw it as it appears in the photo — do NOT add eyes, mouths, ` +
+      `faces, or smiles unless the real object physically has them.`;
   let prompt =
     `Re-illustrate this photograph as a ${style || 'soft illustration'} of ${subject} for a young child's ` +
     `communication app. Keep ${subject} clearly recognizable and centered, on a simple ${bgPhrase(bg)} ` +
     `background, with bright friendly colors and a gentle, age-appropriate look.` +
-    detailClause + captionClause + styleClause +
-    ` If ${subject} is an inanimate object, draw it as it appears in the photo — do NOT add eyes, mouths, ` +
-    `faces, or smiles unless the real object physically has them.`;
+    detailClause + captionClause + styleClause + subjectRule;
 
   // Ordered images + positional legend (style guide first, source photo second).
   const images = [];
@@ -159,6 +165,7 @@ export async function processTileJob(db, jobId) {
     const r = await renderStyledPhoto({
       photo: src.buffer, contentType: ct, label, detail: job.detail,
       style: job.style, styleGuide, model: job.model, bg: job.bg,
+      section: job.section,
     });
     if (r.ok) {
       imageBytes = Buffer.from(r.b64, 'base64'); imageExt = 'png'; imageCT = 'image/png';
@@ -201,6 +208,21 @@ export async function processTileJob(db, jobId) {
            ${!!job.keep_aspect}, ${Date.now()}, FALSE, ${job.child_id}, ${needsReview}, NOW())
         RETURNING id`;
       itemId = Number(it[0].id);
+    }
+
+    // A photo added to the People section IS a person — register them (or
+    // refresh their portrait) so future taxonomy tiles can reference them by
+    // name (e.g. the new doctor), exactly like the onboarding family members.
+    if (section === 'people' && label && !artFailed) {
+      try {
+        const ex = await db`SELECT id FROM persons WHERE child_id = ${job.child_id} AND lower(display_name) = lower(${label}) LIMIT 1`;
+        if (ex.length) {
+          await db`UPDATE persons SET reference_key = ${imageKey}, updated_at = NOW() WHERE id = ${ex[0].id}`;
+        } else {
+          await db`INSERT INTO persons (child_id, display_name, given_name, relationship, is_self, reference_key)
+                   VALUES (${job.child_id}, ${label}, ${label}, 'other', FALSE, ${imageKey})`;
+        }
+      } catch (_) { /* persons registration is best-effort */ }
     }
 
     try {
