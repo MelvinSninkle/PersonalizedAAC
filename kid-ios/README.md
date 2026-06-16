@@ -20,7 +20,8 @@ Therapist / admin / Lab stay on the web app by design.
 
 | Screen | Endpoint(s) |
 | --- | --- |
-| Add a tile | reuses the iPad's `AddTileQueue` chain (describe → generate → tts → items) |
+| Add a tile | `AddTileQueue` uploads to the durable `POST /api/tile-jobs` queue (server renders + a cron lands the tile; the photo can't be lost) and polls status |
+| Family & people | `GET/POST/DELETE /api/persons` + the durable People-section pipeline — add/replace/rename reference faces anytime |
 | Quick board (PRD §4.3) | the same `BoardView`, full screen; long-press the lock pill 1.2s to exit |
 | Start a game (PRD §4.4) | `POST /api/live` kind=cmd (`start` / `end`); tablet presence via status age |
 | Message the board (PRD §4.7) | `POST /api/message-to-board` → token preview strip |
@@ -34,12 +35,13 @@ zoom, gesture fights with the kid's actual taps). Native UIKit/SwiftUI gesture
 handlers fire on the touch-down event with no delay — that's the whole point.
 
 Backend: this app calls the same `/api/auth/login`, `/api/sync`, `/api/media`,
-`/api/events`, `/api/live`, `/api/tts` endpoints as the web app, plus — for the
-in-app tile editor — `/api/describe-image`, `/api/generate-image`, `/api/upload`,
-and `/api/items` (create / update / delete). The only schema change it relies on
-is the additive `items.needs_review` flag for the bulk-import review queue (run
-`POST /api/init` once to apply it). Auth is cookie-based via `URLSession` +
-`HTTPCookieStorage` (same flow as Safari, just from a native client).
+`/api/events`, `/api/live`, `/api/tts` endpoints as the web app, plus — for tile
+authoring + people — the durable `/api/tile-jobs` queue, `/api/items` and
+`/api/generate-image` (board-editor regenerate), `/api/persons` (Family & people),
+and `/api/onboarding/{styles,voices,child,family,seed-core}`. New schema: the
+`tile_jobs` table (self-creates via `ensureTileJobs`) and `child_settings.styleGuideId`
+/ `voiceId`; the `run-tile-jobs` cron is in `vercel.json`. Auth is cookie-based via
+`URLSession` + `HTTPCookieStorage` (same flow as Safari, just from a native client).
 
 ## Setup on a fresh Mac
 
@@ -125,31 +127,40 @@ parent can add tiles without bouncing out to Safari. The full dashboard
 
 ## Tile authoring (parent edit mode)
 
-Long-press the lock → edit mode → **+ New tile** (single) or **Add several from
-Photos** (bulk). Both run the same chain: photo → `/api/describe-image`
-(auto name + phonetic) → `/api/generate-image` (styled art) → `/api/tts` (voice)
-→ review → `/api/items`.
+Long-press the lock → edit mode → **Add a tile** (single) or **Choose photo(s)**
+(bulk). The work runs **server-side and durably**: the photo uploads to
+`POST /api/tile-jobs` (safe the instant it returns), and the server names →
+generates style-consistent art → voices → places the tile, with a one-minute
+cron (`/api/cron/run-tile-jobs`) guaranteeing completion. No phonetic
+pronunciation — TTS speaks the title.
 
-- **Background render with progress rings.** Captures return instantly; each
-  photo becomes a `TileJob` in an app-level `AddTileQueue` (max 3 rendering at
-  once) so a parent can keep snapping/picking while tiles render. The header
-  pill shows a live "⏳ N rendering" count.
-- **Bulk = reviewable.** Bulk-imported tiles auto-add to the board flagged
-  `needs_review`; when the batch finishes, a banner on the board opens a review
-  sheet (art + hear-the-voice + editable name / pronunciation). The same queue
-  surfaces on the web parent dashboard. A typed name/pronunciation supersedes
-  the AI's.
+- **Pre-generation review.** A single capture pauses on a "hold on — here's more
+  info" sheet: override the name (blank → AI names it) and add an optional detail
+  hint that steers the art, before generation starts.
+- **Durable + restart-proof.** Each photo becomes a `tile_jobs` row server-side;
+  the in-app tray just polls and reappears in-flight after an app restart. The
+  photo can't be lost — final-attempt save-first keeps the raw photo as the tile.
+- **Edit any tile on unlock.** Tapping a tile in edit mode opens `BoardTileEditSheet`
+  — rename, swap picture (new photo → art or use as-is), keep-aspect, re-voice,
+  pin (People), move section/folder, set the listening-game description, delete.
+- **Bulk = reviewable.** Bulk-imported tiles auto-add flagged `needs_review`; when
+  the batch finishes, a banner opens a review sheet (art + ▶ voice + editable
+  name). A typed name supersedes the AI's.
+- **Square-except-TV.** Tiles render square; a folder named TV/Movies/Shows/Posters
+  shows its tiles as posters (rectangular). Settings → "Make all tiles square"
+  normalizes stored `keep_aspect`.
 
 Relevant files:
 
 ```
-Storage/AddTileQueue.swift   TileJob + queue: AI chain, concurrency gate, batch + review notice
+Storage/AddTileQueue.swift   TileJob view-model + upload-to-/api/tile-jobs + poll loop
 Storage/ImageDownscale.swift Shared photo → ≤1024px JPEG helper
-Views/AddTileView.swift      Add-Tiles sheet: destination, capture buttons, render tray
-Views/TileEditSheet.swift    Fix/name a single tile (create-or-update)
+Views/AddTileView.swift      Add-Tiles sheet: destination, capture, pre-gen review, tray
+Views/TileEditSheet.swift    TileEditSheet (tray) + BoardTileEditSheet (full board editor)
 Views/BatchReviewView.swift  Review queue sheet for needs_review tiles
 Views/CameraPicker.swift     UIImagePickerController bridge (system camera)
-Views/HeaderBar.swift        Edit-mode pills incl. + New tile + the rendering badge
+Parent/PeopleManager (in ParentHomeView.swift)  Family & people: persons + reference photos
+Parent/OnboardingFlow.swift  Onboarding incl. style + voice pickers, repeatable grown-ups
 ```
 
 Camera/Photos usage strings live in `project.yml` (baked into `Info.plist` on
