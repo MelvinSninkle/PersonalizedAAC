@@ -538,15 +538,19 @@ let boardState = { bySlug: new Map(), byKey: new Map(), catSet: new Set() };
 let catList = [];     // [{section,label,parentLabel,hasImage,imageKey,boardId,parentMissing,tileCount,prompt}]
 const editedPrompts = new Map();   // catKey -> edited prompt, so tweaks survive a reload
 const catKey = (r) => (r.section + '|' + (r.parentLabel || '') + '|' + r.label).toLowerCase();
+let catLoadErr = '';
 async function loadBoardState() {
   const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
-  try {
-    const [bs, cs, ps] = await Promise.all([
-      api('GET', '/api/admin/lab-board-state?childId=' + encodeURIComponent(childId)),
-      api('GET', '/api/admin/lab-categories?childId=' + encodeURIComponent(childId)),
-      api('GET', '/api/persons?childId=' + encodeURIComponent(childId)).catch(() => ({ persons: [] })),
-    ]);
-    personsList = (ps && ps.persons) || [];
+  // Capture each call's error independently — a failure in one endpoint must not
+  // blank the whole panel, and we surface the real message instead of hiding it
+  // (the old single try/catch swallowed errors and left the panel reading 0/0).
+  const [bs, cs, ps] = await Promise.all([
+    api('GET', '/api/admin/lab-board-state?childId=' + encodeURIComponent(childId)).catch(e => ({ __err: 'board-state: ' + (e.message || e) })),
+    api('GET', '/api/admin/lab-categories?childId=' + encodeURIComponent(childId)).catch(e => ({ __err: 'categories: ' + (e.message || e) })),
+    api('GET', '/api/persons?childId=' + encodeURIComponent(childId)).catch(() => ({ persons: [] })),
+  ]);
+  personsList = (ps && ps.persons) || [];
+  if (bs && !bs.__err) {
     const next = { bySlug: new Map(), byKey: new Map(), catSet: new Set() };
     for (const it of bs.items || []) {
       if (it.taxonomy_slug) next.bySlug.set(it.taxonomy_slug, it);
@@ -554,10 +558,13 @@ async function loadBoardState() {
     }
     for (const c of bs.categories || []) next.catSet.add((c.section || '').toLowerCase() + '|' + (c.label || '').toLowerCase());
     boardState = next;
+  }
+  if (cs && !cs.__err) {
     catList = cs.rows || [];
     for (const r of catList) { const k = catKey(r); if (editedPrompts.has(k)) r.prompt = editedPrompts.get(k); }
-    renderCategoryPanel();
-  } catch (_) { /* keep prior state on failure */ }
+  }
+  catLoadErr = [bs, cs].filter(x => x && x.__err).map(x => x.__err).join(' · ');
+  renderCategoryPanel();
 }
 
 function renderCategoryPanel() {
@@ -568,7 +575,9 @@ function renderCategoryPanel() {
   const onlyMissing = $('cats-only-missing') && $('cats-only-missing').checked;
   const rows = catList.filter(r => !onlyMissing || !r.hasImage);
   const total = catList.length, withImg = catList.filter(r => r.hasImage).length, missingChip = catList.filter(r => !r.boardId).length;
-  $('cats-stat').textContent = `${withImg}/${total} have images · ${missingChip} not yet on board`;
+  $('cats-stat').textContent = catLoadErr
+    ? ('⚠ couldn’t load categories — ' + catLoadErr)
+    : `${withImg}/${total} have images · ${missingChip} not yet on board`;
   list.innerHTML = '';
   for (const r of rows) {
     const div = document.createElement('div');
@@ -679,12 +688,22 @@ async function loadTaxonomy() {
   $('stat-tiles').textContent = tiles.length + ' tiles';
   // populate filter dropdowns
   const sections = [...new Set(tiles.map(t => t.column).filter(Boolean))].sort();
-  const categories = [...new Set(tiles.map(t => t.category).filter(Boolean))].sort();
   const audiences = [...new Set(tiles.map(t => t.audience).filter(Boolean))].sort();
   fillSelect($('f-section'), sections);
-  fillSelect($('f-category'), categories);
   fillSelect($('f-audience'), audiences);
+  refreshCategoryOptions();   // Category list is scoped to the selected Section
   applyFilters();
+}
+
+// The Category dropdown only lists categories that exist in the currently
+// selected Section (or every category when Section = All) — so it never offers
+// a category that belongs to a different strip.
+function refreshCategoryOptions() {
+  const sec = $('f-section').value;
+  const prev = $('f-category').value;
+  const cats = [...new Set(tiles.filter(t => !sec || t.column === sec).map(t => t.category).filter(Boolean))].sort();
+  fillSelect($('f-category'), cats);
+  if (prev && !cats.includes(prev)) $('f-category').value = '';
 }
 
 function fillSelect(sel, values) {
@@ -719,7 +738,8 @@ function applyFilters() {
   renderTiles();
 }
 
-['f-section','f-category','f-audience','f-image','f-page-size'].forEach(id => $(id).addEventListener('change', applyFilters));
+['f-category','f-audience','f-image','f-page-size'].forEach(id => $(id).addEventListener('change', applyFilters));
+$('f-section').addEventListener('change', () => { refreshCategoryOptions(); applyFilters(); });
 $('f-search').addEventListener('input', debounce(applyFilters, 200));
 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
