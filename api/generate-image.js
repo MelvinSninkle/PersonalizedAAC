@@ -8,7 +8,7 @@ import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
 import { geminiKey, geminiDefaultModel, isGeminiModel, geminiCostCents, geminiGenerateImage } from './_lib/gemini.js';
-import { loadStyleGuide, loadChildStyleGuideId } from './_lib/onboarding-render.js';
+import { loadStyleGuide, loadChildStyleGuideId, SQUARE_RULE } from './_lib/onboarding-render.js';
 
 // gpt-image-1.5 / -2 at high quality + input_fidelity:high can legitimately run
 // 60-120s for an edit. 300s is Vercel Pro's hard ceiling for serverless
@@ -243,6 +243,7 @@ export default async function handler(req, res) {
     `physically present on the real object in the photo.` + refClause;
   // Positional legend so the model never confuses the style exemplar with the
   // subject (source photo is image 1, the style guide is image 2).
+  prompt += SQUARE_RULE;
   if (styleBuf) {
     prompt += `\n\nImage 1 is the source photo — re-illustrate THIS subject. ` +
       `Image 2 is the STYLE reference — copy its art style only (palette, linework, finish), not its content.`;
@@ -258,7 +259,7 @@ export default async function handler(req, res) {
       const gKey = geminiKey();
       if (!gKey) { res.status(500).json({ error: 'GEMINI_API_KEY env var not configured' }); return; }
       const g = await geminiGenerateImage({
-        apiKey: gKey, model, prompt,
+        apiKey: gKey, model, prompt, aspectRatio: '1:1',
         images: [
           { buffer, contentType: req.headers['content-type'] || 'image/jpeg' },
           ...(styleBuf ? [{ buffer: styleBuf.buffer, contentType: styleBuf.contentType }] : []),

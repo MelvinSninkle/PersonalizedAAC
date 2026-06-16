@@ -27,7 +27,7 @@ import { sql } from '../_lib/db.js';
 import { geminiKey, geminiDefaultModel, geminiGenerateImage } from '../_lib/gemini.js';
 import { ensureProgress, nextStep, setStep } from '../_lib/onboarding.js';
 import { isValidRelationship, relationshipNeedsSide } from '../_lib/relationships.js';
-import { loadStyleGuide, loadChildVoiceId, synthesizeVoice } from '../_lib/onboarding-render.js';
+import { loadStyleGuide, loadChildVoiceId, synthesizeVoice, SQUARE_RULE } from '../_lib/onboarding-render.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 300 };
 
@@ -88,8 +88,9 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
     images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
     prompt = STYLE_PROMPT_BASE + variant;
   }
+  prompt += SQUARE_RULE;
 
-  const g = await geminiGenerateImage({ apiKey: gKey, model: geminiDefaultModel(), prompt, images });
+  const g = await geminiGenerateImage({ apiKey: gKey, model: geminiDefaultModel(), prompt, images, aspectRatio: '1:1' });
   if (!g.ok) {
     const err = new Error('Stylization failed: ' + (g.detail || '').slice(0, 200));
     err.status = g.status || 502; throw err;

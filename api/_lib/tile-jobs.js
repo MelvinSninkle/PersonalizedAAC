@@ -13,7 +13,7 @@
 import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { geminiKey, geminiDefaultModel, isGeminiModel, geminiGenerateImage, geminiCostCents } from './gemini.js';
-import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice } from './onboarding-render.js';
+import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, SQUARE_RULE } from './onboarding-render.js';
 
 export const MAX_ATTEMPTS = 3;
 
@@ -116,7 +116,7 @@ export async function renderStyledPhoto({ photo, contentType, label, detail, sty
     `Re-illustrate this photograph as a ${style || 'soft illustration'} of ${subject} for a young child's ` +
     `communication app. Keep ${subject} clearly recognizable and centered, on a simple ${bgPhrase(bg)} ` +
     `background, with bright friendly colors and a gentle, age-appropriate look.` +
-    detailClause + captionClause + styleClause + subjectRule;
+    detailClause + captionClause + styleClause + subjectRule + SQUARE_RULE;
 
   // Ordered images + positional legend (style guide first, source photo second).
   const images = [];
@@ -132,7 +132,7 @@ export async function renderStyledPhoto({ photo, contentType, label, detail, sty
   const gKey = geminiKey();
   if (!gKey) return { ok: false, detail: 'GEMINI_API_KEY not configured' };
   const useModel = isGeminiModel(model) ? model : geminiDefaultModel();
-  const g = await geminiGenerateImage({ apiKey: gKey, model: useModel, prompt, images });
+  const g = await geminiGenerateImage({ apiKey: gKey, model: useModel, prompt, images, aspectRatio: '1:1' });
   if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
   return { ok: true, b64: g.b64, prompt, model: useModel, costCents: geminiCostCents(useModel) };
 }
