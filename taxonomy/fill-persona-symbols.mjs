@@ -189,7 +189,7 @@ function outfitTemplate(label, oldTemplate) {
   if (!o) return null;
   const cap = captionOf(oldTemplate, label);
   return `A {style} of {reference} wearing a bright ${o.color} shirt, ${o.pose}, ` +
-    `holding up ${o.held} clearly toward the viewer. The ${o.color} clothing and the ${o.held} ` +
+    `holding up ${o.held} clearly toward the viewer. The ${o.color} clothing and ${o.held} ` +
     `are the consistent learning cue — render them the exact same way every time this word appears, ` +
     `and never let them cover the caption. One clear figure on a plain soft pastel background. ${cap}`;
 }
