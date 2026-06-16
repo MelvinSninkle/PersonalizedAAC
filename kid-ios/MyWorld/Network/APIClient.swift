@@ -312,6 +312,117 @@ struct APIClient {
         _ = try await request(method: "DELETE", path: "/api/items?id=\(id)", body: nil)
     }
 
+    // MARK: -- Durable server-side tile jobs
+
+    /// One server job's status (for the add-tile tray to poll).
+    struct TileJobStatus: Codable, Identifiable {
+        let id: Int
+        let status: String          // queued | processing | done | failed
+        let label: String?
+        let itemId: Int?
+        let artFailed: Bool
+        let needsReview: Bool
+        let error: String?
+        let attempts: Int
+    }
+    private struct TileJobsList: Codable { let jobs: [TileJobStatus] }
+    private struct TileJobCreated: Codable { let id: Int; let status: String }
+
+    /// POST a photo to the durable server queue. The photo is persisted
+    /// server-side BEFORE this returns, so it can never be lost; the server then
+    /// renders the tile (style-consistent art + voice) and a cron guarantees it
+    /// lands even if this device disappears. Returns the job id.
+    func createTileJob(photoJPEG: Data, label: String, detail: String, section: String,
+                       categoryId: Int?, style: String, styleGuideId: Int?, model: String,
+                       bg: String, keepAspect: Bool, needsReview: Bool, emotion: String,
+                       childId: String, relationship: String? = nil) async throws -> Int {
+        var path = "/api/tile-jobs?childId=\(percentEscape(childId))&section=\(percentEscape(section))"
+            + "&style=\(percentEscape(style))&model=\(percentEscape(model))&bg=\(percentEscape(bg))"
+            + "&emotion=\(percentEscape(emotion))"
+        if !label.isEmpty  { path += "&label=\(percentEscape(label))" }
+        if !detail.isEmpty { path += "&detail=\(percentEscape(detail))" }
+        if let categoryId  { path += "&categoryId=\(categoryId)" }
+        if let styleGuideId { path += "&styleGuideId=\(styleGuideId)" }
+        if let relationship, !relationship.isEmpty { path += "&relationship=\(percentEscape(relationship))" }
+        if keepAspect  { path += "&keepAspect=1" }
+        if needsReview { path += "&needsReview=1" }
+        let (data, _) = try await request(method: "POST", path: path,
+                                          body: photoJPEG, contentType: "image/jpeg", timeout: 60)
+        return (try JSONDecoder().decode(TileJobCreated.self, from: data)).id
+    }
+
+    // MARK: -- People / family (persons)
+
+    /// A reference person — the child (is_self) and family/caregivers whose face
+    /// anchors the tiles about them. `referenceKey` is their stylized portrait.
+    struct Person: Codable, Identifiable, Hashable {
+        let id: Int
+        let displayName: String
+        let givenName: String?
+        let relationship: String
+        let isSelf: Bool
+        let referenceKey: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case displayName  = "display_name"
+            case givenName    = "given_name"
+            case relationship
+            case isSelf       = "is_self"
+            case referenceKey = "reference_key"
+        }
+    }
+    private struct PersonsList: Codable { let persons: [Person] }
+
+    /// GET the child's reference people (child + family).
+    func listPersons(childId: String) async throws -> [Person] {
+        let (data, _) = try await request(method: "GET",
+                                          path: "/api/persons?childId=\(percentEscape(childId))", body: nil)
+        return (try JSONDecoder().decode(PersonsList.self, from: data)).persons
+    }
+
+    /// POST structured person fields (name / relationship) — no photo. Upserts by
+    /// id or, failing that, by display name. Returns the person id.
+    @discardableResult
+    func upsertPerson(id: Int?, displayName: String, relationship: String, childId: String) async throws -> Int {
+        var body: [String: Any] = ["childId": childId, "displayName": displayName, "relationship": relationship]
+        if let id { body["id"] = id }
+        let data = try JSONSerialization.data(withJSONObject: body)
+        let (resp, _) = try await request(method: "POST", path: "/api/persons",
+                                          body: data, contentType: "application/json")
+        struct R: Codable { let id: Int }
+        return (try JSONDecoder().decode(R.self, from: resp)).id
+    }
+
+    func deletePerson(id: Int, childId: String) async {
+        _ = try? await request(method: "DELETE",
+                               path: "/api/persons?id=\(id)&childId=\(percentEscape(childId))", body: nil)
+    }
+
+    /// POST /api/square-tiles — set every tile square except those in a
+    /// TV/movies/posters folder. Returns how many were squared vs left as posters.
+    @discardableResult
+    func squareAllTiles(childId: String) async throws -> (squared: Int, posters: Int) {
+        let (data, _) = try await request(method: "POST",
+                                          path: "/api/square-tiles?childId=\(percentEscape(childId))", body: nil)
+        struct R: Codable { let squared: Int; let posters: Int }
+        let r = try JSONDecoder().decode(R.self, from: data)
+        return (r.squared, r.posters)
+    }
+
+    /// GET the child's active/recent jobs for the tray.
+    func listTileJobs(childId: String) async throws -> [TileJobStatus] {
+        let (data, _) = try await request(method: "GET",
+                                          path: "/api/tile-jobs?childId=\(percentEscape(childId))", body: nil)
+        return (try JSONDecoder().decode(TileJobsList.self, from: data)).jobs
+    }
+
+    /// DELETE a job (and its blobs); leaves any tile it already created alone.
+    func deleteTileJob(id: Int, childId: String) async {
+        _ = try? await request(method: "DELETE",
+                               path: "/api/tile-jobs?id=\(id)&childId=\(percentEscape(childId))", body: nil)
+    }
+
     /// Fire-and-forget POST to any path that doesn't need a body or response —
     /// used for things like `/api/play-request?childId=...`.
     func postEmpty(path: String) async {

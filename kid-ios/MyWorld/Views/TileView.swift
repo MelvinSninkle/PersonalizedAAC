@@ -10,6 +10,10 @@ struct TileView: View {
     /// speaking (matching the web organizer). A pencil badge marks it editable.
     var editMode: Bool = false
     var onEdit: (Tile) -> Void = { _ in }
+    /// Tiles are square everywhere EXCEPT a TV/movies folder, where they show
+    /// their natural rectangular aspect (movie posters). Driven by the folder,
+    /// not the per-tile flag, so the board stays consistent.
+    var posterMode: Bool = false
 
     @Environment(DisplayPrefs.self) private var prefs
     @State private var image: UIImage?
@@ -25,7 +29,7 @@ struct TileView: View {
                     if let img = image {
                         Image(uiImage: img)
                             .resizable()
-                            .aspectRatio(contentMode: tile.keepAspect ? .fit : .fill)
+                            .aspectRatio(contentMode: posterMode ? .fit : .fill)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()
                     } else {

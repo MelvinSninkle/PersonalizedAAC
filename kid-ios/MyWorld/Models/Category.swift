@@ -22,6 +22,10 @@ struct Category: Codable, Identifiable, Hashable {
 
     var isLocation: Bool { kind == "location" }
     var isRoom: Bool { kind == "room" }
+    /// A "TV / Movies / Shows / Posters" folder — the one place tiles render in
+    /// their natural rectangular aspect (movie posters). Everywhere else stays
+    /// square. Matched by name so a parent just names the folder.
+    var isPoster: Bool { categoryNameIsPoster(label) }
 
     enum CodingKeys: String, CodingKey {
         case id, section, label
@@ -53,4 +57,17 @@ struct Category: Codable, Identifiable, Hashable {
         taxonomySlug = try c.decodeIfPresent(String.self, forKey: .taxonomySlug)
         kind = try c.decodeIfPresent(String.self, forKey: .kind)
     }
+}
+
+/// True when a folder name marks it as the TV/movies poster shelf — its tiles
+/// render in their natural rectangular aspect. Matched on whole words for "tv"
+/// (so it never trips on words that merely contain those letters) and on
+/// substrings for the unambiguous ones.
+func categoryNameIsPoster(_ label: String) -> Bool {
+    let l = label.lowercased()
+    if l.contains("movie") || l.contains("show") || l.contains("poster") || l.contains("cinema") {
+        return true
+    }
+    let words = l.split { !$0.isLetter }.map(String.init)
+    return words.contains("tv") || words.contains("tvs")
 }

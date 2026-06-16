@@ -128,7 +128,8 @@ struct RoomInteriorView: View {
                                              )
                                          }
                                      },
-                                     editMode: editMode, onEdit: onEditTile)
+                                     editMode: editMode, onEdit: onEditTile,
+                                     posterMode: room.isPoster)
                             .frame(width: tile)
                         }
                     }

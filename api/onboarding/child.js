@@ -23,6 +23,11 @@ export default async function handler(req, res) {
   // parent's pick so every tile's generated audio speaks in that voice.
   const voiceId = typeof b.voiceId === 'string' && /^[A-Za-z0-9]{8,40}$/.test(b.voiceId.trim())
     ? b.voiceId.trim() : null;
+  // The chosen art style (a style_guides id) becomes the child's HOUSE STYLE —
+  // every tile generated later attaches this exemplar so the board stays
+  // visually consistent.
+  const styleGuideId = Number.isFinite(Number(b.styleGuideId)) && Number(b.styleGuideId) > 0
+    ? Number(b.styleGuideId) : null;
   if (!name) { res.status(400).json({ error: 'name required' }); return; }
   if (!birthDate) { res.status(400).json({ error: 'birthDate (YYYY-MM-DD) required' }); return; }
 
@@ -66,6 +71,7 @@ export default async function handler(req, res) {
     const settings = (csRow && csRow.settings) || {};
     settings.language = language;
     if (voiceId) settings.voiceId = voiceId;
+    if (styleGuideId) settings.styleGuideId = styleGuideId;
     settings.autoTeach = {
       enabled: false,
       cadence: 'conservative',
@@ -80,7 +86,7 @@ export default async function handler(req, res) {
       ON CONFLICT (child_id) DO UPDATE SET settings = ${settings}::jsonb, updated_at = NOW()`;
 
     await setStep(db, Number(auth.user.uid), nextStep('child'),
-                  { childName: name, birthDate, tier, language, voiceId });
+                  { childName: name, birthDate, tier, language, voiceId, styleGuideId });
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({ ok: true, step: nextStep('child'), childId, personId: Number(personId) });
   } catch (err) {

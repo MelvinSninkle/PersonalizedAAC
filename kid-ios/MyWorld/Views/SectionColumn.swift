@@ -143,7 +143,8 @@ struct SectionColumn: View {
             LazyVGrid(columns: gridCols, alignment: .leading, spacing: BoardMetrics.tileGap) {
                 ForEach(tiles) { tile in
                     TileView(tile: tile, onTap: { t in playWithLogging(t) },
-                             editMode: editMode, onEdit: onEditTile)
+                             editMode: editMode, onEdit: onEditTile,
+                             posterMode: effectiveCategory?.isPoster ?? false)
                     .frame(width: tileSize)
                 }
                 if editMode {
@@ -173,7 +174,8 @@ struct SectionColumn: View {
                     ForEach(board.tiles(in: location)) { tile in
                         TileView(tile: tile,
                                  onTap: { t in playWithLogging(t, fallbackCategory: location.label) },
-                                 editMode: editMode, onEdit: onEditTile)
+                                 editMode: editMode, onEdit: onEditTile,
+                                 posterMode: location.isPoster)
                         .frame(width: tileSize)
                     }
                 }

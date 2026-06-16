@@ -51,6 +51,13 @@ function fillTemplate(template, tokens) {
     Object.prototype.hasOwnProperty.call(tokens, key) ? tokens[key] : m);
 }
 
+// Every board tile is shown in a square cell, so generate square art — keeps the
+// subject (and the baked caption) from being cropped by the square fill. Shared
+// by all the photo/taxonomy generators.
+export const SQUARE_RULE =
+  ' Compose the picture as a perfectly SQUARE 1:1 image, with the subject centered and ' +
+  'comfortably filling the frame — no borders, letterboxing, or empty bands on any side.';
+
 // Object-like categories must never grow cartoon faces. Mirrors lab-generate.
 const NO_FACE_CATEGORIES = new Set([
   'Things', 'Tools', 'Clothes', 'Vehicles', 'Toys', 'Food', 'Snacks', 'Treats',
@@ -106,12 +113,13 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
     images.push({ buffer: subject.buffer, contentType: subject.contentType });
     legend.push(`Image ${images.length} shows ${subject.name} — keep this person's face and likeness clearly recognizable.`);
   }
+  prompt += SQUARE_RULE;
   if (legend.length) prompt += '\n\n' + legend.join(' ');
 
   const gKey = geminiKey();
   if (!gKey) return { ok: false, detail: 'GEMINI_API_KEY not configured' };
   const model = geminiDefaultModel();
-  const g = await geminiGenerateImage({ apiKey: gKey, model, prompt, images });
+  const g = await geminiGenerateImage({ apiKey: gKey, model, prompt, images, aspectRatio: '1:1' });
   if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
   return { ok: true, b64: g.b64, contentType: 'image/png', prompt, costCents: geminiCostCents(model), model };
 }
@@ -140,6 +148,18 @@ export async function loadChildVoiceId(db, childId) {
     const row = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
     const v = row && row.settings && row.settings.voiceId;
     return (typeof v === 'string' && v) ? v : null;
+  } catch (_) { return null; }
+}
+
+// The child's chosen house art style (a style_guides id) from child_settings.
+// This is what keeps every tile the parent adds visually consistent with the
+// board — the same exemplar image is attached to every generation.
+export async function loadChildStyleGuideId(db, childId) {
+  try {
+    const row = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+    const v = row && row.settings && row.settings.styleGuideId;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
   } catch (_) { return null; }
 }
 

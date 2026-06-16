@@ -8,6 +8,7 @@ import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
 import { geminiKey, geminiDefaultModel, isGeminiModel, geminiCostCents, geminiGenerateImage } from './_lib/gemini.js';
+import { loadStyleGuide, loadChildStyleGuideId, SQUARE_RULE } from './_lib/onboarding-render.js';
 
 // gpt-image-1.5 / -2 at high quality + input_fidelity:high can legitimately run
 // 60-120s for an edit. 300s is Vercel Pro's hard ceiling for serverless
@@ -197,21 +198,25 @@ export default async function handler(req, res) {
   }
   if (!buffer.length) { res.status(400).json({ error: 'Empty body' }); return; }
 
-  // Load up to MAX_REFS of the child's reference images (best-effort).
+  // The child's HOUSE STYLE — a style-guide exemplar image attached to every
+  // generation so tiles match the board. Replaces the old `reference_images`
+  // pull, which fed the child's OWN photos as a "style guide" (inconsistent —
+  // a photo has no art style — and not even populated by the current
+  // onboarding, which writes to `persons`). An explicit ?styleGuideId= overrides
+  // the child's saved house style.
   let refKeys = [];
-  const refBufs = [];
+  let styleBuf = null;
   try {
     const db = sql();
-    const rows = await db`SELECT blob_key FROM reference_images WHERE child_id = ${childId} ORDER BY created_at DESC LIMIT ${MAX_REFS}`;
-    refKeys = rows.map((r) => r.blob_key);
-    for (const k of refKeys) {
-      try { refBufs.push(await readBlob(k)); } catch (_) { /* skip unreadable ref */ }
-    }
-  } catch (_) { /* no references table/rows yet */ }
+    const sgParam = parseInt((req.query && req.query.styleGuideId) || '', 10);
+    const sgId = Number.isFinite(sgParam) ? sgParam : await loadChildStyleGuideId(db, childId);
+    const sg = await loadStyleGuide(db, sgId);
+    if (sg && sg.image) { styleBuf = sg.image; refKeys = sg.blob_key ? [sg.blob_key] : []; }
+  } catch (_) { /* no style guide configured → text style only */ }
 
   const subject = label ? `"${label}"` : 'the main subject';
-  const refClause = refBufs.length
-    ? ` Use the additional reference image(s) only as a guide for the art style — do not copy their content.`
+  const refClause = styleBuf
+    ? ` Match the art style of the style-reference image exactly — its palette, linework, shading, and finish — so this tile is consistent with the rest of the board.`
     : '';
   // Parent's call: bake the word INTO the art (the newer models render text
   // cleanly), instead of a separate text band under the tile, which looked bad.
@@ -224,7 +229,7 @@ export default async function handler(req, res) {
   // a soft pastel background that fits the brand.
   const bgPhrase = bg ? bg.phrase : 'a soft pastel';
   const detailClause = detail ? ` Important detail from the family: ${detail}.` : '';
-  const prompt =
+  let prompt =
     `Re-illustrate this photograph as a ${style} of ${subject} for a young child's ` +
     `communication app. Keep ${subject} clearly recognizable and centered, on a simple ` +
     `${bgPhrase} background, with bright friendly colors and a gentle, age-appropriate ` +
@@ -236,6 +241,13 @@ export default async function handler(req, res) {
     ` If ${subject} is an inanimate object, draw it exactly as it appears in the photo — do NOT add ` +
     `eyes, mouths, faces, smiles, or other cartoon human features. Only draw a face if a face is ` +
     `physically present on the real object in the photo.` + refClause;
+  // Positional legend so the model never confuses the style exemplar with the
+  // subject (source photo is image 1, the style guide is image 2).
+  prompt += SQUARE_RULE;
+  if (styleBuf) {
+    prompt += `\n\nImage 1 is the source photo — re-illustrate THIS subject. ` +
+      `Image 2 is the STYLE reference — copy its art style only (palette, linework, finish), not its content.`;
+  }
 
   let costCents = null, inTok = null, outTok = null;
   try {
@@ -247,10 +259,10 @@ export default async function handler(req, res) {
       const gKey = geminiKey();
       if (!gKey) { res.status(500).json({ error: 'GEMINI_API_KEY env var not configured' }); return; }
       const g = await geminiGenerateImage({
-        apiKey: gKey, model, prompt,
+        apiKey: gKey, model, prompt, aspectRatio: '1:1',
         images: [
           { buffer, contentType: req.headers['content-type'] || 'image/jpeg' },
-          ...refBufs.map((rb) => ({ buffer: rb.buffer, contentType: rb.contentType })),
+          ...(styleBuf ? [{ buffer: styleBuf.buffer, contentType: styleBuf.contentType }] : []),
         ],
       });
       if (!g.ok) { res.status(g.status === 429 ? 429 : 502).json({ error: 'Gemini generation failed', detail: g.detail }); return; }
@@ -271,7 +283,7 @@ export default async function handler(req, res) {
         fd.append('input_fidelity', 'high');
       }
       fd.append('image[]', new Blob([buffer], { type: req.headers['content-type'] || 'image/jpeg' }), 'photo.jpg');
-      refBufs.forEach((rb, i) => fd.append('image[]', new Blob([rb.buffer], { type: rb.contentType }), `ref${i}.jpg`));
+      if (styleBuf) fd.append('image[]', new Blob([styleBuf.buffer], { type: styleBuf.contentType }), 'style.jpg');
 
       const upstream = await fetch('https://api.openai.com/v1/images/edits', {
         method: 'POST',

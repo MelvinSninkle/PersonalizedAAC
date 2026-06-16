@@ -28,23 +28,36 @@ export function geminiCostCents(model) {
 
 // Generate one image. `images` is an ordered list of { buffer, contentType }
 // reference inputs (style guide, subject anchor, source photo …) — order must
-// match any positional legend in the prompt. Returns
+// match any positional legend in the prompt. `aspectRatio` (e.g. '1:1') asks the
+// model for a specific shape; if the model rejects the config we retry without
+// it so a square request can never break generation. Returns
 // { ok, b64?, mimeType?, inputTokens?, outputTokens?, status?, detail? }.
-export async function geminiGenerateImage({ apiKey, model, prompt, images = [] }) {
+export async function geminiGenerateImage({ apiKey, model, prompt, images = [], aspectRatio = null }) {
   const parts = [{ text: prompt }];
   for (const im of images) {
     parts.push({ inlineData: { mimeType: im.contentType || 'image/jpeg', data: im.buffer.toString('base64') } });
   }
-  let resp;
-  try {
-    resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const send = (withAspect) => {
+    const generationConfig = { responseModalities: ['TEXT', 'IMAGE'] };
+    if (withAspect && aspectRatio) generationConfig.imageConfig = { aspectRatio };
+    return fetch(url, {
       method: 'POST',
       headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-      }),
+      body: JSON.stringify({ contents: [{ parts }], generationConfig }),
     });
+  };
+  let resp;
+  try {
+    resp = await send(true);
+    // If the imageConfig/aspectRatio field isn't accepted, fall back to a plain
+    // request rather than failing the whole generation.
+    if (!resp.ok && aspectRatio) {
+      const detail = await resp.clone().text().catch(() => '');
+      if (/imageConfig|aspectRatio|unknown name|INVALID_ARGUMENT/i.test(detail)) {
+        resp = await send(false);
+      }
+    }
   } catch (err) {
     return { ok: false, status: 502, detail: String(err.message || err) };
   }
