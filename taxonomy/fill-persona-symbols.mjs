@@ -140,7 +140,113 @@ const SYMBOLS = {
   'know': 'a glowing lightbulb in a thought bubble',
   'remember': 'a thought bubble with a small picture inside',
   'wash': 'soap bubbles and water drops',
+
+  // ── Expanded concept symbols (curated recognizable conventions) ──────────
+  // Weather (Describing)
+  'sunny': 'a bright yellow sun',
+  'cloudy': 'a soft grey cloud',
+  'rainy': 'a grey cloud with blue rain drops falling',
+  'snowy': 'a grey cloud with white snowflakes falling',
+  'windy': 'curved wind-gust lines',
+  'stormy': 'a dark storm cloud with a lightning bolt',
+  'foggy': 'soft horizontal grey fog bands',
+  'lightning': 'a bold yellow lightning bolt',
+  'tornado': 'a grey funnel-cloud spiral',
+  'rainbow': 'a bright rainbow arc',
+  // Size + measure + state (Describing)
+  'big': 'a large circle next to a tiny one',
+  'little': 'a tiny circle next to a large one',
+  'tall': 'a tall bar next to a short one',
+  'short': 'a short bar next to a tall one',
+  'full': 'a glass filled to the top',
+  'empty': 'an empty glass',
+  'heavy': 'a solid black weight',
+  'light_wt': 'a single floating feather',
+  'less': 'a bold minus sign',
+  'good': 'a clear thumbs-up',
+  'bad': 'a clear thumbs-down',
+  'broken': 'an object split by a jagged crack',
+  'new': 'a bright four-point sparkle',
+  'dirty': 'brown smudge spots',
+  'clean': 'a bright sparkle on a clean surface',
+  'dry': 'a sun over dry ground, no water drops',
+  'bright': 'a sun with bold rays',
+  'dark': 'a dim crescent moon',
+  'shiny': 'a bright sparkle glint',
+  'dull': 'a flat grey patch',
+  'first': 'a number-1 award ribbon',
+  'last': 'a checkered finish flag',
+  'right (correct)': 'a bold green check mark',
+  'wrong': 'a bold red X',
+  'closed': 'a closed padlock',
+  'warm': 'a few gentle red warmth lines',
+  'cool': 'a few gentle blue chill lines',
+  'asleep': 'three floating Z letters (zzz)',
+  'awake': 'two wide-open eyes',
+  'deep': 'a downward arrow into deep water',
+  'strong': 'a flexed arm muscle',
+  // Quantifiers
+  'all': 'a full set of dots gathered inside a circle',
+  'none': 'an empty circle with a line through it',
+  'some': 'a few dots, a small handful',
+  'many': 'a large cluster of many dots',
+  'few': 'just two or three dots',
+  'much': 'a big heaped pile',
+  'every': 'a row of dots each marked with a small check',
+  'any': 'a single dot beside a question mark',
+  // Adverbs
+  'quickly': 'horizontal speed lines',
+  'slowly': 'a small snail',
+  'loudly': 'a megaphone with bold sound waves',
+  'quietly': 'a finger-to-lips shh',
+  'always': 'a continuous looping arrow',
+  'never': 'a circle with a bold line through it',
+  'sometimes': 'a half-filled dashed circle',
+  'almost': 'a bar filled almost to the end',
+  'carefully': 'two gentle hands cradling something fragile',
+  'gently': 'a soft open hand with a small heart',
+  // Position (remaining)
+  'here': 'a bold downward arrow to an X marking the spot',
+  'middle': 'a dot centered between two blocks',
+  'front': 'a figure with a forward arrow in front of it',
+  'back': 'a figure with an arrow behind it',
+  'side': 'a block with an arrow pointing to its side',
+  // Time (remaining) + seasons
+  'soon': 'a clock with a small forward arrow',
+  'before': 'a timeline with an arrow pointing to the earlier left',
+  'after': 'a timeline with an arrow pointing to the later right',
+  'afternoon': 'a sun lowered in the western sky',
+  'spring': 'a small green sprout with a flower bud',
+  'summer': 'a big bright sun',
+  'fall': 'a single orange falling leaf',
+  'winter': 'a blue snowflake',
+  'week': 'a calendar showing seven days',
+  'year': 'a calendar showing twelve months',
+  'weekend': 'a calendar with two days circled',
+  'tonight': 'a crescent moon with stars',
+  // Health
+  'medicine': 'a medicine bottle with a dosing spoon',
+  'dizzy': 'a spiral swirl with small stars above the head',
+  'itchy': 'small scratch marks',
+  'sore': 'a red ache starburst on the spot',
+  // Money
+  'money': 'a green banknote with a dollar sign',
+  'dollar': 'a bold dollar sign',
+  'coin': 'a gold coin stamped with a dollar sign',
+  // Greetings
+  'hi': 'an open hand waving hello',
+  'bye': 'an open hand waving goodbye',
 };
+
+// Category/subcategory-derived symbols — where the symbol is the label itself
+// (the color swatch, the shape outline). Numbers/letters are skipped: the glyph
+// is already the content + caption.
+function categorySymbol(sub, label) {
+  const s = norm(sub);
+  if (s === 'colors') return `a large bold solid swatch of the color ${label.toLowerCase()}`;
+  if (s === 'shapes') return `a single large bold clean ${label.toLowerCase()} outline`;
+  return null;
+}
 
 // ---- CORE GESTURES — the child acting out each core word ------------------
 // Specific, repeatable gesture scenes (many follow common ASL/AAC gestures) so
@@ -169,6 +275,30 @@ const CORE_GESTURES = {
   'hurt': 'holding their arm and wincing',
   'wait': 'sitting with hands folded in their lap, waiting patiently',
 };
+
+// ---- COLOR-CODED EMBODIMENT — the child WEARS the color + HOLDS the symbol ---
+// A small set of words carry a culturally-conventional COLOR, not just a symbol.
+// For these the child embodies it (wears the color shirt, holds the symbol) so
+// the color-coding itself teaches the word: the yes/no check-vs-X convention and
+// the traffic-light trio (stop = red, wait = yellow, go = green). Rendered the
+// SAME way every time, so a child reads "green + check = yes" across the board.
+// Kept deliberately tight — only words with an unambiguous color convention.
+const SYMBOL_OUTFIT = {
+  'yes':  { color: 'green',  pose: 'smiling and nodding yes',                     held: 'a big bold green check mark' },
+  'no':   { color: 'red',    pose: 'shaking their head firmly',                   held: 'a big bold red X' },
+  'stop': { color: 'red',    pose: 'one palm held out flat and firm',             held: 'a red octagon STOP sign' },
+  'wait': { color: 'yellow', pose: 'sitting patiently with hands folded',         held: 'a yellow hourglass' },
+  'go':   { color: 'green',  pose: 'mid-step and pointing forward, ready to move', held: 'a bright green circle' },
+};
+function outfitTemplate(label, oldTemplate) {
+  const o = SYMBOL_OUTFIT[norm(label)];
+  if (!o) return null;
+  const cap = captionOf(oldTemplate, label);
+  return `A {style} of {reference} wearing a bright ${o.color} shirt, ${o.pose}, ` +
+    `holding up ${o.held} clearly toward the viewer. The ${o.color} clothing and ${o.held} ` +
+    `are the consistent learning cue — render them the exact same way every time this word appears, ` +
+    `and never let them cover the caption. One clear figure on a plain soft pastel background. ${cap}`;
+}
 
 // ---- Affection / comfort phrases — child + family adult TOGETHER ----------
 const TOGETHER = new Set([
@@ -200,6 +330,16 @@ const SYMBOL_CLAUSE = (sym) =>
 
 const hasPersonToken = (t) => /\{reference\}|\{family_adult\}|\{parent_photo\}/i.test(t);
 const hasSymbolClause = (t) => /learning cue/i.test(t);
+
+// Categories whose rows must NEVER get an abstract symbol — body parts (the
+// part itself is the subject, handled by the {family_adult} persona) and the
+// concrete-object categories (so a stray label collision like "back" can't
+// attach a position arrow to the body part).
+const NO_SYMBOL_CATEGORIES = new Set([
+  'Body', 'Animals', 'Food', 'Clothes', 'Home', 'Toys', 'Vehicles', 'Tools',
+  'Music', 'Nature', 'Sports', 'School', 'Therapy', 'Personalize', 'Holidays',
+  'Linking', 'Family', 'Community', 'Therapy Team',
+]);
 
 // ---- per-category persona templates ----
 function personaTemplate(category, label, oldTemplate) {
@@ -238,14 +378,26 @@ const col = (name) => {
   if (i < 0) throw new Error(`column not found: ${name}`);
   return i;
 };
-const CI = { category: col('category'), label: col('label'), template: col('prompt_template'), subjectMode: col('subject_mode') };
+const CI = { category: col('category'), sub: col('subcategory'), label: col('label'), template: col('prompt_template'), subjectMode: col('subject_mode') };
 
-const stats = { persona: {}, symbol: 0, skippedPersona: 0, skippedSymbol: 0 };
+const stats = { persona: {}, symbol: 0, outfit: 0, skippedPersona: 0, skippedSymbol: 0 };
 const samples = [];
 for (const r of rows.slice(1)) {
   if (!r[CI.label]) continue;
   const category = r[CI.category], label = r[CI.label];
   const l = norm(label);
+
+  // 0. color-coded embodiment (yes/no/stop/wait/go) — overwrites the gesture +
+  //    beside-symbol template with the "wear the color, hold the symbol" version.
+  //    Deterministic, so re-running is idempotent. Takes the whole row.
+  const outfit = outfitTemplate(label, r[CI.template] || '');
+  if (outfit) {
+    r[CI.template] = outfit;
+    r[CI.subjectMode] = 'child_as_subject';
+    stats.outfit++;
+    if (samples.length < 8) samples.push(`  [OUTFIT / ${label}] ${outfit.slice(0, 150)}…`);
+    continue;
+  }
 
   // 1. persona (skip rows that already carry a person token — idempotent)
   let t = r[CI.template] || '';
@@ -263,7 +415,7 @@ for (const r of rows.slice(1)) {
   }
 
   // 2. symbol (independent of persona; idempotent via the 'learning cue' marker)
-  const sym = SYMBOLS[l];
+  const sym = NO_SYMBOL_CATEGORIES.has(category) ? null : (SYMBOLS[l] || categorySymbol(r[CI.sub], label));
   if (sym && !hasSymbolClause(t)) {
     const cap = captionOf(t, label);
     const body = t.replace(CAPTION_RE, '').trim();
@@ -274,6 +426,7 @@ for (const r of rows.slice(1)) {
   }
 }
 
+console.log('color-coded embodiment (wear color + hold symbol):', stats.outfit);
 console.log('persona rewrites by category:', stats.persona);
 console.log('symbol clauses added:', stats.symbol, ' (already present, skipped:', stats.skippedSymbol + ')');
 console.log('rows with existing person tokens left untouched:', stats.skippedPersona);

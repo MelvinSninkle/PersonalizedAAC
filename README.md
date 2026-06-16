@@ -15,10 +15,21 @@ The recent feature waves, in the rough order they shipped:
 - **Auto-teach subsystem** — hands-off slideshow + daily game runner with parent-tunable cadence (conservative / standard / intensive), tier (under-3 / 3-5 / 5+), schedule blackouts (sleep / school / meals), recently-active guard, and 30-min cooldown. Tile picker prioritizes unmet age-band words → longest-gap active → acquired-not-mastered → one stretch tile → one maintenance recheck.
 - **Two-tier TTS caching** — every phrase is hashed (`model|voice|emotion|text`) and stored in Vercel Blob server-side AND in a per-device `SpeechCache` so ElevenLabs is hit at most once per unique phrase, ever.
 - **One app, two display modes** — the SwiftUI binary asks "Who uses this device?" on first run and stores the role; same install can be the child board or the parent app, switchable from either side's settings.
-- **Parent app, native** — phone-first SwiftUI home screen with Add a Tile · Quick Board · Start a Game · Message the Board · Stats · Schedules · Album · Auto-teach.
+- **Parent app, native** — phone-first SwiftUI home screen with Add a Tile · Family & People · Quick Board · Start a Game · Message the Board · Stats · Schedules · Album · Auto-teach.
 - **Stats hub** — five focused pages: Top Words, Word History (searchable), Game Accuracy (by category AND by mode), How They Answer (tap / verbal / object / physical / gesture), Mastery & Sessions.
 - **Facilitator UI auto-pops** — when a game session starts on the iPad (from anywhere — phone, iPad, web console, scheduler), `ParentLive` flips and the FacilitatorView appears over whatever the parent was doing. Match the same color cues as the web therapist console (tap blue / verbal green / object purple).
 - **Security baseline** — `canAccessChild` and `isParentOf` now gate every child-scoped endpoint; admin gates on every `api/admin/*`; XSS escaped in dashboards; per-account daily image-generation spend cap.
+
+### Latest wave (2026-06)
+
+- **Durable, server-side tile generation** — making a tile from a photo no longer runs on the device. The photo is uploaded once to `/api/tile-jobs` (and is *safe the instant that returns*), the server runs the whole chain (name → style-consistent art → voice → place on the board), and a one-minute cron (`/api/cron/run-tile-jobs`) drains the queue + retries stragglers — so a tile lands even if the device drops, backgrounds, or is killed. Final-attempt **save-first** keeps the raw photo as the tile so a capture can never be lost. The iOS tray just polls; `tile_jobs` rows survive an app restart.
+- **Style consistency, everywhere** — every generation now attaches the child's **house style-guide image** ("copy its art style only") instead of the old `reference_images` pull (which fed the child's own photos as a "style" and wasn't even populated by the SwiftUI onboarding). The chosen style persists to `child_settings.styleGuideId`; `/api/generate-image` (board-editor regenerate + web) and the durable path share the same composition. All tile art now targets a **square 1:1** output (Gemini `imageConfig.aspectRatio` with a safe fallback) so the subject + baked caption survive the square crop.
+- **Onboarding redesign** — the Child step now picks a **board art style** (a style-guide image) and a **board voice** (an ElevenLabs voice, with ▶ previews); the grown-up step is **repeatable** (add the whole circle — other parent, siblings, grandparents, nanny). The seed step **actually renders** the Core 12-18m taxonomy tiles now (it was a queue stub) using the chosen style + the child's portrait, and voices them in the chosen voice. Phonetic-pronunciation generation was removed (selection over generation — TTS speaks the title).
+- **Per-child voice** — the onboarding voice persists to `child_settings.voiceId`; `/api/tts` resolves it from `childId` (explicit `voiceId` still wins), and every tile created or edited in the app speaks in it.
+- **Family & People manager** (parent app) — a parent-accessible screen to add / replace / rename the reference faces (child, family, caregivers, the doctor) anytime — not just onboarding. Adding a People-section photo runs the durable pipeline, which also **registers a `persons` row** (so a new doctor becomes a referenceable anchor) and upserts their one tile (replace-photo doesn't duplicate).
+- **In-app board edit powers** — tap any tile while the board is unlocked (or in the parent Quick Board) to open the full editor: rename, swap the picture (new photo → AI art or use as-is), keep-aspect, re-voice with an emotion preset, pin (People), move section/folder, set the listening-game description, or delete — matching the web organizer.
+- **Square-except-TV tiles** — every tile renders square (crop-to-fill); the one exception is a folder named **TV / Movies / Shows / Posters**, whose tiles keep their natural rectangular shape for movie posters. Driven by the folder, not a per-tile flag. Settings → "Make all tiles square" normalizes the stored `keep_aspect` (fixes the web/data) to the same rule.
+- **Pre-generation review** — a single capture now pauses on a "hold on — here's more info" sheet before the (slow, costly) generation: override the name and add an optional detail hint ("the red cup, not the blue one") that steers the art.
 
 ---
 
@@ -184,7 +195,8 @@ The home grid (`ParentHomeView`) lays out these cards, each one tap away:
 
 | Card | What it does |
 |---|---|
-| **Add a tile** | Reuses the iPad's `AddTileQueue` chain (describe → generate → tts → items). Background renders, up to 3 concurrent, tile lands on the board even if the parent closes the sheet. New: model picker includes Nano Banana (`gemini-2.5-flash-image`) as the default and Nano Banana Pro (`gemini-3-pro-image-preview`); background-color swatch picker (pink/mint/yellow/blue/peach/white) passed to `/api/generate-image?bg=`. |
+| **Add a tile** | `AddTileQueue` now uploads to the **durable `/api/tile-jobs`** queue (server renders + a cron guarantees completion — the photo can't be lost) and polls status. A single capture pauses on a pre-gen review (name + steering detail). Model picker includes Nano Banana (`gemini-2.5-flash-image`) default + Pro; background swatch picker; the child's house style guide drives the look. |
+| **Family & people** | Add / replace / rename the reference faces (child, family, the doctor) anytime via `/api/persons` + the durable People-section pipeline. The post-onboarding home for reference photos. |
 | **Quick board** | Presents the actual `BoardView` full-screen so the child can talk on the parent's phone if the iPad's not available. 1.2s long-press on the labeled "Hold to exit to Parent app" pill returns. |
 | **Start a game** | Setup phase mirrors the web therapist console field-for-field: every mode + scope + range + sample + choices + time limit + slideshow seconds-per-image + label style (plain / first-person) + music override. When a game starts (from here or anywhere), `FacilitatorView` auto-pops as a fullScreenCover. |
 | **Facilitator (auto-pop)** | Live target card, "Item N of M · X correct" progress, the three mark buttons (👆 Tapped · 🗣 Said · 🧸 Showed object — colors match the web), Skip · Next · End. Dismiss with "Hide"; reappears next time a session starts. |
@@ -193,7 +205,7 @@ The home grid (`ParentHomeView`) lays out these cards, each one tap away:
 | **Schedules** | `child_settings.schedules` round-trip on raw dictionaries so question/game prompts authored on the web survive untouched. Toggle / delete / add a simple reminder. |
 | **Album** | `/api/album?mode=by-tile` → folder hub: **People · Words · Verbs · Celebrations**. Open a folder → tile rows with version counts → open a tile → every version newest-first, "Current" badge on the live one. Holiday celebrations from every year land here automatically. |
 | **Auto-teach** | Enable toggle + cadence picker + attention tier + daily game time + cooldown stepper. Live gate status: "Currently a teachable window · Cooldown clear · Today's exposure budget 6/18 min." 5-color stacked bar per category showing maintenance / mastered / acquired / active / unmet. |
-| **Settings** | Current vocabulary band display + the parent unlock button, device-mode switch back to child board, link to web dashboard, sign out, clear local cache (drops both image and speech caches). |
+| **Settings** | Current vocabulary band display + the parent unlock button, **"Make all tiles square"** (normalizes `keep_aspect` to the square-except-TV rule), device-mode switch back to child board, link to web dashboard, sign out, clear local cache (drops both image and speech caches). |
 
 ### Colors + branding
 
@@ -217,6 +229,10 @@ The system distinguishes between **tiles** (board buttons) and **persons** (stru
 - **`{family_adult}` token** — body parts and caregiving phrases generate better with the parent's face than the child's. The token resolves through `mother → father → step-parent → guardian → grandparent` with fallbacks to the child's own anchor and a generic adult, so every tile still renders.
 
 The `generate-descriptions` endpoint consumes this structure directly: a People tile description doesn't ask the model "describe Grandma Jane" — it pulls the relationship + side + given_name and writes a deterministic line in the right family-facing wording. The model only handles non-people teaching descriptions.
+
+**Managing the faces.** The child + a first grown-up are captured at signup; the grown-up step is **repeatable** (add the whole circle). After signup, the parent app's **Family & people** screen (`GET/POST/DELETE /api/persons`) lists everyone with a reference photo and lets a parent add / replace / rename them anytime — no re-onboarding. Adding a photo runs the durable People-section pipeline, which renders a style-consistent portrait, sets it as the person's `reference_key`, and upserts their one tile (so "replace photo" never duplicates). A photo dropped into the People section of add-a-tile registers a person the same way — so a new doctor becomes a referenceable anchor.
+
+**House style + voice.** `child_settings.styleGuideId` pins the child's art style (a `style_guides` image) and `child_settings.voiceId` pins their TTS voice — both chosen in onboarding and used by every later generation/TTS, so a child's tiles stay visually and audibly consistent. (A parent-app picker to change these on an existing child is a follow-up; today they ride the onboarding choice or the first active Lab style guide.)
 
 ### Special-day events
 
@@ -250,6 +266,8 @@ The iPad's `AutoTeachRunner` polls `/api/auto-teach/next` every 5 minutes when t
 
 The image pipeline supports both Google Gemini ("Nano Banana") and OpenAI gpt-image models. Nano Banana is the default for new tiles (~$0.04/image vs $0.13-0.21 for gpt-image-1.5/2) and the strongest at keeping a person's likeness from a reference photo, which is exactly the workload of this app. Model selection routes through `api/admin/model-routes` (per-scope rules) with per-request overrides. The `?bg=` param accepts presets (`pink | mint | yellow | blue | peach | white`) or any 6-digit hex.
 
+**Reference intelligence.** What gets attached to a generation is chosen per tile, by role: the **style guide** image (the house style) is attached to *every* tile with "copy its art style only, not its content"; a **subject anchor** (the child's `reference_key` for child-subject tiles, a specific person for People tiles, the source photo for objects) carries likeness; the child photo is *never* used as a blanket "style." This is what makes a board consistent — the shared exemplar, not the text style word. All tile art targets **square 1:1** (`gemini.js` passes `imageConfig.aspectRatio` with a fallback that retries without it if the model rejects the field), and the inanimate-object "no cartoon faces" rule is applied to everything except People.
+
 Every code path that overwrites `items.image_key` (parent edit, AI regenerate, Lab publish, onboarding re-photograph) calls `_lib/image-history.archivePriorImage` *first*, which snapshots the OLD key + label + section + source + who-archived-it into `item_image_history`. The Blob is never deleted — it's just invisible to the live board — so the parent's album view can scroll back through every face every tile has ever had. `ON DELETE SET NULL` on `item_id` so history outlives the tile it once belonged to.
 
 ## TTS caching (two-tier)
@@ -258,21 +276,23 @@ Every code path that overwrites `items.image_key` (parent edit, AI regenerate, L
 
 ## Making tiles from photos
 
-Turning a real photo into a board tile is a first-class flow on every surface, built around one AI pipeline:
+Turning a real photo into a board tile is a first-class flow on every surface. The iOS path is now a **durable, server-side pipeline** (`_lib/tile-jobs.js`); the web still uses the synchronous chain.
 
-1. **`/api/describe-image`** — vision suggests a 1–2 word label + a phonetic spelling tuned for TTS.
-2. **`/api/generate-image`** — re-illustrates the photo in the chosen art style (3D / picture-book / watercolor / soft / felted), steered by the child's reference images.
-3. **`/api/tts`** — records the voice from the phonetic spelling (or the label).
-4. Review → **`/api/items`** saves the tile (art + voice uploaded via `/api/upload`).
+**Durable pipeline (iOS add-a-tile):**
 
-A parent's typed name / pronunciation **always supersedes** the AI's.
+1. **`POST /api/tile-jobs`** (raw photo bytes) — persists the photo to Blob + inserts a `tile_jobs` row, returns the id immediately. **The photo is safe the instant this returns**, regardless of what happens to the device. Fires a best-effort render right away.
+2. The server runs the chain from the durable source: vision **name** (only when the parent didn't type one) → **style-consistent art** (the child's house style-guide image + the source photo) → **voice** (the child's chosen voice) → **create the board item** (linked by `taxonomy_slug` where relevant).
+3. **`/api/cron/run-tile-jobs`** (every minute) drains `queued` jobs, re-runs ones whose in-request render died, and retries `failed` jobs up to 3× — the completion guarantee. On the final attempt it **save-firsts** the raw photo as the tile (flagged `needs_review`) so a tile always lands.
+4. The iOS tray **polls** `GET /api/tile-jobs?childId=` and reconciles on open, so in-flight jobs survive an app restart.
+
+Phonetic-pronunciation generation was **removed** — TTS speaks the title; a parent's typed name **always supersedes** the AI's, and a wrong-sounding name is just respelled. A single capture pauses on a **pre-generation review** sheet (override the name, add an optional steering detail) before generation starts.
 
 ### Where it shows up
 
-- **Web, single tile** (`parent.html` organizer + `app.html` edit mode): *photo first* — tap the magic button and the label + pronunciation auto-fill; you review and Save. (The old "type a label first" gate is gone, and the hidden file input no longer no-ops on iOS Safari.)
+- **Web, single tile** (`parent.html` organizer + `app.html` edit mode): *photo first* — tap the magic button and the label auto-fills; you review and Save. `/api/generate-image` now attaches the child's **style-guide image** for board-consistent art.
 - **Web, bulk folder** (`app.html`): pick a folder of images; each is named + illustrated into an editable list you review before saving as a category.
-- **Native, single tile** (iOS edit mode → **+ New tile**): system camera or Photos, then the same describe → art → voice → review → Save chain.
-- **Native, bulk import** (iOS → **Add several from Photos**): multi-select up to 50; each photo renders as a **background job** with its own progress ring (max 3 in flight, so a 20-photo batch doesn't fire 20 image generations at once) and auto-adds to the board as it finishes — so a parent can keep snapping/picking without waiting on a render.
+- **Native, single tile** (iOS → **Add a tile**): system camera or Photos → the pre-gen review sheet → the durable pipeline. A People-section photo also registers/refreshes a `persons` row.
+- **Native, bulk import** (iOS → **Choose photo(s)**): multi-select up to 50; each photo becomes a durable job (the server gates concurrency, so a 20-photo batch doesn't fire 20 generations at once) and auto-adds to the board as it finishes — keep snapping without waiting on a render.
 
 ### The review queue (`items.needs_review`)
 
@@ -496,8 +516,15 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `POST/PUT/DELETE /api/categories` | Category CRUD (PUT with `section + cascade:true` rewrites whole subtree's section) |
 | `POST /api/upload?kind=&ext=` | Upload an image/audio blob to Vercel Blob, returns `{ key }` |
 | `GET /api/media?key=` | Stream a stored blob |
-| `POST /api/generate-image?label=&style=&childId=` | OpenAI re-illustration of a photo (uses reference images for steering) |
-| `POST /api/tts` | ElevenLabs TTS, returns `audio/mpeg` |
+| `POST /api/generate-image?label=&style=&childId=&styleGuideId=` | Re-illustrate a photo (Gemini/OpenAI); attaches the child's house **style-guide image** for board-consistent, square output |
+| `POST/GET/DELETE /api/tile-jobs?childId=` | Durable add-a-tile queue: POST raw photo (safe immediately) → server renders + places the tile; GET polls status; DELETE cancels |
+| `GET /api/cron/run-tile-jobs` | Vercel cron (every minute): drains `tile_jobs`, retries stuck/failed jobs — the completion guarantee |
+| `POST /api/tts?voiceId=\|childId=` | ElevenLabs TTS, returns `audio/mpeg`; resolves the child's saved voice from `childId` (explicit `voiceId` wins) |
+| `GET/POST/DELETE /api/persons?childId=` | Reference-people CRUD (the Family & people screen): list, upsert name/relationship, delete |
+| `GET /api/onboarding/styles` | Active style guides for the onboarding art-style picker (`?image=<id>` streams a preview) |
+| `GET /api/onboarding/voices` | Account's ElevenLabs voices for the onboarding voice picker (with preview samples) |
+| `POST /api/onboarding/{state,child,family,seed-core,complete}` | Onboarding contract: progress cursor, child + house style/voice, repeatable family portraits, Core-tile render, finish |
+| `POST /api/square-tiles?childId=` | Normalize tile `keep_aspect` to the board rule (square everywhere except a TV/Movies/Shows/Posters folder) |
 | `POST /api/describe-image` | Vision-based image labeling helper |
 | `GET/POST /api/child-settings?childId=` | Per-child settings JSON (rewards, schedule, presets, routines, prompts) |
 | `GET/POST /api/live?childId=` | Live facilitator command + tablet payload room |
@@ -548,7 +575,7 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `GET /api/admin/lab-board-state?childId=` | What's already on the child's board, indexed for the walker's "needs X first" hints |
 | `GET /api/admin/lab-categories?childId=` | Every category/subcategory chip the library needs, joined with the child's existing chips (status + image_key) |
 | `POST /api/admin/lab-category-upload` | Upload a chip image — creates the category row if missing |
-| `POST /api/admin/lab-category-generate` | Generate a chip image with the active style guide — creates the category row if missing |
+| `POST /api/admin/lab-category-generate` | Generate one chip image — curated icon (`_lib/category-icons.js`) when the folder is known, generic otherwise; accepts a `promptOverride` (the Lab surfaces the editable prompt); active style guide; creates the category row if missing. The Lab's "✨ Review & generate icons" clusters the chips needing an icon, lets you read/tweak each prompt, confirms the count, then loops this per chip |
 | `GET/PATCH/DELETE /api/admin/tile-generations` | The QC strip: list candidates, star the winner, set rating/notes, delete |
 
 ---
@@ -576,8 +603,9 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | Google AI key for Nano Banana image generation; created at <https://aistudio.google.com> |
 | `GEMINI_IMAGE_MODEL` | Optional override for the default Gemini model id (default `gemini-2.5-flash-image`) |
 | `IMAGE_GEN_DAILY_LIMIT` | Optional per-account daily image-generation cap (default 150; admins exempt) |
+| `CRON_SECRET` | Optional bearer token Vercel sends to the cron handlers (`/api/cron/*`); when unset the idempotent handlers accept any call |
 
-After deploying with the env vars set, hit `POST /api/init` once with the `ADMIN_TOKEN` to create the tables.
+After deploying with the env vars set, hit `POST /api/init` once with the `ADMIN_TOKEN` to create the tables. The `tile_jobs` table (durable add-a-tile queue) self-creates on first use via `ensureTileJobs`; the **`run-tile-jobs` cron** is registered in `vercel.json` (every minute) — confirm it appears under Project → Settings → Cron Jobs after deploy.
 
 ---
 

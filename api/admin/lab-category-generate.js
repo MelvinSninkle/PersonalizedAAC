@@ -3,19 +3,12 @@
 // reference, same as tile generation) and set it as the category's image on the
 // child's board, creating the chip if missing. Direct-to-board, no candidate
 // review. Admin-gated.
-import { put, get } from '@vercel/blob';
-import { randomUUID } from 'node:crypto';
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
+import { buildIconPrompt, readBlobBuffer, generateCategoryIconPNG, uploadIconPNG } from '../_lib/category-icons.js';
 
 const ALLOWED_MODELS = new Set(['gpt-image-1', 'gpt-image-1.5', 'gpt-image-2']);
 const PRICE = { text: 5, imageIn: 10, out: 40 };
-
-async function readBlob(key) {
-  const r = await get(key);
-  const buf = Buffer.from(await r.arrayBuffer());
-  return { buffer: buf, contentType: r.contentType || 'image/png' };
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -49,39 +42,20 @@ export default async function handler(req, res) {
     const model = modelOverride || (settings.model_defaults && settings.model_defaults.category) || 'gpt-image-1.5';
     const size = settings.size_default || '1024x1024';
 
-    const subjectHint = parentLabel ? `the subcategory "${label}" under "${parentLabel}"` : `the category "${label}"`;
-    const prompt = `A clear, friendly category icon representing ${subjectHint} for a young child's AAC communication board. Centered, simple, instantly recognizable from a thumbnail. No text or letters in the image. Square composition with generous padding. ${style ? `Match the style of the reference image.` : ''}`;
+    // Use the admin's edited prompt when provided (the Lab surfaces the curated
+    // prompt for tweaking), else build the curated/generic one.
+    const promptOverride = typeof b.promptOverride === 'string' && b.promptOverride.trim() ? b.promptOverride.trim() : null;
+    const prompt = promptOverride || buildIconPrompt({ label, parentLabel, hasStyle: !!style });
 
     let styleBuf = null;
-    if (style && style.blob_key) { try { styleBuf = await readBlob(style.blob_key); } catch (_) {} }
+    if (style && style.blob_key) { try { styleBuf = await readBlobBuffer(style.blob_key); } catch (_) {} }
 
-    let data;
-    if (styleBuf) {
-      const fd = new FormData();
-      fd.append('model', model);
-      fd.append('prompt', prompt);
-      fd.append('size', size);
-      fd.append('n', '1');
-      fd.append('quality', 'high');
-      if (model === 'gpt-image-1' || model === 'gpt-image-1.5') fd.append('input_fidelity', 'high');
-      fd.append('image[]', new Blob([styleBuf.buffer], { type: styleBuf.contentType }), 'style.jpg');
-      const upstream = await fetch('https://api.openai.com/v1/images/edits', {
-        method: 'POST', headers: { Authorization: 'Bearer ' + apiKey }, body: fd,
-      });
-      if (!upstream.ok) { const detail = await upstream.text().catch(() => ''); res.status(upstream.status).json({ error: 'OpenAI edits failed', detail: detail.slice(0, 500) }); return; }
-      data = await upstream.json();
-    } else {
-      const upstream = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST', headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt, size, quality: 'high', n: 1 }),
-      });
-      if (!upstream.ok) { const detail = await upstream.text().catch(() => ''); res.status(upstream.status).json({ error: 'OpenAI generations failed', detail: detail.slice(0, 500) }); return; }
-      data = await upstream.json();
-    }
-    const b64 = data && data.data && data.data[0] && data.data[0].b64_json;
-    if (!b64) { res.status(502).json({ error: 'No image returned' }); return; }
+    let b64, usage;
+    try {
+      ({ b64, usage } = await generateCategoryIconPNG({ apiKey, prompt, styleBuf, model, size }));
+    } catch (e) { res.status(e.status || 502).json({ error: 'category-generate failed', detail: String(e.message || e) }); return; }
 
-    const u = (data && data.usage) || {};
+    const u = usage || {};
     const det = u.input_tokens_details || {};
     let costCents;
     if (u.output_tokens != null) {
@@ -89,9 +63,7 @@ export default async function handler(req, res) {
       costCents = dollars * 100;
     } else { costCents = model === 'gpt-image-2' ? 21 : (model === 'gpt-image-1.5' ? 13 : 4); }
 
-    const pngBuffer = Buffer.from(b64, 'base64');
-    const blobKey = `lab/categories/${section}/${randomUUID()}.png`;
-    await put(blobKey, pngBuffer, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
+    const blobKey = await uploadIconPNG(section, b64);
 
     const ex = parentId == null
       ? await db`SELECT id FROM categories WHERE child_id = ${childId} AND section = ${section} AND parent_id IS NULL AND lower(label) = lower(${label}) LIMIT 1`

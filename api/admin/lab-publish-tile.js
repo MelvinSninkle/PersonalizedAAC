@@ -4,9 +4,12 @@
 // borrowing this tile's image for the chip if it has none yet — then upserts the
 // item under it, linked back by taxonomy_slug. This is the "generate it in the
 // Lab and have it go live on Fletcher's board as I go" step. Admin-gated.
+import { put } from '@vercel/blob';
+import { randomUUID } from 'node:crypto';
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { archivePriorImage } from '../_lib/image-history.js';
+import { loadChildVoiceId, synthesizeVoice } from '../_lib/onboarding-render.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -79,7 +82,27 @@ export default async function handler(req, res) {
         VALUES (${section}, ${targetCatId}, ${label}, ${imageKey}, FALSE, ${Date.now()}, FALSE, ${childId}, ${taxonomyId}, FALSE, NOW()) RETURNING id`;
       itemId = it[0].id; created = true;
     }
-    res.status(200).json({ ok: true, itemId: Number(itemId), categoryId: targetCatId ? Number(targetCatId) : null, created, live: true });
+
+    // 4) Voice: if the tile has no recorded audio yet, synthesize it in the
+    //    child's chosen voice so a freshly published tile is fully ready (art +
+    //    voice) instead of falling back to the system voice. Best-effort — a TTS
+    //    miss never fails the publish (the image is already live).
+    let voiced = false;
+    try {
+      const cur = await db`SELECT sound_key FROM items WHERE id = ${itemId} LIMIT 1`;
+      if (!cur[0] || !cur[0].sound_key) {
+        const voiceId = await loadChildVoiceId(db, childId);
+        const mp3 = await synthesizeVoice({ text: label, voiceId });
+        if (mp3) {
+          const soundKey = `lab/${childId}/voice/${randomUUID()}.mp3`;
+          await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });
+          await db`UPDATE items SET sound_key = ${soundKey}, updated_at = NOW() WHERE id = ${itemId}`;
+          voiced = true;
+        }
+      }
+    } catch (_) { /* voice is best-effort; the tile is already published */ }
+
+    res.status(200).json({ ok: true, itemId: Number(itemId), categoryId: targetCatId ? Number(targetCatId) : null, created, voiced, live: true });
   } catch (err) {
     res.status(500).json({ error: 'Publish failed', detail: String(err.message || err) });
   }

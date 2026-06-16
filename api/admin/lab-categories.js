@@ -6,6 +6,7 @@
 // BEFORE generating tiles in that category (publish blocks otherwise). Admin-gated.
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
+import { buildIconPrompt } from '../_lib/category-icons.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -35,6 +36,7 @@ export default async function handler(req, res) {
     const boardCats = await db`
       SELECT id, lower(section) AS section, label, parent_id, image_key
       FROM categories WHERE child_id = ${childId}`;
+    const hasStyle = (await db`SELECT 1 FROM style_guides WHERE active = TRUE LIMIT 1`).length > 0;
     // index board cats by section+lower(label) and section+lower(label)+parent_id
     const topByKey = new Map();      // section|label -> row (parent_id NULL)
     const subByKey = new Map();      // section|parent_id|label -> row
@@ -66,6 +68,9 @@ export default async function handler(req, res) {
         imageKey: onBoard ? onBoard.image_key : null,
         parentBoardId: parentId,
         parentMissing,
+        // The curated (or generic-fallback) icon prompt, surfaced so the Lab can
+        // show it for a read-through and let the admin tweak it before generating.
+        prompt: buildIconPrompt({ label: s.label, parentLabel: s.parent_label, hasStyle }),
       };
     });
     res.setHeader('Cache-Control', 'no-store');
