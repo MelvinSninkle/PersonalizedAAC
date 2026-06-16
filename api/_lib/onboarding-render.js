@@ -143,6 +143,18 @@ export async function loadChildVoiceId(db, childId) {
   } catch (_) { return null; }
 }
 
+// The child's chosen house art style (a style_guides id) from child_settings.
+// This is what keeps every tile the parent adds visually consistent with the
+// board — the same exemplar image is attached to every generation.
+export async function loadChildStyleGuideId(db, childId) {
+  try {
+    const row = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+    const v = row && row.settings && row.settings.styleGuideId;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch (_) { return null; }
+}
+
 // Synthesize `text` to MP3 via ElevenLabs in the chosen voice. Returns a Buffer
 // or null — best-effort, so a TTS hiccup never fails a tile (the board falls
 // back to the system voice when a tile has no recorded clip).

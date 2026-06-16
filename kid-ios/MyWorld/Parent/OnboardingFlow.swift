@@ -661,7 +661,8 @@ private struct OnboardingChildView: View {
                 birthDate: coord.birthDate,
                 tier: coord.tier,
                 language: coord.language,
-                voiceId: coord.voiceId
+                voiceId: coord.voiceId,
+                styleGuideId: coord.styleGuideId
             )
             coord.go(to: .childPhoto)
         } catch {
