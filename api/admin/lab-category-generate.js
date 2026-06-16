@@ -6,6 +6,7 @@
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { buildIconPrompt, readBlobBuffer, generateCategoryIconPNG, uploadIconPNG } from '../_lib/category-icons.js';
+import { geminiKey, isGeminiModel, geminiCostCents, geminiGenerateImage } from '../_lib/gemini.js';
 
 const ALLOWED_MODELS = new Set(['gpt-image-1', 'gpt-image-1.5', 'gpt-image-2']);
 const PRICE = { text: 5, imageIn: 10, out: 40 };
@@ -23,7 +24,7 @@ export default async function handler(req, res) {
   const section = String(b.section || '').toLowerCase().trim();
   const label = String(b.label || '').trim();
   const parentLabel = String(b.parent || '').trim();
-  const modelOverride = typeof b.model === 'string' && ALLOWED_MODELS.has(b.model) ? b.model : null;
+  const modelOverride = typeof b.model === 'string' && (ALLOWED_MODELS.has(b.model) || isGeminiModel(b.model)) ? b.model : null;
   if (!childId || !section || !label) { res.status(400).json({ error: 'childId, section, label required' }); return; }
 
   try {
@@ -39,7 +40,7 @@ export default async function handler(req, res) {
     const style = sg[0] || null;
     const settingsRows = await db`SELECT model_defaults, size_default FROM lab_settings WHERE id = 1`;
     const settings = settingsRows[0] || { model_defaults: {}, size_default: '1024x1024' };
-    const model = modelOverride || (settings.model_defaults && settings.model_defaults.category) || 'gpt-image-1.5';
+    const model = modelOverride || (settings.model_defaults && (settings.model_defaults.category || settings.model_defaults.default)) || 'gpt-image-1.5';
     const size = settings.size_default || '1024x1024';
 
     // Use the admin's edited prompt when provided (the Lab surfaces the curated
@@ -52,13 +53,26 @@ export default async function handler(req, res) {
 
     let b64, usage;
     try {
-      ({ b64, usage } = await generateCategoryIconPNG({ apiKey, prompt, styleBuf, model, size }));
+      if (isGeminiModel(model)) {
+        const gKey = geminiKey();
+        if (!gKey) { res.status(500).json({ error: 'GEMINI_API_KEY env var not configured' }); return; }
+        const g = await geminiGenerateImage({
+          apiKey: gKey, model, prompt, aspectRatio: '1:1',
+          images: styleBuf ? [{ buffer: styleBuf.buffer, contentType: styleBuf.contentType }] : [],
+        });
+        if (!g.ok) { res.status(g.status === 429 ? 429 : 502).json({ error: 'category-generate failed', detail: (g.detail || '').slice(0, 1000) }); return; }
+        b64 = g.b64; usage = { gemini: true, input_tokens: g.inputTokens, output_tokens: g.outputTokens };
+      } else {
+        ({ b64, usage } = await generateCategoryIconPNG({ apiKey, prompt, styleBuf, model, size }));
+      }
     } catch (e) { res.status(e.status || 502).json({ error: 'category-generate failed', detail: String(e.message || e) }); return; }
 
     const u = usage || {};
-    const det = u.input_tokens_details || {};
     let costCents;
-    if (u.output_tokens != null) {
+    if (u.gemini) {
+      costCents = geminiCostCents(model);
+    } else if (u.output_tokens != null) {
+      const det = u.input_tokens_details || {};
       const dollars = ((det.text_tokens || 0) * PRICE.text + (det.image_tokens || 0) * PRICE.imageIn + (u.output_tokens || 0) * PRICE.out) / 1e6;
       costCents = dollars * 100;
     } else { costCents = model === 'gpt-image-2' ? 21 : (model === 'gpt-image-1.5' ? 13 : 4); }

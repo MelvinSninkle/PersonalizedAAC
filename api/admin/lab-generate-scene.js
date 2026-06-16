@@ -24,6 +24,7 @@ import { randomUUID } from 'node:crypto';
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { resolveModelForRow } from './model-routes.js';
+import { geminiKey, isGeminiModel, geminiCostCents, geminiGenerateImage } from '../_lib/gemini.js';
 
 const ALLOWED_MODELS = new Set(['gpt-image-1', 'gpt-image-1.5', 'gpt-image-2']);
 const PRICE = { text: 5, imageIn: 10, out: 40 };
@@ -50,7 +51,7 @@ export default async function handler(req, res) {
   const subjectsIn = Array.isArray(b.subjects) ? b.subjects.slice(0, MAX_SUBJECTS) : [];
   if (!subjectsIn.length) { res.status(400).json({ error: 'subjects[] required (use lab-generate for a plain styled tile)' }); return; }
   const explicitStyleId = b.styleGuideId != null ? parseInt(b.styleGuideId, 10) : null;
-  const modelOverride = typeof b.model === 'string' && ALLOWED_MODELS.has(b.model) ? b.model : null;
+  const modelOverride = typeof b.model === 'string' && (ALLOWED_MODELS.has(b.model) || isGeminiModel(b.model)) ? b.model : null;
   const sceneText = typeof b.scene === 'string' ? b.scene.trim() : '';
 
   let db;
@@ -156,7 +157,21 @@ export default async function handler(req, res) {
   // 7. Generate. edits if we have any image input (style and/or a subject ref); else text-only.
   let data, costCents = null, inTok = null, outTok = null;
   try {
-    if (images.length) {
+    if (isGeminiModel(model)) {
+      const gKey = geminiKey();
+      if (!gKey) { res.status(500).json({ error: 'GEMINI_API_KEY env var not configured' }); return; }
+      const g = await geminiGenerateImage({
+        apiKey: gKey, model, prompt,
+        images: images.map(im => ({ buffer: im.buf.buffer, contentType: im.buf.contentType })),
+      });
+      if (!g.ok) {
+        console.error('[lab-generate-scene] gemini failed', g.status, 'model=' + model, g.detail);
+        res.status(g.status === 429 ? 429 : 502).json({ error: 'Gemini generation failed', detail: (g.detail || '').slice(0, 1000) });
+        return;
+      }
+      data = { data: [{ b64_json: g.b64 }] };
+      inTok = g.inputTokens; outTok = g.outputTokens; costCents = geminiCostCents(model);
+    } else if (images.length) {
       const fd = new FormData();
       fd.append('model', model);
       fd.append('prompt', prompt);
@@ -182,13 +197,15 @@ export default async function handler(req, res) {
     const b64 = data && data.data && data.data[0] && data.data[0].b64_json;
     if (!b64) { res.status(502).json({ error: 'No image returned from generator' }); return; }
 
-    const u = (data && data.usage) || {};
-    const det = u.input_tokens_details || {};
-    inTok = u.input_tokens ?? null; outTok = u.output_tokens ?? null;
-    if (u.output_tokens != null) {
-      costCents = (((det.text_tokens || 0) * PRICE.text + (det.image_tokens || 0) * PRICE.imageIn + (u.output_tokens || 0) * PRICE.out) / 1e6) * 100;
-    } else {
-      costCents = model === 'gpt-image-2' ? 21 : (model === 'gpt-image-1.5' ? 13 : 4);
+    if (costCents == null) {
+      const u = (data && data.usage) || {};
+      const det = u.input_tokens_details || {};
+      inTok = u.input_tokens ?? null; outTok = u.output_tokens ?? null;
+      if (u.output_tokens != null) {
+        costCents = (((det.text_tokens || 0) * PRICE.text + (det.image_tokens || 0) * PRICE.imageIn + (u.output_tokens || 0) * PRICE.out) / 1e6) * 100;
+      } else {
+        costCents = model === 'gpt-image-2' ? 21 : (model === 'gpt-image-1.5' ? 13 : 4);
+      }
     }
 
     // 8. Save PNG → Blob, then into tile_generations (the QC strip) + image_generations (cost log).
