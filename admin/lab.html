@@ -77,7 +77,10 @@
   aside.filters .stats { margin-top: 14px; font-size: 12px; color: #557fa3; line-height: 1.6; }
 
   #walker { display: flex; flex-direction: column; gap: 10px; }
-  .cat-row { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid #e2e6ec; border-radius: 6px; background: #fafbfd; font-size: 12px; }
+  .cat-row { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; border: 1px solid #e2e6ec; border-radius: 6px; background: #fafbfd; font-size: 12px; }
+  .cat-row .cat-top { display: flex; gap: 8px; align-items: center; }
+  .cat-row .cat-prompt { width: 100%; box-sizing: border-box; font-size: 10px; line-height: 1.35; color: #4a5b6b; border: 1px solid #d7dee7; border-radius: 4px; padding: 4px 6px; resize: vertical; min-height: 46px; background: #fff; font-family: inherit; }
+  .cat-row .cat-prompt:focus { outline: none; border-color: #2d7ff9; }
   .cat-row.missing { background: #fef7e0; border-color: #f5d486; }
   .cat-row.ok { background: #e6f4ea; border-color: #b6dfc0; }
   .cat-row.parent-missing { background: #fde9e6; border-color: #f3b8b1; }
@@ -258,7 +261,7 @@
     <h2 style="margin:0;font-size:13px;letter-spacing:.4px;color:#557fa3;text-transform:uppercase;">Board categories <span id="cats-target" style="color:#95a5a6;font-weight:400;text-transform:none;letter-spacing:0;"></span></h2>
     <span class="stat" id="cats-stat">— total</span>
     <label style="font-size:11px;color:#557fa3;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="cats-only-missing"> only missing or no image</label>
-    <button id="cats-fill-all" onclick="fillAllCategoryIcons()" style="font-size:11px;border:1px solid #2d7ff9;background:#eaf2ff;color:#2d7ff9;border-radius:6px;padding:3px 9px;cursor:pointer;">✨ Fill all icons</button>
+    <button id="cats-fill-all" onclick="reviewAndGenerateIcons()" style="font-size:11px;border:1px solid #2d7ff9;background:#eaf2ff;color:#2d7ff9;border-radius:6px;padding:3px 9px;cursor:pointer;" title="Cluster the chips that need an icon, read/tweak their prompts, then generate them all">✨ Review &amp; generate icons</button>
     <span style="flex:1;"></span>
     <span style="font-size:11px;color:#95a5a6;">Create category chips here BEFORE generating tiles in that category — publish blocks otherwise.</span>
   </div>
@@ -506,7 +509,9 @@ let genCache = {};              // taxonomyId -> [generation]
 // What the publish-target child already has, so the Lab can show "on board",
 // offer to port existing art, and warn when a category chip isn't there yet.
 let boardState = { bySlug: new Map(), byKey: new Map(), catSet: new Set() };
-let catList = [];     // [{section,label,parentLabel,hasImage,imageKey,boardId,parentMissing,tileCount}]
+let catList = [];     // [{section,label,parentLabel,hasImage,imageKey,boardId,parentMissing,tileCount,prompt}]
+const editedPrompts = new Map();   // catKey -> edited prompt, so tweaks survive a reload
+const catKey = (r) => (r.section + '|' + (r.parentLabel || '') + '|' + r.label).toLowerCase();
 async function loadBoardState() {
   const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
   try {
@@ -524,6 +529,7 @@ async function loadBoardState() {
     for (const c of bs.categories || []) next.catSet.add((c.section || '').toLowerCase() + '|' + (c.label || '').toLowerCase());
     boardState = next;
     catList = cs.rows || [];
+    for (const r of catList) { const k = catKey(r); if (editedPrompts.has(k)) r.prompt = editedPrompts.get(k); }
     renderCategoryPanel();
   } catch (_) { /* keep prior state on failure */ }
 }
@@ -548,12 +554,17 @@ function renderCategoryPanel() {
     const crumb = `${r.section}${r.parentLabel ? ` › ${escapeHtml(r.parentLabel)}` : ''} · ${r.tileCount} tiles`;
     const status = r.parentMissing ? `⚠ need "${escapeHtml(r.parentLabel)}" first` : (r.hasImage ? '✓ chip · image' : (r.boardId ? '⚠ chip, no image' : '— not on board'));
     div.innerHTML = `
-      ${thumb}
-      <div class="lbl"><div class="name">${escapeHtml(r.label)}</div><div class="crumb">${crumb} — ${status}</div></div>
-      <button data-act="cat-upload" ${r.parentMissing ? 'disabled' : ''} title="Upload an image you already made">⬆</button>
-      <button data-act="cat-generate" ${r.parentMissing ? 'disabled' : ''} title="Generate with AI">✨</button>`;
+      <div class="cat-top">
+        ${thumb}
+        <div class="lbl"><div class="name">${escapeHtml(r.label)}</div><div class="crumb">${crumb} — ${status}</div></div>
+        <button data-act="cat-upload" ${r.parentMissing ? 'disabled' : ''} title="Upload an image you already made">⬆</button>
+        <button data-act="cat-generate" ${r.parentMissing ? 'disabled' : ''} title="Generate with AI">✨</button>
+      </div>
+      <textarea class="cat-prompt" data-act="cat-prompt" ${r.parentMissing ? 'disabled' : ''} title="Icon prompt — tweak before generating" spellcheck="false">${escapeHtml(r.prompt || '')}</textarea>`;
     div.querySelector('[data-act="cat-upload"]').addEventListener('click', () => triggerCategoryUpload(r));
     div.querySelector('[data-act="cat-generate"]').addEventListener('click', () => generateCategory(r, div));
+    // Live-bind the edited prompt back onto the row so single + batch generate use it.
+    div.querySelector('[data-act="cat-prompt"]').addEventListener('input', (e) => { r.prompt = e.target.value; editedPrompts.set(catKey(r), e.target.value); });
     list.appendChild(div);
   }
 }
@@ -586,6 +597,7 @@ async function generateCategory(row, div) {
   try {
     const r = await api('POST', '/api/admin/lab-category-generate', {
       childId, section: row.section, label: row.label, parent: row.parentLabel || undefined,
+      promptOverride: (row.prompt || '').trim() || undefined,
     });
     addCost(r.costCents || 0);
     await loadBoardState();
@@ -595,28 +607,34 @@ async function generateCategory(row, div) {
     alert('Category generate failed: ' + (err.message || err));
   }
 }
-async function fillAllCategoryIcons() {
+async function reviewAndGenerateIcons() {
   const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
-  if (!confirm('Generate the curated icon for every category/subcategory chip that has none, for ' + childId + '?')) return;
+  // Cluster the to-generate chips so you can read/tweak their prompts side by side
+  // before committing.
+  if ($('cats-only-missing')) $('cats-only-missing').checked = true;
+  renderCategoryPanel();
+  await new Promise((r) => setTimeout(r, 60));   // let the clustered view paint before the prompt
+  const toGen = catList.filter((r) => !r.hasImage && !r.parentMissing);  // parents first (server order)
+  if (!toGen.length) { alert('Every category chip already has an icon. Nothing to generate.'); return; }
+  if (!confirm(`You're about to generate ${toGen.length} category icon${toGen.length === 1 ? '' : 's'} for ${childId}.\n\nThey're listed above with their prompts — Cancel to tweak any, then click again.\n\nGenerate ${toGen.length} now?`)) return;
+
   const btn = $('cats-fill-all'); if (btn) btn.disabled = true;
-  let total = 0, fails = 0, rounds = 0;
-  try {
-    // Each call fills up to a capped batch; loop until nothing's left (the
-    // missing set shrinks each round). Cap rounds + stop if a round does nothing.
-    while (rounds++ < 40) {
-      if (btn) btn.textContent = `✨ Filling… (${total} done)`;
-      const r = await api('POST', '/api/admin/lab-category-fill', { childId });
-      total += r.generated || 0; fails += r.failed || 0;
-      if (!r.remaining) break;
-      if ((r.generated || 0) === 0) break;   // remaining are all failing — bail
-    }
-    await loadBoardState(); renderTiles();
-    alert(`Done — generated ${total} category icon(s)` + (fails ? `, ${fails} failed (retry to finish).` : '.'));
-  } catch (err) {
-    alert('Fill all icons failed: ' + (err.message || err));
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '✨ Fill all icons'; }
+  let done = 0; const failed = [];
+  for (const row of toGen) {
+    if (btn) btn.textContent = `✨ Generating ${done + 1}/${toGen.length}…`;
+    try {
+      const r = await api('POST', '/api/admin/lab-category-generate', {
+        childId, section: row.section, label: row.label, parent: row.parentLabel || undefined,
+        promptOverride: (row.prompt || '').trim() || undefined,
+      });
+      addCost(r.costCents || 0);
+      row.hasImage = true; row.imageKey = r.imageKey; row.boardId = r.id;
+      done++;
+    } catch (err) { failed.push(row.label + (err && err.message ? ` (${err.message})` : '')); }
   }
+  await loadBoardState(); renderTiles();
+  if (btn) { btn.disabled = false; btn.textContent = '✨ Review & generate icons'; }
+  alert(`Generated ${done} category icon(s)` + (failed.length ? `.\n${failed.length} failed:\n- ` + failed.slice(0, 12).join('\n- ') : '.'));
 }
 function decorateBoardNote(t, card) {
   const note = card.querySelector('[data-board-note]');

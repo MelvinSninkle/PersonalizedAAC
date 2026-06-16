@@ -1,8 +1,9 @@
 // Curated, child-recognizable icons for the board's category + subcategory
 // folder chips — the one-level-up companion to the tile symbol vocabulary.
-// lab-category-generate (single) and lab-category-fill (batch) use these so a
-// known folder gets an INTENTIONAL, consistent icon (anchored to the active
-// style guide) instead of a model-invented one. Unknown folders fall back to a
+// lab-category-generate uses these (per chip, and looped by the Lab's "Review &
+// generate icons") so a known folder gets an INTENTIONAL, consistent icon
+// (anchored to the active style guide) instead of a model-invented one. The Lab
+// surfaces the prompt for a read-through + edit. Unknown folders fall back to a
 // generic "icon representing X" prompt, and overflow folders ("Extended", "…
 // more") inherit their parent category's icon.
 import { put, get } from '@vercel/blob';

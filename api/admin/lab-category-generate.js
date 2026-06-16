@@ -42,7 +42,10 @@ export default async function handler(req, res) {
     const model = modelOverride || (settings.model_defaults && settings.model_defaults.category) || 'gpt-image-1.5';
     const size = settings.size_default || '1024x1024';
 
-    const prompt = buildIconPrompt({ label, parentLabel, hasStyle: !!style });
+    // Use the admin's edited prompt when provided (the Lab surfaces the curated
+    // prompt for tweaking), else build the curated/generic one.
+    const promptOverride = typeof b.promptOverride === 'string' && b.promptOverride.trim() ? b.promptOverride.trim() : null;
+    const prompt = promptOverride || buildIconPrompt({ label, parentLabel, hasStyle: !!style });
 
     let styleBuf = null;
     if (style && style.blob_key) { try { styleBuf = await readBlobBuffer(style.blob_key); } catch (_) {} }
