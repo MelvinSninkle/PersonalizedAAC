@@ -37,6 +37,7 @@ export async function ensureTileJobs(db) {
       keep_aspect BOOLEAN NOT NULL DEFAULT FALSE,
       needs_review BOOLEAN NOT NULL DEFAULT FALSE,
       emotion TEXT NOT NULL DEFAULT 'default',
+      relationship TEXT,
       attempts INT NOT NULL DEFAULT 0,
       image_key TEXT,
       sound_key TEXT,
@@ -46,6 +47,7 @@ export async function ensureTileJobs(db) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
+  await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS relationship TEXT`;
   await db`CREATE INDEX IF NOT EXISTS tile_jobs_child_idx  ON tile_jobs(child_id, status)`;
   await db`CREATE INDEX IF NOT EXISTS tile_jobs_status_idx ON tile_jobs(status, updated_at)`;
 }
@@ -192,9 +194,16 @@ export async function processTileJob(db, jobId) {
 
     // Create or update the board item. Idempotent via the job's item_id so a
     // retry after a partial run updates the same tile instead of duplicating.
+    // People tiles also match by name so re-adding a person (e.g. replacing their
+    // photo from the Family screen) updates their one tile rather than dupes it.
     const needsReview = !!job.needs_review || artFailed;
     const section = String(job.section || 'nouns').toLowerCase();
     let itemId = job.item_id ? Number(job.item_id) : null;
+    if (!itemId && section === 'people' && label) {
+      const ex = await db`SELECT id FROM items WHERE child_id = ${job.child_id}
+                          AND section = 'people' AND lower(label) = lower(${label}) LIMIT 1`;
+      if (ex.length) itemId = Number(ex[0].id);
+    }
     if (itemId) {
       await db`UPDATE items SET label = ${label || 'New tile'}, image_key = ${imageKey},
                  sound_key = COALESCE(${soundKey}, sound_key), section = ${section},
@@ -214,13 +223,16 @@ export async function processTileJob(db, jobId) {
     // refresh their portrait) so future taxonomy tiles can reference them by
     // name (e.g. the new doctor), exactly like the onboarding family members.
     if (section === 'people' && label && !artFailed) {
+      const rel = job.relationship || 'other';
       try {
         const ex = await db`SELECT id FROM persons WHERE child_id = ${job.child_id} AND lower(display_name) = lower(${label}) LIMIT 1`;
         if (ex.length) {
-          await db`UPDATE persons SET reference_key = ${imageKey}, updated_at = NOW() WHERE id = ${ex[0].id}`;
+          await db`UPDATE persons SET reference_key = ${imageKey},
+                     relationship = COALESCE(${job.relationship}, relationship), updated_at = NOW()
+                   WHERE id = ${ex[0].id}`;
         } else {
           await db`INSERT INTO persons (child_id, display_name, given_name, relationship, is_self, reference_key)
-                   VALUES (${job.child_id}, ${label}, ${label}, 'other', FALSE, ${imageKey})`;
+                   VALUES (${job.child_id}, ${label}, ${label}, ${rel}, FALSE, ${imageKey})`;
         }
       } catch (_) { /* persons registration is best-effort */ }
     }

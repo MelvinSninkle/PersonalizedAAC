@@ -690,6 +690,10 @@ private struct OnboardingPhotoView: View {
     @State private var subjectName: String = ""
     @State private var relationship: String = "mother"
     @State private var errorText: String?
+    /// How many grown-ups committed so far, and whether to show the "add another
+    /// grown-up?" choice between them (the parent step is repeatable).
+    @State private var addedGrownups = 0
+    @State private var showAddMore = false
     private let api = APIClient()
 
     var body: some View {
@@ -704,7 +708,9 @@ private struct OnboardingPhotoView: View {
                 // in Assets.xcassets and the placeholders disappear.
                 beforeAfterCard
 
-                if let img = draftImage {
+                if role == .parent && showAddMore {
+                    addMoreCard
+                } else if let img = draftImage {
                     previewCard(img)
                     actionButtons
                 } else if capturedJPEG != nil {
@@ -966,14 +972,48 @@ private struct OnboardingPhotoView: View {
                     name: subjectName.trimmingCharacters(in: .whitespaces),
                     relationship: relationship
                 )
-                coord.parentPortraitKey = key
-                coord.firstGrownupName = subjectName
-                coord.firstGrownupRelationship = relationship
-                coord.go(to: .seedCore)
+                if addedGrownups == 0 {
+                    coord.parentPortraitKey = key
+                    coord.firstGrownupName = subjectName
+                    coord.firstGrownupRelationship = relationship
+                }
+                addedGrownups += 1
+                // Repeatable: offer to add more grown-ups (other parent, sibling,
+                // grandparent, nanny) before moving on. Each becomes a face the
+                // taxonomy can anchor on.
+                resetCapture()
+                showAddMore = true
             }
         } catch {
             errorText = "Could not save: \(error.localizedDescription)"
         }
+    }
+
+    private func resetCapture() {
+        capturedJPEG = nil; draftKey = nil; draftImage = nil
+        attempt = 0; subjectName = ""; relationship = "mother"; errorText = nil
+    }
+
+    private var addMoreCard: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 44)).foregroundStyle(Color(hex: Brand.good))
+            Text(addedGrownups == 1 ? "Grown-up added!" : "\(addedGrownups) grown-ups added!")
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: Brand.pinkDeep))
+            Text("Add anyone else the child sees a lot — the other parent, a sibling, a grandparent, a nanny. Each face anchors the tiles about them. You can always add more later from Family & people.")
+                .font(.system(size: 13)).foregroundStyle(Color(hex: Brand.muted))
+                .multilineTextAlignment(.center).padding(.horizontal, 8)
+            OBPrimaryButton(title: "Add another grown-up", busy: false) { showAddMore = false }
+            Button("Continue") { coord.go(to: .seedCore) }
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color(hex: Brand.pinkDeep))
+                .padding(.top, 2)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity)
+        .background(.white, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(hex: Brand.line), lineWidth: 1))
     }
 
     private func loadPreview(key: String) async {

@@ -335,7 +335,7 @@ struct APIClient {
     func createTileJob(photoJPEG: Data, label: String, detail: String, section: String,
                        categoryId: Int?, style: String, styleGuideId: Int?, model: String,
                        bg: String, keepAspect: Bool, needsReview: Bool, emotion: String,
-                       childId: String) async throws -> Int {
+                       childId: String, relationship: String? = nil) async throws -> Int {
         var path = "/api/tile-jobs?childId=\(percentEscape(childId))&section=\(percentEscape(section))"
             + "&style=\(percentEscape(style))&model=\(percentEscape(model))&bg=\(percentEscape(bg))"
             + "&emotion=\(percentEscape(emotion))"
@@ -343,11 +343,60 @@ struct APIClient {
         if !detail.isEmpty { path += "&detail=\(percentEscape(detail))" }
         if let categoryId  { path += "&categoryId=\(categoryId)" }
         if let styleGuideId { path += "&styleGuideId=\(styleGuideId)" }
+        if let relationship, !relationship.isEmpty { path += "&relationship=\(percentEscape(relationship))" }
         if keepAspect  { path += "&keepAspect=1" }
         if needsReview { path += "&needsReview=1" }
         let (data, _) = try await request(method: "POST", path: path,
                                           body: photoJPEG, contentType: "image/jpeg", timeout: 60)
         return (try JSONDecoder().decode(TileJobCreated.self, from: data)).id
+    }
+
+    // MARK: -- People / family (persons)
+
+    /// A reference person — the child (is_self) and family/caregivers whose face
+    /// anchors the tiles about them. `referenceKey` is their stylized portrait.
+    struct Person: Codable, Identifiable, Hashable {
+        let id: Int
+        let displayName: String
+        let givenName: String?
+        let relationship: String
+        let isSelf: Bool
+        let referenceKey: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case displayName  = "display_name"
+            case givenName    = "given_name"
+            case relationship
+            case isSelf       = "is_self"
+            case referenceKey = "reference_key"
+        }
+    }
+    private struct PersonsList: Codable { let persons: [Person] }
+
+    /// GET the child's reference people (child + family).
+    func listPersons(childId: String) async throws -> [Person] {
+        let (data, _) = try await request(method: "GET",
+                                          path: "/api/persons?childId=\(percentEscape(childId))", body: nil)
+        return (try JSONDecoder().decode(PersonsList.self, from: data)).persons
+    }
+
+    /// POST structured person fields (name / relationship) — no photo. Upserts by
+    /// id or, failing that, by display name. Returns the person id.
+    @discardableResult
+    func upsertPerson(id: Int?, displayName: String, relationship: String, childId: String) async throws -> Int {
+        var body: [String: Any] = ["childId": childId, "displayName": displayName, "relationship": relationship]
+        if let id { body["id"] = id }
+        let data = try JSONSerialization.data(withJSONObject: body)
+        let (resp, _) = try await request(method: "POST", path: "/api/persons",
+                                          body: data, contentType: "application/json")
+        struct R: Codable { let id: Int }
+        return (try JSONDecoder().decode(R.self, from: resp)).id
+    }
+
+    func deletePerson(id: Int, childId: String) async {
+        _ = try? await request(method: "DELETE",
+                               path: "/api/persons?id=\(id)&childId=\(percentEscape(childId))", body: nil)
     }
 
     /// GET the child's active/recent jobs for the tray.

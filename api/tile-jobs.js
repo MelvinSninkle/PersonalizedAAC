@@ -97,14 +97,15 @@ export default async function handler(req, res) {
     const rows = await db`
       INSERT INTO tile_jobs
         (child_id, actor_email, status, source_key, source_content_type, label, detail, section,
-         category_id, style, style_guide_id, model, bg, keep_aspect, needs_review, emotion)
+         category_id, style, style_guide_id, model, bg, keep_aspect, needs_review, emotion, relationship)
       VALUES
         (${childId}, ${auth.user.email || null}, 'queued', ${sourceKey}, ${contentType},
          ${qs(req, 'label').slice(0, 80) || null}, ${qs(req, 'detail').slice(0, 200) || null},
          ${qs(req, 'section') || null}, ${qint(req, 'categoryId')},
          ${qs(req, 'style').slice(0, 80) || null}, ${qint(req, 'styleGuideId')},
          ${qs(req, 'model').slice(0, 60) || null}, ${qs(req, 'bg').slice(0, 16) || null},
-         ${qbool(req, 'keepAspect')}, ${qbool(req, 'needsReview')}, ${qs(req, 'emotion') || 'default'})
+         ${qbool(req, 'keepAspect')}, ${qbool(req, 'needsReview')}, ${qs(req, 'emotion') || 'default'},
+         ${qs(req, 'relationship').slice(0, 40) || null})
       RETURNING id`;
     id = Number(rows[0].id);
   } catch (err) {
