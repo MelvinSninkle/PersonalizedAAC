@@ -16,16 +16,42 @@ final class TilePlayer {
     private var player: AVAudioPlayer?
     private let speech = AVSpeechSynthesizer()
 
-    func play(_ tile: Tile) async {
+    /// Plays a tile's audio AND (when `childId` is provided) logs the tap.
+    ///
+    /// FREE-TAP CALLERS on the board MUST pass `childId`, otherwise nothing
+    /// lands in the events table — Top Words / Use / Word History / mastery
+    /// all silently empty out. This was the entire cause of "we stopped
+    /// collecting board taps when the SwiftUI app shipped": the original
+    /// implementation called this without childId AND sent a bare event
+    /// (not the `{ events: [{...}] }` shape the server requires), so every
+    /// tap was either rejected as 400 or fell back to the literal 'fletcher'
+    /// child_id default.
+    ///
+    /// GAME/SLIDESHOW CALLERS deliberately omit childId — they log richer
+    /// game_attempts via /api/game-log; we don't want to double-count.
+    func play(_ tile: Tile,
+              childId: String? = nil,
+              categoryName: String? = nil,
+              subcategoryName: String? = nil) async {
         // Log the tap (fire-and-forget — UI never waits on analytics).
-        Task.detached(priority: .background) {
-            await APIClient().logEvent([
-                "role":     "student",
-                "itemId":   tile.id,
-                "section":  tile.section.rawValue,
-                "label":    tile.label,
-                "occurredAt": ISO8601DateFormatter().string(from: Date()),
-            ])
+        // The server expects { events: [{ ... }] }; sending a bare event
+        // object hits the 400 'events array required' branch silently.
+        if let childId, !childId.isEmpty {
+            let event: [String: Any] = [
+                "role":            "student",
+                "itemId":          tile.id,
+                "section":         tile.section.rawValue,
+                "label":           tile.label,
+                "categoryName":    categoryName    as Any,
+                "subcategoryName": subcategoryName as Any,
+                "occurredAt":      ISO8601DateFormatter().string(from: Date()),
+            ]
+            Task.detached(priority: .background) {
+                await APIClient().logEvent([
+                    "childId": childId,
+                    "events":  [event],
+                ])
+            }
         }
 
         // 1) Cached audio file.

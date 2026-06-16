@@ -19,6 +19,10 @@ export default async function handler(req, res) {
   const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(String(b.birthDate || '')) ? String(b.birthDate) : null;
   const tier = TIER_LABELS.has(b.tier) ? b.tier : 'under3';
   const language = LANGUAGE_LABELS.has(b.language) ? b.language : 'en';
+  // ElevenLabs voice ids are ~20-char alphanumerics; accept and store the
+  // parent's pick so every tile's generated audio speaks in that voice.
+  const voiceId = typeof b.voiceId === 'string' && /^[A-Za-z0-9]{8,40}$/.test(b.voiceId.trim())
+    ? b.voiceId.trim() : null;
   if (!name) { res.status(400).json({ error: 'name required' }); return; }
   if (!birthDate) { res.status(400).json({ error: 'birthDate (YYYY-MM-DD) required' }); return; }
 
@@ -61,6 +65,7 @@ export default async function handler(req, res) {
     const csRow = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
     const settings = (csRow && csRow.settings) || {};
     settings.language = language;
+    if (voiceId) settings.voiceId = voiceId;
     settings.autoTeach = {
       enabled: false,
       cadence: 'conservative',
@@ -75,7 +80,7 @@ export default async function handler(req, res) {
       ON CONFLICT (child_id) DO UPDATE SET settings = ${settings}::jsonb, updated_at = NOW()`;
 
     await setStep(db, Number(auth.user.uid), nextStep('child'),
-                  { childName: name, birthDate, tier, language });
+                  { childName: name, birthDate, tier, language, voiceId });
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({ ok: true, step: nextStep('child'), childId, personId: Number(personId) });
   } catch (err) {

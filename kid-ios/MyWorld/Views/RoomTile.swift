@@ -15,6 +15,7 @@ struct RoomTile: View {
     let onTap: () -> Void
     let onLongPress: () -> Void
 
+    @Environment(AuthManager.self) private var auth
     @State private var image: UIImage?
 
     var body: some View {
@@ -71,10 +72,14 @@ struct RoomTile: View {
 /// can long-press it again to back out — same gesture that opened it.
 struct RoomInteriorView: View {
     let room: Category
+    /// Unlocked board → tiles inside the room are tap-to-edit too.
+    var editMode: Bool = false
+    var onEditTile: (Tile) -> Void = { _ in }
     let onClose: () -> Void
 
     @Environment(BoardStore.self) private var board
     @Environment(DisplayPrefs.self) private var prefs
+    @Environment(AuthManager.self) private var auth
 
     private var tiles: [Tile] { board.tiles(in: room) }
 
@@ -113,9 +118,17 @@ struct RoomInteriorView: View {
                               alignment: .leading,
                               spacing: BoardMetrics.tileGap) {
                         ForEach(tiles) { t in
-                            TileView(tile: t) { tapped in
-                                Task { await TilePlayer.shared.play(tapped) }
-                            }
+                            TileView(tile: t,
+                                     onTap: { tapped in
+                                         Task {
+                                             await TilePlayer.shared.play(
+                                                 tapped,
+                                                 childId: auth.childSlug,
+                                                 categoryName: room.label
+                                             )
+                                         }
+                                     },
+                                     editMode: editMode, onEdit: onEditTile)
                             .frame(width: tile)
                         }
                     }

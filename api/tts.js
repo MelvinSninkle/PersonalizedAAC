@@ -17,6 +17,7 @@
 import { createHash } from 'node:crypto';
 import { put, get } from '@vercel/blob';
 import { checkAuth } from './_lib/auth.js';
+import { sql } from './_lib/db.js';
 
 const MAX_TEXT_LEN = 300;
 
@@ -61,7 +62,7 @@ export default async function handler(req, res) {
 
   const apiKey = process.env.Fletchers_AAC_Device;
   if (!apiKey) { res.status(500).json({ error: 'Fletchers_AAC_Device env var not configured' }); return; }
-  const voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
+  let voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
   const modelId = process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
 
   const body = typeof req.body === 'object' && req.body !== null ? req.body : {};
@@ -71,6 +72,23 @@ export default async function handler(req, res) {
   }
   if (text.length > MAX_TEXT_LEN) {
     res.status(400).json({ error: `text too long (max ${MAX_TEXT_LEN} chars)` }); return;
+  }
+
+  // Per-child voice: an explicit voiceId wins; else resolve the child's saved
+  // voice (child_settings.voiceId); else the env default above. The cache key
+  // includes the voice, so each voice's renditions cache independently.
+  const explicitVoice = String((typeof body.voiceId === 'string' && body.voiceId) || (req.query && req.query.voiceId) || '');
+  if (/^[A-Za-z0-9]{8,40}$/.test(explicitVoice)) {
+    voiceId = explicitVoice;
+  } else {
+    const childId = String((typeof body.childId === 'string' && body.childId) || (req.query && req.query.childId) || '').slice(0, 64);
+    if (childId) {
+      try {
+        const row = (await sql()`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+        const v = row && row.settings && row.settings.voiceId;
+        if (typeof v === 'string' && /^[A-Za-z0-9]{8,40}$/.test(v)) voiceId = v;
+      } catch (_) { /* fall back to default voice */ }
+    }
   }
 
   const emotionKey = typeof body.emotion === 'string' ? body.emotion.toLowerCase() : 'default';

@@ -88,7 +88,9 @@ final class TileJob: Identifiable {
     let batchId: UUID?
     /// Bulk-imported tiles auto-add to the board but ask the parent to review;
     /// single snaps are final on save. Drives the `needsReview` flag on create.
-    let needsReview: Bool
+    /// `var` (not `let`) so the save-first fallback can flip it true when the
+    /// art failed to render and we kept the raw photo instead.
+    var needsReview: Bool
 
     enum Phase: Equatable {
         case working          // AI chain in flight (progress ring)
@@ -102,8 +104,13 @@ final class TileJob: Identifiable {
     var statusText = "Saved — making the tile…"
 
     var label = ""
-    var pronunciation = ""
+    /// Parent's optional "here's more info" detail, captured before generation
+    /// and passed to /api/generate-image to steer the art (not spoken).
+    var detail = ""
     var errorText: String?
+    /// True when generation failed and we saved the raw photo as the tile image
+    /// instead — the parent can regenerate the art later from the board.
+    var artFailed = false
 
     // Carried so an edit/retry can reuse work instead of re-shooting.
     var imagePNG: Data?
@@ -174,6 +181,7 @@ final class AddTileQueue {
                  bg: String = "pink",
                  emotion: String,
                  prefilledLabel: String,
+                 prefilledDetail: String = "",
                  childId: String,
                  board: BoardStore,
                  batchId: UUID? = nil,
@@ -184,6 +192,7 @@ final class AddTileQueue {
                           emotion: emotion, childId: childId, batchId: batchId,
                           needsReview: needsReview)
         job.label = prefilledLabel
+        job.detail = prefilledDetail
         jobs.insert(job, at: 0)
         schedule(job, board: board)
         return job
@@ -261,54 +270,69 @@ final class AddTileQueue {
 
     private func process(_ job: TileJob, board: BoardStore) async {
         do {
-            // 1) Vision: auto-name + phonetic spelling. Best-effort — if the org
-            //    isn't verified for vision it returns empties and we lean on the
-            //    label the parent may have pre-typed for the batch.
-            job.statusText = "🔍 Naming it…"
-            let desc: APIClient.DescribeResult? = await animating(job, to: 0.12, over: 3) {
-                try? await self.api.describeImage(photoJPEG: job.photoJPEG)
-            }
-            if let desc {
-                if job.label.isEmpty,          !desc.label.isEmpty         { job.label = desc.label }
-                if job.pronunciation.isEmpty,  !desc.pronunciation.isEmpty { job.pronunciation = desc.pronunciation }
+            // 1) Vision: auto-name only (no phonetic spelling anymore). Best-
+            //    effort — if the org isn't verified for vision it returns an
+            //    empty label and we lean on the name the parent may have typed
+            //    in the pre-gen review step.
+            // Only auto-name if the parent didn't already name it in the
+            // "hold on, here's more info" step before generation.
+            if job.label.trimmingCharacters(in: .whitespaces).isEmpty {
+                job.statusText = "🔍 Naming it…"
+                let desc: APIClient.DescribeResult? = await animating(job, to: 0.12, over: 3) {
+                    try? await self.api.describeImage(photoJPEG: job.photoJPEG)
+                }
+                if let desc, !desc.label.isEmpty { job.label = desc.label }
             }
 
-            // 2) Stylized art (~20-120s depending on model + quality). The slow
-            //    step — the ring eases toward 0.85 over ~90s (covers most
-            //    gpt-image-1.5 / -2 high-quality runs) and parks there if the
-            //    API runs longer; the request itself has 300s+ of headroom.
+            // 2) Stylized art (~20-120s). SAVE-FIRST (PRD data fidelity): if
+            //    generation fails — model down, quota, network — we DON'T lose
+            //    the capture. We keep the raw photo as the tile image, flag it
+            //    for review, and carry on so a usable tile still lands on the
+            //    board. The parent regenerates the art later from the board.
             job.statusText = "🎨 Painting the picture…"
-            let png = try await animating(job, to: 0.85, over: 90, {
-                try await self.api.generateImage(photoJPEG: job.photoJPEG,
-                                                 label: job.label,
-                                                 style: job.style.prompt,
-                                                 model: job.model,
-                                                 bg: job.bg,
-                                                 childId: job.childId)
-            })
-            job.imagePNG = png
+            let imageBytes: Data
+            let imageExt: String
+            let imageCT: String
+            do {
+                let png = try await animating(job, to: 0.85, over: 90, {
+                    try await self.api.generateImage(photoJPEG: job.photoJPEG,
+                                                     label: job.label,
+                                                     style: job.style.prompt,
+                                                     model: job.model,
+                                                     bg: job.bg,
+                                                     detail: job.detail,
+                                                     childId: job.childId)
+                })
+                imageBytes = png; imageExt = "png"; imageCT = "image/png"
+                job.imagePNG = png
+            } catch {
+                imageBytes = job.photoJPEG; imageExt = "jpg"; imageCT = "image/jpeg"
+                job.imagePNG = job.photoJPEG
+                job.artFailed = true
+                job.needsReview = true
+            }
             job.progress = 0.85
 
-            // If vision struck out AND no batch label was set, we have art but
-            // nothing to call it. Park the job for a one-tap name rather than
-            // saving a nameless tile to the child's board.
+            // Still nothing to call it (no parent name AND vision struck out) →
+            // park for a one-tap name rather than saving a nameless tile.
             if job.label.trimmingCharacters(in: .whitespaces).isEmpty {
                 job.phase = .needsAttention
                 job.statusText = "Tap to name it"
                 return
             }
 
-            // 3) Voice (phrase wins, else the label).
+            // 3) Voice — speak straight from the label (phonetic pronunciation
+            //    generation was removed; the parent corrects the title if TTS
+            //    mispronounces it).
             job.statusText = "🔊 Making the voice…"
-            let speak = job.pronunciation.isEmpty ? job.label : job.pronunciation
             let mp3 = try await animating(job, to: 0.93, over: 3, {
-                try await self.api.synthesizeSpeech(text: speak, emotion: job.emotion)
+                try await self.api.synthesizeSpeech(text: job.label, emotion: job.emotion, childId: job.childId)
             })
             job.soundMP3 = mp3
 
             // 4) Upload both blobs + create the row. Auto-adds to the board.
             job.statusText = "💾 Adding to the board…"
-            async let imageKeyT = api.uploadBlob(png, kind: "item-image", ext: "png", contentType: "image/png")
+            async let imageKeyT = api.uploadBlob(imageBytes, kind: "item-image", ext: imageExt, contentType: imageCT)
             async let soundKeyT = api.uploadBlob(mp3, kind: "item-sound", ext: "mp3", contentType: "audio/mpeg")
             let imageKey = try await imageKeyT
             let soundKey = try await soundKeyT

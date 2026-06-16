@@ -27,6 +27,7 @@ import { sql } from '../_lib/db.js';
 import { geminiKey, geminiDefaultModel, geminiGenerateImage } from '../_lib/gemini.js';
 import { ensureProgress, nextStep, setStep } from '../_lib/onboarding.js';
 import { isValidRelationship, relationshipNeedsSide } from '../_lib/relationships.js';
+import { loadStyleGuide, loadChildVoiceId, synthesizeVoice } from '../_lib/onboarding-render.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 300 };
 
@@ -55,7 +56,7 @@ async function readBlobBytes(key) {
   return Buffer.concat(chunks);
 }
 
-async function stylize({ db, childId, sourceBytes, contentType, actorEmail, attempt }) {
+async function stylize({ db, childId, sourceBytes, contentType, actorEmail, attempt, styleGuide }) {
   const gKey = geminiKey();
   if (!gKey) throw new Error('GEMINI_API_KEY not configured');
   // A small variance instruction makes each retry give a fresh look — same
@@ -64,12 +65,31 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   const variant = attempt > 0
     ? ` Vary the framing and expression slightly from any previous attempt (attempt ${attempt + 1}).`
     : '';
-  const g = await geminiGenerateImage({
-    apiKey: gKey,
-    model: geminiDefaultModel(),
-    prompt: STYLE_PROMPT_BASE + variant,
-    images: [{ buffer: sourceBytes, contentType: contentType || 'image/jpeg' }],
-  });
+
+  // Two render modes:
+  //   • style guide chosen → render the person IN that style: image 1 is the
+  //     style reference (copy its look only), image 2 is the real photo (keep
+  //     the likeness). This is the "style image + real photo" composition the
+  //     whole board shares, so People match the rest of the tiles.
+  //   • no style guide → the original tuned warm-storybook portrait.
+  const images = [];
+  let prompt;
+  if (styleGuide && styleGuide.image && styleGuide.image.buffer) {
+    images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
+    images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
+    prompt =
+      "Re-illustrate the person in the photo as a head-and-shoulders portrait for a young child's " +
+      "communication board, rendered in the art style of the style-reference image. Keep the person's " +
+      "face and likeness clearly recognizable; soft even lighting; clean soft pastel background; centered; " +
+      "bright friendly colors. Do not add any text, words, or letters." + variant +
+      "\n\nImage 1 is the STYLE reference — copy its art style only, not its content. " +
+      "Image 2 shows the person — keep this person's face and likeness clearly recognizable.";
+  } else {
+    images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
+    prompt = STYLE_PROMPT_BASE + variant;
+  }
+
+  const g = await geminiGenerateImage({ apiKey: gKey, model: geminiDefaultModel(), prompt, images });
   if (!g.ok) {
     const err = new Error('Stylization failed: ' + (g.detail || '').slice(0, 200));
     err.status = g.status || 502; throw err;
@@ -82,7 +102,7 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   try {
     await db`
       INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, size, cost_cents)
-      VALUES (${childId}, ${actorEmail || null}, 'onboarding_draft', 'onboarding-portrait', 'soft', ${STYLE_PROMPT_BASE + variant}, '1024x1024', 4)`;
+      VALUES (${childId}, ${actorEmail || null}, 'onboarding_draft', 'onboarding-portrait', ${styleGuide ? styleGuide.label : 'soft'}, ${prompt}, '1024x1024', 4)`;
   } catch (_) {}
   return blobKey;
 }
@@ -118,12 +138,17 @@ export default async function handler(req, res) {
       const ext = contentType.includes('png') ? 'png' : 'jpg';
       const sourceKey = `onboarding/${childId}/source/${randomUUID()}.${ext}`;
       await put(sourceKey, bytes, { access: 'private', contentType, addRandomSuffix: false });
+      // The chosen style applies to BOTH portraits and the Core seed, so we
+      // persist it on the progress row the first time it arrives — retries and
+      // the seed step read it back from here.
+      const styleGuideId = q.styleGuideId ? parseInt(q.styleGuideId, 10) : (progress.data && progress.data.styleGuideId) || null;
       await db`UPDATE onboarding_progress
-                  SET data = COALESCE(data, '{}'::jsonb) || ${JSON.stringify({ lastSourceKey: sourceKey })}::jsonb,
+                  SET data = COALESCE(data, '{}'::jsonb) || ${JSON.stringify({ lastSourceKey: sourceKey, styleGuideId })}::jsonb,
                       updated_at = NOW()
                 WHERE user_id = ${Number(auth.user.uid)}`;
+      const styleGuide = await loadStyleGuide(db, styleGuideId);
       const draftKey = await stylize({ db, childId, sourceBytes: bytes, contentType,
-                                       actorEmail: auth.user.email, attempt: 0 });
+                                       actorEmail: auth.user.email, attempt: 0, styleGuide });
       res.status(200).json({ ok: true, draftKey });
       return;
     }
@@ -135,9 +160,11 @@ export default async function handler(req, res) {
       const b = body ? JSON.parse(body) : {};
       const attempt = Number(b.attempt) > 0 ? Math.min(5, Math.floor(b.attempt)) : 1;
       const bytes = await loadSourceFromDraft(db, childId, b.draftKey);
+      const styleGuideId = b.styleGuideId ? parseInt(b.styleGuideId, 10) : (progress.data && progress.data.styleGuideId) || null;
+      const styleGuide = await loadStyleGuide(db, styleGuideId);
       const draftKey = await stylize({ db, childId, sourceBytes: bytes,
                                        contentType: 'image/jpeg',
-                                       actorEmail: auth.user.email, attempt });
+                                       actorEmail: auth.user.email, attempt, styleGuide });
       res.status(200).json({ ok: true, draftKey });
       return;
     }
@@ -185,15 +212,27 @@ export default async function handler(req, res) {
           RETURNING id`;
         catId = ins[0].id;
       }
+      // Voice the People tile in the parent's chosen voice (best-effort).
+      let soundKey = null;
+      try {
+        const voiceId = await loadChildVoiceId(db, childId);
+        const mp3 = await synthesizeVoice({ text: name, voiceId });
+        if (mp3) {
+          soundKey = `onboarding/${childId}/voice/${randomUUID()}.mp3`;
+          await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });
+        }
+      } catch (_) {}
+
       const existingTile = await db`SELECT id FROM items
                                      WHERE child_id = ${childId} AND section = 'people'
                                        AND lower(label) = lower(${name}) LIMIT 1`;
       if (existingTile.length) {
-        await db`UPDATE items SET image_key = ${draftKey}, category_id = ${catId}, pinned = ${isSelf}, updated_at = NOW()
+        await db`UPDATE items SET image_key = ${draftKey}, sound_key = COALESCE(${soundKey}, sound_key),
+                   category_id = ${catId}, pinned = ${isSelf}, updated_at = NOW()
                   WHERE id = ${existingTile[0].id}`;
       } else {
-        await db`INSERT INTO items (section, category_id, label, image_key, keep_aspect, display_order, pinned, child_id, updated_at)
-                  VALUES ('people', ${catId}, ${name}, ${draftKey}, FALSE, ${Date.now()}, ${isSelf}, ${childId}, NOW())`;
+        await db`INSERT INTO items (section, category_id, label, image_key, sound_key, keep_aspect, display_order, pinned, child_id, updated_at)
+                  VALUES ('people', ${catId}, ${name}, ${draftKey}, ${soundKey}, FALSE, ${Date.now()}, ${isSelf}, ${childId}, NOW())`;
       }
 
       // Advance the step.

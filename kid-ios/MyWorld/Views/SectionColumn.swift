@@ -16,6 +16,9 @@ struct SectionColumn: View {
     /// opens the add flow pre-set to this section + whatever folder is showing.
     var editMode: Bool = false
     var onAdd: (BoardSection, Int?) -> Void = { _, _ in }
+    /// Tapping a tile while unlocked opens its editor (matching the web
+    /// organizer). Bubbled up to BoardView, which presents the edit sheet.
+    var onEditTile: (Tile) -> Void = { _ in }
 
     @Environment(BoardStore.self) private var board
     @Environment(DisplayPrefs.self) private var prefs
@@ -23,6 +26,30 @@ struct SectionColumn: View {
     @State private var selectedCategoryId: Int?
     @State private var selectedSubcategoryId: Int?
     @State private var openRoom: Category?
+
+    /// Top-level category label at the moment of tap — landed alongside the
+    /// event so the analytics Use chart + Top Words grouping work. We resolve
+    /// it from the selected ids rather than effectiveCategory so a tap inside
+    /// a subcategory still attributes to the visible top-level chip.
+    private var activeCategoryName: String? {
+        let roots = board.roots(in: section)
+        return roots.first(where: { $0.id == selectedCategoryId })?.label
+            ?? roots.first?.label
+    }
+    private var activeSubcategoryName: String? {
+        guard let subId = selectedSubcategoryId else { return nil }
+        return board.categories.first(where: { $0.id == subId })?.label
+    }
+    private func playWithLogging(_ t: Tile, fallbackCategory: String? = nil) {
+        Task {
+            await TilePlayer.shared.play(
+                t,
+                childId: auth.childSlug,
+                categoryName: fallbackCategory ?? activeCategoryName,
+                subcategoryName: activeSubcategoryName
+            )
+        }
+    }
 
     private var bandColor: Color { Color(hex: prefs.color(section)).opacity(0.7) }
 
@@ -68,7 +95,7 @@ struct SectionColumn: View {
         }
         // Room interior — the child long-pressed a room; long-press exits.
         .fullScreenCover(item: $openRoom) { room in
-            RoomInteriorView(room: room) { openRoom = nil }
+            RoomInteriorView(room: room, editMode: editMode, onEditTile: onEditTile) { openRoom = nil }
         }
     }
 
@@ -115,9 +142,8 @@ struct SectionColumn: View {
         return ScrollView {
             LazyVGrid(columns: gridCols, alignment: .leading, spacing: BoardMetrics.tileGap) {
                 ForEach(tiles) { tile in
-                    TileView(tile: tile) { t in
-                        Task { await TilePlayer.shared.play(t) }
-                    }
+                    TileView(tile: tile, onTap: { t in playWithLogging(t) },
+                             editMode: editMode, onEdit: onEditTile)
                     .frame(width: tileSize)
                 }
                 if editMode {
@@ -145,9 +171,9 @@ struct SectionColumn: View {
                 // No rooms configured — show this location's items like normal.
                 LazyVGrid(columns: gridCols, alignment: .leading, spacing: BoardMetrics.tileGap) {
                     ForEach(board.tiles(in: location)) { tile in
-                        TileView(tile: tile) { t in
-                            Task { await TilePlayer.shared.play(t) }
-                        }
+                        TileView(tile: tile,
+                                 onTap: { t in playWithLogging(t, fallbackCategory: location.label) },
+                                 editMode: editMode, onEdit: onEditTile)
                         .frame(width: tileSize)
                     }
                 }

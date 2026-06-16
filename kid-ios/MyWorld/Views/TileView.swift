@@ -6,13 +6,17 @@ import SwiftUI
 struct TileView: View {
     let tile: Tile
     let onTap: (Tile) -> Void
+    /// When the board is unlocked, tapping a tile opens its editor instead of
+    /// speaking (matching the web organizer). A pencil badge marks it editable.
+    var editMode: Bool = false
+    var onEdit: (Tile) -> Void = { _ in }
 
     @Environment(DisplayPrefs.self) private var prefs
     @State private var image: UIImage?
 
     var body: some View {
         Button {
-            onTap(tile)
+            if editMode { onEdit(tile) } else { onTap(tile) }
         } label: {
             VStack(spacing: 6) {
                 ZStack {
@@ -35,8 +39,29 @@ struct TileView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .overlay(
                     RoundedRectangle(cornerRadius: 18)
-                        .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                        .stroke(editMode ? Color(hex: "#ff1493").opacity(0.7) : Color.black.opacity(0.06),
+                                lineWidth: editMode ? 2 : 1)
                 )
+                // Pencil badge so the parent knows the tile is tap-to-edit while
+                // unlocked (and the pinned star, matching the web organizer).
+                .overlay(alignment: .topTrailing) {
+                    if editMode {
+                        Image(systemName: "pencil.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(Color(hex: "#ff1493"))
+                            .background(Circle().fill(.white))
+                            .padding(5)
+                    }
+                }
+                .overlay(alignment: .topLeading) {
+                    if tile.pinned {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.yellow)
+                            .padding(6)
+                            .shadow(color: .black.opacity(0.25), radius: 1)
+                    }
+                }
 
                 if !prefs.hideLabels {
                     Text(tile.label)

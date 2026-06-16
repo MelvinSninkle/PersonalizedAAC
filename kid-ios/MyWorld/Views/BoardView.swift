@@ -28,6 +28,8 @@ struct BoardView: View {
     @State private var pendingMessage: [MessageToken]?
     /// An in-grid "+ Add tile" tap; carries which section/folder to pre-select.
     @State private var addTileRequest: AddTileRequest?
+    /// A tile tapped while the board is unlocked → opens the full board editor.
+    @State private var editingTile: Tile?
 
     struct AddTileRequest: Identifiable {
         let id = UUID()
@@ -53,7 +55,8 @@ struct BoardView: View {
                                           editMode: editMode,
                                           onAdd: { sec, catId in
                                               addTileRequest = AddTileRequest(section: sec, categoryId: catId)
-                                          })
+                                          },
+                                          onEditTile: { editingTile = $0 })
                                 .frame(width: BoardMetrics.columnWidth(across: prefs.across(section),
                                                                        tile: tile))
                             if idx < visible.count - 1 { Divider() }
@@ -67,7 +70,8 @@ struct BoardView: View {
                         Divider()
                         NeedsStrip(tileSize: tile,
                                    editMode: editMode,
-                                   onAdd: { addTileRequest = AddTileRequest(section: .needs, categoryId: nil) })
+                                   onAdd: { addTileRequest = AddTileRequest(section: .needs, categoryId: nil) },
+                                   onEditTile: { editingTile = $0 })
                     }
                 }
             }
@@ -89,6 +93,9 @@ struct BoardView: View {
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showDisplay)  { DisplaySettingsView() }
         .sheet(isPresented: $showBatchReview) { BatchReviewView { showBatchReview = false } }
+        // Tap a tile while unlocked → the full board tile editor (rename, swap
+        // picture, re-voice, pin, move, delete) — the app match to the web.
+        .sheet(item: $editingTile) { tile in BoardTileEditSheet(tile: tile) }
         // Full-screen so the board + its header don't bleed through behind the
         // add UI (a centered form sheet looked cluttered on iPad).
         .fullScreenCover(item: $addTileRequest) { req in

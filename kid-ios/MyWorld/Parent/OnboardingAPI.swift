@@ -59,13 +59,57 @@ extension APIClient {
         catch { throw APIError.decoding(error) }
     }
 
+    // MARK: -- Art style picker (style guides)
+
+    struct OnboardingStyle: Codable, Identifiable, Hashable {
+        let id: Int
+        let label: String
+        let description: String?
+    }
+    private struct OnboardingStylesResult: Codable { let styles: [OnboardingStyle] }
+
+    /// The active style guides the parent can pick from — same set the admin Lab
+    /// uses, exposed read-only for onboarding.
+    func onboardingStyles() async throws -> [OnboardingStyle] {
+        let (data, _) = try await request(method: "GET", path: "/api/onboarding/styles", body: nil)
+        do { return try JSONDecoder().decode(OnboardingStylesResult.self, from: data).styles }
+        catch { throw APIError.decoding(error) }
+    }
+
+    /// Preview image bytes for a style guide (auth-gated proxy).
+    func onboardingStyleImage(id: Int) async throws -> Data {
+        let (data, _) = try await request(method: "GET", path: "/api/onboarding/styles?image=\(id)", body: nil)
+        return data
+    }
+
+    // MARK: -- Voice picker
+
+    struct OnboardingVoice: Codable, Identifiable, Hashable {
+        let id: String
+        let name: String
+        let description: String?
+        let previewUrl: String?
+    }
+    private struct OnboardingVoicesResult: Codable { let voices: [OnboardingVoice] }
+
+    /// The ElevenLabs voices available to the account — the parent picks how the
+    /// board speaks; the choice is saved to the child and used for every tile.
+    func onboardingVoices() async throws -> [OnboardingVoice] {
+        let (data, _) = try await request(method: "GET", path: "/api/onboarding/voices", body: nil)
+        do { return try JSONDecoder().decode(OnboardingVoicesResult.self, from: data).voices }
+        catch { throw APIError.decoding(error) }
+    }
+
     @discardableResult
-    func onboardingChild(name: String, birthDate: Date, tier: String, language: String) async throws -> [String: Any] {
+    func onboardingChild(name: String, birthDate: Date, tier: String, language: String,
+                         voiceId: String? = nil) async throws -> [String: Any] {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
-        let body = try JSONSerialization.data(withJSONObject: [
+        var payload: [String: Any] = [
             "name": name, "birthDate": f.string(from: birthDate),
             "tier": tier, "language": language,
-        ])
+        ]
+        if let voiceId, !voiceId.isEmpty { payload["voiceId"] = voiceId }
+        let body = try JSONSerialization.data(withJSONObject: payload)
         let (data, _) = try await request(method: "POST", path: "/api/onboarding/child",
                                           body: body, contentType: "application/json")
         return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
@@ -74,10 +118,12 @@ extension APIClient {
     // MARK: -- Photo: draft / retry / commit (free retries during onboarding)
 
     struct OnboardingDraftResult: Codable { let ok: Bool; let draftKey: String? }
-    /// Stylize a raw JPEG and return a DRAFT blob key. Doesn't commit.
-    func onboardingPhotoDraft(jpeg: Data) async throws -> String {
-        let (data, _) = try await request(method: "POST",
-                                          path: "/api/onboarding/family?action=draft",
+    /// Stylize a raw JPEG and return a DRAFT blob key. Doesn't commit. The
+    /// chosen style guide (image) is rendered alongside the real photo.
+    func onboardingPhotoDraft(jpeg: Data, styleGuideId: Int? = nil) async throws -> String {
+        var path = "/api/onboarding/family?action=draft"
+        if let styleGuideId { path += "&styleGuideId=\(styleGuideId)" }
+        let (data, _) = try await request(method: "POST", path: path,
                                           body: jpeg, contentType: "image/jpeg",
                                           timeout: 320)
         let r = try JSONDecoder().decode(OnboardingDraftResult.self, from: data)
@@ -85,10 +131,10 @@ extension APIClient {
         return k
     }
     /// Re-stylize from the cached source bytes — same photo, different roll.
-    func onboardingPhotoRetry(draftKey: String, attempt: Int) async throws -> String {
-        let body = try JSONSerialization.data(withJSONObject: [
-            "draftKey": draftKey, "attempt": attempt,
-        ])
+    func onboardingPhotoRetry(draftKey: String, attempt: Int, styleGuideId: Int? = nil) async throws -> String {
+        var payload: [String: Any] = ["draftKey": draftKey, "attempt": attempt]
+        if let styleGuideId { payload["styleGuideId"] = styleGuideId }
+        let body = try JSONSerialization.data(withJSONObject: payload)
         let (data, _) = try await request(method: "POST",
                                           path: "/api/onboarding/family?action=retry",
                                           body: body, contentType: "application/json",
@@ -117,10 +163,14 @@ extension APIClient {
         let slugs: [String]
         let message: String?
     }
-    func onboardingSeedCore() async throws -> OnboardingSeedResult {
-        let (data, _) = try await request(method: "POST", path: "/api/onboarding/seed-core",
+    func onboardingSeedCore(styleGuideId: Int? = nil) async throws -> OnboardingSeedResult {
+        var path = "/api/onboarding/seed-core"
+        if let styleGuideId { path += "?styleGuideId=\(styleGuideId)" }
+        // Renders ~13 tiles server-side (Gemini) before responding — give it the
+        // function's full ceiling rather than the old fire-and-forget 30s.
+        let (data, _) = try await request(method: "POST", path: path,
                                           body: nil, contentType: "application/json",
-                                          timeout: 30)
+                                          timeout: 320)
         return try JSONDecoder().decode(OnboardingSeedResult.self, from: data)
     }
     func onboardingComplete() async {

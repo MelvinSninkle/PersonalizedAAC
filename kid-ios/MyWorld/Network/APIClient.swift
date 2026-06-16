@@ -171,12 +171,12 @@ struct APIClient {
 
     struct DescribeResult: Codable {
         let label: String
-        let pronunciation: String
     }
 
-    /// POST /api/describe-image — OpenAI vision suggests a 1-2 word label and
-    /// a phonetic spelling tuned for TTS. Best-effort; if the org isn't
-    /// verified for vision, returns empty strings.
+    /// POST /api/describe-image — OpenAI vision suggests a 1-2 word label.
+    /// Best-effort; if the org isn't verified for vision, returns an empty
+    /// label (phonetic-pronunciation generation was removed — TTS speaks from
+    /// the title).
     func describeImage(photoJPEG: Data) async throws -> DescribeResult {
         let (data, _) = try await request(method: "POST", path: "/api/describe-image",
                                           body: photoJPEG, contentType: "image/jpeg")
@@ -188,9 +188,10 @@ struct APIClient {
     /// with the chosen image model. `bg` picks the flat background color
     /// (preset name like 'pink' or a hex). Returns the raw PNG bytes. ~20-40s.
     func generateImage(photoJPEG: Data, label: String, style: String, model: String,
-                       bg: String?, childId: String) async throws -> Data {
+                       bg: String?, detail: String? = nil, childId: String) async throws -> Data {
         var path = "/api/generate-image?label=\(percentEscape(label))&style=\(percentEscape(style))&model=\(percentEscape(model))&childId=\(percentEscape(childId))"
         if let bg, !bg.isEmpty { path += "&bg=\(percentEscape(bg))" }
+        if let detail, !detail.isEmpty { path += "&detail=\(percentEscape(detail))" }
         // 320s = Vercel's 300s function ceiling plus a 20s grace window, so a
         // near-the-edge response still arrives intact rather than the iPad
         // giving up first. gpt-image-1.5/-2 at high quality + high fidelity can
@@ -205,8 +206,12 @@ struct APIClient {
     /// Returns the raw MP3 bytes. Throws on failure so the caller can surface
     /// an inline error (the legacy `tts` below returns Data? for fire-and-
     /// forget callers like GameAudio that don't need to know what went wrong).
-    func synthesizeSpeech(text: String, emotion: String) async throws -> Data {
-        let body = try JSONSerialization.data(withJSONObject: ["text": text, "emotion": emotion])
+    /// `childId` lets the server resolve that child's chosen voice
+    /// (child_settings.voiceId) so newly created/edited tiles speak in it.
+    func synthesizeSpeech(text: String, emotion: String, childId: String? = nil) async throws -> Data {
+        var payload: [String: Any] = ["text": text, "emotion": emotion]
+        if let childId, !childId.isEmpty { payload["childId"] = childId }
+        let body = try JSONSerialization.data(withJSONObject: payload)
         let (data, _) = try await request(method: "POST", path: "/api/tts",
                                           body: body, contentType: "application/json")
         return data
@@ -265,13 +270,18 @@ struct APIClient {
 
     /// PUT /api/items?id= — updates an existing tile. Only the fields you pass
     /// are changed (the server COALESCEs the rest). Used by the tray edit (fix
-    /// a wrong AI name / placement) and by the review queue (`needsReview:
-    /// false` to confirm a bulk-imported tile).
+    /// a wrong AI name / placement), the review queue (`needsReview: false` to
+    /// confirm a bulk-imported tile), and the board's full tile editor (image,
+    /// voice, pin, keep-aspect, move, description — matching the web dashboard).
     func updateItem(id: Int,
                     label: String? = nil,
                     section: String? = nil,
                     category: CategoryUpdate = .unchanged,
+                    imageKey: String? = nil,
                     soundKey: String? = nil,
+                    keepAspect: Bool? = nil,
+                    pinned: Bool? = nil,
+                    description: String? = nil,
                     needsReview: Bool? = nil,
                     childId: String) async throws -> Tile {
         var body: [String: Any] = ["childId": childId]
@@ -281,7 +291,13 @@ struct APIClient {
         case .unchanged:      break
         case .set(let catId): body["categoryId"] = catId ?? NSNull()
         }
+        if let imageKey    { body["imageKey"]    = imageKey }
         if let soundKey    { body["soundKey"]    = soundKey }
+        if let keepAspect  { body["keepAspect"]  = keepAspect }
+        if let pinned      { body["pinned"]      = pinned }
+        // Explicit "" clears the description back to the game's fallback prompt;
+        // nil leaves it untouched (so we only send it when the editor changed it).
+        if let description { body["description"] = description }
         if let needsReview { body["needsReview"] = needsReview }
         let bodyData = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await request(method: "PUT", path: "/api/items?id=\(id)",
