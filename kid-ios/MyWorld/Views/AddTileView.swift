@@ -112,10 +112,12 @@ struct AddTileView: View {
                 Task { await importPicked(picked) }
             }
             .task {
-                // Destination is seeded in init now (see above). Reopening the
-                // sheet starts the tray clean, but keep anything still rendering
-                // visible so she can watch it land.
+                // Destination is seeded in init now (see above). Drop finished
+                // cards, then pull any jobs still rendering SERVER-SIDE so they
+                // reappear in the tray even after an app restart (they're durable
+                // now — the work continues without this device).
                 queue.pruneFinished()
+                await queue.restore(childId: auth.childSlug, board: board)
             }
         }
     }

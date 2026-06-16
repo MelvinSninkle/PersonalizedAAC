@@ -4,8 +4,8 @@ import UIKit
 import Observation
 
 /// Which image model to generate with — selectable from the add-tile UI so a
-/// parent can experiment. `apiValue` is sent to /api/generate-image as the
-/// `model` param (server allow-lists these; gemini-* routes to Nano Banana).
+/// parent can experiment. `apiValue` is sent to /api/tile-jobs as the `model`
+/// param (server allow-lists these; gemini-* routes to Nano Banana).
 enum ImageModel: String, CaseIterable, Identifiable {
     // Default first — Nano Banana is cheapest AND strongest at keeping a
     // person's likeness from a reference photo.
@@ -32,8 +32,10 @@ enum ImageModel: String, CaseIterable, Identifiable {
 }
 
 /// Art styles offered when generating a tile. `prompt` is what we send to
-/// /api/generate-image as the `style` param; `label` is the parent-facing name.
-/// Mirrors the web dashboard's style dropdown.
+/// /api/tile-jobs as the `style` param; `label` is the parent-facing name.
+/// Mirrors the web dashboard's style dropdown. NOTE: visual consistency comes
+/// from the child's saved STYLE-GUIDE image (resolved server-side), not this
+/// text — this just nudges the descriptor.
 enum ArtStyle: String, CaseIterable, Identifiable {
     case threeD, pictureBook, watercolor, soft, felted
     var id: String { rawValue }
@@ -57,14 +59,11 @@ enum ArtStyle: String, CaseIterable, Identifiable {
     }
 }
 
-/// One background "make a tile from this photo" job. Observable so its progress
-/// ring + status text update live in the tray while the AI chain runs.
-///
-/// The parent never waits on this: the moment a photo is captured a job is
-/// created and the camera is free again. Jobs render concurrently and auto-add
-/// to the board when finished. A job only stops to ask for help in two cases —
-/// the AI couldn't name the photo, or a step errored — both surfaced as a
-/// tappable card.
+/// One "make a tile from this photo" job, as shown in the tray. The work itself
+/// runs SERVER-SIDE now (api/tile-jobs): the photo is uploaded once (and is safe
+/// the instant that returns), then the server renders + voices + places the tile
+/// and a cron guarantees completion. This object just mirrors the server job's
+/// status for the tray, polled by `AddTileQueue`.
 @MainActor
 @Observable
 final class TileJob: Identifiable {
@@ -72,50 +71,43 @@ final class TileJob: Identifiable {
     /// The captured photo, shown as the card's backdrop while it processes.
     let thumbnail: UIImage
     let photoJPEG: Data
-    /// Destination chosen for the batch. Mutable so a per-tile edit can move it.
     var section: BoardSection
     var categoryId: Int?
     let style: ArtStyle
-    /// OpenAI image model id (e.g. "gpt-image-1.5") chosen for this tile.
     let model: String
-    /// Background-color preset name ('pink', 'mint', 'yellow', 'blue', 'peach',
-    /// 'white') — passed to /api/generate-image as ?bg=. Empty = model default.
     let bg: String
     let emotion: String
     let childId: String
-    /// Non-nil when this job is part of a multi-photo bulk import. Used to fire
-    /// the "review N tiles" notice once the whole batch has settled.
+    /// Non-nil when part of a multi-photo bulk import (drives the review notice).
     let batchId: UUID?
-    /// Bulk-imported tiles auto-add to the board but ask the parent to review;
-    /// single snaps are final on save. Drives the `needsReview` flag on create.
-    /// `var` (not `let`) so the save-first fallback can flip it true when the
-    /// art failed to render and we kept the raw photo instead.
+    /// Bulk imports auto-add but ask for review; single snaps are final.
     var needsReview: Bool
 
+    /// The server job id once the upload has returned. Until then the job is
+    /// uploading; after, the tray polls the server by this id.
+    var serverId: Int?
+
     enum Phase: Equatable {
-        case working          // AI chain in flight (progress ring)
-        case done             // saved + on the board (checkmark)
-        case needsAttention   // can't auto-finish — see `errorText` vs empty label
+        case working          // uploading or rendering server-side
+        case done             // tile is on the board
+        case needsAttention   // upload/terminal failure — see errorText, or unnamed
     }
     var phase: Phase = .working
-    /// 0…1 for the ring. Estimated during the long image step (no real % from
-    /// the API) — eases toward a ceiling, then snaps to done.
     var progress: Double = 0
     var statusText = "Saved — making the tile…"
 
     var label = ""
-    /// Parent's optional "here's more info" detail, captured before generation
-    /// and passed to /api/generate-image to steer the art (not spoken).
+    /// Parent's optional "here's more info" detail passed to generation.
     var detail = ""
     var errorText: String?
-    /// True when generation failed and we saved the raw photo as the tile image
-    /// instead — the parent can regenerate the art later from the board.
+    /// True when the server kept the raw photo because art generation failed.
     var artFailed = false
 
-    // Carried so an edit/retry can reuse work instead of re-shooting.
+    // Kept so TileEditSheet/retry can reuse work. (imagePNG/soundMP3 are unused
+    // in the server model but retained so the tray editor still compiles.)
     var imagePNG: Data?
     var soundMP3: Data?
-    /// Set once the tile row exists on the server (nil = not saved yet).
+    /// Set to the created item id once the server job is done.
     var savedTileId: Int?
 
     init(thumbnail: UIImage, photoJPEG: Data, section: BoardSection,
@@ -142,10 +134,11 @@ struct ReviewNotice: Identifiable, Equatable {
     let count: Int        // how many tiles in the batch landed successfully
 }
 
-/// App-level queue that runs `TileJob`s. Lives in the environment (created in
-/// `MyWorldApp`) rather than inside the Add-Tile sheet, so a parent can fire off
-/// several photos, close the sheet, and the tiles still finish rendering and
-/// land on the board on their own.
+/// App-level queue that drives the SERVER-SIDE tile pipeline. The parent fires
+/// off photos; each is uploaded to /api/tile-jobs (durably — the photo can't be
+/// lost) and the server does the slow work. The queue polls the server for
+/// status so the tray updates live, and the tiles land on the board on their own
+/// even if the sheet is closed or the app restarts.
 @MainActor
 @Observable
 final class AddTileQueue {
@@ -154,23 +147,20 @@ final class AddTileQueue {
 
     private let api = APIClient()
 
-    // Concurrency gate. A bulk import of 20 photos must NOT fire 20 image
-    // generations at once — that invites rate limits and runs up cost. We keep
-    // at most `maxConcurrent` jobs rendering and queue the rest; the tray still
-    // feels parallel (3 rings spinning) without hammering the API.
-    private let maxConcurrent = 3
-    private var inFlight = 0
-    private var waiting: [(TileJob, BoardStore)] = []
-
-    /// True while anything is still rendering — used to badge the board header
-    /// so the parent knows tiles are still on the way after closing the sheet.
-    var hasActiveJobs: Bool { jobs.contains { $0.phase == .working } }
-
     /// Set when a bulk import settles; the board watches this to pop the review
     /// banner. Cleared when the parent opens or dismisses the review.
     var pendingReviewNotice: ReviewNotice?
 
-    // MARK: -- Enqueue / manage
+    // Poll loop + the context it needs to refresh the board on completion.
+    private var pollTask: Task<Void, Never>?
+    private var board: BoardStore?
+    private var childId: String = ""
+    /// Batches we've already announced, so the review notice fires once.
+    private var announcedBatches: Set<UUID> = []
+
+    var hasActiveJobs: Bool { jobs.contains { $0.phase == .working } }
+
+    // MARK: -- Enqueue
 
     @discardableResult
     func enqueue(photoJPEG: Data,
@@ -186,6 +176,8 @@ final class AddTileQueue {
                  board: BoardStore,
                  batchId: UUID? = nil,
                  needsReview: Bool = false) -> TileJob {
+        self.board = board
+        self.childId = childId
         let thumb = UIImage(data: photoJPEG) ?? UIImage()
         let job = TileJob(thumbnail: thumb, photoJPEG: photoJPEG, section: section,
                           categoryId: categoryId, style: style, model: model, bg: bg,
@@ -193,36 +185,14 @@ final class AddTileQueue {
                           needsReview: needsReview)
         job.label = prefilledLabel
         job.detail = prefilledDetail
+        job.statusText = "Uploading photo…"
+        job.progress = 0.05
         jobs.insert(job, at: 0)
-        schedule(job, board: board)
+        Task { await upload(job) }
+        ensurePolling()
         return job
     }
 
-    /// Start the job now if there's a free slot, else hold it until one frees.
-    private func schedule(_ job: TileJob, board: BoardStore) {
-        guard inFlight < maxConcurrent else {
-            waiting.append((job, board))
-            job.statusText = "Waiting its turn…"
-            return
-        }
-        inFlight += 1
-        Task { await runAndRelease(job, board: board) }
-    }
-
-    private func runAndRelease(_ job: TileJob, board: BoardStore) async {
-        await process(job, board: board)
-        inFlight -= 1
-        if !waiting.isEmpty {
-            let (next, nextBoard) = waiting.removeFirst()
-            inFlight += 1
-            Task { await runAndRelease(next, board: nextBoard) }
-        }
-    }
-
-    /// Enqueue a whole photo-library multi-selection as one reviewable batch.
-    /// Every photo renders in the background (auto-adding to the board with the
-    /// review flag set); when the last one settles, `pendingReviewNotice` fires
-    /// so the parent gets the "review N tiles" prompt.
     func enqueueBatch(photos: [Data],
                       section: BoardSection,
                       categoryId: Int?,
@@ -234,164 +204,166 @@ final class AddTileQueue {
                       board: BoardStore) {
         let batchId = UUID()
         for photo in photos {
-            _ = enqueue(photoJPEG: photo,
-                        section: section,
-                        categoryId: categoryId,
-                        style: style,
-                        model: model,
-                        bg: bg,
-                        emotion: emotion,
-                        prefilledLabel: "",
-                        childId: childId,
-                        board: board,
-                        batchId: batchId,
-                        needsReview: true)
+            _ = enqueue(photoJPEG: photo, section: section, categoryId: categoryId,
+                        style: style, model: model, bg: bg, emotion: emotion,
+                        prefilledLabel: "", childId: childId, board: board,
+                        batchId: batchId, needsReview: true)
         }
     }
 
-    func remove(_ job: TileJob) {
-        jobs.removeAll { $0.id == job.id }
-        waiting.removeAll { $0.0.id == job.id }   // drop it if still queued
-    }
-
-    /// Drop finished cards (they're already on the board). Called when the sheet
-    /// reopens so the tray starts clean but still shows anything mid-flight.
-    func pruneFinished() { jobs.removeAll { $0.phase == .done } }
-
-    func retry(_ job: TileJob, board: BoardStore) {
-        job.phase = .working
-        job.progress = 0
-        job.errorText = nil
-        job.statusText = "Trying again…"
-        schedule(job, board: board)
-    }
-
-    // MARK: -- The chain
-
-    private func process(_ job: TileJob, board: BoardStore) async {
+    /// Upload the photo to the durable server queue. The moment this returns the
+    /// photo is safe server-side; the server renders the tile from there.
+    private func upload(_ job: TileJob) async {
         do {
-            // 1) Vision: auto-name only (no phonetic spelling anymore). Best-
-            //    effort — if the org isn't verified for vision it returns an
-            //    empty label and we lean on the name the parent may have typed
-            //    in the pre-gen review step.
-            // Only auto-name if the parent didn't already name it in the
-            // "hold on, here's more info" step before generation.
-            if job.label.trimmingCharacters(in: .whitespaces).isEmpty {
-                job.statusText = "🔍 Naming it…"
-                let desc: APIClient.DescribeResult? = await animating(job, to: 0.12, over: 3) {
-                    try? await self.api.describeImage(photoJPEG: job.photoJPEG)
-                }
-                if let desc, !desc.label.isEmpty { job.label = desc.label }
-            }
-
-            // 2) Stylized art (~20-120s). SAVE-FIRST (PRD data fidelity): if
-            //    generation fails — model down, quota, network — we DON'T lose
-            //    the capture. We keep the raw photo as the tile image, flag it
-            //    for review, and carry on so a usable tile still lands on the
-            //    board. The parent regenerates the art later from the board.
-            job.statusText = "🎨 Painting the picture…"
-            let imageBytes: Data
-            let imageExt: String
-            let imageCT: String
-            do {
-                let png = try await animating(job, to: 0.85, over: 90, {
-                    try await self.api.generateImage(photoJPEG: job.photoJPEG,
-                                                     label: job.label,
-                                                     style: job.style.prompt,
-                                                     model: job.model,
-                                                     bg: job.bg,
-                                                     detail: job.detail,
-                                                     childId: job.childId)
-                })
-                imageBytes = png; imageExt = "png"; imageCT = "image/png"
-                job.imagePNG = png
-            } catch {
-                imageBytes = job.photoJPEG; imageExt = "jpg"; imageCT = "image/jpeg"
-                job.imagePNG = job.photoJPEG
-                job.artFailed = true
-                job.needsReview = true
-            }
-            job.progress = 0.85
-
-            // Still nothing to call it (no parent name AND vision struck out) →
-            // park for a one-tap name rather than saving a nameless tile.
-            if job.label.trimmingCharacters(in: .whitespaces).isEmpty {
-                job.phase = .needsAttention
-                job.statusText = "Tap to name it"
-                return
-            }
-
-            // 3) Voice — speak straight from the label (phonetic pronunciation
-            //    generation was removed; the parent corrects the title if TTS
-            //    mispronounces it).
-            job.statusText = "🔊 Making the voice…"
-            let mp3 = try await animating(job, to: 0.93, over: 3, {
-                try await self.api.synthesizeSpeech(text: job.label, emotion: job.emotion, childId: job.childId)
-            })
-            job.soundMP3 = mp3
-
-            // 4) Upload both blobs + create the row. Auto-adds to the board.
-            job.statusText = "💾 Adding to the board…"
-            async let imageKeyT = api.uploadBlob(imageBytes, kind: "item-image", ext: imageExt, contentType: imageCT)
-            async let soundKeyT = api.uploadBlob(mp3, kind: "item-sound", ext: "mp3", contentType: "audio/mpeg")
-            let imageKey = try await imageKeyT
-            let soundKey = try await soundKeyT
-
-            let tile = try await api.createItem(section: job.section.rawValue,
-                                                categoryId: job.categoryId,
-                                                label: job.label,
-                                                imageKey: imageKey,
-                                                soundKey: soundKey,
-                                                keepAspect: false,
-                                                description: nil,
-                                                needsReview: job.needsReview,
-                                                childId: job.childId)
-            job.savedTileId = tile.id
-            job.progress = 1.0
-            job.phase = .done
-            job.statusText = job.needsReview ? "✅ On the board — needs review" : "✅ On the board"
-            await board.refresh(childId: job.childId)
+            let serverId = try await api.createTileJob(
+                photoJPEG: job.photoJPEG,
+                label: job.label,
+                detail: job.detail,
+                section: job.section.rawValue,
+                categoryId: job.categoryId,
+                style: job.style.prompt,
+                styleGuideId: nil,                 // server resolves the child's house style
+                model: job.model,
+                bg: job.bg,
+                keepAspect: false,
+                needsReview: job.needsReview,
+                emotion: job.emotion,
+                childId: job.childId)
+            job.serverId = serverId
+            job.statusText = "Saved — making the tile…"
+            job.progress = max(job.progress, 0.15)
         } catch {
             job.phase = .needsAttention
             job.errorText = friendly(error)
-            job.statusText = "Didn't finish"
+            job.statusText = "Upload failed — tap Retry"
         }
-        // Whether it landed or stumbled, check if this was the last straggler
-        // in a bulk import — if so, prompt the parent to review the batch.
-        checkBatchCompletion(job.batchId)
     }
 
-    /// Fire the review notice once every job in a bulk batch has stopped
-    /// working (done or needs-attention). Counts only the ones that made it
-    /// onto the board.
-    private func checkBatchCompletion(_ batchId: UUID?) {
-        guard let batchId else { return }
-        let inBatch = jobs.filter { $0.batchId == batchId }
-        guard !inBatch.isEmpty, inBatch.allSatisfy({ $0.phase != .working }) else { return }
-        let landed = inBatch.filter { $0.phase == .done }.count
-        guard landed > 0 else { return }
-        pendingReviewNotice = ReviewNotice(count: landed)
+    // MARK: -- Polling
+
+    private func ensurePolling() {
+        guard pollTask == nil else { return }
+        pollTask = Task { [weak self] in await self?.pollLoop() }
     }
 
-    /// Run `work`, easing `job.progress` from its current value toward `ceiling`
-    /// over ~`seconds` meanwhile. The animator is cancelled as soon as the real
-    /// work returns, so a fast response snaps ahead and a slow one parks just
-    /// shy of the ceiling — honest "still going" feedback without a fake 100%.
-    private func animating<T>(_ job: TileJob,
-                              to ceiling: Double,
-                              over seconds: Double,
-                              _ work: () async throws -> T) async rethrows -> T {
-        let start = job.progress
-        let anim = Task { @MainActor in
-            let steps = 50
-            for i in 1...steps {
-                try? await Task.sleep(nanoseconds: UInt64((seconds / Double(steps)) * 1_000_000_000))
-                if Task.isCancelled { return }
-                job.progress = start + (ceiling - start) * (Double(i) / Double(steps))
+    private func pollLoop() async {
+        while !Task.isCancelled {
+            // Stop when nothing is in flight (an upload-failed card is terminal
+            // until the parent retries, which restarts polling).
+            if !jobs.contains(where: { $0.phase == .working && $0.serverId != nil }) {
+                // Still waiting on an in-flight upload? keep looping; else stop.
+                if !jobs.contains(where: { $0.phase == .working }) { pollTask = nil; return }
+            }
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            await syncFromServer()
+        }
+        pollTask = nil
+    }
+
+    /// Pull server status and map it onto the tray jobs. Refreshes the board when
+    /// a tile newly lands and fires the batch-review notice when a batch settles.
+    func syncFromServer() async {
+        guard !childId.isEmpty else { return }
+        guard let server = try? await api.listTileJobs(childId: childId) else { return }
+        let byId = Dictionary(uniqueKeysWithValues: server.map { ($0.id, $0) })
+
+        var landed = false
+        for job in jobs {
+            guard let sid = job.serverId, let s = byId[sid] else { continue }
+            switch s.status {
+            case "done":
+                if job.phase != .done { landed = true }
+                job.phase = .done
+                job.progress = 1.0
+                if let l = s.label, !l.isEmpty { job.label = l }
+                job.needsReview = s.needsReview
+                job.artFailed = s.artFailed
+                job.savedTileId = s.itemId
+                job.errorText = nil
+                job.statusText = s.needsReview ? "✅ On the board — needs review"
+                    : (s.artFailed ? "✅ Saved your photo — art didn't render" : "✅ On the board")
+            case "failed":
+                if s.attempts >= 3 {
+                    job.phase = .needsAttention
+                    job.errorText = s.error ?? "Didn't finish"
+                    job.statusText = "Didn't finish — tap Retry"
+                } else {
+                    job.statusText = "Trying again…"
+                    job.progress = max(job.progress, 0.4)
+                }
+            case "processing":
+                job.statusText = "🎨 Making the tile…"
+                job.progress = max(job.progress, 0.6)
+            default: // queued
+                job.statusText = "Waiting its turn…"
+                job.progress = max(job.progress, 0.2)
             }
         }
-        defer { anim.cancel() }
-        return try await work()
+
+        if landed { await board?.refresh(childId: childId) }
+        checkBatchCompletions()
+    }
+
+    /// Rebuild the tray from the server on sheet open / app launch, so in-flight
+    /// jobs survive an app restart (they're durable server-side now). Restored
+    /// jobs get a blank thumbnail — the real tile shows on the board when done.
+    func restore(childId: String, board: BoardStore) async {
+        self.board = board
+        self.childId = childId
+        guard let server = try? await api.listTileJobs(childId: childId) else { return }
+        for s in server where s.status != "done" {
+            guard !jobs.contains(where: { $0.serverId == s.id }) else { continue }
+            let job = TileJob(thumbnail: UIImage(), photoJPEG: Data(), section: .nouns,
+                              categoryId: nil, style: .soft, model: "", bg: "pink",
+                              emotion: "default", childId: childId)
+            job.serverId = s.id
+            job.label = s.label ?? ""
+            job.statusText = "Making the tile…"
+            job.progress = 0.5
+            jobs.append(job)
+        }
+        ensurePolling()
+        await syncFromServer()
+    }
+
+    // MARK: -- Manage
+
+    func remove(_ job: TileJob) {
+        jobs.removeAll { $0.id == job.id }
+        if let sid = job.serverId {
+            Task { await api.deleteTileJob(id: sid, childId: childId) }
+        }
+    }
+
+    /// Drop finished cards (they're already on the board).
+    func pruneFinished() { jobs.removeAll { $0.phase == .done } }
+
+    /// Retry a failed job by re-uploading its photo (a fresh server job). The old
+    /// server job, if any, is dropped.
+    func retry(_ job: TileJob, board: BoardStore) {
+        self.board = board
+        if !childId.isEmpty, let sid = job.serverId {
+            Task { await api.deleteTileJob(id: sid, childId: childId) }
+        }
+        job.serverId = nil
+        job.phase = .working
+        job.progress = 0.05
+        job.errorText = nil
+        job.statusText = "Uploading photo…"
+        Task { await upload(job) }
+        ensurePolling()
+    }
+
+    private func checkBatchCompletions() {
+        let batchIds = Set(jobs.compactMap { $0.batchId })
+        for batchId in batchIds where !announcedBatches.contains(batchId) {
+            let inBatch = jobs.filter { $0.batchId == batchId }
+            guard !inBatch.isEmpty, inBatch.allSatisfy({ $0.phase != .working }) else { continue }
+            let landed = inBatch.filter { $0.phase == .done }.count
+            guard landed > 0 else { continue }
+            announcedBatches.insert(batchId)
+            pendingReviewNotice = ReviewNotice(count: landed)
+        }
     }
 
     private func friendly(_ error: Error) -> String {

@@ -312,6 +312,57 @@ struct APIClient {
         _ = try await request(method: "DELETE", path: "/api/items?id=\(id)", body: nil)
     }
 
+    // MARK: -- Durable server-side tile jobs
+
+    /// One server job's status (for the add-tile tray to poll).
+    struct TileJobStatus: Codable, Identifiable {
+        let id: Int
+        let status: String          // queued | processing | done | failed
+        let label: String?
+        let itemId: Int?
+        let artFailed: Bool
+        let needsReview: Bool
+        let error: String?
+        let attempts: Int
+    }
+    private struct TileJobsList: Codable { let jobs: [TileJobStatus] }
+    private struct TileJobCreated: Codable { let id: Int; let status: String }
+
+    /// POST a photo to the durable server queue. The photo is persisted
+    /// server-side BEFORE this returns, so it can never be lost; the server then
+    /// renders the tile (style-consistent art + voice) and a cron guarantees it
+    /// lands even if this device disappears. Returns the job id.
+    func createTileJob(photoJPEG: Data, label: String, detail: String, section: String,
+                       categoryId: Int?, style: String, styleGuideId: Int?, model: String,
+                       bg: String, keepAspect: Bool, needsReview: Bool, emotion: String,
+                       childId: String) async throws -> Int {
+        var path = "/api/tile-jobs?childId=\(percentEscape(childId))&section=\(percentEscape(section))"
+            + "&style=\(percentEscape(style))&model=\(percentEscape(model))&bg=\(percentEscape(bg))"
+            + "&emotion=\(percentEscape(emotion))"
+        if !label.isEmpty  { path += "&label=\(percentEscape(label))" }
+        if !detail.isEmpty { path += "&detail=\(percentEscape(detail))" }
+        if let categoryId  { path += "&categoryId=\(categoryId)" }
+        if let styleGuideId { path += "&styleGuideId=\(styleGuideId)" }
+        if keepAspect  { path += "&keepAspect=1" }
+        if needsReview { path += "&needsReview=1" }
+        let (data, _) = try await request(method: "POST", path: path,
+                                          body: photoJPEG, contentType: "image/jpeg", timeout: 60)
+        return (try JSONDecoder().decode(TileJobCreated.self, from: data)).id
+    }
+
+    /// GET the child's active/recent jobs for the tray.
+    func listTileJobs(childId: String) async throws -> [TileJobStatus] {
+        let (data, _) = try await request(method: "GET",
+                                          path: "/api/tile-jobs?childId=\(percentEscape(childId))", body: nil)
+        return (try JSONDecoder().decode(TileJobsList.self, from: data)).jobs
+    }
+
+    /// DELETE a job (and its blobs); leaves any tile it already created alone.
+    func deleteTileJob(id: Int, childId: String) async {
+        _ = try? await request(method: "DELETE",
+                               path: "/api/tile-jobs?id=\(id)&childId=\(percentEscape(childId))", body: nil)
+    }
+
     /// Fire-and-forget POST to any path that doesn't need a body or response —
     /// used for things like `/api/play-request?childId=...`.
     func postEmpty(path: String) async {
