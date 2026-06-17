@@ -17,16 +17,19 @@ import { fileURLToPath } from 'url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 // ---- Shared prompt tails (the consistency backbone) ----
+// NOTE: square/centered/frame-filling composition and the black-on-white label
+// band are enforced at generation time (SQUARE_RULE + captionRule in the image
+// generators), so the tails no longer carry a "no text" clause — that would fight
+// the baked caption. uplift-prompts.mjs also strips any stray "no text" tail.
 const OBJECT_TAIL =
   'a single clear subject centered and filling most of the frame on a plain soft pastel background; ' +
-  'soft even lighting, bright cheerful colors, simple and uncluttered, instantly recognizable to a toddler; ' +
-  'no text, letters, numbers, logos, or extra props.';
+  'soft even lighting, bright cheerful colors, simple and uncluttered, instantly recognizable to a toddler.';
 const ACTION_TAIL =
   'one clear friendly figure centered on a plain soft pastel background; soft even lighting, bright cheerful colors, ' +
-  'the meaning obvious at a glance to a toddler; minimal extra detail; no text, letters, or numbers.';
+  'the meaning obvious at a glance to a toddler; minimal extra detail.';
 const PORTRAIT_TAIL =
   'a warm, friendly head-and-shoulders portrait with a gentle smile on a plain soft pastel background; ' +
-  'soft even lighting; keep them clearly recognizable and kind-looking; no text or letters.';
+  'soft even lighting; keep them clearly recognizable and kind-looking.';
 
 function promptFor(e) {
   if (e.promptOverride) return e.promptOverride;

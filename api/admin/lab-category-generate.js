@@ -1,8 +1,10 @@
-// POST /api/admin/lab-category-generate  { childId, section, label, parent?, model? }
-// Generate a category chip image with OpenAI (using the active style guide as a
-// reference, same as tile generation) and set it as the category's image on the
-// child's board, creating the chip if missing. Direct-to-board, no candidate
-// review. Admin-gated.
+// POST /api/admin/lab-category-generate  { childId, section, label, parent?, model?, styleGuideId? }
+// Generate a category chip image and set it as the category's image on the child's
+// board, creating the chip if missing. The chosen style guide (styleGuideId, else
+// the first active one) rides along as a reference image AND its saved text
+// description is appended to the prompt — the same style referencing tile
+// generation uses, so chips match the board's art style. Direct-to-board, no
+// candidate review. Admin-gated.
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { buildIconPrompt, readBlobBuffer, generateCategoryIconPNG, uploadIconPNG } from '../_lib/category-icons.js';
@@ -25,6 +27,7 @@ export default async function handler(req, res) {
   const label = String(b.label || '').trim();
   const parentLabel = String(b.parent || '').trim();
   const modelOverride = typeof b.model === 'string' && (ALLOWED_MODELS.has(b.model) || isGeminiModel(b.model)) ? b.model : null;
+  const explicitStyleId = b.styleGuideId != null ? parseInt(b.styleGuideId, 10) : null;
   if (!childId || !section || !label) { res.status(400).json({ error: 'childId, section, label required' }); return; }
 
   try {
@@ -36,8 +39,13 @@ export default async function handler(req, res) {
       parentId = pr[0].id;
     }
 
-    const sg = await db`SELECT id, label, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`;
+    // Honor an explicitly chosen style (parity with tile generation); else the
+    // first active guide. Pull `description` too so the style can be given in words.
+    const sg = explicitStyleId
+      ? await db`SELECT id, label, description, blob_key FROM style_guides WHERE id = ${explicitStyleId} LIMIT 1`
+      : await db`SELECT id, label, description, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`;
     const style = sg[0] || null;
+    const styleDesc = (style && style.description) ? String(style.description).trim() : '';
     const settingsRows = await db`SELECT model_defaults, size_default FROM lab_settings WHERE id = 1`;
     const settings = settingsRows[0] || { model_defaults: {}, size_default: '1024x1024' };
     const model = modelOverride || (settings.model_defaults && (settings.model_defaults.category || settings.model_defaults.default)) || 'gpt-image-1.5';
@@ -46,10 +54,15 @@ export default async function handler(req, res) {
     // Use the admin's edited prompt when provided (the Lab surfaces the curated
     // prompt for tweaking), else build the curated/generic one.
     const promptOverride = typeof b.promptOverride === 'string' && b.promptOverride.trim() ? b.promptOverride.trim() : null;
-    const prompt = promptOverride || buildIconPrompt({ label, parentLabel, hasStyle: !!style });
+    let prompt = promptOverride || buildIconPrompt({ label, parentLabel, hasStyle: !!style, styleDescription: styleDesc });
 
     let styleBuf = null;
     if (style && style.blob_key) { try { styleBuf = await readBlobBuffer(style.blob_key); } catch (_) {} }
+    // Positional legend so the model knows the attached image is the STYLE ref —
+    // mirrors the per-tile generator (style in both words and pixels).
+    if (styleBuf) {
+      prompt += `\n\nThe attached image is the STYLE reference — copy its art style only, not its content.${styleDesc ? ` (Style: ${styleDesc})` : ''}`;
+    }
 
     let b64, usage;
     try {

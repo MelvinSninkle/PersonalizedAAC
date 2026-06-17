@@ -23,15 +23,15 @@ export async function readBlobBytes(key) {
 export async function loadStyleGuide(db, styleGuideId) {
   let row = null;
   if (styleGuideId) {
-    row = (await db`SELECT id, label, blob_key FROM style_guides WHERE id = ${styleGuideId} AND active = TRUE LIMIT 1`)[0] || null;
+    row = (await db`SELECT id, label, description, blob_key FROM style_guides WHERE id = ${styleGuideId} AND active = TRUE LIMIT 1`)[0] || null;
   }
   if (!row) {
-    row = (await db`SELECT id, label, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`)[0] || null;
+    row = (await db`SELECT id, label, description, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`)[0] || null;
   }
   if (!row) return null;
   let image = null;
   if (row.blob_key) { try { image = await readBlobBytes(row.blob_key); } catch (_) { /* missing blob → text-only style */ } }
-  return { id: Number(row.id), label: row.label, blob_key: row.blob_key, image };
+  return { id: Number(row.id), label: row.label, description: row.description || '', blob_key: row.blob_key, image };
 }
 
 // Load the child's committed self-portrait as the subject anchor for any tile
@@ -51,12 +51,30 @@ function fillTemplate(template, tokens) {
     Object.prototype.hasOwnProperty.call(tokens, key) ? tokens[key] : m);
 }
 
-// Every board tile is shown in a square cell, so generate square art — keeps the
-// subject (and the baked caption) from being cropped by the square fill. Shared
-// by all the photo/taxonomy generators.
+// Every board tile is shown in a small square cell, so generate square art with the
+// one subject blown up to fill it — empty space wastes the cell and makes the tile
+// hard to read at a glance. Shared by all the photo/taxonomy generators so every
+// tile is framed the same way.
 export const SQUARE_RULE =
-  ' Compose the picture as a perfectly SQUARE 1:1 image, with the subject centered and ' +
-  'comfortably filling the frame — no borders, letterboxing, or empty bands on any side.';
+  ' COMPOSITION: render a perfectly SQUARE 1:1 image. There is exactly ONE main subject and ' +
+  'it is the absolute priority: place it dead-center and scale it up so it fills almost the ' +
+  'entire frame, leaving only a small even margin. Keep the empty space to a minimum — no wide ' +
+  'borders, letterboxing, or blank bands on any side, and no clutter or secondary objects ' +
+  'competing for attention. The subject must be instantly, unmistakably recognizable to a toddler.';
+
+// Every tile carries the printed word along the bottom. Pinning the lettering to a
+// single, identical treatment — black text on a solid white band — is what keeps the
+// caption from drifting in font/color/placement across the board. Appended by every
+// generator so the rule is enforced in code, not left to the per-tile template.
+export function captionRule(label) {
+  const word = String(label || '').trim();
+  if (!word) return '';
+  return ` LABEL: along the very bottom of the image, print the single caption "${word}", ` +
+    'spelled exactly, in BLACK lettering on a solid WHITE band that spans the full width — ' +
+    'a clean, bold, rounded sans-serif, large enough to read easily. Use this same ' +
+    'black-on-white treatment on every tile. The band sits below the subject and must not ' +
+    'cover it. Do NOT add any other text, words, letters, numbers, watermarks, or logos.';
+}
 
 // Object-like categories must never grow cartoon faces. Mirrors lab-generate.
 const NO_FACE_CATEGORIES = new Set([
@@ -87,6 +105,11 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
     family_all: 'the whole family gathered close', parent_photo: '',
   });
 
+  // A short text description of the chosen style, saved alongside the reference
+  // image, so the model gets the style in words AND in pixels (see the legend).
+  const styleDesc = (styleGuide && styleGuide.description) ? String(styleGuide.description).trim() : '';
+  const styleDescPhrase = styleDesc ? `Render it in this art style: ${styleDesc}` : '';
+
   const size = (settings && settings.size_default) || '1024x1024';
   let prompt;
   if (settings && settings.master_prompt) {
@@ -96,10 +119,11 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
       size,
       no_face_rule: (subject || mentionsRef || usePerson) ? '' : noFaceRule(tax.category),
       style_image: styleGuide ? '(match the art style of the style-reference image)' : '',
+      style_description: styleDescPhrase,
       reference: subject ? `(keep the likeness of ${subject.name} from the reference photo)` : '',
     });
   } else {
-    prompt = `Generate a child-friendly illustration. Subject: ${content}. ${subject ? '' : noFaceRule(tax.category)}`;
+    prompt = `Generate a child-friendly illustration. Subject: ${content}. ${styleDescPhrase} ${subject ? '' : noFaceRule(tax.category)}`;
   }
 
   // Ordered images + positional legend (style first, subject second).
@@ -107,13 +131,15 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
   const legend = [];
   if (styleGuide && styleGuide.image && styleGuide.image.buffer) {
     images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
-    legend.push(`Image ${images.length} is the STYLE reference — copy its art style only, not its content.`);
+    legend.push(`Image ${images.length} is the STYLE reference — copy its art style only, not its content.${styleDesc ? ` (Style: ${styleDesc})` : ''}`);
   }
   if (subject && subject.buffer) {
     images.push({ buffer: subject.buffer, contentType: subject.contentType });
     legend.push(`Image ${images.length} shows ${subject.name} — keep this person's face and likeness clearly recognizable.`);
   }
-  prompt += SQUARE_RULE;
+  // Enforce framing + caption in code so they hold regardless of the editable
+  // master prompt: square/centered/frame-filling, then the black-on-white label.
+  prompt += SQUARE_RULE + captionRule(tax.label);
   if (legend.length) prompt += '\n\n' + legend.join(' ');
 
   const gKey = geminiKey();

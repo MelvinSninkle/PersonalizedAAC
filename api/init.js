@@ -651,15 +651,15 @@ export default async function handler(req, res) {
       INSERT INTO lab_settings (id, master_prompt, model_defaults, size_default)
       VALUES (
         1,
-        'Generate a child-friendly illustration in the visual style of the attached style reference image.
+        'This image is a single picture tile for an AAC communication board used by a young, non-speaking child. The child taps the tile to say the word, so the picture must read instantly and, wherever a person is shown, look like the child''s own world. Personalize it to the attached reference image(s).
 
 Subject: {content}
 
-Tile label: "{label}" — bake the label as clean, large, sans-serif text along the bottom edge of the image, on a soft contrasting band that does not obscure the subject. The label must be spelled exactly and easy for a non-reader to associate with the picture.
+Art style: render the picture in the visual style of the attached style-reference image. {style_description}
 
-Composition: centered subject, generous negative space, simple uncluttered background. Friendly, warm, never frightening. {no_face_rule}
+Keep it friendly, warm, and never frightening. {no_face_rule}
 
-Size: {size}. No watermarks, no extra text other than the tile label.',
+Size: {size}.',
         '{"default":"gpt-image-1.5","face_safe":"gpt-image-2"}'::jsonb,
         '1024x1024'
       )

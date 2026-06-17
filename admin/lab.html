@@ -633,6 +633,7 @@ async function generateCategory(row, div) {
     const r = await api('POST', '/api/admin/lab-category-generate', {
       childId, section: row.section, label: row.label, parent: row.parentLabel || undefined,
       promptOverride: (row.prompt || '').trim() || undefined,
+      styleGuideId: currentStyleId() || undefined,
     });
     addCost(r.costCents || 0);
     await loadBoardState();
@@ -661,6 +662,7 @@ async function reviewAndGenerateIcons() {
       const r = await api('POST', '/api/admin/lab-category-generate', {
         childId, section: row.section, label: row.label, parent: row.parentLabel || undefined,
         promptOverride: (row.prompt || '').trim() || undefined,
+        styleGuideId: currentStyleId() || undefined,
       });
       addCost(r.costCents || 0);
       row.hasImage = true; row.imageKey = r.imageKey; row.boardId = r.id;
