@@ -1,12 +1,20 @@
 // /api/admin/lab-settings — the singleton row holding the master wrapper
 // prompt + global model defaults that the Lab uses to compose every per-tile
 // generation. Tokens supported by /api/admin/lab-generate:
-//   {style_image}  — handled implicitly by attaching the chosen style guide
-//   {content}      — the per-tile prompt_template body (the WHAT)
-//   {label}        — the tile's display label, baked into the image as caption
-//   {size}         — image size, defaulting to settings.size_default
-//   {no_face_rule} — auto-injected guard for inanimate categories
-//   {reference}    — kept for compatibility with existing taxonomy templates
+//   {style_image}       — handled implicitly by attaching the chosen style guide
+//   {style_description} — the chosen style guide's saved text description (the
+//                         art style in words, alongside the attached reference image)
+//   {content}           — the per-tile prompt_template body (the WHAT)
+//   {label}             — the tile's display label. The black-on-white caption is
+//                         enforced in code (captionRule), so the master prompt no
+//                         longer needs to spell out the caption treatment.
+//   {size}              — image size, defaulting to settings.size_default
+//   {no_face_rule}      — auto-injected guard for inanimate categories
+//   {reference}         — kept for compatibility with existing taxonomy templates
+//
+// NOTE: square/centered/frame-filling composition and the black-on-white label
+// band are appended in code (SQUARE_RULE + captionRule) for every generation, so
+// they hold even if this editable prompt omits them.
 //
 //   GET                       returns current settings
 //   PUT  { masterPrompt?, modelDefaults?, sizeDefault?, notes? }   partial update

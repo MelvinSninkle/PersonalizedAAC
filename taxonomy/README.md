@@ -20,7 +20,7 @@ every import / bulk op auto-snapshots, and there's a full audit log.
 | `pronunciation` | TTS override (how the voice should say it, e.g. `Cheery-ohs`). |
 | `subject_mode` | `child_as_subject` (the child) · `person` (a real person) · `object` (a thing) · `concept` (abstract word). |
 | `parent_photo_behavior` | how an uploaded photo is used: `override` (the subject *is* the photo) · `supplement` (photo steers style) · `none`. |
-| `prompt_template` | the image-generation prompt. Tokens: `{style}`, `{color}`, `{reference}` (child photo), `{parent_photo}`. |
+| `prompt_template` | the image-generation prompt — the **subject only** (the WHAT). Tokens: `{style}`, `{color}`, `{reference}` (the child's likeness from his photo), `{parent_photo}`. Any tile that *depicts the child* uses `{reference}` so he sees himself — never a generic "smiling child". Square/centered/frame-filling composition and the black-on-white label band are **not** written here; they're enforced once at generation time (see below), so every tile is framed and captioned identically. |
 | `phase` | rollout grouping: `v1_core` / `v1_extended` / `v2` / `later`. |
 | **`core`** | **`true`** = part of the standard baseline vocabulary; **`false`** = grows in later. A whole category/subcategory is "non-core" when its tiles are — flip a group at once via the toolbar filter + **Bulk action → Mark non-core**. |
 | `growth_stage` | When this tile becomes prominent **by default for a child** on the standard scaffold (PRD §4.2B): `stage_1` (first contact: persistent strip + food + toys + immediate family), `stage_2` (more & done), `stage_3` (want), `stage_4` (places + go/stop), `stage_5plus` (broadening: help, verbs, body, feelings, social). Advisory only — never a gate. |
@@ -51,10 +51,42 @@ node taxonomy/build-seed.mjs   # rewrites seed-core-v1.csv
 
 Prompt shape (`{style}` is injected by the generator as e.g. "flat picture-book
 illustration"):
-- **Objects** — `A {style} of <subject>, <single subject, centered, plain pastel bg, no text…>`
-- **Actions / feelings / concepts** — `A {style} of <a child doing X / a gesture>, <one clear figure…>`
+- **Objects** — `A {style} of <subject>, <single subject, centered, plain pastel bg…>`
+- **Actions / feelings / concepts** — `A {style} of {reference} doing X / making a gesture, <one clear figure…>`
 - **People** — `A {style} portrait based on {reference}` (the child) or `{parent_photo}`
   (an uploaded person); generic people (teacher/doctor) need no photo.
+
+### Composition, caption, and style are enforced at generation time (not per row)
+
+To stop tiles from "bouncing around", three global rules live in the image
+generators (`api/_lib/onboarding-render.js` + `api/admin/lab-generate.js`), not in
+each `prompt_template`:
+
+- **Square + central focus** (`SQUARE_RULE`) — one subject, dead-center, scaled to
+  fill the frame with minimal empty space; no borders/letterboxing.
+- **Caption** (`captionRule`) — the label printed in **black lettering on a solid
+  white band** along the bottom, identical on every tile. (Captions are therefore
+  *not* baked into `prompt_template` anymore — `uplift-prompts.mjs` strips any that
+  were, since two caption instructions are what made the lettering drift.)
+- **Style in words** — `style_guides.description` (the parent's chosen art style,
+  described in text) is concatenated into the prompt via the `{style_description}`
+  token *and* the style-reference image rides along, so the model gets the look in
+  both words and pixels.
+
+The editable master wrapper prompt (`lab_settings`, at `/admin/lab`) supplies the
+intent preamble + `{content}` + `{style_description}` + `{no_face_rule}`; the rules
+above are appended in code so they hold even if the master prompt omits them.
+
+**Embodiment uplift.** `uplift-prompts.mjs` rewrites only the `prompt_template`
+column in place (preserving descriptions / acquisition_age / status / …): it swaps
+every depicted child — including the adjective variants ("a friendly young child",
+"a smiling child") and multi-child scenes (foreground child → `{reference}`, the
+rest generic) — to `{reference}`, while protecting object possessives ("a child's
+bed") and other named people (`subject_mode = person`). Run it after any edit:
+
+```
+node taxonomy/uplift-prompts.mjs   # in-place; idempotent; only prompt_template
+```
 
 ## Loading the draft
 

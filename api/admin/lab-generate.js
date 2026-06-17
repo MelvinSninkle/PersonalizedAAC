@@ -15,6 +15,7 @@ import { requireAdmin } from '../_lib/admin.js';
 import { geminiKey, isGeminiModel, geminiCostCents, geminiGenerateImage } from '../_lib/gemini.js';
 import { sql } from '../_lib/db.js';
 import { resolveModelForRow } from './model-routes.js';
+import { SQUARE_RULE, captionRule } from '../_lib/onboarding-render.js';
 
 // The slowest gpt-image-2 generation can run ~120s; 300s is Vercel Pro's ceiling.
 export const config = { maxDuration: 300 };
@@ -91,11 +92,11 @@ export default async function handler(req, res) {
   // 2. Pick the style guide (explicit id, or first active by sort_order)
   let style = null;
   if (explicitStyleId) {
-    const sg = await db`SELECT id, label, blob_key FROM style_guides WHERE id = ${explicitStyleId}`;
+    const sg = await db`SELECT id, label, description, blob_key FROM style_guides WHERE id = ${explicitStyleId}`;
     if (!sg.length) { res.status(404).json({ error: 'style guide not found', styleGuideId: explicitStyleId }); return; }
     style = sg[0];
   } else {
-    const sg = await db`SELECT id, label, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`;
+    const sg = await db`SELECT id, label, description, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`;
     if (sg.length) style = sg[0];
   }
 
@@ -174,6 +175,10 @@ export default async function handler(req, res) {
   // Christmas / birthday). We don't pass more than two anchored faces yet —
   // the model fills in believable extras around the anchored child + adult.
   content = fillTemplate(content, { style: 'picture', reference: refPhrase, family_adult: famPhrase, family_all: 'the whole family gathered close around', parent_photo: '' });
+  // A short text description of the chosen style (saved with the reference image)
+  // so the model gets the style in words as well as in the attached pixels.
+  const styleDesc = (style && style.description) ? String(style.description).trim() : '';
+  const styleDescPhrase = styleDesc ? `Render it in this art style: ${styleDesc}` : '';
   let prompt;
   if (promptOverride) {
     prompt = promptOverride;
@@ -184,12 +189,16 @@ export default async function handler(req, res) {
       size,
       no_face_rule: (subject || famSubject || mentionsRef || mentionsFam) ? '' : noFaceRule(tax.category),   // a real person SHOULD have a face
       style_image: style ? '(match the art style of the style-reference image)' : '',
+      style_description: styleDescPhrase,
       reference: subject ? `(keep the likeness of ${subject.name} from the reference photo)` : '',
     });
   } else {
     // Fallback if no master prompt is configured yet.
-    prompt = `Generate a child-friendly illustration. Subject: ${content}. Bake the label "${tax.label}" along the bottom edge in clean sans-serif. ${subject ? '' : noFaceRule(tax.category)}`;
+    prompt = `Generate a child-friendly illustration. Subject: ${content}. ${styleDescPhrase} ${subject ? '' : noFaceRule(tax.category)}`;
   }
+  // Enforce framing + caption in code so they hold regardless of the editable
+  // master prompt (skip when the caller supplies a fully custom promptOverride).
+  if (!promptOverride) prompt += SQUARE_RULE + captionRule(tax.label);
 
   // 5. Read the style guide bytes, then assemble the ordered image[] (style first,
   //    subject second) plus a positional legend so the model knows which is which.
@@ -200,7 +209,7 @@ export default async function handler(req, res) {
   }
   const images = [];
   const legend = [];
-  if (styleBuf) { images.push({ buf: styleBuf, name: 'style.jpg' }); legend.push(`Image ${images.length} is the STYLE reference — copy its art style only, not its content.`); }
+  if (styleBuf) { images.push({ buf: styleBuf, name: 'style.jpg' }); legend.push(`Image ${images.length} is the STYLE reference — copy its art style only, not its content.${styleDesc ? ` (Style: ${styleDesc})` : ''}`); }
   if (subject) { images.push({ buf: subject.buf, name: 'subject.jpg' }); legend.push(`Image ${images.length} shows ${subject.name} — keep this person's face and likeness clearly recognizable.`); }
   if (famSubject) { images.push({ buf: famSubject.buf, name: 'family.jpg' }); legend.push(`Image ${images.length} shows ${famSubject.name} — keep this person's face and likeness clearly recognizable.`); }
   if (legend.length) prompt += '\n\n' + legend.join(' ');
