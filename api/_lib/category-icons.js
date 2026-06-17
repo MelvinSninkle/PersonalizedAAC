@@ -146,7 +146,8 @@ export function buildIconPrompt({ label, parentLabel, hasStyle, styleDescription
   return `A clear, friendly category icon for ${subjectHint} on a young child's AAC communication board.` +
     iconClause +
     ` Centered, simple, and instantly recognizable from a small thumbnail. No text, words, or letters in the image. ` +
-    `Square composition with generous padding.${styleClause}`;
+    `Square composition: scale the icon up so it fills the frame, leaving only a small even margin — ` +
+    `minimal empty space, no wide padding or borders, so it stays easy to read at thumbnail size.${styleClause}`;
 }
 
 export async function readBlobBuffer(key) {
