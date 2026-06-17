@@ -29,9 +29,11 @@ export default async function handler(req, res) {
                COUNT(*)::int AS tile_count
         FROM taxonomy WHERE subcategory IS NOT NULL AND subcategory <> '' GROUP BY 1,2,3
       )
-      SELECT section, label, NULL::text AS parent_label, tile_count FROM cats
-      UNION ALL
-      SELECT section, label, parent_label, tile_count FROM subs
+      SELECT * FROM (
+        SELECT section, label, NULL::text AS parent_label, tile_count FROM cats
+        UNION ALL
+        SELECT section, label, parent_label, tile_count FROM subs
+      ) u
       ORDER BY section, COALESCE(parent_label, label), parent_label NULLS FIRST, label`;
     const boardCats = await db`
       SELECT id, lower(section) AS section, label, parent_id, image_key
