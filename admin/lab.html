@@ -229,6 +229,18 @@
   <div class="panel">
     <h2>Model routes <span class="count" id="route-count">0</span></h2>
     <div class="panel-body">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:10px;border-bottom:1px solid #e6ebf1;">
+        <label for="default-model" style="font-size:11px;color:#557fa3;font-weight:600;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;">Default model</label>
+        <select id="default-model" style="flex:1;">
+          <option value="gpt-image-1.5">gpt-image-1.5 (OpenAI)</option>
+          <option value="gpt-image-2">gpt-image-2 (OpenAI)</option>
+          <option value="gpt-image-1">gpt-image-1 (OpenAI)</option>
+          <option value="gemini-2.5-flash-image">gemini-2.5-flash-image — Nano Banana (~$0.04)</option>
+          <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview — Nano Banana Pro (~$0.13)</option>
+        </select>
+        <span id="default-model-status" style="font-size:11px;"></span>
+      </div>
+      <p style="margin:0 0 8px;font-size:11px;color:#95a5a6;">Every tile uses this unless it has its own Model override, or a matching route below.</p>
       <table class="routes-table" id="routes-table">
         <thead><tr><th>Scope</th><th>Value</th><th>Model</th><th>Pri</th><th></th></tr></thead>
         <tbody></tbody>
@@ -454,7 +466,21 @@ async function loadLabSettings() {
   const r = await api('GET', '/api/admin/lab-settings');
   labSettings = r.settings || labSettings;
   $('masterPrompt').value = labSettings.masterPrompt || '';
+  $('default-model').value = (labSettings.modelDefaults && labSettings.modelDefaults.default) || 'gpt-image-1.5';
 }
+// The global fallback model: every tile uses this when it has no per-tile
+// Model override and no matching route. Auto-saves to lab_settings.model_defaults.default.
+$('default-model').addEventListener('change', async () => {
+  const v = $('default-model').value;
+  const modelDefaults = Object.assign({}, labSettings.modelDefaults, { default: v });
+  try {
+    await api('PUT', '/api/admin/lab-settings', { modelDefaults });
+    labSettings.modelDefaults = modelDefaults;
+    flashStatus('default-model-status', 'saved', 'saved-flash');
+  } catch (err) {
+    flashStatus('default-model-status', err.message, 'err-flash');
+  }
+});
 $('btn-save-prompt').addEventListener('click', async () => {
   const t = $('masterPrompt').value;
   try {
@@ -512,15 +538,19 @@ let boardState = { bySlug: new Map(), byKey: new Map(), catSet: new Set() };
 let catList = [];     // [{section,label,parentLabel,hasImage,imageKey,boardId,parentMissing,tileCount,prompt}]
 const editedPrompts = new Map();   // catKey -> edited prompt, so tweaks survive a reload
 const catKey = (r) => (r.section + '|' + (r.parentLabel || '') + '|' + r.label).toLowerCase();
+let catLoadErr = '';
 async function loadBoardState() {
   const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
-  try {
-    const [bs, cs, ps] = await Promise.all([
-      api('GET', '/api/admin/lab-board-state?childId=' + encodeURIComponent(childId)),
-      api('GET', '/api/admin/lab-categories?childId=' + encodeURIComponent(childId)),
-      api('GET', '/api/persons?childId=' + encodeURIComponent(childId)).catch(() => ({ persons: [] })),
-    ]);
-    personsList = (ps && ps.persons) || [];
+  // Capture each call's error independently — a failure in one endpoint must not
+  // blank the whole panel, and we surface the real message instead of hiding it
+  // (the old single try/catch swallowed errors and left the panel reading 0/0).
+  const [bs, cs, ps] = await Promise.all([
+    api('GET', '/api/admin/lab-board-state?childId=' + encodeURIComponent(childId)).catch(e => ({ __err: 'board-state: ' + (e.message || e) })),
+    api('GET', '/api/admin/lab-categories?childId=' + encodeURIComponent(childId)).catch(e => ({ __err: 'categories: ' + (e.message || e) })),
+    api('GET', '/api/persons?childId=' + encodeURIComponent(childId)).catch(() => ({ persons: [] })),
+  ]);
+  personsList = (ps && ps.persons) || [];
+  if (bs && !bs.__err) {
     const next = { bySlug: new Map(), byKey: new Map(), catSet: new Set() };
     for (const it of bs.items || []) {
       if (it.taxonomy_slug) next.bySlug.set(it.taxonomy_slug, it);
@@ -528,10 +558,13 @@ async function loadBoardState() {
     }
     for (const c of bs.categories || []) next.catSet.add((c.section || '').toLowerCase() + '|' + (c.label || '').toLowerCase());
     boardState = next;
+  }
+  if (cs && !cs.__err) {
     catList = cs.rows || [];
     for (const r of catList) { const k = catKey(r); if (editedPrompts.has(k)) r.prompt = editedPrompts.get(k); }
-    renderCategoryPanel();
-  } catch (_) { /* keep prior state on failure */ }
+  }
+  catLoadErr = [bs, cs].filter(x => x && x.__err).map(x => x.__err).join(' · ');
+  renderCategoryPanel();
 }
 
 function renderCategoryPanel() {
@@ -542,7 +575,9 @@ function renderCategoryPanel() {
   const onlyMissing = $('cats-only-missing') && $('cats-only-missing').checked;
   const rows = catList.filter(r => !onlyMissing || !r.hasImage);
   const total = catList.length, withImg = catList.filter(r => r.hasImage).length, missingChip = catList.filter(r => !r.boardId).length;
-  $('cats-stat').textContent = `${withImg}/${total} have images · ${missingChip} not yet on board`;
+  $('cats-stat').textContent = catLoadErr
+    ? ('⚠ couldn’t load categories — ' + catLoadErr)
+    : `${withImg}/${total} have images · ${missingChip} not yet on board`;
   list.innerHTML = '';
   for (const r of rows) {
     const div = document.createElement('div');
@@ -653,12 +688,22 @@ async function loadTaxonomy() {
   $('stat-tiles').textContent = tiles.length + ' tiles';
   // populate filter dropdowns
   const sections = [...new Set(tiles.map(t => t.column).filter(Boolean))].sort();
-  const categories = [...new Set(tiles.map(t => t.category).filter(Boolean))].sort();
   const audiences = [...new Set(tiles.map(t => t.audience).filter(Boolean))].sort();
   fillSelect($('f-section'), sections);
-  fillSelect($('f-category'), categories);
   fillSelect($('f-audience'), audiences);
+  refreshCategoryOptions();   // Category list is scoped to the selected Section
   applyFilters();
+}
+
+// The Category dropdown only lists categories that exist in the currently
+// selected Section (or every category when Section = All) — so it never offers
+// a category that belongs to a different strip.
+function refreshCategoryOptions() {
+  const sec = $('f-section').value;
+  const prev = $('f-category').value;
+  const cats = [...new Set(tiles.filter(t => !sec || t.column === sec).map(t => t.category).filter(Boolean))].sort();
+  fillSelect($('f-category'), cats);
+  if (prev && !cats.includes(prev)) $('f-category').value = '';
 }
 
 function fillSelect(sel, values) {
@@ -693,7 +738,8 @@ function applyFilters() {
   renderTiles();
 }
 
-['f-section','f-category','f-audience','f-image','f-page-size'].forEach(id => $(id).addEventListener('change', applyFilters));
+['f-category','f-audience','f-image','f-page-size'].forEach(id => $(id).addEventListener('change', applyFilters));
+$('f-section').addEventListener('change', () => { refreshCategoryOptions(); applyFilters(); });
 $('f-search').addEventListener('input', debounce(applyFilters, 200));
 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
