@@ -131,15 +131,22 @@ export function iconFor(category, subcategory) {
   return CATEGORY_ICONS[cat] || null;
 }
 
-// Build the generation prompt for a category/subcategory chip.
-export function buildIconPrompt({ label, parentLabel, hasStyle }) {
+// Build the generation prompt for a category/subcategory chip. When a style guide
+// is attached, `styleDescription` (its saved text description) is concatenated so
+// the chosen art style is conveyed in words as well as in the reference image —
+// the same style referencing the per-tile generator uses.
+export function buildIconPrompt({ label, parentLabel, hasStyle, styleDescription }) {
   const icon = parentLabel ? iconFor(parentLabel, label) : iconFor(label, null);
   const subjectHint = parentLabel ? `the subcategory "${label}" under "${parentLabel}"` : `the category "${label}"`;
   const iconClause = icon ? ` The icon should clearly be: ${icon}.` : '';
+  const desc = (styleDescription || '').trim();
+  const styleClause = hasStyle
+    ? ` Match the art style of the reference image.${desc ? ` Render it in this art style: ${desc}` : ''}`
+    : '';
   return `A clear, friendly category icon for ${subjectHint} on a young child's AAC communication board.` +
     iconClause +
     ` Centered, simple, and instantly recognizable from a small thumbnail. No text, words, or letters in the image. ` +
-    `Square composition with generous padding.${hasStyle ? ' Match the art style of the reference image.' : ''}`;
+    `Square composition with generous padding.${styleClause}`;
 }
 
 export async function readBlobBuffer(key) {
