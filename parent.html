@@ -2477,6 +2477,11 @@
     if (!iso) return '';
     try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (_) { return ''; }
   }
+  // Paginate so the album is a click-through experience, not one giant scroll.
+  let albumList = [];        // full result set (entries in timeline mode, tiles in by-tile mode)
+  let albumPageIdx = 0;
+  function albumPageSize() { return albumMode === 'timeline' ? 24 : 18; }
+
   async function loadAlbum() {
     if (!albumGrid) return;
     albumGrid.innerHTML = '<div class="hint">Loading…</div>';
@@ -2484,55 +2489,90 @@
       const r = await fetch('/api/album?childId=' + encodeURIComponent(slug) + '&mode=' + albumMode + '&limit=300', { credentials: 'same-origin' });
       if (!r.ok) { albumGrid.innerHTML = '<div class="hint" style="color:#9b1c1c;">Could not load album (' + r.status + ').</div>'; return; }
       const d = await r.json();
-      albumGrid.innerHTML = '';
-      let totalShown = 0;
-      if (albumMode === 'timeline') {
-        const entries = d.entries || [];
-        if (!entries.length) { albumEmpty.style.display = ''; albumCount.textContent = ''; return; }
-        albumEmpty.style.display = 'none';
-        for (const e of entries) {
-          albumGrid.appendChild(albumThumb(e.blobKey, e.label || '(untitled)', albumWhen(e.when) + (e.kind === 'current' ? ' · current' : '')));
-          totalShown++;
-        }
-      } else {
-        const tiles = d.tiles || [];
-        if (!tiles.length) { albumEmpty.style.display = ''; albumCount.textContent = ''; return; }
-        albumEmpty.style.display = 'none';
-        // Each tile becomes a "stack" card: the current image plus a small count of
-        // older versions. Tapping the count expands inline.
-        albumGrid.style.gridTemplateColumns = 'repeat(auto-fill,minmax(160px,1fr))';
-        for (const t of tiles) {
-          const card = document.createElement('div');
-          card.style.cssText = 'border:1px solid var(--line);border-radius:14px;background:#fff;padding:10px;display:flex;flex-direction:column;gap:8px;';
-          const top = t.current ? albumThumb(t.current.blobKey, t.label || '(untitled)', 'current · ' + albumWhen(t.current.when)) : null;
-          if (top) { top.style.border = 'none'; card.appendChild(top); }
-          if (t.history && t.history.length) {
-            const sub = document.createElement('div');
-            sub.style.cssText = 'font-size:12px;color:#6b7280;cursor:pointer;user-select:none;';
-            sub.textContent = '＋ ' + t.history.length + ' older version' + (t.history.length === 1 ? '' : 's');
-            const stack = document.createElement('div');
-            stack.style.cssText = 'display:none;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;';
-            for (const h of t.history) {
-              const mini = albumThumb(h.blobKey, '', albumWhen(h.when));
-              mini.style.borderRadius = '8px';
-              mini.querySelector('img').style.aspectRatio = '1/1';
-              stack.appendChild(mini);
-            }
-            sub.addEventListener('click', () => {
-              const open = stack.style.display === 'grid';
-              stack.style.display = open ? 'none' : 'grid';
-              sub.textContent = (open ? '＋ ' : '− ') + t.history.length + ' older version' + (t.history.length === 1 ? '' : 's');
-            });
-            card.appendChild(sub); card.appendChild(stack);
-            totalShown += 1 + t.history.length;
-          } else if (t.current) { totalShown += 1; }
-          albumGrid.appendChild(card);
-        }
-      }
-      albumCount.textContent = '· ' + totalShown + ' picture' + (totalShown === 1 ? '' : 's');
+      albumList = albumMode === 'timeline' ? (d.entries || []) : (d.tiles || []);
+      albumPageIdx = 0;
+      renderAlbumPage();
     } catch (err) {
       albumGrid.innerHTML = '<div class="hint" style="color:#9b1c1c;">Could not load album: ' + schEsc(String(err.message || err)) + '</div>';
     }
+  }
+
+  function renderAlbumPage() {
+    albumGrid.innerHTML = '';
+    if (!albumList.length) { albumEmpty.style.display = ''; albumCount.textContent = ''; renderAlbumPager(1, 1); return; }
+    albumEmpty.style.display = 'none';
+    const size = albumPageSize();
+    const pages = Math.max(1, Math.ceil(albumList.length / size));
+    if (albumPageIdx >= pages) albumPageIdx = pages - 1;
+    if (albumPageIdx < 0) albumPageIdx = 0;
+    const slice = albumList.slice(albumPageIdx * size, albumPageIdx * size + size);
+    let total = 0;
+    if (albumMode === 'timeline') {
+      albumGrid.style.gridTemplateColumns = 'repeat(auto-fill,minmax(140px,1fr))';
+      total = albumList.length;
+      for (const e of slice) {
+        albumGrid.appendChild(albumThumb(e.blobKey, e.label || '(untitled)', albumWhen(e.when) + (e.kind === 'current' ? ' · current' : '')));
+      }
+    } else {
+      // Each tile becomes a "stack" card: the current image plus a small count of
+      // older versions. Tapping the count expands inline.
+      albumGrid.style.gridTemplateColumns = 'repeat(auto-fill,minmax(160px,1fr))';
+      for (const t of albumList) total += (t.current ? 1 : 0) + (t.history ? t.history.length : 0);
+      for (const t of slice) {
+        const card = document.createElement('div');
+        card.style.cssText = 'border:1px solid var(--line);border-radius:14px;background:#fff;padding:10px;display:flex;flex-direction:column;gap:8px;';
+        const top = t.current ? albumThumb(t.current.blobKey, t.label || '(untitled)', 'current · ' + albumWhen(t.current.when)) : null;
+        if (top) { top.style.border = 'none'; card.appendChild(top); }
+        if (t.history && t.history.length) {
+          const sub = document.createElement('div');
+          sub.style.cssText = 'font-size:12px;color:#6b7280;cursor:pointer;user-select:none;';
+          sub.textContent = '＋ ' + t.history.length + ' older version' + (t.history.length === 1 ? '' : 's');
+          const stack = document.createElement('div');
+          stack.style.cssText = 'display:none;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;';
+          for (const h of t.history) {
+            const mini = albumThumb(h.blobKey, '', albumWhen(h.when));
+            mini.style.borderRadius = '8px';
+            mini.querySelector('img').style.aspectRatio = '1/1';
+            stack.appendChild(mini);
+          }
+          sub.addEventListener('click', () => {
+            const open = stack.style.display === 'grid';
+            stack.style.display = open ? 'none' : 'grid';
+            sub.textContent = (open ? '＋ ' : '− ') + t.history.length + ' older version' + (t.history.length === 1 ? '' : 's');
+          });
+          card.appendChild(sub); card.appendChild(stack);
+        }
+        albumGrid.appendChild(card);
+      }
+    }
+    albumCount.textContent = '· ' + total + ' picture' + (total === 1 ? '' : 's');
+    renderAlbumPager(albumPageIdx + 1, pages);
+  }
+
+  function renderAlbumPager(pageNum, pages) {
+    let pager = document.getElementById('album-pager');
+    if (!pager) {
+      pager = document.createElement('div');
+      pager.id = 'album-pager';
+      pager.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:14px;margin-top:14px;';
+      albumGrid.parentNode.insertBefore(pager, albumGrid.nextSibling);
+    }
+    if (pages <= 1) { pager.style.display = 'none'; return; }
+    pager.style.display = 'flex';
+    pager.innerHTML = '';
+    const mk = (txt, disabled, fn) => {
+      const b = document.createElement('button');
+      b.className = 'btn ghost'; b.textContent = txt; b.disabled = disabled;
+      if (!disabled) b.addEventListener('click', fn);
+      return b;
+    };
+    const go = (delta) => { albumPageIdx += delta; renderAlbumPage(); try { document.getElementById('album-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {} };
+    pager.appendChild(mk('‹ Prev', albumPageIdx <= 0, () => go(-1)));
+    const label = document.createElement('span');
+    label.style.cssText = 'font-size:14px;color:#6b7280;';
+    label.textContent = 'Page ' + pageNum + ' of ' + pages;
+    pager.appendChild(label);
+    pager.appendChild(mk('Next ›', albumPageIdx >= pages - 1, () => go(1)));
   }
   document.getElementById('album-mode-tiles').addEventListener('click', () => albumSetMode('by-tile'));
   document.getElementById('album-mode-time').addEventListener('click', () => albumSetMode('timeline'));
