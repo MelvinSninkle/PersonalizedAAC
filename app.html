@@ -957,6 +957,7 @@
     <button id="remote-btn" class="edit-only" style="display:none">📡 Remote</button>
     <button id="rewards-btn" class="edit-only" style="display:none">🎁 Rewards</button>
     <button id="organize-btn" class="edit-only" style="display:none">📁 Organize</button>
+    <button id="reload-btn" class="edit-only" style="display:none" title="Discard this device's cached board and re-pull everything fresh from the server">↻ Reload from server</button>
     <button id="export-btn" class="edit-only" style="display:none">Export</button>
     <button id="import-btn" class="edit-only" style="display:none">Import</button>
     <button id="wipe-btn" class="edit-only" style="display:none">Wipe All</button>
@@ -2435,8 +2436,8 @@
   // reconnect); when the structure actually changed it re-hydrates, re-renders, and
   // re-warms the media cache so no tile is ever silent or missing for Fletcher.
   function structSig(data) {
-    const c = (data.categories || []).map(x => [x.id, x.imageKey || '', x.parentId ?? '', x.order ?? 0, x.label].join(':')).join('|');
-    const i = (data.items || []).map(x => [x.id, x.imageKey || '', x.soundKey || '', x.categoryId ?? '', x.order ?? 0, x.pinned ? 1 : 0, x.label].join(':')).join('|');
+    const c = (data.categories || []).map(x => [x.id, x.imageKey || '', x.parentId ?? '', x.order ?? 0, x.keepAspect ? 1 : 0, x.label].join(':')).join('|');
+    const i = (data.items || []).map(x => [x.id, x.imageKey || '', x.soundKey || '', x.categoryId ?? '', x.order ?? 0, x.pinned ? 1 : 0, x.keepAspect ? 1 : 0, x.label].join(':')).join('|');
     return c + '#' + i;
   }
   let _lastSig = null, _resyncing = false;
@@ -3498,6 +3499,34 @@
     }
   }
   document.getElementById('wipe-btn').addEventListener('click', () => { wipeAll(); });
+
+  // Force a full refresh from the server, bypassing the structure-signature
+  // shortcut. Use this after server-side changes that the background resync
+  // can't see on its own (e.g. tile aspect/squaring, bulk re-homing). Replaces
+  // this device's cached board with the canonical server snapshot.
+  async function reloadFromServer() {
+    const btn = document.getElementById('reload-btn');
+    const prev = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '↻ Reloading…'; }
+    try {
+      const showAll = (() => { try { return localStorage.getItem('aacShowAllVocab') === '1'; } catch (_) { return false; } })();
+      const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID) + (showAll ? '&showAllVocab=1' : ''));
+      if (!r.ok) throw new Error('server returned ' + r.status);
+      const data = await r.json();
+      if (!(data.categories || []).length && !(data.items || []).length) { alert('Server returned an empty board — not reloading.'); return; }
+      await hydrateFromServer(data);
+      _lastSig = structSig(data);
+      _precaching = false;
+      await renderAll();
+      precacheAllMedia();
+      alert('Reloaded ' + data.categories.length + ' categories and ' + data.items.length + ' tiles from the server.');
+    } catch (err) {
+      alert('Reload failed: ' + (err.message || err));
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = prev; }
+    }
+  }
+  document.getElementById('reload-btn').addEventListener('click', () => { reloadFromServer(); });
 
   // ---- Display Settings modal ----
   const displayModal = document.getElementById('display-modal');
