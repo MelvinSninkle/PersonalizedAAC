@@ -3636,8 +3636,8 @@
   const organizeOverlay = document.getElementById('organize-overlay');
 
   function openOrganize() {
-    if (!MAIN_SECTIONS.includes(orgSel.section) || !display.sectionVisible[orgSel.section]) {
-      orgSel.section = MAIN_SECTIONS.find(s => display.sectionVisible[s]) || 'people';
+    if (!SECTIONS.includes(orgSel.section) || !display.sectionVisible[orgSel.section]) {
+      orgSel.section = SECTIONS.find(s => display.sectionVisible[s]) || 'people';
     }
     organizeOverlay.classList.add('show');
     renderOrganize();
@@ -3688,9 +3688,9 @@
     // -------- Column 1: Sections --------
     const secBody = document.getElementById('org-col-sec');
     secBody.innerHTML = '';
-    // Organize view manages the category tree; the flat "needs" strip is edited
-    // inline from the main view, so we skip it here.
-    for (const s of MAIN_SECTIONS) {
+    // All four sections, Needs included — its categories/items are organized here
+    // just like the others (the bottom strip on the board is the same data).
+    for (const s of SECTIONS) {
       const row = makeOrgRow({
         kind: 'section',
         entity: null,
