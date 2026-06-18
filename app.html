@@ -3713,7 +3713,9 @@
     const topBody = document.getElementById('org-col-top');
     topBody.innerHTML = '';
     const topCats = allCats[orgSel.section].filter(c => c.parentId == null);
-    if (!topCats.length) topBody.appendChild(orgEmptyHint('No categories yet — drag items here to start.'));
+    if (!topCats.length) topBody.appendChild(orgEmptyHint(orgSel.section === 'needs'
+      ? 'Needs is a flat strip (no folders). Its tiles are in the Items column → — drag to reorder.'
+      : 'No categories yet — drag items here to start.'));
     for (const cat of topCats) {
       const subs = allCats[orgSel.section].filter(c => c.parentId === cat.id);
       const row = makeOrgRow({
@@ -3760,12 +3762,17 @@
       attachOrgColBodyDrop(subBody, { col: 'sub', section: orgSel.section, parentId: orgSel.topCatId });
     }
 
-    // -------- Column 4: items of selected category (subcat if any, else top cat) --------
+    // -------- Column 4: items of selected category, OR the flat "needs" tiles --------
+    // Needs has no categories, so when it's selected we list its category-less
+    // tiles here directly — drag to reorder (reuses the item move/re-stamp path).
     const itemBody = document.getElementById('org-col-item');
     itemBody.innerHTML = '';
     const itemParentId = orgSel.subCatId ?? orgSel.topCatId;
-    if (itemParentId != null) {
-      const items = allItems[orgSel.section].filter(it => it.categoryId === itemParentId);
+    const flatNeeds = orgSel.section === 'needs' && itemParentId == null;
+    if (itemParentId != null || flatNeeds) {
+      const items = flatNeeds
+        ? allItems[orgSel.section].filter(it => (it.categoryId ?? null) === null)
+        : allItems[orgSel.section].filter(it => it.categoryId === itemParentId);
       if (!items.length) itemBody.appendChild(orgEmptyHint('No items.'));
       for (const it of items) {
         const row = makeOrgRow({
@@ -3775,12 +3782,14 @@
           selected: false,
           hasChildren: false,
         });
-        row.dataset.categoryId = String(itemParentId);
+        // Flat needs tiles have no category — leave categoryId unset so the drag
+        // plan resolves it to null and keeps them in the null-parent sibling group.
+        if (!flatNeeds) row.dataset.categoryId = String(itemParentId);
         row.draggable = true;
         attachOrgDrag(row); attachOrgDrop(row);
         itemBody.appendChild(row);
       }
-      attachOrgColBodyDrop(itemBody, { col: 'item', section: orgSel.section, parentId: itemParentId });
+      attachOrgColBodyDrop(itemBody, { col: 'item', section: orgSel.section, parentId: flatNeeds ? null : itemParentId });
     }
   }
 
