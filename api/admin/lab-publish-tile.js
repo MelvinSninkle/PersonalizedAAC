@@ -76,7 +76,7 @@ export default async function handler(req, res) {
         });
       }
       await db`UPDATE items SET label = ${label}, image_key = ${imageKey}, category_id = ${targetCatId},
-        taxonomy_slug = ${taxonomyId}, needs_review = FALSE, updated_at = NOW() WHERE id = ${itemId}`;
+        taxonomy_slug = ${taxonomyId}, keep_aspect = FALSE, needs_review = FALSE, updated_at = NOW() WHERE id = ${itemId}`;
     } else {
       const it = await db`INSERT INTO items (section, category_id, label, image_key, keep_aspect, display_order, pinned, child_id, taxonomy_slug, needs_review, updated_at)
         VALUES (${section}, ${targetCatId}, ${label}, ${imageKey}, FALSE, ${Date.now()}, FALSE, ${childId}, ${taxonomyId}, FALSE, NOW()) RETURNING id`;
