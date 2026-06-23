@@ -7,6 +7,7 @@
 // generic "icon representing X" prompt, and overflow folders ("Extended", "…
 // more") inherit their parent category's icon.
 import { put, get } from '@vercel/blob';
+import { geminiKey, isGeminiModel, geminiCostCents, geminiGenerateImage } from './gemini.js';
 
 const norm = (s) => String(s || '').toLowerCase().trim().replace(/\s+/g, ' ');
 
@@ -190,4 +191,110 @@ export async function uploadIconPNG(section, b64) {
   const blobKey = `lab/categories/${section}/${randomUUID()}.png`;
   await put(blobKey, buffer, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
   return blobKey;
+}
+
+// OpenAI image pricing (cents per million tokens) for the cost estimate.
+const OPENAI_PRICE = { text: 5, imageIn: 10, out: 40 };
+
+// Resolve a style guide row + its reference-image bytes once, so a batch can load
+// the chosen style a single time and pass it to every chip. Returns
+// { style, styleBuf } where style is { id, label, description, blob_key } | null.
+export async function loadCategoryStyle(db, styleGuideId) {
+  const explicit = styleGuideId != null ? parseInt(styleGuideId, 10) : null;
+  const rows = explicit
+    ? await db`SELECT id, label, description, blob_key FROM style_guides WHERE id = ${explicit} LIMIT 1`
+    : await db`SELECT id, label, description, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`;
+  const style = rows[0] || null;
+  let styleBuf = null;
+  if (style && style.blob_key) { try { styleBuf = await readBlobBuffer(style.blob_key); } catch (_) {} }
+  return { style, styleBuf };
+}
+
+// Generate ONE category/subcategory chip and set it on the child's board — the
+// reusable core shared by the single-chip endpoint, the Lab's "Review & generate
+// icons", the bulk batch engine, and new-customer onboarding. It resolves the
+// parent chip, builds (or accepts an override of) the prompt with the style in
+// both words and pixels, generates via Gemini or OpenAI, uploads the PNG, and
+// upserts the categories row (find by child/section/parent/label → UPDATE else
+// INSERT). `style`/`styleBuf` may be pre-loaded (batch) or loaded here via
+// `styleGuideId`. Returns { ok, created, id, blobKey, costCents, prompt } or
+// { ok:false, status, error }.
+export async function generateCategoryIcon({
+  db, childId, section, label, parentLabel = '', promptOverride = null,
+  style = undefined, styleBuf = undefined, styleGuideId = null,
+  model, size = '1024x1024', actorEmail = null,
+}) {
+  childId = String(childId || '').slice(0, 64).trim();
+  section = String(section || '').toLowerCase().trim();
+  label = String(label || '').trim();
+  parentLabel = String(parentLabel || '').trim();
+  if (!childId || !section || !label) return { ok: false, status: 400, error: 'childId, section, label required' };
+
+  // Resolve the parent chip (subcategories hang off an existing top-level chip).
+  let parentId = null;
+  if (parentLabel) {
+    const pr = await db`SELECT id FROM categories WHERE child_id = ${childId} AND section = ${section} AND parent_id IS NULL AND lower(label) = lower(${parentLabel}) LIMIT 1`;
+    if (!pr.length) return { ok: false, status: 409, error: `Parent category "${parentLabel}" doesn't exist on ${childId}'s board yet — create it first.` };
+    parentId = pr[0].id;
+  }
+
+  // Load the style once if the caller didn't hand it in pre-loaded.
+  if (style === undefined) { ({ style, styleBuf } = await loadCategoryStyle(db, styleGuideId)); }
+  const styleDesc = (style && style.description) ? String(style.description).trim() : '';
+
+  let prompt = (typeof promptOverride === 'string' && promptOverride.trim())
+    ? promptOverride.trim()
+    : buildIconPrompt({ label, parentLabel, hasStyle: !!style, styleDescription: styleDesc });
+  if (styleBuf) {
+    prompt += `\n\nThe attached image is the STYLE reference — copy its art style only, not its content.${styleDesc ? ` (Style: ${styleDesc})` : ''}`;
+  }
+
+  // Generate (Gemini or OpenAI) and estimate cost.
+  let b64, usage;
+  if (isGeminiModel(model)) {
+    const gKey = geminiKey();
+    if (!gKey) return { ok: false, status: 500, error: 'GEMINI_API_KEY not configured' };
+    const g = await geminiGenerateImage({
+      apiKey: gKey, model, prompt, aspectRatio: '1:1',
+      images: styleBuf ? [{ buffer: styleBuf.buffer, contentType: styleBuf.contentType }] : [],
+    });
+    if (!g.ok) return { ok: false, status: g.status === 429 ? 429 : 502, error: (g.detail || 'generation failed').slice(0, 1000) };
+    b64 = g.b64; usage = { gemini: true, input_tokens: g.inputTokens, output_tokens: g.outputTokens };
+  } else {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return { ok: false, status: 500, error: 'OPENAI_API_KEY not configured' };
+    try { ({ b64, usage } = await generateCategoryIconPNG({ apiKey, prompt, styleBuf, model, size })); }
+    catch (e) { return { ok: false, status: e.status || 502, error: String(e.message || e) }; }
+  }
+
+  const u = usage || {};
+  let costCents;
+  if (u.gemini) {
+    costCents = geminiCostCents(model);
+  } else if (u.output_tokens != null) {
+    const det = u.input_tokens_details || {};
+    costCents = ((det.text_tokens || 0) * OPENAI_PRICE.text + (det.image_tokens || 0) * OPENAI_PRICE.imageIn + (u.output_tokens || 0) * OPENAI_PRICE.out) / 1e6 * 100;
+  } else { costCents = model === 'gpt-image-2' ? 21 : (model === 'gpt-image-1.5' ? 13 : 4); }
+
+  const blobKey = await uploadIconPNG(section, b64);
+
+  // Upsert the chip's image on the child's board.
+  const ex = parentId == null
+    ? await db`SELECT id FROM categories WHERE child_id = ${childId} AND section = ${section} AND parent_id IS NULL AND lower(label) = lower(${label}) LIMIT 1`
+    : await db`SELECT id FROM categories WHERE child_id = ${childId} AND section = ${section} AND parent_id = ${parentId} AND lower(label) = lower(${label}) LIMIT 1`;
+  let row, created = false;
+  if (ex.length) {
+    row = await db`UPDATE categories SET image_key = ${blobKey}, updated_at = NOW() WHERE id = ${ex[0].id} RETURNING id, image_key`;
+  } else {
+    row = await db`INSERT INTO categories (section, label, parent_id, image_key, keep_aspect, display_order, child_id, updated_at)
+      VALUES (${section}, ${label}, ${parentId}, ${blobKey}, FALSE, ${Date.now()}, ${childId}, NOW()) RETURNING id, image_key`;
+    created = true;
+  }
+  try {
+    await db`INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, reference_keys, size, input_tokens, output_tokens, cost_cents)
+      VALUES (${'__lab__'}, ${actorEmail}, 'admin', ${'[cat] ' + label}, ${style ? style.label : 'lab'}, ${prompt},
+              ${style && style.blob_key ? [style.blob_key] : []}, ${size}, ${u.input_tokens ?? null}, ${u.output_tokens ?? null}, ${costCents})`;
+  } catch (_) {}
+
+  return { ok: true, created, id: Number(row[0].id), blobKey, imageKey: row[0].image_key, costCents: Number(costCents), prompt };
 }

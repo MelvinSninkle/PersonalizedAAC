@@ -20,8 +20,9 @@ import { randomUUID } from 'node:crypto';
 import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
 import { ensureProgress, setStep, SEED_BAND, SEED_CATEGORY } from '../_lib/onboarding.js';
-import { loadStyleGuide, loadChildAnchor, renderTaxonomyTile, mapPool,
+import { loadStyleGuide, loadChildAnchor, renderTaxonomyTile,
          loadChildVoiceId, synthesizeVoice } from '../_lib/onboarding-render.js';
+import { planGenerationGroups, runGroups } from '../_lib/batch-generate.js';
 
 export const config = { maxDuration: 300 };
 
@@ -50,7 +51,7 @@ export default async function handler(req, res) {
     const settings = settingsRows[0] || { master_prompt: '', size_default: '1024x1024' };
 
     const tiles = await db`
-      SELECT id AS slug, column_name, category, subcategory, label, prompt_template, subject_mode
+      SELECT id, id AS slug, column_name, category, subcategory, label, prompt_template, subject_mode, related_images
       FROM taxonomy
       WHERE category = ${SEED_CATEGORY}
         AND acquisition_age = ${SEED_BAND}
@@ -59,10 +60,14 @@ export default async function handler(req, res) {
         AND status = 'published'
       ORDER BY label`;
 
-    // Render with bounded concurrency so 13 Gemini calls fit inside maxDuration.
-    const results = await mapPool(tiles, 3, async (tax) => {
-      const r = await renderTaxonomyTile({ tax, styleGuide, childAnchor, settings });
-      if (!r.ok) throw new Error(r.detail || 'render failed');
+    // Same dependency-ordered engine the admin Lab's bulk generate uses: paired
+    // tiles (related_images) generate together with bounded concurrency, the
+    // earlier image seeding the later, so the starter set fits inside maxDuration.
+    const byId = new Map(tiles.map((t) => [t.id, t]));
+    const groups = planGenerationGroups(tiles);
+    const render = async (tax, { referenceImageKeys }) => {
+      const r = await renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys });
+      if (!r.ok) return { ok: false, error: r.detail || 'render failed' };
 
       const png = Buffer.from(r.b64, 'base64');
       const imageKey = `onboarding/${childId}/core/${randomUUID()}.png`;
@@ -99,11 +104,17 @@ export default async function handler(req, res) {
                  VALUES (${childId}, ${auth.user.email || null}, 'onboarding_seed', ${tax.label},
                     ${styleGuide ? styleGuide.label : 'default'}, ${r.prompt}, '1024x1024', ${r.costCents ?? 4})`;
       } catch (_) {}
-      return tax.slug;
-    });
+      // blobKey threads into paired tiles as a reference for a consistent set.
+      return { ok: true, blobKey: imageKey, slug: tax.slug, costCents: r.costCents };
+    };
 
-    const placed = results.filter(x => x.ok).map(x => x.value);
-    const failed = results.filter(x => !x.ok).length;
+    const resultMap = await runGroups({ groups, byId, concurrency: 3, render });
+    const placed = [];
+    let failed = 0;
+    for (const t of tiles) {
+      const r = resultMap.get(t.id);
+      if (r && r.ok) placed.push(r.slug); else failed++;
+    }
 
     await setStep(db, Number(auth.user.uid), 'complete',
       { seededCount: placed.length, seedStyleGuideId: styleGuide ? styleGuide.id : null });

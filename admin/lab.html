@@ -659,23 +659,40 @@ async function reviewAndGenerateIcons() {
   if (!confirm(`You're about to ${verb} ${toGen.length} category icon${toGen.length === 1 ? '' : 's'} for ${childId} in the selected style.\n\nThey're listed above with their prompts — Cancel to tweak any, then click again.\n\nProceed with ${toGen.length} now?`)) return;
 
   const btn = $('cats-fill-all'); if (btn) btn.disabled = true;
-  let done = 0; const failed = [];
-  for (const row of toGen) {
-    if (btn) btn.textContent = `✨ Generating ${done + 1}/${toGen.length}…`;
-    try {
-      const r = await api('POST', '/api/admin/lab-category-generate', {
-        childId, section: row.section, label: row.label, parent: row.parentLabel || undefined,
-        promptOverride: (row.prompt || '').trim() || undefined,
-        styleGuideId: currentStyleId() || undefined,
-      });
-      addCost(r.costCents || 0);
-      row.hasImage = true; row.imageKey = r.imageKey; row.boardId = r.id;
-      done++;
-    } catch (err) { failed.push(row.label + (err && err.message ? ` (${err.message})` : '')); }
-  }
+  // Run the chips through the SHARED batch engine (parallel) — the same path the
+  // bulk tile generator + onboarding use. Parents must exist before their
+  // subcategories, so generate top-level chips (no parentLabel) first, then subs.
+  const styleGuideId = currentStyleId();
+  const parents = toGen.filter((r) => !r.parentLabel);
+  const subs = toGen.filter((r) => r.parentLabel);
+  let done = 0, ok = 0; const failed = [];
+  const runWave = async (wave) => {
+    if (!wave.length) return;
+    const CHUNK = 12;
+    for (let i = 0; i < wave.length; i += CHUNK) {
+      const slice = wave.slice(i, i + CHUNK);
+      if (btn) btn.textContent = `✨ Generating ${done + 1}-${Math.min(done + slice.length, toGen.length)}/${toGen.length}…`;
+      const categories = slice.map((r) => ({
+        section: r.section, label: r.label, parent: r.parentLabel || undefined,
+        promptOverride: (r.prompt || '').trim() || undefined,
+      }));
+      try {
+        const resp = await api('POST', '/api/admin/lab-batch-generate', { categories, childId, styleGuideId: styleGuideId || undefined });
+        addCost(resp.costCents || 0);
+        for (let j = 0; j < slice.length; j++) {
+          const cr = (resp.categories || [])[j] || {};
+          if (cr.ok) { ok++; slice[j].hasImage = true; slice[j].boardId = cr.categoryId; }
+          else failed.push(slice[j].label + (cr.error ? ` (${cr.error})` : ''));
+        }
+      } catch (err) { for (const r of slice) failed.push(r.label + (err && err.message ? ` (${err.message})` : '')); }
+      done += slice.length;
+    }
+  };
+  await runWave(parents);   // parents first so their chips exist for the subs
+  await runWave(subs);
   await loadBoardState(); renderTiles();
   if (btn) { btn.disabled = false; btn.textContent = '✨ Review & generate icons'; }
-  alert(`Generated ${done} category icon(s)` + (failed.length ? `.\n${failed.length} failed:\n- ` + failed.slice(0, 12).join('\n- ') : '.'));
+  alert(`Generated ${ok} category icon(s)` + (failed.length ? `.\n${failed.length} failed:\n- ` + failed.slice(0, 12).join('\n- ') : '.'));
 }
 function decorateBoardNote(t, card) {
   const note = card.querySelector('[data-board-note]');

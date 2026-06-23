@@ -1,22 +1,26 @@
 // POST /api/admin/lab-batch-generate
-// Body: { taxonomyIds: [...], styleGuideId?, childId?, model? }
+// Body: { taxonomyIds?: [...], categories?: [{ section, label, parent?, promptOverride?, childId? }],
+//         styleGuideId?, childId?, model? }
 //
-// Bulk-generate many tiles in one call, reusing the shared batch engine
-// (api/_lib/batch-generate.js) + the shared renderer (renderTaxonomyTile) — the
-// SAME code path new-customer onboarding uses. Paired/related tiles
-// (has_relationship + related_images) generate together so the earlier image
-// seeds the later for a consistent set. Each result is recorded in
-// tile_generations (so the QC gallery + publish flow pick it up).
+// Bulk-generate many tiles AND/OR category chips in one call, reusing the shared
+// batch engine (api/_lib/batch-generate.js) + the shared renderers
+// (renderTaxonomyTile, generateCategoryIcon) — the SAME code path new-customer
+// onboarding uses. Paired/related tiles (has_relationship + related_images)
+// generate together so the earlier image seeds the later for a consistent set;
+// category chips have no cross-deps, so each is a singleton group. Everything runs
+// through one concurrency pool so chips and tiles parallelize together.
 //
-// The caller (Lab UI) sends manageable CHUNKS — whole related-groups, ~15-20 tiles
+// The caller (Lab UI) sends manageable CHUNKS — whole related-groups, ~15-20 items
 // — so each request stays inside the function time limit; it loops chunks for the
-// whole board. Returns per-tile { id, ok, blobKey?, costCents?, error? } + totals.
+// whole board. Tile results are recorded in tile_generations (QC gallery + publish
+// flow); chips are set straight on the board. Returns per-item results + totals.
 import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { isGeminiModel } from '../_lib/gemini.js';
 import { loadStyleGuide, loadChildAnchor, renderTaxonomyTile } from '../_lib/onboarding-render.js';
+import { generateCategoryIcon, loadCategoryStyle } from '../_lib/category-icons.js';
 import { planGenerationGroups, runGroups } from '../_lib/batch-generate.js';
 
 export const config = { maxDuration: 300 };
@@ -28,7 +32,8 @@ export default async function handler(req, res) {
 
   const b = (typeof req.body === 'object' && req.body) || {};
   const ids = Array.isArray(b.taxonomyIds) ? b.taxonomyIds.map((x) => String(x)).filter(Boolean).slice(0, 60) : [];
-  if (!ids.length) { res.status(400).json({ error: 'taxonomyIds[] required' }); return; }
+  const cats = Array.isArray(b.categories) ? b.categories.filter((c) => c && c.section && c.label).slice(0, 60) : [];
+  if (!ids.length && !cats.length) { res.status(400).json({ error: 'taxonomyIds[] or categories[] required' }); return; }
   const childId = String(b.childId || 'fletcherpeterson').slice(0, 64).trim();
   const styleGuideId = b.styleGuideId != null ? parseInt(b.styleGuideId, 10) : null;
   const model = (typeof b.model === 'string' && isGeminiModel(b.model)) ? b.model : null;
@@ -37,24 +42,58 @@ export default async function handler(req, res) {
   try { db = sql(); } catch (err) { res.status(500).json({ error: 'DB not configured', detail: String(err.message || err) }); return; }
 
   try {
-    // Load the rows (with related_images so the engine can group pairs).
-    const rows = await db`
-      SELECT id, column_name, category, subcategory, label, prompt_template, subject_mode, related_images
-      FROM taxonomy WHERE id = ANY(${ids})
-    `;
-    if (!rows.length) { res.status(404).json({ error: 'no matching taxonomy rows', ids }); return; }
-    const byId = new Map(rows.map((r) => [r.id, r]));
-
-    const styleGuide = await loadStyleGuide(db, styleGuideId);
-    const childAnchor = await loadChildAnchor(db, childId);
-    const settingsRows = await db`SELECT master_prompt, size_default FROM lab_settings WHERE id = 1`;
+    // ── Tiles ────────────────────────────────────────────────────────────────
+    let rows = [];
+    if (ids.length) {
+      rows = await db`
+        SELECT id, column_name, category, subcategory, label, prompt_template, subject_mode, related_images
+        FROM taxonomy WHERE id = ANY(${ids})
+      `;
+    }
+    const settingsRows = await db`SELECT master_prompt, size_default, model_defaults FROM lab_settings WHERE id = 1`;
     const settings = settingsRows[0] || {};
 
-    const groups = planGenerationGroups(rows);
+    const styleGuide = rows.length ? await loadStyleGuide(db, styleGuideId) : null;
+    const childAnchor = rows.length ? await loadChildAnchor(db, childId) : null;
 
-    // Per-tile render: generate → upload PNG → record tile_generations → return the
-    // blob key so the engine can thread it into the next tile in the group.
-    const render = async (tax, { referenceImageKeys }) => {
+    // ── Category chips ─────────────────────────────────────────────────────────
+    // Load the chosen style once (image bytes + description) and reuse for every
+    // chip. Chips can run on a Gemini model (when the batch model is Gemini) or
+    // fall back to the configured category model.
+    let catStyle = null, catStyleBuf = null;
+    let catModel = model;
+    const catSize = settings.size_default || '1024x1024';
+    if (cats.length) {
+      ({ style: catStyle, styleBuf: catStyleBuf } = await loadCategoryStyle(db, styleGuideId));
+      if (!catModel) catModel = (settings.model_defaults && (settings.model_defaults.category || settings.model_defaults.default)) || 'gpt-image-1.5';
+    }
+
+    // Build a unified id space: real taxonomy ids for tiles + synthetic ids for
+    // chips, so both flow through the one ordering + concurrency pool.
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const catGroups = [];
+    cats.forEach((c, i) => {
+      const cid = `__cat__${i}`;
+      byId.set(cid, { __category: true, spec: c });
+      catGroups.push([cid]);   // chips have no cross-deps → singleton groups
+    });
+    const tileGroups = rows.length ? planGenerationGroups(rows) : [];
+    const groups = [...tileGroups, ...catGroups];
+
+    // Dispatch render: tiles via renderTaxonomyTile (records tile_generations and
+    // threads paired references); chips via the shared generateCategoryIcon.
+    const render = async (row, { referenceImageKeys }) => {
+      if (row && row.__category) {
+        const c = row.spec;
+        const r = await generateCategoryIcon({
+          db, childId: String(c.childId || childId), section: c.section, label: c.label,
+          parentLabel: c.parent || '', promptOverride: c.promptOverride || null,
+          style: catStyle, styleBuf: catStyleBuf, model: catModel, size: catSize, actorEmail: gate.email,
+        });
+        if (!r.ok) return { ok: false, error: r.error || 'generation failed' };
+        return { ok: true, blobKey: r.blobKey, costCents: r.costCents, created: r.created, categoryId: r.id };
+      }
+      const tax = row;
       const r = await renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys, model });
       if (!r.ok) return { ok: false, error: r.detail || r.status || 'generation failed' };
       const blobKey = `lab/${tax.id}/${randomUUID()}.png`;
@@ -71,6 +110,7 @@ export default async function handler(req, res) {
 
     const results = await runGroups({ groups, byId, concurrency: 3, render });
 
+    // Split results back into tiles + chips.
     const out = [];
     let okCount = 0, cost = 0;
     for (const id of ids) {
@@ -78,7 +118,20 @@ export default async function handler(req, res) {
       if (r.ok) { okCount++; cost += (r.costCents || 0); }
       out.push({ id, ok: !!r.ok, blobKey: r.blobKey, blobUrl: r.blobUrl, costCents: r.costCents, error: r.error });
     }
-    res.status(200).json({ ok: true, generated: okCount, failed: ids.length - okCount, costCents: cost, groups: groups.length, results: out });
+    const catOut = [];
+    let catOk = 0;
+    cats.forEach((c, i) => {
+      const r = results.get(`__cat__${i}`) || { ok: false, error: 'not processed' };
+      if (r.ok) { catOk++; cost += (r.costCents || 0); }
+      catOut.push({ section: c.section, label: c.label, parent: c.parent || null, ok: !!r.ok, categoryId: r.categoryId, created: r.created, error: r.error });
+    });
+
+    res.status(200).json({
+      ok: true,
+      generated: okCount, failed: ids.length - okCount,
+      categoriesGenerated: catOk, categoriesFailed: cats.length - catOk,
+      costCents: cost, groups: groups.length, results: out, categories: catOut,
+    });
   } catch (err) {
     res.status(500).json({ error: 'batch generate failed', detail: String(err.message || err) });
   }
