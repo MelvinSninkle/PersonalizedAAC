@@ -50,8 +50,12 @@ When writing or revising a prompt:
   every tile. *(Enforced in code by `captionRule`; do NOT bake captions or "no
   text" clauses into prompt_template — two caption instructions are what made the
   lettering drift.)*
-- Photographic / realistic style consistent with the child's single styled
-  reference image (see Style strategy).
+- Photographic / realistic? **NO — never name a rendering medium or style** in the
+  prompt body (no "photographic", "realistic", "3D render", "watercolor", "cartoon",
+  etc.). The visual style is owned **entirely** by the `{style}` token + the attached
+  style-reference image; naming a medium here *fights* the parent's chosen style and
+  can override it. Describe **only the subject, scene, and composition** — let
+  `{style}` decide how it's drawn.
 - **No anthropomorphic faces or expressions on inanimate objects, ever.**
 
 ### Nouns / objects
