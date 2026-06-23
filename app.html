@@ -189,7 +189,7 @@
 
   main {
     display: grid;
-    grid-template-columns: var(--main-cols, minmax(0,1fr) minmax(0,1fr) minmax(0,1fr));
+    grid-template-columns: var(--main-cols, minmax(0,2fr) minmax(0,4fr) minmax(0,3fr));
     gap: 10px;
     padding: 8px;
   }
@@ -250,7 +250,8 @@
     letter-spacing: .5px;
   }
 
-  /* Category chip strip — small tiles, wraps so ALL top-level cats show */
+  /* Category chip strip — single row that scrolls sideways (like iOS); the
+     section's minmax(0,…) track lets it scroll instead of forcing the column wider. */
   .tab-strip {
     flex: 0 0 auto;
     display: flex;
@@ -1496,8 +1497,14 @@
     // section instead of shrinking its tiles (tile size ≈ board_width ÷ total
     // columns, which barely moved). Equal widths make "tiles across" mean exactly
     // that — more columns = smaller tiles in that section.
+    // Section widths are PROPORTIONAL to each section's tiles-across, so every tile
+    // ends up the same size (total width ÷ total tiles-across) and the row fills the
+    // screen — matching the iOS layout. minmax(0, …) (not bare Nfr) lets a track
+    // shrink below its content so the category chip strip scrolls instead of forcing
+    // the section wider. Nouns is widest because it has the most tiles — by design.
     const visibleMains = MAIN_SECTIONS.filter(s => display.sectionVisible[s]);
-    document.querySelector('main').style.setProperty('--main-cols', visibleMains.map(() => 'minmax(0, 1fr)').join(' ') || 'minmax(0, 1fr)');
+    document.querySelector('main').style.setProperty('--main-cols',
+      visibleMains.map(s => `minmax(0, ${display.tilesAcross[s] || 1}fr)`).join(' ') || 'minmax(0, 1fr)');
     // Section background colors via CSS custom properties on :root.
     for (const s of SECTIONS) {
       document.documentElement.style.setProperty(`--bg-${s}`, display.sectionColors[s]);

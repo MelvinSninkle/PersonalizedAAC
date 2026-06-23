@@ -306,6 +306,8 @@
       <option value="100">100 per page</option>
     </select>
     <div class="stats" id="filter-stats"></div>
+    <button id="btn-batch" class="primary" style="margin-top:8px;width:100%;" title="Generate every tile that matches the current filter, in the selected style. Paired tiles (open/close, big/little) are generated together.">✨ Generate all filtered (batch)</button>
+    <div id="batch-status" style="font-size:11px;color:#557fa3;margin-top:6px;white-space:pre-line;"></div>
   </aside>
 
   <div id="walker"></div>
@@ -645,33 +647,52 @@ async function generateCategory(row, div) {
 }
 async function reviewAndGenerateIcons() {
   const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
-  // Cluster the to-generate chips so you can read/tweak their prompts side by side
-  // before committing.
-  if ($('cats-only-missing')) $('cats-only-missing').checked = true;
+  // "Only missing or no image" checked → fill gaps. Unchecked → regenerate ALL
+  // chips (restyle existing in the currently-selected style — that's how you
+  // re-skin category icons when the house style changes).
+  const onlyMissing = !$('cats-only-missing') || $('cats-only-missing').checked;
   renderCategoryPanel();
   await new Promise((r) => setTimeout(r, 60));   // let the clustered view paint before the prompt
-  const toGen = catList.filter((r) => !r.hasImage && !r.parentMissing);  // parents first (server order)
-  if (!toGen.length) { alert('Every category chip already has an icon. Nothing to generate.'); return; }
-  if (!confirm(`You're about to generate ${toGen.length} category icon${toGen.length === 1 ? '' : 's'} for ${childId}.\n\nThey're listed above with their prompts — Cancel to tweak any, then click again.\n\nGenerate ${toGen.length} now?`)) return;
+  const toGen = catList.filter((r) => !r.parentMissing && (onlyMissing ? !r.hasImage : true));  // parents first (server order)
+  if (!toGen.length) { alert(onlyMissing ? 'Every category chip already has an icon. Uncheck "only missing" to restyle them.' : 'No category chips to generate.'); return; }
+  const verb = onlyMissing ? 'generate' : 'REGENERATE (restyle)';
+  if (!confirm(`You're about to ${verb} ${toGen.length} category icon${toGen.length === 1 ? '' : 's'} for ${childId} in the selected style.\n\nThey're listed above with their prompts — Cancel to tweak any, then click again.\n\nProceed with ${toGen.length} now?`)) return;
 
   const btn = $('cats-fill-all'); if (btn) btn.disabled = true;
-  let done = 0; const failed = [];
-  for (const row of toGen) {
-    if (btn) btn.textContent = `✨ Generating ${done + 1}/${toGen.length}…`;
-    try {
-      const r = await api('POST', '/api/admin/lab-category-generate', {
-        childId, section: row.section, label: row.label, parent: row.parentLabel || undefined,
-        promptOverride: (row.prompt || '').trim() || undefined,
-        styleGuideId: currentStyleId() || undefined,
-      });
-      addCost(r.costCents || 0);
-      row.hasImage = true; row.imageKey = r.imageKey; row.boardId = r.id;
-      done++;
-    } catch (err) { failed.push(row.label + (err && err.message ? ` (${err.message})` : '')); }
-  }
+  // Run the chips through the SHARED batch engine (parallel) — the same path the
+  // bulk tile generator + onboarding use. Parents must exist before their
+  // subcategories, so generate top-level chips (no parentLabel) first, then subs.
+  const styleGuideId = currentStyleId();
+  const parents = toGen.filter((r) => !r.parentLabel);
+  const subs = toGen.filter((r) => r.parentLabel);
+  let done = 0, ok = 0; const failed = [];
+  const runWave = async (wave) => {
+    if (!wave.length) return;
+    const CHUNK = 12;
+    for (let i = 0; i < wave.length; i += CHUNK) {
+      const slice = wave.slice(i, i + CHUNK);
+      if (btn) btn.textContent = `✨ Generating ${done + 1}-${Math.min(done + slice.length, toGen.length)}/${toGen.length}…`;
+      const categories = slice.map((r) => ({
+        section: r.section, label: r.label, parent: r.parentLabel || undefined,
+        promptOverride: (r.prompt || '').trim() || undefined,
+      }));
+      try {
+        const resp = await api('POST', '/api/admin/lab-batch-generate', { categories, childId, styleGuideId: styleGuideId || undefined });
+        addCost(resp.costCents || 0);
+        for (let j = 0; j < slice.length; j++) {
+          const cr = (resp.categories || [])[j] || {};
+          if (cr.ok) { ok++; slice[j].hasImage = true; slice[j].boardId = cr.categoryId; }
+          else failed.push(slice[j].label + (cr.error ? ` (${cr.error})` : ''));
+        }
+      } catch (err) { for (const r of slice) failed.push(r.label + (err && err.message ? ` (${err.message})` : '')); }
+      done += slice.length;
+    }
+  };
+  await runWave(parents);   // parents first so their chips exist for the subs
+  await runWave(subs);
   await loadBoardState(); renderTiles();
   if (btn) { btn.disabled = false; btn.textContent = '✨ Review & generate icons'; }
-  alert(`Generated ${done} category icon(s)` + (failed.length ? `.\n${failed.length} failed:\n- ` + failed.slice(0, 12).join('\n- ') : '.'));
+  alert(`Generated ${ok} category icon(s)` + (failed.length ? `.\n${failed.length} failed:\n- ` + failed.slice(0, 12).join('\n- ') : '.'));
 }
 function decorateBoardNote(t, card) {
   const note = card.querySelector('[data-board-note]');
@@ -759,6 +780,57 @@ function renderTiles() {
 
 $('btn-prev').addEventListener('click', () => { if (page > 0) { page--; renderTiles(); window.scrollTo({top: 0, behavior: 'smooth'}); } });
 $('btn-next').addEventListener('click', () => { if ((page + 1) * PAGE_SIZE() < filtered.length) { page++; renderTiles(); window.scrollTo({top: 0, behavior: 'smooth'}); } });
+// ---- bulk batch generation (reuses the shared engine: /api/admin/lab-batch-generate) ----
+function _relIds(t) {
+  const r = t.relatedImages;
+  if (Array.isArray(r)) return r;
+  return (typeof r === 'string' && r) ? r.split(/\s*\|\s*|,/).map(s => s.trim()).filter(Boolean) : [];
+}
+// Group filtered tiles by the related_images graph (mirrors server planGenerationGroups)
+// so paired tiles ride in the same chunk and generate together.
+function _planGroups(rows) {
+  const byId = new Map(rows.map(t => [t.id, t]));
+  const seen = new Set(), groups = [];
+  for (const t of rows) {
+    if (seen.has(t.id)) continue;
+    const comp = [], q = [t.id]; seen.add(t.id);
+    while (q.length) { const id = q.shift(); comp.push(id); const row = byId.get(id); if (!row) continue;
+      for (const nid of _relIds(row)) if (byId.has(nid) && !seen.has(nid)) { seen.add(nid); q.push(nid); } }
+    comp.sort(); groups.push(comp);
+  }
+  return groups;
+}
+async function batchGenerateFiltered() {
+  const btn = $('btn-batch'), st = $('batch-status');
+  const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
+  const styleGuideId = currentStyleId();
+  const model = ($('default-model') && $('default-model').value) || undefined;
+  const list = filtered.slice();
+  if (!list.length) { alert('No tiles match the current filter.'); return; }
+  if (!styleGuideId) { alert('No active style selected — pick a style guide first.'); return; }
+  if (!confirm(`Generate ${list.length} tile${list.length === 1 ? '' : 's'} in the selected style?\n\nPaired tiles (open/close, big/little) generate together. Runs in chunks — watch progress below. Note: batch uses the Gemini (Nano Banana) renderer.`)) return;
+  // whole groups packed into <=15-tile chunks (keeps pairs together, stays under the time limit)
+  const groups = _planGroups(list);
+  const chunks = []; let cur = [], n = 0;
+  for (const g of groups) { if (n + g.length > 15 && cur.length) { chunks.push(cur); cur = []; n = 0; } cur.push(...g); n += g.length; }
+  if (cur.length) chunks.push(cur);
+  btn.disabled = true;
+  let done = 0, ok = 0, fail = 0; const total = list.length, failed = [];
+  for (let i = 0; i < chunks.length; i++) {
+    st.textContent = `Generating… ${done}/${total} (chunk ${i + 1}/${chunks.length})`;
+    try {
+      const r = await api('POST', '/api/admin/lab-batch-generate', { taxonomyIds: chunks[i], styleGuideId: styleGuideId || undefined, childId, model });
+      ok += r.generated || 0; fail += r.failed || 0; addCost(r.costCents || 0);
+      for (const res of (r.results || [])) if (!res.ok) failed.push(res.id + (res.error ? ` (${res.error})` : ''));
+    } catch (e) { fail += chunks[i].length; failed.push(`chunk ${i + 1}: ${e.message || e}`); }
+    done += chunks[i].length;
+  }
+  st.textContent = `Done: ${ok} generated, ${fail} failed.` + (failed.length ? `\nFirst failures:\n- ` + failed.slice(0, 8).join('\n- ') : '');
+  btn.disabled = false;
+  for (const t of filtered.slice(page * PAGE_SIZE(), page * PAGE_SIZE() + PAGE_SIZE())) loadGenerations(t.id);
+}
+$('btn-batch').addEventListener('click', batchGenerateFiltered);
+
 $('publish-child').addEventListener('change', async () => { await loadBoardState(); renderTiles(); });
 $('cats-only-missing').addEventListener('change', renderCategoryPanel);
 $('cat-upload-input').addEventListener('change', (e) => {

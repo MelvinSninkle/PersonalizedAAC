@@ -91,7 +91,7 @@ function noFaceRule(category) {
 // Render one taxonomy tile. `styleGuide` is the loaded { image, label } (or null),
 // `childAnchor` the loaded { buffer, contentType, name } (or null), `settings`
 // the lab_settings row. Returns { ok, b64?, contentType?, prompt?, costCents?, model?, detail? }.
-export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings }) {
+export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], model = null }) {
   const section = String(tax.column_name || '').toLowerCase();
   let content = tax.prompt_template || `A friendly illustration of ${tax.label}.`;
   const mentionsRef = /\{reference\}/i.test(content);
@@ -137,6 +137,15 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
     images.push({ buffer: subject.buffer, contentType: subject.contentType });
     legend.push(`Image ${images.length} shows ${subject.name} — keep this person's face and likeness clearly recognizable.`);
   }
+  // Related already-generated tiles (paired concepts like open/close, big/little):
+  // attach them so this tile reuses the same setup/composition for a legible pair.
+  for (const key of (referenceImageKeys || [])) {
+    try {
+      const bytes = await readBlobBytes(key);
+      images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
+      legend.push(`Image ${images.length} is a RELATED tile already drawn — match its scene, composition, and props exactly; change only what this word requires.`);
+    } catch (_) { /* a missing reference never blocks generation */ }
+  }
   // Enforce framing + caption in code so they hold regardless of the editable
   // master prompt: square/centered/frame-filling, then the black-on-white label.
   prompt += SQUARE_RULE + captionRule(tax.label);
@@ -144,10 +153,10 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
 
   const gKey = geminiKey();
   if (!gKey) return { ok: false, detail: 'GEMINI_API_KEY not configured' };
-  const model = geminiDefaultModel();
-  const g = await geminiGenerateImage({ apiKey: gKey, model, prompt, images, aspectRatio: '1:1' });
+  const useModel = model || geminiDefaultModel();
+  const g = await geminiGenerateImage({ apiKey: gKey, model: useModel, prompt, images, aspectRatio: '1:1' });
   if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
-  return { ok: true, b64: g.b64, contentType: 'image/png', prompt, costCents: geminiCostCents(model), model };
+  return { ok: true, b64: g.b64, contentType: 'image/png', prompt, costCents: geminiCostCents(useModel), model: useModel };
 }
 
 // Run `worker` over `items` with at most `limit` in flight. Best-effort: a
