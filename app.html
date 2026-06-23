@@ -189,7 +189,7 @@
 
   main {
     display: grid;
-    grid-template-columns: var(--main-cols, 2fr 4fr 3fr);
+    grid-template-columns: var(--main-cols, minmax(0,1fr) minmax(0,1fr) minmax(0,1fr));
     gap: 10px;
     padding: 8px;
   }
@@ -375,7 +375,7 @@
   .items-grid {
     flex: 1;
     display: grid;
-    grid-template-columns: var(--items-cols, repeat(2, 1fr));
+    grid-template-columns: var(--items-cols, repeat(2, minmax(0, 1fr)));
     align-content: start;
     gap: 10px;
     padding: 8px;
@@ -1497,7 +1497,7 @@
     // columns, which barely moved). Equal widths make "tiles across" mean exactly
     // that — more columns = smaller tiles in that section.
     const visibleMains = MAIN_SECTIONS.filter(s => display.sectionVisible[s]);
-    document.querySelector('main').style.setProperty('--main-cols', visibleMains.map(() => '1fr').join(' ') || '1fr');
+    document.querySelector('main').style.setProperty('--main-cols', visibleMains.map(() => 'minmax(0, 1fr)').join(' ') || 'minmax(0, 1fr)');
     // Section background colors via CSS custom properties on :root.
     for (const s of SECTIONS) {
       document.documentElement.style.setProperty(`--bg-${s}`, display.sectionColors[s]);
@@ -1520,7 +1520,7 @@
           // distortion. Force a sane integer here so a corrupted display object
           // can never deform the board.
           const cols = clampAcross(display.tilesAcross[s] ?? DISPLAY_DEFAULTS.tilesAcross[s]);
-          itemsEl.style.setProperty('--items-cols', `repeat(${cols}, 1fr)`);
+          itemsEl.style.setProperty('--items-cols', `repeat(${cols}, minmax(0, 1fr))`);
         }
       }
     }
@@ -2074,7 +2074,7 @@
     // -------- Items: one wrapping grid that scrolls as a block --------
     const itemsEl = document.getElementById(`items-${section}`);
     itemsEl.innerHTML = '';
-    itemsEl.style.setProperty('--items-cols', `repeat(${N}, 1fr)`);
+    itemsEl.style.setProperty('--items-cols', `repeat(${N}, minmax(0, 1fr))`);
 
     if (!activeId) {
       if (!editMode) {
