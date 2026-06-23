@@ -306,6 +306,8 @@
       <option value="100">100 per page</option>
     </select>
     <div class="stats" id="filter-stats"></div>
+    <button id="btn-batch" class="primary" style="margin-top:8px;width:100%;" title="Generate every tile that matches the current filter, in the selected style. Paired tiles (open/close, big/little) are generated together.">✨ Generate all filtered (batch)</button>
+    <div id="batch-status" style="font-size:11px;color:#557fa3;margin-top:6px;white-space:pre-line;"></div>
   </aside>
 
   <div id="walker"></div>
@@ -761,6 +763,57 @@ function renderTiles() {
 
 $('btn-prev').addEventListener('click', () => { if (page > 0) { page--; renderTiles(); window.scrollTo({top: 0, behavior: 'smooth'}); } });
 $('btn-next').addEventListener('click', () => { if ((page + 1) * PAGE_SIZE() < filtered.length) { page++; renderTiles(); window.scrollTo({top: 0, behavior: 'smooth'}); } });
+// ---- bulk batch generation (reuses the shared engine: /api/admin/lab-batch-generate) ----
+function _relIds(t) {
+  const r = t.relatedImages;
+  if (Array.isArray(r)) return r;
+  return (typeof r === 'string' && r) ? r.split(/\s*\|\s*|,/).map(s => s.trim()).filter(Boolean) : [];
+}
+// Group filtered tiles by the related_images graph (mirrors server planGenerationGroups)
+// so paired tiles ride in the same chunk and generate together.
+function _planGroups(rows) {
+  const byId = new Map(rows.map(t => [t.id, t]));
+  const seen = new Set(), groups = [];
+  for (const t of rows) {
+    if (seen.has(t.id)) continue;
+    const comp = [], q = [t.id]; seen.add(t.id);
+    while (q.length) { const id = q.shift(); comp.push(id); const row = byId.get(id); if (!row) continue;
+      for (const nid of _relIds(row)) if (byId.has(nid) && !seen.has(nid)) { seen.add(nid); q.push(nid); } }
+    comp.sort(); groups.push(comp);
+  }
+  return groups;
+}
+async function batchGenerateFiltered() {
+  const btn = $('btn-batch'), st = $('batch-status');
+  const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
+  const styleGuideId = currentStyleId();
+  const model = ($('default-model') && $('default-model').value) || undefined;
+  const list = filtered.slice();
+  if (!list.length) { alert('No tiles match the current filter.'); return; }
+  if (!styleGuideId) { alert('No active style selected — pick a style guide first.'); return; }
+  if (!confirm(`Generate ${list.length} tile${list.length === 1 ? '' : 's'} in the selected style?\n\nPaired tiles (open/close, big/little) generate together. Runs in chunks — watch progress below. Note: batch uses the Gemini (Nano Banana) renderer.`)) return;
+  // whole groups packed into <=15-tile chunks (keeps pairs together, stays under the time limit)
+  const groups = _planGroups(list);
+  const chunks = []; let cur = [], n = 0;
+  for (const g of groups) { if (n + g.length > 15 && cur.length) { chunks.push(cur); cur = []; n = 0; } cur.push(...g); n += g.length; }
+  if (cur.length) chunks.push(cur);
+  btn.disabled = true;
+  let done = 0, ok = 0, fail = 0; const total = list.length, failed = [];
+  for (let i = 0; i < chunks.length; i++) {
+    st.textContent = `Generating… ${done}/${total} (chunk ${i + 1}/${chunks.length})`;
+    try {
+      const r = await api('POST', '/api/admin/lab-batch-generate', { taxonomyIds: chunks[i], styleGuideId: styleGuideId || undefined, childId, model });
+      ok += r.generated || 0; fail += r.failed || 0; addCost(r.costCents || 0);
+      for (const res of (r.results || [])) if (!res.ok) failed.push(res.id + (res.error ? ` (${res.error})` : ''));
+    } catch (e) { fail += chunks[i].length; failed.push(`chunk ${i + 1}: ${e.message || e}`); }
+    done += chunks[i].length;
+  }
+  st.textContent = `Done: ${ok} generated, ${fail} failed.` + (failed.length ? `\nFirst failures:\n- ` + failed.slice(0, 8).join('\n- ') : '');
+  btn.disabled = false;
+  for (const t of filtered.slice(page * PAGE_SIZE(), page * PAGE_SIZE() + PAGE_SIZE())) loadGenerations(t.id);
+}
+$('btn-batch').addEventListener('click', batchGenerateFiltered);
+
 $('publish-child').addEventListener('change', async () => { await loadBoardState(); renderTiles(); });
 $('cats-only-missing').addEventListener('change', renderCategoryPanel);
 $('cat-upload-input').addEventListener('change', (e) => {
