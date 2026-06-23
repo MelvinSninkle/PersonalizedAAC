@@ -13,6 +13,7 @@ const HEADER = [
   'parent_photo_behavior', 'phase', 'core', 'growth_stage', 'meal_context', 'is_gestalt',
   'gestalt_type', 'gestalt_meaning', 'gestalt_target_words', 'descriptive_clues',
   'audience', 'authoring_kind', 'status', 'prompt_template', 'notes', 'acquisition_age',
+  'roles_present', 'objects_present', 'has_relationship', 'related_images', 'personalized',
 ];
 
 function csvField(v) {
@@ -39,7 +40,8 @@ export default async function handler(req, res) {
       SELECT id, column_name, category, subcategory, label, pronunciation, subject_mode,
              parent_photo_behavior, phase, core, growth_stage, meal_context, is_gestalt,
              gestalt_type, gestalt_meaning, gestalt_target_words, descriptive_clues,
-             audience, authoring_kind, status, prompt_template, notes, acquisition_age
+             audience, authoring_kind, status, prompt_template, notes, acquisition_age,
+             roles_present, objects_present, has_relationship, related_images, personalized
       FROM taxonomy
       WHERE archived = FALSE
       ORDER BY column_name, category, subcategory NULLS FIRST, id
@@ -70,6 +72,11 @@ export default async function handler(req, res) {
         csvField(r.prompt_template),
         csvField(r.notes),
         csvField(r.acquisition_age),
+        csvField(joinArray(r.roles_present)),
+        csvField(joinArray(r.objects_present)),
+        csvField(r.has_relationship ? 'true' : 'false'),
+        csvField(joinArray(r.related_images)),
+        csvField(r.personalized ? 'true' : 'false'),
       ].join(','));
     }
     const body = lines.join('\n') + '\n';

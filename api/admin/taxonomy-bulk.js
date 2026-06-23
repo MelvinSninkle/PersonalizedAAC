@@ -10,8 +10,15 @@
 // Returns counts: { inserted, updated, skipped, errors: [...] }.
 import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
+import { savePromptVersion } from '../_lib/prompt-versions.js';
 
 const ACTOR = 'admin';
+// Personalization metadata arrays (prompt-skill §4) — cleaned like the other
+// TEXT[] fields. `undefined` means "the import didn't supply it" → keep existing.
+function cleanArr(v, max, itemMax) {
+  if (!Array.isArray(v)) return undefined;
+  return v.map(x => (typeof x === 'string' ? x.trim().slice(0, itemMax) : '')).filter(Boolean).slice(0, max);
+}
 const VALID_COLUMNS = new Set(['People', 'Nouns', 'Verbs', 'Needs', 'Events']);
 const VALID_SUBJECT_MODES = new Set(['child_as_subject', 'object', 'person', 'concept']);
 const VALID_PARENT_PHOTO = new Set(['override', 'supplement', 'none']);
@@ -74,6 +81,7 @@ export default async function handler(req, res) {
 
     // 2) Build a set of existing ids so we can categorize each incoming row.
     const existingIds = new Set(existing.map(r => r.id));
+    const existingById = new Map(existing.map(r => [r.id, r]));
 
     const errors = [];
     let inserted = 0;
@@ -99,8 +107,25 @@ export default async function handler(req, res) {
       const authoringKind = VALID_AUTHORING_KIND.has(r.authoringKind) ? r.authoringKind : 'canonical';
 
       if (collision) {
+        const prior = existingById.get(r.id);
+        // Save the prior prompt before overwriting it — this is the exact path that
+        // silently wiped hand-tuned prompts before; now they're always recoverable.
+        if (prior && r.promptTemplate !== undefined && r.promptTemplate !== prior.prompt_template) {
+          await savePromptVersion(db, r.id, prior.prompt_template, { by: ACTOR, source: 'import' });
+        }
+        // Personalization metadata: overwrite only when the import supplies it,
+        // otherwise keep what's there — an old CSV without these columns must not
+        // wipe them.
+        const rolesP = cleanArr(r.rolesPresent, 12, 40);
+        const objsP  = cleanArr(r.objectsPresent, 24, 80);
+        const relImg = cleanArr(r.relatedImages, 24, 120);
         await db`
           UPDATE taxonomy SET
+            roles_present         = ${rolesP !== undefined ? rolesP : (prior ? prior.roles_present : null)},
+            objects_present       = ${objsP  !== undefined ? objsP  : (prior ? prior.objects_present : null)},
+            related_images        = ${relImg !== undefined ? relImg : (prior ? prior.related_images : null)},
+            has_relationship      = ${r.hasRelationship !== undefined ? !!r.hasRelationship : (prior ? prior.has_relationship : false)},
+            personalized          = ${r.personalized !== undefined ? !!r.personalized : (prior ? prior.personalized : false)},
             column_name           = ${r.column},
             category              = ${r.category ?? null},
             subcategory           = ${r.subcategory ?? null},
@@ -137,6 +162,7 @@ export default async function handler(req, res) {
             prompt_template, subject_mode, parent_photo_behavior, phase, core, notes,
             growth_stage, acquisition_age, meal_context, is_gestalt, gestalt_type, gestalt_meaning,
             gestalt_target_words, descriptive_clues, representation_levels,
+            roles_present, objects_present, has_relationship, related_images, personalized,
             audience, authoring_kind,
             status, archived, created_by, updated_by
           ) VALUES (
@@ -147,6 +173,7 @@ export default async function handler(req, res) {
             ${r.growthStage ?? null}, ${r.acquisitionAge ?? null}, ${r.mealContext ?? null},
             ${isGestalt}, ${r.gestaltType ?? null}, ${r.gestaltMeaning ?? null},
             ${targetWords}, ${clues}, ${repLevels}::jsonb,
+            ${cleanArr(r.rolesPresent, 12, 40) ?? null}, ${cleanArr(r.objectsPresent, 24, 80) ?? null}, ${!!r.hasRelationship}, ${cleanArr(r.relatedImages, 24, 120) ?? null}, ${!!r.personalized},
             ${audience}, ${authoringKind},
             ${status}, ${!!r.archived}, ${ACTOR}, ${ACTOR}
           )

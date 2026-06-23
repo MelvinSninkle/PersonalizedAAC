@@ -4,6 +4,7 @@
 // have real user identities.
 import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
+import { savePromptVersion } from '../_lib/prompt-versions.js';
 
 const ACTOR = 'admin';
 
@@ -50,6 +51,11 @@ function rowOut(r) {
     gestaltTargetWords: Array.isArray(r.gestalt_target_words) ? r.gestalt_target_words : [],
     descriptiveClues: Array.isArray(r.descriptive_clues) ? r.descriptive_clues : [],
     representationLevels: r.representation_levels || null,
+    rolesPresent: Array.isArray(r.roles_present) ? r.roles_present : [],
+    objectsPresent: Array.isArray(r.objects_present) ? r.objects_present : [],
+    hasRelationship: !!r.has_relationship,
+    relatedImages: Array.isArray(r.related_images) ? r.related_images : [],
+    personalized: !!r.personalized,
     notes: r.notes,
     status: r.status,
     archived: !!r.archived,
@@ -122,6 +128,11 @@ function validateRow(body, { partial }) {
   if (body.gestaltTargetWords !== undefined)  out.gestaltTargetWords = cleanStrArray(body.gestaltTargetWords, 24, 80);
   if (body.descriptiveClues !== undefined)    out.descriptiveClues = cleanStrArray(body.descriptiveClues, 12, 400);
   if (body.representationLevels !== undefined) out.representationLevels = body.representationLevels || null;
+  if (body.rolesPresent !== undefined)    out.rolesPresent = cleanStrArray(body.rolesPresent, 12, 40);
+  if (body.objectsPresent !== undefined)  out.objectsPresent = cleanStrArray(body.objectsPresent, 24, 80);
+  if (body.relatedImages !== undefined)   out.relatedImages = cleanStrArray(body.relatedImages, 24, 120);
+  if (body.hasRelationship !== undefined) out.hasRelationship = !!body.hasRelationship;
+  if (body.personalized !== undefined)    out.personalized = !!body.personalized;
   if (body.audience !== undefined) {
     if (!VALID_AUDIENCE.has(body.audience)) errs.push(`audience must be one of ${[...VALID_AUDIENCE].join(', ')}`);
     out.audience = body.audience;
@@ -184,6 +195,7 @@ async function create(req, res, db) {
       prompt_template, subject_mode, parent_photo_behavior, phase, core, notes, acquisition_age,
       growth_stage, meal_context, is_gestalt, gestalt_type, gestalt_meaning,
       gestalt_target_words, descriptive_clues, representation_levels,
+      roles_present, objects_present, has_relationship, related_images, personalized,
       audience, authoring_kind,
       status, archived, created_by, updated_by
     ) VALUES (
@@ -195,6 +207,7 @@ async function create(req, res, db) {
       ${value.isGestalt ?? false}, ${value.gestaltType ?? null}, ${value.gestaltMeaning ?? null},
       ${value.gestaltTargetWords ?? null}, ${value.descriptiveClues ?? null},
       ${value.representationLevels == null ? null : JSON.stringify(value.representationLevels)}::jsonb,
+      ${value.rolesPresent ?? null}, ${value.objectsPresent ?? null}, ${value.hasRelationship ?? false}, ${value.relatedImages ?? null}, ${value.personalized ?? false},
       ${value.audience ?? 'universal'}, ${value.authoringKind ?? 'canonical'},
       ${value.status ?? 'draft'}, ${value.archived ?? false},
       ${ACTOR}, ${ACTOR}
@@ -224,6 +237,12 @@ async function update(req, res, db) {
     if (collision.length) { res.status(409).json({ error: 'target id already exists' }); return; }
   }
 
+  // Preserve the prior prompt before we overwrite it, so a hand-tuned prompt is
+  // always recoverable (single-edit path; the bulk import path does the same).
+  if (value.promptTemplate !== undefined && value.promptTemplate !== old.prompt_template) {
+    await savePromptVersion(db, old.id, old.prompt_template, { by: ACTOR, source: 'edit' });
+  }
+
   // Apply: every field that was sent gets written, others left alone.
   const willPublish = value.status === 'published' && old.status !== 'published';
 
@@ -250,6 +269,11 @@ async function update(req, res, db) {
       gestalt_target_words   = ${value.gestaltTargetWords    !== undefined ? value.gestaltTargetWords    : old.gestalt_target_words},
       descriptive_clues      = ${value.descriptiveClues      !== undefined ? value.descriptiveClues      : old.descriptive_clues},
       representation_levels  = ${value.representationLevels  !== undefined ? (value.representationLevels == null ? null : JSON.stringify(value.representationLevels)) : (old.representation_levels == null ? null : JSON.stringify(old.representation_levels))}::jsonb,
+      roles_present          = ${value.rolesPresent          !== undefined ? value.rolesPresent          : old.roles_present},
+      objects_present        = ${value.objectsPresent        !== undefined ? value.objectsPresent        : old.objects_present},
+      has_relationship       = ${value.hasRelationship       !== undefined ? value.hasRelationship       : old.has_relationship},
+      related_images         = ${value.relatedImages         !== undefined ? value.relatedImages         : old.related_images},
+      personalized           = ${value.personalized          !== undefined ? value.personalized          : old.personalized},
       audience               = ${value.audience              ?? old.audience},
       authoring_kind         = ${value.authoringKind         ?? old.authoring_kind},
       status                 = ${value.status                ?? old.status},

@@ -1490,10 +1490,14 @@
   function applyDisplay() {
     // Labels always show in edit mode so the parent can see what they're editing.
     document.body.classList.toggle('hide-labels', display.hideLabels && !editMode);
-    const visibleFrs = MAIN_SECTIONS
-      .filter(s => display.sectionVisible[s])
-      .map(s => `${display.tilesAcross[s]}fr`);
-    document.querySelector('main').style.setProperty('--main-cols', visibleFrs.join(' ') || '1fr');
+    // Section column WIDTHS are equal; "tiles across" controls only tiles-per-row
+    // (--items-cols below). Previously the width used tilesAcross as its fr-weight,
+    // which coupled the two: raising a section's column count just widened the
+    // section instead of shrinking its tiles (tile size ≈ board_width ÷ total
+    // columns, which barely moved). Equal widths make "tiles across" mean exactly
+    // that — more columns = smaller tiles in that section.
+    const visibleMains = MAIN_SECTIONS.filter(s => display.sectionVisible[s]);
+    document.querySelector('main').style.setProperty('--main-cols', visibleMains.map(() => '1fr').join(' ') || '1fr');
     // Section background colors via CSS custom properties on :root.
     for (const s of SECTIONS) {
       document.documentElement.style.setProperty(`--bg-${s}`, display.sectionColors[s]);
