@@ -250,16 +250,17 @@
     letter-spacing: .5px;
   }
 
-  /* Category chip strip — small tiles, wraps so ALL top-level cats show */
+  /* Category chip strip — wraps so ALL top-level cats fit across the section
+     width (same width as the tiles below) instead of scrolling off-screen. */
   .tab-strip {
     flex: 0 0 auto;
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 8px;
     padding: 10px;
     border-bottom: 2px solid #eef1f6;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
     -webkit-overflow-scrolling: touch;

@@ -80,19 +80,31 @@ For pairs like open/close, big/little, up/down, on/off:
 - Set `has_relationship=true` and list the partner in `related_images` so they
   generate as a dependent set.
 
-## Role vocabulary (closed, consistent across ALL prompts)
-The child is always the **`{reference}` token** (the live token the generators
-fill with the child's likeness — this is the canonical "child"/"user" anchor; do
-not invent `child`/`user` strings). Other people use a **fixed** set in
-`roles_present` so personalization can find them later:
+## Role vocabulary + the bracket-token model (CONFIRMED — drives personalization)
+The child is always the **`{reference}` token** — the live token the generators fill
+with the child's likeness (the canonical "child" anchor; never write `child`/`user`
+as literal text).
 
-`child` (≡ the `{reference}` subject) · `sibling` · `peer` (another child, e.g.
-"play" → catch with a `peer`) · `caregiver` · `parent` · `adult`
+**Everything personalizable is a `{bracket}` token.** This is the core mechanism:
+any role or object the prompt names is recorded in metadata, and the backend can
+**wrap it in brackets and substitute it later** — exactly like `{reference}`. So a
+prompt that says "a cup" tags `objects_present: [cup]`; when the parent adds *their*
+cup, the backend swaps it in as `{cup}`. Same for people. Write prompts so the
+personalizable nouns/roles are clean, single tokens.
 
-> **OPEN DECISION (confirm with Andrew):** the exact closed role list above, and
-> whether the metadata records the child as `child` while the prompt text uses
-> `{reference}`. Default assumed: prompt text = `{reference}`, metadata role =
-> `child`. Lock this before the full run — it drives the whole cascade.
+**Generic roles** (closed set, use in `roles_present`):
+`child` (≡ `{reference}`) · `sibling` · `peer` · `parent` · `caregiver` · `adult`
+
+**Family is special — it carries a role AND a name.** Family members have a generic
+role *and* a specific identity (e.g. role `grandfather`, name "Papa Gary"). Use the
+specific family role so personalization can map role → named person:
+`mother` · `father` · `brother` · `sister` · `grandmother` · `grandfather`
+- A prompt referencing `grandfather` is later offered for regeneration with the
+  real person ("Papa Gary") — the role is the hook, the name is the instance.
+- The child themself is always `{reference}`, never a family role token.
+
+This is why prompt + metadata are one job: the brackets/tokens written now are what
+let the board become *theirs* later (their cup, their Papa Gary, their sibling).
 
 ## Metadata to emit (with every prompt)
 | field | how to fill |
@@ -117,15 +129,12 @@ later word's reference (close→open, big→little). The skill's only job is cor
 `has_relationship` + `related_images`. No dependency graph.
 
 ## Settled vs open
-**Settled (already enforced in code / decided):**
+**Settled (enforced in code / decided):**
 - Square 1:1, frame-filling (`SQUARE_RULE`).
 - Black-on-white caption band (`captionRule`) — never in prompt_template.
 - Child embodiment via `{reference}`; no faces on objects.
-
-**Open — confirm before the full 1,200 run:**
-- The closed `roles_present` vocabulary + child-token convention (above).
-- Exact output px (we generate 1:1 square; confirm the pixel target if it matters
-  for the provider).
+- Role vocabulary + bracket-token model + family role/name handling (above).
+- Never name a rendering medium — `{style}` owns the look.
 
 ## How to run a rewrite
 1. Operate per taxonomy row (id, label, column, category, current prompt_template).
