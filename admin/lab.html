@@ -645,14 +645,16 @@ async function generateCategory(row, div) {
 }
 async function reviewAndGenerateIcons() {
   const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
-  // Cluster the to-generate chips so you can read/tweak their prompts side by side
-  // before committing.
-  if ($('cats-only-missing')) $('cats-only-missing').checked = true;
+  // "Only missing or no image" checked → fill gaps. Unchecked → regenerate ALL
+  // chips (restyle existing in the currently-selected style — that's how you
+  // re-skin category icons when the house style changes).
+  const onlyMissing = !$('cats-only-missing') || $('cats-only-missing').checked;
   renderCategoryPanel();
   await new Promise((r) => setTimeout(r, 60));   // let the clustered view paint before the prompt
-  const toGen = catList.filter((r) => !r.hasImage && !r.parentMissing);  // parents first (server order)
-  if (!toGen.length) { alert('Every category chip already has an icon. Nothing to generate.'); return; }
-  if (!confirm(`You're about to generate ${toGen.length} category icon${toGen.length === 1 ? '' : 's'} for ${childId}.\n\nThey're listed above with their prompts — Cancel to tweak any, then click again.\n\nGenerate ${toGen.length} now?`)) return;
+  const toGen = catList.filter((r) => !r.parentMissing && (onlyMissing ? !r.hasImage : true));  // parents first (server order)
+  if (!toGen.length) { alert(onlyMissing ? 'Every category chip already has an icon. Uncheck "only missing" to restyle them.' : 'No category chips to generate.'); return; }
+  const verb = onlyMissing ? 'generate' : 'REGENERATE (restyle)';
+  if (!confirm(`You're about to ${verb} ${toGen.length} category icon${toGen.length === 1 ? '' : 's'} for ${childId} in the selected style.\n\nThey're listed above with their prompts — Cancel to tweak any, then click again.\n\nProceed with ${toGen.length} now?`)) return;
 
   const btn = $('cats-fill-all'); if (btn) btn.disabled = true;
   let done = 0; const failed = [];
