@@ -1124,6 +1124,11 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
         case 'descriptive_clues':     out.descriptiveClues = String(v || '').split(/\s*\|\s*|\s*\n\s*/).map(s => s.trim()).filter(Boolean); break;
         case 'audience':              out.audience = v || 'universal'; break;
         case 'authoring_kind':        out.authoringKind = v || 'canonical'; break;
+        case 'roles_present':         out.rolesPresent = String(v || '').split(/\s*\|\s*|[,;]/).map(s => s.trim()).filter(Boolean); break;
+        case 'objects_present':       out.objectsPresent = String(v || '').split(/\s*\|\s*|[,;]/).map(s => s.trim()).filter(Boolean); break;
+        case 'related_images':        out.relatedImages = String(v || '').split(/\s*\|\s*|[,;]/).map(s => s.trim()).filter(Boolean); break;
+        case 'has_relationship':      out.hasRelationship = /^(true|1|yes|y)$/i.test(String(v).trim()); break;
+        case 'personalized':          out.personalized = /^(true|1|yes|y)$/i.test(String(v).trim()); break;
         default: /* ignore unknown columns */ break;
       }
     }

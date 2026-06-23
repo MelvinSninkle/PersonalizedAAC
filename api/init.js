@@ -543,6 +543,32 @@ export default async function handler(req, res) {
     await db`CREATE INDEX IF NOT EXISTS taxonomy_audience_idx       ON taxonomy(audience)`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_authoring_kind_idx ON taxonomy(authoring_kind)`;
 
+    // Personalization metadata (prompt-skill §4): the closed role vocabulary
+    // present in a prompt, the vocabulary objects present (for the reverse index),
+    // the paired/related-set linkage, and the per-image personalized flag (a hard
+    // stop against re-processing once a parent has made an image theirs).
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS roles_present    TEXT[]`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS objects_present  TEXT[]`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS has_relationship BOOLEAN NOT NULL DEFAULT FALSE`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS related_images   TEXT[]`;
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS personalized     BOOLEAN NOT NULL DEFAULT FALSE`;
+
+    // Prompt version history: every time a tile's prompt_template changes (single
+    // edit OR bulk import overwrite), the PRIOR value is saved here first, so an
+    // accidental overwrite is always recoverable. Kept separate from full-taxonomy
+    // snapshots — this is fine-grained, per-tile, and cheap to query/restore.
+    await db`
+      CREATE TABLE IF NOT EXISTS taxonomy_prompt_versions (
+        id BIGSERIAL PRIMARY KEY,
+        taxonomy_id TEXT NOT NULL,
+        prompt_template TEXT NOT NULL,
+        saved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        saved_by TEXT,
+        source TEXT
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS taxonomy_prompt_versions_idx ON taxonomy_prompt_versions(taxonomy_id, saved_at DESC)`;
+
     // §8.2 extension: an invite can target either a 'therapist' or a 'school_team'
     // member. The role applies to child_access.relation on accept. Defaults to
     // 'therapist' so existing invites flowing through keep their semantics.
