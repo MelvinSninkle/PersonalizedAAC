@@ -10,6 +10,8 @@ import { archivePriorImage } from './_lib/image-history.js';
 import { sql } from './_lib/db.js';
 import { canAccessChild } from './_lib/access.js';
 import { isValidRelationship, relationshipNeedsSide } from './_lib/relationships.js';
+import { geminiKey, geminiProModel, geminiGenerateImage } from './_lib/gemini.js';
+import { loadStyleGuide, loadChildStyleGuideId, SQUARE_RULE } from './_lib/onboarding-render.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
 
@@ -70,26 +72,45 @@ export default async function handler(req, res) {
   const contentType = req.headers['content-type'] || 'image/jpeg';
 
   try {
-    // 1) Stylize the person.
+    const db = sql();
+    // 1) Stylize the person in the child's HOUSE STYLE using the advanced (Pro)
+    //    Gemini tier. A new-person add should match the board and use the latest
+    //    gen, so it attaches the child's chosen style guide (image + description)
+    //    exactly like the onboarding portraits, with the photo as the likeness.
     let key;
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (apiKey && style) {
-      const subject = role === 'child' ? 'this child' : 'this person';
-      const prompt = `Re-illustrate this photo as a ${style} head-and-shoulders portrait of ${subject} for a young child's ` +
-        `communication app. Keep ${subject} clearly recognizable and friendly, on a simple soft background. No text in the image.`;
-      const fd = new FormData();
-      fd.append('model', 'gpt-image-1'); fd.append('prompt', prompt); fd.append('size', '1024x1024'); fd.append('n', '1');
-      fd.append('image[]', new Blob([buffer], { type: contentType }), 'photo.jpg');
-      const r = await fetch('https://api.openai.com/v1/images/edits', { method: 'POST', headers: { Authorization: 'Bearer ' + apiKey }, body: fd });
-      if (!r.ok) { const d = await r.text().catch(() => ''); res.status(r.status).json({ error: 'Image generation failed', detail: d.slice(0, 400) }); return; }
-      const b64 = (await r.json())?.data?.[0]?.b64_json;
-      if (!b64) { res.status(502).json({ error: 'No image returned' }); return; }
-      key = await uploadBytes('refimage', 'png', Buffer.from(b64, 'base64'), 'image/png');
+    const gKey = geminiKey();
+    let styleGuide = null;
+    try { styleGuide = await loadStyleGuide(db, await loadChildStyleGuideId(db, childId)); } catch (_) {}
+    if (gKey) {
+      const images = [];
+      const styleDesc = (styleGuide && styleGuide.description) ? String(styleGuide.description).trim() : '';
+      let prompt;
+      if (styleGuide && styleGuide.image && styleGuide.image.buffer) {
+        images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
+        images.push({ buffer, contentType });
+        prompt =
+          "Re-illustrate the person in the photo as a head-and-shoulders portrait for a young child's " +
+          "communication board, rendered in the art style of the style-reference image. Keep the person's " +
+          "face and likeness clearly recognizable; soft even lighting; clean soft pastel background; centered; " +
+          "bright friendly colors. Do not add any text, words, or letters." +
+          `\n\nImage 1 is the STYLE reference — copy its art style only, not its content.${styleDesc ? ` (Style: ${styleDesc})` : ''}` +
+          "\nImage 2 shows the person — keep this person's face and likeness clearly recognizable.";
+      } else {
+        images.push({ buffer, contentType });
+        prompt =
+          "Re-illustrate this photo as a warm storybook head-and-shoulders portrait for a young child's " +
+          "communication board. Keep the person's face and likeness clearly recognizable; soft even lighting; " +
+          "clean soft pastel background; centered; bright friendly colors. Do not add any text, words, or letters." +
+          (styleDesc ? ` Render it in this art style: ${styleDesc}.` : '');
+      }
+      prompt += SQUARE_RULE;
+      const g = await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
+      if (!g.ok) { res.status(g.status === 429 ? 429 : 502).json({ error: 'Image generation failed', detail: (g.detail || '').slice(0, 400) }); return; }
+      key = await uploadBytes('refimage', 'png', Buffer.from(g.b64, 'base64'), 'image/png');
     } else {
       key = await uploadBytes('refimage', 'jpg', buffer, contentType);
     }
 
-    const db = sql();
     // 2) Save as a reference image (subject anchor for later renders).
     await db`
       CREATE TABLE IF NOT EXISTS reference_images (

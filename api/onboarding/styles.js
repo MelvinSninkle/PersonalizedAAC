@@ -29,9 +29,11 @@ export default async function handler(req, res) {
       return;
     }
 
+    // Only GLOBAL templates (child_id IS NULL) appear in the chooser — a
+    // parent's own uploaded template is child-scoped and referenced by id.
     const rows = await db`
       SELECT id, label, description FROM style_guides
-      WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC`;
+      WHERE active = TRUE AND child_id IS NULL ORDER BY sort_order ASC, created_at ASC`;
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
       styles: rows.map(r => ({ id: Number(r.id), label: r.label, description: r.description || null })),

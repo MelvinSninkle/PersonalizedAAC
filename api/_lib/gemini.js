@@ -14,6 +14,15 @@ export function geminiDefaultModel() {
   return process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
 }
 
+// The advanced ("Pro" / Nano Banana Pro) tier — higher fidelity, ~$0.13/image.
+// Used for the onboarding KEYSTONES (child + parent portraits, the no-people
+// scene) and every new-person add, because those anchor the look of everything
+// generated after them. The bulk board stays on the cheaper Flash default.
+// Override with GEMINI_PRO_IMAGE_MODEL when Google ships a newer id.
+export function geminiProModel() {
+  return process.env.GEMINI_PRO_IMAGE_MODEL || 'gemini-3-pro-image-preview';
+}
+
 // Any gemini-* id is treated as a Gemini model — the Lab experiments with new
 // ids (e.g. the Pro tier) without needing a code change.
 export function isGeminiModel(m) {

@@ -24,7 +24,7 @@ import { put, get as blobGet } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
-import { geminiKey, geminiDefaultModel, geminiGenerateImage } from '../_lib/gemini.js';
+import { geminiKey, geminiProModel, geminiGenerateImage } from '../_lib/gemini.js';
 import { ensureProgress, nextStep, setStep } from '../_lib/onboarding.js';
 import { isValidRelationship, relationshipNeedsSide } from '../_lib/relationships.js';
 import { loadStyleGuide, loadChildVoiceId, synthesizeVoice, SQUARE_RULE } from '../_lib/onboarding-render.js';
@@ -90,7 +90,8 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   }
   prompt += SQUARE_RULE;
 
-  const g = await geminiGenerateImage({ apiKey: gKey, model: geminiDefaultModel(), prompt, images, aspectRatio: '1:1' });
+  // KEYSTONE: portraits anchor every later render, so use the advanced Pro tier.
+  const g = await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
   if (!g.ok) {
     const err = new Error('Stylization failed: ' + (g.detail || '').slice(0, 200));
     err.status = g.status || 502; throw err;
@@ -236,9 +237,10 @@ export default async function handler(req, res) {
                   VALUES ('people', ${catId}, ${name}, ${draftKey}, ${soundKey}, FALSE, ${Date.now()}, ${isSelf}, ${childId}, NOW())`;
       }
 
-      // Advance the step.
+      // Advance the step. child_photo → parent_photo → scene_keystone (the
+      // no-people style gate) → seed_core.
       const cur = progress.step;
-      const nxt = cur === 'child_photo' ? 'parent_photo' : (cur === 'parent_photo' ? 'seed_core' : nextStep(cur));
+      const nxt = cur === 'child_photo' ? 'parent_photo' : (cur === 'parent_photo' ? 'scene_keystone' : nextStep(cur));
       await setStep(db, Number(auth.user.uid), nxt);
       res.status(200).json({ ok: true, step: nxt, personId: Number(personId) });
       return;

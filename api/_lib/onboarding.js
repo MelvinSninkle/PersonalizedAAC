@@ -5,7 +5,7 @@ import { sql } from './db.js';
 
 // The canonical step ordering. Both clients (SwiftUI + web) walk this list.
 // Final value 'complete' means the parent has finished onboarding.
-export const ORDER = ['account', 'child', 'child_photo', 'parent_photo', 'seed_core', 'complete'];
+export const ORDER = ['account', 'child', 'child_photo', 'parent_photo', 'scene_keystone', 'seed_core', 'complete'];
 
 export function nextStep(current) {
   const i = ORDER.indexOf(current);
