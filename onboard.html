@@ -153,7 +153,11 @@
     <h3 class="fred">Step 4 · Building the board</h3>
     <div class="center" id="board-busy">
       <div class="spin" style="margin:18px auto;"></div>
-      <p class="note" id="board-msg">Making the first tiles in your style… this takes a minute or two. You can keep this open.</p>
+      <p class="note" id="board-msg">Making the tiles in your style… this takes a few minutes. You can keep this open.</p>
+      <div style="background:#f3c6dd;border-radius:999px;height:10px;max-width:360px;margin:10px auto;overflow:hidden;">
+        <div id="board-bar" style="background:var(--pink);height:100%;width:0;transition:width .3s;"></div>
+      </div>
+      <div class="note" id="board-count"></div>
     </div>
     <div class="center" id="board-done" style="display:none;">
       <div style="font-size:40px;">🎉</div>
@@ -225,7 +229,7 @@
       applyName();
       // Jump to the saved step.
       if (st.step === 'complete') { showPhase('board'); $('board-busy').style.display = 'none'; $('board-done').style.display = ''; return; }
-      if (st.step === 'seed_core') { showPhase('board'); runSeed(); return; }
+      if (st.step === 'seed_core') { showPhase('board'); runSeed(Number(d.seedNextG) || 0, Number(d.seededCount) || 0); return; }
       if (st.step === 'scene_keystone') { showPhase('scene'); startScene(); return; }
       if (st.step === 'parent_photo') { await loadRelOptions(); childDone = true; markChildDoneUI(); showPhase('people'); return; }
       if (st.step === 'child_photo') { await loadRelOptions(); showPhase('people'); return; }
@@ -441,16 +445,30 @@
     } catch (err) { $('scene-msg').textContent = 'Could not save: ' + (err.message || err); $('scene-approve').disabled = false; $('scene-retry').disabled = false; }
   });
 
-  // ---- PHASE 4: generate the board ----
+  // ---- PHASE 4: generate the board (chunked + resumable) ----
   let seedStarted = false;
-  async function runSeed() {
+  async function runSeed(startG = 0, priorPlaced = 0) {
     if (seedStarted) return; seedStarted = true;
     $('board-busy').style.display = ''; $('board-done').style.display = 'none';
+    let g = startG, placedTotal = priorPlaced, doneTotal = priorPlaced, total = 0, guard = 0;
     try {
-      const r = await apiJSON('/api/onboarding/seed-core');
+      while (true) {
+        const r = await apiJSON('/api/onboarding/seed-core?g=' + g);
+        total = r.total || total;
+        placedTotal += (r.placed || 0);
+        doneTotal += (r.placed || 0) + (r.failed || 0);
+        if (total) {
+          $('board-bar').style.width = Math.min(100, Math.round(doneTotal / total * 100)) + '%';
+          $('board-count').textContent = Math.min(doneTotal, total) + ' of ' + total + ' tiles';
+        }
+        if (r.done) break;
+        g = r.nextG;
+        if (++guard > 400) break;   // safety: never loop forever
+      }
+      $('board-bar').style.width = '100%';
       $('board-busy').style.display = 'none'; $('board-done').style.display = '';
       $('board-done-msg').textContent = (CHILD_NAME ? CHILD_NAME + "'s" : 'The') + ' board is ready!' +
-        (r && r.placed != null ? ' (' + r.placed + ' starter tiles)' : '');
+        (placedTotal ? ' (' + placedTotal + ' tiles)' : '');
     } catch (err) {
       $('board-msg').textContent = 'Something went wrong building the board: ' + (err.message || err) + ' — refresh to retry.';
     }
