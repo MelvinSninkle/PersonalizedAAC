@@ -6,6 +6,7 @@
     { "source": "/therapist/library", "destination": "/therapist-library.html" },
     { "source": "/therapist/:slug", "destination": "/therapist.html" },
     { "source": "/login", "destination": "/login.html" },
+    { "source": "/signup", "destination": "/signup.html" },
     { "source": "/reset", "destination": "/reset.html" },
     { "source": "/welcome", "destination": "/welcome.html" },
     { "source": "/accept-invite", "destination": "/accept-invite.html" },
