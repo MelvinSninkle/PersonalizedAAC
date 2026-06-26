@@ -1,21 +1,35 @@
-// POST /api/auth/register { email, password, role?, slug?, inviteToken? }
-// Two entry paths:
+// POST /api/auth/register { email, password, role?, slug?, inviteToken?, selfSignup?, childName? }
+// Three entry paths:
 //   1. Admin-created: a signed-in admin (or the legacy ADMIN_TOKEN bearer)
 //      creates or updates any user with any role. The bootstrap for the
 //      very first admin is the legacy path.
 //   2. Self-signup via invite: an anonymous visitor with a valid `inviteToken`
 //      (HMAC-signed by /api/access/invite) creates their own account. The role
-//      is forced to 'therapist' regardless of body; the email is forced to the
-//      one in the invite. This is how a therapist invited by a parent gets an
-//      account without an admin in the loop.
+//      is forced to 'therapist'/'school_team'; the email is forced to the
+//      one in the invite.
+//   3. Open self-signup ({ selfSignup: true }): an anonymous parent creates
+//      their own free account. Role is forced to 'parent'. We generate a child
+//      slug from the child's name, link it via child_access (so the board is
+//      theirs when the app is live), drop a session cookie, and send a welcome
+//      email. An existing email is rejected (never silently password-reset).
 import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
 import { hashPassword } from '../_lib/password.js';
 import { signSession, serializeCookie, verifySession, SESSION_MAX_AGE } from '../../lib/session.js';
+import { sendEmail, emailConfigured, escapeHtml } from '../_lib/email.js';
+import { randomUUID } from 'node:crypto';
 
 // 'school_team' = teacher / aide / school SLP. Peer of therapist for content
 // ownership and canEditContent; presented separately in the parent's roster.
 const ROLES = new Set(['admin', 'parent', 'therapist', 'school_team']);
+
+function appUrl() {
+  return process.env.APP_URL || process.env.PUBLIC_URL || 'https://aac.andrewpeterson.io';
+}
+function slugify(s) {
+  return String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, '').slice(0, 40);
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -27,6 +41,99 @@ export default async function handler(req, res) {
   const inviteToken = typeof body.inviteToken === 'string' ? body.inviteToken : '';
   if (password.length < 8) {
     res.status(400).json({ error: 'A password of at least 8 characters is required' });
+    return;
+  }
+
+  // Path 3 — open parent self-signup (free). Fully self-contained: no admin,
+  // no invite token. Role is forced to 'parent' so nobody can self-assign
+  // elevated access through this endpoint.
+  if (body.selfSignup === true && !inviteToken) {
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: 'A valid email is required' }); return;
+    }
+    const childName = typeof body.childName === 'string' ? body.childName.trim().slice(0, 60) : '';
+    try {
+      const db = sql();
+      await db`
+        CREATE TABLE IF NOT EXISTS users (
+          id BIGSERIAL PRIMARY KEY,
+          email TEXT NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'parent',
+          child_slug TEXT,
+          reset_token TEXT,
+          reset_expires TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_login_at TIMESTAMPTZ
+        )`;
+      // Never silently overwrite an existing account's password — that would be
+      // an account-takeover hole. Tell them to sign in instead.
+      const dupe = await db`SELECT id FROM users WHERE email = ${email} LIMIT 1`;
+      if (dupe.length) {
+        res.status(409).json({ error: 'An account with that email already exists. Please sign in.' }); return;
+      }
+
+      // Generate a board slug from the child's name (falls back to the email
+      // local part), uniquified against both legacy child_slug and child_access.
+      const base = slugify(childName) || slugify(email.split('@')[0]) || 'child';
+      let slug = base;
+      const taken = async (s) => {
+        const a = await db`SELECT 1 FROM users WHERE child_slug = ${s} LIMIT 1`;
+        if (a.length) return true;
+        try { const b = await db`SELECT 1 FROM child_access WHERE child_id = ${s} LIMIT 1`; return b.length > 0; }
+        catch (_) { return false; }
+      };
+      if (await taken(slug)) slug = base + '-' + randomUUID().slice(0, 4);
+
+      const hash = hashPassword(password);
+      const rows = await db`
+        INSERT INTO users (email, password_hash, role, child_slug)
+        VALUES (${email}, ${hash}, 'parent', ${slug})
+        RETURNING id, email, role, child_slug`;
+      const user = rows[0];
+
+      // Link the parent to their child's board (the source of truth for access
+      // checks — isParentOf/canEditContent read child_access, not child_slug).
+      try {
+        await db`INSERT INTO child_access (user_id, child_id, relation, status)
+                 VALUES (${user.id}, ${slug}, 'parent', 'active')
+                 ON CONFLICT (user_id, child_id) DO NOTHING`;
+      } catch (_) { /* table may not exist pre-init; backfill covers it later */ }
+
+      // Drop a session cookie so they walk straight into /onboard signed in.
+      const secret = process.env.SESSION_SECRET;
+      if (secret) {
+        const exp = Date.now() + SESSION_MAX_AGE * 1000;
+        const token = await signSession({ uid: Number(user.id), email: user.email, role: 'parent', slug, exp }, secret);
+        res.setHeader('Set-Cookie', serializeCookie(token));
+      }
+      try { await db`UPDATE users SET last_login_at = NOW() WHERE id = ${user.id}`; } catch (_) {}
+
+      // Welcome email — best-effort; signup succeeds even if it doesn't send.
+      let sentEmail = false;
+      if (emailConfigured()) {
+        const link = appUrl() + '/onboard';
+        const who = childName ? escapeHtml(childName) : 'your child';
+        const subject = childName ? `Welcome to My World — let's build ${childName}'s board` : 'Welcome to My World';
+        const html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1f2937;max-width:560px;margin:0 auto;padding:24px;">
+            <h2 style="color:#ad1457;margin:0 0 12px;font-family:'Fredoka',system-ui;">Welcome to My World 🌍</h2>
+            <p>Your account is ready. My World turns ${who}'s real food, toys, people, and home into the vocabulary on their AAC board — rendered in a style they love.</p>
+            <p>Pick up where you are anytime by signing in with this email. To build the first board now:</p>
+            <p style="margin:22px 0;">
+              <a href="${link}" style="display:inline-block;background:#ff1493;color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:999px;">Set up ${who}'s board →</a>
+            </p>
+            <p style="font-size:12px;color:#6b7280;">If you didn't create this account, you can safely ignore this email.</p>
+          </div>`;
+        const r = await sendEmail({ to: email, subject, html });
+        sentEmail = !!r.ok;
+      }
+
+      res.status(200).json({ ok: true, user, slug, sentEmail });
+    } catch (err) {
+      res.status(500).json({ error: 'Sign-up failed', detail: String(err.message || err) });
+    }
     return;
   }
 

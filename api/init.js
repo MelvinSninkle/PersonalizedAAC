@@ -660,6 +660,13 @@ export default async function handler(req, res) {
     `;
     await db`CREATE INDEX IF NOT EXISTS style_guides_active_idx ON style_guides(active)`;
     await db`CREATE INDEX IF NOT EXISTS style_guides_sort_idx   ON style_guides(sort_order)`;
+    // Per-customer style guides: `child_id` scopes a guide to one board (NULL =
+    // a global template shown in every picker); `ephemeral` flags a parent's
+    // uploaded template that is discarded once the approved keystones take over
+    // as the lasting anchor (see api/onboarding/scene.js).
+    await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS child_id TEXT`;
+    await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS ephemeral BOOLEAN NOT NULL DEFAULT FALSE`;
+    await db`CREATE INDEX IF NOT EXISTS style_guides_child_idx ON style_guides(child_id)`;
 
     await db`
       CREATE TABLE IF NOT EXISTS lab_settings (

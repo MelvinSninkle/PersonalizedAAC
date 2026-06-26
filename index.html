@@ -227,7 +227,7 @@
     <a href="#how">How it works</a>
     <a href="#try">Try it</a>
     <a href="#pricing">Pricing</a>
-    <a class="cta" href="#signup">Get early access</a>
+    <a class="cta" href="/signup">Get early access</a>
   </div>
 </nav>
 
@@ -241,10 +241,10 @@
       <em>become</em> their vocabulary, rendered in the style they love.
     </p>
     <div class="ctas hero-ctas">
-      <a class="btn primary" href="#signup">Get early access · $99/mo</a>
+      <a class="btn primary" href="/signup">Create your child’s account</a>
       <a class="btn secondary" href="#try">See how it works</a>
     </div>
-    <p class="tiny">14-day free trial when we launch. No card required.</p>
+    <p class="tiny">Free during early access. No card required.</p>
     <p class="tiny">Already set up with your clinic? <a class="member-cta" href="/onboard">Set up your child's board →</a></p>
   </div>
 </section>
@@ -292,7 +292,7 @@
     </div>
 
     <div style="text-align: center; margin-top: 48px;">
-      <a class="btn primary" href="#signup">Get early access · $99/mo</a>
+      <a class="btn primary" href="/signup">Create your child’s account</a>
     </div>
   </div>
 </section>
@@ -322,8 +322,8 @@
     </figure>
 
     <div style="text-align: center; margin-top: 48px;">
-      <a class="btn primary" href="#signup">Generate my child's tiles · $99/mo</a>
-      <p style="margin-top: 12px; font-size: 13px; color: #6b7280;">We'll email you when early access opens.</p>
+      <a class="btn primary" href="/signup">Generate my child’s tiles — free</a>
+      <p style="margin-top: 12px; font-size: 13px; color: #6b7280;">Free during early access — create your account and start now.</p>
     </div>
   </div>
 </section>
@@ -336,7 +336,7 @@
         <div class="eyebrow">Modeling loop</div>
         <h2>You can talk back, from your phone.</h2>
         <p class="lead">When your child says something through their tablet, you can respond from your phone — in the same vocabulary. Each tile lights up on their screen in sequence, then your sentence speaks aloud in your own voice. They learn the construction of language, not just the words.</p>
-        <a class="btn secondary" href="#signup" style="margin-top: 20px;">Join the waitlist</a>
+        <a class="btn secondary" href="/signup" style="margin-top: 20px;">Create your child’s account</a>
       </div>
       <div class="img-slot wide">
         <div>
@@ -359,7 +359,7 @@
         <p class="lead">Walk through your kitchen with the parent app open. Take five photos. The system identifies the foods, drinks, dishes, and snacks your child actually uses, and transforms each one into a tile in their style. The vocabulary that takes other apps months to build appears in an afternoon.</p>
         <div style="margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap;">
           <a class="btn primary" href="/onboard">Start your room walk →</a>
-          <a class="btn secondary" href="#signup">Get early access · $99/mo</a>
+          <a class="btn secondary" href="/signup">Create your child’s account</a>
         </div>
       </div>
     </div>
@@ -384,11 +384,11 @@
 <section class="pricing" id="pricing">
   <div class="wrap" style="text-align: center;">
     <div class="eyebrow">Pricing</div>
-    <h2>Simple, family-first pricing.</h2>
-    <p class="lead" style="margin: 0 auto;">No insurance battles. No clinical hardware bundle. One subscription for the whole family.</p>
+    <h2>Free while we're in early access.</h2>
+    <p class="lead" style="margin: 0 auto;">No insurance battles. No clinical hardware bundle. Create your child's board today at no cost — we'll share pricing well before early access ends.</p>
 
     <div class="price-card">
-      <div class="price">$99<span class="per">/month</span></div>
+      <div class="price">Free<span class="per"> · early access</span></div>
       <p style="color: #6b7280; margin-top: 8px;">One family. One child profile.</p>
       <ul>
         <li>Unlimited custom tiles photographed from your child's world</li>
@@ -396,25 +396,24 @@
         <li>Parent phone app with the modeling loop (talk back from your phone)</li>
         <li>Voice cloning (opt-in, with documented consent)</li>
         <li>SLP collaboration — invite their speech therapist to push activities</li>
-        <li>Existing tiles stay working forever, even if the subscription lapses</li>
+        <li>Existing tiles stay working forever</li>
       </ul>
-      <a class="btn primary" href="#signup" style="width: 100%;">Get early access</a>
-      <p class="tiny">14-day free trial at launch. Cancel anytime.</p>
+      <a class="btn primary" href="/signup" style="width: 100%;">Create your child's account</a>
+      <p class="tiny">No card required.</p>
     </div>
   </div>
 </section>
 
 <section class="signup" id="signup">
   <div class="wrap">
-    <div class="eyebrow" style="color: #ffd400;">Get early access</div>
-    <h2>We'll email you when your child's world is ready.</h2>
-    <p class="lead">$99/month at launch. Early-access families get the first onboarding sessions, priority support, and the right to lock in trial pricing.</p>
+    <div class="eyebrow" style="color: #ffd400;">Get started</div>
+    <h2>Build your child's world today.</h2>
+    <p class="lead">Free during early access — no card required. Create your account and set up the first board in about five minutes.</p>
 
-    <form id="waitlist-form" novalidate>
-      <input type="email" name="email" id="waitlist-email" placeholder="parent@example.com" required autocomplete="email">
-      <button type="submit" class="btn primary">Notify me</button>
-    </form>
-    <div class="msg" id="waitlist-msg"></div>
+    <div style="margin-top: 24px;">
+      <a class="btn primary" href="/signup">Create your child's account</a>
+      <p style="margin-top: 12px; font-size: 13px; color: rgba(255,255,255,.85);">Already have an account? <a href="/login" style="color: #fff; font-weight: 700;">Sign in</a></p>
+    </div>
   </div>
 </section>
 
@@ -442,40 +441,6 @@
     if (chip) setStyle(chip);
   });
 
-  // ---- Waitlist form ----
-  const form = document.getElementById('waitlist-form');
-  const msg  = document.getElementById('waitlist-msg');
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    msg.classList.remove('success');
-    const email = document.getElementById('waitlist-email').value.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      msg.textContent = 'Please enter a valid email address.';
-      return;
-    }
-    const style = picker.querySelector('.style-chip.active')?.dataset.style || null;
-    const btn = form.querySelector('button');
-    const prev = btn.textContent;
-    btn.disabled = true; btn.textContent = 'Saving…';
-    try {
-      const r = await fetch('/api/waitlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, style, source: 'landing' }),
-      });
-      if (!r.ok) {
-        const detail = await r.json().catch(() => ({}));
-        throw new Error(detail.error || ('Status ' + r.status));
-      }
-      msg.textContent = 'You’re on the list. We’ll be in touch.';
-      msg.classList.add('success');
-      form.reset();
-    } catch (err) {
-      msg.textContent = 'Something went wrong: ' + (err.message || err);
-    } finally {
-      btn.disabled = false; btn.textContent = prev;
-    }
-  });
 })();
 </script>
 

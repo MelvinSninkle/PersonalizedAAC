@@ -3,14 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Set up tiles · My World</title>
+<title>Set up the board · My World</title>
 <meta name="theme-color" content="#ff1493">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <!--
-  Onboarding. STEP 1 (gate): capture the child + a parent and render them in the
-  chosen style — confirms the look and seeds them as reference images the rest
-  of the renders use. STEP 2: walk the house snapping photos; each renders in the
-  background and the review list fills in. Nothing goes live until approved.
+  Web onboarding — KEYSTONE-APPROVAL flow (api/onboarding/*).
+    1. Basics + style: name/birthdate, pick a template OR upload your own.
+    2. People keystones: child + one grown-up, rendered in the style (advanced
+       Pro model), approve/retry. Optional: add more family.
+    3. Scene keystone: a no-people scene (building + objects) in the style; approve.
+    4. Generate the starter board (cheap Flash, anchored to the approved keystones).
+  The portraits + scene are the KEYSTONES — they anchor the look of everything
+  generated afterwards, so nothing goes live until the parent approves them.
 -->
 <style>
   * { box-sizing: border-box; }
@@ -21,11 +25,14 @@
   header .brand { font-family:'Fredoka',system-ui; font-weight:700; color:var(--pink-deep); font-size:19px; }
   header .sub { font-size:13px; color:var(--muted); }
   .wrap { max-width:760px; margin:0 auto; padding:18px; }
+  .steps { display:flex; gap:6px; margin:0 auto 6px; max-width:760px; padding:0 18px; }
+  .steps .dot { flex:1; height:6px; border-radius:999px; background:#f3c6dd; }
+  .steps .dot.on { background:var(--pink); }
   .panel { background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:16px; }
   .panel h3 { margin:0 0 4px; }
   .panel p.note { font-size:13px; color:var(--muted); margin:0 0 12px; }
   label { display:block; font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px; }
-  select, input[type=text] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; }
+  select, input[type=text], input[type=date] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; }
   .btn { border:none; cursor:pointer; font:inherit; font-weight:700; border-radius:999px; padding:13px 18px; background:var(--pink); color:#fff; font-size:15px; }
   .btn:hover { background:var(--pink-deep); }
   .btn:disabled { opacity:.5; cursor:default; }
@@ -33,133 +40,159 @@
   .btn.tiny { padding:8px 13px; font-size:13px; }
   .btn.ok { background:var(--good); }
   .btn.no { background:#fff0f0; color:var(--danger); }
+  .style-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:12px; margin:12px 0; }
+  .style-card { border:2px solid var(--line); border-radius:14px; padding:8px; cursor:pointer; text-align:center; background:#fff; transition:border-color .15s; }
+  .style-card.sel { border-color:var(--pink); box-shadow:0 0 0 3px #ffd6ec; }
+  .style-card .pic { width:100%; aspect-ratio:1; border-radius:10px; background:#fff7fb center/cover no-repeat; display:grid; place-items:center; color:var(--faint); font-size:26px; overflow:hidden; }
+  .style-card .pic img { width:100%; height:100%; object-fit:cover; }
+  .style-card .lbl { font-size:12px; font-weight:700; margin-top:6px; color:var(--ink); }
   .subjects { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:14px 0; }
   .subj { text-align:center; }
   .subj .thumb { width:100%; aspect-ratio:1; border-radius:14px; border:2px dashed #f3c6dd; background:#fff7fb center/cover no-repeat; display:grid; place-items:center; color:var(--faint); font-size:13px; padding:10px; cursor:pointer; overflow:hidden; }
   .subj .thumb img { width:100%; height:100%; object-fit:cover; }
-  .subj .name { font-weight:700; color:var(--pink-deep); margin:8px 0 6px; }
-  .capture-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
-  .count { font-family:'Fredoka',system-ui; font-weight:700; color:var(--pink-deep); font-size:15px; }
-  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
-  .card { border:1px solid var(--line); border-radius:14px; padding:12px; background:#fff; }
-  .card .thumb { width:100%; aspect-ratio:1; border-radius:10px; background:#fff7fb center/cover no-repeat; display:grid; place-items:center; color:var(--faint); font-size:13px; text-align:center; overflow:hidden; }
-  .card .thumb img { width:100%; height:100%; object-fit:cover; }
-  .card input[type=text] { margin-top:8px; }
-  .card .pron { font-size:12px; color:#666; }
-  .card .row { display:flex; gap:8px; margin-top:8px; }
-  .card .row .btn { flex:1; }
-  .empty { color:var(--faint); font-size:14px; text-align:center; padding:24px; }
+  .subj.done .thumb { border-style:solid; border-color:var(--good); }
+  .subj .row { display:flex; gap:8px; margin-top:8px; }
+  .subj .row .btn { flex:1; }
+  .scene-pic { width:100%; max-width:420px; margin:10px auto; aspect-ratio:1; border-radius:16px; border:2px solid var(--line); background:#fff7fb center/cover no-repeat; display:grid; place-items:center; overflow:hidden; }
+  .scene-pic img { width:100%; height:100%; object-fit:cover; }
   .spin { width:26px; height:26px; border:3px solid #fce4ec; border-top-color:var(--pink); border-radius:50%; animation:spin .9s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
+  .msg { font-size:13px; color:var(--muted); min-height:18px; margin:8px 0; }
+  .center { text-align:center; }
 </style>
 </head>
 <body>
 <header>
-  <div class="brand fred"><img src="/icons/myworld-globe.png" alt="" style="height:1.5em;width:auto;vertical-align:middle;margin-right:.12em;"> Set up <span id="child-name">Fletcher</span>'s tiles</div>
-  <div class="sub">First we make the people, then you walk the house snapping photos.</div>
+  <div class="brand fred"><img src="/icons/myworld-globe.png" alt="" style="height:1.5em;width:auto;vertical-align:middle;margin-right:.12em;"> Set up <span id="hdr-name">the</span> board</div>
+  <div class="sub">First the style, then the people, then we build the board.</div>
 </header>
+<div class="steps" id="steps">
+  <div class="dot" data-step="0"></div><div class="dot" data-step="1"></div><div class="dot" data-step="2"></div><div class="dot" data-step="3"></div>
+</div>
 <div class="wrap">
 
-  <!-- STEP 1 — style + the people (gate) -->
-  <div class="panel" id="ob-phase-a">
-    <h3 class="fred">Step 1 · The people</h3>
-    <p class="note">Pick a style, then add a photo of <strong id="child-name-2">Fletcher</strong> and one grown-up who's here helping. We'll make them in the style first so you can see how it looks.</p>
-    <label for="ob-style">Art style</label>
-    <select id="ob-style">
-      <option value="Pixar-style 3D animated render">3D Animated</option>
-      <option value="flat picture-book illustration">Picture Book</option>
-      <option value="soft watercolor illustration">Watercolor</option>
-      <option value="gentle soft storybook illustration">Soft Storybook</option>
-      <option value="needle-felted wool craft">Felted</option>
-    </select>
+  <!-- PHASE 1 — basics + style -->
+  <div class="panel" id="phase-style">
+    <h3 class="fred">Step 1 · Name &amp; style</h3>
+    <p class="note">Tell us who this is for, then pick the art style for the whole board. You can choose a template or upload a picture in the look you want.</p>
+    <label for="in-name">Child's name</label>
+    <input id="in-name" type="text" placeholder="e.g. Fletcher">
+    <div style="height:10px;"></div>
+    <label for="in-birth">Birth date</label>
+    <input id="in-birth" type="date">
+    <div style="font-size:11px;color:#666;margin-top:4px;line-height:1.3;">Used to start with vocabulary at the right level — older words stay hidden until they're ready. Never shown publicly.</div>
+
+    <label style="margin-top:16px;">Art style</label>
+    <div class="style-grid" id="style-grid">
+      <div class="center" style="grid-column:1/-1;color:var(--faint);font-size:13px;padding:14px;">Loading styles…</div>
+    </div>
+    <input type="file" id="style-upload-input" accept="image/*" style="display:none;">
+    <div class="msg" id="style-msg"></div>
+    <button class="btn" id="style-continue" disabled>Continue →</button>
+  </div>
+
+  <!-- PHASE 2 — people keystones -->
+  <div class="panel" id="phase-people" style="display:none;">
+    <h3 class="fred">Step 2 · The people</h3>
+    <p class="note">Add a photo of <strong id="ppl-child-name">the child</strong> and one grown-up who's here. We'll draw each in your style — approve the look or tap "Try again" for a fresh take.</p>
     <div class="subjects">
-      <div class="subj">
+      <div class="subj" id="subj-child">
         <div class="thumb" id="child-thumb">Tap to add the child's photo</div>
-        <input id="child-name-input" type="text" placeholder="Name (e.g. Fletcher)" style="margin-top:8px;">
-        <input id="child-pron-input" type="text" placeholder="Say it as… (optional)" style="margin-top:6px;font-size:12px;color:#666;">
-        <input id="child-birth-input" type="date" style="margin-top:6px;font-size:13px;color:#444;" title="Birth date (used to show vocabulary at the right developmental level — never displayed publicly).">
-        <div style="font-size:11px;color:#666;margin-top:2px;line-height:1.3;">Birth date (so we start with vocabulary at the right level — older words stay hidden until they're ready).</div>
-        <button class="btn ghost tiny" id="child-take" style="margin-top:6px;">📸 Take / choose</button>
+        <div class="row" id="child-actions" style="display:none;">
+          <button class="btn ok tiny" id="child-approve">✓ Looks great</button>
+          <button class="btn ghost tiny" id="child-retry">↻ Try again</button>
+        </div>
       </div>
-      <div class="subj">
+      <div class="subj" id="subj-parent">
         <div class="thumb" id="parent-thumb">Tap to add a grown-up's photo</div>
-        <input id="parent-name-input" type="text" placeholder="Name (e.g. Mom)" style="margin-top:8px;">
-        <input id="parent-pron-input" type="text" placeholder="Say it as… (optional)" style="margin-top:6px;font-size:12px;color:#666;">
-        <select id="parent-rel" title="Relationship to the child" style="margin-top:6px;width:100%;font-size:12px;padding:5px;border:1px solid #e6c9d6;border-radius:6px;color:#555;"></select>
-        <button class="btn ghost tiny" id="parent-take" style="margin-top:6px;">📸 Take / choose</button>
+        <input id="parent-name" type="text" placeholder="Name (e.g. Mom)" style="margin-top:8px;">
+        <select id="parent-rel" style="margin-top:6px;font-size:13px;"></select>
+        <div class="row" id="parent-actions" style="display:none;">
+          <button class="btn ok tiny" id="parent-approve">✓ Looks great</button>
+          <button class="btn ghost tiny" id="parent-retry">↻ Try again</button>
+        </div>
       </div>
     </div>
-    <div id="ob-a-msg" style="font-size:13px;color:var(--muted);min-height:18px;margin-bottom:10px;"></div>
-    <button class="btn" id="ob-continue" disabled>Continue to the walk-through →</button>
     <input type="file" id="child-input" accept="image/*" capture="user" style="display:none;">
     <input type="file" id="parent-input" accept="image/*" capture="user" style="display:none;">
+    <div class="msg" id="people-msg"></div>
+
+    <!-- optional: more family (synchronous add via /api/onboard-subject; uses the house style + latest gen) -->
+    <div style="border-top:1px solid var(--line); margin-top:10px; padding-top:12px;">
+      <div id="famx-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
+      <div id="famx-form" style="display:none;border:1px solid #f0d9e2;border-radius:12px;padding:12px;margin-bottom:10px;">
+        <div class="thumb" id="famx-thumb" style="aspect-ratio:auto;height:auto;padding:14px;cursor:pointer;">Tap to add a photo</div>
+        <input type="file" id="famx-input" accept="image/*" capture="user" style="display:none;">
+        <div id="famx-picker" style="margin-top:10px;"></div>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="btn tiny" id="famx-save">Add this person</button>
+          <button class="btn ghost tiny" id="famx-cancel">Cancel</button>
+        </div>
+        <div class="msg" id="famx-msg"></div>
+      </div>
+      <button class="btn ghost tiny" id="famx-add">＋ Add another family member</button>
+    </div>
+
+    <button class="btn" id="people-continue" disabled style="margin-top:14px;">Continue →</button>
   </div>
 
-  <!-- STEP 1b — optional: more family -->
-  <div class="panel" id="ob-family">
-    <h3 class="fred">Add more family <span style="font-weight:400;color:#999;font-size:14px;">· optional</span></h3>
-    <p class="note">Grandparents, brothers and sisters, anyone else. Snap a photo and say who they are — you can always do this later from the parent dashboard.</p>
-    <div id="famx-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
-    <div id="famx-form" style="display:none;border:1px solid #f0d9e2;border-radius:12px;padding:12px;margin-bottom:10px;">
-      <div class="thumb" id="famx-thumb" style="cursor:pointer;">Tap to add a photo</div>
-      <input type="file" id="famx-input" accept="image/*" capture="user" style="display:none;">
-      <div id="famx-picker" style="margin-top:10px;"></div>
-      <div style="display:flex;gap:8px;margin-top:12px;">
-        <button class="btn" id="famx-save">Add this person</button>
-        <button class="btn ghost" id="famx-cancel">Cancel</button>
-      </div>
-      <div id="famx-msg" class="note" style="margin-top:8px;min-height:16px;"></div>
+  <!-- PHASE 3 — scene keystone -->
+  <div class="panel" id="phase-scene" style="display:none;">
+    <h3 class="fred">Step 3 · How things look</h3>
+    <p class="note">Here's how everyday things — toys, food, places — will look in your style. Approve it and we'll build the board to match.</p>
+    <div class="scene-pic" id="scene-pic"><div class="spin"></div></div>
+    <div class="msg center" id="scene-msg">Drawing a sample…</div>
+    <div class="center">
+      <button class="btn ok" id="scene-approve" disabled>✓ Build the board with this look</button>
+      <button class="btn ghost" id="scene-retry" disabled>↻ Try again</button>
     </div>
-    <button class="btn ghost" id="famx-add">＋ Add a family member</button>
   </div>
 
-  <!-- STEP 2 — walk the house -->
-  <div id="ob-phase-b" style="display:none;">
-    <div class="panel">
-      <h3 class="fred">Step 2 · Walk the house</h3>
-      <p class="note">Snap anything Fletcher uses. Each one renders in the background — keep moving, then review below.</p>
-      <div class="capture-row">
-        <button class="btn" id="ob-take">📸 Take a photo</button>
-        <button class="btn ghost" id="ob-choose">🖼 Choose photos</button>
-        <span class="count" id="ob-count"></span>
+  <!-- PHASE 4 — generate board -->
+  <div class="panel" id="phase-board" style="display:none;">
+    <h3 class="fred">Step 4 · Building the board</h3>
+    <div class="center" id="board-busy">
+      <div class="spin" style="margin:18px auto;"></div>
+      <p class="note" id="board-msg">Making the tiles in your style… this takes a few minutes. You can keep this open.</p>
+      <div style="background:#f3c6dd;border-radius:999px;height:10px;max-width:360px;margin:10px auto;overflow:hidden;">
+        <div id="board-bar" style="background:var(--pink);height:100%;width:0;transition:width .3s;"></div>
       </div>
-      <input type="file" id="ob-camera" accept="image/*" capture="environment" style="display:none;">
-      <input type="file" id="ob-library" accept="image/*" multiple style="display:none;">
+      <div class="note" id="board-count"></div>
     </div>
-    <h3 class="fred" style="margin:6px 2px;">Review</h3>
-    <div class="cards" id="ob-cards"><div class="empty">No photos yet — snap one above to begin.</div></div>
+    <div class="center" id="board-done" style="display:none;">
+      <div style="font-size:40px;">🎉</div>
+      <p class="fred" style="font-size:18px;color:var(--pink-deep);" id="board-done-msg">The board is ready!</p>
+      <a class="btn" href="/app">Open the board</a>
+    </div>
   </div>
+
 </div>
-
-<audio id="ob-audio" preload="none"></audio>
 
 <script src="/people-picker.js"></script>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const m = location.pathname.match(/^\/onboard\/([^\/]+)/);
-  let slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';   // fallback slug for API calls if /me is unavailable
-  let pretty = 'your child';
-  let nameResolved = !!m;   // a path slug is trusted; otherwise wait for the session before naming the child
-  function applyName() {
-    const next = nameResolved ? ((slug.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase())) || 'your child') : 'your child';
-    $('child-name').textContent = next; $('child-name-2').textContent = next;
-    const inp = $('child-name-input');
-    if (!inp.value || inp.value === pretty) inp.value = (next === 'your child') ? '' : next;
-    pretty = next;
-  }
-  applyName();
-  // No slug in the URL (clinic parents arrive at plain /onboard): resolve the
-  // child from the logged-in session, then refresh the name + category options.
-  if (!m) {
-    fetch('/api/auth/me', { credentials: 'same-origin' })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { const s = d && d.user && d.user.slug; if (s) { slug = s; nameResolved = true; applyName(); loadCategories(); } })
-      .catch(() => {});
-  }
-  try { const ss = localStorage.getItem('aacStyle'); if (ss) for (const o of $('ob-style').options) if (o.value === ss) { $('ob-style').value = ss; break; } } catch (_) {}
-  $('ob-style').addEventListener('change', () => { try { localStorage.setItem('aacStyle', $('ob-style').value); } catch (_) {} });
+  let CHILD_ID = 'fletcherpeterson';
+  let CHILD_NAME = '';
+  let selectedStyle = null;          // { id, label }
+  let childDraftKey = null, parentDraftKey = null;
+  let childFile = null, parentFile = null;
+  let childDone = false, parentDone = false;
+  let sceneDraftKey = null, sceneAttempt = 0;
 
+  // ---- helpers ----
+  async function apiJSON(url, body) {
+    const r = await fetch(url, { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    if (!r.ok) { let d = {}; try { d = await r.json(); } catch (_) {} throw new Error(d.error || ('HTTP ' + r.status)); }
+    return r.json();
+  }
+  async function postBytes(url, blob) {
+    const r = await fetch(url, { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
+    if (!r.ok) { let d = {}; try { d = await r.json(); } catch (_) {} throw new Error(d.error || ('HTTP ' + r.status)); }
+    return r.json();
+  }
   async function downscale(file, max = 1024, q = 0.85) {
     try {
       const bmp = await createImageBitmap(file);
@@ -171,214 +204,275 @@
       return (blob && blob.size < file.size) ? blob : file;
     } catch (_) { return file; }
   }
-
-  // ---- Step 1: the people (gate) ----
-  const done = { child: false, parent: false };
-  function updateGate() { $('ob-continue').disabled = !(done.child && done.parent); }
-  async function renderSubject(role, file) {
-    const nameEl = $(role + '-name-input');
-    const name = (nameEl.value || '').trim();
-    const msg = $('ob-a-msg');
-    if (!name) { msg.textContent = 'Type a name first.'; nameEl.focus(); return; }
-    const pron = ($(role + '-pron-input').value || '').trim();
-    const thumb = $(role + '-thumb');
-    thumb.innerHTML = '<div class="spin"></div>';
-    msg.textContent = 'Making ' + name + ' in your style… (about 30 seconds)';
-    try {
-      const blob = await downscale(file);
-      const relSel = $(role + '-rel');
-      const relationship = role === 'child' ? 'self' : (relSel ? relSel.value : '');
-      const birth = role === 'child' ? (($('child-birth-input') && $('child-birth-input').value) || '') : '';
-      const qs = '?childId=' + encodeURIComponent(slug) + '&style=' + encodeURIComponent($('ob-style').value) +
-        '&role=' + role + '&name=' + encodeURIComponent(name) + '&pronunciation=' + encodeURIComponent(pron) +
-        (relationship ? '&relationship=' + encodeURIComponent(relationship) : '') +
-        (birth ? '&birthDate=' + encodeURIComponent(birth) : '');
-      const r = await fetch('/api/onboard-subject' + qs, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
-      const { key } = await r.json();
-      thumb.innerHTML = '<img src="/api/media?key=' + encodeURIComponent(key) + '" alt="">';
-      done[role] = true; updateGate();
-      msg.textContent = (done.child && done.parent) ? '✅ Both added as tiles. Continue below — or re-tap a photo to redo.' : (name + ' added as a tile ✓');
-    } catch (err) {
-      thumb.textContent = 'Tap to try again';
-      msg.textContent = 'Could not make ' + name + ': ' + (err.message || err);
-    }
+  const mediaUrl = (key) => '/api/media?key=' + encodeURIComponent(key);
+  function showPhase(name) {
+    for (const p of ['style', 'people', 'scene', 'board']) $('phase-' + p).style.display = (p === name) ? '' : 'none';
+    const idx = { style: 0, people: 1, scene: 2, board: 3 }[name];
+    document.querySelectorAll('#steps .dot').forEach((d, i) => d.classList.toggle('on', i <= idx));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  $('child-take').addEventListener('click', () => $('child-input').click());
-  $('parent-take').addEventListener('click', () => $('parent-input').click());
-  $('child-thumb').addEventListener('click', () => $('child-input').click());
-  $('parent-thumb').addEventListener('click', () => $('parent-input').click());
-  $('child-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) renderSubject('child', f); });
-  $('parent-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) renderSubject('parent', f); });
 
-  // ---- Step 1b: optional "add more family" (people model) ----
-  let famxFile = null, famxPicker = null;
+  // ---- resume / identity ----
   (async () => {
+    try {
+      const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null);
+      if (me && me.user && me.user.slug) CHILD_ID = me.user.slug;
+    } catch (_) {}
+    let st = null;
+    try { st = await fetch('/api/onboarding/state', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null); } catch (_) {}
+    if (st) {
+      if (st.childId) CHILD_ID = st.childId;
+      const d = st.data || {};
+      if (d.childName) { CHILD_NAME = d.childName; $('in-name').value = d.childName; }
+      if (d.birthDate) $('in-birth').value = d.birthDate;
+      if (d.styleGuideId) selectedStyle = { id: Number(d.styleGuideId), label: 'Your style' };
+      applyName();
+      // Jump to the saved step.
+      if (st.step === 'complete') { showPhase('board'); $('board-busy').style.display = 'none'; $('board-done').style.display = ''; return; }
+      if (st.step === 'seed_core') { showPhase('board'); runSeed(Number(d.seedNextG) || 0, Number(d.seededCount) || 0); return; }
+      if (st.step === 'scene_keystone') { showPhase('scene'); startScene(); return; }
+      if (st.step === 'parent_photo') { await loadRelOptions(); childDone = true; markChildDoneUI(); showPhase('people'); return; }
+      if (st.step === 'child_photo') { await loadRelOptions(); showPhase('people'); return; }
+    }
+    showPhase('style');
+  })();
+
+  function applyName() {
+    const n = CHILD_NAME || ($('in-name').value || '').trim();
+    $('hdr-name').textContent = n ? (n + "'s") : 'the';
+    $('ppl-child-name').textContent = n || 'the child';
+  }
+  $('in-name').addEventListener('input', applyName);
+
+  // ---- PHASE 1: style ----
+  (async () => {
+    let styles = [];
+    try { styles = (await fetch('/api/onboarding/styles', { credentials: 'same-origin' }).then(r => r.json())).styles || []; } catch (_) {}
+    const grid = $('style-grid');
+    grid.innerHTML = '';
+    for (const s of styles) {
+      const card = document.createElement('div'); card.className = 'style-card'; card.dataset.id = s.id;
+      card.innerHTML = '<div class="pic"><img src="/api/onboarding/styles?image=' + s.id + '" alt="" loading="lazy"></div>' +
+        '<div class="lbl">' + (s.label || 'Style') + '</div>';
+      card.addEventListener('click', () => selectStyle({ id: s.id, label: s.label }, card));
+      grid.appendChild(card);
+    }
+    // "Upload your own" card.
+    const up = document.createElement('div'); up.className = 'style-card'; up.id = 'style-upload-card';
+    up.innerHTML = '<div class="pic" id="style-upload-pic">⬆️</div><div class="lbl">Upload your own</div>';
+    up.addEventListener('click', () => $('style-upload-input').click());
+    grid.appendChild(up);
+    // Re-select if resumed.
+    if (selectedStyle) {
+      const ex = grid.querySelector('.style-card[data-id="' + selectedStyle.id + '"]');
+      if (ex) ex.classList.add('sel'); else up.classList.add('sel');
+      $('style-continue').disabled = !($('in-name').value.trim() && $('in-birth').value);
+    }
+  })();
+  function selectStyle(s, card) {
+    selectedStyle = s;
+    document.querySelectorAll('.style-card').forEach(c => c.classList.remove('sel'));
+    card.classList.add('sel');
+    refreshContinue();
+  }
+  function refreshContinue() {
+    $('style-continue').disabled = !(selectedStyle && $('in-name').value.trim() && $('in-birth').value);
+  }
+  $('in-name').addEventListener('input', refreshContinue);
+  $('in-birth').addEventListener('input', refreshContinue);
+  $('style-upload-input').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    $('style-msg').textContent = 'Uploading your style…';
+    try {
+      const blob = await downscale(f, 1280, 0.9);
+      const { styleGuideId } = await postBytes('/api/onboarding/style-upload', blob);
+      selectedStyle = { id: styleGuideId, label: 'Your style' };
+      const pic = $('style-upload-pic'); pic.innerHTML = '<img src="' + URL.createObjectURL(f) + '" alt="">';
+      document.querySelectorAll('.style-card').forEach(c => c.classList.remove('sel'));
+      $('style-upload-card').classList.add('sel');
+      $('style-msg').textContent = 'Got it — your style is selected.';
+      refreshContinue();
+    } catch (err) { $('style-msg').textContent = 'Upload failed: ' + (err.message || err); }
+  });
+  $('style-continue').addEventListener('click', async () => {
+    const name = $('in-name').value.trim();
+    const birthDate = $('in-birth').value;
+    if (!selectedStyle || !name || !birthDate) return;
+    $('style-continue').disabled = true; $('style-msg').textContent = 'Saving…';
+    try {
+      await apiJSON('/api/onboarding/child', { name, birthDate, tier: 'under3', styleGuideId: selectedStyle.id });
+      CHILD_NAME = name; applyName();
+      await loadRelOptions();
+      showPhase('people');
+    } catch (err) { $('style-msg').textContent = 'Could not save: ' + (err.message || err); $('style-continue').disabled = false; }
+  });
+
+  // ---- PHASE 2: people keystones ----
+  async function loadRelOptions() {
     try {
       const o = await PeoplePicker.getOptions();
       const sel = $('parent-rel');
-      if (sel) sel.innerHTML = o.relationships.filter(r => !r.self).map(r => `<option value="${r.value}">${r.label}</option>`).join('');
-    } catch (_) { /* offline default is fine */ }
-  })();
-  async function famxOpen() {
-    $('famx-form').style.display = 'block';
-    $('famx-add').style.display = 'none';
+      sel.innerHTML = o.relationships.filter(r => !r.self).map(r => '<option value="' + r.value + '">' + r.label + '</option>').join('');
+    } catch (_) { $('parent-rel').innerHTML = '<option value="mother">Mom</option><option value="father">Dad</option>'; }
+  }
+  function markChildDoneUI() {
+    $('subj-child').classList.add('done');
+    $('child-thumb').innerHTML = '✓';
+    $('child-actions').style.display = 'none';
+    refreshPeopleContinue();
+  }
+  function refreshPeopleContinue() { $('people-continue').disabled = !(childDone && parentDone); }
+
+  async function draftSubject(role) {
+    const file = role === 'child' ? childFile : parentFile;
+    if (!file) return;
+    const thumb = $(role + '-thumb');
+    const actions = $(role + '-actions');
+    thumb.innerHTML = '<div class="spin"></div>'; actions.style.display = 'none';
+    $('people-msg').textContent = 'Drawing in your style… (about 20–30 seconds)';
+    try {
+      const blob = await downscale(file);
+      const { draftKey } = await postBytes('/api/onboarding/family?action=draft&styleGuideId=' + selectedStyle.id, blob);
+      if (role === 'child') childDraftKey = draftKey; else parentDraftKey = draftKey;
+      thumb.innerHTML = '<img src="' + mediaUrl(draftKey) + '" alt="">';
+      actions.style.display = 'flex';
+      $('people-msg').textContent = 'Like it? Approve, or try again for a different take.';
+    } catch (err) {
+      thumb.textContent = 'Tap to try again';
+      $('people-msg').textContent = 'Could not draw it: ' + (err.message || err);
+    }
+  }
+  async function approveSubject(role) {
+    const draftKey = role === 'child' ? childDraftKey : parentDraftKey;
+    if (!draftKey) return;
+    const name = role === 'child' ? CHILD_NAME : ($('parent-name').value || '').trim();
+    if (role === 'parent' && !name) { $('parent-name').focus(); $('people-msg').textContent = 'Add the grown-up’s name first.'; return; }
+    const body = { draftKey, role, name };
+    if (role === 'parent') { body.relationship = $('parent-rel').value; }
+    $(role + '-actions').style.display = 'none';
+    $('people-msg').textContent = 'Saving ' + name + '…';
+    try {
+      await apiJSON('/api/onboarding/family?action=commit', body);
+      $('subj-' + role).classList.add('done');
+      if (role === 'child') { childDone = true; } else { parentDone = true; }
+      $('people-msg').textContent = (childDone && parentDone) ? 'Both saved ✓ — add more family, or continue.' : (name + ' saved ✓');
+      refreshPeopleContinue();
+    } catch (err) { $(role + '-actions').style.display = 'flex'; $('people-msg').textContent = 'Could not save: ' + (err.message || err); }
+  }
+  $('child-thumb').addEventListener('click', () => { if (!childDone) $('child-input').click(); });
+  $('parent-thumb').addEventListener('click', () => {
+    if (!childDone) { $('people-msg').textContent = 'Add ' + (CHILD_NAME || 'the child') + ' first.'; $('child-thumb').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    if (!parentDone) $('parent-input').click();
+  });
+  $('child-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) { childFile = f; draftSubject('child'); } });
+  $('parent-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) { parentFile = f; draftSubject('parent'); } });
+  $('child-approve').addEventListener('click', () => approveSubject('child'));
+  $('parent-approve').addEventListener('click', () => approveSubject('parent'));
+  $('child-retry').addEventListener('click', () => draftSubject('child'));
+  $('parent-retry').addEventListener('click', () => draftSubject('parent'));
+
+  // optional more-family (synchronous, house style, latest gen) via /api/onboard-subject
+  let famxFile = null, famxPicker = null;
+  $('famx-add').addEventListener('click', async () => {
+    $('famx-form').style.display = 'block'; $('famx-add').style.display = 'none';
     if (!famxPicker) famxPicker = await PeoplePicker.mount($('famx-picker'), {});
-  }
-  function famxClose() {
-    $('famx-form').style.display = 'none';
-    $('famx-add').style.display = '';
-    famxFile = null;
-    $('famx-thumb').textContent = 'Tap to add a photo';
-    $('famx-msg').textContent = '';
+  });
+  $('famx-cancel').addEventListener('click', () => {
+    $('famx-form').style.display = 'none'; $('famx-add').style.display = '';
+    famxFile = null; $('famx-thumb').textContent = 'Tap to add a photo'; $('famx-msg').textContent = '';
     if (famxPicker) famxPicker.reset();
-  }
-  $('famx-add').addEventListener('click', famxOpen);
-  $('famx-cancel').addEventListener('click', famxClose);
+  });
   $('famx-thumb').addEventListener('click', () => $('famx-input').click());
   $('famx-input').addEventListener('change', (e) => {
-    const f = e.target.files[0]; e.target.value = '';
-    if (!f) return;
-    famxFile = f;
-    $('famx-thumb').innerHTML = '<img src="' + URL.createObjectURL(f) + '" alt="" style="max-width:96px;max-height:96px;border-radius:10px;">';
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    famxFile = f; $('famx-thumb').innerHTML = '<img src="' + URL.createObjectURL(f) + '" alt="" style="max-width:96px;max-height:96px;border-radius:10px;">';
   });
   $('famx-save').addEventListener('click', async () => {
     const v = famxPicker ? famxPicker.getValues() : null;
     if (!v || !v.displayName) { $('famx-msg').textContent = 'Add a name first.'; return; }
     if (!famxFile) { $('famx-msg').textContent = 'Add a photo first.'; return; }
-    $('famx-msg').textContent = 'Making ' + v.displayName + ' in your style… (about 30 seconds)';
-    $('famx-save').disabled = true;
+    $('famx-msg').textContent = 'Making ' + v.displayName + ' in your style…'; $('famx-save').disabled = true;
     try {
       const blob = await downscale(famxFile);
-      const qs = '?childId=' + encodeURIComponent(slug) + '&style=' + encodeURIComponent($('ob-style').value) +
-        '&role=parent&name=' + encodeURIComponent(v.displayName) +
-        '&relationship=' + encodeURIComponent(v.relationship) +
-        (v.side ? '&side=' + encodeURIComponent(v.side) : '') +
-        (v.givenName ? '&given=' + encodeURIComponent(v.givenName) : '') +
-        (v.pronoun ? '&pronoun=' + encodeURIComponent(v.pronoun) : '') +
+      const qs = '?childId=' + encodeURIComponent(CHILD_ID) + '&role=parent&name=' + encodeURIComponent(v.displayName) +
+        '&relationship=' + encodeURIComponent(v.relationship) + (v.side ? '&side=' + encodeURIComponent(v.side) : '') +
+        (v.givenName ? '&given=' + encodeURIComponent(v.givenName) : '') + (v.pronoun ? '&pronoun=' + encodeURIComponent(v.pronoun) : '') +
         (v.birthOrder ? '&birthOrder=' + encodeURIComponent(v.birthOrder) : '');
-      const r = await fetch('/api/onboard-subject' + qs, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
-      const { key } = await r.json();
+      const { key } = await postBytes('/api/onboard-subject' + qs, blob);
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:14px;';
-      row.innerHTML = '<img src="/api/media?key=' + encodeURIComponent(key) + '" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;"><span>' + v.displayName + ' · ' + v.relationship + (v.side ? ' (' + v.side + ')' : '') + '</span>';
+      row.innerHTML = '<img src="' + mediaUrl(key) + '" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;"><span>' + v.displayName + ' · ' + v.relationship + (v.side ? ' (' + v.side + ')' : '') + '</span>';
       $('famx-list').appendChild(row);
-      famxClose();
-    } catch (err) {
-      $('famx-msg').textContent = 'Could not add: ' + (err.message || err);
-    } finally { $('famx-save').disabled = false; }
+      $('famx-cancel').click();
+    } catch (err) { $('famx-msg').textContent = 'Could not add: ' + (err.message || err); }
+    finally { $('famx-save').disabled = false; }
   });
 
-  let pollTimer = null;
-  $('ob-continue').addEventListener('click', () => {
-    $('ob-phase-b').style.display = 'block';
-    $('ob-phase-b').scrollIntoView({ behavior: 'smooth' });
-    if (!pollTimer) { poll(); pollTimer = setInterval(poll, 3000); }
-  });
+  $('people-continue').addEventListener('click', () => { showPhase('scene'); startScene(); });
 
-  // ---- Step 2: walk-through capture ----
-  let snapped = 0;
-  const setCount = () => { $('ob-count').textContent = snapped ? snapped + ' sent' : ''; };
-  async function queuePhoto(file) {
-    const style = $('ob-style').value;
-    const blob = await downscale(file);
-    snapped++; setCount();
-    fetch('/api/pending?childId=' + encodeURIComponent(slug) + '&style=' + encodeURIComponent(style),
-      { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' })
-      .then(() => poll()).catch(() => {});
-  }
-  $('ob-take').addEventListener('click', () => $('ob-camera').click());
-  $('ob-choose').addEventListener('click', () => $('ob-library').click());
-  $('ob-camera').addEventListener('change', async (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) await queuePhoto(f); });
-  $('ob-library').addEventListener('change', async (e) => { const files = Array.from(e.target.files || []); e.target.value = ''; for (const f of files) await queuePhoto(f); });
-
-  // ---- Category options for approving ----
-  let CAT_OPTS = [];
-  async function loadCategories() {
+  // ---- PHASE 3: scene keystone ----
+  async function startScene() {
+    sceneAttempt = 0;
+    $('scene-pic').innerHTML = '<div class="spin"></div>';
+    $('scene-approve').disabled = true; $('scene-retry').disabled = true;
+    $('scene-msg').textContent = 'Drawing a sample…';
     try {
-      const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
-      if (!r.ok) return;
-      const cats = (await r.json()).categories || [];
-      const opts = [];
-      for (const s of ['people', 'nouns', 'verbs']) {
-        const secCats = cats.filter(c => c.section === s);
-        opts.push({ value: s + ':', text: 'All ' + s + ' (no category)' });
-        const tops = secCats.filter(c => c.parentId == null).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        for (const t of tops) {
-          opts.push({ value: s + ':' + t.id, text: s + ' — ' + t.label });
-          const subs = secCats.filter(c => c.parentId === t.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-          for (const sub of subs) opts.push({ value: s + ':' + sub.id, text: s + ' — ' + t.label + ' / ' + sub.label });
+      const { draftKey } = await apiJSON('/api/onboarding/scene?action=draft');
+      sceneDraftKey = draftKey;
+      $('scene-pic').innerHTML = '<img src="' + mediaUrl(draftKey) + '" alt="">';
+      $('scene-msg').textContent = 'This is how toys, food, and places will look.';
+      $('scene-approve').disabled = false; $('scene-retry').disabled = false;
+    } catch (err) { $('scene-msg').textContent = 'Could not draw it: ' + (err.message || err); $('scene-retry').disabled = false; }
+  }
+  $('scene-retry').addEventListener('click', async () => {
+    sceneAttempt++;
+    $('scene-pic').innerHTML = '<div class="spin"></div>';
+    $('scene-approve').disabled = true; $('scene-retry').disabled = true; $('scene-msg').textContent = 'Drawing another…';
+    try {
+      const { draftKey } = await apiJSON('/api/onboarding/scene?action=retry', { attempt: sceneAttempt });
+      sceneDraftKey = draftKey;
+      $('scene-pic').innerHTML = '<img src="' + mediaUrl(draftKey) + '" alt="">';
+      $('scene-msg').textContent = 'Better? Approve, or try again.';
+    } catch (err) { $('scene-msg').textContent = 'Could not draw it: ' + (err.message || err); }
+    finally { $('scene-approve').disabled = false; $('scene-retry').disabled = false; }
+  });
+  $('scene-approve').addEventListener('click', async () => {
+    if (!sceneDraftKey) return;
+    $('scene-approve').disabled = true; $('scene-retry').disabled = true; $('scene-msg').textContent = 'Locking in the look…';
+    try {
+      await apiJSON('/api/onboarding/scene?action=commit', { draftKey: sceneDraftKey });
+      showPhase('board'); runSeed();
+    } catch (err) { $('scene-msg').textContent = 'Could not save: ' + (err.message || err); $('scene-approve').disabled = false; $('scene-retry').disabled = false; }
+  });
+
+  // ---- PHASE 4: generate the board (chunked + resumable) ----
+  let seedStarted = false;
+  async function runSeed(startG = 0, priorPlaced = 0) {
+    if (seedStarted) return; seedStarted = true;
+    $('board-busy').style.display = ''; $('board-done').style.display = 'none';
+    let g = startG, placedTotal = priorPlaced, doneTotal = priorPlaced, total = 0, guard = 0;
+    try {
+      while (true) {
+        const r = await apiJSON('/api/onboarding/seed-core?g=' + g);
+        total = r.total || total;
+        placedTotal += (r.placed || 0);
+        doneTotal += (r.placed || 0) + (r.failed || 0);
+        if (total) {
+          $('board-bar').style.width = Math.min(100, Math.round(doneTotal / total * 100)) + '%';
+          $('board-count').textContent = Math.min(doneTotal, total) + ' of ' + total + ' tiles';
         }
+        if (r.done) break;
+        g = r.nextG;
+        if (++guard > 400) break;   // safety: never loop forever
       }
-      CAT_OPTS = opts;
-    } catch (_) {}
-  }
-
-  // ---- Review queue ----
-  const seen = new Map();
-  const cardsEl = $('ob-cards');
-  function catSelect() {
-    const sel = document.createElement('select');
-    for (const o of CAT_OPTS) { const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.text; sel.appendChild(opt); }
-    return sel;
-  }
-  function buildCard(d) {
-    const card = document.createElement('div'); card.className = 'card'; card.dataset.id = d.id;
-    const thumb = document.createElement('div'); thumb.className = 'thumb';
-    if (d.status === 'ready' && d.image_key) { const img = document.createElement('img'); img.src = '/api/media?key=' + encodeURIComponent(d.image_key); thumb.appendChild(img); }
-    else if (d.status === 'failed') thumb.textContent = '⚠️ Could not render';
-    else { const s = document.createElement('div'); s.className = 'spin'; thumb.appendChild(s); }
-    card.appendChild(thumb);
-    if (d.status === 'ready') {
-      const name = document.createElement('input'); name.type = 'text'; name.value = d.label || ''; name.placeholder = 'Name'; card.appendChild(name);
-      const pron = document.createElement('input'); pron.type = 'text'; pron.className = 'pron'; pron.value = d.pronunciation || ''; pron.placeholder = 'Say it as… (optional)'; pron.style.marginTop = '6px'; card.appendChild(pron);
-      const cat = catSelect(); cat.style.marginTop = '6px'; card.appendChild(cat);
-      const row = document.createElement('div'); row.className = 'row';
-      const play = document.createElement('button'); play.className = 'btn ghost tiny'; play.textContent = '🔊'; play.style.flex = '0 0 auto';
-      play.addEventListener('click', () => { if (d.sound_key) { const a = $('ob-audio'); a.src = '/api/media?key=' + encodeURIComponent(d.sound_key); a.play().catch(() => {}); } });
-      const approve = document.createElement('button'); approve.className = 'btn ok tiny'; approve.textContent = '✓ Approve';
-      const reject = document.createElement('button'); reject.className = 'btn no tiny'; reject.textContent = '✕';
-      approve.addEventListener('click', async () => {
-        const v = cat.value.split(':'); const section = v[0]; const catId = v[1] ? parseInt(v[1], 10) : null;
-        if (!name.value.trim()) { name.focus(); return; }
-        approve.disabled = true; approve.textContent = '…';
-        try {
-          const r = await fetch('/api/pending-approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-            body: JSON.stringify({ id: d.id, childId: slug, section, categoryId: catId, label: name.value.trim(), pronunciation: pron.value.trim() }) });
-          if (r.ok) { card.remove(); seen.delete(String(d.id)); } else { approve.disabled = false; approve.textContent = '✓ Approve'; }
-        } catch (_) { approve.disabled = false; approve.textContent = '✓ Approve'; }
-      });
-      reject.addEventListener('click', () => rejectDraft(d.id, card));
-      row.appendChild(play); row.appendChild(approve); row.appendChild(reject); card.appendChild(row);
-    } else {
-      const status = document.createElement('div'); status.style.cssText = 'text-align:center;font-size:13px;color:var(--muted);margin-top:8px;';
-      status.textContent = d.status === 'failed' ? (d.error || 'Failed') : 'Rendering…';
-      card.appendChild(status);
-      if (d.status === 'failed') { const reject = document.createElement('button'); reject.className = 'btn no tiny'; reject.style.cssText = 'margin-top:8px;width:100%;'; reject.textContent = 'Remove'; reject.addEventListener('click', () => rejectDraft(d.id, card)); card.appendChild(reject); }
+      $('board-bar').style.width = '100%';
+      $('board-busy').style.display = 'none'; $('board-done').style.display = '';
+      $('board-done-msg').textContent = (CHILD_NAME ? CHILD_NAME + "'s" : 'The') + ' board is ready!' +
+        (placedTotal ? ' (' + placedTotal + ' tiles)' : '');
+    } catch (err) {
+      $('board-msg').textContent = 'Something went wrong building the board: ' + (err.message || err) + ' — refresh to retry.';
     }
-    return card;
   }
-  async function rejectDraft(id, card) {
-    try { await fetch('/api/pending?childId=' + encodeURIComponent(slug) + '&id=' + id, { method: 'DELETE', credentials: 'same-origin' }); } catch (_) {}
-    card.remove(); seen.delete(String(id));
-  }
-  async function poll() {
-    let list;
-    try { const r = await fetch('/api/pending?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' }); if (!r.ok) return; list = (await r.json()).pending || []; }
-    catch (_) { return; }
-    const empty = cardsEl.querySelector('.empty'); if (empty && list.length) empty.remove();
-    const ids = new Set(list.map(d => String(d.id)));
-    for (const d of list) {
-      const key = String(d.id);
-      if (!seen.has(key)) { cardsEl.appendChild(buildCard(d)); seen.set(key, d.status); }
-      else if (seen.get(key) !== d.status) { const old = cardsEl.querySelector('.card[data-id="' + d.id + '"]'); const fresh = buildCard(d); if (old) old.replaceWith(fresh); else cardsEl.appendChild(fresh); seen.set(key, d.status); }
-    }
-    for (const key of [...seen.keys()]) { if (!ids.has(key)) { const el = cardsEl.querySelector('.card[data-id="' + key + '"]'); if (el) el.remove(); seen.delete(key); } }
-    if (!cardsEl.children.length) cardsEl.innerHTML = '<div class="empty">No photos yet — snap one above to begin.</div>';
-  }
-
-  loadCategories();
 })();
 </script>
 </body>
