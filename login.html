@@ -68,10 +68,13 @@
       <a id="show-forgot">Forgot password?</a>
     </div>
 
-    <!-- New-parent CTA: walk through the house, build the board in minutes -->
+    <!-- New-parent CTA: create the free account, then walk through the house.
+         Points at /signup (not /onboard) — a new visitor has no account yet, so
+         /onboard would just bounce back here. -->
     <div class="cta-band">
-      <p>New to My World? Set up your child's board in about five minutes.</p>
-      <a class="cta" href="/onboard">📸 Set up your child's board →</a>
+      <p>New to My World? Create your free account and set up the board in about five minutes.</p>
+      <a class="cta" href="/signup">📸 Create your child's account →</a>
+      <p style="margin-top:14px;"><a href="/" style="color:var(--muted);font-weight:600;">← See how My World works</a></p>
     </div>
 
     <!-- Forgot password -->
@@ -82,8 +85,9 @@
       <div class="msg" id="forgot-msg"></div>
     </div>
 
-    <!-- First-time setup (bootstrap the first admin with the existing token) -->
-    <details id="setup">
+    <!-- First-time setup (bootstrap the first admin with the existing token).
+         Hidden from normal visitors — reveal with /login?setup=1 when needed. -->
+    <details id="setup" hidden>
       <summary>First-time setup</summary>
       <p class="hint">Create the first admin account. Paste your existing admin token (the one the app/admin already use). You only need to do this once.</p>
       <label for="s-token">Admin token</label>
@@ -112,6 +116,8 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(location.search);
+  // Admin bootstrap is hidden by default; reveal it only with ?setup=1.
+  if (params.get('setup') === '1') { const s = $('setup'); if (s) { s.hidden = false; s.open = true; } }
   const rawNext = params.get('next') || '';
   // Only honor same-origin path redirects.
   const next = /^\/[^/]/.test(rawNext) ? rawNext : '';
