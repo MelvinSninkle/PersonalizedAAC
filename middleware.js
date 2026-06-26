@@ -21,8 +21,16 @@ export const config = {
   matcher: ['/((?!api/|login|reset|welcome|accept-invite|favicon\\.ico|robots\\.txt|manifest\\.webmanifest|sw\\.js|icons/|audio/|styles/).*)'],
 };
 
+// Fully public — viewable with no invite code and no login. The marketing
+// home/benefits page so /welcome, /login and emails can all point people here.
 function isPublicPage(pathname) {
   return pathname === '/' || pathname === '/index.html';
+}
+// Reachable once past the invite gate but WITHOUT a login session: self-service
+// account creation. An invited visitor has no account yet, so bouncing them to
+// /login here is the bug — they need to be able to reach /signup.
+function isInviteGatedNoAuthPage(pathname) {
+  return pathname === '/signup' || pathname === '/signup.html';
 }
 
 export default async function middleware(req) {
@@ -44,6 +52,10 @@ export default async function middleware(req) {
   const session = token ? await verifySession(token, secret) : null;
   if (session) return;
 
+  // The marketing home is public even without an invite code, so the gate and
+  // login pages (and emails) can always send people to the benefits page.
+  if (isPublicPage(url.pathname)) return;
+
   // Anonymous visitors must clear the private-preview invite gate first.
   const invToken = cookies[INVITE_COOKIE];
   const invite = invToken ? await verifySession(invToken, secret) : null;
@@ -52,10 +64,10 @@ export default async function middleware(req) {
     return new Response(null, { status: 302, headers: { Location: `/welcome?next=${next}` } });
   }
 
-  // Past the gate but not logged in: the home/landing page is public.
-  if (isPublicPage(url.pathname)) return;
+  // Past the gate but not logged in: self-service signup is allowed (no account
+  // exists yet). Everything else still needs a real login session.
+  if (isInviteGatedNoAuthPage(url.pathname)) return;
 
-  // Anything else still needs a real login session.
   const next = encodeURIComponent(url.pathname + url.search);
   return new Response(null, { status: 302, headers: { Location: `/login?next=${next}` } });
 }
