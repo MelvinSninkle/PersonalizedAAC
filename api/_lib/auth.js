@@ -15,7 +15,8 @@ export async function checkAuth(req) {
     const tok = cookies[cookieName()];
     if (tok) {
       const s = await verifySession(tok, secret);
-      if (s) return { ok: true, user: { id: s.uid, email: s.email, role: s.role || 'parent', slug: s.slug || null } };
+      // Expose both `uid` and `id` (same value) — callers use either name.
+      if (s) return { ok: true, user: { uid: s.uid, id: s.uid, email: s.email, role: s.role || 'parent', slug: s.slug || null } };
     }
   }
 
