@@ -250,6 +250,16 @@
   <h1 class="page-title fred" style="margin-top:24px;">Hi Andrew 👋</h1>
   <p class="page-sub">Here's how <strong id="child-name">Fletcher</strong> is doing. Start a learning mode below, or review progress. <em>Fletcher never sees this screen.</em></p>
 
+  <!-- ONBOARDING NUDGE — shown when the board has no tiles yet (setup unfinished) -->
+  <div id="onboard-nudge" style="display:none;align-items:center;gap:14px;background:#fff7fb;border:2px solid var(--pink);border-radius:16px;padding:16px 18px;margin:8px 0 18px;">
+    <span style="font-size:26px;">🎨</span>
+    <div style="flex:1;">
+      <div style="font-weight:700;color:var(--pink-deep,#ad1457);font-size:16px;">Finish setting up <span class="cn">your child</span>'s board</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:2px;">You haven't built the board yet — pick a style and add the first tiles. It takes about five minutes.</div>
+    </div>
+    <a class="btn primary" id="onboard-nudge-go" href="/onboard">Continue setup →</a>
+  </div>
+
   <!-- BULK-IMPORT REVIEW QUEUE — tiles imported in bulk (iOS app or web) land
        on the board right away but flagged needs_review; surfaced here so the
        parent can confirm / rename / remove. Hidden when the queue is empty. -->
@@ -268,10 +278,10 @@
   <!-- OVERVIEW -->
   <div class="section-label">This week</div>
   <div class="stats">
-    <div class="stat"><div class="n">12</div><div class="k">Sessions</div><div class="trend up">▲ 3 vs last week</div></div>
-    <div class="stat"><div class="n">84%</div><div class="k">Avg. matching accuracy</div><div class="trend up">▲ 6 pts</div></div>
-    <div class="stat"><div class="n">147</div><div class="k">Items practiced</div><div class="trend up">▲ 22</div></div>
-    <div class="stat"><div class="n">38<span style="font-size:16px"> min</span></div><div class="k">Exposure / slideshow time</div><div class="trend flat">— steady</div></div>
+    <div class="stat"><div class="n" id="stat-sessions">12</div><div class="k">Sessions</div><div class="trend up" id="stat-sessions-t">▲ 3 vs last week</div></div>
+    <div class="stat"><div class="n" id="stat-acc">84%</div><div class="k">Avg. matching accuracy</div><div class="trend up" id="stat-acc-t">▲ 6 pts</div></div>
+    <div class="stat"><div class="n" id="stat-items">147</div><div class="k">Items practiced</div><div class="trend up" id="stat-items-t">▲ 22</div></div>
+    <div class="stat"><div class="n" id="stat-time">38<span style="font-size:16px"> min</span></div><div class="k">Exposure / slideshow time</div><div class="trend flat" id="stat-time-t">— steady</div></div>
   </div>
 
   <!-- PLAY REQUEST BANNER -->
@@ -678,6 +688,24 @@
       </div>
       <span id="acct-msg" style="font-size:13px;color:var(--muted);"></span>
     </div>
+
+    <div style="margin-top:22px;border-top:1px solid #fde2ec;padding-top:16px;">
+      <h2 style="color:#b91c1c;">Delete account</h2>
+      <p class="hint">Permanently deletes this account and <strong>everything</strong> on <span class="cn">your child</span>'s board — all tiles, categories, people, and every generated image and voice recording. This cannot be undone.</p>
+      <button class="btn ghost" id="del-start" style="color:#b91c1c;border:1px solid #f3c6da;">Delete account…</button>
+      <div id="del-flow" style="display:none;margin-top:14px;max-width:420px;background:#fff5f5;border:1px solid #fecaca;border-radius:12px;padding:14px;">
+        <p style="font-size:13px;color:#7f1d1d;margin:0 0 10px;"><strong>Download a backup first?</strong> Once deleted, the images and data are gone for good.</p>
+        <button class="btn ghost" id="del-backup" style="margin-bottom:12px;">⬇ Download backup first</button>
+        <label style="display:block;font-size:12px;font-weight:700;color:#7f1d1d;">Type <strong>DELETE</strong> to confirm
+          <input id="del-confirm" type="text" autocomplete="off" placeholder="DELETE" style="width:100%;padding:9px;border:1px solid #fecaca;border-radius:10px;font:inherit;margin-top:4px;">
+        </label>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;">
+          <button class="btn" id="del-confirm-btn" style="background:#b91c1c;color:#fff;">Permanently delete</button>
+          <button class="btn ghost" id="del-cancel">Cancel</button>
+          <span id="del-msg" style="font-size:13px;color:#b91c1c;"></span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- FAMILY / PEOPLE — name vs. relationship (docs/people-data-model.md) -->
@@ -690,16 +718,9 @@
     <span id="family-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
   </div>
 
-  <!-- REFERENCE IMAGES — steer how AI tiles are generated from a photo -->
-  <div class="section-label">Reference images for AI tiles</div>
-  <div class="panel">
-    <h2>Style &amp; subject references</h2>
-    <p class="hint">These guide how a new tile is generated from a photo — e.g. a sample of the art style you like, or a clear picture of your child. The most recent few are used each time you make a tile.</p>
-    <div id="ref-grid" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;"></div>
-    <input type="file" id="ref-file" accept="image/*" style="display:none;">
-    <button class="btn primary" id="ref-add">＋ Add reference image</button>
-    <div id="ref-msg" style="font-size:13px;color:var(--muted);margin-top:10px;min-height:18px;"></div>
-  </div>
+  <!-- (Removed) "Style & subject references" — superseded by the Art style panel
+       above (style_guides) for art style, and by Family/onboarding (persons) for
+       the child's likeness. api/generate-image.js no longer reads reference_images. -->
 </div>
 
 <!-- CONFIG MODAL -->
@@ -866,6 +887,29 @@
   const slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';
   const pretty = slug.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase()) || 'Fletcher';
   document.getElementById('child-name').textContent = pretty;
+  // Fill every ".cn" placeholder with the child's name.
+  document.querySelectorAll('.cn').forEach(el => { el.textContent = pretty; });
+  // Swap hardcoded "Fletcher" in static copy (brand, mode cards, hints) for the
+  // real child's name. Dynamic JS strings handle their own substitution.
+  if (pretty && pretty !== 'Fletcher') {
+    const skip = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'SELECT']);
+    const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(n) { return (n.parentNode && !skip.has(n.parentNode.tagName) && n.nodeValue.indexOf('Fletcher') !== -1) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT; },
+    });
+    const hits = []; while (tw.nextNode()) hits.push(tw.currentNode);
+    hits.forEach(n => { n.nodeValue = n.nodeValue.replace(/Fletcher/g, pretty); });
+  }
+  // Onboarding nudge: no tiles on the board yet → setup is unfinished.
+  (async () => {
+    try {
+      const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!((d.items || []).length)) {
+        const n = document.getElementById('onboard-nudge'); if (n) n.style.display = 'flex';
+      }
+    } catch (_) {}
+  })();
   document.getElementById('to-therapist').href = '/therapist/' + encodeURIComponent(slug);
   // Re-open the per-device "who uses this device?" chooser on the board.
   const deviceDefaultLink = document.getElementById('device-default');
@@ -945,7 +989,7 @@
     const step = n <= 8 ? 1 : Math.ceil(n / 7);
     labels.forEach((w, i) => { if (i % step === 0 || i === n - 1) svg += `<text x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="#9ca3af">${w}</text>`; });
     document.getElementById('ins-svg').innerHTML = svg;
-    document.getElementById('ins-sub').innerHTML = cfg.sub + (cfg.sample ? ' <span class="ins-badge">sample</span>' : '');
+    document.getElementById('ins-sub').innerHTML = cfg.sub.replace(/Fletcher/g, pretty) + (cfg.sample ? ' <span class="ins-badge">sample</span>' : '');
     document.getElementById('ins-legend').innerHTML = drawn.map(s =>
       `<span class="lg"><i style="background:${s.color}"></i>${schEsc(s.name)} <b>${s.data[n - 1]}${cfg.unit}</b></span>`).join('');
     const starred = cfg.list.filter(cfg.star);
@@ -1009,6 +1053,21 @@
     if (a.mastery && a.mastery.length) renderMastery(a.mastery.map(m => [m.name, m.pct]));
     if (a.recentSessions && a.recentSessions.length) renderRecent(a.recentSessions);
     renderSpikes(a.recentSpikes || []);
+    // No real activity yet (new account) → clear the mockup numbers so a fresh
+    // parent doesn't see fabricated stats. (The chart already self-labels SAMPLE.)
+    const active = (a.use && a.use.series && a.use.series.length)
+      || (a.games && a.games.series && a.games.series.length)
+      || (a.mastery && a.mastery.length)
+      || (a.recentSessions && a.recentSessions.length);
+    if (!active) showEmptyAnalytics();
+  }
+  function showEmptyAnalytics() {
+    [['stat-sessions', 'stat-sessions-t'], ['stat-acc', 'stat-acc-t'], ['stat-items', 'stat-items-t'], ['stat-time', 'stat-time-t']]
+      .forEach(([n, t]) => { const en = document.getElementById(n), et = document.getElementById(t); if (en) en.textContent = '—'; if (et) et.textContent = ''; });
+    const m = document.getElementById('mastery');
+    if (m) m.innerHTML = '<div class="muted" style="padding:14px;color:#888;">No category accuracy yet — it appears after the first scored sessions.</div>';
+    const tb = document.getElementById('recent-body');
+    if (tb) tb.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No sessions yet — start a learning mode above.</td></tr>';
   }
 
   // PRD §6: render the most recent spike events as a chip stack. Each chip
@@ -1017,7 +1076,7 @@
     const el = document.getElementById('spikes-body');
     if (!el) return;
     if (!list.length) {
-      el.innerHTML = '<div class="muted" style="padding:14px;color:#888;">No spike events yet — these appear once Fletcher has ≥10 sessions in any (skill, mode) bucket and clears the 2σ threshold (or hits 100%).</div>';
+      el.innerHTML = '<div class="muted" style="padding:14px;color:#888;">No spike events yet — these appear once ' + pretty + ' has ≥10 sessions in any (skill, mode) bucket and clears the 2σ threshold (or hits 100%).</div>';
       return;
     }
     const KIND = {
@@ -1280,6 +1339,30 @@
         acctMsg('Sent — check ' + myEmail + ' for the reset link.');
       } catch (err) { acctMsg('Could not send: ' + (err.message || err), true); } finally { forgotBtn.disabled = false; }
     });
+
+    // ---- Delete account (with backup offer + typed confirmation) ----
+    const delStart = document.getElementById('del-start');
+    const delFlow = document.getElementById('del-flow');
+    const delMsg = (t) => { const m = document.getElementById('del-msg'); if (m) m.textContent = t || ''; };
+    if (delStart) delStart.addEventListener('click', () => { delFlow.style.display = ''; delStart.style.display = 'none'; });
+    const delCancel = document.getElementById('del-cancel');
+    if (delCancel) delCancel.addEventListener('click', () => { delFlow.style.display = 'none'; delStart.style.display = ''; delMsg(''); document.getElementById('del-confirm').value = ''; });
+    const delBackup = document.getElementById('del-backup');
+    if (delBackup) delBackup.addEventListener('click', () => { const b = document.getElementById('backup-export'); if (b) b.click(); });
+    const delBtn = document.getElementById('del-confirm-btn');
+    if (delBtn) delBtn.addEventListener('click', async () => {
+      const confirmVal = (document.getElementById('del-confirm').value || '').trim();
+      if (confirmVal.toUpperCase() !== 'DELETE') { delMsg('Type DELETE to confirm.'); return; }
+      if (!window.confirm('Permanently delete this account and every image on the board? This cannot be undone.')) return;
+      delBtn.disabled = true; delMsg('Deleting…');
+      try {
+        const r = await fetch('/api/auth/delete-account', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: 'DELETE' }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        delMsg('Account deleted. Goodbye.');
+        setTimeout(() => { window.location.href = '/'; }, 1200);
+      } catch (err) { delMsg('Could not delete: ' + (err.message || err)); delBtn.disabled = false; }
+    });
   })();
 
   // ---- Mode launcher — starts a real session on Fletcher's tablet over /api/live ----
@@ -1358,7 +1441,7 @@
 
   function openModal(mode, launch) {
     title.textContent = (launch ? 'Start · ' : 'Configure · ') + mode;
-    sub.textContent = "Runs live on Fletcher's tablet — it must be open on the board.";
+    sub.textContent = "Runs live on " + pretty + "'s tablet — it must be open on the board.";
     body.innerHTML = (FORMS[mode] || (() => catSelect() + musicField()))();
     goBtn.textContent = mode === 'Celebration' ? 'Play on tablet' : 'Start on tablet';
     goBtn.dataset.modeName = mode;
@@ -1397,7 +1480,7 @@
     return sawOnline ? 'nostart' : 'offline';
   }
   const NOSTART_MSG = "⚠ The tablet is on the board but didn't start — the chosen categories may not have 3+ picture tiles. Try “Everything”, or add tiles.";
-  const OFFLINE_MSG = "⚠ Fletcher's tablet isn't on the board right now. Open his app, then tap Start again.";
+  const OFFLINE_MSG = "⚠ " + pretty + "'s tablet isn't on the board right now. Open the app, then tap Start again.";
   function buildLaunchCmd(modeName) {
     const mode = MODE_KEY[modeName] || 'self_paced';
     const cmd = { kind: 'cmd', action: 'start', mode };
@@ -1475,7 +1558,7 @@
     if (!ok) { toast('Could not reach the server — try again.'); return; }
     toast('Sent — waiting for the tablet…');
     const res = await confirmStarted();
-    if (res === 'started') toast("Started on Fletcher's tablet ✓");
+    if (res === 'started') toast("Started on " + pretty + "'s tablet ✓");
     else if (res.startsWith('error:')) toast('⚠ ' + res.slice(6));
     else if (res === 'nostart') toast("Tablet didn't start it — try “Everything” or add more tiles.");
     else toast("Tablet isn't on the board. Open his app, then try again.");
@@ -2065,11 +2148,7 @@
   })();
   loadReviewQueue();
 
-  // ---- Reference images (steer AI tile generation) ----
-  const refGrid = document.getElementById('ref-grid');
-  const refMsg = document.getElementById('ref-msg');
-  const refFile = document.getElementById('ref-file');
-  function refMsgSet(t, err) { refMsg.textContent = t; refMsg.style.color = err ? '#dc2626' : '#6b7280'; }
+  // Shared image downscaler used by tile + family-photo uploads.
   async function downscale(file, max = 1024, quality = 0.85) {
     try {
       const bmp = await createImageBitmap(file);
@@ -2082,50 +2161,6 @@
       return (blob && blob.size < file.size) ? blob : file;
     } catch (_) { return file; }
   }
-  function renderRefs(list) {
-    refGrid.innerHTML = list.length ? list.map(ref => `
-      <div style="position:relative;width:96px;">
-        <img src="/api/media?key=${encodeURIComponent(ref.blob_key)}" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:12px;border:1px solid #fce4ec;">
-        <button data-del="${ref.id}" title="Remove" style="position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;border:none;background:#dc2626;color:#fff;cursor:pointer;font-weight:700;line-height:1;">×</button>
-      </div>`).join('') : '<div style="font-size:13px;color:#9ca3af;">No reference images yet.</div>';
-  }
-  async function loadRefs() {
-    try {
-      const r = await fetch('/api/reference-images?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
-      if (!r.ok) { if (r.status === 403) refMsgSet('Sign in as a parent or admin to manage references.'); return; }
-      const d = await r.json();
-      renderRefs(d.references || []);
-    } catch (_) { /* ignore */ }
-  }
-  refGrid.addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-del]'); if (!b) return;
-    if (!confirm('Remove this reference image?')) return;
-    try {
-      const r = await fetch('/api/reference-images?id=' + b.dataset.del, { method: 'DELETE', credentials: 'same-origin' });
-      if (!r.ok) throw new Error('Delete failed');
-      loadRefs();
-    } catch (err) { refMsgSet('Could not remove: ' + (err.message || err), true); }
-  });
-  document.getElementById('ref-add').addEventListener('click', () => refFile.click());
-  refFile.addEventListener('change', async (e) => {
-    const file = e.target.files[0]; e.target.value = '';
-    if (!file) return;
-    refMsgSet('Uploading…');
-    try {
-      const blob = await downscale(file);
-      const up = await fetch('/api/upload?kind=ref&ext=jpg', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
-      const upd = await up.json().catch(() => ({}));
-      if (!up.ok) throw new Error(upd.error || ('upload ' + up.status));
-      const add = await fetch('/api/reference-images', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-        body: JSON.stringify({ childId: slug, blobKey: upd.key, label: file.name.slice(0, 120) }),
-      });
-      if (!add.ok) { const d = await add.json().catch(() => ({})); throw new Error(d.error || ('save ' + add.status)); }
-      refMsgSet('Added.');
-      loadRefs();
-    } catch (err) { refMsgSet('Upload failed: ' + (err.message || err), true); }
-  });
-  loadRefs();
 
   // ---- Family & people management (people model; docs/people-data-model.md) ----
   (function () {
