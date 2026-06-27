@@ -667,6 +667,10 @@ export default async function handler(req, res) {
     await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS child_id TEXT`;
     await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS ephemeral BOOLEAN NOT NULL DEFAULT FALSE`;
     await db`CREATE INDEX IF NOT EXISTS style_guides_child_idx ON style_guides(child_id)`;
+    // preview_blob_key: an optional polished "marketing" image for the PUBLIC
+    // picker/home page, distinct from blob_key (the raw style anchor the image
+    // generator references). Falls back to blob_key when not set.
+    await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS preview_blob_key TEXT`;
 
     await db`
       CREATE TABLE IF NOT EXISTS lab_settings (

@@ -441,6 +441,29 @@
     if (chip) setStyle(chip);
   });
 
+  // Replace the hardcoded chips with the admin-managed PUBLIC style guides so the
+  // home page shows the very same styles families pick in onboarding. The static
+  // chips above stay as a fallback if the DB is empty or the fetch fails.
+  (async () => {
+    try {
+      const data = await fetch('/api/style-guides/public').then(r => r.ok ? r.json() : null);
+      const styles = data && Array.isArray(data.styles) ? data.styles : [];
+      if (!styles.length) return; // keep static fallback
+      picker.innerHTML = '';
+      styles.forEach((s, i) => {
+        const img = '/api/style-guides/public?image=' + s.id;
+        const caption = s.description ? (s.label + ' — ' + s.description) : s.label;
+        const b = document.createElement('button');
+        b.className = 'style-chip' + (i === 0 ? ' active' : '');
+        b.dataset.img = img; b.dataset.caption = caption; b.dataset.style = s.label;
+        b.textContent = s.label;
+        picker.appendChild(b);
+        new Image().src = img; // preload
+      });
+      styleImg.src = '/api/style-guides/public?image=' + styles[0].id;
+      styleCaption.textContent = styles[0].description ? (styles[0].label + ' — ' + styles[0].description) : styles[0].label;
+    } catch (_) { /* keep static fallback */ }
+  })();
 })();
 </script>
 
