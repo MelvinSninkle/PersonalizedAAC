@@ -74,21 +74,32 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   //     the likeness). This is the "style image + real photo" composition the
   //     whole board shares, so People match the rest of the tiles.
   //   • no style guide → the original tuned warm-storybook portrait.
+  // Why faithful likeness matters here — tells the model to prioritize a true
+  // match over generic prettification. This is the single most important framing
+  // for this step: the child must recognize the real person, not a cute stranger.
+  const PURPOSE =
+    "This is a tile for a young child's AAC (augmentative & alternative communication) device. The child has a " +
+    "developmental disability and must INSTANTLY recognize this exact, specific real person, so a faithful likeness " +
+    "is the top priority. Preserve their identifying features from the photo precisely — face shape, skin tone, " +
+    "hair color and hairstyle, eye color, eyebrows, and any glasses, freckles, or distinctive features — and keep " +
+    "the same apparent age and sex. Re-render them only in the reference art style; do NOT beautify, average, or " +
+    "change their features. A consistent art style across all tiles is what helps the child focus and recognize people. ";
+
   const images = [];
   let prompt;
   if (styleGuide && styleGuide.image && styleGuide.image.buffer) {
     images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
     images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
     prompt =
-      "Re-illustrate the person in the photo as a head-and-shoulders portrait for a young child's " +
-      "communication board, rendered in the art style of the style-reference image. Keep the person's " +
-      "face and likeness clearly recognizable; soft even lighting; clean soft pastel background; centered; " +
-      "bright friendly colors. Do not add any text, words, or letters." + variant +
-      "\n\nImage 1 is the STYLE reference — copy its art style only, not its content. " +
-      "Image 2 shows the person — keep this person's face and likeness clearly recognizable.";
+      PURPOSE +
+      "Re-illustrate the person in the photo as a head-and-shoulders portrait for the communication board, " +
+      "rendered in the art style of the style-reference image. Soft even lighting; clean soft pastel background; " +
+      "centered; bright friendly colors. Do not add any text, words, or letters." + variant +
+      "\n\nImage 1 is the STYLE reference — copy its art style only (linework, palette, shading, finish), NOT its " +
+      "content or the people in it. Image 2 is the real person — keep THIS person's face and likeness an unmistakable match.";
   } else {
     images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
-    prompt = STYLE_PROMPT_BASE + variant;
+    prompt = PURPOSE + STYLE_PROMPT_BASE + variant;
   }
   prompt += fix;
   prompt += SQUARE_RULE;
