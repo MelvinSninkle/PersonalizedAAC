@@ -56,7 +56,7 @@ async function readBlobBytes(key) {
   return Buffer.concat(chunks);
 }
 
-async function stylize({ db, childId, sourceBytes, contentType, actorEmail, attempt, styleGuide }) {
+async function stylize({ db, childId, sourceBytes, contentType, actorEmail, attempt, styleGuide, guidance }) {
   const gKey = geminiKey();
   if (!gKey) throw new Error('GEMINI_API_KEY not configured');
   // A small variance instruction makes each retry give a fresh look — same
@@ -65,6 +65,8 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   const variant = attempt > 0
     ? ` Vary the framing and expression slightly from any previous attempt (attempt ${attempt + 1}).`
     : '';
+  // The parent's specific correction (e.g. "add white to his eyes"), applied verbatim.
+  const fix = guidance ? ` Important correction from the parent — apply this exactly: ${guidance}.` : '';
 
   // Two render modes:
   //   • style guide chosen → render the person IN that style: image 1 is the
@@ -88,6 +90,7 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
     images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
     prompt = STYLE_PROMPT_BASE + variant;
   }
+  prompt += fix;
   prompt += SQUARE_RULE;
 
   // KEYSTONE: portraits anchor every later render, so use the advanced Pro tier.
@@ -149,8 +152,10 @@ export default async function handler(req, res) {
                       updated_at = NOW()
                 WHERE user_id = ${Number(auth.user.uid)}`;
       const styleGuide = await loadStyleGuide(db, styleGuideId);
+      const attempt = q.attempt ? Math.min(5, Math.max(0, parseInt(q.attempt, 10) || 0)) : 0;
+      const guidance = typeof q.guidance === 'string' ? q.guidance.slice(0, 300) : '';
       const draftKey = await stylize({ db, childId, sourceBytes: bytes, contentType,
-                                       actorEmail: auth.user.email, attempt: 0, styleGuide });
+                                       actorEmail: auth.user.email, attempt, styleGuide, guidance });
       res.status(200).json({ ok: true, draftKey });
       return;
     }
@@ -164,9 +169,10 @@ export default async function handler(req, res) {
       const bytes = await loadSourceFromDraft(db, childId, b.draftKey);
       const styleGuideId = b.styleGuideId ? parseInt(b.styleGuideId, 10) : (progress.data && progress.data.styleGuideId) || null;
       const styleGuide = await loadStyleGuide(db, styleGuideId);
+      const guidance = typeof b.guidance === 'string' ? b.guidance.slice(0, 300) : '';
       const draftKey = await stylize({ db, childId, sourceBytes: bytes,
                                        contentType: 'image/jpeg',
-                                       actorEmail: auth.user.email, attempt, styleGuide });
+                                       actorEmail: auth.user.email, attempt, styleGuide, guidance });
       res.status(200).json({ ok: true, draftKey });
       return;
     }

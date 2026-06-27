@@ -58,10 +58,17 @@
   .spin { width:26px; height:26px; border:3px solid #fce4ec; border-top-color:var(--pink); border-radius:50%; animation:spin .9s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
   /* Faded, pulsing My World icon shown while an image is generating. */
+  .gen-wrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
   .gen-load { width:72px; height:72px; opacity:.5; animation:genpulse 1.5s ease-in-out infinite; }
   @keyframes genpulse { 0%,100% { opacity:.3; transform:scale(.9); } 50% { opacity:.7; transform:scale(1.05); } }
-  .style-ref { display:none; align-items:center; gap:10px; margin:0 0 12px; }
-  .style-ref img { width:46px; height:46px; border-radius:10px; object-fit:cover; border:2px solid var(--line); }
+  .gen-cap { font-size:12px; color:var(--muted); }
+  .style-ref { display:none; align-items:center; gap:12px; margin:0 0 14px; }
+  .style-ref img { width:88px; height:88px; border-radius:12px; object-fit:cover; border:2px solid var(--line); cursor:zoom-in; }
+  /* Tap-to-enlarge the style reference. */
+  .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.82); display:none; place-items:center; z-index:60; padding:24px; }
+  .lightbox.show { display:grid; }
+  .lightbox img { max-width:92vw; max-height:88vh; border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+  .lightbox .hint { position:fixed; bottom:18px; left:0; right:0; text-align:center; color:#fff; font-size:13px; opacity:.85; }
   .msg { font-size:13px; color:var(--muted); min-height:18px; margin:8px 0; }
   .center { text-align:center; }
 </style>
@@ -131,6 +138,9 @@
     </div>
     <input type="file" id="child-input" accept="image/*" capture="user" style="display:none;">
     <input type="file" id="parent-input" accept="image/*" capture="user" style="display:none;">
+    <label style="margin-top:6px;">Is something off? Tell us what to fix</label>
+    <input id="fix-guidance" type="text" placeholder="e.g. add white to his eyes, lighten the hair, bigger smile">
+    <p class="note" style="margin:4px 0 0;">Type a fix, then tap <strong>Try again</strong> on that photo.</p>
     <div class="msg" id="people-msg"></div>
 
     <!-- optional: more family (synchronous add via /api/onboard-subject; uses the house style + latest gen) -->
@@ -185,6 +195,8 @@
 
 </div>
 
+<div class="lightbox" id="style-lightbox"><img id="style-lightbox-img" alt=""><div class="hint">Tap anywhere to close</div></div>
+
 <script src="/people-picker.js"></script>
 <script>
 (() => {
@@ -195,6 +207,7 @@
   let selectedVoiceId = null;        // chosen ElevenLabs voice id
   let childDraftKey = null, parentDraftKey = null;
   let childFile = null, parentFile = null;
+  let childAttempt = 0, parentAttempt = 0;   // bumped on "Try again" for variance
   let childDone = false, parentDone = false;
   let sceneDraftKey = null, sceneAttempt = 0;
 
@@ -223,8 +236,16 @@
     } catch (_) { return file; }
   }
   const mediaUrl = (key) => '/api/media?key=' + encodeURIComponent(key);
-  // Faded, pulsing My World icon shown while a portrait/scene is generating.
-  const GEN_LOADER = '<img class="gen-load" src="/icons/myworld-globe.png" alt="">';
+  // Faded, pulsing My World icon + caption shown while an image is generating.
+  const GEN_LOADER = '<div class="gen-wrap"><img class="gen-load" src="/icons/myworld-globe.png" alt=""><div class="gen-cap">Please wait a few seconds…</div></div>';
+  // Tap-to-enlarge the style reference.
+  function openLightbox(src) {
+    const lb = $('style-lightbox'); if (!lb) return;
+    document.getElementById('style-lightbox-img').src = src; lb.classList.add('show');
+  }
+  (function wireLightbox() {
+    const lb = $('style-lightbox'); if (lb) lb.addEventListener('click', () => lb.classList.remove('show'));
+  })();
   // Show the chosen style reference so the parent sees the look being applied
   // (works for templates and uploads — both are active style_guides rows).
   function applyStyleRef() {
@@ -232,7 +253,7 @@
     const src = '/api/onboarding/styles?image=' + selectedStyle.id;
     for (const [wrapId, imgId] of [['people-style-ref', 'people-style-thumb'], ['scene-style-ref', 'scene-style-thumb']]) {
       const wrap = $(wrapId), img = document.getElementById(imgId);
-      if (img) img.src = src;
+      if (img) { img.src = src; img.onclick = () => openLightbox(src); img.title = 'Tap to enlarge'; }
       if (wrap) wrap.style.display = 'flex';
     }
   }
@@ -424,7 +445,12 @@
     $('people-msg').textContent = 'Drawing in your style… (about 20–30 seconds)';
     try {
       const blob = await downscale(file);
-      const { draftKey } = await postBytes('/api/onboarding/family?action=draft&styleGuideId=' + selectedStyle.id, blob);
+      const attempt = role === 'child' ? childAttempt : parentAttempt;
+      const guidance = ($('fix-guidance').value || '').trim().slice(0, 300);
+      const qs = '/api/onboarding/family?action=draft&styleGuideId=' + selectedStyle.id
+        + '&attempt=' + attempt
+        + (guidance ? '&guidance=' + encodeURIComponent(guidance) : '');
+      const { draftKey } = await postBytes(qs, blob);
       if (role === 'child') childDraftKey = draftKey; else parentDraftKey = draftKey;
       thumb.innerHTML = '<img src="' + mediaUrl(draftKey) + '" alt="">';
       actions.style.display = 'flex';
@@ -456,12 +482,12 @@
     if (!childDone) { $('people-msg').textContent = 'Add ' + (CHILD_NAME || 'the child') + ' first.'; $('child-thumb').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
     if (!parentDone) $('parent-input').click();
   });
-  $('child-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) { childFile = f; draftSubject('child'); } });
-  $('parent-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) { parentFile = f; draftSubject('parent'); } });
+  $('child-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) { childFile = f; childAttempt = 0; draftSubject('child'); } });
+  $('parent-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) { parentFile = f; parentAttempt = 0; draftSubject('parent'); } });
   $('child-approve').addEventListener('click', () => approveSubject('child'));
   $('parent-approve').addEventListener('click', () => approveSubject('parent'));
-  $('child-retry').addEventListener('click', () => draftSubject('child'));
-  $('parent-retry').addEventListener('click', () => draftSubject('parent'));
+  $('child-retry').addEventListener('click', () => { childAttempt++; draftSubject('child'); });
+  $('parent-retry').addEventListener('click', () => { parentAttempt++; draftSubject('parent'); });
 
   // optional more-family (synchronous, house style, latest gen) via /api/onboard-subject
   let famxFile = null, famxPicker = null;
