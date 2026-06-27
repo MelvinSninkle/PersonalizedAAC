@@ -320,6 +320,19 @@
 (() => {
   const m = location.pathname.match(/^\/therapist\/([^\/]+)/);
   const slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';
+  // Child's name from the slug — swap every hardcoded "Fletcher" in static copy
+  // (brand, hints, the live-start button) and fill any .cn placeholders. Safe
+  // here: this is a control panel, not the child's live board.
+  const pretty = slug.replace(/peterson$/i, '').replace(/[-_].*$/, '').replace(/^\w/, c => c.toUpperCase()) || 'Fletcher';
+  if (pretty && pretty !== 'Fletcher') {
+    const skip = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'SELECT']);
+    const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(n) { return (n.parentNode && !skip.has(n.parentNode.tagName) && n.nodeValue.indexOf('Fletcher') !== -1) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT; },
+    });
+    const hits = []; while (tw.nextNode()) hits.push(tw.currentNode);
+    hits.forEach(n => { n.nodeValue = n.nodeValue.replace(/Fletcher/g, pretty); });
+    document.querySelectorAll('.cn').forEach(el => { el.textContent = pretty; });
+  }
   const deviceDefaultLink = document.getElementById('device-default');
   if (deviceDefaultLink) deviceDefaultLink.addEventListener('click', (e) => {
     e.preventDefault();
@@ -402,7 +415,7 @@
     const step = n <= 8 ? 1 : Math.ceil(n / 7);
     labels.forEach((w, i) => { if (i % step === 0 || i === n - 1) svg += `<text x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="#9ca3af">${w}</text>`; });
     document.getElementById('ins-svg').innerHTML = svg;
-    document.getElementById('ins-sub').innerHTML = cfg.sub + (cfg.sample ? ' <span class="ins-badge">sample</span>' : '');
+    document.getElementById('ins-sub').innerHTML = cfg.sub.replace(/Fletcher/g, pretty) + (cfg.sample ? ' <span class="ins-badge">sample</span>' : '');
     document.getElementById('ins-legend').innerHTML = drawn.map(s =>
       `<span class="lg"><i style="background:${s.color}"></i>${esc(s.name)} <b>${s.data[n - 1]}${cfg.unit}</b></span>`).join('');
     const starred = cfg.list.filter(cfg.star);

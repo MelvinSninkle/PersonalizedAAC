@@ -1397,6 +1397,12 @@
   // (Carlos' World), everything else 's (Fletcher's World).
   let CHILD_NAME = '';
   try { CHILD_NAME = localStorage.getItem('aacChildName:' + CHILD_ID) || ''; } catch (_) {}
+  // Fall back to a slug-derived name so the board shows the child's name (not the
+  // generic "My World") before the persons record loads — e.g. mid-onboarding.
+  // loadChildName() refines it from the canonical is_self person afterwards.
+  if (!CHILD_NAME) {
+    CHILD_NAME = CHILD_ID.replace(/peterson$/i, '').replace(/[-_].*$/, '').replace(/^\w/, c => c.toUpperCase());
+  }
   function possessive(n) { return /s$/i.test(n) ? n + "'" : n + "'s"; }
   function applyChildName() {
     const title = CHILD_NAME ? possessive(CHILD_NAME) + ' World' : 'My World';
