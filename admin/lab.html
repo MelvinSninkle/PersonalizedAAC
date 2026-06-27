@@ -404,6 +404,7 @@ function renderStyleGuides() {
       <div class="label">${escapeHtml(s.label)}</div>
       <div class="row">
         <button data-act="toggle">${s.active ? 'Active' : 'Inactive'}</button>
+        <button data-act="preview" title="Polished marketing image shown on the public home page (falls back to this anchor if unset)">${s.previewBlobKey ? '🖼 Preview ✓' : '🖼 Preview'}</button>
         <button data-act="delete">✕</button>
       </div>`;
     card.querySelector('[data-act="toggle"]').addEventListener('click', async (e) => {
@@ -411,6 +412,29 @@ function renderStyleGuides() {
       await api('PATCH', `/api/admin/style-guides?id=${s.id}`, { active: !s.active });
       await loadStyleGuides();
       renderTiles();
+    });
+    // Upload / replace the marketing preview shown on the public home page.
+    card.querySelector('[data-act="preview"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'image/*';
+      inp.addEventListener('change', async () => {
+        const file = inp.files[0]; if (!file) return;
+        const btn = card.querySelector('[data-act="preview"]');
+        btn.disabled = true; btn.textContent = 'Uploading…';
+        try {
+          const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+          const up = await fetch(`/api/upload?kind=style&ext=${ext}`, {
+            method: 'POST', headers: { 'Content-Type': file.type || 'image/jpeg' }, body: file,
+          });
+          if (!up.ok) throw new Error(`upload failed: ${up.status}`);
+          const { key } = await up.json();
+          await api('PATCH', `/api/admin/style-guides?id=${s.id}`, { previewBlobKey: key });
+          await loadStyleGuides();
+          renderTiles();
+        } catch (err) { alert('Preview upload failed: ' + err.message); btn.disabled = false; btn.textContent = '🖼 Preview'; }
+      });
+      inp.click();
     });
     card.querySelector('[data-act="delete"]').addEventListener('click', async (e) => {
       e.stopPropagation();

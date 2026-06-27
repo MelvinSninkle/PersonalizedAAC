@@ -558,6 +558,38 @@
     <div id="age-readiness-note" style="margin-top:10px;font-size:13px;color:#6b7280;"></div>
   </div>
 
+  <!-- ART STYLE -->
+  <div class="section-label">Art style</div>
+  <div class="panel" id="style-panel" style="display:none;">
+    <h2><span class="cn">Your child</span>'s board art style</h2>
+    <p class="hint">Every tile is drawn in this style, with <span class="cn">your child</span> as the recognizable anchor. This is the look the whole board is generated from.</p>
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+      <img id="style-panel-img" alt="" style="width:160px;height:160px;object-fit:cover;border-radius:16px;border:2px solid var(--line);background:#fff7fb;">
+      <div>
+        <div id="style-panel-label" style="font-weight:700;font-size:16px;color:var(--ink);"></div>
+        <div id="style-panel-desc" style="font-size:13px;color:#6b7280;margin-top:4px;max-width:360px;"></div>
+        <div id="style-panel-source" style="font-size:12px;color:#9ca3af;margin-top:8px;"></div>
+        <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="btn ghost" id="style-regen-btn">↻ Regenerate style</button>
+          <span id="style-regen-msg" style="font-size:13px;color:#6b7280;"></span>
+        </div>
+      </div>
+    </div>
+    <!-- Draft preview (approve before it replaces the anchor) -->
+    <div id="style-draft" style="display:none;margin-top:16px;padding:14px;border-radius:14px;background:#fdf4ff;border:1px solid #f3c6da;">
+      <div style="font-weight:700;color:#9d174d;margin-bottom:8px;">New take — keep it?</div>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+        <img id="style-draft-img" alt="" style="width:160px;height:160px;object-fit:cover;border-radius:16px;border:2px solid #f3c6da;background:#fff;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn" id="style-draft-use">Use this style</button>
+          <button class="btn ghost" id="style-draft-again">Try another</button>
+          <button class="btn ghost" id="style-draft-cancel">Keep current</button>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:8px;">This becomes the look every new tile is generated from. Existing tiles keep their current pictures.</p>
+    </div>
+  </div>
+
   <!-- ALBUM -->
   <div class="section-label">Picture album</div>
   <div class="panel" id="album-panel">
@@ -1135,6 +1167,64 @@
     });
   })();
   loadAnalytics();
+
+  // ---- Art style: show the family's current board style ----
+  async function loadStyle() {
+    try {
+      const r = await fetch('/api/parent/style?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const { styleGuide } = await r.json();
+      if (!styleGuide) return; // no style yet — leave the panel hidden
+      const img = document.getElementById('style-panel-img');
+      if (styleGuide.imageUrl) { img.src = styleGuide.imageUrl; } else { img.style.display = 'none'; }
+      document.getElementById('style-panel-label').textContent = styleGuide.label || 'Your style';
+      document.getElementById('style-panel-desc').textContent = styleGuide.description || '';
+      document.getElementById('style-panel-source').textContent =
+        styleGuide.source === 'family' ? 'Generated for your family from your onboarding.' : 'A built-in style template.';
+      document.getElementById('style-panel').style.display = '';
+    } catch (_) { /* leave hidden */ }
+  }
+  loadStyle();
+
+  // ---- Regenerate the family style (draft → approve) ----
+  let styleDraftKey = null;
+  function styleRegenMsg(t) { document.getElementById('style-regen-msg').textContent = t || ''; }
+  async function styleRegenDraft() {
+    const btn = document.getElementById('style-regen-btn');
+    btn.disabled = true; styleRegenMsg('Drawing a new take… about 30 seconds.');
+    try {
+      const r = await fetch('/api/parent/style-regenerate?action=draft&childId=' + encodeURIComponent(slug),
+        { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      styleDraftKey = d.draftKey;
+      document.getElementById('style-draft-img').src = d.previewUrl + '&t=' + Date.now();
+      document.getElementById('style-draft').style.display = '';
+      styleRegenMsg('');
+    } catch (err) { styleRegenMsg('Could not regenerate: ' + (err.message || err)); }
+    finally { btn.disabled = false; }
+  }
+  document.getElementById('style-regen-btn').addEventListener('click', styleRegenDraft);
+  document.getElementById('style-draft-again').addEventListener('click', styleRegenDraft);
+  document.getElementById('style-draft-cancel').addEventListener('click', () => {
+    styleDraftKey = null; document.getElementById('style-draft').style.display = 'none'; styleRegenMsg('');
+  });
+  document.getElementById('style-draft-use').addEventListener('click', async () => {
+    if (!styleDraftKey) return;
+    const use = document.getElementById('style-draft-use'); use.disabled = true; use.textContent = 'Saving…';
+    try {
+      const r = await fetch('/api/parent/style-regenerate?action=commit&childId=' + encodeURIComponent(slug),
+        { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draftKey: styleDraftKey }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      document.getElementById('style-panel-img').src = d.imageUrl + '&t=' + Date.now();
+      document.getElementById('style-panel-source').textContent = 'Generated for your family from your onboarding.';
+      document.getElementById('style-draft').style.display = 'none';
+      styleDraftKey = null; styleRegenMsg('Updated — new tiles will use this style.');
+    } catch (err) { styleRegenMsg('Could not save: ' + (err.message || err)); }
+    finally { use.disabled = false; use.textContent = 'Use this style'; }
+  });
 
   // ---- Mode launcher — starts a real session on Fletcher's tablet over /api/live ----
   const scrim = document.getElementById('scrim');

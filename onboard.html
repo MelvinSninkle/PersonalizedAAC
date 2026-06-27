@@ -19,7 +19,7 @@
 <style>
   * { box-sizing: border-box; }
   :root { --pink:#ff1493; --pink-deep:#ad1457; --ink:#1f2937; --muted:#6b7280; --faint:#9ca3af; --line:#fce4ec; --bg:#fdf2f8; --good:#16a34a; --danger:#dc2626; }
-  html,body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.5; }
+  html,body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.5; overflow-x:hidden; }
   .fred { font-family:'Fredoka',ui-rounded,system-ui,sans-serif; }
   header { position:sticky; top:0; z-index:10; background:rgba(255,255,255,.96); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); padding:14px 18px; }
   header .brand { font-family:'Fredoka',system-ui; font-weight:700; color:var(--pink-deep); font-size:19px; }
@@ -41,7 +41,7 @@
   .btn.ok { background:var(--good); }
   .btn.no { background:#fff0f0; color:var(--danger); }
   .style-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:12px; margin:12px 0; }
-  .style-card { border:2px solid var(--line); border-radius:14px; padding:8px; cursor:pointer; text-align:center; background:#fff; transition:border-color .15s; }
+  .style-card { border:2px solid var(--line); border-radius:14px; padding:8px; cursor:pointer; text-align:center; background:#fff; transition:border-color .15s; min-width:0; }
   .style-card.sel { border-color:var(--pink); box-shadow:0 0 0 3px #ffd6ec; }
   .style-card .pic { width:100%; aspect-ratio:1; border-radius:10px; background:#fff7fb center/cover no-repeat; display:grid; place-items:center; color:var(--faint); font-size:26px; overflow:hidden; }
   .style-card .pic img { width:100%; height:100%; object-fit:cover; }
@@ -86,7 +86,8 @@
     <div class="style-grid" id="style-grid">
       <div class="center" style="grid-column:1/-1;color:var(--faint);font-size:13px;padding:14px;">Loading styles…</div>
     </div>
-    <input type="file" id="style-upload-input" accept="image/*" style="display:none;">
+    <input type="file" id="style-upload-input" accept="image/*"
+           style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;">
     <div class="msg" id="style-msg"></div>
     <button class="btn" id="style-continue" disabled>Continue →</button>
   </div>
@@ -250,6 +251,12 @@
     try { styles = (await fetch('/api/onboarding/styles', { credentials: 'same-origin' }).then(r => r.json())).styles || []; } catch (_) {}
     const grid = $('style-grid');
     grid.innerHTML = '';
+    if (!styles.length) {
+      const note = document.createElement('div');
+      note.style.cssText = 'grid-column:1/-1;font-size:13px;color:var(--muted);margin-bottom:2px;';
+      note.textContent = 'Upload a picture in the art style you want for the whole board.';
+      grid.appendChild(note);
+    }
     for (const s of styles) {
       const card = document.createElement('div'); card.className = 'style-card'; card.dataset.id = s.id;
       card.innerHTML = '<div class="pic"><img src="/api/onboarding/styles?image=' + s.id + '" alt="" loading="lazy"></div>' +

@@ -31,6 +31,8 @@ function rowOut(r) {
     description: r.description,
     blobUrl: r.blob_url,
     blobKey: r.blob_key,
+    previewBlobKey: r.preview_blob_key || null,
+    previewUrl: (r.preview_blob_key || r.blob_key) ? `/api/style-guides/public?image=${r.id}` : null,
     active: !!r.active,
     sortOrder: r.sort_order,
     createdBy: r.created_by,
@@ -39,9 +41,12 @@ function rowOut(r) {
 }
 
 async function list(req, res, db) {
+  // PUBLIC guides only (child_id IS NULL). Parents' private uploads are
+  // child-scoped and managed from the parent view, not the Lab.
   const rows = await db`
-    SELECT id, label, description, blob_url, blob_key, active, sort_order, created_by, created_at
+    SELECT id, label, description, blob_url, blob_key, preview_blob_key, active, sort_order, created_by, created_at
     FROM style_guides
+    WHERE child_id IS NULL
     ORDER BY sort_order ASC, created_at ASC
   `;
   res.setHeader('Cache-Control', 'no-store');
@@ -54,15 +59,17 @@ async function add(req, res, db, email) {
   const blobKey = typeof b.blobKey === 'string' ? b.blobKey.trim() : '';
   const description = typeof b.description === 'string' ? b.description.slice(0, 600) : null;
   const sortOrder = Number.isInteger(b.sortOrder) ? b.sortOrder : 0;
+  // Optional polished marketing image for the public picker/home page.
+  const previewBlobKey = typeof b.previewBlobKey === 'string' && b.previewBlobKey.trim() ? b.previewBlobKey.trim() : null;
   if (!label) { res.status(400).json({ error: 'label required' }); return; }
   if (!blobKey) { res.status(400).json({ error: 'blobKey required (upload via /api/upload first)' }); return; }
   // Resolve a viewable URL via the existing /api/media route so the UI can
-  // <img src=> straight from the database row.
+  // <img src=> straight from the database row. child_id NULL = public guide.
   const blobUrl = `/api/media?key=${encodeURIComponent(blobKey)}`;
   const rows = await db`
-    INSERT INTO style_guides (label, description, blob_url, blob_key, sort_order, created_by)
-    VALUES (${label}, ${description}, ${blobUrl}, ${blobKey}, ${sortOrder}, ${email})
-    RETURNING id, label, description, blob_url, blob_key, active, sort_order, created_by, created_at
+    INSERT INTO style_guides (label, description, blob_url, blob_key, preview_blob_key, sort_order, created_by, child_id)
+    VALUES (${label}, ${description}, ${blobUrl}, ${blobKey}, ${previewBlobKey}, ${sortOrder}, ${email}, NULL)
+    RETURNING id, label, description, blob_url, blob_key, preview_blob_key, active, sort_order, created_by, created_at
   `;
   res.status(200).json({ ok: true, styleGuide: rowOut(rows[0]) });
 }
@@ -77,6 +84,7 @@ async function patch(req, res, db) {
   if (typeof b.description === 'string' || b.description === null) { sets.push('description'); vals.description = b.description ? String(b.description).slice(0, 600) : null; }
   if (typeof b.active === 'boolean') { sets.push('active'); vals.active = b.active; }
   if (Number.isInteger(b.sortOrder)) { sets.push('sort_order'); vals.sort_order = b.sortOrder; }
+  if (typeof b.previewBlobKey === 'string' || b.previewBlobKey === null) { sets.push('preview'); vals.preview = b.previewBlobKey ? String(b.previewBlobKey).trim() : null; }
   if (!sets.length) { res.status(400).json({ error: 'no fields to update' }); return; }
   // Build the update with a small switch — keeps neon-tagged-template safety.
   const r = await db`
@@ -84,9 +92,10 @@ async function patch(req, res, db) {
       label       = COALESCE(${vals.label       ?? null}, label),
       description = CASE WHEN ${'description' in vals} THEN ${vals.description ?? null} ELSE description END,
       active      = COALESCE(${vals.active      ?? null}, active),
-      sort_order  = COALESCE(${vals.sort_order  ?? null}, sort_order)
+      sort_order  = COALESCE(${vals.sort_order  ?? null}, sort_order),
+      preview_blob_key = CASE WHEN ${'preview' in vals} THEN ${vals.preview ?? null} ELSE preview_blob_key END
     WHERE id = ${id}
-    RETURNING id, label, description, blob_url, blob_key, active, sort_order, created_by, created_at
+    RETURNING id, label, description, blob_url, blob_key, preview_blob_key, active, sort_order, created_by, created_at
   `;
   if (!r.length) { res.status(404).json({ error: 'not found' }); return; }
   res.status(200).json({ ok: true, styleGuide: rowOut(r[0]) });
