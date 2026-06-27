@@ -1238,7 +1238,7 @@
     <select id="disp-device-role" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;width:100%;box-sizing:border-box;">
       <option value="child" id="opt-child-view">This child's board (this view)</option>
       <option value="parent">Parent dashboard</option>
-      <option value="therapist">Therapist view</option>
+      <option value="therapist" id="opt-therapist-view">Therapist view</option>
     </select>
     <div id="disp-account" style="margin-top:18px;border-top:1px solid #eee;padding-top:14px;display:none;">
       <label>Account &amp; password</label>
@@ -1251,6 +1251,12 @@
         <button class="secondary" id="disp-acct-forgot">Email reset link</button>
       </div>
       <div id="disp-acct-msg" style="font-size:12px;color:#666;margin-top:6px;"></div>
+    </div>
+    <div id="disp-admin" style="margin-top:18px;border-top:1px solid #eee;padding-top:14px;display:none;">
+      <label>Admin tools</label>
+      <div style="font-size:12px;color:#666;margin:4px 0 8px;">One-time fix: make every tile's image fill its square uniformly.</div>
+      <button class="secondary" id="disp-normalize">Resize all tiles to fill</button>
+      <div id="disp-normalize-msg" style="font-size:12px;color:#666;margin-top:6px;"></div>
     </div>
     <div class="button-row">
       <button class="secondary" id="display-reset">Reset to defaults</button>
@@ -1266,7 +1272,7 @@
     <div style="display:flex;flex-direction:column;gap:10px;">
       <button class="role-pick" data-role="child" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🧒 <span class="cn">Your child</span> — the communication board</button>
       <button class="role-pick" data-role="parent" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">👪 Parent — the dashboard</button>
-      <button class="role-pick" data-role="therapist" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🩺 Therapist — the facilitator view</button>
+      <button class="role-pick" data-role="therapist" id="role-therapist" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🩺 Therapist — the facilitator view</button>
     </div>
   </div>
 </div>
@@ -1565,6 +1571,15 @@
       const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
       if (r.ok) { const d = await r.json(); sessionUser = (d && d.user) || null; }
     } catch (_) { sessionUser = null; }
+    // Therapist view is a day-two feature — admin only. Hide the option to make
+    // it (or open it) from this device for everyone else.
+    try {
+      if (!sessionUser || sessionUser.role !== 'admin') {
+        const o = document.getElementById('opt-therapist-view'); if (o) o.remove();
+        const b = document.getElementById('role-therapist'); if (b) b.style.display = 'none';
+        const tb = document.getElementById('therapist-btn'); if (tb) tb.style.display = 'none';
+      }
+    } catch (_) {}
   }
   function canEdit() { return !!sessionUser && (sessionUser.role === 'admin' || sessionUser.role === 'parent'); }
   const objectURLs = new Map();
@@ -2253,7 +2268,9 @@
 
   let flushing = false;
   async function flushEvents() {
-    if (flushing || !db || !authToken || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+    // Flush whenever we're online — works for cookie-session boards too (a
+    // parent-unlocked iPad has no bearer authToken; apiFetch sends the cookie).
+    if (flushing || !db || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
     flushing = true;
     try {
       // Read up to 200 queued events
@@ -3603,6 +3620,8 @@
         document.getElementById('disp-acct-email').textContent = sessionUser.email;
       } else { acct.style.display = 'none'; }
     }
+    const adminTools = document.getElementById('disp-admin');
+    if (adminTools) adminTools.style.display = (sessionUser && sessionUser.role === 'admin') ? '' : 'none';
   }
   function openDisplayModal() { populateDisplayModal(); displayModal.classList.add('show'); }
   // Change password / email reset link from the iOS app's Display Settings.
@@ -3632,6 +3651,28 @@
         await fetch('/api/auth/reset-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: sessionUser.email }) });
         msg('Reset link sent to ' + sessionUser.email + '.');
       } catch (err) { msg('Could not send: ' + (err.message || err), true); } finally { forgotBtn.disabled = false; }
+    });
+    // Admin one-time: resize every tile to fill its square (keep_aspect=false).
+    const nmsg = (t, err) => { const m = document.getElementById('disp-normalize-msg'); if (m) { m.textContent = t || ''; m.style.color = err ? '#c0392b' : '#666'; } };
+    const normBtn = document.getElementById('disp-normalize');
+    if (normBtn) normBtn.addEventListener('click', async () => {
+      if (!confirm('Resize every tile to fill its square? This updates all tiles on ' + (CHILD_NAME || 'this') + "'s board.")) return;
+      normBtn.disabled = true; nmsg('Resizing…');
+      try {
+        const r = await apiFetch('/api/admin/normalize-tiles?childId=' + encodeURIComponent(CHILD_ID), { method: 'POST' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        // Reflect it locally so the board updates without a reload.
+        for (const s of SECTIONS) {
+          try {
+            for (const it of await getAllItems(s)) { if (it.keepAspect) { it.keepAspect = false; await putItem(it); } }
+            for (const c of await getAllCats(s)) { if (c.keepAspect) { c.keepAspect = false; await putCat(c); } }
+          } catch (_) {}
+        }
+        await renderAll();
+        nmsg('Done — resized ' + ((d.items || 0) + (d.categories || 0)) + ' tiles.');
+      } catch (err) { nmsg('Could not resize: ' + (err.message || err), true); }
+      finally { normBtn.disabled = false; }
     });
   })();
   function commitDisplay() { saveDisplay(); applyDisplay(); }

@@ -218,7 +218,7 @@
   <div class="brand fred">Fletcher's World <small>Parent dashboard</small></div>
   <div class="right">
     <span class="device-pill"><span class="dot"></span> Tablet · online</span>
-    <span class="role-switch">View as <a href="#" id="to-therapist">Therapist</a> · <a href="#" id="device-default">Change device default</a><a href="/admin/taxonomy.html" id="admin-taxonomy" style="display:none;"> · 🧬 Taxonomy</a></span>
+    <span class="role-switch"><span id="therapist-switch" style="display:none;">View as <a href="#" id="to-therapist">Therapist</a> · </span><a href="#" id="device-default">Change device default</a><a href="/admin/taxonomy.html" id="admin-taxonomy" style="display:none;"> · 🧬 Taxonomy</a></span>
   </div>
 </header>
 
@@ -600,6 +600,14 @@
     </div>
   </div>
 
+  <!-- BOARD VOICE (change = coming soon) -->
+  <div class="section-label">Voice</div>
+  <div class="panel">
+    <h2>Board voice <span style="font-weight:400;color:#9ca3af;font-size:13px;">· coming soon</span></h2>
+    <p class="hint"><span class="cn">Your child</span>'s board speaks in the voice you chose during setup. Changing the voice from here is coming soon.</p>
+    <button class="btn" disabled style="opacity:.55;cursor:default;">Change voice (coming soon)</button>
+  </div>
+
   <!-- ALBUM -->
   <div class="section-label">Picture album</div>
   <div class="panel" id="album-panel">
@@ -640,9 +648,9 @@
     </div>
   </div>
 
-  <!-- THERAPY TEAM -->
-  <div class="section-label">Care team</div>
-  <div class="panel">
+  <!-- THERAPY TEAM (day-two; admin only for now) -->
+  <div class="section-label therapist-only" style="display:none;">Care team</div>
+  <div class="panel therapist-only" style="display:none;">
     <h2>Who has access to <span id="team-child-name">your child</span></h2>
     <p class="hint">Therapists and school team members you invite see your child's progress, run live games on the tablet, and can build their own custom boards. You can remove anyone at any time.</p>
     <div id="team-list" style="display:flex;flex-direction:column;gap:8px;margin:14px 0;"></div>
@@ -650,9 +658,9 @@
     <span id="team-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
   </div>
 
-  <!-- THERAPIST-SHARED BOARDS (parent override) -->
-  <div class="section-label">Therapist boards on the tablet</div>
-  <div class="panel">
+  <!-- THERAPIST-SHARED BOARDS (parent override; day-two, admin only for now) -->
+  <div class="section-label therapist-only" style="display:none;">Therapist boards on the tablet</div>
+  <div class="panel therapist-only" style="display:none;">
     <h2>Custom boards a therapist has shared</h2>
     <p class="hint">Anything your therapists make for <span id="shared-child-name">your child</span> appears here. By default they show on the tablet right away. Tap "Remove from view" if you don't want one on the board — the therapist's content is unchanged; it just stops showing for your child.</p>
     <div id="shared-list" style="display:flex;flex-direction:column;gap:8px;margin-top:14px;"></div>
@@ -878,7 +886,12 @@
       const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
       if (!r.ok) return;
       const u = (await r.json()).user;
-      if (u && u.role === 'admin') { const el = document.getElementById('admin-taxonomy'); if (el) el.style.display = ''; }
+      // Therapist view + invite/team features are day-two — admin only for now.
+      if (u && u.role === 'admin') {
+        const el = document.getElementById('admin-taxonomy'); if (el) el.style.display = '';
+        const ts = document.getElementById('therapist-switch'); if (ts) ts.style.display = '';
+        document.querySelectorAll('.therapist-only').forEach(n => { n.style.display = ''; });
+      }
     } catch (_) {}
   })();
 

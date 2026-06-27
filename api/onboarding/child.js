@@ -8,6 +8,7 @@ import { checkAuth } from '../_lib/auth.js';
 import { isParentOf } from '../_lib/access.js';
 import { sql } from '../_lib/db.js';
 import { ensureProgress, nextStep, setStep, TIER_LABELS, LANGUAGE_LABELS } from '../_lib/onboarding.js';
+import { isSelectableVoice } from '../_lib/voices.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -20,9 +21,11 @@ export default async function handler(req, res) {
   const tier = TIER_LABELS.has(b.tier) ? b.tier : 'under3';
   const language = LANGUAGE_LABELS.has(b.language) ? b.language : 'en';
   // ElevenLabs voice ids are ~20-char alphanumerics; accept and store the
-  // parent's pick so every tile's generated audio speaks in that voice.
-  const voiceId = typeof b.voiceId === 'string' && /^[A-Za-z0-9]{8,40}$/.test(b.voiceId.trim())
+  // parent's pick so every tile's generated audio speaks in that voice. Gate it
+  // to the curated catalog — only an admin may assign the reserved default voice.
+  const rawVoice = typeof b.voiceId === 'string' && /^[A-Za-z0-9]{8,40}$/.test(b.voiceId.trim())
     ? b.voiceId.trim() : null;
+  const voiceId = (rawVoice && isSelectableVoice(rawVoice, { isAdmin: auth.user.role === 'admin' })) ? rawVoice : null;
   // The chosen art style (a style_guides id) becomes the child's HOUSE STYLE —
   // every tile generated later attaches this exemplar so the board stays
   // visually consistent.
