@@ -320,6 +320,14 @@
 (() => {
   const m = location.pathname.match(/^\/therapist\/([^\/]+)/);
   const slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';
+  // Therapist view is a day-two feature — admin only for now. Anyone else is
+  // bounced to the parent dashboard.
+  (async () => {
+    try {
+      const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null);
+      if (!me || !me.user || me.user.role !== 'admin') location.replace('/parent/' + encodeURIComponent(slug));
+    } catch (_) { location.replace('/parent/' + encodeURIComponent(slug)); }
+  })();
   // Child's name from the slug — swap every hardcoded "Fletcher" in static copy
   // (brand, hints, the live-start button) and fill any .cn placeholders. Safe
   // here: this is a control panel, not the child's live board.
