@@ -1020,6 +1020,8 @@
     <input type="password" id="login-pass" autocomplete="current-password">
     <input type="hidden" id="login-user" value="admin">
     <div class="error" id="login-error"></div>
+    <div style="margin-top:8px;font-size:13px;"><a href="#" id="login-forgot" style="color:#ad1457;font-weight:600;text-decoration:none;display:none;">Forgot password?</a></div>
+    <div id="login-forgot-msg" style="font-size:12px;color:#666;margin-top:4px;"></div>
     <div class="button-row">
       <button class="secondary" id="login-cancel">Cancel</button>
       <button class="primary" id="login-submit">Unlock</button>
@@ -1238,6 +1240,18 @@
       <option value="parent">Parent dashboard</option>
       <option value="therapist">Therapist view</option>
     </select>
+    <div id="disp-account" style="margin-top:18px;border-top:1px solid #eee;padding-top:14px;display:none;">
+      <label>Account &amp; password</label>
+      <div style="font-size:12px;color:#666;margin:4px 0 8px;">Signed in as <strong id="disp-acct-email">…</strong></div>
+      <input type="password" id="disp-acct-current" autocomplete="current-password" placeholder="Current password" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;margin-bottom:6px;box-sizing:border-box;">
+      <input type="password" id="disp-acct-new" autocomplete="new-password" placeholder="New password (min 8)" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;margin-bottom:6px;box-sizing:border-box;">
+      <input type="password" id="disp-acct-confirm" autocomplete="new-password" placeholder="Confirm new password" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="primary" id="disp-acct-change" style="flex:1;">Change password</button>
+        <button class="secondary" id="disp-acct-forgot">Email reset link</button>
+      </div>
+      <div id="disp-acct-msg" style="font-size:12px;color:#666;margin-top:6px;"></div>
+    </div>
     <div class="button-row">
       <button class="secondary" id="display-reset">Reset to defaults</button>
       <button class="primary" id="display-done">Done</button>
@@ -2315,8 +2329,20 @@
     }
     document.getElementById('login-pass').value = '';
     document.getElementById('login-error').textContent = '';
+    document.getElementById('login-forgot-msg').textContent = '';
+    // Offer a reset link only in password mode (we know the account email then).
+    document.getElementById('login-forgot').style.display = (loginMode === 'password' && sessionUser && sessionUser.email) ? 'inline' : 'none';
     loginModal.classList.add('show');
     document.getElementById('login-pass').focus();
+  });
+  document.getElementById('login-forgot').addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!sessionUser || !sessionUser.email) return;
+    const m = document.getElementById('login-forgot-msg'); m.textContent = 'Sending…';
+    try {
+      await fetch('/api/auth/reset-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: sessionUser.email }) });
+      m.textContent = 'Reset link sent to ' + sessionUser.email + '.';
+    } catch (err) { m.textContent = 'Could not send: ' + (err.message || err); }
   });
   document.getElementById('login-cancel').addEventListener('click', () => loginModal.classList.remove('show'));
   // Safety: tapping the backdrop dismisses the login modal so a kid who
@@ -3563,8 +3589,45 @@
     }
     const hb = document.getElementById('disp-color-header-bg');     if (hb) hb.value = display.headerColors.bg;
     const ht = document.getElementById('disp-color-header-text');   if (ht) ht.value = display.headerColors.text;
+    // Account section — only for a signed-in account (not the kid's open board).
+    const acct = document.getElementById('disp-account');
+    if (acct) {
+      if (sessionUser && sessionUser.email) {
+        acct.style.display = '';
+        document.getElementById('disp-acct-email').textContent = sessionUser.email;
+      } else { acct.style.display = 'none'; }
+    }
   }
   function openDisplayModal() { populateDisplayModal(); displayModal.classList.add('show'); }
+  // Change password / email reset link from the iOS app's Display Settings.
+  (function wireAccountSettings() {
+    const msg = (t, err) => { const m = document.getElementById('disp-acct-msg'); if (!m) return; m.textContent = t || ''; m.style.color = err ? '#c0392b' : '#666'; };
+    const changeBtn = document.getElementById('disp-acct-change');
+    if (changeBtn) changeBtn.addEventListener('click', async () => {
+      const cur = document.getElementById('disp-acct-current').value;
+      const nw = document.getElementById('disp-acct-new').value;
+      const cf = document.getElementById('disp-acct-confirm').value;
+      if (nw.length < 8) { msg('New password must be at least 8 characters.', true); return; }
+      if (nw !== cf) { msg('New passwords do not match.', true); return; }
+      changeBtn.disabled = true; msg('Saving…');
+      try {
+        const r = await fetch('/api/auth/change-password', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword: cur, newPassword: nw }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        document.getElementById('disp-acct-current').value = ''; document.getElementById('disp-acct-new').value = ''; document.getElementById('disp-acct-confirm').value = '';
+        msg('Password changed.');
+      } catch (err) { msg(err.message || String(err), true); } finally { changeBtn.disabled = false; }
+    });
+    const forgotBtn = document.getElementById('disp-acct-forgot');
+    if (forgotBtn) forgotBtn.addEventListener('click', async () => {
+      if (!sessionUser || !sessionUser.email) { msg('No account email.', true); return; }
+      forgotBtn.disabled = true; msg('Sending…');
+      try {
+        await fetch('/api/auth/reset-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: sessionUser.email }) });
+        msg('Reset link sent to ' + sessionUser.email + '.');
+      } catch (err) { msg('Could not send: ' + (err.message || err), true); } finally { forgotBtn.disabled = false; }
+    });
+  })();
   function commitDisplay() { saveDisplay(); applyDisplay(); }
   document.getElementById('display-btn').addEventListener('click', openDisplayModal);
   // Quick switch to the parent / therapist dashboards for the current child.

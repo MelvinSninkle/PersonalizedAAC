@@ -657,6 +657,29 @@
     <span id="backup-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
   </div>
 
+  <!-- ACCOUNT & SECURITY -->
+  <div class="section-label">Account &amp; security</div>
+  <div class="panel" id="account-panel">
+    <h2>Password</h2>
+    <p class="hint">Signed in as <strong id="acct-email">…</strong>. Change your password below, or email yourself a reset link.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;max-width:340px;">
+      <label style="font-size:12px;font-weight:700;color:var(--muted);">Current password
+        <input id="acct-current" type="password" autocomplete="current-password" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;">
+      </label>
+      <label style="font-size:12px;font-weight:700;color:var(--muted);">New password (min 8 chars)
+        <input id="acct-new" type="password" autocomplete="new-password" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;">
+      </label>
+      <label style="font-size:12px;font-weight:700;color:var(--muted);">Confirm new password
+        <input id="acct-confirm" type="password" autocomplete="new-password" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;">
+      </label>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <button class="btn primary" id="acct-change">Change password</button>
+        <button class="btn ghost" id="acct-forgot">Email me a reset link</button>
+      </div>
+      <span id="acct-msg" style="font-size:13px;color:var(--muted);"></span>
+    </div>
+  </div>
+
   <!-- FAMILY / PEOPLE — name vs. relationship (docs/people-data-model.md) -->
   <div class="section-label">Family &amp; people</div>
   <div class="panel">
@@ -1225,6 +1248,39 @@
     } catch (err) { styleRegenMsg('Could not save: ' + (err.message || err)); }
     finally { use.disabled = false; use.textContent = 'Use this style'; }
   });
+
+  // ---- Account & security: change password / email reset link ----
+  (async () => {
+    let myEmail = '';
+    try { const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null); myEmail = (me && me.user && me.user.email) || ''; } catch (_) {}
+    const emailEl = document.getElementById('acct-email'); if (emailEl) emailEl.textContent = myEmail || 'your account';
+    const acctMsg = (t, err) => { const m = document.getElementById('acct-msg'); if (!m) return; m.textContent = t || ''; m.style.color = err ? '#dc2626' : 'var(--muted)'; };
+    const changeBtn = document.getElementById('acct-change');
+    if (changeBtn) changeBtn.addEventListener('click', async () => {
+      const cur = document.getElementById('acct-current').value;
+      const nw = document.getElementById('acct-new').value;
+      const cf = document.getElementById('acct-confirm').value;
+      if (nw.length < 8) { acctMsg('New password must be at least 8 characters.', true); return; }
+      if (nw !== cf) { acctMsg('New passwords do not match.', true); return; }
+      changeBtn.disabled = true; acctMsg('Saving…');
+      try {
+        const r = await fetch('/api/auth/change-password', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword: cur, newPassword: nw }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        document.getElementById('acct-current').value = ''; document.getElementById('acct-new').value = ''; document.getElementById('acct-confirm').value = '';
+        acctMsg('Password changed.');
+      } catch (err) { acctMsg(err.message || String(err), true); } finally { changeBtn.disabled = false; }
+    });
+    const forgotBtn = document.getElementById('acct-forgot');
+    if (forgotBtn) forgotBtn.addEventListener('click', async () => {
+      if (!myEmail) { acctMsg('No email on file for this account.', true); return; }
+      forgotBtn.disabled = true; acctMsg('Sending…');
+      try {
+        await fetch('/api/auth/reset-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: myEmail }) });
+        acctMsg('Sent — check ' + myEmail + ' for the reset link.');
+      } catch (err) { acctMsg('Could not send: ' + (err.message || err), true); } finally { forgotBtn.disabled = false; }
+    });
+  })();
 
   // ---- Mode launcher — starts a real session on Fletcher's tablet over /api/live ----
   const scrim = document.getElementById('scrim');
