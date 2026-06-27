@@ -56,7 +56,7 @@ async function readBlobBytes(key) {
   return Buffer.concat(chunks);
 }
 
-async function stylize({ db, childId, sourceBytes, contentType, actorEmail, attempt, styleGuide }) {
+async function stylize({ db, childId, sourceBytes, contentType, actorEmail, attempt, styleGuide, guidance }) {
   const gKey = geminiKey();
   if (!gKey) throw new Error('GEMINI_API_KEY not configured');
   // A small variance instruction makes each retry give a fresh look — same
@@ -65,6 +65,8 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   const variant = attempt > 0
     ? ` Vary the framing and expression slightly from any previous attempt (attempt ${attempt + 1}).`
     : '';
+  // The parent's specific correction (e.g. "add white to his eyes"), applied verbatim.
+  const fix = guidance ? ` Important correction from the parent — apply this exactly: ${guidance}.` : '';
 
   // Two render modes:
   //   • style guide chosen → render the person IN that style: image 1 is the
@@ -72,22 +74,34 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   //     the likeness). This is the "style image + real photo" composition the
   //     whole board shares, so People match the rest of the tiles.
   //   • no style guide → the original tuned warm-storybook portrait.
+  // Why faithful likeness matters here — tells the model to prioritize a true
+  // match over generic prettification. This is the single most important framing
+  // for this step: the child must recognize the real person, not a cute stranger.
+  const PURPOSE =
+    "This is a tile for a young child's AAC (augmentative & alternative communication) device. The child has a " +
+    "developmental disability and must INSTANTLY recognize this exact, specific real person, so a faithful likeness " +
+    "is the top priority. Preserve their identifying features from the photo precisely — face shape, skin tone, " +
+    "hair color and hairstyle, eye color, eyebrows, and any glasses, freckles, or distinctive features — and keep " +
+    "the same apparent age and sex. Re-render them only in the reference art style; do NOT beautify, average, or " +
+    "change their features. A consistent art style across all tiles is what helps the child focus and recognize people. ";
+
   const images = [];
   let prompt;
   if (styleGuide && styleGuide.image && styleGuide.image.buffer) {
     images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
     images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
     prompt =
-      "Re-illustrate the person in the photo as a head-and-shoulders portrait for a young child's " +
-      "communication board, rendered in the art style of the style-reference image. Keep the person's " +
-      "face and likeness clearly recognizable; soft even lighting; clean soft pastel background; centered; " +
-      "bright friendly colors. Do not add any text, words, or letters." + variant +
-      "\n\nImage 1 is the STYLE reference — copy its art style only, not its content. " +
-      "Image 2 shows the person — keep this person's face and likeness clearly recognizable.";
+      PURPOSE +
+      "Re-illustrate the person in the photo as a head-and-shoulders portrait for the communication board, " +
+      "rendered in the art style of the style-reference image. Soft even lighting; clean soft pastel background; " +
+      "centered; bright friendly colors. Do not add any text, words, or letters." + variant +
+      "\n\nImage 1 is the STYLE reference — copy its art style only (linework, palette, shading, finish), NOT its " +
+      "content or the people in it. Image 2 is the real person — keep THIS person's face and likeness an unmistakable match.";
   } else {
     images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
-    prompt = STYLE_PROMPT_BASE + variant;
+    prompt = PURPOSE + STYLE_PROMPT_BASE + variant;
   }
+  prompt += fix;
   prompt += SQUARE_RULE;
 
   // KEYSTONE: portraits anchor every later render, so use the advanced Pro tier.
@@ -149,8 +163,10 @@ export default async function handler(req, res) {
                       updated_at = NOW()
                 WHERE user_id = ${Number(auth.user.uid)}`;
       const styleGuide = await loadStyleGuide(db, styleGuideId);
+      const attempt = q.attempt ? Math.min(5, Math.max(0, parseInt(q.attempt, 10) || 0)) : 0;
+      const guidance = typeof q.guidance === 'string' ? q.guidance.slice(0, 300) : '';
       const draftKey = await stylize({ db, childId, sourceBytes: bytes, contentType,
-                                       actorEmail: auth.user.email, attempt: 0, styleGuide });
+                                       actorEmail: auth.user.email, attempt, styleGuide, guidance });
       res.status(200).json({ ok: true, draftKey });
       return;
     }
@@ -164,9 +180,10 @@ export default async function handler(req, res) {
       const bytes = await loadSourceFromDraft(db, childId, b.draftKey);
       const styleGuideId = b.styleGuideId ? parseInt(b.styleGuideId, 10) : (progress.data && progress.data.styleGuideId) || null;
       const styleGuide = await loadStyleGuide(db, styleGuideId);
+      const guidance = typeof b.guidance === 'string' ? b.guidance.slice(0, 300) : '';
       const draftKey = await stylize({ db, childId, sourceBytes: bytes,
                                        contentType: 'image/jpeg',
-                                       actorEmail: auth.user.email, attempt, styleGuide });
+                                       actorEmail: auth.user.email, attempt, styleGuide, guidance });
       res.status(200).json({ ok: true, draftKey });
       return;
     }
