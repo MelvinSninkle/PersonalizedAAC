@@ -24,6 +24,12 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
+    // Self-heal the per-customer columns so an un-migrated deploy can't break
+    // upload (mirrors api/init.js). Idempotent + cheap.
+    await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS blob_key TEXT`;
+    await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS child_id TEXT`;
+    await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS ephemeral BOOLEAN NOT NULL DEFAULT FALSE`;
+
     const progress = await ensureProgress(db, auth.user);
     const childId = progress.child_id;
 

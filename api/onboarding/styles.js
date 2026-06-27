@@ -31,9 +31,18 @@ export default async function handler(req, res) {
 
     // Only GLOBAL templates (child_id IS NULL) appear in the chooser — a
     // parent's own uploaded template is child-scoped and referenced by id.
-    const rows = await db`
-      SELECT id, label, description FROM style_guides
-      WHERE active = TRUE AND child_id IS NULL ORDER BY sort_order ASC, created_at ASC`;
+    // Fall back to all active guides if the child_id column hasn't been migrated
+    // yet, so a lagging deploy still shows the picker instead of erroring.
+    let rows;
+    try {
+      rows = await db`
+        SELECT id, label, description FROM style_guides
+        WHERE active = TRUE AND child_id IS NULL ORDER BY sort_order ASC, created_at ASC`;
+    } catch (_) {
+      rows = await db`
+        SELECT id, label, description FROM style_guides
+        WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC`;
+    }
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
       styles: rows.map(r => ({ id: Number(r.id), label: r.label, description: r.description || null })),
