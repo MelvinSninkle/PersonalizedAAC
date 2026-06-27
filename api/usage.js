@@ -55,6 +55,26 @@ export default async function handler(req, res) {
       costCents: r.cost_cents == null ? null : Number(r.cost_cents),
       createdAt: r.created_at,
     }));
+
+    // Resolve each generation's reference blob key(s) back to the style_guides
+    // row they belong to, so the admin can see EXACTLY which style guide id (and
+    // owner) was used — proof of which style fed the generation.
+    const allKeys = [...new Set(out.recent.flatMap((r) => r.referenceKeys || []))];
+    if (allKeys.length) {
+      let sg = [];
+      try {
+        sg = await db`SELECT id, label, child_id, ephemeral, active, blob_key
+                      FROM style_guides WHERE blob_key = ANY(${allKeys})`;
+      } catch (_) { sg = []; }
+      const byKey = new Map(sg.map((s) => [s.blob_key, s]));
+      out.recent.forEach((r) => {
+        r.styleRefs = (r.referenceKeys || [])
+          .map((k) => byKey.get(k))
+          .filter(Boolean)
+          .map((s) => ({ id: Number(s.id), label: s.label, childId: s.child_id || null,
+                         ephemeral: !!s.ephemeral, active: !!s.active }));
+      });
+    }
   } catch (_) { /* table may not exist yet — return zeros */ }
 
   res.setHeader('Cache-Control', 'no-store');
