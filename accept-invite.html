@@ -58,6 +58,8 @@
         <label for="si-pw">Password</label>
         <input id="si-pw" type="password" autocomplete="current-password">
         <button class="primary" id="si-btn">Sign in & accept</button>
+        <p style="margin-top:10px;font-size:13px;"><a href="#" id="si-forgot" style="color:var(--pink-deep,#ad1457);font-weight:600;">Forgot password?</a></p>
+        <div id="si-forgot-msg" style="font-size:12px;color:#666;margin-top:4px;"></div>
       </div>
 
       <!-- Sign up (new user) -->
@@ -171,6 +173,16 @@
     const d = await r.json().catch(()=>({}));
     if (!r.ok || !d.ok) { msg(d.error || 'Sign-in failed.'); btn.disabled = false; btn.textContent = prev; return; }
     await accept('accept');
+  });
+
+  const siForgot = $('si-forgot');
+  if (siForgot) siForgot.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const fm = $('si-forgot-msg'); fm.textContent = 'Sending…';
+    try {
+      await fetch('/api/auth/reset-request', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify({ email: claim.email }) });
+      fm.textContent = 'Reset link sent to ' + claim.email + '.';
+    } catch (err) { fm.textContent = 'Could not send: ' + (err.message || err); }
   });
 
   $('su-btn').addEventListener('click', async () => {

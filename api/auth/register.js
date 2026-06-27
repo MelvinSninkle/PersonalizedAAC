@@ -101,6 +101,17 @@ export default async function handler(req, res) {
                  ON CONFLICT (user_id, child_id) DO NOTHING`;
       } catch (_) { /* table may not exist pre-init; backfill covers it later */ }
 
+      // Seed the onboarding row with the child's name so Step 1 prefills it from
+      // signup (the prior page) instead of starting blank.
+      if (childName) {
+        try {
+          await db`INSERT INTO onboarding_progress (user_id, child_id, step, data)
+                   VALUES (${Number(user.id)}, ${slug}, 'account', ${JSON.stringify({ childName })}::jsonb)
+                   ON CONFLICT (user_id) DO UPDATE
+                     SET data = COALESCE(onboarding_progress.data, '{}'::jsonb) || ${JSON.stringify({ childName })}::jsonb`;
+        } catch (_) { /* table may not exist pre-init; onboarding will create it */ }
+      }
+
       // Drop a session cookie so they walk straight into /onboard signed in.
       const secret = process.env.SESSION_SECRET;
       if (secret) {
