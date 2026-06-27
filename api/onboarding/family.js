@@ -69,37 +69,33 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   const fix = guidance ? ` Important correction from the parent — apply this exactly: ${guidance}.` : '';
 
   // Two render modes:
-  //   • style guide chosen → render the person IN that style: image 1 is the
-  //     style reference (copy its look only), image 2 is the real photo (keep
-  //     the likeness). This is the "style image + real photo" composition the
-  //     whole board shares, so People match the rest of the tiles.
+  //   • style guide chosen → IMAGE 1 = the style reference, IMAGE 2 = the real
+  //     photo. Lead with faithful STYLE copying (incl. the eye treatment) AND
+  //     preserve IDENTITY, so the result matches both the look of the board and
+  //     the specific person.
   //   • no style guide → the original tuned warm-storybook portrait.
-  // Why faithful likeness matters here — tells the model to prioritize a true
-  // match over generic prettification. This is the single most important framing
-  // for this step: the child must recognize the real person, not a cute stranger.
-  const PURPOSE =
-    "This is a tile for a young child's AAC (augmentative & alternative communication) device. The child has a " +
-    "developmental disability and must INSTANTLY recognize this exact, specific real person, so a faithful likeness " +
-    "is the top priority. Preserve their identifying features from the photo precisely — face shape, skin tone, " +
-    "hair color and hairstyle, eye color, eyebrows, and any glasses, freckles, or distinctive features — and keep " +
-    "the same apparent age and sex. Re-render them only in the reference art style; do NOT beautify, average, or " +
-    "change their features. A consistent art style across all tiles is what helps the child focus and recognize people. ";
-
+  const styleDesc = (styleGuide && styleGuide.description) ? String(styleGuide.description).trim() : '';
   const images = [];
   let prompt;
   if (styleGuide && styleGuide.image && styleGuide.image.buffer) {
     images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
     images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
     prompt =
-      PURPOSE +
-      "Re-illustrate the person in the photo as a head-and-shoulders portrait for the communication board, " +
-      "rendered in the art style of the style-reference image. Soft even lighting; clean soft pastel background; " +
-      "centered; bright friendly colors. Do not add any text, words, or letters." + variant +
-      "\n\nImage 1 is the STYLE reference — copy its art style only (linework, palette, shading, finish), NOT its " +
-      "content or the people in it. Image 2 is the real person — keep THIS person's face and likeness an unmistakable match.";
+      "TASK: Redraw the real person shown in IMAGE 2 in the EXACT art style of IMAGE 1.\n" +
+      "IMAGE 1 is the STYLE reference. Copy its art style faithfully and obviously: its linework weight and color, " +
+      "its flat cel coloring and shading, its proportions and shapes, and ESPECIALLY its eye treatment — match how " +
+      "eyes, pupils, and the whites of the eyes are drawn. Do NOT copy IMAGE 1's content, background, or the people in it. " +
+      (styleDesc ? `The style can be described as: ${styleDesc}. ` : '') +
+      "\nIMAGE 2 is the real person. Keep their IDENTITY unmistakable — same skin tone, hair color and hairstyle, " +
+      "face shape, eyebrows, apparent age and sex, and any glasses, freckles, or distinctive features — but DRAW every " +
+      "one of those features in IMAGE 1's art style (do not render them realistically or in a different cartoon style).\n" +
+      "WHY: this is a tile for a young child's AAC communication device; the child has a developmental disability and " +
+      "must instantly recognize BOTH this exact person AND the shared art style that helps them focus — so a faithful " +
+      "style match and a faithful likeness matter equally.\n" +
+      "Head-and-shoulders portrait, centered, clean soft pastel background, bright friendly colors, no text or letters." + variant;
   } else {
     images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
-    prompt = PURPOSE + STYLE_PROMPT_BASE + variant;
+    prompt = STYLE_PROMPT_BASE + variant;
   }
   prompt += fix;
   prompt += SQUARE_RULE;
@@ -115,10 +111,18 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   await put(blobKey, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
   // Log generation with actor_role='onboarding_draft' so it doesn't count
   // toward the parent's monthly quota (api/generate-image excludes that role).
+  // The `style` field is made VERBOSE on purpose so /api/usage can prove which
+  // style guide was used and whether its image was actually attached (vs a
+  // text-only or no-style fallback). reference_keys records the exact blob used.
+  const imgOk = !!(styleGuide && styleGuide.image && styleGuide.image.buffer);
+  const styleLog = styleGuide
+    ? `guide#${styleGuide.id} ${imgOk ? '(IMAGE ATTACHED)' : '(TEXT-ONLY, no image)'} ${styleGuide.label || ''}`.trim()
+    : 'NO-STYLE (default storybook)';
+  const refKeys = (styleGuide && styleGuide.blob_key) ? [styleGuide.blob_key] : [];
   try {
     await db`
-      INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, size, cost_cents)
-      VALUES (${childId}, ${actorEmail || null}, 'onboarding_draft', 'onboarding-portrait', ${styleGuide ? styleGuide.label : 'soft'}, ${prompt}, '1024x1024', 4)`;
+      INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, reference_keys, size, cost_cents)
+      VALUES (${childId}, ${actorEmail || null}, 'onboarding_draft', 'onboarding-portrait', ${styleLog}, ${prompt}, ${refKeys}, '1024x1024', 4)`;
   } catch (_) {}
   return blobKey;
 }
