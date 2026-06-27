@@ -89,6 +89,15 @@
     <input type="file" id="style-upload-input" accept="image/*"
            style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;">
     <div class="msg" id="style-msg"></div>
+
+    <label style="margin-top:16px;">Voice</label>
+    <p class="note" style="margin:0 0 8px;">Pick the voice your child hears whenever they tap a tile. Tap ▶ to hear a sample.</p>
+    <div class="style-grid" id="voice-grid">
+      <div class="center" style="grid-column:1/-1;color:var(--faint);font-size:13px;padding:14px;">Loading voices…</div>
+    </div>
+    <audio id="voice-audio" style="display:none;"></audio>
+    <div class="msg" id="voice-msg"></div>
+
     <button class="btn" id="style-continue" disabled>Continue →</button>
   </div>
 
@@ -176,6 +185,7 @@
   let CHILD_ID = 'fletcherpeterson';
   let CHILD_NAME = '';
   let selectedStyle = null;          // { id, label }
+  let selectedVoiceId = null;        // chosen ElevenLabs voice id
   let childDraftKey = null, parentDraftKey = null;
   let childFile = null, parentFile = null;
   let childDone = false, parentDone = false;
@@ -227,6 +237,7 @@
       if (d.childName) { CHILD_NAME = d.childName; $('in-name').value = d.childName; }
       if (d.birthDate) $('in-birth').value = d.birthDate;
       if (d.styleGuideId) selectedStyle = { id: Number(d.styleGuideId), label: 'Your style' };
+      if (d.voiceId) selectedVoiceId = d.voiceId;
       applyName();
       // Jump to the saved step.
       if (st.step === 'complete') { showPhase('board'); $('board-busy').style.display = 'none'; $('board-done').style.display = ''; return; }
@@ -283,7 +294,7 @@
     refreshContinue();
   }
   function refreshContinue() {
-    $('style-continue').disabled = !(selectedStyle && $('in-name').value.trim() && $('in-birth').value);
+    $('style-continue').disabled = !(selectedStyle && selectedVoiceId && $('in-name').value.trim() && $('in-birth').value);
   }
   $('in-name').addEventListener('input', refreshContinue);
   $('in-birth').addEventListener('input', refreshContinue);
@@ -307,12 +318,65 @@
     if (!selectedStyle || !name || !birthDate) return;
     $('style-continue').disabled = true; $('style-msg').textContent = 'Saving…';
     try {
-      await apiJSON('/api/onboarding/child', { name, birthDate, tier: 'under3', styleGuideId: selectedStyle.id });
+      await apiJSON('/api/onboarding/child', { name, birthDate, tier: 'under3', styleGuideId: selectedStyle.id, voiceId: selectedVoiceId });
       CHILD_NAME = name; applyName();
       await loadRelOptions();
       showPhase('people');
     } catch (err) { $('style-msg').textContent = 'Could not save: ' + (err.message || err); $('style-continue').disabled = false; }
   });
+
+  // ---- Voice picker (curated catalog; preview via /api/tts) ----
+  (async () => {
+    let voices = [], sampleText = '';
+    try {
+      const d = await fetch('/api/onboarding/voices', { credentials: 'same-origin' }).then(r => r.json());
+      voices = d.voices || []; sampleText = d.sampleText || '';
+    } catch (_) {}
+    const grid = $('voice-grid');
+    grid.innerHTML = '';
+    if (!voices.length) { grid.innerHTML = '<div class="center" style="grid-column:1/-1;color:var(--faint);font-size:13px;padding:14px;">Voices unavailable right now.</div>'; return; }
+    const audio = $('voice-audio');
+    let playingFor = null;
+    for (const v of voices) {
+      const card = document.createElement('div'); card.className = 'style-card'; card.dataset.id = v.id;
+      const meta = [v.gender, v.accent].filter(Boolean).join(' · ');
+      card.innerHTML =
+        '<div class="lbl" style="font-size:14px;">' + v.name + '</div>' +
+        (meta ? '<div style="font-size:11px;color:var(--faint);margin-top:2px;">' + meta + '</div>' : '') +
+        '<button type="button" class="btn ghost tiny voice-play" style="margin-top:8px;">▶ Sample</button>';
+      card.addEventListener('click', () => selectVoice(v.id, card));
+      const playBtn = card.querySelector('.voice-play');
+      playBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        $('voice-msg').textContent = '';
+        if (playingFor === v.id && !audio.paused) { audio.pause(); playBtn.textContent = '▶ Sample'; playingFor = null; return; }
+        document.querySelectorAll('.voice-play').forEach(b => b.textContent = '▶ Sample');
+        playBtn.textContent = '… loading'; playBtn.disabled = true;
+        try {
+          const r = await fetch('/api/tts', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ voiceId: v.id, text: sampleText }) });
+          if (!r.ok) { let er = {}; try { er = await r.json(); } catch (_) {} throw new Error(er.error || ('HTTP ' + r.status)); }
+          const url = URL.createObjectURL(await r.blob());
+          audio.src = url; await audio.play();
+          playingFor = v.id; playBtn.textContent = '⏸ Stop';
+          audio.onended = () => { playBtn.textContent = '▶ Sample'; playingFor = null; };
+        } catch (err) { $('voice-msg').textContent = 'Could not play sample: ' + (err.message || err); playBtn.textContent = '▶ Sample'; }
+        finally { playBtn.disabled = false; }
+      });
+      grid.appendChild(card);
+    }
+    // Re-mark a resumed selection.
+    if (selectedVoiceId) {
+      const ex = grid.querySelector('.style-card[data-id="' + selectedVoiceId + '"]');
+      if (ex) ex.classList.add('sel');
+    }
+    refreshContinue();
+    function selectVoice(id, card) {
+      selectedVoiceId = id;
+      grid.querySelectorAll('.style-card').forEach(c => c.classList.remove('sel'));
+      card.classList.add('sel');
+      refreshContinue();
+    }
+  })();
 
   // ---- PHASE 2: people keystones ----
   async function loadRelOptions() {

@@ -1,10 +1,13 @@
-// GET /api/onboarding/voices → { voices: [{ id, name, description, previewUrl }] }
+// GET /api/onboarding/voices → { voices: [{ id, name, gender, accent }], sampleText }
 //
-// The onboarding voice picker needs the ElevenLabs voices available to the
-// account, with a preview sample, so the parent can choose how the board speaks.
-// Read-only; the chosen voice id is saved on the child (child_settings.voiceId)
-// by the Child step and used for every tile's generated audio.
+// The curated voice choices shown in onboarding. The parent picks one; the
+// chosen id is saved on the child (child_settings.voiceId) by the Child step and
+// used for every tile's generated audio. The admin's personal/default voice
+// (env ELEVENLABS_VOICE_ID) is appended ONLY for an admin caller, so it stays
+// reserved for the admin's own child. Previews are played via /api/tts with the
+// shared sampleText so each voice says the same lines.
 import { checkAuth } from '../_lib/auth.js';
+import { ONBOARDING_VOICES, VOICE_SAMPLE_TEXT } from '../_lib/voices.js';
 
 export const config = { maxDuration: 15 };
 
@@ -13,26 +16,10 @@ export default async function handler(req, res) {
   const auth = await checkAuth(req);
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
 
-  const key = process.env.Fletchers_AAC_Device;
-  if (!key) { res.status(500).json({ error: 'ElevenLabs key (Fletchers_AAC_Device) not configured' }); return; }
-
-  try {
-    const r = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': key } });
-    if (!r.ok) {
-      const detail = await r.text().catch(() => '');
-      res.status(502).json({ error: 'voices fetch failed', detail: detail.slice(0, 300) });
-      return;
-    }
-    const data = await r.json();
-    const voices = (Array.isArray(data.voices) ? data.voices : []).map(v => {
-      const l = v.labels || {};
-      const description = [l.gender, l.accent, l.age, l.description, l.use_case]
-        .filter(Boolean).join(' · ') || (v.category || null);
-      return { id: v.voice_id, name: v.name, description, previewUrl: v.preview_url || null };
-    });
-    res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json({ voices });
-  } catch (err) {
-    res.status(500).json({ error: 'voices failed', detail: String(err.message || err) });
+  const voices = ONBOARDING_VOICES.map(v => ({ ...v }));
+  if (auth.user.role === 'admin' && process.env.ELEVENLABS_VOICE_ID) {
+    voices.unshift({ id: process.env.ELEVENLABS_VOICE_ID, name: 'My voice', gender: '', accent: 'Admin default', adminOnly: true });
   }
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(200).json({ voices, sampleText: VOICE_SAMPLE_TEXT });
 }
