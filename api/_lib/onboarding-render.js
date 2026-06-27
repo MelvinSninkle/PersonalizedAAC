@@ -24,10 +24,14 @@ export async function loadStyleGuide(db, styleGuideId) {
   let row = null;
   if (styleGuideId) {
     row = (await db`SELECT id, label, description, blob_key FROM style_guides WHERE id = ${styleGuideId} AND active = TRUE LIMIT 1`)[0] || null;
-    // A SPECIFIC style was requested but not found (deleted / inactive / wrong
-    // id). Do NOT silently substitute a different style — that's how an uploaded
-    // style quietly became "some other storybook look". Render style-free instead.
-    if (!row) return null;
+    // A SPECIFIC style was requested but isn't there (deleted / inactive / wrong
+    // id). Parents want THEIR exact style — never substitute or go generic. Fail
+    // loud so the caller surfaces it and the parent re-picks / re-uploads.
+    if (!row) {
+      throw Object.assign(
+        new Error("We couldn't find the art style you chose. Go back to the style step and pick or re-upload it."),
+        { status: 404, code: 'style_not_found' });
+    }
   } else {
     // No style chosen → fall back to the first active global template.
     row = (await db`SELECT id, label, description, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`)[0] || null;
