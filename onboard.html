@@ -57,6 +57,11 @@
   .scene-pic img { width:100%; height:100%; object-fit:cover; }
   .spin { width:26px; height:26px; border:3px solid #fce4ec; border-top-color:var(--pink); border-radius:50%; animation:spin .9s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
+  /* Faded, pulsing My World icon shown while an image is generating. */
+  .gen-load { width:72px; height:72px; opacity:.5; animation:genpulse 1.5s ease-in-out infinite; }
+  @keyframes genpulse { 0%,100% { opacity:.3; transform:scale(.9); } 50% { opacity:.7; transform:scale(1.05); } }
+  .style-ref { display:none; align-items:center; gap:10px; margin:0 0 12px; }
+  .style-ref img { width:46px; height:46px; border-radius:10px; object-fit:cover; border:2px solid var(--line); }
   .msg { font-size:13px; color:var(--muted); min-height:18px; margin:8px 0; }
   .center { text-align:center; }
 </style>
@@ -105,6 +110,7 @@
   <div class="panel" id="phase-people" style="display:none;">
     <h3 class="fred">Step 2 · The people</h3>
     <p class="note">Add a photo of <strong id="ppl-child-name">the child</strong> and one grown-up who's here. We'll draw each in your style — approve the look or tap "Try again" for a fresh take.</p>
+    <div class="style-ref" id="people-style-ref"><img id="people-style-thumb" alt=""><span class="note" style="margin:0;">Everyone is drawn in <strong>this style</strong>.</span></div>
     <div class="subjects">
       <div class="subj" id="subj-child">
         <div class="thumb" id="child-thumb">Tap to add the child's photo</div>
@@ -150,7 +156,8 @@
   <div class="panel" id="phase-scene" style="display:none;">
     <h3 class="fred">Step 3 · How things look</h3>
     <p class="note">Here's how everyday things — toys, food, places — will look in your style. Approve it and we'll build the board to match.</p>
-    <div class="scene-pic" id="scene-pic"><div class="spin"></div></div>
+    <div class="style-ref" id="scene-style-ref"><img id="scene-style-thumb" alt=""><span class="note" style="margin:0;">Matching <strong>this style</strong>.</span></div>
+    <div class="scene-pic" id="scene-pic"><img class="gen-load" src="/icons/myworld-globe.png" alt=""></div>
     <div class="msg center" id="scene-msg">Drawing a sample…</div>
     <div class="center">
       <button class="btn ok" id="scene-approve" disabled>✓ Build the board with this look</button>
@@ -162,7 +169,7 @@
   <div class="panel" id="phase-board" style="display:none;">
     <h3 class="fred">Step 4 · Building the board</h3>
     <div class="center" id="board-busy">
-      <div class="spin" style="margin:18px auto;"></div>
+      <img class="gen-load" src="/icons/myworld-globe.png" alt="" style="margin:18px auto;display:block;">
       <p class="note" id="board-msg">Making the tiles in your style… this takes a few minutes. You can keep this open.</p>
       <div style="background:#f3c6dd;border-radius:999px;height:10px;max-width:360px;margin:10px auto;overflow:hidden;">
         <div id="board-bar" style="background:var(--pink);height:100%;width:0;transition:width .3s;"></div>
@@ -216,10 +223,24 @@
     } catch (_) { return file; }
   }
   const mediaUrl = (key) => '/api/media?key=' + encodeURIComponent(key);
+  // Faded, pulsing My World icon shown while a portrait/scene is generating.
+  const GEN_LOADER = '<img class="gen-load" src="/icons/myworld-globe.png" alt="">';
+  // Show the chosen style reference so the parent sees the look being applied
+  // (works for templates and uploads — both are active style_guides rows).
+  function applyStyleRef() {
+    if (!selectedStyle || !selectedStyle.id) return;
+    const src = '/api/onboarding/styles?image=' + selectedStyle.id;
+    for (const [wrapId, imgId] of [['people-style-ref', 'people-style-thumb'], ['scene-style-ref', 'scene-style-thumb']]) {
+      const wrap = $(wrapId), img = document.getElementById(imgId);
+      if (img) img.src = src;
+      if (wrap) wrap.style.display = 'flex';
+    }
+  }
   function showPhase(name) {
     for (const p of ['style', 'people', 'scene', 'board']) $('phase-' + p).style.display = (p === name) ? '' : 'none';
     const idx = { style: 0, people: 1, scene: 2, board: 3 }[name];
     document.querySelectorAll('#steps .dot').forEach((d, i) => d.classList.toggle('on', i <= idx));
+    if (name === 'people' || name === 'scene') applyStyleRef();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -399,7 +420,7 @@
     if (!file) return;
     const thumb = $(role + '-thumb');
     const actions = $(role + '-actions');
-    thumb.innerHTML = '<div class="spin"></div>'; actions.style.display = 'none';
+    thumb.innerHTML = GEN_LOADER; actions.style.display = 'none';
     $('people-msg').textContent = 'Drawing in your style… (about 20–30 seconds)';
     try {
       const blob = await downscale(file);
@@ -484,7 +505,7 @@
   // ---- PHASE 3: scene keystone ----
   async function startScene() {
     sceneAttempt = 0;
-    $('scene-pic').innerHTML = '<div class="spin"></div>';
+    $('scene-pic').innerHTML = GEN_LOADER;
     $('scene-approve').disabled = true; $('scene-retry').disabled = true;
     $('scene-msg').textContent = 'Drawing a sample…';
     try {
@@ -497,7 +518,7 @@
   }
   $('scene-retry').addEventListener('click', async () => {
     sceneAttempt++;
-    $('scene-pic').innerHTML = '<div class="spin"></div>';
+    $('scene-pic').innerHTML = GEN_LOADER;
     $('scene-approve').disabled = true; $('scene-retry').disabled = true; $('scene-msg').textContent = 'Drawing another…';
     try {
       const { draftKey } = await apiJSON('/api/onboarding/scene?action=retry', { attempt: sceneAttempt });

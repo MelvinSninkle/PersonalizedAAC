@@ -24,8 +24,12 @@ export async function loadStyleGuide(db, styleGuideId) {
   let row = null;
   if (styleGuideId) {
     row = (await db`SELECT id, label, description, blob_key FROM style_guides WHERE id = ${styleGuideId} AND active = TRUE LIMIT 1`)[0] || null;
-  }
-  if (!row) {
+    // A SPECIFIC style was requested but not found (deleted / inactive / wrong
+    // id). Do NOT silently substitute a different style — that's how an uploaded
+    // style quietly became "some other storybook look". Render style-free instead.
+    if (!row) return null;
+  } else {
+    // No style chosen → fall back to the first active global template.
     row = (await db`SELECT id, label, description, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`)[0] || null;
   }
   if (!row) return null;
