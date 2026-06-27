@@ -27,16 +27,11 @@ import { sql } from '../_lib/db.js';
 import { geminiKey, geminiProModel, geminiGenerateImage } from '../_lib/gemini.js';
 import { ensureProgress, nextStep, setStep } from '../_lib/onboarding.js';
 import { isValidRelationship, relationshipNeedsSide } from '../_lib/relationships.js';
-import { loadStyleGuide, loadChildVoiceId, synthesizeVoice, SQUARE_RULE } from '../_lib/onboarding-render.js';
+import { loadStyleGuide, loadChildVoiceId, synthesizeVoice, buildPortraitPrompt } from '../_lib/onboarding-render.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 300 };
 
 const MAX_BYTES = 4 * 1024 * 1024;
-const STYLE_PROMPT_BASE =
-  "Re-illustrate this photograph as a warm storybook portrait for a young child's communication board. " +
-  "Keep the person's face and likeness clearly recognizable; soft even lighting; clean soft pastel pink " +
-  "background; centered head-and-shoulders; bright friendly colors; gentle age-appropriate look. " +
-  "Do not add any text, words, or letters.";
 
 async function readBody(req) {
   const chunks = []; let total = 0;
@@ -62,43 +57,15 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   // A small variance instruction makes each retry give a fresh look — same
   // person, different lighting / pose interpretation — so the parent isn't
   // burning a photo decision on a bad first roll.
-  const variant = attempt > 0
-    ? ` Vary the framing and expression slightly from any previous attempt (attempt ${attempt + 1}).`
-    : '';
-  // The parent's specific correction (e.g. "add white to his eyes"), applied verbatim.
-  const fix = guidance ? ` Important correction from the parent — apply this exactly: ${guidance}.` : '';
-
-  // Two render modes:
-  //   • style guide chosen → IMAGE 1 = the style reference, IMAGE 2 = the real
-  //     photo. Lead with faithful STYLE copying (incl. the eye treatment) AND
-  //     preserve IDENTITY, so the result matches both the look of the board and
-  //     the specific person.
-  //   • no style guide → the original tuned warm-storybook portrait.
-  const styleDesc = (styleGuide && styleGuide.description) ? String(styleGuide.description).trim() : '';
+  // Images: when a style guide image is present, IMAGE 1 = style ref, IMAGE 2 =
+  // the real photo; otherwise just the photo. The prompt itself is built by the
+  // SHARED buildPortraitPrompt so the admin Portrait Lab mirrors production 1:1.
   const images = [];
-  let prompt;
   if (styleGuide && styleGuide.image && styleGuide.image.buffer) {
     images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
-    images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
-    prompt =
-      "TASK: Redraw the real person shown in IMAGE 2 in the EXACT art style of IMAGE 1.\n" +
-      "IMAGE 1 is the STYLE reference. Copy its art style faithfully and obviously: its linework weight and color, " +
-      "its flat cel coloring and shading, its proportions and shapes, and ESPECIALLY its eye treatment — match how " +
-      "eyes, pupils, and the whites of the eyes are drawn. Do NOT copy IMAGE 1's content, background, or the people in it. " +
-      (styleDesc ? `The style can be described as: ${styleDesc}. ` : '') +
-      "\nIMAGE 2 is the real person. Keep their IDENTITY unmistakable — same skin tone, hair color and hairstyle, " +
-      "face shape, eyebrows, apparent age and sex, and any glasses, freckles, or distinctive features — but DRAW every " +
-      "one of those features in IMAGE 1's art style (do not render them realistically or in a different cartoon style).\n" +
-      "WHY: this is a tile for a young child's AAC communication device; the child has a developmental disability and " +
-      "must instantly recognize BOTH this exact person AND the shared art style that helps them focus — so a faithful " +
-      "style match and a faithful likeness matter equally.\n" +
-      "Head-and-shoulders portrait, centered, clean soft pastel background, bright friendly colors, no text or letters." + variant;
-  } else {
-    images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
-    prompt = STYLE_PROMPT_BASE + variant;
   }
-  prompt += fix;
-  prompt += SQUARE_RULE;
+  images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
+  const prompt = buildPortraitPrompt({ styleGuide, attempt, guidance });
 
   // KEYSTONE: portraits anchor every later render, so use the advanced Pro tier.
   const g = await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
