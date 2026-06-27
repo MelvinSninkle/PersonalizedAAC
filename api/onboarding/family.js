@@ -111,10 +111,18 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   await put(blobKey, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
   // Log generation with actor_role='onboarding_draft' so it doesn't count
   // toward the parent's monthly quota (api/generate-image excludes that role).
+  // The `style` field is made VERBOSE on purpose so /api/usage can prove which
+  // style guide was used and whether its image was actually attached (vs a
+  // text-only or no-style fallback). reference_keys records the exact blob used.
+  const imgOk = !!(styleGuide && styleGuide.image && styleGuide.image.buffer);
+  const styleLog = styleGuide
+    ? `guide#${styleGuide.id} ${imgOk ? '(IMAGE ATTACHED)' : '(TEXT-ONLY, no image)'} ${styleGuide.label || ''}`.trim()
+    : 'NO-STYLE (default storybook)';
+  const refKeys = (styleGuide && styleGuide.blob_key) ? [styleGuide.blob_key] : [];
   try {
     await db`
-      INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, size, cost_cents)
-      VALUES (${childId}, ${actorEmail || null}, 'onboarding_draft', 'onboarding-portrait', ${styleGuide ? styleGuide.label : 'soft'}, ${prompt}, '1024x1024', 4)`;
+      INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, reference_keys, size, cost_cents)
+      VALUES (${childId}, ${actorEmail || null}, 'onboarding_draft', 'onboarding-portrait', ${styleLog}, ${prompt}, ${refKeys}, '1024x1024', 4)`;
   } catch (_) {}
   return blobKey;
 }
