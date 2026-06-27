@@ -1252,6 +1252,12 @@
       </div>
       <div id="disp-acct-msg" style="font-size:12px;color:#666;margin-top:6px;"></div>
     </div>
+    <div id="disp-admin" style="margin-top:18px;border-top:1px solid #eee;padding-top:14px;display:none;">
+      <label>Admin tools</label>
+      <div style="font-size:12px;color:#666;margin:4px 0 8px;">One-time fix: make every tile's image fill its square uniformly.</div>
+      <button class="secondary" id="disp-normalize">Resize all tiles to fill</button>
+      <div id="disp-normalize-msg" style="font-size:12px;color:#666;margin-top:6px;"></div>
+    </div>
     <div class="button-row">
       <button class="secondary" id="display-reset">Reset to defaults</button>
       <button class="primary" id="display-done">Done</button>
@@ -1571,6 +1577,7 @@
       if (!sessionUser || sessionUser.role !== 'admin') {
         const o = document.getElementById('opt-therapist-view'); if (o) o.remove();
         const b = document.getElementById('role-therapist'); if (b) b.style.display = 'none';
+        const tb = document.getElementById('therapist-btn'); if (tb) tb.style.display = 'none';
       }
     } catch (_) {}
   }
@@ -3613,6 +3620,8 @@
         document.getElementById('disp-acct-email').textContent = sessionUser.email;
       } else { acct.style.display = 'none'; }
     }
+    const adminTools = document.getElementById('disp-admin');
+    if (adminTools) adminTools.style.display = (sessionUser && sessionUser.role === 'admin') ? '' : 'none';
   }
   function openDisplayModal() { populateDisplayModal(); displayModal.classList.add('show'); }
   // Change password / email reset link from the iOS app's Display Settings.
@@ -3642,6 +3651,28 @@
         await fetch('/api/auth/reset-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: sessionUser.email }) });
         msg('Reset link sent to ' + sessionUser.email + '.');
       } catch (err) { msg('Could not send: ' + (err.message || err), true); } finally { forgotBtn.disabled = false; }
+    });
+    // Admin one-time: resize every tile to fill its square (keep_aspect=false).
+    const nmsg = (t, err) => { const m = document.getElementById('disp-normalize-msg'); if (m) { m.textContent = t || ''; m.style.color = err ? '#c0392b' : '#666'; } };
+    const normBtn = document.getElementById('disp-normalize');
+    if (normBtn) normBtn.addEventListener('click', async () => {
+      if (!confirm('Resize every tile to fill its square? This updates all tiles on ' + (CHILD_NAME || 'this') + "'s board.")) return;
+      normBtn.disabled = true; nmsg('Resizing…');
+      try {
+        const r = await apiFetch('/api/admin/normalize-tiles?childId=' + encodeURIComponent(CHILD_ID), { method: 'POST' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        // Reflect it locally so the board updates without a reload.
+        for (const s of SECTIONS) {
+          try {
+            for (const it of await getAllItems(s)) { if (it.keepAspect) { it.keepAspect = false; await putItem(it); } }
+            for (const c of await getAllCats(s)) { if (c.keepAspect) { c.keepAspect = false; await putCat(c); } }
+          } catch (_) {}
+        }
+        await renderAll();
+        nmsg('Done — resized ' + ((d.items || 0) + (d.categories || 0)) + ' tiles.');
+      } catch (err) { nmsg('Could not resize: ' + (err.message || err), true); }
+      finally { normBtn.disabled = false; }
     });
   })();
   function commitDisplay() { saveDisplay(); applyDisplay(); }
