@@ -115,6 +115,7 @@
 
   <!-- PHASE 2 — people keystones -->
   <div class="panel" id="phase-people" style="display:none;">
+    <button class="btn ghost tiny" id="people-back" style="margin-bottom:10px;">← Back to style</button>
     <h3 class="fred">Step 2 · The people</h3>
     <p class="note">Add a photo of <strong id="ppl-child-name">the child</strong> and one grown-up who's here. We'll draw each in your style — approve the look or tap "Try again" for a fresh take.</p>
     <div class="style-ref" id="people-style-ref"><img id="people-style-thumb" alt=""><span class="note" style="margin:0;">Everyone is drawn in <strong>this style</strong>.</span></div>
@@ -164,6 +165,7 @@
 
   <!-- PHASE 3 — scene keystone -->
   <div class="panel" id="phase-scene" style="display:none;">
+    <button class="btn ghost tiny" id="scene-back" style="margin-bottom:10px;">← Back to people</button>
     <h3 class="fred">Step 3 · How things look</h3>
     <p class="note">Here's how everyday things — toys, food, places — will look in your style. Approve it and we'll build the board to match.</p>
     <div class="style-ref" id="scene-style-ref"><img id="scene-style-thumb" alt=""><span class="note" style="margin:0;">Matching <strong>this style</strong>.</span></div>
@@ -527,6 +529,13 @@
   });
 
   $('people-continue').addEventListener('click', () => { showPhase('scene'); startScene(); });
+  // Backward navigation — change/re-upload the style, then Continue forward again.
+  $('people-back').addEventListener('click', () => {
+    showPhase('style');
+    refreshContinue();   // re-enable Continue (it was disabled after the first submit)
+    $('style-msg').textContent = 'Change or re-upload the style, then tap Continue. You can re-draw the photos after.';
+  });
+  $('scene-back').addEventListener('click', () => showPhase('people'));
 
   // ---- PHASE 3: scene keystone ----
   async function startScene() {
