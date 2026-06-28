@@ -45,10 +45,15 @@ export default async function handler(req, res) {
     images.push({ buffer: Buffer.from(photoB64, 'base64'), contentType: photoType });
 
     const prompt = buildPortraitPrompt({ styleGuide, attempt, guidance });
-    // Mirror production keystone routing: OpenAI gpt-image when configured, else Gemini Pro.
-    const engine = oaKey ? ('openai:' + openaiKeystoneModel()) : ('gemini:' + geminiProModel());
+    // Mirror production keystone routing: OpenAI gpt-image when configured, else
+    // Gemini Pro. A per-run `model` override lets you preview a model before
+    // saving it as the production keystone model (PUT /api/admin/keystone-model).
+    const oaModel = oaKey
+      ? ((typeof b.model === 'string' && /^gpt-image[\w.\-]*$/.test(b.model)) ? b.model : await openaiKeystoneModel(db))
+      : null;
+    const engine = oaKey ? ('openai:' + oaModel) : ('gemini:' + geminiProModel());
     const g = oaKey
-      ? await openaiEditImage({ apiKey: oaKey, model: openaiKeystoneModel(), prompt, images, size: '1024x1024' })
+      ? await openaiEditImage({ apiKey: oaKey, model: oaModel, prompt, images, size: '1024x1024' })
       : await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
     if (!g.ok) { res.status(g.status || 502).json({ error: 'Render failed', detail: (g.detail || '').slice(0, 300), prompt }); return; }
 

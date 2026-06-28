@@ -55,7 +55,7 @@ async function generateScene({ db, childId, styleGuide, actorEmail, attempt }) {
   // better); fall back to Gemini Pro (incl. the no-style-image case, since
   // OpenAI edits requires at least one input image).
   const g = (oaKey && images.length)
-    ? await openaiEditImage({ apiKey: oaKey, model: openaiKeystoneModel(), prompt, images, size: '1024x1024' })
+    ? await openaiEditImage({ apiKey: oaKey, model: await openaiKeystoneModel(db), prompt, images, size: '1024x1024' })
     : await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
   if (!g.ok) throw Object.assign(new Error('Scene render failed: ' + (g.detail || '').slice(0, 200)), { status: g.status || 502 });
   const genCost = g.costCents != null ? g.costCents : 13;
