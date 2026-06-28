@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto';
 import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
 import { geminiKey, geminiProModel, geminiGenerateImage } from '../_lib/gemini.js';
+import { openaiEditImage, openaiKeystoneModel } from '../_lib/openai-image.js';
 import { ensureProgress, setStep } from '../_lib/onboarding.js';
 import { loadStyleGuide, SQUARE_RULE } from '../_lib/onboarding-render.js';
 
@@ -32,8 +33,9 @@ const SCENE_PROMPT_BASE =
   "Bright, gentle, age-appropriate. Do not add any text, words, or letters.";
 
 async function generateScene({ db, childId, styleGuide, actorEmail, attempt }) {
+  const oaKey = process.env.OPENAI_API_KEY;
   const gKey = geminiKey();
-  if (!gKey) throw Object.assign(new Error('GEMINI_API_KEY not configured'), { status: 500 });
+  if (!oaKey && !gKey) throw Object.assign(new Error('No image API key configured (OPENAI_API_KEY or GEMINI_API_KEY)'), { status: 500 });
   const variant = attempt > 0
     ? ` Vary the composition and the objects shown slightly from any previous attempt (attempt ${attempt + 1}).`
     : '';
@@ -48,16 +50,22 @@ async function generateScene({ db, childId, styleGuide, actorEmail, attempt }) {
   }
   prompt += SQUARE_RULE;
 
-  // KEYSTONE: anchors every object/scene tile after it, so use the advanced Pro tier.
-  const g = await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
+  // KEYSTONE: anchors every object/scene tile, and style transfer matters — use
+  // OpenAI gpt-image when a style reference image is present (it copies style far
+  // better); fall back to Gemini Pro (incl. the no-style-image case, since
+  // OpenAI edits requires at least one input image).
+  const g = (oaKey && images.length)
+    ? await openaiEditImage({ apiKey: oaKey, model: openaiKeystoneModel(), prompt, images, size: '1024x1024' })
+    : await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
   if (!g.ok) throw Object.assign(new Error('Scene render failed: ' + (g.detail || '').slice(0, 200)), { status: g.status || 502 });
+  const genCost = g.costCents != null ? g.costCents : 13;
   const png = Buffer.from(g.b64, 'base64');
   const blobKey = `onboarding/${childId}/scene/${randomUUID()}.png`;
   await put(blobKey, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
   // Free during onboarding (actor_role='onboarding_draft' is excluded from quota).
   try {
     await db`INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, size, cost_cents)
-             VALUES (${childId}, ${actorEmail || null}, 'onboarding_draft', 'onboarding-scene', ${styleGuide ? styleGuide.label : 'default'}, ${prompt}, '1024x1024', 13)`;
+             VALUES (${childId}, ${actorEmail || null}, 'onboarding_draft', 'onboarding-scene', ${styleGuide ? styleGuide.label : 'default'}, ${prompt}, '1024x1024', ${genCost})`;
   } catch (_) {}
   return blobKey;
 }

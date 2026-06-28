@@ -9,6 +9,7 @@
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { geminiKey, geminiProModel, geminiGenerateImage } from '../_lib/gemini.js';
+import { openaiEditImage, openaiKeystoneModel } from '../_lib/openai-image.js';
 import { loadStyleGuide, buildPortraitPrompt } from '../_lib/onboarding-render.js';
 
 export const config = { maxDuration: 120 };
@@ -27,8 +28,9 @@ export default async function handler(req, res) {
   const attempt = Number.isFinite(Number(b.attempt)) ? Math.min(5, Math.max(0, Math.floor(Number(b.attempt)))) : 0;
 
   try {
+    const oaKey = process.env.OPENAI_API_KEY;
     const gKey = geminiKey();
-    if (!gKey) { res.status(500).json({ error: 'GEMINI_API_KEY not configured' }); return; }
+    if (!oaKey && !gKey) { res.status(500).json({ error: 'No image API key configured (OPENAI_API_KEY or GEMINI_API_KEY)' }); return; }
     const db = sql();
 
     // loadStyleGuide throws style_not_found if a specific id is missing — surface it.
@@ -43,7 +45,11 @@ export default async function handler(req, res) {
     images.push({ buffer: Buffer.from(photoB64, 'base64'), contentType: photoType });
 
     const prompt = buildPortraitPrompt({ styleGuide, attempt, guidance });
-    const g = await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
+    // Mirror production keystone routing: OpenAI gpt-image when configured, else Gemini Pro.
+    const engine = oaKey ? ('openai:' + openaiKeystoneModel()) : ('gemini:' + geminiProModel());
+    const g = oaKey
+      ? await openaiEditImage({ apiKey: oaKey, model: openaiKeystoneModel(), prompt, images, size: '1024x1024' })
+      : await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
     if (!g.ok) { res.status(g.status || 502).json({ error: 'Render failed', detail: (g.detail || '').slice(0, 300), prompt }); return; }
 
     // Light cost log (role excluded from parent quota).
@@ -62,6 +68,7 @@ export default async function handler(req, res) {
       styleGuideId: styleGuide ? styleGuide.id : null,
       styleLabel: styleGuide ? styleGuide.label : null,
       styleImageAttached: !!(styleGuide && styleGuide.image && styleGuide.image.buffer),
+      engine,
     });
   } catch (err) {
     res.status(500).json({ error: 'portrait-lab failed', detail: String(err.message || err) });
