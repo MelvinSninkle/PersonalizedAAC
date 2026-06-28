@@ -139,7 +139,7 @@
       $('result').innerHTML = '<img src="data:image/png;base64,' + d.b64 + '" alt="">';
       $('prompt').textContent = d.prompt || '—';
       const pill = d.styleImageAttached ? '<span class="pill ok">style image ATTACHED</span>' : '<span class="pill no">no style image</span>';
-      $('result-cap').innerHTML = 'Result · ' + pill + (d.styleLabel ? ' · ' + d.styleLabel + ' (#' + d.styleGuideId + ')' : '');
+      $('result-cap').innerHTML = 'Result · ' + pill + (d.engine ? ' · ' + d.engine : '') + (d.styleLabel ? ' · ' + d.styleLabel + ' (#' + d.styleGuideId + ')' : '');
       msg('Done.');
     } catch (err) {
       $('result').innerHTML = '<div style="font-size:13px;color:#dc2626;">Failed</div>';

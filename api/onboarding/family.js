@@ -25,6 +25,7 @@ import { randomUUID } from 'node:crypto';
 import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
 import { geminiKey, geminiProModel, geminiGenerateImage } from '../_lib/gemini.js';
+import { openaiEditImage, openaiKeystoneModel } from '../_lib/openai-image.js';
 import { ensureProgress, nextStep, setStep } from '../_lib/onboarding.js';
 import { isValidRelationship, relationshipNeedsSide } from '../_lib/relationships.js';
 import { loadStyleGuide, loadChildVoiceId, synthesizeVoice, buildPortraitPrompt } from '../_lib/onboarding-render.js';
@@ -52,11 +53,9 @@ async function readBlobBytes(key) {
 }
 
 async function stylize({ db, childId, sourceBytes, contentType, actorEmail, attempt, styleGuide, guidance }) {
+  const oaKey = process.env.OPENAI_API_KEY;
   const gKey = geminiKey();
-  if (!gKey) throw new Error('GEMINI_API_KEY not configured');
-  // A small variance instruction makes each retry give a fresh look — same
-  // person, different lighting / pose interpretation — so the parent isn't
-  // burning a photo decision on a bad first roll.
+  if (!oaKey && !gKey) throw new Error('No image API key configured (OPENAI_API_KEY or GEMINI_API_KEY)');
   // Images: when a style guide image is present, IMAGE 1 = style ref, IMAGE 2 =
   // the real photo; otherwise just the photo. The prompt itself is built by the
   // SHARED buildPortraitPrompt so the admin Portrait Lab mirrors production 1:1.
@@ -67,12 +66,17 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
   const prompt = buildPortraitPrompt({ styleGuide, attempt, guidance });
 
-  // KEYSTONE: portraits anchor every later render, so use the advanced Pro tier.
-  const g = await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
+  // KEYSTONE: portraits anchor every later render and require faithful STYLE
+  // transfer, which OpenAI's gpt-image handles better than Gemini. Use OpenAI
+  // when configured; fall back to Gemini Pro otherwise.
+  const g = oaKey
+    ? await openaiEditImage({ apiKey: oaKey, model: openaiKeystoneModel(), prompt, images, size: '1024x1024' })
+    : await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
   if (!g.ok) {
     const err = new Error('Stylization failed: ' + (g.detail || '').slice(0, 200));
     err.status = g.status || 502; throw err;
   }
+  const genCost = g.costCents != null ? g.costCents : 13;
   const png = Buffer.from(g.b64, 'base64');
   const blobKey = `onboarding/${childId}/${randomUUID()}.png`;
   await put(blobKey, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
@@ -89,7 +93,7 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   try {
     await db`
       INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, reference_keys, size, cost_cents)
-      VALUES (${childId}, ${actorEmail || null}, 'onboarding_draft', 'onboarding-portrait', ${styleLog}, ${prompt}, ${refKeys}, '1024x1024', 4)`;
+      VALUES (${childId}, ${actorEmail || null}, 'onboarding_draft', 'onboarding-portrait', ${styleLog}, ${prompt}, ${refKeys}, '1024x1024', ${genCost})`;
   } catch (_) {}
   return blobKey;
 }
