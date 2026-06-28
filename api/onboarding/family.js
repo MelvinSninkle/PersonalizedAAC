@@ -70,7 +70,7 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   // transfer, which OpenAI's gpt-image handles better than Gemini. Use OpenAI
   // when configured; fall back to Gemini Pro otherwise.
   const g = oaKey
-    ? await openaiEditImage({ apiKey: oaKey, model: openaiKeystoneModel(), prompt, images, size: '1024x1024' })
+    ? await openaiEditImage({ apiKey: oaKey, model: await openaiKeystoneModel(db), prompt, images, size: '1024x1024' })
     : await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
   if (!g.ok) {
     const err = new Error('Stylization failed: ' + (g.detail || '').slice(0, 200));
