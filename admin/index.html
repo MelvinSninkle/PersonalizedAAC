@@ -333,7 +333,8 @@
         ? d.recent.map(r => `<details style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
             <summary style="cursor:pointer;font-size:13px;"><strong>${esc(r.label || '(no label)')}</strong> · ${esc(r.style || '')} · ${cents(r.costCents)} · ${esc(r.actor)} · ${new Date(r.createdAt).toLocaleString()}</summary>
             <div style="font-size:12px;color:var(--muted);margin-top:8px;white-space:pre-wrap;">${esc(r.prompt || '')}</div>
-            ${r.referenceKeys && r.referenceKeys.length ? `<div style="font-size:12px;margin-top:8px;">References: ${r.referenceKeys.map(esc).join(', ')}</div>` : ''}
+            ${r.styleRefs && r.styleRefs.length ? `<div style="font-size:12px;margin-top:8px;"><strong>Style guide used:</strong> ${r.styleRefs.map(s => `#${s.id} ${esc(s.label || '')} (owner: ${esc(s.childId || 'global template')}${s.ephemeral ? ', ephemeral' : ''}${s.active ? '' : ', INACTIVE'})`).join('; ')}</div>` : (r.referenceKeys && r.referenceKeys.length ? `<div style="font-size:12px;margin-top:8px;color:#c0392b;"><strong>Style guide used:</strong> none matched the reference key (possible fallback / deleted)</div>` : '')}
+            ${r.referenceKeys && r.referenceKeys.length ? `<div style="font-size:12px;margin-top:6px;">Reference keys: ${r.referenceKeys.map(esc).join(', ')}</div>` : ''}
             <div style="font-size:11px;color:var(--faint);margin-top:6px;">tokens in/out: ${r.inputTokens ?? '—'} / ${r.outputTokens ?? '—'} · child: ${esc(r.childId || '')}</div>
           </details>`).join('')
         : '<p style="font-size:13px;color:var(--muted)">No generations yet.</p>';

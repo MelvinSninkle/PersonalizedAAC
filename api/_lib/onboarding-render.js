@@ -70,6 +70,46 @@ export const SQUARE_RULE =
   'borders, letterboxing, or blank bands on any side, and no clutter or secondary objects ' +
   'competing for attention. The subject must be instantly, unmistakably recognizable to a toddler.';
 
+// The no-style fallback portrait (used when no style guide image is attached).
+export const PORTRAIT_NO_STYLE_BASE =
+  "Re-illustrate this photograph as a warm storybook portrait for a young child's communication board. " +
+  "Keep the person's face and likeness clearly recognizable; soft even lighting; clean soft pastel pink " +
+  "background; centered head-and-shoulders; bright friendly colors; gentle age-appropriate look. " +
+  "Do not add any text, words, or letters.";
+
+// SINGLE SOURCE OF TRUTH for the onboarding people-portrait prompt — used by the
+// real onboarding flow (api/onboarding/family.js) AND the admin Portrait Lab, so
+// the lab faithfully mirrors production. `styleGuide` is the loadStyleGuide()
+// result (with `.image` + `.description`); when it has an image the prompt copies
+// that style, otherwise it falls back to the warm-storybook base.
+export function buildPortraitPrompt({ styleGuide, attempt = 0, guidance = '' } = {}) {
+  const variant = attempt > 0
+    ? ` Vary the framing and expression slightly from any previous attempt (attempt ${attempt + 1}).`
+    : '';
+  const fix = guidance ? ` Important correction from the parent — apply this exactly: ${guidance}.` : '';
+  const styleDesc = (styleGuide && styleGuide.description) ? String(styleGuide.description).trim() : '';
+  const hasStyleImg = !!(styleGuide && styleGuide.image && styleGuide.image.buffer);
+  let prompt;
+  if (hasStyleImg) {
+    prompt =
+      "TASK: Redraw the real person shown in IMAGE 2 in the EXACT art style of IMAGE 1.\n" +
+      "IMAGE 1 is the STYLE reference. Copy its art style faithfully and obviously: its linework weight and color, " +
+      "its flat cel coloring and shading, its proportions and shapes, and ESPECIALLY its eye treatment — match how " +
+      "eyes, pupils, and the whites of the eyes are drawn. Do NOT copy IMAGE 1's content, background, or the people in it. " +
+      (styleDesc ? `The style can be described as: ${styleDesc}. ` : '') +
+      "\nIMAGE 2 is the real person. Keep their IDENTITY unmistakable — same skin tone, hair color and hairstyle, " +
+      "face shape, eyebrows, apparent age and sex, and any glasses, freckles, or distinctive features — but DRAW every " +
+      "one of those features in IMAGE 1's art style (do not render them realistically or in a different cartoon style).\n" +
+      "WHY: this is a tile for a young child's AAC communication device; the child has a developmental disability and " +
+      "must instantly recognize BOTH this exact person AND the shared art style that helps them focus — so a faithful " +
+      "style match and a faithful likeness matter equally.\n" +
+      "Head-and-shoulders portrait, centered, clean soft pastel background, bright friendly colors, no text or letters." + variant;
+  } else {
+    prompt = PORTRAIT_NO_STYLE_BASE + variant;
+  }
+  return prompt + fix + SQUARE_RULE;
+}
+
 // Every tile carries the printed word along the bottom. Pinning the lettering to a
 // single, identical treatment — black text on a solid white band — is what keeps the
 // caption from drifting in font/color/placement across the board. Appended by every
