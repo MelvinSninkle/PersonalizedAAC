@@ -55,7 +55,7 @@ export default async function handler(req, res) {
     const g = oaKey
       ? await openaiEditImage({ apiKey: oaKey, model: oaModel, prompt, images, size: '1024x1024' })
       : await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
-    if (!g.ok) { res.status(g.status || 502).json({ error: 'Render failed', detail: (g.detail || '').slice(0, 300), prompt }); return; }
+    if (!g.ok) { res.status(g.status || 502).json({ error: 'Render failed (' + engine + ')', detail: g.detail || '(no detail returned)', status: g.status || 502, prompt }); return; }
 
     // Light cost log (role excluded from parent quota).
     try {
