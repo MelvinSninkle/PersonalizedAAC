@@ -1880,7 +1880,8 @@
     return [el.dataset.dragKind, el.dataset.section, el.dataset.parentId ?? ''].join('|');
   }
   function onTileDragStart(e) {
-    dragState = { id: parseInt(this.dataset.entityId, 10), key: dragGroupKey(this) };
+    dragState = { id: parseInt(this.dataset.entityId, 10), key: dragGroupKey(this),
+                  kind: this.dataset.dragKind, section: this.dataset.section };
     this.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
     try { e.dataTransfer.setData('text/plain', String(dragState.id)); } catch (_) {}
@@ -1891,8 +1892,17 @@
       && dragGroupKey(el) === dragState.key
       && parseInt(el.dataset.entityId, 10) !== dragState.id;
   }
+  // A tile may ALSO be dropped onto a category/subcategory TAB to MOVE it into
+  // that category — but only within the same family (People/Nouns/Verbs), so a
+  // tile never jumps sections. (The three sections render as separate columns,
+  // each with its own tabs carrying data-section, so we just compare sections.)
+  function isItemIntoCatDrop(el) {
+    return dragState && dragState.kind === 'item'
+      && (el.dataset.dragKind === 'cat-top' || el.dataset.dragKind === 'cat-sub')
+      && el.dataset.section === dragState.section;
+  }
   function onTileDragOver(e) {
-    if (!isDropTarget(this)) return;
+    if (!isDropTarget(this) && !isItemIntoCatDrop(this)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     this.classList.add('drop-target');
@@ -1902,6 +1912,11 @@
     e.preventDefault();
     e.stopPropagation();
     this.classList.remove('drop-target');
+    // Dropped a tile onto a category/subcategory tab → move it into that category.
+    if (isItemIntoCatDrop(this)) {
+      await moveItemToCategory(dragState.id, this.dataset.section, parseInt(this.dataset.entityId, 10));
+      return;
+    }
     if (!isDropTarget(this)) return;
     const targetId = parseInt(this.dataset.entityId, 10);
     const draggedId = dragState.id;
@@ -1958,6 +1973,25 @@
         list[i].order = newOrder;
         if (entityKind === 'item') await putItem(list[i]); else await putCat(list[i]);
       }
+    }
+    await renderSection(section);
+  }
+
+  // Move an item into a different category/subcategory of the SAME section and
+  // drop it at the end of that category. The backend already supports re-parenting
+  // an item (serverUpdateItem with a new categoryId — the same call the parent
+  // organizer uses); we just pick a trailing order so it lands at the bottom.
+  async function moveItemToCategory(itemId, section, targetCatId) {
+    const items = await getAllItems(section);
+    const moving = items.find(i => i.id === itemId);
+    if (!moving || (moving.categoryId ?? null) === targetCatId) return;
+    const maxOrder = items
+      .filter(i => (i.categoryId ?? null) === targetCatId)
+      .reduce((m, i) => Math.max(m, i.order ?? 0), -1000);
+    try {
+      await serverUpdateItem(moving, { categoryId: targetCatId, order: maxOrder + 1000 });
+    } catch (_) {
+      moving.categoryId = targetCatId; moving.order = maxOrder + 1000; await putItem(moving);
     }
     await renderSection(section);
   }
