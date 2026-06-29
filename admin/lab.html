@@ -193,7 +193,7 @@
     <button class="secondary" id="btn-migrate" title="Re-run /api/init. Idempotent.">⚙️ Run migrations</button>
     <button class="secondary" id="btn-people" title="Create the persons table + populate this board's family identities and likeness anchors from its People tiles. Idempotent.">👤 Set up people</button>
     <button class="secondary" id="btn-snapshot">Snapshot now</button>
-    <a class="btn" href="/api/admin/taxonomy-export-csv" id="btn-export">Export CSV</a>
+    <a class="btn" href="/api/admin/taxonomy?fn=export-csv" id="btn-export">Export CSV</a>
     <label style="font-size:11px;color:#557fa3;display:flex;align-items:center;gap:4px;">🚀 Board:
       <input id="publish-child" value="fletcherpeterson" title="Publish goes live on this child's board" style="width:128px;font-size:11px;padding:3px 6px;border:1px solid #cdd6e0;border-radius:4px;">
     </label>
@@ -1265,7 +1265,7 @@ $('btn-snapshot').addEventListener('click', async () => {
   const label = prompt('Snapshot label?', 'lab-' + new Date().toISOString().slice(0, 16));
   if (!label) return;
   try {
-    await api('POST', '/api/admin/taxonomy-snapshots', { label, note: 'manual snapshot from /admin/lab' });
+    await api('POST', '/api/admin/taxonomy?fn=snapshots', { label, note: 'manual snapshot from /admin/lab' });
     alert('Snapshot created');
   } catch (err) { alert('Snapshot failed: ' + err.message); }
 });
