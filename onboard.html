@@ -286,9 +286,9 @@
       // Jump to the saved step.
       if (st.step === 'complete') { showPhase('board'); $('board-busy').style.display = 'none'; $('board-done').style.display = ''; return; }
       if (st.step === 'seed_core') { showPhase('board'); runSeed(Number(d.seedNextG) || 0, Number(d.seededCount) || 0); return; }
-      if (st.step === 'scene_keystone') { showPhase('scene'); startScene(); return; }
-      if (st.step === 'parent_photo') { await loadRelOptions(); childDone = true; markChildDoneUI(); showPhase('people'); return; }
-      if (st.step === 'child_photo') { await loadRelOptions(); showPhase('people'); return; }
+      if (st.step === 'scene_keystone') { showPhase('scene'); if (!restoreScene()) startScene(); return; }
+      if (st.step === 'parent_photo') { await loadRelOptions(); childDone = true; markChildDoneUI(); restorePeople(); showPhase('people'); return; }
+      if (st.step === 'child_photo') { await loadRelOptions(); restorePeople(); showPhase('people'); return; }
     }
     showPhase('style');
   })();
@@ -438,6 +438,41 @@
   }
   function refreshPeopleContinue() { $('people-continue').disabled = !(childDone && parentDone); }
 
+  // Persist generated drafts per child so they survive page navigation/reload —
+  // no regenerating when you come back. The blobs live server-side; we just keep
+  // the keys + approval state locally.
+  function onbKey() { return 'onbDrafts:' + CHILD_ID; }
+  function onbLoad() { try { return JSON.parse(localStorage.getItem(onbKey()) || '{}'); } catch (_) { return {}; } }
+  function onbSave(patch) { try { localStorage.setItem(onbKey(), JSON.stringify(Object.assign(onbLoad(), patch))); } catch (_) {} }
+  function restorePeople() {
+    const s = onbLoad();
+    if (s.childDraftKey) {
+      childDraftKey = s.childDraftKey;
+      $('child-thumb').innerHTML = '<img src="' + mediaUrl(s.childDraftKey) + '" alt="">';
+      if (s.childApproved) { childDone = true; $('subj-child').classList.add('done'); $('child-actions').style.display = 'none'; }
+      else { $('child-actions').style.display = 'flex'; }
+    }
+    if (s.parentDraftKey) {
+      parentDraftKey = s.parentDraftKey;
+      $('parent-thumb').innerHTML = '<img src="' + mediaUrl(s.parentDraftKey) + '" alt="">';
+      if (s.parentName) $('parent-name').value = s.parentName;
+      if (s.parentRel) { const sel = $('parent-rel'); if (sel) sel.value = s.parentRel; }
+      if (s.parentApproved) { parentDone = true; $('subj-parent').classList.add('done'); $('parent-actions').style.display = 'none'; }
+      else { $('parent-actions').style.display = 'flex'; }
+    }
+    refreshPeopleContinue();
+    return !!s.childDraftKey;
+  }
+  function restoreScene() {
+    const s = onbLoad();
+    if (!s.sceneDraftKey) return false;
+    sceneDraftKey = s.sceneDraftKey;
+    $('scene-pic').innerHTML = '<img src="' + mediaUrl(s.sceneDraftKey) + '" alt="">';
+    $('scene-approve').disabled = false; $('scene-retry').disabled = false;
+    $('scene-msg').textContent = 'This is how toys, food, and places will look. Approve, or try again.';
+    return true;
+  }
+
   async function draftSubject(role) {
     const file = role === 'child' ? childFile : parentFile;
     if (!file) return;
@@ -454,6 +489,7 @@
         + (guidance ? '&guidance=' + encodeURIComponent(guidance) : '');
       const { draftKey } = await postBytes(qs, blob);
       if (role === 'child') childDraftKey = draftKey; else parentDraftKey = draftKey;
+      onbSave(role === 'child' ? { childDraftKey: draftKey, childApproved: false } : { parentDraftKey: draftKey, parentApproved: false });
       thumb.innerHTML = '<img src="' + mediaUrl(draftKey) + '" alt="">';
       actions.style.display = 'flex';
       $('people-msg').textContent = 'Like it? Approve, or try again for a different take.';
@@ -474,6 +510,7 @@
     try {
       await apiJSON('/api/onboarding/family?action=commit', body);
       $('subj-' + role).classList.add('done');
+      onbSave(role === 'child' ? { childApproved: true } : { parentApproved: true, parentName: name, parentRel: $('parent-rel').value });
       if (role === 'child') { childDone = true; } else { parentDone = true; }
       $('people-msg').textContent = (childDone && parentDone) ? 'Both saved ✓ — add more family, or continue.' : (name + ' saved ✓');
       refreshPeopleContinue();
@@ -528,7 +565,7 @@
     finally { $('famx-save').disabled = false; }
   });
 
-  $('people-continue').addEventListener('click', () => { showPhase('scene'); startScene(); });
+  $('people-continue').addEventListener('click', () => { showPhase('scene'); if (!restoreScene()) startScene(); });
   // Backward navigation — change/re-upload the style, then Continue forward again.
   $('people-back').addEventListener('click', () => {
     showPhase('style');
@@ -545,7 +582,7 @@
     $('scene-msg').textContent = 'Drawing a sample…';
     try {
       const { draftKey } = await apiJSON('/api/onboarding/scene?action=draft');
-      sceneDraftKey = draftKey;
+      sceneDraftKey = draftKey; onbSave({ sceneDraftKey: draftKey });
       $('scene-pic').innerHTML = '<img src="' + mediaUrl(draftKey) + '" alt="">';
       $('scene-msg').textContent = 'This is how toys, food, and places will look.';
       $('scene-approve').disabled = false; $('scene-retry').disabled = false;
@@ -557,7 +594,7 @@
     $('scene-approve').disabled = true; $('scene-retry').disabled = true; $('scene-msg').textContent = 'Drawing another…';
     try {
       const { draftKey } = await apiJSON('/api/onboarding/scene?action=retry', { attempt: sceneAttempt });
-      sceneDraftKey = draftKey;
+      sceneDraftKey = draftKey; onbSave({ sceneDraftKey: draftKey });
       $('scene-pic').innerHTML = '<img src="' + mediaUrl(draftKey) + '" alt="">';
       $('scene-msg').textContent = 'Better? Approve, or try again.';
     } catch (err) { $('scene-msg').textContent = 'Could not draw it: ' + (err.message || err); }
