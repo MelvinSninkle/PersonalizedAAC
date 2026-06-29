@@ -670,9 +670,12 @@
   <div class="section-label">Backup</div>
   <div class="panel">
     <h2>Download a backup</h2>
-    <p class="hint">Saves all of this child's categories, tiles, images and sounds to one file you can keep safe.</p>
-    <button class="btn primary" id="backup-export">⬇ Download backup (.json)</button>
-    <span id="backup-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
+    <p class="hint">Save everything on this child's board. The <strong>.json</strong> is a single restore file (used to import the board back into the app). The <strong>.zip</strong> unpacks into browseable folders of the actual image and sound files, plus a manifest.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <button class="btn primary" id="backup-export">⬇ Download backup (.json)</button>
+      <button class="btn" id="backup-zip">⬇ Download images &amp; sounds (.zip)</button>
+    </div>
+    <span id="backup-msg" style="font-size:13px;color:var(--muted);display:block;margin-top:8px;"></span>
   </div>
 
   <!-- ACCOUNT & SECURITY -->
@@ -3143,6 +3146,110 @@
       setMsg('Downloaded ✓');
     } catch (err) { setMsg('Backup failed: ' + (err.message || err)); }
     backupBtn.disabled = false; backupBtn.textContent = prev;
+  });
+
+  // ---- ZIP backup (real .png/.mp3 files in browseable folders + manifest.json) ----
+  // A parent-friendly archive: instead of one giant base64 JSON, the media land as
+  // actual files they can open. Built entirely client-side with a tiny STORE-only
+  // (no-compression) ZIP writer — PNG/MP3 are already compressed, so STORE is both
+  // correct and fast, and it means no serverless function is needed.
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; }
+    return t;
+  })();
+  function crc32(bytes) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  const _u16 = (n) => new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF]);
+  const _u32 = (n) => new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF]);
+  function _concat(parts) { let len = 0; for (const p of parts) len += p.length; const out = new Uint8Array(len); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; } return out; }
+  function makeZip(files) {
+    const enc = new TextEncoder();
+    const localParts = [], central = []; let offset = 0;
+    for (const f of files) {
+      const nameBytes = enc.encode(f.name);
+      const data = f.data, crc = crc32(data), size = data.length;
+      const header = _concat([
+        _u32(0x04034b50), _u16(20), _u16(0), _u16(0), _u16(0), _u16(0),
+        _u32(crc), _u32(size), _u32(size), _u16(nameBytes.length), _u16(0), nameBytes,
+      ]);
+      localParts.push(header, data);
+      central.push(_concat([
+        _u32(0x02014b50), _u16(20), _u16(20), _u16(0), _u16(0), _u16(0), _u16(0),
+        _u32(crc), _u32(size), _u32(size), _u16(nameBytes.length), _u16(0), _u16(0), _u16(0), _u16(0),
+        _u32(0), _u32(offset), nameBytes,
+      ]));
+      offset += header.length + size;
+    }
+    const centralBytes = _concat(central);
+    const eocd = _concat([
+      _u32(0x06054b50), _u16(0), _u16(0), _u16(files.length), _u16(files.length),
+      _u32(centralBytes.length), _u32(offset), _u16(0),
+    ]);
+    return new Blob([...localParts, centralBytes, eocd], { type: 'application/zip' });
+  }
+  const safeName = (s) => (String(s || 'untitled').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 40) || 'untitled');
+  const extOf = (key, fallback) => { const m = String(key || '').match(/\.([a-z0-9]{1,4})(?:$|\?)/i); return m ? m[1].toLowerCase() : fallback; };
+
+  const zipBtn = document.getElementById('backup-zip');
+  if (zipBtn) zipBtn.addEventListener('click', async () => {
+    const msg = document.getElementById('backup-msg');
+    const setMsg = (t) => { if (msg) msg.textContent = t; };
+    zipBtn.disabled = true; const prev = zipBtn.textContent; zipBtn.textContent = 'Preparing…';
+    try {
+      const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('sync ' + r.status);
+      const data = await r.json();
+      const cats = data.categories || [], items = data.items || [];
+      const files = [];                 // [{ name, data:Uint8Array }]
+      const used = new Set();
+      const cache = new Map();
+      let done = 0, missing = 0; const total = cats.length + items.length;
+      async function addMedia(folder, baseName, key, fallbackExt) {
+        if (!key) return null;
+        let bytes = cache.get(key);
+        if (bytes === undefined) {
+          try {
+            const br = await fetch('/api/media?key=' + encodeURIComponent(key), { credentials: 'same-origin' });
+            bytes = br.ok ? new Uint8Array(await br.arrayBuffer()) : null;
+          } catch (_) { bytes = null; }
+          cache.set(key, bytes);
+        }
+        if (!bytes) { missing++; return null; }
+        let name = folder + '/' + baseName + '.' + extOf(key, fallbackExt);
+        let i = 2; while (used.has(name)) name = folder + '/' + baseName + '-' + (i++) + '.' + extOf(key, fallbackExt);
+        used.add(name);
+        files.push({ name, data: bytes });
+        return name;
+      }
+      const manifest = { version: 1, exportedAt: new Date().toISOString(), child: slug, categories: [], items: [] };
+      for (const c of cats) {
+        const base = 'cat-' + safeName(c.label) + '-' + c.id;
+        const imageFile = await addMedia('images', base, c.imageKey, 'png');
+        manifest.categories.push({ id: c.id, section: c.section, label: c.label, order: c.order ?? 0, parentId: c.parentId ?? null, keepAspect: !!c.keepAspect, imageFile });
+        setMsg('Preparing… ' + (++done) + '/' + total);
+      }
+      for (const it of items) {
+        const base = safeName(it.label) + '-' + it.id;
+        const imageFile = await addMedia('images', base, it.imageKey, 'png');
+        const soundFile = await addMedia('sounds', base, it.soundKey, 'mp3');
+        manifest.items.push({ id: it.id, section: it.section, categoryId: it.categoryId, label: it.label, order: it.order ?? 0, pinned: !!it.pinned, keepAspect: !!it.keepAspect, imageFile, soundFile });
+        setMsg('Preparing… ' + (++done) + '/' + total);
+      }
+      files.push({ name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) });
+      setMsg('Zipping ' + files.length + ' files…');
+      const blob = makeZip(files);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      a.download = slug + '-aac-backup-' + new Date().toISOString().slice(0, 10) + '.zip';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setMsg('Downloaded ✓ — ' + files.length + ' files' + (missing ? ' (' + missing + ' media file(s) could not be fetched)' : ''));
+    } catch (err) { setMsg('ZIP backup failed: ' + (err.message || err)); }
+    zipBtn.disabled = false; zipBtn.textContent = prev;
   });
 })();
 </script>
