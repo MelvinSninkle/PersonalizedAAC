@@ -8,6 +8,7 @@
 // more") inherit their parent category's icon.
 import { put, get } from '@vercel/blob';
 import { geminiKey, isGeminiModel, geminiCostCents, geminiGenerateImage } from './gemini.js';
+import { openaiCostCents } from './openai-image.js';
 
 const norm = (s) => String(s || '').toLowerCase().trim().replace(/\s+/g, ' ');
 
@@ -274,7 +275,7 @@ export async function generateCategoryIcon({
   } else if (u.output_tokens != null) {
     const det = u.input_tokens_details || {};
     costCents = ((det.text_tokens || 0) * OPENAI_PRICE.text + (det.image_tokens || 0) * OPENAI_PRICE.imageIn + (u.output_tokens || 0) * OPENAI_PRICE.out) / 1e6 * 100;
-  } else { costCents = model === 'gpt-image-2' ? 21 : (model === 'gpt-image-1.5' ? 13 : 4); }
+  } else { costCents = openaiCostCents(model); }
 
   const blobKey = await uploadIconPNG(section, b64);
 

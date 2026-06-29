@@ -2,6 +2,7 @@
 // model to suggest a toddler-friendly label and a phonetic pronunciation for TTS.
 // Returns { label, pronunciation }. Auth-gated; needs OPENAI_API_KEY.
 import { checkAuth } from './_lib/auth.js';
+import { describePhotoLabel } from './_lib/vision.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 30 };
 
@@ -49,36 +50,11 @@ export default async function handler(req, res) {
     "subject. Respond with strict JSON only: {\"label\":\"<1-2 word everyday name, Capitalized>\"}. " +
     "Keep the label concrete and child-friendly. No extra text.";
 
-  try {
-    const upstream = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
-          ],
-        }],
-        response_format: { type: 'json_object' },
-        max_tokens: 40,
-      }),
-    });
-    if (!upstream.ok) {
-      const detail = await upstream.text().catch(() => '');
-      res.status(upstream.status).json({ error: 'Vision request failed', detail: detail.slice(0, 400) });
-      return;
-    }
-    const data = await upstream.json();
-    let out = {};
-    try { out = JSON.parse(data.choices[0].message.content); } catch (_) {}
-    res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json({
-      label: typeof out.label === 'string' ? out.label.slice(0, 80) : '',
-    });
-  } catch (err) {
-    res.status(502).json({ error: 'Vision request failed', detail: String(err.message || err) });
+  const result = await describePhotoLabel({ apiKey, dataUrl, prompt });
+  if (!result.ok) {
+    res.status(result.status).json({ error: 'Vision request failed', detail: result.detail });
+    return;
   }
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(200).json({ label: result.label });
 }

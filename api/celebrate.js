@@ -11,7 +11,8 @@
 // close family member), the active style guide, the Gemini image pipeline
 // (Nano Banana default), and archives every generated picture to the parent's
 // album so every year's celebration becomes part of the memorabilia stream.
-import { put, get as blobGet } from '@vercel/blob';
+import { put } from '@vercel/blob';
+import { readBlobBytes as readBlob } from './_lib/blob.js';
 import { randomUUID } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
@@ -49,15 +50,6 @@ async function resolveAnchors(db, childId) {
     ORDER BY array_position(ARRAY['mother','father','stepmother','stepfather','guardian','grandmother','grandfather']::text[], relationship)
     LIMIT 1`)[0] || self;
   return { self, adult };
-}
-
-async function readBlob(key) {
-  const result = await blobGet(key, { access: 'private' });
-  if (result.statusCode !== 200 || !result.stream) throw new Error('blob read failed');
-  const reader = result.stream.getReader();
-  const chunks = [];
-  while (true) { const { value, done } = await reader.read(); if (done) break; chunks.push(Buffer.from(value)); }
-  return { buffer: Buffer.concat(chunks), contentType: result.blob.contentType || 'image/jpeg' };
 }
 
 function fillTemplate(t, tokens) {

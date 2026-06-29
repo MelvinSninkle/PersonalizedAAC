@@ -34,7 +34,9 @@ export async function listOpenaiImageModels(apiKey) {
   } catch (_) { return []; }
 }
 
-function costFor(model) {
+// Flat per-image cost (cents) by gpt-image tier — the single source of truth
+// for the cost ladder otherwise duplicated across the Lab + category-icon paths.
+export function openaiCostCents(model) {
   return model === 'gpt-image-2' ? 21 : (model === 'gpt-image-1.5' ? 13 : 4);
 }
 
@@ -59,7 +61,7 @@ export async function openaiEditImage({ apiKey, model, prompt, images = [], size
     const data = await r.json();
     const b64 = data && data.data && data.data[0] && data.data[0].b64_json;
     if (!b64) return { ok: false, status: 502, detail: 'no image in OpenAI response' };
-    return { ok: true, b64, costCents: costFor(model) };
+    return { ok: true, b64, costCents: openaiCostCents(model) };
   } catch (err) {
     return { ok: false, status: 502, detail: String(err.message || err) };
   }
