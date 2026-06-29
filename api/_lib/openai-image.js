@@ -55,7 +55,7 @@ export async function openaiEditImage({ apiKey, model, prompt, images = [], size
     const r = await fetch('https://api.openai.com/v1/images/edits', {
       method: 'POST', headers: { Authorization: 'Bearer ' + apiKey }, body: fd,
     });
-    if (!r.ok) { const detail = await r.text().catch(() => ''); return { ok: false, status: r.status, detail: detail.slice(0, 1000) }; }
+    if (!r.ok) { const detail = await r.text().catch(() => ''); return { ok: false, status: r.status, detail: detail.slice(0, 4000) }; }
     const data = await r.json();
     const b64 = data && data.data && data.data[0] && data.data[0].b64_json;
     if (!b64) return { ok: false, status: 502, detail: 'no image in OpenAI response' };

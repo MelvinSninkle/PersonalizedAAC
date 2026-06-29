@@ -76,6 +76,7 @@
       <div><div class="thumb" id="style-out">Style ref</div><div class="cap">IMAGE 1 · style reference</div></div>
       <div><div class="thumb" id="result">Result</div><div class="cap" id="result-cap">Result</div></div>
     </div>
+    <pre id="error" style="display:none;white-space:pre-wrap;font-size:12px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:12px;margin-top:14px;max-height:340px;overflow:auto;"></pre>
     <label style="margin-top:16px;">Prompt sent to the model</label>
     <pre id="prompt">—</pre>
   </div>
@@ -160,6 +161,7 @@
     const guidance = ($('guidance').value || '').trim();
     const attempt = Number($('attempt').value) || 0;
     $('gen').disabled = true; $('again').disabled = true; msg('Generating… ~20–40s');
+    $('error').style.display = 'none'; $('error').textContent = '';
     $('result').innerHTML = '<div style="font-size:13px;color:#9ca3af;">Working…</div>';
     // mirror the style ref into the output pane
     $('style-out').innerHTML = styleGuideId ? '<img src="/api/onboarding/styles?image=' + encodeURIComponent(styleGuideId) + '" alt="">' : 'No style';
@@ -172,7 +174,9 @@
       msg('Done.');
     } catch (err) {
       $('result').innerHTML = '<div style="font-size:13px;color:#dc2626;">Failed</div>';
-      msg(err.message || String(err), true);
+      msg('Generation failed — see full error below.', true);
+      $('error').textContent = (err.message || String(err));
+      $('error').style.display = 'block';
     } finally { $('gen').disabled = false; $('again').disabled = false; }
   }
   $('gen').addEventListener('click', generate);

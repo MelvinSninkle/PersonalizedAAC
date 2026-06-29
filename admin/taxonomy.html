@@ -1057,7 +1057,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     if (!child || !child.trim()) return;
     if (!confirm(`Pull ${child.trim()}'s current board into the taxonomy?\n\nEach tile becomes a DRAFT row with a default prompt you can refine. A snapshot is saved first and existing ids are left untouched.`)) return;
     try {
-      const r = await api('/api/admin/taxonomy-import-board?childId=' + encodeURIComponent(child.trim()), { method: 'POST' });
+      const r = await api('/api/admin/taxonomy?fn=import-board&childId=' + encodeURIComponent(child.trim()), { method: 'POST' });
       await loadRows();
       const errCount = r.errorCount != null ? r.errorCount : (r.errors ? r.errors.length : 0);
       let msg = `Imported ${r.inserted} new draft rows · skipped ${r.skipped} · ${errCount} error(s).\nSnapshot: ${r.snapshotLabel}`;
@@ -1289,7 +1289,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     const btn = document.getElementById('import-commit');
     const prev = btn.textContent; btn.disabled = true; btn.textContent = 'Importing…';
     try {
-      const result = await api('/api/admin/taxonomy-bulk', {
+      const result = await api('/api/admin/taxonomy?fn=bulk', {
         method: 'POST',
         body: { rows: rowsToSend, strategy, defaultStatus, snapshotLabel },
       });
@@ -1327,7 +1327,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     document.getElementById('snap-list').textContent = 'Loading…';
     document.getElementById('snapshots-modal').classList.add('show');
     try {
-      const { snapshots } = await api('/api/admin/taxonomy-snapshots');
+      const { snapshots } = await api('/api/admin/taxonomy?fn=snapshots');
       renderSnapshots(snapshots);
     } catch (e) {
       document.getElementById('snap-list').textContent = 'Failed to load: ' + (e.message || e);
@@ -1341,14 +1341,14 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     const errEl = document.getElementById('snapshot-error');
     errEl.textContent = '';
     try {
-      await api('/api/admin/taxonomy-snapshots', {
+      await api('/api/admin/taxonomy?fn=snapshots', {
         method: 'POST',
         body: {
           label: document.getElementById('snap-label').value.trim() || null,
           note:  document.getElementById('snap-note').value.trim() || null,
         },
       });
-      const { snapshots } = await api('/api/admin/taxonomy-snapshots');
+      const { snapshots } = await api('/api/admin/taxonomy?fn=snapshots');
       renderSnapshots(snapshots);
       document.getElementById('snap-label').value = '';
       document.getElementById('snap-note').value  = '';
@@ -1364,18 +1364,18 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     try {
       if (action === 'restore') {
         if (!confirm(`Restore snapshot #${id}? This replaces the entire taxonomy. A pre-restore snapshot is created automatically.`)) return;
-        const result = await api('/api/admin/taxonomy-snapshots?action=restore&id=' + id, { method: 'POST' });
+        const result = await api('/api/admin/taxonomy?fn=snapshots&action=restore&id=' + id, { method: 'POST' });
         await loadRows();
-        const { snapshots } = await api('/api/admin/taxonomy-snapshots');
+        const { snapshots } = await api('/api/admin/taxonomy?fn=snapshots');
         renderSnapshots(snapshots);
         alert(`Restored ${result.restored} rows.\nPre-restore snapshot: ${result.preRestoreSnapshot}`);
       } else if (action === 'delete') {
         if (!confirm(`Delete snapshot #${id}? Cannot be undone.`)) return;
-        await api('/api/admin/taxonomy-snapshots?id=' + id, { method: 'DELETE' });
-        const { snapshots } = await api('/api/admin/taxonomy-snapshots');
+        await api('/api/admin/taxonomy?fn=snapshots&id=' + id, { method: 'DELETE' });
+        const { snapshots } = await api('/api/admin/taxonomy?fn=snapshots');
         renderSnapshots(snapshots);
       } else if (action === 'diff') {
-        const diff = await api('/api/admin/taxonomy-snapshots?id=' + id + '&diff=1');
+        const diff = await api('/api/admin/taxonomy?fn=snapshots&id=' + id + '&diff=1');
         document.getElementById('diff-title').textContent =
           `Current vs snapshot #${diff.snapshotId}`;
         document.getElementById('diff-meta').textContent =
@@ -1534,7 +1534,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     if (act === 'set-growth-stage') body.value = value || null;
     if (act === 'set-acquisition-age') body.value = value || null;
     try {
-      const r = await api('/api/admin/taxonomy-bulkop', { method: 'POST', body });
+      const r = await api('/api/admin/taxonomy?fn=bulkop', { method: 'POST', body });
       await loadRows();
       const msg = `Applied to ${r.affected} of ${selected.length} row(s).` +
         (r.snapshotLabel ? `\nPre-op snapshot: ${r.snapshotLabel}` : '');
@@ -1571,7 +1571,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     if (until)  params.set('until', new Date(until + 'T23:59:59').toISOString());
     if (q)      params.set('q', q);
     try {
-      const { entries } = await api('/api/admin/taxonomy-audit?' + params.toString());
+      const { entries } = await api('/api/admin/taxonomy?fn=audit&' + params.toString());
       renderAudit(entries);
     } catch (e) { errEl.textContent = e.message || String(e); }
   }
