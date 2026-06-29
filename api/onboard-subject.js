@@ -11,7 +11,8 @@ import { sql } from './_lib/db.js';
 import { canAccessChild } from './_lib/access.js';
 import { isValidRelationship, relationshipNeedsSide } from './_lib/relationships.js';
 import { geminiKey, geminiProModel, geminiGenerateImage } from './_lib/gemini.js';
-import { loadStyleGuide, loadChildStyleGuideId, SQUARE_RULE } from './_lib/onboarding-render.js';
+import { openaiEditImage, openaiKeystoneModel } from './_lib/openai-image.js';
+import { loadStyleGuide, loadChildStyleGuideId, loadChildVoiceId, synthesizeVoice, buildPortraitPrompt } from './_lib/onboarding-render.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
 
@@ -21,19 +22,6 @@ async function uploadBytes(kind, ext, buffer, contentType) {
   const pathname = `${kind}/${randomUUID()}.${ext}`;
   await put(pathname, buffer, { access: 'private', contentType, addRandomSuffix: false });
   return pathname;
-}
-
-async function ttsBytes(text) {
-  const key = process.env.Fletchers_AAC_Device;
-  if (!key) return null;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
-  const modelId = process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
-  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
-    method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-    body: JSON.stringify({ text, model_id: modelId }),
-  });
-  if (!r.ok) return null;
-  return Buffer.from(await r.arrayBuffer());
 }
 
 export default async function handler(req, res) {
@@ -73,38 +61,29 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
-    // 1) Stylize the person in the child's HOUSE STYLE using the advanced (Pro)
-    //    Gemini tier. A new-person add should match the board and use the latest
-    //    gen, so it attaches the child's chosen style guide (image + description)
-    //    exactly like the onboarding portraits, with the photo as the likeness.
+    // 1) Stylize the person in the child's HOUSE STYLE. This MUST match the
+    //    onboarding keystone path (api/onboarding/family.js) exactly, so a family
+    //    member added here looks like the child + first parent: the same shared
+    //    buildPortraitPrompt, the style guide image as IMAGE 1 + the photo as
+    //    IMAGE 2, rendered on OpenAI gpt-image when configured (best style
+    //    transfer) and falling back to Gemini Pro otherwise. (Previously this
+    //    path was Gemini-Pro-only, which is why earlier adds looked different
+    //    from the OpenAI keystones.)
     let key;
+    const oaKey = process.env.OPENAI_API_KEY;
     const gKey = geminiKey();
     let styleGuide = null;
     try { styleGuide = await loadStyleGuide(db, await loadChildStyleGuideId(db, childId)); } catch (_) {}
-    if (gKey) {
+    if (oaKey || gKey) {
       const images = [];
-      const styleDesc = (styleGuide && styleGuide.description) ? String(styleGuide.description).trim() : '';
-      let prompt;
       if (styleGuide && styleGuide.image && styleGuide.image.buffer) {
         images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
-        images.push({ buffer, contentType });
-        prompt =
-          "Re-illustrate the person in the photo as a head-and-shoulders portrait for a young child's " +
-          "communication board, rendered in the art style of the style-reference image. Keep the person's " +
-          "face and likeness clearly recognizable; soft even lighting; clean soft pastel background; centered; " +
-          "bright friendly colors. Do not add any text, words, or letters." +
-          `\n\nImage 1 is the STYLE reference — copy its art style only, not its content.${styleDesc ? ` (Style: ${styleDesc})` : ''}` +
-          "\nImage 2 shows the person — keep this person's face and likeness clearly recognizable.";
-      } else {
-        images.push({ buffer, contentType });
-        prompt =
-          "Re-illustrate this photo as a warm storybook head-and-shoulders portrait for a young child's " +
-          "communication board. Keep the person's face and likeness clearly recognizable; soft even lighting; " +
-          "clean soft pastel background; centered; bright friendly colors. Do not add any text, words, or letters." +
-          (styleDesc ? ` Render it in this art style: ${styleDesc}.` : '');
       }
-      prompt += SQUARE_RULE;
-      const g = await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
+      images.push({ buffer, contentType });
+      const prompt = buildPortraitPrompt({ styleGuide });
+      const g = oaKey
+        ? await openaiEditImage({ apiKey: oaKey, model: await openaiKeystoneModel(db), prompt, images, size: '1024x1024' })
+        : await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
       if (!g.ok) { res.status(g.status === 429 ? 429 : 502).json({ error: 'Image generation failed', detail: (g.detail || '').slice(0, 400) }); return; }
       key = await uploadBytes('refimage', 'png', Buffer.from(g.b64, 'base64'), 'image/png');
     } else {
@@ -124,7 +103,15 @@ export default async function handler(req, res) {
     let itemId = null;
     if (name) {
       let soundKey = null;
-      try { const mp3 = await ttsBytes(pronunciation || name); if (mp3) soundKey = await uploadBytes('itemsound', 'mp3', mp3, 'audio/mpeg'); } catch (_) {}
+      // Voice the tile in the CHILD's chosen voice (same as the onboarding
+      // keystone path); fall back to the system voice only when none is set.
+      // Previously this used the env default voice, so added family spoke in the
+      // admin voice instead of the one selected during enrollment.
+      try {
+        const voiceId = await loadChildVoiceId(db, childId);
+        const mp3 = await synthesizeVoice({ text: pronunciation || name, voiceId });
+        if (mp3) soundKey = await uploadBytes('itemsound', 'mp3', mp3, 'audio/mpeg');
+      } catch (_) {}
 
       const fam = await db`SELECT id, image_key FROM categories WHERE child_id = ${childId} AND section = 'people' AND parent_id IS NULL AND lower(label) = 'family' LIMIT 1`;
       let catId;
