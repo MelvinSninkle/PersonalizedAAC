@@ -1,6 +1,6 @@
 # Personalized AAC — "My World"
 
-A communication and learning app built for non-verbal children who may be gestalt language processors. Two clients (a child board + a parent app) backed by one Vercel API, deployed at `aac.andrewpeterson.io`. The child board is a native SwiftUI app for the iPad; the parent surface lives both as a SwiftUI iPhone view and as a full web dashboard.
+A communication and learning app built for non-verbal children who may be gestalt language processors. The product is a **web app** (the `app.html` kid board + `parent.html` dashboard + therapist and admin surfaces) backed by one Vercel API, deployed at `aac.andrewpeterson.io`. A native **SwiftUI** build of the child board + parent app also lives in `kid-ios/`, and a Capacitor shell wraps the web views; all three clients share the same API.
 
 > The app started as a single-file HTML AAC board for one specific child. It has since grown into a full system covering personalized AI tile art, structured games, spaced-repetition auto-teaching, scheduling, remote facilitation, holiday celebrations, and image memorabilia. This README documents the current shape — see git history for the journey.
 
@@ -20,6 +20,13 @@ The recent feature waves, in the rough order they shipped:
 - **Facilitator UI auto-pops** — when a game session starts on the iPad (from anywhere — phone, iPad, web console, scheduler), `ParentLive` flips and the FacilitatorView appears over whatever the parent was doing. Match the same color cues as the web therapist console (tap blue / verbal green / object purple).
 - **Security baseline** — `canAccessChild` and `isParentOf` now gate every child-scoped endpoint; admin gates on every `api/admin/*`; XSS escaped in dashboards; per-account daily image-generation spend cap.
 
+### Latest wave (web onboarding, keystones, backups)
+
+- **Self-service web onboarding** — a public `/signup` (free, no card) creates the account + child slug + welcome email, then a redesigned `/onboard` runs a durable **state machine** (`account → child → child_photo → parent_photo → scene_keystone → seed_core → complete`, resumable via `/api/onboarding/state`): pick a board **art style** (or upload your own) and a **voice** (with ▶ previews) → approve the child + family **keystone portraits** → approve a no-people **scene keystone** → the curated Core board renders in the background.
+- **Two-model image split** — keystones (people portraits + the scene anchor, and any family added later) now generate on **OpenAI gpt-image** (best art-style transfer); the bulk board stays on **Gemini Flash / Nano Banana** (cheapest, best likeness-holding). The live keystone model is chosen in the **Portrait Lab** and stored in `lab_settings.model_defaults.keystone`. Added-family generation (`/api/onboard-subject`) was realigned to the same keystone pipeline + the child's chosen voice, so every person on a board matches.
+- **Parent ZIP backup** — alongside the import-compatible `.json`, parents can download a `.zip` of the actual `.png`/`.mp3` files in browseable `images/`/`sounds/` folders + a `manifest.json` (built client-side, no server function).
+- **Function-count consolidation** — to stay under Vercel's 100-route limit, the Lab's 11 endpoints and the taxonomy workbench's 8 endpoints were each folded behind one dispatcher (`/api/admin/lab?action=` and `/api/admin/taxonomy?fn=`); the underlying handlers were renamed with a leading `_` so Vercel stops counting them as routes. Four dead endpoints were removed.
+
 ### Latest wave (2026-06)
 
 - **Durable, server-side tile generation** — making a tile from a photo no longer runs on the device. The photo is uploaded once to `/api/tile-jobs` (and is *safe the instant that returns*), the server runs the whole chain (name → style-consistent art → voice → place on the board), and a one-minute cron (`/api/cron/run-tile-jobs`) drains the queue + retries stragglers — so a tile lands even if the device drops, backgrounds, or is killed. Final-attempt **save-first** keeps the raw photo as the tile so a capture can never be lost. The iOS tray just polls; `tile_jobs` rows survive an app restart.
@@ -37,12 +44,15 @@ The recent feature waves, in the rough order they shipped:
 
 | Path | Audience | What it is |
 |---|---|---|
+| `/signup` + `/onboard` | New parents | Free self-service signup → guided onboarding (art style, voice, keystone portraits + scene, then the starter board) |
 | `/u/<slug>` | The child (tablet) | The AAC board itself — People · Nouns · Verbs grid + a Needs strip + the game/slideshow/celebration runtime |
-| `/parent/<slug>` | Parents | Dashboard: analytics, mode launcher, organizer, schedule editor, reward cheers, scheduled prompts, reference images, backup |
+| `/parent/<slug>` | Parents | Dashboard: analytics, mode launcher, organizer, schedule editor, reward cheers, scheduled prompts, family & people, JSON + ZIP backup, account |
 | `/therapist` | SLP / facilitator (multi-child) | Roster home — a grid of child profile portraits for every child the therapist has access to; click one to enter that child's `/therapist/<slug>` |
 | `/therapist/<slug>` | SLP / facilitator (one child) | Live facilitator console (drives a game on the iPad), plus the shared schedule editor and progress view |
 | `/admin/taxonomy.html` | Admin | The canonical word/tile library workbench (curated word list shared across all children) |
 | `/admin/lab.html` | Admin | The tile-art studio — style guides, model routes, generate / review / push tile candidates live, and a multi-subject scene composer |
+| `/admin/portrait-lab.html` | Admin | Bench for the onboarding portrait/keystone generation (runs the exact production pipeline) + the live keystone-model picker |
+| `/admin/index.html` | Admin | Hub: content tree, usage/cost, invite codes, DB migrations, and links to every admin tool |
 
 All views sit behind a session cookie; an invite-gate (`/welcome`) sits in front of anonymous traffic. After login, **no automatic redirect by role** — you land on a launchpad with the surfaces relevant to your role, so you can deliberately go to (e.g.) onboarding or the admin taxonomy instead of being yanked into a specific child's view. The kid iPad still opens its `/u/<slug>` URL directly.
 
@@ -262,9 +272,9 @@ Tile picker priority: unmet age-band tiles → longest-gap active rotation → a
 
 The iPad's `AutoTeachRunner` polls `/api/auto-teach/next` every 5 minutes when the board is up and dispatches via the same `/api/live` channel everything else uses, so the activity runs through the existing `GameController` path and the parent's `ParentLive` observable sees it as a normal session.
 
-## Image generation — Nano Banana + the regeneration archive
+## Image generation — two-model split + the regeneration archive
 
-The image pipeline supports both Google Gemini ("Nano Banana") and OpenAI gpt-image models. Nano Banana is the default for new tiles (~$0.04/image vs $0.13-0.21 for gpt-image-1.5/2) and the strongest at keeping a person's likeness from a reference photo, which is exactly the workload of this app. Model selection routes through `api/admin/model-routes` (per-scope rules) with per-request overrides. The `?bg=` param accepts presets (`pink | mint | yellow | blue | peach | white`) or any 6-digit hex.
+The pipeline uses a deliberate **two-model split**. **Keystone images** — the onboarding people portraits and the no-people scene anchor, plus any family member added later — go through **OpenAI gpt-image** (`_lib/openai-image.js` → `openaiEditImage` on `/v1/images/edits`), because OpenAI is markedly better at copying an arbitrary **art style** from a reference, and the keystones set the look every other tile imitates. The production keystone model is whatever the **Portrait Lab** saved to `lab_settings.model_defaults.keystone` (resolved by `openaiKeystoneModel()`, default `gpt-image-1`); with no OpenAI key it falls back to Gemini Pro (`geminiProModel()`, `gemini-3-pro-image-preview`). **The bulk board** — the ~150 curated starter tiles and ongoing add-a-tile renders — runs on **Gemini Flash / "Nano Banana"** (`geminiDefaultModel()`, `gemini-2.5-flash-image`) via `_lib/gemini.js`, which is cheapest (~$0.04/image) and strongest at holding a person's likeness across many tiles, with the keystones attached as references. Lab/board-editor model selection also routes through `api/admin/model-routes` (per-scope rules) with per-request overrides. The `?bg=` param accepts presets (`pink | mint | yellow | blue | peach | white`) or any 6-digit hex.
 
 **Reference intelligence.** What gets attached to a generation is chosen per tile, by role: the **style guide** image (the house style) is attached to *every* tile with "copy its art style only, not its content"; a **subject anchor** (the child's `reference_key` for child-subject tiles, a specific person for People tiles, the source photo for objects) carries likeness; the child photo is *never* used as a blanket "style." This is what makes a board consistent — the shared exemplar, not the text style word. All tile art targets **square 1:1** (`gemini.js` passes `imageConfig.aspectRatio` with a fallback that retries without it if the model rejects the field), and the inanimate-object "no cartoon faces" rule is applied to everything except People.
 
@@ -455,7 +465,7 @@ The Lab is where admin turns taxonomy rows into the actual artwork that lands on
 | Panel | Purpose |
 |---|---|
 | **Style guides** | Upload reference images that define the house art style (line, palette, finish). Each card has Active/Inactive + sort order. `POST /api/admin/style-guides` registers an upload; `PATCH` toggles active / renames / reorders. |
-| **Master prompt** | One editable template that wraps every generation. Supports tokens `{content} {label} {size} {no_face_rule} {style_image} {reference}`. Saved via `PUT /api/admin/lab-settings`. |
+| **Master prompt** | One editable template that wraps every generation. Supports tokens `{content} {label} {size} {no_face_rule} {style_image} {reference}`. Saved via `PUT /api/admin/lab?action=settings`. |
 | **Model routes** | Scope-based defaults (e.g. `category=Food → gpt-image-1.5`). The generator falls back to these when no per-call override is given. CRUD via `/api/admin/model-routes`. |
 | **Board categories** *(see below)* | Per-child chip status + Upload/Generate. |
 
@@ -493,7 +503,7 @@ A generation is **one style + an ordered list of subjects**. Each subject resolv
 | `tile` | Match a prior generated tile's art | `tile_generations.blob_key` *(UI picker still TODO)* |
 | `fresh` | No reference, text only | — |
 
-Wire-level, the endpoint builds an ordered `image[]` (style first, then each subject) and slots them into the prompt by position (*"image 2 is Person A; image 3 is Person B…"*), so the model keeps each likeness attached. Faces are allowed here — the object-tile `no_face_rule` deliberately does not apply. Endpoint: `POST /api/admin/lab-generate-scene`.
+Wire-level, the endpoint builds an ordered `image[]` (style first, then each subject) and slots them into the prompt by position (*"image 2 is Person A; image 3 is Person B…"*), so the model keeps each likeness attached. Faces are allowed here — the object-tile `no_face_rule` deliberately does not apply. Endpoint: `POST /api/admin/lab?action=generate-scene`.
 
 **Known limit:** multi-face likeness in a single edits call can blend identities on current gpt-image models, even with `input_fidelity: high`. If two-person scenes blur identities in practice, per-subject passes / compositing will slot into the same contract — no UI change needed.
 
@@ -519,11 +529,12 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `POST /api/generate-image?label=&style=&childId=&styleGuideId=` | Re-illustrate a photo (Gemini/OpenAI); attaches the child's house **style-guide image** for board-consistent, square output |
 | `POST/GET/DELETE /api/tile-jobs?childId=` | Durable add-a-tile queue: POST raw photo (safe immediately) → server renders + places the tile; GET polls status; DELETE cancels |
 | `GET /api/cron/run-tile-jobs` | Vercel cron (every minute): drains `tile_jobs`, retries stuck/failed jobs — the completion guarantee |
+| `GET /api/cron/refresh-insights` | Vercel cron (daily 08:00): recomputes the per-child skill-insight narratives |
 | `POST /api/tts?voiceId=\|childId=` | ElevenLabs TTS, returns `audio/mpeg`; resolves the child's saved voice from `childId` (explicit `voiceId` wins) |
 | `GET/POST/DELETE /api/persons?childId=` | Reference-people CRUD (the Family & people screen): list, upsert name/relationship, delete |
 | `GET /api/onboarding/styles` | Active style guides for the onboarding art-style picker (`?image=<id>` streams a preview) |
 | `GET /api/onboarding/voices` | Account's ElevenLabs voices for the onboarding voice picker (with preview samples) |
-| `POST /api/onboarding/{state,child,family,seed-core,complete}` | Onboarding contract: progress cursor, child + house style/voice, repeatable family portraits, Core-tile render, finish |
+| `GET/POST /api/onboarding/{state,child,family,scene,seed-core,complete}` + `style-upload` | Onboarding state machine: progress cursor → child (name/voice/style) → repeatable family **keystone portraits** (OpenAI, draft/retry/commit) → no-people **scene keystone** → chunked Core-tile render (Gemini Flash) → finish. `style-upload` stores a parent's custom style as an ephemeral guide |
 | `POST /api/square-tiles?childId=` | Normalize tile `keep_aspect` to the board rule (square everywhere except a TV/Movies/Shows/Posters folder) |
 | `POST /api/describe-image` | Vision-based image labeling helper |
 | `GET/POST /api/child-settings?childId=` | Per-child settings JSON (rewards, schedule, presets, routines, prompts) |
@@ -532,7 +543,6 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `POST /api/interactions` | Question-prompt answers; triggers push |
 | `POST /api/play-request` | "Fletcher wants to play" — stamps + pushes parents |
 | `POST /api/push-token` | Register an iOS device token for this user + role |
-| `GET/POST /api/reference-images` | Manage style/subject reference photos |
 | `GET /api/events`, `/api/analytics`, `/api/usage` | Read-side dashboards |
 | `GET /api/word-history?q=&since=&until=&limit=&offset=` | Searchable tap log (drives the Stats hub) |
 | `GET /api/top-words?days=&limit=` | Most-tapped words, grouped by lowercase label, with count + first/last timestamps |
@@ -541,7 +551,7 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `GET/POST /api/celebrate?childId=` | Today's special-day events for a child (GET); lazy-generate this year's image (POST `{eventKey}`) |
 | `GET /api/manifest?child=` | Per-child PWA manifest so an installed app launches into the right slug |
 | `GET/POST /api/advance-band` | Vocabulary-level state + parent-or-mastery unlock to the next acquisition band |
-| `POST /api/quick-capture` | Phone-friendly raw-photo capture: persists to Blob and creates the items row IMMEDIATELY; AI polish happens via the existing chain afterward |
+| `POST /api/onboard-subject?childId=&role=&name=` | Add one person from a photo (parent dashboard / onboarding "add family"): keystone-stylizes the portrait, registers a `persons` row + People tile, voices it in the child's voice |
 | `POST /api/message-to-board` | Tokenize the parent's text against every tile on the child's board and publish a `message` cmd through the live channel |
 | `GET /api/auto-teach/state?childId=` | Settings + gates ("blackout / cooldown / budget") + per-category mastery roll-up |
 | `POST /api/auto-teach/next` | Picks the next batch of taxonomy ids to expose now, OR returns a refusal `{ok:false, reason}` |
@@ -554,29 +564,19 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `GET/POST /api/therapist/boards` | List my custom-board templates + create new ones |
 | `GET /api/therapist/board?id=` | Fetch one board's categories + items (for the editor) |
 | `GET/POST/DELETE /api/therapist/board-share?categoryId=&childId=` | Share / unshare a template; parent "remove from view" goes through DELETE too |
-| `GET/POST /api/auth/{login,logout,me,register,reset,reset-request}` | Account flow (register accepts an `inviteToken` for self-signup) |
+| `POST /api/auth/{login,logout,register,reset,reset-request,change-password,delete-account,apple}` + `GET /api/auth/me` | Account flow: `register` accepts `selfSignup` (web signup) or an `inviteToken` (team self-signup); `apple` = Sign in with Apple (RS256 JWT vs Apple JWKS); `delete-account` wipes the child's board + all media |
 | `POST /api/init` | One-time schema bootstrap (idempotent) |
 | **Admin-only** | |
-| `GET/POST/PUT/DELETE /api/admin/taxonomy` | Canonical taxonomy CRUD |
-| `POST /api/admin/taxonomy-bulk` | Bulk import (CSV/JSON parsed client-side, snapshot-first) |
-| `POST /api/admin/taxonomy-bulkop` | Bulk set status / phase / core / archived / delete |
-| `POST /api/admin/taxonomy-import-board?childId=` | Seed the taxonomy from a child's live board as drafts |
-| `GET/POST/DELETE /api/admin/taxonomy-snapshots` | Manual snapshots + restore + diff |
-| `GET /api/admin/taxonomy-audit` | Filterable audit log |
-| `GET /api/admin/taxonomy-export-csv` | Stream the current DB taxonomy out in the exact seed-core-v1.csv shape (round-trips through the importer) |
-| `GET/PUT /api/admin/lab-settings` | Master prompt + size + per-scope model defaults |
+| `GET/POST/PUT/DELETE /api/admin/taxonomy` | Canonical taxonomy **row CRUD** (the dispatcher's default; bare URL or `?fn=crud`) |
+| `/api/admin/taxonomy?fn=<name>` | Taxonomy workbench **dispatcher** (one function, to stay under Vercel's 100-route limit). `fn=` one of: `bulk` (snapshot-first import), `bulkop` (bulk set status/phase/core/archived/delete), `import-board&childId=` (seed drafts from a child's board), `snapshots` (+`?action=restore\|diff`), `audit` (filterable log), `export-csv` (stream the seed-core-v1.csv shape), `prompt-versions` (per-tile prompt history + restore) |
+| `/api/admin/lab?action=<name>` | Lab **dispatcher** (one function). `action=` one of: `generate` (one styled candidate for a row), `generate-scene` (multi-image: one style + ordered subjects), `batch-generate`, `category-generate` / `category-upload` (chip icons via `_lib/category-icons.js`), `categories` / `board-state` (walker context for a child), `upload-image` / `port-image` (attach/pull a candidate), `publish-tile` (copy the ★ best to a child's board), `settings` (GET/PUT master prompt + size + model defaults) |
+| `POST /api/admin/portrait-lab` | Bench for the onboarding people-portrait generation — runs the exact production `buildPortraitPrompt()` + keystone pipeline, so what you see is what a parent gets |
+| `GET/PUT /api/admin/keystone-model` | List this account's live `gpt-image-*` models; save the production keystone model into `lab_settings.model_defaults.keystone` |
 | `GET/POST/PATCH/DELETE /api/admin/style-guides` | Register / toggle / reorder / remove style-reference images |
 | `GET/POST/PATCH/DELETE /api/admin/model-routes` | Scope-based model defaults (category=…, subcategory=…, label=…) |
-| `POST /api/admin/lab-generate` | Generate one styled candidate for a taxonomy row (single-image edits call) |
-| `POST /api/admin/lab-generate-scene` | Multi-image edits call: one style + ordered subjects (person-anchor / photo / tile / fresh) |
-| `POST /api/admin/lab-upload-image` | Attach an externally-made image as a candidate for a tile (no OpenAI cost) |
-| `POST /api/admin/lab-port-image` | Pull the target child's existing board image back into the strip as a candidate |
-| `POST /api/admin/lab-publish-tile` | Copy the ★ best candidate to the chosen child's board (blocks if the category chip is missing) |
-| `GET /api/admin/lab-board-state?childId=` | What's already on the child's board, indexed for the walker's "needs X first" hints |
-| `GET /api/admin/lab-categories?childId=` | Every category/subcategory chip the library needs, joined with the child's existing chips (status + image_key) |
-| `POST /api/admin/lab-category-upload` | Upload a chip image — creates the category row if missing |
-| `POST /api/admin/lab-category-generate` | Generate one chip image — curated icon (`_lib/category-icons.js`) when the folder is known, generic otherwise; accepts a `promptOverride` (the Lab surfaces the editable prompt) and `styleGuideId` (the chosen art style, else the first active); the style guide rides along as a reference image and its text description is appended to the prompt (same style referencing as tiles); creates the category row if missing. The Lab's "✨ Review & generate icons" clusters the chips needing an icon, lets you read/tweak each prompt, confirms the count, then loops this per chip |
 | `GET/PATCH/DELETE /api/admin/tile-generations` | The QC strip: list candidates, star the winner, set rating/notes, delete |
+| `POST /api/admin/{seed-persons,seed-style-guides,normalize-tiles,backfill-taxonomy-slug}` | One-time / idempotent migration + seed utilities (run manually) |
+| `GET /api/admin/board-tree?childId=` | Read-only board-vs-taxonomy diff (rename/merge planning) |
 
 ---
 
@@ -584,14 +584,15 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 
 | Var | What |
 |---|---|
-| `DATABASE_URL` | Neon Postgres pooled connection string |
+| `DATABASE_URL` | Neon Postgres pooled connection string (falls back to `POSTGRES_URL` / `POSTGRES_PRISMA_URL` / `POSTGRES_URL_NON_POOLING` / `DATABASE_URL_UNPOOLED`) |
 | `BLOB_READ_WRITE_TOKEN` | Auto-set when you create a Vercel Blob store |
 | `SESSION_SECRET` | Random long string; signs `mw_session` + `mw_invite` cookies |
 | `ADMIN_TOKEN` | Bearer token for admin-only endpoints (init, wipe) |
 | `Fletchers_AAC_Device` | ElevenLabs API key |
 | `ELEVENLABS_VOICE_ID` | Optional, defaults to Rachel |
 | `ELEVENLABS_MODEL_ID` | Optional, defaults to `eleven_turbo_v2_5` |
-| `OPENAI_API_KEY` | For `/api/generate-image` + `/api/describe-image` |
+| `OPENAI_API_KEY` | **Keystone** image generation (onboarding portraits + scene, added family) + `/api/generate-image`, `/api/describe-image`, category icons |
+| `OPENAI_KEYSTONE_MODEL` | Optional keystone-model override (default `gpt-image-1`; normally set live from the Portrait Lab) |
 | `APNS_KEY_ID` | 10-char Key ID for the APNs `.p8` key |
 | `APNS_TEAM_ID` | Apple Team ID |
 | `APNS_BUNDLE_ID` | `io.andrewpeterson.myworld` |
@@ -600,12 +601,15 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `RESEND_API_KEY` | Resend API key (used for therapist-invite emails) |
 | `INVITE_FROM_EMAIL` | Verified Resend `From`, e.g. `My World <hello@aac.andrewpeterson.io>` |
 | `APP_URL` | Public base URL for invite links (defaults to `https://aac.andrewpeterson.io`) |
+| `PUBLIC_URL` | Alternate base-URL source for some links (falls back to `APP_URL`) |
+| `APPLE_AUDIENCES` | Allowed audiences for Sign in with Apple JWT verification (falls back to `APNS_BUNDLE_ID`) |
 | `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | Google AI key for Nano Banana image generation; created at <https://aistudio.google.com> |
-| `GEMINI_IMAGE_MODEL` | Optional override for the default Gemini model id (default `gemini-2.5-flash-image`) |
+| `GEMINI_IMAGE_MODEL` | Optional override for the default (Flash/bulk) Gemini model id (default `gemini-2.5-flash-image`) |
+| `GEMINI_PRO_IMAGE_MODEL` | Optional override for the Gemini Pro model (keystone fallback when no OpenAI key; default `gemini-3-pro-image-preview`) |
 | `IMAGE_GEN_DAILY_LIMIT` | Optional per-account daily image-generation cap (default 150; admins exempt) |
 | `CRON_SECRET` | Optional bearer token Vercel sends to the cron handlers (`/api/cron/*`); when unset the idempotent handlers accept any call |
 
-After deploying with the env vars set, hit `POST /api/init` once with the `ADMIN_TOKEN` to create the tables. The `tile_jobs` table (durable add-a-tile queue) self-creates on first use via `ensureTileJobs`; the **`run-tile-jobs` cron** is registered in `vercel.json` (every minute) — confirm it appears under Project → Settings → Cron Jobs after deploy.
+After deploying with the env vars set, hit `POST /api/init` once with the `ADMIN_TOKEN` to create the tables. The `tile_jobs` table (durable add-a-tile queue) self-creates on first use via `ensureTileJobs`; two crons are registered in `vercel.json` — **`run-tile-jobs`** (every minute) and **`refresh-insights`** (daily 08:00) — confirm they appear under Project → Settings → Cron Jobs after deploy.
 
 ---
 
@@ -704,7 +708,7 @@ All photos / audio of real people live in Vercel Blob behind authenticated `/api
 ## Known limitations & follow-ups
 
 ### Security baseline (shipped)
-- **Cross-child IDOR closed.** `canAccessChild` and `isParentOf` now gate every child-scoped endpoint (`sync`, `analytics`, `events`, `interactions`, `live`, `play-request`, `game-log`, `persons`, `child-settings`, `skill-insights`, `pending-approve`, `onboard-subject`, `generate-image`, `generate-descriptions`, `reference-images`, `push-token`, `exposure-*`).
+- **Cross-child IDOR closed.** `canAccessChild` and `isParentOf` now gate every child-scoped endpoint (`sync`, `analytics`, `events`, `interactions`, `live`, `play-request`, `game-log`, `persons`, `child-settings`, `skill-insights`, `onboard-subject`, `generate-image`, `generate-descriptions`, `push-token`, `exposure-*`).
 - **Media gated by ownership.** `/api/media` does a one-UNION lookup over `items`/`categories`/`persons`/`reference_images`/`pending_tiles`, requires access to at least one owning child, fails open on DB error so the board never goes dark from a guard bug.
 - **All `api/admin/*` admin-gated.** `taxonomy-snapshots` and `taxonomy-audit` were the two gaps; closed with `requireAdmin`.
 - **Image-gen spend cap.** Per-account rolling-24h limit (env `IMAGE_GEN_DAILY_LIMIT`, default 150; admins exempt).
