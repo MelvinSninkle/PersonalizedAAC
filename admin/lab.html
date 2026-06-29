@@ -489,7 +489,7 @@ $('sgu-save').addEventListener('click', async () => {
 // ---- lab settings (master prompt) ---------------------------------------
 let labSettings = { masterPrompt: '', modelDefaults: {}, sizeDefault: '1024x1024' };
 async function loadLabSettings() {
-  const r = await api('GET', '/api/admin/lab-settings');
+  const r = await api('GET', '/api/admin/lab?action=settings');
   labSettings = r.settings || labSettings;
   $('masterPrompt').value = labSettings.masterPrompt || '';
   $('default-model').value = (labSettings.modelDefaults && labSettings.modelDefaults.default) || 'gpt-image-1.5';
@@ -500,7 +500,7 @@ $('default-model').addEventListener('change', async () => {
   const v = $('default-model').value;
   const modelDefaults = Object.assign({}, labSettings.modelDefaults, { default: v });
   try {
-    await api('PUT', '/api/admin/lab-settings', { modelDefaults });
+    await api('PUT', '/api/admin/lab?action=settings', { modelDefaults });
     labSettings.modelDefaults = modelDefaults;
     flashStatus('default-model-status', 'saved', 'saved-flash');
   } catch (err) {
@@ -510,7 +510,7 @@ $('default-model').addEventListener('change', async () => {
 $('btn-save-prompt').addEventListener('click', async () => {
   const t = $('masterPrompt').value;
   try {
-    await api('PUT', '/api/admin/lab-settings', { masterPrompt: t });
+    await api('PUT', '/api/admin/lab?action=settings', { masterPrompt: t });
     labSettings.masterPrompt = t;
     flashStatus('prompt-status', 'saved', 'saved-flash');
   } catch (err) {
@@ -571,8 +571,8 @@ async function loadBoardState() {
   // blank the whole panel, and we surface the real message instead of hiding it
   // (the old single try/catch swallowed errors and left the panel reading 0/0).
   const [bs, cs, ps] = await Promise.all([
-    api('GET', '/api/admin/lab-board-state?childId=' + encodeURIComponent(childId)).catch(e => ({ __err: 'board-state: ' + (e.message || e) })),
-    api('GET', '/api/admin/lab-categories?childId=' + encodeURIComponent(childId)).catch(e => ({ __err: 'categories: ' + (e.message || e) })),
+    api('GET', '/api/admin/lab?action=board-state&childId=' + encodeURIComponent(childId)).catch(e => ({ __err: 'board-state: ' + (e.message || e) })),
+    api('GET', '/api/admin/lab?action=categories&childId=' + encodeURIComponent(childId)).catch(e => ({ __err: 'categories: ' + (e.message || e) })),
     api('GET', '/api/persons?childId=' + encodeURIComponent(childId)).catch(() => ({ persons: [] })),
   ]);
   personsList = (ps && ps.persons) || [];
@@ -643,7 +643,7 @@ async function uploadCategory(row, file) {
   const qs = new URLSearchParams({ childId, section: row.section, label: row.label, ext });
   if (row.parentLabel) qs.set('parent', row.parentLabel);
   try {
-    const res = await fetch('/api/admin/lab-category-upload?' + qs.toString(), {
+    const res = await fetch('/api/admin/lab?action=category-upload&' + qs.toString(), {
       method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
     });
     if (!res.ok) { let d = {}; try { d = await res.json(); } catch (_) {} throw new Error(d.error || ('HTTP ' + res.status)); }
@@ -656,7 +656,7 @@ async function generateCategory(row, div) {
   const orig = div.innerHTML;
   div.innerHTML = `<div style="padding:6px 4px;color:#557fa3;">✨ generating "${escapeHtml(row.label)}"…</div>`;
   try {
-    const r = await api('POST', '/api/admin/lab-category-generate', {
+    const r = await api('POST', '/api/admin/lab?action=category-generate', {
       childId, section: row.section, label: row.label, parent: row.parentLabel || undefined,
       promptOverride: (row.prompt || '').trim() || undefined,
       styleGuideId: currentStyleId() || undefined,
@@ -701,7 +701,7 @@ async function reviewAndGenerateIcons() {
         promptOverride: (r.prompt || '').trim() || undefined,
       }));
       try {
-        const resp = await api('POST', '/api/admin/lab-batch-generate', { categories, childId, styleGuideId: styleGuideId || undefined });
+        const resp = await api('POST', '/api/admin/lab?action=batch-generate', { categories, childId, styleGuideId: styleGuideId || undefined });
         addCost(resp.costCents || 0);
         for (let j = 0; j < slice.length; j++) {
           const cr = (resp.categories || [])[j] || {};
@@ -804,7 +804,7 @@ function renderTiles() {
 
 $('btn-prev').addEventListener('click', () => { if (page > 0) { page--; renderTiles(); window.scrollTo({top: 0, behavior: 'smooth'}); } });
 $('btn-next').addEventListener('click', () => { if ((page + 1) * PAGE_SIZE() < filtered.length) { page++; renderTiles(); window.scrollTo({top: 0, behavior: 'smooth'}); } });
-// ---- bulk batch generation (reuses the shared engine: /api/admin/lab-batch-generate) ----
+// ---- bulk batch generation (reuses the shared engine: /api/admin/lab?action=batch-generate) ----
 function _relIds(t) {
   const r = t.relatedImages;
   if (Array.isArray(r)) return r;
@@ -843,7 +843,7 @@ async function batchGenerateFiltered() {
   for (let i = 0; i < chunks.length; i++) {
     st.textContent = `Generating… ${done}/${total} (chunk ${i + 1}/${chunks.length})`;
     try {
-      const r = await api('POST', '/api/admin/lab-batch-generate', { taxonomyIds: chunks[i], styleGuideId: styleGuideId || undefined, childId, model });
+      const r = await api('POST', '/api/admin/lab?action=batch-generate', { taxonomyIds: chunks[i], styleGuideId: styleGuideId || undefined, childId, model });
       ok += r.generated || 0; fail += r.failed || 0; addCost(r.costCents || 0);
       for (const res of (r.results || [])) if (!res.ok) failed.push(res.id + (res.error ? ` (${res.error})` : ''));
     } catch (e) { fail += chunks[i].length; failed.push(`chunk ${i + 1}: ${e.message || e}`); }
@@ -1038,7 +1038,7 @@ async function generateOne(tileId, styleGuideId, card) {
   const modelOverride = card.querySelector('[data-field="modelOverride"]').value || undefined;
   const childId = ($('publish-child') && $('publish-child').value.trim()) || 'fletcherpeterson';
   try {
-    const r = await api('POST', '/api/admin/lab-generate', {
+    const r = await api('POST', '/api/admin/lab?action=generate', {
       taxonomyId: tileId,
       childId,
       styleGuideId,
@@ -1154,7 +1154,7 @@ async function generateScene(tileId, card) {
   if (note) note.textContent = 'generating…';
   const modelOverride = card.querySelector('[data-field="modelOverride"]').value || undefined;
   try {
-    const r = await api('POST', '/api/admin/lab-generate-scene', { taxonomyId: tileId, childId, subjects, scene, model: modelOverride });
+    const r = await api('POST', '/api/admin/lab?action=generate-scene', { taxonomyId: tileId, childId, subjects, scene, model: modelOverride });
     addCost(r.generation.costCents);
     if (note) note.textContent = r.subjects.map(s => `${s.role}:${s.resolved}`).join('  ');
     await loadGenerations(tileId);
@@ -1173,7 +1173,7 @@ async function uploadImage(tileId, file, card) {
   if (strip) strip.prepend(ph);
   try {
     const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-    const res = await fetch(`/api/admin/lab-upload-image?taxonomyId=${encodeURIComponent(tileId)}&ext=${encodeURIComponent(ext)}`, {
+    const res = await fetch(`/api/admin/lab?action=upload-image&taxonomyId=${encodeURIComponent(tileId)}&ext=${encodeURIComponent(ext)}`, {
       method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
     });
     if (!res.ok) { let d = {}; try { d = await res.json(); } catch (_) {} throw new Error(d.error || ('HTTP ' + res.status)); }
@@ -1190,7 +1190,7 @@ async function portImage(tileId, card) {
   const status = card.querySelector('[data-save-status]');
   flashStatus(status, 'porting…', 'saved-flash');
   try {
-    await api('POST', '/api/admin/lab-port-image', { taxonomyId: tileId, childId });
+    await api('POST', '/api/admin/lab?action=port-image', { taxonomyId: tileId, childId });
     await loadGenerations(tileId);   // ported image is now a candidate — review and ★ it
     flashStatus(status, '⬇ ported board image', 'saved-flash');
   } catch (err) {
@@ -1206,7 +1206,7 @@ async function publishTile(tileId, card) {
   if (!gens.some(g => g.markedBest)) { flashStatus(status, 'mark a ★ best image first', 'err-flash'); return; }
   flashStatus(status, 'publishing…', 'saved-flash');
   try {
-    const r = await api('POST', '/api/admin/lab-publish-tile', { taxonomyId: tileId, childId });
+    const r = await api('POST', '/api/admin/lab?action=publish-tile', { taxonomyId: tileId, childId });
     flashStatus(status, r.created ? `🚀 live on ${childId}` : `🚀 updated on ${childId}`, 'saved-flash');
   } catch (err) {
     flashStatus(status, err.message, 'err-flash');
