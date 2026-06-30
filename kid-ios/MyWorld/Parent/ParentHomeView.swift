@@ -32,35 +32,35 @@ struct ParentHomeView: View {
                                  title: "Add a tile",
                                  subtitle: "Snap it, it's on the board") { showAddTile = true }
 
-                        homeCard(icon: "square.grid.3x3.fill", tint: "#ec4899",
+                        homeCard(icon: "square.grid.3x3.fill", tint: "#14b8a6",
                                  title: "Quick board",
                                  subtitle: "The child can talk on this device") { showQuickBoard = true }
 
-                        navCard(icon: "person.2.crop.square.stack.fill", tint: "#db2777",
+                        navCard(icon: "person.2.crop.square.stack.fill", tint: "#f59e0b",
                                 title: "Family & people",
                                 subtitle: "Faces that anchor their tiles") { PeopleManagerView() }
 
-                        navCard(icon: "gamecontroller.fill", tint: "#c026d3",
+                        navCard(icon: "gamecontroller.fill", tint: "#8b5cf6",
                                 title: "Start a game",
                                 subtitle: "Runs on the child's iPad") { StartGameView() }
 
-                        navCard(icon: "text.bubble.fill", tint: "#be185d",
+                        navCard(icon: "text.bubble.fill", tint: "#3b82f6",
                                 title: "Message the board",
                                 subtitle: "Your words as their tiles") { MessageBoardView() }
 
-                        navCard(icon: "chart.bar.fill", tint: "#9d174d",
+                        navCard(icon: "chart.bar.fill", tint: "#10b981",
                                 title: "Stats",
                                 subtitle: "Progress & mastery") { StatsView() }
 
-                        navCard(icon: "clock.fill", tint: "#831843",
+                        navCard(icon: "clock.fill", tint: "#f97316",
                                 title: "Schedules",
                                 subtitle: "Prompts & reminders") { SchedulesView() }
 
-                        navCard(icon: "photo.on.rectangle.angled", tint: "#ad1457",
+                        navCard(icon: "photo.on.rectangle.angled", tint: "#fb7185",
                                 title: "Album",
                                 subtitle: "Every picture, every year") { AlbumView() }
 
-                        navCard(icon: "sparkles.rectangle.stack.fill", tint: "#9d174d",
+                        navCard(icon: "sparkles.rectangle.stack.fill", tint: "#06b6d4",
                                 title: "Auto-teach",
                                 subtitle: "Hands-off slideshow + daily game") { AutoTeachView() }
                     }

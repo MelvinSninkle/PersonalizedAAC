@@ -159,6 +159,16 @@
   header button.btn-listen { background: #7c3aed; }
   header button.btn-listen:hover { background: #6d28d9; }
   header button.btn-listen.on { background: #dc2626; }   /* red = listening, tap to stop */
+  /* Listen + Play are icon-only round buttons — big, obvious, kid-tappable. */
+  header button.btn-listen, header button.btn-play-req {
+    width: 52px; height: 52px; min-width: 0; border-radius: 50%; padding: 0; font-size: 26px;
+  }
+  header button.btn-listen.on { animation: listenBtnPulse 1.1s ease-in-out infinite; }
+  @keyframes listenBtnPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.55); }
+    50% { box-shadow: 0 0 0 9px rgba(220,38,38,0); }
+  }
+  @media (max-width: 749px) { header button.btn-listen, header button.btn-play-req { width: 44px; height: 44px; font-size: 22px; } }
   /* Listening mode: a one-tile-high live strip takes over the branding spot. */
   #listen-bar { display: none; }
   body.listening .hdr-center h1, body.listening .btn-play-req { display: none; }
@@ -982,12 +992,12 @@
   </div>
   <div class="hdr-center">
     <button id="login-btn" aria-label="Login" title="Login">🔒</button>
-    <button id="listen-btn" class="btn-listen" title="Listen — turn spoken words into picture tiles">🎙️ Listen</button>
+    <button id="listen-btn" class="btn-listen" aria-label="Listen" title="Listen — turn spoken words into picture tiles">🎙️</button>
     <h1>
       <img class="hdr-icon" src="/icons/myworld-globe.png" alt="">
       <span class="cwt">My World</span>
     </h1>
-    <button id="play-request-btn" class="btn-play-req" title="Tell a grown-up you want to play">🙋 Play with me</button>
+    <button id="play-request-btn" class="btn-play-req" aria-label="Play with me" title="Tell a grown-up you want to play">🙋</button>
     <div id="listen-bar" aria-live="polite">
       <span id="listen-mic" aria-hidden="true">🎙️</span>
       <div id="listen-tiles"></div>
@@ -5051,7 +5061,7 @@
     _listening = on;
     document.body.classList.toggle('listening', on);
     const lb = document.getElementById('listen-btn');
-    if (lb) { lb.classList.toggle('on', on); lb.textContent = on ? '⏹️ Stop' : '🎙️ Listen'; }
+    if (lb) { lb.classList.toggle('on', on); lb.textContent = on ? '⏹️' : '🎙️'; lb.title = on ? 'Stop listening' : 'Listen — turn spoken words into picture tiles'; }
     const wrap = document.getElementById('listen-tiles'); if (wrap) wrap.innerHTML = '';
     if (on) { _listenLex = await buildListenLexicon(); await startSpeech(); bumpListenIdle(); }
     else {
