@@ -54,11 +54,39 @@ on-device offline when enabled).
 The first time listening mode starts on the iPad, iOS shows the mic + speech
 permission prompts once; grant them.
 
-## Offline (follow-up)
+## Offline / on-device
 
-The plugin uses Apple's online recognition by default. On-device offline
-recognition is a per-request option; flip it on in `kickSpeech()`
-(`app.html`) once we want offline. No UI/protocol changes needed.
+The web side **already requests on-device** recognition: `kickSpeech()` calls
+`SpeechRecognition.start({ …, requiresOnDeviceRecognition: true })`. Apple's
+`SFSpeechRecognizer` then runs fully offline (no network) for languages the device
+has downloaded.
+
+⚠️ **Native enforcement:** the mainline `@capacitor-community/speech-recognition`
+plugin doesn't read that option, so to make iOS honor it you must set the flag in
+the plugin's Swift once. In `node_modules/@capacitor-community/speech-recognition/
+ios/.../Plugin.swift` (or the Pod source), where the recognition request is built:
+
+```swift
+let request = SFSpeechAudioBufferRecognitionRequest()
+request.requiresOnDeviceRecognition = true   // <-- add this line
+```
+
+Persist it across `npm install` with `patch-package`:
+
+```bash
+npx patch-package @capacitor-community/speech-recognition
+```
+
+(commit the generated `patches/` file). Then `npx cap sync ios` + rebuild. Offline
+needs iOS 13+ and the language pack present under Settings → General → Keyboard /
+Dictation; if a device lacks on-device support the plugin falls back to online.
+
+## Timeout
+
+Listening auto-stops after **2 minutes with no speech heard** (`LISTEN_IDLE_MS` in
+`app.html`); every recognized phrase resets the timer. The child can also stop it
+anytime with the on-board 🎙️ button (it turns red / "⏹️ Stop" while listening),
+or the parent can stop it from the dashboard.
 
 ## Verifying
 

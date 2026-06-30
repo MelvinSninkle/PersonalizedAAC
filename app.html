@@ -156,6 +156,9 @@
   }
   header button.btn-play-req { background: #16a34a; }
   header button.btn-play-req:hover { background: #15803d; }
+  header button.btn-listen { background: #7c3aed; }
+  header button.btn-listen:hover { background: #6d28d9; }
+  header button.btn-listen.on { background: #dc2626; }   /* red = listening, tap to stop */
   /* Listening mode: a one-tile-high live strip takes over the branding spot. */
   #listen-bar { display: none; }
   body.listening .hdr-center h1, body.listening .btn-play-req { display: none; }
@@ -979,6 +982,7 @@
   </div>
   <div class="hdr-center">
     <button id="login-btn" aria-label="Login" title="Login">🔒</button>
+    <button id="listen-btn" class="btn-listen" title="Listen — turn spoken words into picture tiles">🎙️ Listen</button>
     <h1>
       <img class="hdr-icon" src="/icons/myworld-globe.png" alt="">
       <span class="cwt">My World</span>
@@ -4944,7 +4948,12 @@
   // Capacitor SpeechRecognition plugin (Apple SFSpeechRecognizer — online today,
   // on-device offline when enabled); if that plugin isn't present (e.g. plain
   // Safari or dev), the strip shows a friendly note instead of erroring.
-  let _listening = false, _listenLex = null, _listenRestart = false;
+  let _listening = false, _listenLex = null, _listenRestart = false, _listenIdleTimer = null;
+  const LISTEN_IDLE_MS = 120000;   // auto-stop after 2 minutes with no speech heard
+  function bumpListenIdle() {
+    if (_listenIdleTimer) clearTimeout(_listenIdleTimer);
+    _listenIdleTimer = setTimeout(() => { setListenMode(false); }, LISTEN_IDLE_MS);
+  }
   function normalizeListenWord(w) {
     return String(w || '').toLowerCase().replace(/[.,!?;:"()\[\]{}]/g, '').replace(/\s+/g, ' ').trim();
   }
@@ -5005,7 +5014,8 @@
   async function kickSpeech() {
     const SR = speechPlugin(); if (!SR || !_listening) return;
     _listenRestart = true;
-    try { await SR.start({ language: 'en-US', partialResults: true, popup: false }); } catch (_) {}
+    // requiresOnDeviceRecognition → Apple's offline on-device engine (no network).
+    try { await SR.start({ language: 'en-US', partialResults: true, popup: false, requiresOnDeviceRecognition: true }); } catch (_) {}
   }
   async function startSpeech() {
     const SR = speechPlugin();
@@ -5016,6 +5026,7 @@
       try { await SR.removeAllListeners(); } catch (_) {}
       await SR.addListener('partialResults', (data) => {
         const text = (data && data.matches && data.matches[0]) || '';
+        if (text.trim()) bumpListenIdle();   // heard something → reset the 2-min timeout
         if (_listenLex) renderListenStrip(tokenizeForListen(text, _listenLex));
       });
       // iOS ends a recognition session after a pause / ~1 min — restart while on.
@@ -5039,10 +5050,21 @@
     if (on === _listening) return;
     _listening = on;
     document.body.classList.toggle('listening', on);
+    const lb = document.getElementById('listen-btn');
+    if (lb) { lb.classList.toggle('on', on); lb.textContent = on ? '⏹️ Stop' : '🎙️ Listen'; }
     const wrap = document.getElementById('listen-tiles'); if (wrap) wrap.innerHTML = '';
-    if (on) { _listenLex = await buildListenLexicon(); await startSpeech(); }
-    else { await stopSpeech(); _listenLex = null; }
+    if (on) { _listenLex = await buildListenLexicon(); await startSpeech(); bumpListenIdle(); }
+    else {
+      if (_listenIdleTimer) { clearTimeout(_listenIdleTimer); _listenIdleTimer = null; }
+      await stopSpeech(); _listenLex = null;
+    }
   }
+  // The board's own mic toggle, mirrored opposite the Play button. Deliberately
+  // NOT gated by edit mode — the child can start/stop listening himself.
+  (function () {
+    const b = document.getElementById('listen-btn');
+    if (b) b.addEventListener('click', () => setListenMode(!_listening));
+  })();
 
   function applyCmd(cmd) {
     const a = cmd.action;
