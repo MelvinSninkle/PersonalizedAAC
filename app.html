@@ -156,6 +156,19 @@
   }
   header button.btn-play-req { background: #16a34a; }
   header button.btn-play-req:hover { background: #15803d; }
+  /* Listening mode: a one-tile-high live strip takes over the branding spot. */
+  #listen-bar { display: none; }
+  body.listening .hdr-center h1, body.listening .btn-play-req { display: none; }
+  body.listening #listen-bar { display: flex; align-items: center; gap: 10px; width: 100%; max-width: min(96vw, 1100px); }
+  #listen-mic { font-size: 26px; flex: 0 0 auto; animation: listenPulse 1.4s ease-in-out infinite; }
+  @keyframes listenPulse { 0%, 100% { opacity: .45; transform: scale(1); } 50% { opacity: 1; transform: scale(1.12); } }
+  #listen-tiles { display: flex; align-items: center; gap: 8px; overflow-x: auto; flex: 1 1 auto; padding: 4px 2px; scrollbar-width: none; }
+  #listen-tiles::-webkit-scrollbar { display: none; }
+  .listen-chip { flex: 0 0 auto; height: 92px; width: 92px; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.14); overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .listen-chip img { width: 100%; height: 100%; object-fit: cover; }
+  .listen-chip.is-text { width: auto; min-width: 60px; padding: 0 14px; font-family: Fredoka, ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: 22px; color: #ad1457; background: #fce4ec; cursor: default; }
+  #listen-hint { flex: 0 0 auto; font-size: 13px; color: #fff; opacity: .85; white-space: nowrap; }
+  @media (max-width: 820px) { .listen-chip { height: 70px; width: 70px; } }
   header button:hover { background: #880e4f; }
   /* Login icon: small + low-contrast so it doesn't distract the kid (and
      so a stray tap isn't tempting). Becomes more visible once the parent
@@ -971,6 +984,11 @@
       <span class="cwt">My World</span>
     </h1>
     <button id="play-request-btn" class="btn-play-req" title="Tell a grown-up you want to play">🙋 Play with me</button>
+    <div id="listen-bar" aria-live="polite">
+      <span id="listen-mic" aria-hidden="true">🎙️</span>
+      <div id="listen-tiles"></div>
+      <span id="listen-hint">Listening…</span>
+    </div>
   </div>
   <div class="hdr-right"></div>
 </header>
@@ -4919,10 +4937,119 @@
       });
     } catch (_) {}
   }
+  // ---- Listening mode -------------------------------------------------------
+  // Speak near the iPad and the child's world renders live as a one-tile-high
+  // strip across the header. Turned on/off remotely by the parent app (live
+  // 'listen-start' / 'listen-stop'). Speech-to-text comes from the native
+  // Capacitor SpeechRecognition plugin (Apple SFSpeechRecognizer — online today,
+  // on-device offline when enabled); if that plugin isn't present (e.g. plain
+  // Safari or dev), the strip shows a friendly note instead of erroring.
+  let _listening = false, _listenLex = null, _listenRestart = false;
+  function normalizeListenWord(w) {
+    return String(w || '').toLowerCase().replace(/[.,!?;:"()\[\]{}]/g, '').replace(/\s+/g, ' ').trim();
+  }
+  async function buildListenLexicon() {
+    const map = new Map();
+    for (const s of ['people', 'nouns', 'verbs', 'needs']) {
+      let items = [];
+      try { items = await getAllItems(s); } catch (_) {}
+      for (const it of items) {
+        const key = normalizeListenWord(it.label);
+        if (key && !map.has(key)) map.set(key, it);
+      }
+    }
+    return map;
+  }
+  // Greedy-longest tokenization — the SAME rule as /api/message-to-board, run
+  // locally so it's instant and works offline.
+  function tokenizeForListen(text, lex) {
+    const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+    const out = []; let i = 0; const MAX_WINDOW = 6;
+    while (i < words.length && out.length < 40) {
+      let matched = null, used = 1;
+      for (let w = Math.min(MAX_WINDOW, words.length - i); w >= 1; w--) {
+        const phrase = normalizeListenWord(words.slice(i, i + w).join(' '));
+        if (lex.has(phrase)) { matched = lex.get(phrase); used = w; break; }
+      }
+      if (matched) out.push({ word: matched.label, imageKey: matched.imageKey, soundKey: matched.soundKey });
+      else out.push({ word: words[i].replace(/[.,!?;:"()\[\]{}]/g, '') });
+      i += used;
+    }
+    return out;
+  }
+  async function renderListenStrip(tokens) {
+    const wrap = document.getElementById('listen-tiles');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    for (const t of tokens) {
+      const chip = document.createElement('div');
+      chip.className = 'listen-chip' + (t.imageKey ? '' : ' is-text');
+      if (t.imageKey) {
+        const img = document.createElement('img');
+        img.alt = t.word || '';
+        try { const u = await getMediaURL(t.imageKey); if (u) img.src = u; } catch (_) {}
+        chip.appendChild(img);
+        if (t.soundKey) chip.addEventListener('click', async () => {
+          try { const u = await getMediaURL(t.soundKey); if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } } catch (_) {}
+        });
+      } else {
+        chip.textContent = t.word || '';
+      }
+      wrap.appendChild(chip);
+    }
+    wrap.scrollLeft = wrap.scrollWidth;   // keep the newest words in view (slider)
+  }
+  function speechPlugin() {
+    return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition) || null;
+  }
+  async function kickSpeech() {
+    const SR = speechPlugin(); if (!SR || !_listening) return;
+    _listenRestart = true;
+    try { await SR.start({ language: 'en-US', partialResults: true, popup: false }); } catch (_) {}
+  }
+  async function startSpeech() {
+    const SR = speechPlugin();
+    const hint = document.getElementById('listen-hint');
+    if (!SR) { if (hint) hint.textContent = 'Open the installed app to use the mic'; return; }
+    try {
+      try { await SR.requestPermissions(); } catch (_) {}
+      try { await SR.removeAllListeners(); } catch (_) {}
+      await SR.addListener('partialResults', (data) => {
+        const text = (data && data.matches && data.matches[0]) || '';
+        if (_listenLex) renderListenStrip(tokenizeForListen(text, _listenLex));
+      });
+      // iOS ends a recognition session after a pause / ~1 min — restart while on.
+      try {
+        await SR.addListener('listeningState', (s) => {
+          if (_listening && _listenRestart && s && s.status === 'stopped') setTimeout(kickSpeech, 300);
+        });
+      } catch (_) {}
+      if (hint) hint.textContent = 'Listening…';
+      kickSpeech();
+    } catch (_) { if (hint) hint.textContent = 'Could not start listening'; }
+  }
+  async function stopSpeech() {
+    const SR = speechPlugin(); _listenRestart = false;
+    if (!SR) return;
+    try { await SR.stop(); } catch (_) {}
+    try { await SR.removeAllListeners(); } catch (_) {}
+  }
+  async function setListenMode(on) {
+    if (on && (G.running || SLIDE.running || ROUTINE.active || _messagePlaying)) return; // never hijack an activity
+    if (on === _listening) return;
+    _listening = on;
+    document.body.classList.toggle('listening', on);
+    const wrap = document.getElementById('listen-tiles'); if (wrap) wrap.innerHTML = '';
+    if (on) { _listenLex = await buildListenLexicon(); await startSpeech(); }
+    else { await stopSpeech(); _listenLex = null; }
+  }
+
   function applyCmd(cmd) {
     const a = cmd.action;
     if (a === 'start') { startFromCmd(cmd); return; }
     if (a === 'message') { playMessageSequence(cmd); return; }
+    if (a === 'listen-start') { setListenMode(true); return; }
+    if (a === 'listen-stop') { setListenMode(false); return; }
     if (a === 'end') {
       abortRoutine();
       if (SLIDE.running) { stopSlideshow({ manual: true }); return; }

@@ -292,6 +292,14 @@
     <button id="play-banner-x" aria-label="Dismiss" style="border:none; background:transparent; color:#6b7280; font-size:18px; cursor:pointer;">✕</button>
   </div>
 
+  <!-- LISTENING MODE -->
+  <div class="section-label">Listening mode</div>
+  <div class="panel" style="padding:14px;">
+    <p class="hint" style="margin:0 0 10px;">Turn the tablet into a live word-board: tap below and the branding strip becomes a one-tile-high slider. Anything said near the iPad is rendered there as <strong id="ln-name">Fletcher</strong>'s own tiles, using the same matching as Message the Board.</p>
+    <button class="btn" id="listen-toggle" style="font-size:16px;">🎙️ Start listening on the tablet</button>
+    <span id="listen-status" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
+  </div>
+
   <!-- MODE LAUNCHER -->
   <div class="section-label">Start a mode</div>
   <div class="modes" id="modes">
@@ -1474,6 +1482,27 @@
       body: JSON.stringify(cmd),
     }).then(r => r.ok).catch(() => false);
   }
+
+  // ---- Listening mode: flip the tablet's branding strip into a live word-board ----
+  (function () {
+    const btn = document.getElementById('listen-toggle');
+    const status = document.getElementById('listen-status');
+    const nameEl = document.getElementById('ln-name');
+    if (nameEl && typeof pretty === 'string') nameEl.textContent = pretty;
+    if (!btn) return;
+    let on = false;
+    btn.addEventListener('click', async () => {
+      const next = !on;
+      btn.disabled = true; if (status) status.textContent = next ? 'Starting…' : 'Stopping…';
+      const ok = await sendCmd({ kind: 'cmd', action: next ? 'listen-start' : 'listen-stop' });
+      btn.disabled = false;
+      if (!ok) { if (status) status.textContent = 'Could not reach the tablet.'; return; }
+      on = next;
+      btn.textContent = on ? '⏹ Stop listening' : '🎙️ Start listening on the tablet';
+      btn.classList.toggle('primary', on);
+      if (status) status.textContent = on ? 'Tablet is listening — speak near it.' : 'Stopped.';
+    });
+  })();
   function toast(msg) {
     let t = document.getElementById('mini-toast');
     if (!t) {
