@@ -3,8 +3,7 @@
 // per-child REFERENCE image (subject anchor), and — when a name is given —
 // generates a voice and creates/updates a People tile for them (the child is
 // pinned). Returns { key, itemId }. Synchronous: this is the onboarding gate.
-import { put } from '@vercel/blob';
-import { randomUUID } from 'node:crypto';
+import { uploadBytes } from './_lib/blob.js';
 import { checkAuth } from './_lib/auth.js';
 import { archivePriorImage } from './_lib/image-history.js';
 import { sql } from './_lib/db.js';
@@ -17,12 +16,6 @@ import { loadStyleGuide, loadChildStyleGuideId, loadChildVoiceId, synthesizeVoic
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
 
 const MAX_BYTES = 5 * 1024 * 1024;
-
-async function uploadBytes(kind, ext, buffer, contentType) {
-  const pathname = `${kind}/${randomUUID()}.${ext}`;
-  await put(pathname, buffer, { access: 'private', contentType, addRandomSuffix: false });
-  return pathname;
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }

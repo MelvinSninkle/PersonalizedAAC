@@ -13,6 +13,7 @@ import { put, get } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { requireAdmin } from '../_lib/admin.js';
 import { geminiKey, isGeminiModel, geminiCostCents, geminiGenerateImage } from '../_lib/gemini.js';
+import { openaiCostCents } from '../_lib/openai-image.js';
 import { sql } from '../_lib/db.js';
 import { resolveModelForRow } from './model-routes.js';
 import { SQUARE_RULE, captionRule } from '../_lib/onboarding-render.js';
@@ -279,7 +280,7 @@ export default async function handler(req, res) {
         const dollars = ((det.text_tokens || 0) * PRICE.text + (det.image_tokens || 0) * PRICE.imageIn + (u.output_tokens || 0) * PRICE.out) / 1e6;
         costCents = dollars * 100;
       } else {
-        costCents = model === 'gpt-image-2' ? 21 : (model === 'gpt-image-1.5' ? 13 : 4);
+        costCents = openaiCostCents(model);
       }
     }
 

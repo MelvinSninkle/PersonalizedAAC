@@ -292,6 +292,14 @@
     <button id="play-banner-x" aria-label="Dismiss" style="border:none; background:transparent; color:#6b7280; font-size:18px; cursor:pointer;">✕</button>
   </div>
 
+  <!-- LISTENING MODE -->
+  <div class="section-label">Listening mode</div>
+  <div class="panel" style="padding:14px;">
+    <p class="hint" style="margin:0 0 10px;">Turn the tablet into a live word-board: tap below and the branding strip becomes a one-tile-high slider. Anything said near the iPad is rendered there as <strong id="ln-name">Fletcher</strong>'s own tiles, using the same matching as Message the Board.</p>
+    <button class="btn" id="listen-toggle" style="font-size:16px;">🎙️ Start listening on the tablet</button>
+    <span id="listen-status" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
+  </div>
+
   <!-- MODE LAUNCHER -->
   <div class="section-label">Start a mode</div>
   <div class="modes" id="modes">
@@ -670,9 +678,12 @@
   <div class="section-label">Backup</div>
   <div class="panel">
     <h2>Download a backup</h2>
-    <p class="hint">Saves all of this child's categories, tiles, images and sounds to one file you can keep safe.</p>
-    <button class="btn primary" id="backup-export">⬇ Download backup (.json)</button>
-    <span id="backup-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
+    <p class="hint">Save everything on this child's board. The <strong>.json</strong> is a single restore file (used to import the board back into the app). The <strong>.zip</strong> unpacks into browseable folders of the actual image and sound files, plus a manifest.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <button class="btn primary" id="backup-export">⬇ Download backup (.json)</button>
+      <button class="btn" id="backup-zip">⬇ Download images &amp; sounds (.zip)</button>
+    </div>
+    <span id="backup-msg" style="font-size:13px;color:var(--muted);display:block;margin-top:8px;"></span>
   </div>
 
   <!-- ACCOUNT & SECURITY -->
@@ -877,6 +888,7 @@
 
 <script src="/people-picker.js"></script>
 <script src="/schedule-editor.js"></script>
+<script src="/charts.js"></script>
 <script>
 (() => {
   // ---- Admin-only links (e.g. the taxonomy workbench). Surfaced only when the
@@ -933,84 +945,13 @@
     window.location.href = '/u/' + encodeURIComponent(slug);
   });
 
-  // ---- Progress charts: tabbed, color-coded, gold-star for mastered ----
-  const WEEKS = ['6w','5w','4w','3w','2w','1w','now'];
-  const SERIES = {
-    games: {
-      sub: 'First-try matching accuracy by category. Mastered categories (100%) drop to a gold star below to keep the lines readable.',
-      max: 100, unit: '%', collapseStarred: true, labels: WEEKS,
-      star: s => s.data[s.data.length - 1] >= 100, starLabel: 'Mastered · 100%',
-      list: [
-        { name: 'People',     color: '#f59e0b', data: [90, 92, 94, 96, 98, 100, 100] },
-        { name: 'Colors',     color: '#ef4444', data: [78, 84, 90, 94, 98, 100, 100] },
-        { name: 'Body Parts', color: '#10b981', data: [62, 68, 74, 80, 84, 86, 88] },
-        { name: 'Animals',    color: '#3b82f6', data: [55, 62, 70, 74, 80, 82, 84] },
-        { name: 'Foods',      color: '#8b5cf6', data: [40, 48, 55, 60, 64, 68, 71] },
-        { name: 'Feelings',   color: '#ec4899', data: [30, 38, 44, 48, 52, 55, 58] },
-      ],
-    },
-    use: {
-      sub: 'How often Fletcher communicates with each category on his own (taps per period). A gold star means he reached for it every day this week.',
-      max: 40, unit: '', collapseStarred: false, dynamicMax: true, labels: WEEKS,
-      star: s => s.daily, starLabel: 'Used every day this week',
-      list: [
-        { name: 'Foods',    color: '#8b5cf6', daily: true,  data: [18, 22, 25, 28, 30, 33, 36] },
-        { name: 'People',   color: '#f59e0b', daily: true,  data: [12, 14, 16, 19, 22, 24, 27] },
-        { name: 'Actions',  color: '#06b6d4', daily: false, data: [8, 10, 12, 13, 15, 16, 18] },
-        { name: 'Feelings', color: '#ec4899', daily: false, data: [3, 4, 6, 7, 8, 10, 12] },
-        { name: 'Colors',   color: '#ef4444', daily: false, data: [5, 6, 6, 7, 7, 8, 9] },
-      ],
-    },
-    time: {
-      sub: 'Minutes per week. Total use is all the time Fletcher spends in the app; passive learning is time in the Learn and Exposure slideshows.',
-      max: 200, unit: ' min', collapseStarred: false, dynamicMax: true, labels: WEEKS,
-      star: () => false, starLabel: '',
-      list: [
-        { name: 'Total use',        color: '#0ea5e9', data: [70, 95, 115, 130, 150, 168, 180] },
-        { name: 'Passive learning', color: '#a855f7', data: [20, 28, 35, 40, 48, 52, 58] },
-      ],
-    },
-  };
-  function niceMax(v) {
-    if (v <= 10) return Math.max(2, Math.ceil(v / 2) * 2);
-    const mag = Math.pow(10, Math.floor(Math.log10(v)));
-    for (const s of [1, 2, 2.5, 5, 10]) { if (v <= s * mag) return s * mag; }
-    return 10 * mag;
-  }
-  const W = 340, H = 200, PADL = 22, PADR = 10, PADT = 12, PADB = 22;
-  function renderChart(key) {
-    const cfg = SERIES[key];
-    const labels = cfg.labels || WEEKS;
-    const n = labels.length;
-    let drawn = cfg.collapseStarred ? cfg.list.filter(s => !cfg.star(s)) : cfg.list.slice();
-    // Keep it legible: plot at most the 8 busiest categories (stars use the full set).
-    if (drawn.length > 8) drawn = drawn.slice().sort((a, b) => b.data[n - 1] - a.data[n - 1]).slice(0, 8);
-    const max = cfg.dynamicMax ? niceMax(Math.max(1, ...drawn.map(s => Math.max(...s.data)))) : cfg.max;
-    const X = i => PADL + (i / (n - 1)) * (W - PADL - PADR);
-    const Y = v => PADT + (1 - v / max) * (H - PADT - PADB);
-    let svg = '';
-    [0, max / 2, max].forEach(val => {
-      const y = Y(val).toFixed(1);
-      svg += `<line x1="${PADL}" y1="${y}" x2="${W - PADR}" y2="${y}" stroke="#f1e3ea"/>`;
-      svg += `<text x="${PADL - 4}" y="${(+y + 3).toFixed(1)}" text-anchor="end" font-size="8" fill="#9ca3af">${Math.round(val)}</text>`;
-    });
-    drawn.forEach(s => {
-      const pts = s.data.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
-      svg += `<polyline fill="none" stroke="${s.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${pts}"/>`;
-      svg += `<circle cx="${X(n - 1).toFixed(1)}" cy="${Y(s.data[n - 1]).toFixed(1)}" r="3" fill="${s.color}"/>`;
-    });
-    const step = n <= 8 ? 1 : Math.ceil(n / 7);
-    labels.forEach((w, i) => { if (i % step === 0 || i === n - 1) svg += `<text x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="#9ca3af">${w}</text>`; });
-    document.getElementById('ins-svg').innerHTML = svg;
-    document.getElementById('ins-sub').innerHTML = cfg.sub.replace(/Fletcher/g, pretty) + (cfg.sample ? ' <span class="ins-badge">sample</span>' : '');
-    document.getElementById('ins-legend').innerHTML = drawn.map(s =>
-      `<span class="lg"><i style="background:${s.color}"></i>${schEsc(s.name)} <b>${s.data[n - 1]}${cfg.unit}</b></span>`).join('');
-    const starred = cfg.list.filter(cfg.star);
-    document.getElementById('ins-stars').innerHTML = starred.length
-      ? `<span class="lbl">${cfg.starLabel}</span>` + starred.map(s => `<span class="ins-star">⭐ ${schEsc(s.name)}</span>`).join('')
-      : '';
-  }
-  SERIES.use.sample = SERIES.games.sample = SERIES.time.sample = true;
+  // ---- Progress charts now live in /charts.js (shared with the other dashboard) ----
+  Insights.init({ childName: pretty });
+  const SERIES = Insights.SERIES;
+  const WEEKS = Insights.WEEKS;
+  const colorFor = Insights.colorFor;
+  const renderChart = Insights.renderChart;
+  const renderMastery = Insights.renderMastery;
   let currentTab = 'use';
   document.querySelectorAll('.ins-tab').forEach(t => t.addEventListener('click', () => {
     document.querySelectorAll('.ins-tab').forEach(x => x.classList.toggle('active', x === t));
@@ -1023,25 +964,10 @@
   document.getElementById('ins-x').addEventListener('click', () => { insights.style.display = 'none'; restore.classList.add('show'); });
   restore.addEventListener('click', () => { insights.style.display = ''; restore.classList.remove('show'); });
 
-  // ---- Mastery bars ----
-  const SAMPLE_MASTERY = [
-    ['Colors', 92], ['Animals', 84], ['Body Parts', 88], ['Foods', 71],
-    ['Feelings', 58], ['Actions', 66], ['People', 95], ['Vehicles', 79],
-  ];
-  function renderMastery(list) {
-    document.getElementById('mastery').innerHTML = list.map(([name, pct]) => `
-    <div class="bar-row">
-      <span>${schEsc(name)}</span>
-      <span class="bar-track"><span class="bar-fill" style="width:${pct}%"></span></span>
-      <span class="pct">${pct}%</span>
-    </div>`).join('');
-  }
-  renderMastery(SAMPLE_MASTERY);
+  renderMastery([]);
 
   // ---- Wire to live analytics (real where data exists; sample otherwise) ----
-  const COLORS = { 'People':'#f59e0b','Colors':'#ef4444','Body Parts':'#10b981','Animals':'#3b82f6','Foods':'#8b5cf6','Feelings':'#ec4899','Actions':'#06b6d4','Vehicles':'#14b8a6','Total use':'#0ea5e9','Passive learning':'#a855f7' };
-  const PALETTE = ['#ff1493','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#06b6d4','#ec4899'];
-  const colorFor = (name, i) => COLORS[name] || PALETTE[i % PALETTE.length];
+
   function renderRecent(rows) {
     const tb = document.getElementById('recent-body');
     if (!tb) return;
@@ -1556,6 +1482,27 @@
       body: JSON.stringify(cmd),
     }).then(r => r.ok).catch(() => false);
   }
+
+  // ---- Listening mode: flip the tablet's branding strip into a live word-board ----
+  (function () {
+    const btn = document.getElementById('listen-toggle');
+    const status = document.getElementById('listen-status');
+    const nameEl = document.getElementById('ln-name');
+    if (nameEl && typeof pretty === 'string') nameEl.textContent = pretty;
+    if (!btn) return;
+    let on = false;
+    btn.addEventListener('click', async () => {
+      const next = !on;
+      btn.disabled = true; if (status) status.textContent = next ? 'Starting…' : 'Stopping…';
+      const ok = await sendCmd({ kind: 'cmd', action: next ? 'listen-start' : 'listen-stop' });
+      btn.disabled = false;
+      if (!ok) { if (status) status.textContent = 'Could not reach the tablet.'; return; }
+      on = next;
+      btn.textContent = on ? '⏹ Stop listening' : '🎙️ Start listening on the tablet';
+      btn.classList.toggle('primary', on);
+      if (status) status.textContent = on ? 'Tablet is listening — speak near it.' : 'Stopped.';
+    });
+  })();
   function toast(msg) {
     let t = document.getElementById('mini-toast');
     if (!t) {
@@ -3143,6 +3090,110 @@
       setMsg('Downloaded ✓');
     } catch (err) { setMsg('Backup failed: ' + (err.message || err)); }
     backupBtn.disabled = false; backupBtn.textContent = prev;
+  });
+
+  // ---- ZIP backup (real .png/.mp3 files in browseable folders + manifest.json) ----
+  // A parent-friendly archive: instead of one giant base64 JSON, the media land as
+  // actual files they can open. Built entirely client-side with a tiny STORE-only
+  // (no-compression) ZIP writer — PNG/MP3 are already compressed, so STORE is both
+  // correct and fast, and it means no serverless function is needed.
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; }
+    return t;
+  })();
+  function crc32(bytes) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  const _u16 = (n) => new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF]);
+  const _u32 = (n) => new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF]);
+  function _concat(parts) { let len = 0; for (const p of parts) len += p.length; const out = new Uint8Array(len); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; } return out; }
+  function makeZip(files) {
+    const enc = new TextEncoder();
+    const localParts = [], central = []; let offset = 0;
+    for (const f of files) {
+      const nameBytes = enc.encode(f.name);
+      const data = f.data, crc = crc32(data), size = data.length;
+      const header = _concat([
+        _u32(0x04034b50), _u16(20), _u16(0), _u16(0), _u16(0), _u16(0),
+        _u32(crc), _u32(size), _u32(size), _u16(nameBytes.length), _u16(0), nameBytes,
+      ]);
+      localParts.push(header, data);
+      central.push(_concat([
+        _u32(0x02014b50), _u16(20), _u16(20), _u16(0), _u16(0), _u16(0), _u16(0),
+        _u32(crc), _u32(size), _u32(size), _u16(nameBytes.length), _u16(0), _u16(0), _u16(0), _u16(0),
+        _u32(0), _u32(offset), nameBytes,
+      ]));
+      offset += header.length + size;
+    }
+    const centralBytes = _concat(central);
+    const eocd = _concat([
+      _u32(0x06054b50), _u16(0), _u16(0), _u16(files.length), _u16(files.length),
+      _u32(centralBytes.length), _u32(offset), _u16(0),
+    ]);
+    return new Blob([...localParts, centralBytes, eocd], { type: 'application/zip' });
+  }
+  const safeName = (s) => (String(s || 'untitled').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 40) || 'untitled');
+  const extOf = (key, fallback) => { const m = String(key || '').match(/\.([a-z0-9]{1,4})(?:$|\?)/i); return m ? m[1].toLowerCase() : fallback; };
+
+  const zipBtn = document.getElementById('backup-zip');
+  if (zipBtn) zipBtn.addEventListener('click', async () => {
+    const msg = document.getElementById('backup-msg');
+    const setMsg = (t) => { if (msg) msg.textContent = t; };
+    zipBtn.disabled = true; const prev = zipBtn.textContent; zipBtn.textContent = 'Preparing…';
+    try {
+      const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('sync ' + r.status);
+      const data = await r.json();
+      const cats = data.categories || [], items = data.items || [];
+      const files = [];                 // [{ name, data:Uint8Array }]
+      const used = new Set();
+      const cache = new Map();
+      let done = 0, missing = 0; const total = cats.length + items.length;
+      async function addMedia(folder, baseName, key, fallbackExt) {
+        if (!key) return null;
+        let bytes = cache.get(key);
+        if (bytes === undefined) {
+          try {
+            const br = await fetch('/api/media?key=' + encodeURIComponent(key), { credentials: 'same-origin' });
+            bytes = br.ok ? new Uint8Array(await br.arrayBuffer()) : null;
+          } catch (_) { bytes = null; }
+          cache.set(key, bytes);
+        }
+        if (!bytes) { missing++; return null; }
+        let name = folder + '/' + baseName + '.' + extOf(key, fallbackExt);
+        let i = 2; while (used.has(name)) name = folder + '/' + baseName + '-' + (i++) + '.' + extOf(key, fallbackExt);
+        used.add(name);
+        files.push({ name, data: bytes });
+        return name;
+      }
+      const manifest = { version: 1, exportedAt: new Date().toISOString(), child: slug, categories: [], items: [] };
+      for (const c of cats) {
+        const base = 'cat-' + safeName(c.label) + '-' + c.id;
+        const imageFile = await addMedia('images', base, c.imageKey, 'png');
+        manifest.categories.push({ id: c.id, section: c.section, label: c.label, order: c.order ?? 0, parentId: c.parentId ?? null, keepAspect: !!c.keepAspect, imageFile });
+        setMsg('Preparing… ' + (++done) + '/' + total);
+      }
+      for (const it of items) {
+        const base = safeName(it.label) + '-' + it.id;
+        const imageFile = await addMedia('images', base, it.imageKey, 'png');
+        const soundFile = await addMedia('sounds', base, it.soundKey, 'mp3');
+        manifest.items.push({ id: it.id, section: it.section, categoryId: it.categoryId, label: it.label, order: it.order ?? 0, pinned: !!it.pinned, keepAspect: !!it.keepAspect, imageFile, soundFile });
+        setMsg('Preparing… ' + (++done) + '/' + total);
+      }
+      files.push({ name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) });
+      setMsg('Zipping ' + files.length + ' files…');
+      const blob = makeZip(files);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      a.download = slug + '-aac-backup-' + new Date().toISOString().slice(0, 10) + '.zip';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setMsg('Downloaded ✓ — ' + files.length + ' files' + (missing ? ' (' + missing + ' media file(s) could not be fetched)' : ''));
+    } catch (err) { setMsg('ZIP backup failed: ' + (err.message || err)); }
+    zipBtn.disabled = false; zipBtn.textContent = prev;
   });
 })();
 </script>

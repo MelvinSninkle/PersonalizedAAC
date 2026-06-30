@@ -3,7 +3,6 @@
 // optionally guided by the child's saved reference images, and returns the PNG
 // bytes. Every call is logged to image_generations with the prompt and an
 // estimated cost (from the model's token usage). Auth-gated; needs OPENAI_API_KEY.
-import { get } from '@vercel/blob';
 import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
@@ -31,18 +30,6 @@ const ALLOWED_MODELS = ['gpt-image-1', 'gpt-image-1.5', 'gpt-image-2'];
 // Approx pricing for the configured model, USD per 1M tokens (cost log only).
 const PRICE = { text: 5, imageIn: 10, out: 40 };
 
-async function readBlob(key) {
-  const result = await get(key, { access: 'private' });
-  if (result.statusCode !== 200 || !result.stream) throw new Error('blob read failed');
-  const reader = result.stream.getReader();
-  const chunks = [];
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    chunks.push(Buffer.from(value));
-  }
-  return { buffer: Buffer.concat(chunks), contentType: result.blob.contentType || 'image/jpeg' };
-}
 
 // Ask the vision model to describe ONLY the generic physical object in the photo
 // (shape, colors, materials, layout), explicitly excluding any branded /

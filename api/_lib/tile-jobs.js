@@ -13,6 +13,7 @@
 import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { geminiKey, geminiDefaultModel, isGeminiModel, geminiGenerateImage, geminiCostCents } from './gemini.js';
+import { describePhotoLabel } from './vision.js';
 import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, SQUARE_RULE } from './onboarding-render.js';
 
 export const MAX_ATTEMPTS = 3;
@@ -69,27 +70,8 @@ async function describeLabel(buffer, contentType) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return '';
   const dataUrl = `data:${contentType || 'image/jpeg'};base64,${buffer.toString('base64')}`;
-  const prompt =
-    "You are labeling a photo for a young child's communication (AAC) app. Identify the single main " +
-    "subject. Respond with strict JSON only: {\"label\":\"<1-2 word everyday name, Capitalized>\"}. No extra text.";
-  try {
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
-        ] }],
-        response_format: { type: 'json_object' }, max_tokens: 40,
-      }),
-    });
-    if (!r.ok) return '';
-    const data = await r.json();
-    let out = {}; try { out = JSON.parse(data.choices[0].message.content); } catch (_) {}
-    return typeof out.label === 'string' ? out.label.slice(0, 80) : '';
-  } catch (_) { return ''; }
+  const r = await describePhotoLabel({ apiKey, dataUrl });
+  return r.label || '';
 }
 
 // Re-illustrate the source photo in the house style, anchored to the style-guide
