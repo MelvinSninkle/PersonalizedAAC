@@ -524,6 +524,32 @@ struct APIClient {
         s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? s
     }
 
+    // MARK: -- Seed starter words (chunked)
+
+    /// One chunk of onboarding's resumable seed-core build. Mirrors the JSON the
+    /// server returns from POST /api/onboarding/seed-core?g=<n>.
+    struct SeedCoreChunk: Decodable {
+        let ok: Bool
+        let done: Bool
+        let nextG: Int
+        let total: Int
+        let placed: Int
+        let failed: Int
+    }
+
+    /// Build ONE chunk of the child's starter board — the SAME resumable engine
+    /// onboarding uses (upserts by taxonomy_slug, so it never dupes). The caller
+    /// loops, passing `g = 0` first and then the returned `nextG`, until `done`.
+    /// Keeping the loop in the caller lets a SwiftUI view update its progress
+    /// @State on the main actor between chunks without any cross-actor hops.
+    func seedCoreChunk(g: Int) async throws -> SeedCoreChunk {
+        let (data, _) = try await request(method: "POST",
+                                          path: "/api/onboarding/seed-core?g=\(g)",
+                                          body: nil, contentType: "application/json",
+                                          timeout: 320)
+        return try JSONDecoder().decode(SeedCoreChunk.self, from: data)
+    }
+
     private func getJSON<T: Decodable>(_ path: String) async throws -> T {
         let (data, _) = try await request(method: "GET", path: path, body: nil)
         do { return try JSONDecoder().decode(T.self, from: data) }
