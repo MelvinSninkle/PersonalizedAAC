@@ -98,18 +98,18 @@ export default async function handler(req, res) {
     const doneAll = nextG >= allGroups.length;
 
     const render = async (tax, { referenceImageKeys }) => {
-      // Generic tiles (no {placeholder} → identical for every kid) reuse the one
-      // pre-rendered default image if the admin seed-defaults job has populated it.
-      // We point this child's item straight at that shared Blob key — no image
-      // generation at all — but still record the cost row as $0 and, below, voice
-      // the tile in the child's own voice. NULL default (never seeded) falls
-      // through to normal per-child generation.
-      const useDefault = isDefaultableTile(tax) && !!tax.default_image_key;
+      // Default-able tiles (they never reference a specific person) are NOT
+      // generated per-child at all — they read straight from the generic board
+      // (taxonomy.default_image_key) at sync time. We just create the item (linked
+      // by taxonomy_slug) and voice it; the image resolves live, so a later edit on
+      // the generic board updates this child too. Only personalized tiles (People,
+      // {reference}, {parent_photo}) still generate below.
+      const useDefault = isDefaultableTile(tax);
 
       let imageKey, promptForLog, costForLog;
       if (useDefault) {
-        imageKey = tax.default_image_key;
-        promptForLog = '(shared default image)';
+        imageKey = tax.default_image_key || null;   // sync fills this from the generic board
+        promptForLog = '(generic board default)';
         costForLog = 0;
       } else {
         const r = await renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys });

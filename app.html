@@ -2330,8 +2330,17 @@
           if (++guard > 400) break;
         }
         if (bar) bar.style.width = '100%';
-        if (txt) txt.textContent = 'Done — ' + placed + ' tiles created! Refreshing…';
-        setTimeout(() => location.reload(), 1400);
+        // Only reload when something actually landed — otherwise reloading just
+        // flashes back to this same empty screen, which reads as "nothing happened."
+        if (placed > 0) {
+          if (txt) txt.textContent = 'Done — ' + placed + ' tiles created! Refreshing…';
+          setTimeout(() => location.reload(), 1400);
+        } else {
+          if (txt) txt.textContent = total > 0
+            ? ('No tiles could be created (' + total + ' tried). Check the starter words are published in admin, then try again.')
+            : 'No starter words are available to create yet. (None are published in the taxonomy.)';
+          btn.disabled = false;
+        }
       } catch (err) {
         if (txt) txt.textContent = 'Could not generate: ' + (err.message || err);
         btn.disabled = false;
