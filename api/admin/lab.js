@@ -22,6 +22,7 @@ import defaultsView from './_lab-defaults-view.js';
 import generateScene from './_lab-generate-scene.js';
 import generate from './_lab-generate.js';
 import portImage from './_lab-port-image.js';
+import publishDefault from './_lab-publish-default.js';
 import publishTile from './_lab-publish-tile.js';
 import seedDefaults from './_lab-seed-defaults.js';
 import settings from './_lab-settings.js';
@@ -39,6 +40,7 @@ const HANDLERS = {
   'board-state': boardState,
   'port-image': portImage,
   'publish-tile': publishTile,
+  'publish-default': publishDefault,
   'defaults-view': defaultsView,
   'seed-defaults': seedDefaults,
   'settings': settings,

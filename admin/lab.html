@@ -906,6 +906,7 @@ function renderTileCard(t) {
         <button data-act="upload" title="Attach an image you already made as a candidate for this tile">⬆ Upload image</button>
         <input type="file" data-act="upload-input" accept="image/png,image/jpeg,image/webp" style="display:none;">
         <button data-act="publish" title="Publish this tile's ★ best image LIVE to the board">🚀 Push live</button>
+        <button data-act="publish-default" title="Set this tile's ★ best image as the shared DEFAULT (generic board) — every child reuses it">🖼️ Set as default</button>
         <button data-act="port" title="Pull this child's existing board image in as a candidate">⬇ Port from board</button>
         <span class="cost-hint" id="cost-hint-${escapeAttr(t.id)}"></span>
         <span class="saved-flash" data-save-status></span>
@@ -942,6 +943,11 @@ function renderTileCard(t) {
   card.querySelector('[data-act="upload"]').addEventListener('click', () => upInput.click());
   upInput.addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadImage(t.id, f, card); });
   card.querySelector('[data-act="publish"]').addEventListener('click', () => publishTile(t.id, card));
+  // "Set as default" only makes sense for default-able tiles (they don't depend
+  // on a specific person's photo). Hide it for personalized tiles.
+  const pubDef = card.querySelector('[data-act="publish-default"]');
+  if (isDefaultableTile(t)) pubDef.addEventListener('click', () => publishDefault(t.id, card));
+  else pubDef.style.display = 'none';
   card.querySelector('[data-act="port"]').addEventListener('click', () => portImage(t.id, card));
   // Variable scene composer (style + N subjects, each from person-anchor / photo / fresh).
   card._subjects = [];
@@ -1208,6 +1214,30 @@ async function publishTile(tileId, card) {
   try {
     const r = await api('POST', '/api/admin/lab?action=publish-tile', { taxonomyId: tileId, childId });
     flashStatus(status, r.created ? `🚀 live on ${childId}` : `🚀 updated on ${childId}`, 'saved-flash');
+  } catch (err) {
+    flashStatus(status, err.message, 'err-flash');
+  }
+}
+
+// A tile is "default-able" when it never references a specific person — mirrors
+// isDefaultableTile() in api/_lib/onboarding-render.js so the button only shows
+// where a shared default makes sense.
+function isDefaultableTile(t) {
+  if (!t) return false;
+  if (String(t.column || '').toLowerCase() === 'people') return false;
+  if (t.subjectMode === 'child_as_subject') return false;
+  return !/\{(reference|parent_photo|family_adult|family_all)\}/i.test(String(t.promptTemplate || ''));
+}
+
+// ---- set a tile's best image as the shared DEFAULT (generic board) ---------
+async function publishDefault(tileId, card) {
+  const status = card.querySelector('[data-save-status]');
+  const gens = genCache[tileId] || [];
+  if (!gens.some(g => g.markedBest)) { flashStatus(status, 'mark a ★ best image first', 'err-flash'); return; }
+  flashStatus(status, 'setting default…', 'saved-flash');
+  try {
+    await api('POST', '/api/admin/lab?action=publish-default', { taxonomyId: tileId });
+    flashStatus(status, '🖼️ set as default', 'saved-flash');
   } catch (err) {
     flashStatus(status, err.message, 'err-flash');
   }
