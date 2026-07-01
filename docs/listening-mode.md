@@ -26,35 +26,80 @@ The speech engine is abstracted behind `speechPlugin()` →
 Safari or local dev), the strip shows "Open the installed app to use the mic"
 instead of erroring — everything else still works.
 
-## Native step required (one-time, in Xcode) — gives the board its microphone
+## Which app gets what (important — there are TWO Xcode projects)
+
+- **"My World" board app = the Capacitor project** (generated `ios/App/…`, loads the
+  live site). This is the one that needs the speech plugin + the Info.plist keys +
+  a rebuild. Listening mode runs here.
+- **Parent app = `kid-ios/` (standalone SwiftUI)**. A totally separate Xcode project.
+  It does NOT need any of the speech/plist steps — only rebuild it to pick up
+  unrelated changes (e.g. the home-screen colors).
+
+Everything below is for the **Capacitor board app**.
+
+## Native runbook (one-time) — gives the board its microphone
 
 Apple's native speech-to-text isn't reachable from web JS, and the Web Speech API
-does **not** run inside the Capacitor WKWebView. So the installed app needs the
-community speech plugin (Apple `SFSpeechRecognizer` under the hood — online now,
-on-device offline when enabled).
+does **not** run inside the Capacitor WKWebView, so the installed app needs the
+community speech plugin (Apple `SFSpeechRecognizer` under the hood).
 
-1. Install (already added to `package.json`):
-   ```bash
-   npm install
-   ```
-2. Add the two usage strings to the **Capacitor app's** `Info.plist`
-   (`ios/App/App/Info.plist` — NOT `kid-ios/`):
+### 1. Terminal (in the repo folder on the Mac)
+
+```bash
+npm install                 # pulls in @capacitor-community/speech-recognition (already in package.json)
+# If there is no ios/ folder yet (first time only):  npx cap add ios
+npx cap sync ios            # copies the plugin + config into ios/ and runs `pod install`
+npx cap open ios            # opens the project in Xcode
+```
+
+If `npx cap sync ios` complains about CocoaPods: `sudo gem install cocoapods`, then
+re-run it.
+
+### 2. Xcode — add the two permission strings (the part you asked about)
+
+iOS refuses to use the mic/speech unless the app declares *why*. Two ways — pick one:
+
+**GUI way**
+1. In the left sidebar, click the blue **App** icon at the very top.
+2. Select the **App** target → the **Info** tab (a.k.a. "Custom iOS Target Properties").
+3. Hover any row, click the small **`+`**. Start typing **`Privacy - Microphone Usage
+   Description`**, pick it, and set the value to a sentence, e.g.
+   *"My World listens so spoken words appear as picture tiles on the board."*
+4. Click **`+`** again, add **`Privacy - Speech Recognition Usage Description`**, value
+   e.g. *"My World turns speech into the child's picture tiles in listening mode."*
+
+(Those friendly names are the same as the raw keys `NSMicrophoneUsageDescription`
+and `NSSpeechRecognitionUsageDescription`.)
+
+**Faster "paste" way**
+1. In the sidebar open **`App/App/Info.plist`**.
+2. Right-click it → **Open As → Source Code**.
+3. Paste these two pairs on a new line just **before** the final `</dict>`:
    ```xml
    <key>NSMicrophoneUsageDescription</key>
    <string>My World listens so spoken words appear as picture tiles on the board.</string>
    <key>NSSpeechRecognitionUsageDescription</key>
    <string>My World turns speech into the child's picture tiles in listening mode.</string>
    ```
-3. Sync + rebuild:
-   ```bash
-   npx cap sync ios
-   npx cap open ios     # then ▶ Run / archive to TestFlight
-   ```
 
-The first time listening mode starts on the iPad, iOS shows the mic + speech
-permission prompts once; grant them.
+### 3. Build to the iPad
 
-## Offline / on-device
+1. Plug in the iPad (or use the same wireless device you normally deploy to).
+2. Pick it from the device dropdown at the top of Xcode.
+3. **Signing & Capabilities** → make sure your **Team** is selected (same as before).
+4. Press **▶** to run, or **Product → Archive** → distribute to **TestFlight** the way
+   you normally ship to the child's iPad.
+
+### 4. First run
+
+The first time listening mode starts on the iPad, iOS shows the **microphone** and
+**speech recognition** permission prompts once — tap **Allow** on both. After that
+it never asks again.
+
+## 5. (Optional, advanced) Make it work fully offline
+
+**You can skip this at first — listening works over the internet without it.** Do it
+later when you want on-device/offline recognition.
 
 The web side **already requests on-device** recognition: `kickSpeech()` calls
 `SpeechRecognition.start({ …, requiresOnDeviceRecognition: true })`. Apple's
