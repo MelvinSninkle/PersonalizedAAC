@@ -1,6 +1,8 @@
 import SwiftUI
 import AuthenticationServices
 import AVFoundation
+import PhotosUI
+import UIKit
 
 /// The whole onboarding flow, gathered in one file so the sequence reads
 /// top-to-bottom: Demo → Account → Child → Child photo → Parent photo →
@@ -687,6 +689,9 @@ private struct OnboardingPhotoView: View {
     @State private var attempt = 0
     @State private var busy = false
     @State private var showPicker = false
+    @State private var showLibrary = false
+    @State private var showSourceChoice = false
+    @State private var libraryItem: PhotosPickerItem?
     @State private var subjectName: String = ""
     @State private var relationship: String = "mother"
     @State private var errorText: String?
@@ -731,6 +736,26 @@ private struct OnboardingPhotoView: View {
             CameraPicker { data in
                 showPicker = false
                 if let data { Task { await draft(data) } }
+            }
+        }
+        // Let the parent choose the camera OR their photo library (the bug was
+        // that this went straight to the camera with no library option).
+        .confirmationDialog("Add a photo", isPresented: $showSourceChoice, titleVisibility: .visible) {
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button("Take Photo") { showPicker = true }
+            }
+            Button("Choose from Library") { showLibrary = true }
+            Button("Cancel", role: .cancel) {}
+        }
+        .photosPicker(isPresented: $showLibrary, selection: $libraryItem, matching: .images)
+        .onChange(of: libraryItem) { _, item in
+            guard let item else { return }
+            Task {
+                let raw = try? await item.loadTransferable(type: Data.self)
+                libraryItem = nil
+                if let raw, let jpeg = downscaleJPEG(raw, maxDim: 1024, quality: 0.85) {
+                    await draft(jpeg)
+                }
             }
         }
     }
@@ -834,7 +859,7 @@ private struct OnboardingPhotoView: View {
     }
 
     private var captureCard: some View {
-        Button { showPicker = true } label: {
+        Button { showSourceChoice = true } label: {
             VStack(spacing: 10) {
                 Image(systemName: "camera.fill")
                     .font(.system(size: 32))

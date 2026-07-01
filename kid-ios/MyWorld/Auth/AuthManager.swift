@@ -21,7 +21,7 @@ final class AuthManager {
         // The child slug we render. Today every parent account is tied to
         // exactly one child via `user.slug`. If we ever support multi-child
         // parents we surface a picker; for now the slug is the user's slug.
-        self.childSlug = cached?.slug ?? "fletcherpeterson"
+        self.childSlug = cached?.slug ?? ""
     }
 
     var isSignedIn: Bool { user != nil }

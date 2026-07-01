@@ -23,7 +23,7 @@ struct HeaderBar: View {
     @State private var showUnlock = false
     @State private var showAddTile = false
 
-    var title: String { "\(prettyChildName(auth.user?.slug))'s World" }
+    var title: String { worldTitle(auth.user?.slug) }
     private var hex: String { prefs.colorHeaderText }
 
     var body: some View {

@@ -208,3 +208,16 @@ func prettyChildName(_ slug: String?) -> String {
     guard let first = name.first else { return slug }
     return String(first).uppercased() + name.dropFirst()
 }
+
+/// The board / app title: "{Name}'s World", or a generic "My World" when no
+/// child name is known yet (so an unset account never reads "Fletcher's World").
+func worldTitle(_ slug: String?) -> String {
+    let n = prettyChildName(slug)
+    return n.isEmpty ? "My World" : "\(n)'s World"
+}
+
+/// Possessive for copy ("Fletcher's …"), with a generic fallback when unknown.
+func childPossessive(_ slug: String?, fallback: String = "your child's") -> String {
+    let n = prettyChildName(slug)
+    return n.isEmpty ? fallback : "\(n)'s"
+}

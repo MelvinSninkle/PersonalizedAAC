@@ -17,7 +17,7 @@ final class Scheduler {
     var pending: Schedule?
 
     private var schedules: [Schedule] = []
-    private var childId: String = "fletcherpeterson"
+    private var childId: String = ""
     private let api = APIClient()
     private var fired: [String: Any] = [:]
     private var tickTask: Task<Void, Never>?
