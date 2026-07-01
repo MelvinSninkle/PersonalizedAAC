@@ -18,6 +18,7 @@ import boardState from './_lab-board-state.js';
 import categories from './_lab-categories.js';
 import categoryGenerate from './_lab-category-generate.js';
 import categoryUpload from './_lab-category-upload.js';
+import defaultsView from './_lab-defaults-view.js';
 import generateScene from './_lab-generate-scene.js';
 import generate from './_lab-generate.js';
 import portImage from './_lab-port-image.js';
@@ -38,6 +39,7 @@ const HANDLERS = {
   'board-state': boardState,
   'port-image': portImage,
   'publish-tile': publishTile,
+  'defaults-view': defaultsView,
   'seed-defaults': seedDefaults,
   'settings': settings,
   'upload-image': uploadImage,
