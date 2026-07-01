@@ -21,7 +21,7 @@ final class SpeechListener {
     var status: String = ""
 
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-    private let audioEngine = AVAudioEngine()
+    private var audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var useOnDevice = true
@@ -71,20 +71,28 @@ final class SpeechListener {
             status = "Audio session error: \(error.localizedDescription)"; isListening = false; return
         }
 
+        // Fresh engine each session so the input node picks up the CURRENT record
+        // route. A stale engine created earlier under the app's .playback session
+        // is the usual cause of a 0-sample-rate "format unavailable".
+        let engine = AVAudioEngine()
+        audioEngine = engine
+        let input = engine.inputNode
+        let format = input.inputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            status = "Microphone format unavailable (sr=\(Int(format.sampleRate))). Try toggling Listen off/on."
+            isListening = false; return
+        }
+
         let req = SFSpeechAudioBufferRecognitionRequest()
         req.shouldReportPartialResults = true
         req.requiresOnDeviceRecognition = useOnDevice   // offline when available
         request = req
 
-        let input = audioEngine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0 else { status = "Microphone format unavailable."; isListening = false; return }
-        input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.request?.append(buffer)
         }
-        audioEngine.prepare()
-        do { try audioEngine.start() }
+        engine.prepare()
+        do { try engine.start() }
         catch { status = "Mic start error: \(error.localizedDescription)"; isListening = false; return }
 
         status = useOnDevice ? "Listening (on-device)…" : "Listening…"
