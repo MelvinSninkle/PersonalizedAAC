@@ -14,6 +14,13 @@
 // Fletcher's item key) decouples the shared default from his board's lifecycle —
 // re-generating or deleting a tile on his board can't break every other kid's.
 //
+// MATCHING the reference board's tiles to taxonomy rows: by items.taxonomy_slug
+// first (populated by onboarding or the "Backfill slugs" tool); if that yields
+// nothing (an old board that was never slug-linked), we FALL BACK to matching by
+// label (unambiguous default-able labels only). Taxonomy status is NOT required —
+// copying a default is harmless on a draft row, and it lets apply-mode repoint a
+// live board even where the canonical row hasn't been published yet.
+//
 // Two modes (both chunked/resumable — call repeatedly until { done:true }):
 //   mode=populate (default)            — copy the reference board's default-able
 //     ?sourceChildId=<slug>              tiles into taxonomy.default_image_key
@@ -41,6 +48,25 @@ const DEFAULT_SOURCE_CHILD = 'fletcherpeterson';
 const POPULATE_BUDGET = 30;
 const APPLY_BUDGET = 24;
 
+const norm = (s) => String(s || '').trim().toLowerCase();
+
+// Map of normalized label → the single default-able taxonomy row with that label.
+// Ambiguous labels (two default-able rows share one) are dropped so a label-based
+// match is never wrong. Used as the fallback when items aren't slug-linked.
+async function defaultableLabelMap(db) {
+  const tax = await db`
+    SELECT id, column_name, subcategory, category, label, prompt_template, subject_mode, default_image_key
+    FROM taxonomy WHERE COALESCE(archived, FALSE) = FALSE`;
+  const map = new Map(); const dup = new Set();
+  for (const t of tax) {
+    if (!isDefaultableTile(t)) continue;
+    const k = norm(t.label); if (!k) continue;
+    if (map.has(k)) dup.add(k); else map.set(k, t);
+  }
+  for (const k of dup) map.delete(k);
+  return map;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
   const gate = await requireAdmin(req, res);
@@ -63,57 +89,65 @@ async function populate(req, res, db) {
   const offset = Math.max(0, parseInt((req.query && req.query.offset) || '0', 10) || 0);
 
   // Pick the reference board. Prefer the explicit ?sourceChildId, else Fletcher's;
-  // but a board only helps if its tiles are LINKED to taxonomy slugs (items.
-  // taxonomy_slug — populated by onboarding or the "Backfill slugs" tool). If the
-  // default board has no linked tiles and none was named, auto-detect the board
-  // with the most taxonomy-linked images so a mis-remembered slug never silently
-  // yields "0 of 0".
+  // if that board has no tiles with images and none was named, auto-detect the
+  // board with the most images so a mis-remembered slug never yields "0 of 0".
   let sourceChildId = explicitSource || DEFAULT_SOURCE_CHILD;
-  const linkedCount = async (cid) => Number((await db`
-    SELECT COUNT(*)::int AS c FROM items
-    WHERE child_id = ${cid} AND taxonomy_slug IS NOT NULL AND image_key IS NOT NULL`)[0]?.c || 0);
-  let sourceLinked = await linkedCount(sourceChildId);
-  if (!explicitSource && sourceLinked === 0) {
+  const imageCount = async (cid) => Number((await db`
+    SELECT COUNT(*)::int AS c FROM items WHERE child_id = ${cid} AND image_key IS NOT NULL`)[0]?.c || 0);
+  let sourceImages = await imageCount(sourceChildId);
+  if (!explicitSource && sourceImages === 0) {
     const best = await db`
       SELECT child_id, COUNT(*)::int AS c FROM items
-      WHERE child_id IS NOT NULL AND taxonomy_slug IS NOT NULL AND image_key IS NOT NULL
+      WHERE child_id IS NOT NULL AND image_key IS NOT NULL
       GROUP BY child_id ORDER BY c DESC LIMIT 1`;
-    if (best.length && best[0].c > 0) { sourceChildId = best[0].child_id; sourceLinked = Number(best[0].c); }
+    if (best.length && best[0].c > 0) { sourceChildId = best[0].child_id; sourceImages = Number(best[0].c); }
   }
 
-  // Drive from the reference board's own tiles (joined to their taxonomy row) so
-  // we only ever try to copy images that actually exist, and the default set is
-  // exactly what that board already shows. Deterministic order → stable cursor.
-  const rows = await db`
+  // Primary: the reference board's tiles joined to their taxonomy row by slug.
+  // NB: no status filter — copying a default is fine on a draft row. Dedupe by
+  // taxonomy id (first item on a slug wins).
+  const linked = await db`
     SELECT t.id AS tax_id, t.column_name, t.subject_mode, t.prompt_template,
            t.default_image_key, i.image_key AS src_key
     FROM items i
     JOIN taxonomy t ON t.id = i.taxonomy_slug
     WHERE i.child_id = ${sourceChildId}
       AND i.image_key IS NOT NULL
-      AND t.status = 'published'
       AND COALESCE(t.archived, FALSE) = FALSE
     ORDER BY t.id`;
-
-  // Keep only the default-able tiles (isDefaultableTile reads column_name /
-  // subject_mode / prompt_template), and drop dupes if the source board happens
-  // to have two items on the same taxonomy slug (first one wins).
   const seen = new Set();
-  const defaultable = rows.filter((r) => {
-    if (seen.has(r.tax_id)) return false;
-    if (!isDefaultableTile(r)) return false;
-    seen.add(r.tax_id);
-    return true;
+  let defaultable = linked.filter((r) => {
+    if (seen.has(r.tax_id) || !isDefaultableTile(r)) return false;
+    seen.add(r.tax_id); return true;
   });
+  let matchedBy = 'slug';
+
+  // Fallback: no slug-linked default-able tiles → match this board's item labels
+  // to unambiguous default-able taxonomy labels.
+  if (defaultable.length === 0) {
+    const [map, items] = await Promise.all([
+      defaultableLabelMap(db),
+      db`SELECT label, image_key FROM items WHERE child_id = ${sourceChildId} AND image_key IS NOT NULL`,
+    ]);
+    const seen2 = new Set(); const alt = [];
+    for (const it of items) {
+      const t = map.get(norm(it.label));
+      if (!t || seen2.has(t.id)) continue;
+      seen2.add(t.id);
+      alt.push({ tax_id: t.id, column_name: t.column_name, subject_mode: t.subject_mode,
+                 prompt_template: t.prompt_template, default_image_key: t.default_image_key, src_key: it.image_key });
+    }
+    if (alt.length) { defaultable = alt; matchedBy = 'label'; }
+  }
+
   const pending = defaultable.filter((t) => force || !t.default_image_key);
   const total = pending.length;
   const slice = pending.slice(offset, offset + POPULATE_BUDGET);
 
   const results = await mapPool(slice, 4, async (row) => {
-    // Copy the reference tile's bytes into a stable defaults path.
     const { buffer, contentType } = await readBlobBytes(row.src_key);
     const ext = String(contentType || '').includes('png') ? 'png'
-              : String(contentType || '').includes('jpeg') || String(contentType || '').includes('jpg') ? 'jpg' : 'png';
+              : (String(contentType || '').includes('jpeg') || String(contentType || '').includes('jpg')) ? 'jpg' : 'png';
     const key = `taxonomy-defaults/${row.tax_id}/${randomUUID()}.${ext}`;
     await put(key, buffer, { access: 'private', contentType: contentType || 'image/png', addRandomSuffix: false });
     await db`UPDATE taxonomy SET default_image_key = ${key}, updated_at = NOW() WHERE id = ${row.tax_id}`;
@@ -125,24 +159,20 @@ async function populate(req, res, db) {
   const nextOffset = offset + slice.length;
   const done = nextOffset >= total;
 
-  // If there's genuinely nothing to do, say WHY — the usual cause is a reference
-  // board whose tiles aren't linked to taxonomy slugs (run "Backfill slugs" on it).
-  let note = `${defaultable.length} default-able tiles on ${sourceChildId}; ${total} ${force ? 'to (re)copy' : 'missing a default'}.`;
+  // If there's genuinely nothing to do, say WHY.
+  let note = `${defaultable.length} default-able tiles on ${sourceChildId} (matched by ${matchedBy}); ${total} ${force ? 'to (re)copy' : 'missing a default'}.`;
   let diag;
   if (defaultable.length === 0 && offset === 0) {
-    const withImg = Number((await db`SELECT COUNT(*)::int AS c FROM items WHERE child_id = ${sourceChildId} AND image_key IS NOT NULL`)[0]?.c || 0);
-    diag = { sourceChildId, itemsWithImage: withImg, itemsLinkedToTaxonomy: sourceLinked, rowsJoined: rows.length };
-    note = withImg === 0
+    diag = { sourceChildId, itemsWithImage: sourceImages, slugLinkedRows: linked.length };
+    note = sourceImages === 0
       ? `Reference board "${sourceChildId}" has no tiles with images — pass ?sourceChildId=<slug> for the right board.`
-      : sourceLinked === 0
-        ? `"${sourceChildId}" has ${withImg} tiles but none are linked to taxonomy slugs. Run "🔗 Backfill slugs…" on that board first, then re-run this.`
-        : `${rows.length} linked tiles found but none are default-able (all reference a person?).`;
+      : `"${sourceChildId}" has ${sourceImages} tiles but none matched a default-able taxonomy row (by slug or label).`;
   }
 
   res.setHeader('Cache-Control', 'no-store');
   res.status(200).json({
     ok: true, mode: 'populate', done, nextOffset, total, processed, failed,
-    sourceChildId, defaultableCount: defaultable.length, note, ...(diag ? { diag } : {}),
+    sourceChildId, matchedBy, defaultableCount: defaultable.length, note, ...(diag ? { diag } : {}),
   });
 }
 
@@ -152,9 +182,9 @@ async function applyToChild(req, res, db, gate) {
   if (!childId) { res.status(400).json({ error: 'childId required for apply mode' }); return; }
   const offset = Math.max(0, parseInt((req.query && req.query.offset) || '0', 10) || 0);
 
-  // The child's items whose taxonomy row is default-able AND has a default image,
-  // that aren't already pointing at it. Join items → taxonomy on taxonomy_slug = id.
-  const rows = await db`
+  // Primary: the child's items whose taxonomy row (by slug) is default-able AND
+  // has a default image, that aren't already pointing at it.
+  const linked = await db`
     SELECT i.id AS item_id, i.label, i.image_key,
            t.default_image_key, t.column_name, t.subject_mode, t.prompt_template
     FROM items i
@@ -163,8 +193,27 @@ async function applyToChild(req, res, db, gate) {
       AND t.default_image_key IS NOT NULL
       AND i.image_key IS DISTINCT FROM t.default_image_key
     ORDER BY i.id`;
+  let eligible = linked.filter(isDefaultableTile);
+  let matchedBy = 'slug';
 
-  const eligible = rows.filter(isDefaultableTile);
+  // Fallback: not slug-linked → match by label to default-able rows that have a
+  // default image.
+  if (eligible.length === 0) {
+    const [map, items] = await Promise.all([
+      defaultableLabelMap(db),
+      db`SELECT id AS item_id, label, image_key FROM items WHERE child_id = ${childId} AND image_key IS NOT NULL`,
+    ]);
+    const alt = [];
+    for (const it of items) {
+      const t = map.get(norm(it.label));
+      if (!t || !t.default_image_key || it.image_key === t.default_image_key) continue;
+      alt.push({ item_id: it.item_id, label: it.label, image_key: it.image_key,
+                 default_image_key: t.default_image_key, column_name: t.column_name,
+                 subject_mode: t.subject_mode, prompt_template: t.prompt_template });
+    }
+    if (alt.length) { eligible = alt; matchedBy = 'label'; }
+  }
+
   const total = eligible.length;
   const slice = eligible.slice(offset, offset + APPLY_BUDGET);
   const childVoiceId = await loadChildVoiceId(db, childId);
@@ -194,7 +243,7 @@ async function applyToChild(req, res, db, gate) {
 
   res.setHeader('Cache-Control', 'no-store');
   res.status(200).json({
-    ok: true, mode: 'apply', childId, done, nextOffset, total, updated, failed,
-    note: `${total} default-able items on this board can adopt a default image.`,
+    ok: true, mode: 'apply', childId, matchedBy, done, nextOffset, total, updated, failed,
+    note: `${total} default-able items on this board can adopt a default image (matched by ${matchedBy}).`,
   });
 }
