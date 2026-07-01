@@ -18,6 +18,8 @@ struct HeaderBar: View {
     @Binding var editMode: Bool
     @Binding var showDisplay: Bool
     @Binding var showSettings: Bool
+    @Binding var listening: Bool
+    let speech: SpeechListener
     @State private var showUnlock = false
     @State private var showAddTile = false
 
@@ -26,23 +28,31 @@ struct HeaderBar: View {
 
     var body: some View {
         ZStack {
-            // Centered title fills the strip; the side controls overlay on top.
-            HStack(spacing: 8) {
-                Image(systemName: "globe.americas.fill")
-                    .foregroundStyle(Color(hex: hex))
-                Text(title)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(hex: hex))
+            // Centered content: the branded title, or — while listening — the
+            // live one-tile-high strip that takes over the branding spot.
+            if listening {
+                ListenStripView(speech: speech)
+                    .padding(.horizontal, 66)   // clear the side buttons
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: "globe.americas.fill")
+                        .foregroundStyle(Color(hex: hex))
+                    Text(title)
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(hex: hex))
+                }
             }
 
             HStack {
                 lockButton
+                listenButton
                 Spacer()
                 trailingControls
             }
             .padding(.horizontal, 12)
         }
-        .frame(height: 48)
+        .frame(height: listening ? 104 : 48)
+        .animation(.easeInOut(duration: 0.2), value: listening)
         .background(Color(hex: prefs.colorHeaderBg))
         .onTapGesture(count: 3) {
             // Hidden gesture: triple-tap the bar to open settings (sign out,
@@ -83,6 +93,25 @@ struct HeaderBar: View {
                     if !editMode { showUnlock = true }
                 }
         )
+    }
+
+    // MARK: -- Left (after lock): the mic toggle for Listening Mode
+    //
+    // Deliberately NOT behind edit mode — the child can turn listening on/off
+    // himself, mirrored opposite the Play button. Flips `listening`; BoardView
+    // owns the actual speech start/stop + the 2-minute timeout.
+
+    private var listenButton: some View {
+        Button {
+            listening.toggle()
+        } label: {
+            Image(systemName: listening ? "stop.circle.fill" : "mic.circle.fill")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(listening ? Color(hex: "#dc2626") : Color(hex: hex).opacity(0.9))
+                .padding(6)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: -- Right: Play with me + (edit-only) toolbar

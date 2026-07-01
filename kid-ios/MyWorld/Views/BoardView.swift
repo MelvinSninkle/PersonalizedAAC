@@ -30,6 +30,10 @@ struct BoardView: View {
     @State private var addTileRequest: AddTileRequest?
     /// A tile tapped while the board is unlocked → opens the full board editor.
     @State private var editingTile: Tile?
+    /// Listening mode — the mic-driven live word-board in the header.
+    @State private var speech = SpeechListener()
+    @State private var listening = false
+    @State private var listenTimeout: Task<Void, Never>?
 
     struct AddTileRequest: Identifiable {
         let id = UUID()
@@ -41,7 +45,9 @@ struct BoardView: View {
         VStack(spacing: 0) {
             HeaderBar(editMode: $editMode,
                       showDisplay: $showDisplay,
-                      showSettings: $showSettings)
+                      showSettings: $showSettings,
+                      listening: $listening,
+                      speech: speech)
 
             GeometryReader { geo in
                 // One uniform tile size for the WHOLE board — columns and the
@@ -132,6 +138,9 @@ struct BoardView: View {
             live.stop()
             scheduler.stop()
             autoTeach.stop()
+            listenTimeout?.cancel()
+            if listening { listening = false }
+            speech.stop()
         }
         .refreshable {
             await board.refresh(childId: auth.childSlug)
@@ -139,15 +148,35 @@ struct BoardView: View {
         }
         .onChange(of: live.latest) { _, cmd in
             guard let cmd else { return }
+            // Listening mode can be toggled remotely from the parent app.
+            if cmd.action == "listen-start" {
+                listening = true
+            } else if cmd.action == "listen-stop" {
+                listening = false
             // PRD §4.7: a "message" command renders the parent's text as a
             // tile sequence. Doesn't go through GameController — it's an
             // overlay-only experience.
-            if cmd.action == "message", let toks = cmd.tokens, !toks.isEmpty {
+            } else if cmd.action == "message", let toks = cmd.tokens, !toks.isEmpty {
                 pendingMessage = toks
             } else {
                 game.apply(cmd)
             }
             live.acknowledge()
+        }
+        // Listening mode: start/stop the mic when toggled (by the header button
+        // or a remote command), and auto-stop after 2 minutes of no speech.
+        .onChange(of: listening) { _, on in
+            listenTimeout?.cancel()
+            if on {
+                guard game.current == nil, pendingMessage == nil else { listening = false; return }
+                speech.start()
+                scheduleListenTimeout()
+            } else {
+                speech.stop()
+            }
+        }
+        .onChange(of: speech.transcript) { _, t in
+            if listening && !t.isEmpty { scheduleListenTimeout() }
         }
         // Pause the scheduler tick while a game / unlock / settings sheet is up
         // so a fired schedule doesn't try to stack a second sheet on top.
@@ -224,6 +253,16 @@ struct BoardView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
             .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// Auto-stop Listening Mode after 2 minutes with no new speech. Each
+    /// recognized phrase reschedules this (see `.onChange(of: speech.transcript)`).
+    private func scheduleListenTimeout() {
+        listenTimeout?.cancel()
+        listenTimeout = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000_000)
+            if !Task.isCancelled && listening { listening = false }
         }
     }
 
