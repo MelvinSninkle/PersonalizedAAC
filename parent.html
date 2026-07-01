@@ -250,14 +250,21 @@
   <h1 class="page-title fred" style="margin-top:24px;">Hi Andrew 👋</h1>
   <p class="page-sub">Here's how <strong id="child-name">Fletcher</strong> is doing. Start a learning mode below, or review progress. <em>Fletcher never sees this screen.</em></p>
 
-  <!-- ONBOARDING NUDGE — shown when the board has no tiles yet (setup unfinished) -->
-  <div id="onboard-nudge" style="display:none;align-items:center;gap:14px;background:#fff7fb;border:2px solid var(--pink);border-radius:16px;padding:16px 18px;margin:8px 0 18px;">
+  <!-- STARTER-WORDS CTA — shown when the board has no core/needs vocabulary yet.
+       Auto-generates the core + needs starter set (reuses the onboarding seed
+       engine; upserts by taxonomy_slug so re-running never duplicates). -->
+  <div id="onboard-nudge" style="display:none;flex-wrap:wrap;align-items:center;gap:12px 14px;background:#fff7fb;border:2px solid var(--pink);border-radius:16px;padding:16px 18px;margin:8px 0 18px;">
     <span style="font-size:26px;">🎨</span>
-    <div style="flex:1;">
-      <div style="font-weight:700;color:var(--pink-deep,#ad1457);font-size:16px;">Finish setting up <span class="cn">your child</span>'s board</div>
-      <div style="font-size:13px;color:#6b7280;margin-top:2px;">You haven't built the board yet — pick a style and add the first tiles. It takes about five minutes.</div>
+    <div style="flex:1;min-width:220px;">
+      <div style="font-weight:700;color:var(--pink-deep,#ad1457);font-size:16px;">Generate <span class="cn">your child</span>'s starter words</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:2px;">Auto-create the core vocabulary + needs words in your chosen style. Takes a few minutes.</div>
+      <div id="seed-progress" style="display:none;margin-top:10px;">
+        <div style="height:8px;background:#fce4ec;border-radius:999px;overflow:hidden;"><div id="seed-bar" style="height:100%;width:0;background:var(--pink);transition:width .3s;"></div></div>
+        <div id="seed-status" style="font-size:12px;color:#6b7280;margin-top:5px;"></div>
+      </div>
     </div>
-    <a class="btn primary" id="onboard-nudge-go" href="/onboard">Continue setup →</a>
+    <button class="btn primary" id="seed-now-btn">✨ Generate starter words</button>
+    <a class="btn" id="onboard-nudge-go" href="/onboard">Full setup →</a>
   </div>
 
   <!-- BULK-IMPORT REVIEW QUEUE — tiles imported in bulk (iOS app or web) land
@@ -924,17 +931,55 @@
     const hits = []; while (tw.nextNode()) hits.push(tw.currentNode);
     hits.forEach(n => { n.nodeValue = n.nodeValue.replace(/Fletcher/g, pretty); });
   }
-  // Onboarding nudge: no tiles on the board yet → setup is unfinished.
+  // Starter-words CTA: show when the board has no CORE/NEEDS vocabulary yet
+  // (people-only counts as "not built" — the core set is what's missing).
   (async () => {
     try {
       const r = await fetch('/api/sync?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
       if (!r.ok) return;
       const d = await r.json();
-      if (!((d.items || []).length)) {
+      const core = (d.items || []).filter(i => String(i.section || '').toLowerCase() !== 'people');
+      if (!core.length) {
         const n = document.getElementById('onboard-nudge'); if (n) n.style.display = 'flex';
       }
     } catch (_) {}
   })();
+
+  // Generate the core + needs starter vocabulary on demand — the same chunked,
+  // resumable engine onboarding uses. Upserts by taxonomy_slug so it never dupes.
+  const seedNowBtn = document.getElementById('seed-now-btn');
+  if (seedNowBtn) seedNowBtn.addEventListener('click', async () => {
+    seedNowBtn.disabled = true;
+    const prog = document.getElementById('seed-progress');
+    const bar = document.getElementById('seed-bar');
+    const txt = document.getElementById('seed-status');
+    const goLink = document.getElementById('onboard-nudge-go');
+    if (goLink) goLink.style.display = 'none';
+    if (prog) prog.style.display = '';
+    let g = 0, total = 0, done = 0, placed = 0, guard = 0;
+    try {
+      while (true) {
+        const resp = await fetch('/api/onboarding/seed-core?g=' + g, { method: 'POST', credentials: 'same-origin' });
+        const r = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(r.detail || r.error || ('HTTP ' + resp.status));
+        total = r.total || total;
+        placed += (r.placed || 0);
+        done += (r.placed || 0) + (r.failed || 0);
+        if (bar) bar.style.width = (total ? Math.min(100, Math.round(done / total * 100)) : 5) + '%';
+        if (txt) txt.textContent = total ? ('Generating… ' + Math.min(done, total) + ' of ' + total + ' tiles') : 'Starting…';
+        if (r.done) break;
+        g = r.nextG;
+        if (++guard > 400) break;
+      }
+      if (bar) bar.style.width = '100%';
+      if (txt) txt.textContent = 'Done — ' + placed + ' tiles created! Refreshing…';
+      setTimeout(() => location.reload(), 1400);
+    } catch (err) {
+      if (txt) txt.textContent = 'Could not generate: ' + (err.message || err);
+      seedNowBtn.disabled = false;
+      if (goLink) goLink.style.display = '';
+    }
+  });
   document.getElementById('to-therapist').href = '/therapist/' + encodeURIComponent(slug);
   // Re-open the per-device "who uses this device?" chooser on the board.
   const deviceDefaultLink = document.getElementById('device-default');
