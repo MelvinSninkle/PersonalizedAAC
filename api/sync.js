@@ -12,6 +12,7 @@ import { checkAuth } from './_lib/auth.js';
 import { sql, rowToCategory, rowToItem } from './_lib/db.js';
 import { canAccessChild } from './_lib/access.js';
 import { bandForBirthDate, tileFitsAge, higherBand } from './_lib/age-band.js';
+import { isDefaultableTile } from './_lib/onboarding-render.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -61,6 +62,27 @@ export default async function handler(req, res) {
       SELECT i.* FROM items i
       WHERE i.child_id IS NULL AND i.category_id IN (SELECT id FROM shared_tree)
       ORDER BY display_order, id`;
+    // Resolve the canonical taxonomy row for every linked item once — used both
+    // for the age-band filter below AND to read default-able tiles' art straight
+    // from the "generic board" (taxonomy.default_image_key).
+    const slugs = [...new Set(items.map(i => i.taxonomy_slug).filter(Boolean))];
+    const taxBySlug = new Map();
+    if (slugs.length) {
+      const rows = await db`SELECT id, acquisition_age, default_image_key, column_name, subject_mode, prompt_template
+                            FROM taxonomy WHERE id = ANY(${slugs})`;
+      for (const r of rows) taxBySlug.set(r.id, r);
+    }
+
+    // Read-through defaults: a default-able tile (one that never references a
+    // specific person) shows the ONE shared generic image. The child's row keeps
+    // whatever image it has in the DB; we only swap it into this response, so a
+    // single edit on the generic board (Lab "Set as default" / seed-defaults)
+    // updates every child's board on the next sync — no per-child copy or "apply".
+    for (const i of items) {
+      const tax = i.taxonomy_slug ? taxBySlug.get(i.taxonomy_slug) : null;
+      if (tax && tax.default_image_key && isDefaultableTile(tax)) i.image_key = tax.default_image_key;
+    }
+
     // Age-band filter: when the child has a birth date AND the parent hasn't
     // turned the filter off ('show all vocabulary'), drop items whose canonical
     // taxonomy row sits above the child's current band. Items without a
@@ -77,13 +99,7 @@ export default async function handler(req, res) {
       const band = higherBand(natural, advanced);
       if (band) {
         appliedBand = band;
-        const slugs = [...new Set(items.map(i => i.taxonomy_slug).filter(Boolean))];
-        const bandBySlug = new Map();
-        if (slugs.length) {
-          const rows = await db`SELECT id, acquisition_age FROM taxonomy WHERE id = ANY(${slugs})`;
-          for (const r of rows) bandBySlug.set(r.id, r.acquisition_age || null);
-        }
-        outItems = items.filter(i => !i.taxonomy_slug || tileFitsAge(bandBySlug.get(i.taxonomy_slug) || null, band));
+        outItems = items.filter(i => !i.taxonomy_slug || tileFitsAge(taxBySlug.get(i.taxonomy_slug)?.acquisition_age || null, band));
       }
     }
 
