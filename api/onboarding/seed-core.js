@@ -23,7 +23,7 @@ import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
 import { ensureProgress, setStep } from '../_lib/onboarding.js';
 import { loadStyleGuide, loadChildAnchor, renderTaxonomyTile,
-         loadChildVoiceId, synthesizeVoice } from '../_lib/onboarding-render.js';
+         loadChildVoiceId, synthesizeVoice, isGenericTemplate } from '../_lib/onboarding-render.js';
 import { planGenerationGroups, runGroups } from '../_lib/batch-generate.js';
 
 export const config = { maxDuration: 300 };
@@ -67,7 +67,7 @@ export default async function handler(req, res) {
     // earliest-acquired words, capped at CURATED_LIMIT. Fully deterministic order
     // (ending in id) so the group indexing is stable across the chunked calls.
     const tiles = await db`
-      SELECT id, id AS slug, column_name, category, subcategory, label, prompt_template, subject_mode, related_images
+      SELECT id, id AS slug, column_name, category, subcategory, label, prompt_template, subject_mode, related_images, default_image_key
       FROM taxonomy
       WHERE core = TRUE
         AND status = 'published'
@@ -98,12 +98,28 @@ export default async function handler(req, res) {
     const doneAll = nextG >= allGroups.length;
 
     const render = async (tax, { referenceImageKeys }) => {
-      const r = await renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys });
-      if (!r.ok) return { ok: false, error: r.detail || 'render failed' };
+      // Generic tiles (no {placeholder} → identical for every kid) reuse the one
+      // pre-rendered default image if the admin seed-defaults job has populated it.
+      // We point this child's item straight at that shared Blob key — no image
+      // generation at all — but still record the cost row as $0 and, below, voice
+      // the tile in the child's own voice. NULL default (never seeded) falls
+      // through to normal per-child generation.
+      const useDefault = isGenericTemplate(tax.prompt_template) && !!tax.default_image_key;
 
-      const png = Buffer.from(r.b64, 'base64');
-      const imageKey = `onboarding/${childId}/core/${randomUUID()}.png`;
-      await put(imageKey, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
+      let imageKey, promptForLog, costForLog;
+      if (useDefault) {
+        imageKey = tax.default_image_key;
+        promptForLog = '(shared default image)';
+        costForLog = 0;
+      } else {
+        const r = await renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys });
+        if (!r.ok) return { ok: false, error: r.detail || 'render failed' };
+        const png = Buffer.from(r.b64, 'base64');
+        imageKey = `onboarding/${childId}/core/${randomUUID()}.png`;
+        await put(imageKey, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
+        promptForLog = r.prompt;
+        costForLog = r.costCents ?? 4;
+      }
 
       // Voice the tile in the parent's chosen voice (best-effort — a TTS miss
       // leaves sound_key null and the board speaks it with the system voice).
@@ -134,10 +150,10 @@ export default async function handler(req, res) {
         await db`INSERT INTO image_generations
                    (child_id, actor_email, actor_role, label, style, prompt, size, cost_cents)
                  VALUES (${childId}, ${auth.user.email || null}, 'onboarding_seed', ${tax.label},
-                    ${styleGuide ? styleGuide.label : 'default'}, ${r.prompt}, '1024x1024', ${r.costCents ?? 4})`;
+                    ${useDefault ? 'default' : (styleGuide ? styleGuide.label : 'default')}, ${promptForLog}, '1024x1024', ${costForLog})`;
       } catch (_) {}
       // blobKey threads into paired tiles as a reference for a consistent set.
-      return { ok: true, blobKey: imageKey, slug: tax.slug, costCents: r.costCents };
+      return { ok: true, blobKey: imageKey, slug: tax.slug, costCents: costForLog };
     };
 
     const resultMap = await runGroups({ groups: slice, byId, concurrency: 3, render });

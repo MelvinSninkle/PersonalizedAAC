@@ -34,6 +34,9 @@ struct BoardView: View {
     @State private var speech = SpeechListener()
     @State private var listening = false
     @State private var listenTimeout: Task<Void, Never>?
+    /// Gate the empty-board welcome so it only appears AFTER the first server
+    /// refresh (never flashes during the initial cold-launch paint).
+    @State private var didInitialLoad = false
 
     struct AddTileRequest: Identifiable {
         let id = UUID()
@@ -83,6 +86,7 @@ struct BoardView: View {
             }
         }
         .background(Color(hex: "#fff7fb"))
+        .overlay { emptyBoardOverlay }
         .overlay(alignment: .top) { scheduledPromptOverlay }
         .overlay(alignment: .bottom) { reviewBanner }
         .fullScreenCover(isPresented: Binding(
@@ -130,6 +134,7 @@ struct BoardView: View {
         .task {
             prefs.attach(childId: auth.childSlug)
             await board.refresh(childId: auth.childSlug)
+            didInitialLoad = true
             live.start(childId: auth.childSlug)
             scheduler.start(childId: auth.childSlug)
             autoTeach.start(childId: auth.childSlug)
@@ -183,6 +188,20 @@ struct BoardView: View {
         .onChange(of: game.current) { _, c in scheduler.isBlocked = (c != nil) || showSettings || showDisplay }
         .onChange(of: showSettings) { _, on in scheduler.isBlocked = on || showDisplay || (game.current != nil) }
         .onChange(of: showDisplay)  { _, on in scheduler.isBlocked = on || showSettings || (game.current != nil) }
+    }
+
+    /// Brand-new board with no tiles yet → a friendly full-screen welcome that
+    /// can build the starter set on the spot. Only after the first server refresh
+    /// (so it never flashes over a board that's simply still loading) and never
+    /// while the board is unlocked for editing.
+    @ViewBuilder
+    private var emptyBoardOverlay: some View {
+        if didInitialLoad, board.tiles.isEmpty, !board.loading, !editMode {
+            EmptyBoardView(possessive: childPossessive(auth.childSlug)) {
+                Task { await board.refresh(childId: auth.childSlug) }
+            }
+            .transition(.opacity)
+        }
     }
 
     /// Surface the scheduler's pending prompt as the right sheet.

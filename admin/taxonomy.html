@@ -185,6 +185,7 @@
     <button class="secondary" id="btn-import">Import…</button>
     <button class="secondary" id="btn-import-board" title="Seed the taxonomy from a child's current live board">Import live board…</button>
     <button class="secondary" id="btn-backfill" title="Link a child's existing tiles to canonical taxonomy slugs">🔗 Backfill slugs…</button>
+    <button class="secondary" id="btn-seed-defaults" title="Render one shared 'default' image for every generic tile (no {placeholder}). Onboarding reuses these instead of generating them per-child.">🖼️ Default images…</button>
     <div class="menu-wrap">
       <button class="secondary" id="btn-export">Export ▾</button>
       <div class="menu" id="export-menu">
@@ -974,6 +975,49 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     bfModal.classList.add('show');
   }
   document.getElementById('btn-backfill').addEventListener('click', openBackfill);
+
+  // ---- Default images: render one shared image per generic tile, then optionally
+  // apply them to an existing child's board. Both endpoints are chunked, so we
+  // loop until { done:true }, reporting progress in a native alert-free status.
+  async function seedDefaultsLoop(mode, extraQS) {
+    let offset = 0, guard = 0, processed = 0, updated = 0, failed = 0, total = 0;
+    for (;;) {
+      const qs = `action=seed-defaults&mode=${mode}&offset=${offset}${extraQS || ''}`;
+      const r = await api(`/api/admin/lab?${qs}`, { method: 'POST' });
+      total = r.total || 0;
+      processed += r.processed || 0;
+      updated += r.updated || 0;
+      failed += r.failed || 0;
+      const did = (r.processed || 0) + (r.updated || 0);
+      document.getElementById('stat').textContent =
+        `${mode}: ${r.nextOffset}/${total}…`;
+      if (r.done || r.nextOffset <= offset) return { total, processed, updated, failed };
+      offset = r.nextOffset;
+      if (++guard > 500) return { total, processed, updated, failed };
+    }
+  }
+  document.getElementById('btn-seed-defaults').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-seed-defaults');
+    if (!confirm('Render a shared "default" image for every GENERIC tile (prompt with no {placeholder})?\n\nOnly tiles missing a default are rendered — this is safe to run repeatedly. It can take a few minutes.')) return;
+    btn.disabled = true;
+    try {
+      const g = await seedDefaultsLoop('populate');
+      let msg = `Defaults: rendered ${g.processed} of ${g.total} generic tiles` + (g.failed ? `, ${g.failed} failed` : '') + '.';
+      const childId = prompt(msg + '\n\nApply these defaults to an EXISTING child board now? Enter the child id (blank to skip):', '');
+      if (childId && childId.trim()) {
+        const a = await seedDefaultsLoop('apply', '&childId=' + encodeURIComponent(childId.trim()));
+        msg += `\nApplied to ${childId.trim()}: updated ${a.updated} of ${a.total} items` + (a.failed ? `, ${a.failed} failed` : '') + '.';
+      }
+      alert(msg);
+      await loadRows();
+    } catch (e) {
+      alert('Default images failed: ' + (e.message || e));
+    } finally {
+      btn.disabled = false;
+      document.getElementById('stat').textContent = `${allRows.length} rows`;
+    }
+  });
+
   document.getElementById('bf-close').addEventListener('click', () => bfModal.classList.remove('show'));
   bfModal.addEventListener('click', (e) => { if (e.target === bfModal) bfModal.classList.remove('show'); });
 

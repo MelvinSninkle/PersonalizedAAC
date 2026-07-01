@@ -670,6 +670,27 @@
     font-style: italic;
   }
 
+  /* Empty-board welcome overlay (brand-new board, no tiles yet). */
+  #empty-cta {
+    position: fixed; inset: 0; z-index: 5000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    background: linear-gradient(160deg, #7c3aed 0%, #db2777 100%);
+  }
+  .empty-cta-card {
+    max-width: 480px; text-align: center; color: #fff;
+  }
+  .empty-cta-emoji { font-size: 56px; line-height: 1; margin-bottom: 10px; }
+  .empty-cta-title { font-size: 26px; margin: 0 0 10px; font-weight: 800; }
+  .empty-cta-sub { font-size: 15px; line-height: 1.5; margin: 0 0 20px; opacity: .95; }
+  #empty-cta .btn.primary {
+    background: #fff; color: #7c3aed; border: none; border-radius: 999px;
+    padding: 14px 26px; font-size: 17px; font-weight: 800; cursor: pointer;
+    box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  }
+  #empty-cta .btn.primary:disabled { opacity: .6; cursor: default; }
+  .empty-cta-link { color: #fff; opacity: .9; font-size: 14px; text-decoration: underline; }
+
   .modal-backdrop {
     position: fixed;
     inset: 0;
@@ -1039,6 +1060,29 @@
     </div>
   </section>
 </main>
+
+<!-- Empty-board welcome: shown only when the board has zero tiles (a brand-new
+     account that hasn't generated its starter words yet). For a parent/admin it
+     offers to build the starter set right here; for a child it points to a
+     grown-up. Hidden by default; checkEmptyBoard() toggles it. -->
+<div id="empty-cta" style="display:none;">
+  <div class="empty-cta-card">
+    <div class="empty-cta-emoji">🎨</div>
+    <h2 class="empty-cta-title">Let’s build <span class="cwt-pos">your child’s</span> board</h2>
+    <p class="empty-cta-sub" id="empty-cta-sub">This board doesn’t have any tiles yet. Generate the starter words — the core vocabulary every new board begins with — and they’ll appear here in your art style and voice.</p>
+    <div id="empty-cta-parent">
+      <button class="btn primary" id="empty-seed-btn">✨ Generate starter words</button>
+      <div id="empty-seed-progress" style="display:none;margin-top:14px;max-width:340px;margin-left:auto;margin-right:auto;">
+        <div style="height:9px;background:rgba(255,255,255,.4);border-radius:999px;overflow:hidden;"><div id="empty-seed-bar" style="height:100%;width:0;background:#fff;transition:width .3s;"></div></div>
+        <div id="empty-seed-status" style="font-size:13px;margin-top:7px;opacity:.9;"></div>
+      </div>
+      <div style="margin-top:12px;"><a class="empty-cta-link" id="empty-cta-parentview" href="#">Open the parent dashboard →</a></div>
+    </div>
+    <div id="empty-cta-child" style="display:none;">
+      <p class="empty-cta-sub">Ask a grown-up to help set up your board. 💛</p>
+    </div>
+  </div>
+</div>
 
 <section class="aac-section needs-section" data-section="needs">
   <div class="items-grid" id="items-needs"></div>
@@ -2226,6 +2270,73 @@
     for (const s of SECTIONS) {
       try { await renderSection(s); } catch (err) { console.error('renderSection failed:', s, err); }
     }
+    try { await checkEmptyBoard(); } catch (_) {}
+  }
+
+  // ---- Empty-board welcome CTA ----
+  // A brand-new account that finished sign-up but hasn't generated its starter
+  // words lands on a blank board. Rather than a confusing empty grid, show a
+  // friendly full-screen prompt: a parent/admin can build the starter set right
+  // here (same chunked seed-core engine the parent dashboard uses); a child is
+  // pointed to a grown-up. Hidden the moment any tile exists.
+  async function countAllTiles() {
+    let n = 0;
+    for (const s of SECTIONS) { try { n += (await getAllItems(s)).length; } catch (_) {} }
+    return n;
+  }
+  let _emptySeedWired = false;
+  async function checkEmptyBoard() {
+    const cta = document.getElementById('empty-cta');
+    if (!cta) return;
+    let n = 1;
+    try { n = await countAllTiles(); } catch (_) { n = 1; }
+    if (n > 0 || editMode) { cta.style.display = 'none'; return; }
+    const editor = canEdit();
+    const parentBlock = document.getElementById('empty-cta-parent');
+    const childBlock = document.getElementById('empty-cta-child');
+    if (parentBlock) parentBlock.style.display = editor ? '' : 'none';
+    if (childBlock) childBlock.style.display = editor ? 'none' : '';
+    const pos = CHILD_NAME ? (CHILD_NAME + '’s') : 'your child’s';
+    cta.querySelectorAll('.cwt-pos').forEach(el => { el.textContent = pos; });
+    const pv = document.getElementById('empty-cta-parentview');
+    if (pv) pv.href = '/parent/' + encodeURIComponent(CHILD_ID);
+    cta.style.display = 'flex';
+    wireEmptySeed();
+  }
+  function wireEmptySeed() {
+    if (_emptySeedWired) return;
+    _emptySeedWired = true;
+    const btn = document.getElementById('empty-seed-btn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const prog = document.getElementById('empty-seed-progress');
+      const bar = document.getElementById('empty-seed-bar');
+      const txt = document.getElementById('empty-seed-status');
+      if (prog) prog.style.display = '';
+      let g = 0, total = 0, done = 0, placed = 0, guard = 0;
+      try {
+        while (true) {
+          const resp = await apiFetch('/api/onboarding/seed-core?g=' + g, { method: 'POST' });
+          const r = await resp.json().catch(() => ({}));
+          if (!resp.ok) throw new Error(r.detail || r.error || ('HTTP ' + resp.status));
+          total = r.total || total;
+          placed += (r.placed || 0);
+          done += (r.placed || 0) + (r.failed || 0);
+          if (bar) bar.style.width = (total ? Math.min(100, Math.round(done / total * 100)) : 5) + '%';
+          if (txt) txt.textContent = total ? ('Generating… ' + Math.min(done, total) + ' of ' + total + ' tiles') : 'Starting…';
+          if (r.done) break;
+          g = r.nextG;
+          if (++guard > 400) break;
+        }
+        if (bar) bar.style.width = '100%';
+        if (txt) txt.textContent = 'Done — ' + placed + ' tiles created! Refreshing…';
+        setTimeout(() => location.reload(), 1400);
+      } catch (err) {
+        if (txt) txt.textContent = 'Could not generate: ' + (err.message || err);
+        btn.disabled = false;
+      }
+    });
   }
 
   // The "needs" strip is flat: no categories, items with categoryId=null,
