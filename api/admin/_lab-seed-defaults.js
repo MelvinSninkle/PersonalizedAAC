@@ -59,8 +59,27 @@ export default async function handler(req, res) {
 // ── mode=populate ────────────────────────────────────────────────────────────
 async function populate(req, res, db) {
   const force = String((req.query && req.query.force) || '') === '1';
-  const sourceChildId = String((req.query && req.query.sourceChildId) || DEFAULT_SOURCE_CHILD).trim();
+  const explicitSource = String((req.query && req.query.sourceChildId) || '').trim();
   const offset = Math.max(0, parseInt((req.query && req.query.offset) || '0', 10) || 0);
+
+  // Pick the reference board. Prefer the explicit ?sourceChildId, else Fletcher's;
+  // but a board only helps if its tiles are LINKED to taxonomy slugs (items.
+  // taxonomy_slug — populated by onboarding or the "Backfill slugs" tool). If the
+  // default board has no linked tiles and none was named, auto-detect the board
+  // with the most taxonomy-linked images so a mis-remembered slug never silently
+  // yields "0 of 0".
+  let sourceChildId = explicitSource || DEFAULT_SOURCE_CHILD;
+  const linkedCount = async (cid) => Number((await db`
+    SELECT COUNT(*)::int AS c FROM items
+    WHERE child_id = ${cid} AND taxonomy_slug IS NOT NULL AND image_key IS NOT NULL`)[0]?.c || 0);
+  let sourceLinked = await linkedCount(sourceChildId);
+  if (!explicitSource && sourceLinked === 0) {
+    const best = await db`
+      SELECT child_id, COUNT(*)::int AS c FROM items
+      WHERE child_id IS NOT NULL AND taxonomy_slug IS NOT NULL AND image_key IS NOT NULL
+      GROUP BY child_id ORDER BY c DESC LIMIT 1`;
+    if (best.length && best[0].c > 0) { sourceChildId = best[0].child_id; sourceLinked = Number(best[0].c); }
+  }
 
   // Drive from the reference board's own tiles (joined to their taxonomy row) so
   // we only ever try to copy images that actually exist, and the default set is
@@ -106,11 +125,24 @@ async function populate(req, res, db) {
   const nextOffset = offset + slice.length;
   const done = nextOffset >= total;
 
+  // If there's genuinely nothing to do, say WHY — the usual cause is a reference
+  // board whose tiles aren't linked to taxonomy slugs (run "Backfill slugs" on it).
+  let note = `${defaultable.length} default-able tiles on ${sourceChildId}; ${total} ${force ? 'to (re)copy' : 'missing a default'}.`;
+  let diag;
+  if (defaultable.length === 0 && offset === 0) {
+    const withImg = Number((await db`SELECT COUNT(*)::int AS c FROM items WHERE child_id = ${sourceChildId} AND image_key IS NOT NULL`)[0]?.c || 0);
+    diag = { sourceChildId, itemsWithImage: withImg, itemsLinkedToTaxonomy: sourceLinked, rowsJoined: rows.length };
+    note = withImg === 0
+      ? `Reference board "${sourceChildId}" has no tiles with images — pass ?sourceChildId=<slug> for the right board.`
+      : sourceLinked === 0
+        ? `"${sourceChildId}" has ${withImg} tiles but none are linked to taxonomy slugs. Run "🔗 Backfill slugs…" on that board first, then re-run this.`
+        : `${rows.length} linked tiles found but none are default-able (all reference a person?).`;
+  }
+
   res.setHeader('Cache-Control', 'no-store');
   res.status(200).json({
     ok: true, mode: 'populate', done, nextOffset, total, processed, failed,
-    sourceChildId, defaultableCount: defaultable.length,
-    note: `${defaultable.length} default-able tiles on ${sourceChildId}; ${total} ${force ? 'to (re)copy' : 'missing a default'}.`,
+    sourceChildId, defaultableCount: defaultable.length, note, ...(diag ? { diag } : {}),
   });
 }
 

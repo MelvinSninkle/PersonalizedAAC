@@ -980,7 +980,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
   // apply them to an existing child's board. Both endpoints are chunked, so we
   // loop until { done:true }, reporting progress in a native alert-free status.
   async function seedDefaultsLoop(mode, extraQS) {
-    let offset = 0, guard = 0, processed = 0, updated = 0, failed = 0, total = 0;
+    let offset = 0, guard = 0, processed = 0, updated = 0, failed = 0, total = 0, note = '', sourceChildId = '';
     for (;;) {
       const qs = `action=seed-defaults&mode=${mode}&offset=${offset}${extraQS || ''}`;
       const r = await api(`/api/admin/lab?${qs}`, { method: 'POST' });
@@ -988,12 +988,13 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       processed += r.processed || 0;
       updated += r.updated || 0;
       failed += r.failed || 0;
-      const did = (r.processed || 0) + (r.updated || 0);
+      if (r.note) note = r.note;
+      if (r.sourceChildId) sourceChildId = r.sourceChildId;
       document.getElementById('stat').textContent =
         `${mode}: ${r.nextOffset}/${total}…`;
-      if (r.done || r.nextOffset <= offset) return { total, processed, updated, failed };
+      if (r.done || r.nextOffset <= offset) return { total, processed, updated, failed, note, sourceChildId };
       offset = r.nextOffset;
-      if (++guard > 500) return { total, processed, updated, failed };
+      if (++guard > 500) return { total, processed, updated, failed, note, sourceChildId };
     }
   }
   document.getElementById('btn-seed-defaults').addEventListener('click', async () => {
@@ -1002,7 +1003,8 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     btn.disabled = true;
     try {
       const g = await seedDefaultsLoop('populate');
-      let msg = `Defaults: copied ${g.processed} of ${g.total} tiles from the reference board` + (g.failed ? `, ${g.failed} failed` : '') + '.';
+      let msg = `Defaults: copied ${g.processed} of ${g.total} tiles from "${g.sourceChildId || 'reference'}"` + (g.failed ? `, ${g.failed} failed` : '') + '.';
+      if (g.total === 0 && g.note) msg += '\n\n' + g.note;
       const childId = prompt(msg + '\n\nApply these defaults to an EXISTING child board now? Enter the child id (blank to skip):', '');
       if (childId && childId.trim()) {
         const a = await seedDefaultsLoop('apply', '&childId=' + encodeURIComponent(childId.trim()));
