@@ -59,6 +59,17 @@ function fillTemplate(template, tokens) {
     Object.prototype.hasOwnProperty.call(tokens, key) ? tokens[key] : m);
 }
 
+// A "generic" tile is one whose prompt_template has NO {placeholder} at all — it
+// never references the child ({reference}), a parent/family member, or the chosen
+// art {style}, so its rendered art is identical for every kid (e.g. "ball",
+// "cup", "more"). Those are exactly the tiles that can share one canonical
+// "default image" instead of a per-child generation. Uses the same
+// {token} grammar as fillTemplate so the two never disagree about what a
+// placeholder is.
+export function isGenericTemplate(template) {
+  return !/\{[a-z_]+\}/i.test(String(template || ''));
+}
+
 // Every board tile is shown in a small square cell, so generate square art with the
 // one subject blown up to fill it — empty space wastes the cell and makes the tile
 // hard to read at a glance. Shared by all the photo/taxonomy generators so every

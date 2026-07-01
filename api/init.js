@@ -553,6 +553,16 @@ export default async function handler(req, res) {
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS related_images   TEXT[]`;
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS personalized     BOOLEAN NOT NULL DEFAULT FALSE`;
 
+    // Default (non-personalized) tile art. Any tile whose prompt_template has NO
+    // {placeholder} — i.e. it never references the child ({reference}), a parent,
+    // or the chosen art {style} — renders identically for every kid. Rather than
+    // burn a per-child image generation on those, we render one canonical image
+    // (admin one-time job → api/admin/lab?action=seed-defaults) and stash its Blob
+    // key here. Onboarding's seed-core then points every child's item at this
+    // shared key (still voicing the tile in the child's own voice) instead of
+    // re-generating it. NULL = no default yet → fall back to per-child generation.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS default_image_key TEXT`;
+
     // Prompt version history: every time a tile's prompt_template changes (single
     // edit OR bulk import overwrite), the PRIOR value is saved here first, so an
     // accidental overwrite is always recoverable. Kept separate from full-taxonomy
