@@ -23,7 +23,7 @@ import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
 import { ensureProgress, setStep } from '../_lib/onboarding.js';
 import { loadStyleGuide, loadChildAnchor, renderTaxonomyTile,
-         loadChildVoiceId, synthesizeVoice, isGenericTemplate } from '../_lib/onboarding-render.js';
+         loadChildVoiceId, synthesizeVoice, isDefaultableTile } from '../_lib/onboarding-render.js';
 import { planGenerationGroups, runGroups } from '../_lib/batch-generate.js';
 
 export const config = { maxDuration: 300 };
@@ -104,7 +104,7 @@ export default async function handler(req, res) {
       // generation at all — but still record the cost row as $0 and, below, voice
       // the tile in the child's own voice. NULL default (never seeded) falls
       // through to normal per-child generation.
-      const useDefault = isGenericTemplate(tax.prompt_template) && !!tax.default_image_key;
+      const useDefault = isDefaultableTile(tax) && !!tax.default_image_key;
 
       let imageKey, promptForLog, costForLog;
       if (useDefault) {

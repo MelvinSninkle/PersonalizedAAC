@@ -59,15 +59,24 @@ function fillTemplate(template, tokens) {
     Object.prototype.hasOwnProperty.call(tokens, key) ? tokens[key] : m);
 }
 
-// A "generic" tile is one whose prompt_template has NO {placeholder} at all — it
-// never references the child ({reference}), a parent/family member, or the chosen
-// art {style}, so its rendered art is identical for every kid (e.g. "ball",
-// "cup", "more"). Those are exactly the tiles that can share one canonical
-// "default image" instead of a per-child generation. Uses the same
-// {token} grammar as fillTemplate so the two never disagree about what a
-// placeholder is.
-export function isGenericTemplate(template) {
-  return !/\{[a-z_]+\}/i.test(String(template || ''));
+// A tile is "default-able" when its art is identical for every child — it never
+// depends on a specific person's photo — so it can share ONE canonical image
+// (rendered once in a standard house style) instead of a per-child generation.
+// The disqualifiers are the SUBJECT placeholders that pull in a real person —
+// {reference} (the child), {parent_photo}, {family_adult}, {family_all} — plus
+// the People section and child_as_subject mode. A plain {style} token does NOT
+// disqualify a tile: the object/action ("ball", "in", "big") is the same for
+// everyone and only the art style would differ, which is exactly what a shared
+// default collapses. Mirrors the `usePerson` logic in renderTaxonomyTile so the
+// two never disagree. NB: almost every authored prompt contains {style}, so a
+// naive "no {placeholder} at all" test would wrongly match nearly nothing.
+const PERSON_PLACEHOLDER = /\{(reference|parent_photo|family_adult|family_all)\}/i;
+export function isDefaultableTile(tax) {
+  if (!tax) return false;
+  const section = String(tax.column_name || '').toLowerCase();
+  if (section === 'people') return false;
+  if (tax.subject_mode === 'child_as_subject') return false;
+  return !PERSON_PLACEHOLDER.test(String(tax.prompt_template || ''));
 }
 
 // Every board tile is shown in a small square cell, so generate square art with the

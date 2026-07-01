@@ -185,7 +185,7 @@
     <button class="secondary" id="btn-import">Import…</button>
     <button class="secondary" id="btn-import-board" title="Seed the taxonomy from a child's current live board">Import live board…</button>
     <button class="secondary" id="btn-backfill" title="Link a child's existing tiles to canonical taxonomy slugs">🔗 Backfill slugs…</button>
-    <button class="secondary" id="btn-seed-defaults" title="Render one shared 'default' image for every generic tile (no {placeholder}). Onboarding reuses these instead of generating them per-child.">🖼️ Default images…</button>
+    <button class="secondary" id="btn-seed-defaults" title="Copy the reference board's (Fletcher's) already-drawn tiles into shared 'default' images for every tile that doesn't reference a specific person. Onboarding reuses these instead of generating them per-child.">🖼️ Default images…</button>
     <div class="menu-wrap">
       <button class="secondary" id="btn-export">Export ▾</button>
       <div class="menu" id="export-menu">
@@ -998,11 +998,11 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
   }
   document.getElementById('btn-seed-defaults').addEventListener('click', async () => {
     const btn = document.getElementById('btn-seed-defaults');
-    if (!confirm('Render a shared "default" image for every GENERIC tile (prompt with no {placeholder})?\n\nOnly tiles missing a default are rendered — this is safe to run repeatedly. It can take a few minutes.')) return;
+    if (!confirm('Copy the reference board (Fletcher’s) into shared "default" images?\n\nEvery tile that doesn’t reference a specific person adopts Fletcher’s already-drawn version. Only tiles missing a default are copied — safe to run repeatedly.')) return;
     btn.disabled = true;
     try {
       const g = await seedDefaultsLoop('populate');
-      let msg = `Defaults: rendered ${g.processed} of ${g.total} generic tiles` + (g.failed ? `, ${g.failed} failed` : '') + '.';
+      let msg = `Defaults: copied ${g.processed} of ${g.total} tiles from the reference board` + (g.failed ? `, ${g.failed} failed` : '') + '.';
       const childId = prompt(msg + '\n\nApply these defaults to an EXISTING child board now? Enter the child id (blank to skip):', '');
       if (childId && childId.trim()) {
         const a = await seedDefaultsLoop('apply', '&childId=' + encodeURIComponent(childId.trim()));
