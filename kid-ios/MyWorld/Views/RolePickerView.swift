@@ -23,7 +23,7 @@ struct RolePickerView: View {
             VStack(spacing: 16) {
                 roleButton(
                     icon: "hand.tap.fill",
-                    title: "\(prettyChildName(auth.user?.slug))'s board",
+                    title: "\(childPossessive(auth.user?.slug, fallback: "Your child's")) board",
                     subtitle: "Big tiles, tap to talk. Best on a tablet in Guided Access.",
                     role: .childBoard
                 )

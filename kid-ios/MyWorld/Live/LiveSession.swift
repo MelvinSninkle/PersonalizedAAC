@@ -84,7 +84,7 @@ final class LiveSession {
     private var pollTask: Task<Void, Never>?
     private var heartbeatTask: Task<Void, Never>?
     private let api = APIClient()
-    private var childId: String = "fletcherpeterson"
+    private var childId: String = ""
 
     /// Current published state — the heartbeat resends this every few seconds.
     private var publishStatus: String = "standby"

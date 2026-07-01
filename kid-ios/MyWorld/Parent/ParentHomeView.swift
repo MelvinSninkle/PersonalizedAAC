@@ -140,7 +140,7 @@ struct ParentHomeView: View {
             }
             Divider().background(Color(hex: "#f3c6da"))
             HStack {
-                Text("\(prettyChildName(auth.user?.slug))'s World")
+                Text(worldTitle(auth.user?.slug))
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundStyle(Color(hex: "#1f2937"))
                 Spacer()

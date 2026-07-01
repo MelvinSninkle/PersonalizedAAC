@@ -191,7 +191,7 @@
     <div class="center" id="board-done" style="display:none;">
       <div style="font-size:40px;">🎉</div>
       <p class="fred" style="font-size:18px;color:var(--pink-deep);" id="board-done-msg">The board is ready!</p>
-      <a class="btn" href="/app">Open the board</a>
+      <a class="btn" href="/app.html" id="open-board-link">Open the board</a>
     </div>
   </div>
 
@@ -203,7 +203,16 @@
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  let CHILD_ID = 'fletcherpeterson';
+  let CHILD_ID = '';
+  // "Open the board" must go to the routed board URL (/u/<slug>) — a bare "/app"
+  // isn't a Vercel route and 404s. Resolve the slug lazily at click time (it's
+  // set during init); the static /app.html href is a no-JS fallback.
+  (function () {
+    const bl = document.getElementById('open-board-link');
+    if (bl) bl.addEventListener('click', function (e) {
+      if (CHILD_ID) { e.preventDefault(); location.href = '/u/' + encodeURIComponent(CHILD_ID); }
+    });
+  })();
   let CHILD_NAME = '';
   let selectedStyle = null;          // { id, label }
   let selectedVoiceId = null;        // chosen ElevenLabs voice id

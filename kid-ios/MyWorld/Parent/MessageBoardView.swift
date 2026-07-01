@@ -18,7 +18,7 @@ struct MessageBoardView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Your words show up on the board as \(prettyChildName(auth.user?.slug))'s own tiles, spoken in their tile voices. Words the board doesn't have appear as text.")
+                Text("Your words show up on the board as \(childPossessive(auth.user?.slug)) own tiles, spoken in their tile voices. Words the board doesn't have appear as text.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
