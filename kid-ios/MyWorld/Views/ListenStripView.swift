@@ -76,9 +76,14 @@ struct ListenStripView: View {
                         .symbolEffect(.pulse, options: .repeating)
                         .padding(.leading, 4)
                     if tokens.isEmpty {
-                        Text("Listening…")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        // Surfaces why nothing is showing yet: "Listening…", or a
+                        // concrete reason (permission / model / network) if the
+                        // recognizer couldn't start.
+                        Text(speech.status.isEmpty ? "Listening… say a word" : speech.status)
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     } else {
                         ForEach(tokens) { tok in
                             chip(tok).id(tok.id)
