@@ -76,22 +76,41 @@ export default async function handler(req, res) {
 
       // Generate a board slug from the child's name (falls back to the email
       // local part), uniquified against both legacy child_slug and child_access.
+      // Board slug from the child's name (fallback: email local part), numbered
+      // for duplicates: sam, sam2, sam3, … Allocated RACE-SAFELY — a partial
+      // UNIQUE index on child_slug is the real arbiter, and we retry with the
+      // next number when a concurrent signup grabs the same one first. So two
+      // people onboarding the same name at the same time can never share a slug.
+      try { await db`CREATE UNIQUE INDEX IF NOT EXISTS users_child_slug_uidx ON users (child_slug) WHERE child_slug IS NOT NULL`; } catch (_) {}
       const base = slugify(childName) || slugify(email.split('@')[0]) || 'child';
-      let slug = base;
       const taken = async (s) => {
         const a = await db`SELECT 1 FROM users WHERE child_slug = ${s} LIMIT 1`;
         if (a.length) return true;
         try { const b = await db`SELECT 1 FROM child_access WHERE child_id = ${s} LIMIT 1`; return b.length > 0; }
         catch (_) { return false; }
       };
-      if (await taken(slug)) slug = base + '-' + randomUUID().slice(0, 4);
-
       const hash = hashPassword(password);
-      const rows = await db`
-        INSERT INTO users (email, password_hash, role, child_slug)
-        VALUES (${email}, ${hash}, 'parent', ${slug})
-        RETURNING id, email, role, child_slug`;
-      const user = rows[0];
+      // Pre-pick a likely-free number to keep collisions rare; the retry loop is
+      // what actually guarantees correctness under concurrency.
+      let n = (await taken(base)) ? 2 : 1;
+      let user = null, slug = base;
+      for (let attempt = 0; attempt < 30 && !user; attempt++) {
+        const candidate = n === 1 ? base : `${base}${n}`;
+        try {
+          const rows = await db`
+            INSERT INTO users (email, password_hash, role, child_slug)
+            VALUES (${email}, ${hash}, 'parent', ${candidate})
+            RETURNING id, email, role, child_slug`;
+          user = rows[0]; slug = candidate;
+        } catch (e) {
+          const msg = String((e && (e.message || e.detail)) || e);
+          const isUnique = (e && e.code === '23505') || /duplicate key|unique constraint/i.test(msg);
+          if (isUnique && /child_slug/i.test(msg)) { n = n < 2 ? 2 : n + 1; continue; }   // slug taken → next number
+          if (isUnique) { res.status(409).json({ error: 'An account with that email already exists. Please sign in.' }); return; }  // email race
+          throw e;
+        }
+      }
+      if (!user) { res.status(500).json({ error: 'Could not allocate a board name — please try again.' }); return; }
 
       // Link the parent to their child's board (the source of truth for access
       // checks — isParentOf/canEditContent read child_access, not child_slug).
