@@ -38,6 +38,46 @@ const TILE_BUDGET = 12;
 // the parent grows the rest by snapping household photos.
 const CURATED_LIMIT = 150;
 
+// Ensure the board has the category (and subcategory) chip a tile belongs in,
+// creating missing ones. A fresh board has NO chips, and the kid board only
+// renders items INSIDE a category — items with category_id NULL are invisible
+// in People/Nouns/Verbs — so without this every seeded tile silently vanished.
+// `cache` memoizes per request ("section|cat|sub" → category id).
+async function ensureCategory(db, childId, cache, section, category, subcategory) {
+  const cat = String(category || '').trim();
+  if (!cat) return null;
+  const sub = String(subcategory || '').trim();
+  const key = `${section}|${cat.toLowerCase()}|${sub.toLowerCase()}`;
+  if (cache.has(key)) return cache.get(key);
+
+  const topKey = `${section}|${cat.toLowerCase()}|`;
+  let topId = cache.get(topKey);
+  if (!topId) {
+    const ex = await db`SELECT id FROM categories WHERE child_id = ${childId} AND section = ${section}
+                        AND parent_id IS NULL AND lower(label) = lower(${cat}) LIMIT 1`;
+    if (ex.length) topId = ex[0].id;
+    else {
+      const ins = await db`INSERT INTO categories (section, label, parent_id, display_order, child_id, updated_at)
+                           VALUES (${section}, ${cat}, NULL, ${Date.now()}, ${childId}, NOW()) RETURNING id`;
+      topId = ins[0].id;
+    }
+    cache.set(topKey, topId);
+  }
+  let outId = topId;
+  if (sub) {
+    const sx = await db`SELECT id FROM categories WHERE child_id = ${childId} AND section = ${section}
+                        AND parent_id = ${topId} AND lower(label) = lower(${sub}) LIMIT 1`;
+    if (sx.length) outId = sx[0].id;
+    else {
+      const ins = await db`INSERT INTO categories (section, label, parent_id, display_order, child_id, updated_at)
+                           VALUES (${section}, ${sub}, ${topId}, ${Date.now()}, ${childId}, NOW()) RETURNING id`;
+      outId = ins[0].id;
+    }
+  }
+  cache.set(key, outId);
+  return outId;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
   const auth = await checkAuth(req);
@@ -66,11 +106,13 @@ export default async function handler(req, res) {
     // The curated starter set: baseline core vocabulary, Core-category first then
     // earliest-acquired words, capped at CURATED_LIMIT. Fully deterministic order
     // (ending in id) so the group indexing is stable across the chunked calls.
+    // NB: no status filter — the library is authored in 'draft' and the editorial
+    // publish flag shouldn't gate a family's starter board (it used to, and every
+    // new board seeded ZERO tiles because nothing was ever flipped to published).
     const tiles = await db`
       SELECT id, id AS slug, column_name, category, subcategory, label, prompt_template, subject_mode, related_images, default_image_key
       FROM taxonomy
       WHERE core = TRUE
-        AND status = 'published'
         AND COALESCE(archived, FALSE) = FALSE
         AND COALESCE(is_event, FALSE) = FALSE
         AND COALESCE(is_gestalt, FALSE) = FALSE
@@ -84,6 +126,7 @@ export default async function handler(req, res) {
     const total = tiles.length;
     const byId = new Map(tiles.map((t) => [t.id, t]));
     const allGroups = planGenerationGroups(tiles);
+    const catCache = new Map();   // per-request category-chip memo for ensureCategory
 
     // Pack whole groups for THIS call until we've covered ~TILE_BUDGET tiles.
     const slice = [];
@@ -131,17 +174,27 @@ export default async function handler(req, res) {
       }
 
       const section = String(tax.column_name || 'needs').toLowerCase();
+      // Needs is the flat strip (no categories); every other section's tiles are
+      // only visible INSIDE a category chip, so make sure it exists.
+      const catId = section === 'needs' ? null
+        : await ensureCategory(db, childId, catCache, section, tax.category, tax.subcategory);
       // Upsert by taxonomy_slug so re-running the step doesn't duplicate tiles.
+      // COALESCE keeps a category the parent already moved the tile into.
       const existing = await db`SELECT id FROM items WHERE child_id = ${childId} AND taxonomy_slug = ${tax.slug} LIMIT 1`;
       if (existing.length) {
-        await db`UPDATE items SET label = ${tax.label}, image_key = ${imageKey},
+        // Default-able re-runs must never clobber an image the tile already has
+        // (a personalized render or a parent's own photo) — the shared default
+        // resolves at sync time anyway. Generated (personalized) tiles do replace.
+        await db`UPDATE items SET label = ${tax.label},
+                   image_key = CASE WHEN ${useDefault} THEN COALESCE(image_key, ${imageKey}) ELSE ${imageKey} END,
                    sound_key = COALESCE(${soundKey}, sound_key), section = ${section},
+                   category_id = COALESCE(category_id, ${catId}),
                    needs_review = FALSE, updated_at = NOW() WHERE id = ${existing[0].id}`;
       } else {
         await db`INSERT INTO items
                    (section, category_id, label, image_key, sound_key, keep_aspect, display_order, pinned,
                     child_id, taxonomy_slug, needs_review, updated_at)
-                 VALUES (${section}, NULL, ${tax.label}, ${imageKey}, ${soundKey}, FALSE, ${Date.now()}, FALSE,
+                 VALUES (${section}, ${catId}, ${tax.label}, ${imageKey}, ${soundKey}, FALSE, ${Date.now()}, FALSE,
                     ${childId}, ${tax.slug}, FALSE, NOW())`;
       }
 
@@ -155,6 +208,16 @@ export default async function handler(req, res) {
       // blobKey threads into paired tiles as a reference for a consistent set.
       return { ok: true, blobKey: imageKey, slug: tax.slug, costCents: costForLog };
     };
+
+    // Pre-create this slice's category chips SERIALLY before the concurrent
+    // render pass — two parallel renders racing on the same brand-new category
+    // would otherwise both INSERT it and the board would grow duplicate chips.
+    for (const grp of slice) for (const id of grp) {
+      const t = byId.get(id);
+      if (!t) continue;
+      const sec = String(t.column_name || 'needs').toLowerCase();
+      if (sec !== 'needs') await ensureCategory(db, childId, catCache, sec, t.category, t.subcategory);
+    }
 
     const resultMap = await runGroups({ groups: slice, byId, concurrency: 3, render });
     let placed = 0, failed = 0;

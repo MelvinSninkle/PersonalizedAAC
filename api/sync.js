@@ -74,13 +74,18 @@ export default async function handler(req, res) {
     }
 
     // Read-through defaults: a default-able tile (one that never references a
-    // specific person) shows the ONE shared generic image. The child's row keeps
-    // whatever image it has in the DB; we only swap it into this response, so a
-    // single edit on the generic board (Lab "Set as default" / seed-defaults)
-    // updates every child's board on the next sync — no per-child copy or "apply".
+    // specific person) shows the ONE shared generic image. We swap it in at read
+    // time, so a single edit on the generic board (Lab "Set as default" /
+    // seed-defaults) updates every child's board on the next sync — no per-child
+    // copy or "apply". PRECEDENCE: a child's OWN image wins — the default only
+    // fills tiles that have no image yet or are already pointing at a (possibly
+    // stale) shared default key. That way per-child personalization (child-as-
+    // subject renders, parent photo swaps) is never clobbered by the generic art.
     for (const i of items) {
       const tax = i.taxonomy_slug ? taxBySlug.get(i.taxonomy_slug) : null;
-      if (tax && tax.default_image_key && isDefaultableTile(tax)) i.image_key = tax.default_image_key;
+      if (!tax || !tax.default_image_key || !isDefaultableTile(tax)) continue;
+      const cur = i.image_key || '';
+      if (!cur || cur.startsWith('taxonomy-defaults/')) i.image_key = tax.default_image_key;
     }
 
     // Age-band filter: when the child has a birth date AND the parent hasn't

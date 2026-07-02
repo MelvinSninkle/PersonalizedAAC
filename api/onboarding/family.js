@@ -69,9 +69,27 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
   // KEYSTONE: portraits anchor every later render and require faithful STYLE
   // transfer, which OpenAI's gpt-image handles better than Gemini. Use OpenAI
   // when configured; fall back to Gemini Pro otherwise.
-  const g = oaKey
-    ? await openaiEditImage({ apiKey: oaKey, model: await openaiKeystoneModel(db), prompt, images, size: '1024x1024' })
-    : await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
+  //
+  // Resilience: image APIs throw transient 429/5xx often enough that a single
+  // unretried call surfaces as a "mysterious" parent-facing error that succeeds
+  // on manual resubmit. So: retry the primary once (short backoff), then fall
+  // back to the other provider before giving up.
+  const callOpenAI = async () =>
+    openaiEditImage({ apiKey: oaKey, model: await openaiKeystoneModel(db), prompt, images, size: '1024x1024' });
+  const callGemini = async () =>
+    geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
+  const transient = (r) => !r.ok && (r.status === 429 || r.status >= 500 || !r.status);
+
+  const primary = oaKey ? callOpenAI : callGemini;
+  const fallback = (oaKey && gKey) ? callGemini : null;
+  let g = await primary().catch((e) => ({ ok: false, detail: String(e.message || e) }));
+  if (transient(g)) {
+    await new Promise((r) => setTimeout(r, 1500));
+    g = await primary().catch((e) => ({ ok: false, detail: String(e.message || e) }));
+  }
+  if (!g.ok && fallback) {
+    g = await fallback().catch((e) => ({ ok: false, detail: String(e.message || e) }));
+  }
   if (!g.ok) {
     const err = new Error('Stylization failed: ' + (g.detail || '').slice(0, 200));
     err.status = g.status || 502; throw err;
