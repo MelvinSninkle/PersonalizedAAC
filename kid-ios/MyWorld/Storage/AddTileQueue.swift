@@ -109,6 +109,9 @@ final class TileJob: Identifiable {
     var soundMP3: Data?
     /// Set to the created item id once the server job is done.
     var savedTileId: Int?
+    /// The generated art's blob key once the server job is done — the tray
+    /// swaps from the captured photo to the finished tile.
+    var generatedImageKey: String?
 
     init(thumbnail: UIImage, photoJPEG: Data, section: BoardSection,
          categoryId: Int?, style: ArtStyle, model: String, bg: String, emotion: String,
@@ -134,6 +137,17 @@ struct ReviewNotice: Identifiable, Equatable {
     let count: Int        // how many tiles in the batch landed successfully
 }
 
+/// A just-finished tile the magic follow-up should examine: does its word
+/// already exist on the board (offer replace)? do other prompts mention it
+/// (offer contextual re-renders)?
+struct MagicCandidate: Identifiable, Equatable {
+    let id = UUID()
+    let itemId: Int
+    let label: String
+    let imageKey: String?
+    let childId: String
+}
+
 /// App-level queue that drives the SERVER-SIDE tile pipeline. The parent fires
 /// off photos; each is uploaded to /api/tile-jobs (durably — the photo can't be
 /// lost) and the server does the slow work. The queue polls the server for
@@ -150,6 +164,9 @@ final class AddTileQueue {
     /// Set when a bulk import settles; the board watches this to pop the review
     /// banner. Cleared when the parent opens or dismisses the review.
     var pendingReviewNotice: ReviewNotice?
+    /// Jobs that JUST finished — AddTileView pops the "replace / remake related
+    /// pictures" magic follow-up for each. Consumed FIFO by the view.
+    var magicCandidates: [MagicCandidate] = []
 
     // Poll loop + the context it needs to refresh the board on completion.
     private var pollTask: Task<Void, Never>?
@@ -272,14 +289,22 @@ final class AddTileQueue {
             guard let sid = job.serverId, let s = byId[sid] else { continue }
             switch s.status {
             case "done":
-                if job.phase != .done { landed = true }
+                let newlyDone = job.phase != .done
+                if newlyDone { landed = true }
                 job.phase = .done
                 job.progress = 1.0
                 if let l = s.label, !l.isEmpty { job.label = l }
                 job.needsReview = s.needsReview
                 job.artFailed = s.artFailed
                 job.savedTileId = s.itemId
+                job.generatedImageKey = s.imageKey
                 job.errorText = nil
+                // Queue the magic follow-up (replace-existing / remake-related)
+                // exactly once per finished job, when the art actually rendered.
+                if newlyDone, !s.artFailed, let itemId = s.itemId, !job.label.isEmpty {
+                    magicCandidates.append(MagicCandidate(itemId: itemId, label: job.label,
+                                                          imageKey: s.imageKey, childId: job.childId))
+                }
                 job.statusText = s.needsReview ? "✅ On the board — needs review"
                     : (s.artFailed ? "✅ Saved your photo — art didn't render" : "✅ On the board")
             case "failed":

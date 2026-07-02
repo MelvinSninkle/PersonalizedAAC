@@ -1341,9 +1341,48 @@
       document.getElementById('style-panel-source').textContent = 'Generated for your family from your onboarding.';
       document.getElementById('style-draft').style.display = 'none';
       styleDraftKey = null; styleRegenMsg('Updated — new tiles will use this style.');
+      // The board is now MISMATCHED (old tiles wear the old style). Offer the
+      // discounted whole-board rebuild right here, while it's top of mind.
+      offerRebuildAfterStyleChange();
     } catch (err) { styleRegenMsg('Could not save: ' + (err.message || err)); }
     finally { use.disabled = false; use.textContent = 'Use this style'; }
   });
+
+  // After a style change the existing tiles still wear the OLD style. Quote the
+  // store's whole-board rebuild (30% off à la carte) and run it on a yes.
+  async function offerRebuildAfterStyleChange() {
+    try {
+      const c = await fetch('/api/store?action=catalog&childId=' + encodeURIComponent(slug),
+        { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null);
+      const rb = c && c.rebuild;
+      if (!rb || !rb.words) return;
+      const ok = confirm(
+        `Heads up: the ${rb.words} pictures already on the board still use the OLD style, so new tiles won't match them.\n\n` +
+        `Re-make the whole board in the new style now? ${rb.credits} credits (${Math.round((1 - rb.credits / rb.listCredits) * 100)}% off one-by-one). ` +
+        `Every replaced picture is archived — you keep them all.\n\nYou have ${c.balance} credits.`);
+      if (!ok) { styleRegenMsg('Updated — new tiles use the new style. Re-make the rest anytime in the Word Store.'); return; }
+      const r = await fetch('/api/store?action=rebuild', {
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: slug }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        styleRegenMsg(r.status === 402
+          ? `Not enough credits (need ${d.needed}, you have ${d.balance}) — grab a pack in the Word Store, then use "Rebuild the board" there.`
+          : 'Rebuild failed: ' + (d.detail || d.error || r.status));
+        return;
+      }
+      styleRegenMsg(`Rebuilding ${d.queued} pictures in the new style — they refresh over the next while. ✨`);
+    } catch (_) { /* the offer is best-effort; the store always has the rebuild */ }
+  }
+
+  // Deep link from the apps: /parent/<slug>?panel=style scrolls to the Art
+  // style panel (the native "Change style…" CTA lands here).
+  if (new URLSearchParams(location.search).get('panel') === 'style') {
+    setTimeout(() => {
+      const p = document.getElementById('style-panel');
+      if (p) { p.style.display = ''; p.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    }, 600);
+  }
 
   // ---- Account & security: change password / email reset link ----
   (async () => {

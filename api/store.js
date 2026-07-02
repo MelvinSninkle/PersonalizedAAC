@@ -24,6 +24,7 @@ import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
 import { isDefaultableTile } from './_lib/onboarding-render.js';
+import { archivePriorImage } from './_lib/image-history.js';
 import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus } from './_lib/seed-board.js';
 import { ensureCredits, ensureStarter, creditBalance, spendCredits, grantCredits,
          recordPurchase, productCredits, rebuildQuote,
@@ -62,6 +63,7 @@ export default async function handler(req, res) {
       case 'history':        return history(req, res, db, uid);
       case 'checkout':       return checkout(req, res, db, auth, uid, body);
       case 'impact':         return impact(req, res, db, auth);
+      case 'adopt-image':    return adoptImage(req, res, db, auth);
       case 'regen-with':     return regenWith(req, res, db, auth, uid, body);
       case 'retry':          return retryTile(req, res, db, auth, uid, body);
       case 'rebuild':        return rebuild(req, res, db, auth, uid, body);
@@ -249,6 +251,42 @@ async function impact(req, res, db, auth) {
       previewKey: m.image_key || m.default_image_key || null,
     })),
   });
+}
+
+// POST ?action=adopt-image { childId, sourceItemId, targetItemId }
+// The "Replace" in the add-tile magic: the existing word tile adopts the newly
+// generated tile's image (old image archived — never deleted), and the new
+// duplicate item row is removed WITHOUT blob cleanup (the target now owns the
+// blob; a plain items DELETE would take the image with it).
+async function adoptImage(req, res, db, auth) {
+  const body = typeof req.body === 'object' && req.body ? req.body : {};
+  const childId = String(body.childId || '').slice(0, 64);
+  const sourceItemId = Number(body.sourceItemId), targetItemId = Number(body.targetItemId);
+  if (!childId || !sourceItemId || !targetItemId || sourceItemId === targetItemId) {
+    res.status(400).json({ error: 'childId, sourceItemId, targetItemId required' }); return;
+  }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  const [src, tgt] = await Promise.all([
+    db`SELECT id, image_key, sound_key FROM items WHERE id = ${sourceItemId} AND child_id = ${childId} LIMIT 1`.then((r) => r[0]),
+    db`SELECT id, image_key, sound_key, label, section FROM items WHERE id = ${targetItemId} AND child_id = ${childId} LIMIT 1`.then((r) => r[0]),
+  ]);
+  if (!src || !src.image_key) { res.status(404).json({ error: 'source tile has no image' }); return; }
+  if (!tgt) { res.status(404).json({ error: 'target tile not found' }); return; }
+
+  if (tgt.image_key && !String(tgt.image_key).startsWith('taxonomy-defaults/')) {
+    try {
+      await archivePriorImage({ db, childId, itemId: tgt.id, oldKey: tgt.image_key,
+                                label: tgt.label, section: tgt.section, source: 'adopt-image',
+                                who: auth.user.email || null });
+    } catch (_) {}
+  }
+  await db`UPDATE items SET image_key = ${src.image_key},
+             sound_key = COALESCE(sound_key, ${src.sound_key}),
+             needs_review = FALSE, updated_at = NOW() WHERE id = ${tgt.id}`;
+  await db`DELETE FROM items WHERE id = ${src.id}`;   // row only — blobs live on with the target
+  res.status(200).json({ ok: true, itemId: Number(tgt.id),
+    note: 'Replaced — the old picture is archived in the Album.' });
 }
 
 // POST ?action=regen-with { childId, taxonomyIds:[], refItemId }
