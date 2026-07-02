@@ -79,11 +79,11 @@ struct TileEditSheet: View {
                         .pickerStyle(.segmented)
                         .onChange(of: section) { _, _ in categoryId = nil }
 
-                        let folders = board.roots(in: section)
+                        let folders = folderRows(board, section)
                         if !folders.isEmpty {
                             Picker("Folder", selection: $categoryId) {
                                 Text("Top level").tag(Int?.none)
-                                ForEach(folders, id: \.id) { c in
+                                ForEach(folders) { c in
                                     Text(c.label).tag(Int?.some(c.id))
                                 }
                             }
@@ -492,11 +492,11 @@ struct BoardTileEditSheet: View {
             .pickerStyle(.segmented)
             .onChange(of: section) { _, _ in categoryId = nil }
 
-            let folders = board.roots(in: section)
+            let folders = folderRows(board, section)
             if !folders.isEmpty {
                 Picker("Folder", selection: $categoryId) {
                     Text("Top level").tag(Int?.none)
-                    ForEach(folders, id: \.id) { c in
+                    ForEach(folders) { c in
                         Text(c.label).tag(Int?.some(c.id))
                     }
                 }
@@ -740,4 +740,29 @@ struct BoardTileEditSheet: View {
         }
         return error.localizedDescription
     }
+}
+
+
+// MARK: -- Folder picker rows
+
+/// Rows for the placement Folder pickers: top-level categories PLUS their
+/// subcategories (indented). Tiles usually live IN a subcategory (the board
+/// build places them there), so a roots-only picker had no tag matching the
+/// tile's categoryId — Xcode's "selection Optional(N) is invalid" warning,
+/// with undefined selection behavior (and a save could silently re-file the
+/// tile). Including the subs makes every real categoryId a valid tag.
+private struct FolderRow: Identifiable {
+    let id: Int
+    let label: String
+}
+
+private func folderRows(_ board: BoardStore, _ section: BoardSection) -> [FolderRow] {
+    var out: [FolderRow] = []
+    for root in board.roots(in: section) {
+        out.append(FolderRow(id: root.id, label: root.label))
+        for sub in board.children(of: root) {
+            out.append(FolderRow(id: sub.id, label: "— " + sub.label))
+        }
+    }
+    return out
 }
