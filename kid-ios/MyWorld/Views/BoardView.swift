@@ -37,6 +37,10 @@ struct BoardView: View {
     /// Gate the empty-board welcome so it only appears AFTER the first server
     /// refresh (never flashes during the initial cold-launch paint).
     @State private var didInitialLoad = false
+    /// Board-build progress ("Making Simon's words… 34 of 108") while the
+    /// server-side seed jobs are still rendering. nil = not building.
+    @State private var seedStatus: APIClient.SeedStatus?
+    @State private var seedPollTask: Task<Void, Never>?
 
     struct AddTileRequest: Identifiable {
         let id = UUID()
@@ -89,6 +93,7 @@ struct BoardView: View {
         .overlay { emptyBoardOverlay }
         .overlay(alignment: .top) { scheduledPromptOverlay }
         .overlay(alignment: .bottom) { reviewBanner }
+        .overlay(alignment: .bottomLeading) { seedProgressPill }
         .fullScreenCover(isPresented: Binding(
             get: { pendingMessage != nil },
             set: { if !$0 { pendingMessage = nil } }
@@ -138,6 +143,7 @@ struct BoardView: View {
             live.start(childId: auth.childSlug)
             scheduler.start(childId: auth.childSlug)
             autoTeach.start(childId: auth.childSlug)
+            startSeedWatch()
         }
         .onDisappear {
             live.stop()
@@ -146,6 +152,7 @@ struct BoardView: View {
             listenTimeout?.cancel()
             if listening { listening = false }
             speech.stop()
+            seedPollTask?.cancel()
         }
         .refreshable {
             await board.refresh(childId: auth.childSlug)
@@ -272,6 +279,56 @@ struct BoardView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
             .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// While the server-side seed jobs are still rendering this board's
+    /// personalized words, show a soft pill and pull fresh tiles in as they
+    /// land. Display-only — closing the app never stops the build.
+    @ViewBuilder
+    private var seedProgressPill: some View {
+        if let s = seedStatus, s.active {
+            let name = prettyChildName(auth.childSlug)
+            let who = name.isEmpty ? "your" : "\(name)’s"
+            let text = s.render.done < s.render.total
+                ? "Making \(who) words… \(s.render.done) of \(s.render.total)"
+                : "Adding \(who) voice… \(s.voice.done) of \(s.voice.total)"
+            HStack(spacing: 8) {
+                Circle().fill(Color(hex: "#ff1493")).frame(width: 9, height: 9)
+                    .opacity(0.9)
+                Text(text)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(hex: "#9d2463"))
+            }
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .background(Capsule().fill(.white))
+            .overlay(Capsule().stroke(Color(hex: "#f3c6dd"), lineWidth: 2))
+            .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
+            .padding(.leading, 12).padding(.bottom, 10)
+            .transition(.opacity)
+        }
+    }
+
+    private func startSeedWatch() {
+        seedPollTask?.cancel()
+        seedPollTask = Task { @MainActor in
+            var lastDone = -1
+            while !Task.isCancelled {
+                let s = await APIClient().seedStatus(childId: auth.childSlug)
+                guard !Task.isCancelled else { return }
+                seedStatus = s
+                guard let s, s.active else {
+                    // Finished (or nothing building): one last pull, then stop.
+                    if lastDone > -1 { await board.refresh(childId: auth.childSlug) }
+                    return
+                }
+                let done = s.render.done + s.voice.done
+                if done != lastDone {
+                    lastDone = done
+                    await board.refresh(childId: auth.childSlug)   // finished tiles pop in
+                }
+                try? await Task.sleep(nanoseconds: 12_000_000_000)
+            }
         }
     }
 

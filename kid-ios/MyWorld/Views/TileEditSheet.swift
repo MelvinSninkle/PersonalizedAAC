@@ -222,7 +222,10 @@ struct TileEditSheet: View {
     private func friendly(_ error: Error) -> String {
         if let api = error as? APIError {
             switch api {
-            case .badStatus(_, let body):
+            case .badStatus(let status, let body):
+                if status == 402 || body.contains("not_enough_credits") {
+                    return "You're out of image credits. Open Credits & Store on the parent home to add more, then retry."
+                }
                 return body.isEmpty ? "Server error." : String(body.prefix(160))
             case .notAuthenticated: return "Signed out — log in and try again."
             case .transport(let e): return "Network problem: \(e.localizedDescription)"
@@ -283,6 +286,8 @@ struct BoardTileEditSheet: View {
     @State private var currentImage: UIImage?
     @State private var showCamera = false
     @State private var showLibrary = false
+    @State private var redrawing = false
+    @State private var redrawNote: String?
     @State private var libraryItem: PhotosPickerItem?
     @State private var saving = false
     @State private var errorText: String?
@@ -401,6 +406,19 @@ struct BoardTileEditSheet: View {
                         .buttonStyle(.plain)
                     Button { showLibrary = true } label: { pill("Choose photo", filled: false, icon: "photo.on.rectangle") }
                         .buttonStyle(.plain)
+                    // Library words can be re-drawn in the child's style — the
+                    // first redo of each tile is free, then 1 credit (server-
+                    // enforced; renders in the background and lands on its own).
+                    if tile.taxonomySlug != nil {
+                        Button { Task { await redrawTile() } } label: {
+                            pill(redrawing ? "Redrawing…" : "Redraw picture", filled: false, icon: "wand.and.stars")
+                        }
+                        .buttonStyle(.plain).disabled(redrawing)
+                    }
+                }
+                if let note = redrawNote {
+                    Text(note)
+                        .font(.system(size: 12)).foregroundStyle(Color(hex: "#2e7d32"))
                 }
                 if stagedImage != nil {
                     Text("New picture ready — tap Save to apply.")
@@ -645,6 +663,23 @@ struct BoardTileEditSheet: View {
         }
     }
 
+    /// Queue a re-render of this library word in the child's style. The server
+    /// gives every tile ONE free redo, then charges a credit; the new art
+    /// renders in the background and replaces the tile on a later sync (the
+    /// old image is archived to the Album, never deleted).
+    private func redrawTile() async {
+        redrawing = true; errorText = nil; redrawNote = nil
+        defer { redrawing = false }
+        do {
+            let r = try await api.storeRetry(childId: auth.childSlug, itemId: tile.id)
+            redrawNote = (r.freeRetry == true)
+                ? "Redrawing now (free) — the new picture lands on the board in a minute or two."
+                : "Redrawing now (💎\(r.charged)) — the new picture lands on the board in a minute or two."
+        } catch {
+            errorText = friendly(error)
+        }
+    }
+
     // MARK: Helpers
 
     private func field(_ text: String) -> some View {
@@ -692,7 +727,10 @@ struct BoardTileEditSheet: View {
     private func friendly(_ error: Error) -> String {
         if let api = error as? APIError {
             switch api {
-            case .badStatus(_, let body):
+            case .badStatus(let status, let body):
+                if status == 402 || body.contains("not_enough_credits") {
+                    return "You're out of image credits. Open Credits & Store on the parent home to add more, then retry."
+                }
                 return body.isEmpty ? "Server error." : String(body.prefix(160))
             case .notAuthenticated: return "Signed out — log in and try again."
             case .transport(let e): return "Network problem: \(e.localizedDescription)"

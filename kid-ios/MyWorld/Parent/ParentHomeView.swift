@@ -18,6 +18,12 @@ struct ParentHomeView: View {
     @State private var showQuickBoard = false
     @State private var showSettings = false
     @State private var showFacilitator = false
+    /// Remote Listening Mode — mirrors the web dashboard toggle. Sends the
+    /// live command; the board flips its header into the live word-strip.
+    @State private var listeningOn = false
+    @State private var listenBusy = false
+    /// Board-build progress (server-side seed jobs still rendering).
+    @State private var buildStatus: APIClient.SeedStatus?
 
     private let columns = [GridItem(.adaptive(minimum: 160), spacing: 14)]
 
@@ -31,6 +37,14 @@ struct ParentHomeView: View {
                         homeCard(icon: "camera.fill", tint: "#ff1493",
                                  title: "Add a tile",
                                  subtitle: "Snap it, it's on the board") { showAddTile = true }
+
+                        homeCard(icon: listeningOn ? "waveform.circle.fill" : "mic.circle.fill",
+                                 tint: listeningOn ? "#ef4444" : "#e11d48",
+                                 title: listeningOn ? "Listening… (tap to stop)" : "Listening mode",
+                                 subtitle: listeningOn ? "The board is captioning live"
+                                                       : "Board turns speech into tiles") {
+                            Task { await toggleListening() }
+                        }
 
                         homeCard(icon: "square.grid.3x3.fill", tint: "#14b8a6",
                                  title: "Quick board",
@@ -77,6 +91,20 @@ struct ParentHomeView: View {
                             .padding(.horizontal, 12).padding(.vertical, 8)
                             .background(Color(hex: "#fce4ec"), in: Capsule())
                     }
+
+                    // Board build in progress (onboarding seed jobs) — the build
+                    // is server-side; this is purely informational.
+                    if let s = buildStatus, s.active {
+                        let txt = s.render.done < s.render.total
+                            ? "Making \(childPossessive(auth.user?.slug)) words… \(s.render.done) of \(s.render.total)"
+                            : "Adding \(childPossessive(auth.user?.slug)) voice… \(s.voice.done) of \(s.voice.total)"
+                        Label("\(txt) — keeps going even if you close the app.",
+                              systemImage: "paintbrush.pointed.fill")
+                            .font(.footnote)
+                            .foregroundStyle(Color(hex: "#9d174d"))
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .background(Color(hex: "#fce4ec"), in: Capsule())
+                    }
                 }
                 .padding(16)
             }
@@ -106,6 +134,9 @@ struct ParentHomeView: View {
                 // App-wide live poller — drives the auto-popping facilitator
                 // overlay from anywhere in the parent app.
                 parentLive.start(childId: auth.childSlug)
+                // Real child name for the title + board-build progress banner.
+                ChildNames.shared.refresh(auth.childSlug)
+                await watchBuildProgress()
             }
             // PRD: when a facilitated game session starts on the iPad — from
             // here, from the child's tablet, from the web console, or from a
@@ -117,6 +148,30 @@ struct ParentHomeView: View {
             .fullScreenCover(isPresented: $showFacilitator) {
                 FacilitatorView()
             }
+        }
+    }
+
+    /// Flip the board's Listening Mode remotely (same live command the web
+    /// dashboard sends; BoardView reacts to listen-start / listen-stop). The
+    /// board also auto-stops itself after 2 minutes of silence.
+    private func toggleListening() async {
+        guard !listenBusy else { return }
+        listenBusy = true
+        defer { listenBusy = false }
+        let next = !listeningOn
+        let ok = await APIClient().sendLiveCommand(childId: auth.childSlug,
+                                                   action: next ? "listen-start" : "listen-stop")
+        if ok { listeningOn = next }
+    }
+
+    /// Poll seed progress while a board build is running (12s cadence, stops
+    /// itself when the queue drains).
+    private func watchBuildProgress() async {
+        while !Task.isCancelled {
+            let s = await APIClient().seedStatus(childId: auth.childSlug)
+            buildStatus = s
+            guard let s, s.active else { return }
+            try? await Task.sleep(nanoseconds: 12_000_000_000)
         }
     }
 
@@ -588,7 +643,11 @@ private struct PersonEditorSheet: View {
     private func friendly(_ error: Error) -> String {
         if let api = error as? APIError {
             switch api {
-            case .badStatus(_, let body): return body.isEmpty ? "Server error." : String(body.prefix(160))
+            case .badStatus(let status, let body):
+                if status == 402 || body.contains("not_enough_credits") {
+                    return "You're out of image credits — open Credits & Store below to add more."
+                }
+                return body.isEmpty ? "Server error." : String(body.prefix(160))
             case .notAuthenticated: return "Signed out — log in and try again."
             case .transport(let e): return "Network problem: \(e.localizedDescription)"
             case .invalidResponse:  return "Unexpected server response."

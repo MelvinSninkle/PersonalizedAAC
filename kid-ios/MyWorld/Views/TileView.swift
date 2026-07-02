@@ -32,6 +32,22 @@ struct TileView: View {
                             .aspectRatio(contentMode: posterMode ? .fit : .fill)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()
+                    } else if tile.imageKey == nil || tile.imageKey?.isEmpty == true {
+                        // WORD TILE: the art hasn't been generated yet (a fresh
+                        // board whose custom render is still queued). Show the
+                        // word big and warm — matches the web app's word-tile —
+                        // instead of a broken-looking placeholder icon. The real
+                        // image replaces it on a later sync with no layout shift.
+                        RoundedRectangle(cornerRadius: 18)
+                            .fill(Color(hex: "#fdf2f8"))
+                        RoundedRectangle(cornerRadius: 18)
+                            .strokeBorder(Color(hex: "#f3c6dd"), style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
+                        Text(tile.label)
+                            .font(.system(size: 19, weight: .heavy, design: .rounded))
+                            .foregroundStyle(Color(hex: "#9d2463"))
+                            .multilineTextAlignment(.center)
+                            .minimumScaleFactor(0.5)
+                            .padding(8)
                     } else {
                         Image(systemName: "photo")
                             .font(.largeTitle)

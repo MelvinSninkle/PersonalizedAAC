@@ -369,7 +369,10 @@ final class AddTileQueue {
     private func friendly(_ error: Error) -> String {
         if let api = error as? APIError {
             switch api {
-            case .badStatus(_, let body):
+            case .badStatus(let status, let body):
+                if status == 402 || body.contains("not_enough_credits") {
+                    return "You're out of image credits. Open Credits & Store on the parent home to add more, then retry."
+                }
                 if body.range(of: "must be verified", options: .caseInsensitive) != nil {
                     return "OpenAI organization isn't verified for image generation. Open platform.openai.com → Settings → Organization → Verify, then retry."
                 }

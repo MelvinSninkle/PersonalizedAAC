@@ -7,6 +7,9 @@ struct CategoryTabStrip: View {
     let categories: [Category]
     @Binding var selectedId: Int?
     var hideLabels: Bool = false
+    /// Unlocked-board drag support: a tile dropped on a chip moves into that
+    /// category (SectionColumn supplies the handler; nil-safe via `?? false`).
+    var onDropTile: ((Category, [String]) -> Bool)? = nil
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -14,7 +17,8 @@ struct CategoryTabStrip: View {
                 ForEach(categories) { cat in
                     CategoryChip(category: cat,
                                  selected: selectedId == cat.id,
-                                 hideLabel: hideLabels) {
+                                 hideLabel: hideLabels,
+                                 onDropTile: onDropTile) {
                         selectedId = cat.id
                     }
                 }
@@ -32,6 +36,7 @@ struct SubcategoryStrip: View {
     let subcategories: [Category]
     @Binding var selectedId: Int?
     var hideLabels: Bool = false
+    var onDropTile: ((Category, [String]) -> Bool)? = nil
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -40,7 +45,8 @@ struct SubcategoryStrip: View {
                     CategoryChip(category: sub,
                                  selected: selectedId == sub.id,
                                  compact: true,
-                                 hideLabel: hideLabels) {
+                                 hideLabel: hideLabels,
+                                 onDropTile: onDropTile) {
                         selectedId = sub.id
                     }
                 }
@@ -59,6 +65,7 @@ struct CategoryChip: View {
     let selected: Bool
     var compact: Bool = false
     var hideLabel: Bool = false
+    var onDropTile: ((Category, [String]) -> Bool)? = nil
     let onTap: () -> Void
 
     @State private var image: UIImage?
@@ -100,6 +107,11 @@ struct CategoryChip: View {
             }
         }
         .buttonStyle(.plain)
+        // Accept a dragged tile (unlocked board): dropping moves the tile into
+        // this category. The handler enforces section + edit-mode rules.
+        .dropDestination(for: String.self) { items, _ in
+            onDropTile?(category, items) ?? false
+        }
         .task(id: category.imageKey) {
             guard let key = category.imageKey, !key.isEmpty else { return }
             if let img = await MediaCache.shared.image(for: key) {

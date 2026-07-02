@@ -144,6 +144,7 @@ final class DisplayPrefs {
         guard self.childId != childId else { return }
         self.childId = childId
         Task { @MainActor in
+            ChildNames.shared.refresh(childId)   // real name for the title
             if let data = await APIClient().fetchDisplayPrefs(childId: childId) {
                 apply(data)
             }
@@ -197,13 +198,61 @@ final class DisplayPrefs {
     }
 }
 
-/// "fletcherpeterson" → "Fletcher" — same helper the web app uses to build
-/// "{Name}'s World" in the header.
+/// Live registry of children's REAL names (the persons roster's is_self row),
+/// so titles read "Simon's World" — never a prettified slug like
+/// "Simon-5ba4's World" (numbered slugs come from the duplicate-name rule at
+/// signup). Cached in UserDefaults for instant cold-launch titles; refreshed
+/// whenever the board or the parent home attaches. @Observable, so any view
+/// whose body reads a name re-renders the moment the fetch lands.
+@Observable
+final class ChildNames {
+    static let shared = ChildNames()
+    private(set) var bySlug: [String: String] = [:]
+    @ObservationIgnored private var inFlight: Set<String> = []
+
+    func name(for slug: String?) -> String {
+        guard let slug, !slug.isEmpty else { return "" }
+        return bySlug[slug] ?? ""
+    }
+
+    @MainActor
+    func refresh(_ slug: String?) {
+        guard let slug, !slug.isEmpty else { return }
+        if bySlug[slug] == nil,
+           let cached = UserDefaults.standard.string(forKey: "childRealName:\(slug)"), !cached.isEmpty {
+            bySlug[slug] = cached
+        }
+        guard !inFlight.contains(slug) else { return }
+        inFlight.insert(slug)
+        Task { @MainActor in
+            defer { inFlight.remove(slug) }
+            guard let persons = try? await APIClient().listPersons(childId: slug),
+                  let me = persons.first(where: { $0.isSelf }) else { return }
+            let raw = (me.givenName?.isEmpty == false) ? me.givenName! : me.displayName
+            let first = raw.split(separator: " ").first.map(String.init) ?? raw
+            guard !first.isEmpty else { return }
+            bySlug[slug] = first
+            UserDefaults.standard.set(first, forKey: "childRealName:\(slug)")
+        }
+    }
+}
+
+/// The child's display name: the REAL name from the persons roster when known,
+/// else a prettified slug ("fletcherpeterson" → "Fletcher"; a numbered-dupe
+/// suffix like "simon-5ba4"/"ella2" is dropped rather than shown).
 func prettyChildName(_ slug: String?) -> String {
+    let real = ChildNames.shared.name(for: slug)
+    if !real.isEmpty { return real }
     guard let slug, !slug.isEmpty else { return "" }
     var name = slug
     if name.lowercased().hasSuffix("peterson") {
         name = String(name.dropLast("peterson".count))
+    }
+    if let r = name.range(of: "[-_][a-z0-9]{1,8}$", options: .regularExpression) {
+        name.removeSubrange(r)
+    }
+    if let r = name.range(of: "[0-9]+$", options: .regularExpression) {
+        name.removeSubrange(r)
     }
     guard let first = name.first else { return slug }
     return String(first).uppercased() + name.dropFirst()

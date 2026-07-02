@@ -20,6 +20,8 @@ struct StoreView: View {
     @State private var busy: String?          // product id mid-purchase
     @State private var note: String?
     @State private var loadFailed = false
+    @State private var couponCode = ""
+    @State private var redeeming = false
 
     private static let productIDs = ["credits20", "credits60", "credits150", "plus.monthly"]
     private let api = APIClient()
@@ -58,6 +60,47 @@ struct StoreView: View {
                     Text(n).font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Color(hex: "#047857"))
                 }
+
+                // Coupon redeem — credits granted by a code (family gift,
+                // therapist drop, promo). One use per account, server-enforced.
+                HStack(spacing: 10) {
+                    TextField("Have a code?", text: $couponCode)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .padding(.horizontal, 12).padding(.vertical, 10)
+                        .background(Color(.systemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#f3c6dd"), lineWidth: 2))
+                    Button {
+                        Task { await redeem() }
+                    } label: {
+                        Text(redeeming ? "…" : "Redeem")
+                            .font(.system(size: 14, weight: .bold))
+                            .padding(.horizontal, 16).padding(.vertical, 10)
+                            .background(Color(hex: "#ad1457"))
+                            .foregroundStyle(.white)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(redeeming || couponCode.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+
+                NavigationLink { WordShopView() } label: {
+                    HStack {
+                        Image(systemName: "cart.fill")
+                        Text("Shop words for the board")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .bold))
+                    }
+                    .padding(14)
+                    .background(Color(hex: "#fff7fb"))
+                    .foregroundStyle(Color(hex: "#ad1457"))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#f3c6dd"), lineWidth: 2))
+                }
+                .buttonStyle(.plain)
 
                 Button("Restore purchases") { Task { await restore() } }
                     .font(.system(size: 13))
@@ -144,6 +187,25 @@ struct StoreView: View {
             }
         } catch {
             note = "Purchase didn't complete: \(error.localizedDescription)"
+        }
+    }
+
+    private func redeem() async {
+        let code = couponCode.trimmingCharacters(in: .whitespaces)
+        guard !code.isEmpty else { return }
+        redeeming = true
+        defer { redeeming = false }
+        do {
+            let r = try await api.storeRedeem(code: code)
+            balance = r.balance
+            couponCode = ""
+            note = "Added 💎\(r.credited) — enjoy!"
+        } catch let APIError.badStatus(_, body) {
+            note = body.contains("already used") ? "You've already used this code."
+                 : body.contains("expired") ? "That code has expired."
+                 : "That code isn't valid."
+        } catch {
+            note = "Couldn't redeem: \(error.localizedDescription)"
         }
     }
 
