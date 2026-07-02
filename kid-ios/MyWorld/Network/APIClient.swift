@@ -335,6 +335,7 @@ struct APIClient {
         let status: String          // queued | processing | done | failed
         let label: String?
         let itemId: Int?
+        let imageKey: String?
         let artFailed: Bool
         let needsReview: Bool
         let error: String?
@@ -609,6 +610,37 @@ struct APIClient {
         let (data, _) = try await request(method: "POST", path: "/api/store?action=redeem",
                                           body: body, contentType: "application/json")
         return try JSONDecoder().decode(StoreRedeemResult.self, from: data)
+    }
+
+    /// The add-tile magic lookups: the exact-word tile already on the board
+    /// (for the replace dialog) + other tiles whose prompts mention the word.
+    struct ImpactExisting: Decodable { let itemId: Int; let label: String; let imageKey: String?; let isDefault: Bool }
+    struct ImpactTile: Decodable, Identifiable { var id: String { taxonomyId }
+        let taxonomyId: String; let itemId: Int; let label: String; let previewKey: String? }
+    struct ImpactResult: Decodable { let existing: ImpactExisting?; let affected: [ImpactTile] }
+    func storeImpact(childId: String, word: String) async -> ImpactResult? {
+        guard let (data, _) = try? await request(method: "GET",
+            path: "/api/store?action=impact&childId=\(percentEscape(childId))&word=\(percentEscape(word))",
+            body: nil) else { return nil }
+        return try? JSONDecoder().decode(ImpactResult.self, from: data)
+    }
+
+    /// "Replace": the existing word tile adopts the new tile's image (old art
+    /// archived server-side) and the duplicate row is removed safely.
+    func storeAdoptImage(childId: String, sourceItemId: Int, targetItemId: Int) async throws {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "childId": childId, "sourceItemId": sourceItemId, "targetItemId": targetItemId])
+        _ = try await request(method: "POST", path: "/api/store?action=adopt-image",
+                              body: body, contentType: "application/json")
+    }
+
+    struct RegenWithResult: Decodable { let ok: Bool; let queued: Int; let charged: Int; let balance: Int?; let note: String? }
+    func storeRegenWith(childId: String, taxonomyIds: [String], refItemId: Int) async throws -> RegenWithResult {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "childId": childId, "taxonomyIds": taxonomyIds, "refItemId": refItemId])
+        let (data, _) = try await request(method: "POST", path: "/api/store?action=regen-with",
+                                          body: body, contentType: "application/json")
+        return try JSONDecoder().decode(RegenWithResult.self, from: data)
     }
 
     // MARK: -- Seed starter words (chunked)

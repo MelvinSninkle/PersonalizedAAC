@@ -30,8 +30,12 @@ struct AddTileView: View {
     // what was resetting the pre-selected folder back to "Top level".
     @State private var section: BoardSection
     @State private var categoryId: Int?
-    @State private var style: ArtStyle = .threeD
-    @State private var model: ImageModel = .nanoBanana
+    // Style + model are no longer user choices here: every tile renders in the
+    // BOARD's saved art style (server-resolved style guide) and the model is
+    // auto-routed server-side (people → GPT keystone, things → nano banana,
+    // taxonomy overrides win). The chip below just explains + links out.
+    @State private var showStyleChange = false
+    @State private var magic: MagicCandidate?
     /// Background-color preset for the generated tile. Defaults to pink to
     /// match the board brand; the user picks a different one per batch when
     /// they want some variety across categories.
@@ -118,8 +122,37 @@ struct AddTileView: View {
                 // now — the work continues without this device).
                 queue.pruneFinished()
                 await queue.restore(childId: auth.childSlug, board: board)
+                advanceMagic()
+            }
+            // Style is a BOARD-level choice; changing it means new tiles won't
+            // match what's already there — confirm before handing off to the
+            // web style settings (where the rebuild offer lives).
+            .confirmationDialog("Change the board's art style?", isPresented: $showStyleChange, titleVisibility: .visible) {
+                Button("Open style settings") {
+                    if let url = URL(string: "\(APIClient.defaultOrigin)/parent/\(auth.childSlug)?panel=style") {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Tiles you make after changing the style won't match the board's current look. You can re-make the whole board in the new style afterward (discounted, in the Word Store).")
+            }
+            // The magic follow-up: a finished tile whose word already exists on
+            // the board (offer replace) or appears inside other pictures (offer
+            // contextual re-renders). One candidate at a time, FIFO.
+            .onChange(of: queue.magicCandidates.count) { _, _ in advanceMagic() }
+            .sheet(item: $magic) { c in
+                MagicFollowUpSheet(candidate: c) {
+                    magic = nil
+                    advanceMagic()
+                }
             }
         }
+    }
+
+    private func advanceMagic() {
+        guard magic == nil, !queue.magicCandidates.isEmpty else { return }
+        magic = queue.magicCandidates.removeFirst()
     }
 
     // MARK: -- Destination
@@ -154,18 +187,13 @@ struct AddTileView: View {
                         }
                     }
                     Menu {
-                        ForEach(ArtStyle.allCases) { s in
-                            Button(s.label) { style = s }
+                        Text("New tiles match your board's art style")
+                        Divider()
+                        Button { showStyleChange = true } label: {
+                            Label("Change style…", systemImage: "paintpalette")
                         }
                     } label: {
-                        menuChip(icon: "paintpalette", text: style.label)
-                    }
-                    Menu {
-                        ForEach(ImageModel.allCases) { m in
-                            Button(m.label) { model = m }
-                        }
-                    } label: {
-                        menuChip(icon: "wand.and.stars", text: model.label)
+                        menuChip(icon: "paintpalette", text: "Board style ✓")
                     }
                     Menu {
                         ForEach(TileBackground.allCases) { c in
@@ -294,8 +322,8 @@ struct AddTileView: View {
         queue.enqueue(photoJPEG: data,
                       section: section,
                       categoryId: categoryId,
-                      style: style,
-                      model: model.apiValue,
+                      style: .soft,
+                      model: "",
                       bg: bg.rawValue,
                       emotion: "default",
                       prefilledLabel: name.trimmingCharacters(in: .whitespaces),
@@ -324,8 +352,8 @@ struct AddTileView: View {
             queue.enqueueBatch(photos: photos,
                                section: section,
                                categoryId: categoryId,
-                               style: style,
-                               model: model.apiValue,
+                               style: .soft,
+                               model: "",
                                bg: bg.rawValue,
                                emotion: "default",
                                childId: auth.childSlug,
@@ -416,8 +444,10 @@ private struct JobCard: View {
         .onTapGesture { onTap() }
     }
 
+    @State private var finishedArt: UIImage?
+
     private var thumbnail: some View {
-        Image(uiImage: job.thumbnail)
+        Image(uiImage: finishedArt ?? job.thumbnail)
             .resizable()
             .aspectRatio(contentMode: .fill)
             .frame(width: 56, height: 56)
@@ -427,6 +457,11 @@ private struct JobCard: View {
                     .stroke(Color.black.opacity(0.06), lineWidth: 1)
             )
             .opacity(job.phase == .working ? 0.7 : 1)
+            // Once the server finishes, swap the captured photo for the tile art.
+            .task(id: job.generatedImageKey) {
+                guard let key = job.generatedImageKey else { return }
+                finishedArt = await MediaCache.shared.image(for: key)
+            }
     }
 
     @ViewBuilder
@@ -572,5 +607,251 @@ private struct PreGenerateSheet: View {
         Text(text.uppercased())
             .font(.system(size: 12, weight: .bold))
             .foregroundStyle(Color(hex: "#999"))
+    }
+}
+
+// MARK: -- Magic follow-up (replace-existing / remake-related)
+
+/// After a photo tile finishes, this sheet closes the loop the parent didn't
+/// know to ask for:
+///   1. REPLACE — the word already exists on the board: offer to swap the old
+///      art (classic default or custom) for the new picture. Default action is
+///      Replace; the old image is archived in the Album, never deleted.
+///   2. REMAKE — other pictures on the board mention this word in their prompts
+///      (curated objects_present index): offer to re-render them WITH the new
+///      tile in the scene. 1 credit each, all pre-selected, paged past 20.
+/// Lives in this file so no xcodegen re-run is needed.
+private struct MagicFollowUpSheet: View {
+    let candidate: MagicCandidate
+    let onDone: () -> Void
+
+    @Environment(BoardStore.self)  private var board
+    @Environment(AuthManager.self) private var auth
+
+    private enum Phase { case loading, replace, regen, done }
+    @State private var phase: Phase = .loading
+    @State private var impact: APIClient.ImpactResult?
+    @State private var selected: Set<String> = []
+    @State private var page = 0
+    @State private var busy = false
+    @State private var note: String?
+    /// The board item that ends up holding the new image (regen reference).
+    @State private var refItemId: Int = 0
+
+    private let api = APIClient()
+    private let pageSize = 20
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                switch phase {
+                case .loading: ProgressView("Checking the board…").padding(40)
+                case .replace: replaceView
+                case .regen:   regenView
+                case .done:    doneView
+                }
+            }
+            .navigationTitle(candidate.label.capitalized)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { onDone() } } }
+        }
+        .presentationDetents([.medium, .large])
+        .interactiveDismissDisabled(busy)
+        .task {
+            refItemId = candidate.itemId
+            impact = await api.storeImpact(childId: candidate.childId, word: candidate.label)
+            advance(from: .loading)
+        }
+    }
+
+    /// Move to the next relevant phase, skipping ones with nothing to show.
+    private func advance(from: Phase) {
+        if from == .loading, let ex = impact?.existing, ex.itemId != candidate.itemId {
+            phase = .replace; return
+        }
+        if from != .regen, let aff = impact?.affected, !aff.isEmpty {
+            selected = Set(aff.map(\.id))     // magic default: all on
+            phase = .regen; return
+        }
+        if note != nil { phase = .done } else { onDone() }
+    }
+
+    // MARK: replace
+
+    private var replaceView: some View {
+        VStack(spacing: 16) {
+            Text("“\(candidate.label.capitalized)” is already on the board")
+                .font(.system(size: 20, weight: .heavy, design: .rounded))
+            if let ex = impact?.existing {
+                HStack(spacing: 18) {
+                    VStack(spacing: 6) {
+                        MagicThumb(blobKey: ex.imageKey)
+                        Text(ex.isDefault ? "Now (classic art)" : "Now (custom picture)")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                    Image(systemName: "arrow.right").foregroundStyle(.secondary)
+                    VStack(spacing: 6) {
+                        MagicThumb(blobKey: candidate.imageKey)
+                        Text("Your new picture")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                }
+                Text(ex.isDefault
+                     ? "Swap in your picture? The classic art stays available to every board."
+                     : "Swap in your new picture? The current one is archived in the Album — you never lose it.")
+                    .font(.system(size: 14)).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            if let e = note { Text(e).font(.system(size: 13)).foregroundStyle(.red) }
+            HStack(spacing: 12) {
+                Button { Task { await doReplace() } } label: {
+                    Text(busy ? "Replacing…" : "Replace")
+                        .font(.system(size: 16, weight: .bold))
+                        .padding(.horizontal, 26).padding(.vertical, 12)
+                        .background(Color(hex: "#ff1493")).foregroundStyle(.white)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain).disabled(busy)
+                Button("Keep both") { advance(from: .replace) }
+                    .font(.system(size: 15, weight: .semibold))
+                    .disabled(busy)
+            }
+        }
+        .padding(22)
+    }
+
+    private func doReplace() async {
+        guard let ex = impact?.existing else { advance(from: .replace); return }
+        busy = true
+        defer { busy = false }
+        do {
+            try await api.storeAdoptImage(childId: candidate.childId,
+                                          sourceItemId: candidate.itemId,
+                                          targetItemId: ex.itemId)
+            refItemId = ex.itemId          // the existing tile now holds the new art
+            note = "Replaced — the old picture is archived in the Album."
+            await board.refresh(childId: candidate.childId)
+            advance(from: .replace)
+        } catch {
+            note = "Couldn't replace: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: regen
+
+    private var regenView: some View {
+        let affected = impact?.affected ?? []
+        let pages = stride(from: 0, to: affected.count, by: pageSize).map { Array(affected[$0..<min($0 + pageSize, affected.count)]) }
+        let current = pages.indices.contains(page) ? pages[page] : []
+        return VStack(spacing: 12) {
+            Text("Your \(candidate.label) shows up in \(affected.count) other picture\(affected.count == 1 ? "" : "s")")
+                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                .multilineTextAlignment(.center)
+            Text("Remake them so they show YOUR \(candidate.label)? 💎1 each — replaced art is archived.")
+                .font(.system(size: 13)).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 10)], spacing: 10) {
+                    ForEach(current) { t in
+                        let on = selected.contains(t.id)
+                        Button {
+                            if on { selected.remove(t.id) } else { selected.insert(t.id) }
+                        } label: {
+                            VStack(spacing: 4) {
+                                MagicThumb(blobKey: t.previewKey, side: 80)
+                                    .overlay(alignment: .topTrailing) {
+                                        Image(systemName: on ? "checkmark.circle.fill" : "circle")
+                                            .foregroundStyle(on ? Color(hex: "#ff1493") : .secondary)
+                                            .background(Circle().fill(.white))
+                                            .padding(3)
+                                    }
+                                Text(t.label).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            if pages.count > 1 {
+                HStack {
+                    Button("‹ Back") { page = max(0, page - 1) }.disabled(page == 0)
+                    Spacer()
+                    Text("Page \(page + 1) of \(pages.count)").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("More ›") { page = min(pages.count - 1, page + 1) }.disabled(page >= pages.count - 1)
+                }
+                .font(.system(size: 14, weight: .semibold))
+            }
+            if let e = note, phase == .regen { Text(e).font(.system(size: 12)).foregroundStyle(.secondary) }
+            HStack(spacing: 12) {
+                Button { Task { await doRegen() } } label: {
+                    Text(busy ? "Queuing…" : "Remake \(selected.count) (💎\(selected.count))")
+                        .font(.system(size: 16, weight: .bold))
+                        .padding(.horizontal, 22).padding(.vertical, 12)
+                        .background(Color(hex: "#ff1493")).foregroundStyle(.white)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain).disabled(busy || selected.isEmpty)
+                Button("Not now") { onDone() }
+                    .font(.system(size: 15, weight: .semibold)).disabled(busy)
+            }
+        }
+        .padding(18)
+    }
+
+    private func doRegen() async {
+        busy = true
+        defer { busy = false }
+        do {
+            let r = try await api.storeRegenWith(childId: candidate.childId,
+                                                 taxonomyIds: Array(selected),
+                                                 refItemId: refItemId)
+            note = r.note ?? "\(r.queued) pictures re-rendering — they pop in over the next few minutes."
+            phase = .done
+        } catch let APIError.badStatus(status, body) {
+            note = (status == 402 || body.contains("not_enough_credits"))
+                ? "Not enough credits — add a pack in Credits & Store, then try again."
+                : "Couldn't queue: \(String(body.prefix(120)))"
+        } catch {
+            note = "Couldn't queue: \(error.localizedDescription)"
+        }
+    }
+
+    private var doneView: some View {
+        VStack(spacing: 14) {
+            Text("✨").font(.system(size: 44))
+            Text(note ?? "All set!")
+                .font(.system(size: 15, weight: .semibold))
+                .multilineTextAlignment(.center)
+            Button("Done") { onDone() }
+                .font(.system(size: 16, weight: .bold))
+        }
+        .padding(30)
+    }
+}
+
+/// Tiny async thumbnail for the magic sheet (MediaCache-backed).
+private struct MagicThumb: View {
+    let blobKey: String?
+    var side: CGFloat = 110
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                ZStack {
+                    Color(hex: "#fdf2f8")
+                    Image(systemName: "photo").foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .frame(width: side, height: side)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#f3c6dd"), lineWidth: 2))
+        .task(id: blobKey) {
+            if let key = blobKey { image = await MediaCache.shared.image(for: key) }
+        }
     }
 }

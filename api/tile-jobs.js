@@ -40,7 +40,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       const rows = await db`
-        SELECT id, status, label, item_id, art_failed, needs_review, error, attempts, created_at, updated_at
+        SELECT id, status, label, item_id, image_key, art_failed, needs_review, error, attempts, created_at, updated_at
         FROM tile_jobs
         WHERE child_id = ${childId}
           AND (status <> 'done' OR updated_at > NOW() - INTERVAL '1 hour')
@@ -49,6 +49,7 @@ export default async function handler(req, res) {
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ jobs: rows.map(j => ({
         id: Number(j.id), status: j.status, label: j.label, itemId: j.item_id ? Number(j.item_id) : null,
+        imageKey: j.image_key || null,
         artFailed: !!j.art_failed, needsReview: !!j.needs_review, error: j.error, attempts: j.attempts,
         createdAt: j.created_at, updatedAt: j.updated_at,
       })) });

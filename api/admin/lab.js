@@ -22,6 +22,7 @@ import categoryUpload from './_lab-category-upload.js';
 import defaultsView from './_lab-defaults-view.js';
 import generateScene from './_lab-generate-scene.js';
 import generate from './_lab-generate.js';
+import indexObjects from './_lab-index-objects.js';
 import portImage from './_lab-port-image.js';
 import publishDefault from './_lab-publish-default.js';
 import publishTile from './_lab-publish-tile.js';
@@ -44,6 +45,7 @@ const HANDLERS = {
   'publish-tile': publishTile,
   'publish-default': publishDefault,
   'defaults-view': defaultsView,
+  'index-objects': indexObjects,
   'seed-defaults': seedDefaults,
   'settings': settings,
   'upload-image': uploadImage,
