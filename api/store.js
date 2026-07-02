@@ -27,6 +27,7 @@ import { isDefaultableTile } from './_lib/onboarding-render.js';
 import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus } from './_lib/seed-board.js';
 import { ensureCredits, ensureStarter, creditBalance, spendCredits, grantCredits,
          recordPurchase, productCredits, rebuildQuote,
+         ensureCoupons, redeemCoupon, randomCouponCode,
          PACKS, SUBSCRIPTION, COST, CREDIT_CENTS } from './_lib/credits.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
@@ -64,7 +65,12 @@ export default async function handler(req, res) {
       case 'rebuild':        return rebuild(req, res, db, auth, uid, body);
       case 'iap-verify':     return iapVerify(req, res, db, uid, body);
       case 'stripe-checkout': return stripeCheckout(req, res, db, auth, uid, body);
+      case 'redeem':         return redeem(req, res, db, uid, body);
       case 'grant':          return adminGrant(req, res, db, auth, body);
+      case 'grant-all':      return adminGrantAll(req, res, db, auth, body);
+      case 'coupons':        return adminCoupons(req, res, db, auth);
+      case 'coupon-create':  return adminCouponCreate(req, res, db, auth, body);
+      case 'coupon-update':  return adminCouponUpdate(req, res, db, auth, body);
       default:
         res.status(404).json({ error: 'unknown store action', action });
     }
@@ -382,7 +388,58 @@ async function stripeWebhook(req, res, db, raw) {
   }
 }
 
-// ── Admin grant ──────────────────────────────────────────────────────────────
+// ── Coupons (parent redeem + admin manage) ───────────────────────────────────
+
+async function redeem(req, res, db, uid, body) {
+  if (!uid) { res.status(400).json({ error: 'no account' }); return; }
+  await ensureCoupons(db);
+  const r = await redeemCoupon(db, { userId: uid, code: body.code });
+  if (!r.ok) { res.status(400).json({ error: r.error }); return; }
+  res.status(200).json({ ok: true, credited: r.credits, balance: r.balance });
+}
+
+async function adminCoupons(req, res, db, auth) {
+  if (auth.user.role !== 'admin') { res.status(403).json({ error: 'Forbidden' }); return; }
+  await ensureCoupons(db);
+  const rows = await db`SELECT code, credits, note, max_redemptions, redemptions, expires_at, active, created_at
+                        FROM coupons ORDER BY created_at DESC LIMIT 200`;
+  res.status(200).json({ ok: true, coupons: rows });
+}
+
+async function adminCouponCreate(req, res, db, auth, body) {
+  if (auth.user.role !== 'admin') { res.status(403).json({ error: 'Forbidden' }); return; }
+  await ensureCoupons(db);
+  const credits = Math.floor(Number(body.credits) || 0);
+  if (credits <= 0) { res.status(400).json({ error: 'credits must be a positive number' }); return; }
+  const code = (String(body.code || '').trim().toUpperCase() || randomCouponCode()).slice(0, 40);
+  const maxRedemptions = Number(body.maxRedemptions) > 0 ? Math.floor(Number(body.maxRedemptions)) : null;
+  const expiresDays = Number(body.expiresDays) > 0 ? Math.floor(Number(body.expiresDays)) : null;
+  const note = String(body.note || '').slice(0, 200) || null;
+  try {
+    const rows = await db`
+      INSERT INTO coupons (code, credits, note, max_redemptions, expires_at, created_by)
+      VALUES (${code}, ${credits}, ${note}, ${maxRedemptions},
+              ${expiresDays ? new Date(Date.now() + expiresDays * 86400000) : null},
+              ${auth.user.email || 'admin'})
+      RETURNING code, credits, max_redemptions, expires_at`;
+    res.status(200).json({ ok: true, coupon: rows[0] });
+  } catch (e) {
+    if (/duplicate key|unique/i.test(String(e.message || e))) { res.status(409).json({ error: 'That code already exists.' }); return; }
+    throw e;
+  }
+}
+
+async function adminCouponUpdate(req, res, db, auth, body) {
+  if (auth.user.role !== 'admin') { res.status(403).json({ error: 'Forbidden' }); return; }
+  await ensureCoupons(db);
+  const code = String(body.code || '').trim().toUpperCase();
+  if (!code) { res.status(400).json({ error: 'code required' }); return; }
+  const rows = await db`UPDATE coupons SET active = ${!!body.active} WHERE code = ${code} RETURNING code, active`;
+  if (!rows.length) { res.status(404).json({ error: 'coupon not found' }); return; }
+  res.status(200).json({ ok: true, coupon: rows[0] });
+}
+
+// ── Admin grants ─────────────────────────────────────────────────────────────
 
 async function adminGrant(req, res, db, auth, body) {
   if (auth.user.role !== 'admin') { res.status(403).json({ error: 'Forbidden' }); return; }
@@ -393,4 +450,18 @@ async function adminGrant(req, res, db, auth, body) {
   if (!u) { res.status(404).json({ error: 'user not found', email }); return; }
   const bal = await grantCredits(db, { userId: u.id, credits, reason: 'admin:grant', ref: body.note || null });
   res.status(200).json({ ok: true, email, credited: credits, balance: bal });
+}
+
+// Global drop: every account (admins excluded) gets the credits in one ledger
+// sweep. `ref` carries the note so the receipt view can show why.
+async function adminGrantAll(req, res, db, auth, body) {
+  if (auth.user.role !== 'admin') { res.status(403).json({ error: 'Forbidden' }); return; }
+  const credits = Math.floor(Number(body.credits) || 0);
+  if (credits <= 0) { res.status(400).json({ error: 'credits must be a positive number' }); return; }
+  const note = String(body.note || '').slice(0, 200) || null;
+  const rows = await db`
+    INSERT INTO credit_ledger (user_id, delta, reason, ref)
+    SELECT id, ${credits}, 'admin:grant-all', ${note} FROM users WHERE role != 'admin'
+    RETURNING id`;
+  res.status(200).json({ ok: true, credited: credits, users: rows.length });
 }

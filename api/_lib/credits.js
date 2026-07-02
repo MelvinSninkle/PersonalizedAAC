@@ -18,6 +18,8 @@
 //
 // Compliance note: iOS sells credits ONLY via StoreKit IAP; the web sells ONLY
 // via Stripe. Credits themselves are platform-neutral and spend anywhere.
+import { randomBytes } from 'node:crypto';
+
 // ── Catalog ──────────────────────────────────────────────────────────────────
 
 export const CREDIT_CENTS = 10;   // list price per credit
@@ -142,6 +144,83 @@ export async function chargeForGeneration(db, user, { credits, reason, ref = nul
   await ensureCredits(db);
   await ensureStarter(db, uid);
   return spendCredits(db, { userId: uid, credits, reason, ref });
+}
+
+// ── Coupons ──────────────────────────────────────────────────────────────────
+// A coupon is a redeemable code worth N credits. Global by nature (anyone with
+// the code), scoped by its limits: max_redemptions caps total uses (NULL =
+// unlimited — a true global drop), one redemption per user always, optional
+// expiry. Admin creates them on the Invites panel next to invite codes.
+
+export async function ensureCoupons(db) {
+  await db`
+    CREATE TABLE IF NOT EXISTS coupons (
+      code TEXT PRIMARY KEY,
+      credits INT NOT NULL,
+      note TEXT,
+      max_redemptions INT,
+      redemptions INT NOT NULL DEFAULT 0,
+      expires_at TIMESTAMPTZ,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`;
+  await db`
+    CREATE TABLE IF NOT EXISTS coupon_redemptions (
+      id BIGSERIAL PRIMARY KEY,
+      code TEXT NOT NULL,
+      user_id BIGINT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (code, user_id)
+    )`;
+}
+
+// Same alphabet as invite codes — no ambiguous characters, easy to read aloud.
+export function randomCouponCode(len = 8) {
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const bytes = randomBytes(len);
+  let s = '';
+  for (const b of bytes) s += alphabet[b % alphabet.length];
+  return s;
+}
+
+// Redeem a coupon for a user. Order matters for the races:
+//   1. the per-user UNIQUE insert blocks double-redeeming,
+//   2. the conditional counter increment blocks over-redeeming a capped code
+//      (two users grabbing the last slot → exactly one wins; the loser's
+//      redemption row is rolled back),
+//   3. only then are the credits granted.
+export async function redeemCoupon(db, { userId, code }) {
+  const uid = Number(userId);
+  const c = String(code || '').trim().toUpperCase();
+  if (!uid || !c) return { ok: false, error: 'code required' };
+
+  const coupon = (await db`SELECT code, credits, max_redemptions, redemptions, expires_at, active
+                           FROM coupons WHERE code = ${c} LIMIT 1`)[0];
+  if (!coupon || !coupon.active) return { ok: false, error: 'That code isn’t valid.' };
+  if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) return { ok: false, error: 'That code has expired.' };
+
+  let claimed;
+  try {
+    claimed = await db`INSERT INTO coupon_redemptions (code, user_id) VALUES (${c}, ${uid}) RETURNING id`;
+  } catch (e) {
+    const msg = String((e && e.message) || e);
+    if (/duplicate key|unique/i.test(msg)) return { ok: false, error: 'You’ve already used this code.' };
+    throw e;
+  }
+
+  const inc = await db`UPDATE coupons SET redemptions = redemptions + 1
+                       WHERE code = ${c} AND active = TRUE
+                         AND (max_redemptions IS NULL OR redemptions < max_redemptions)
+                       RETURNING credits`;
+  if (!inc.length) {
+    try { await db`DELETE FROM coupon_redemptions WHERE id = ${claimed[0].id}`; } catch (_) {}
+    return { ok: false, error: 'That code has been fully used up.' };
+  }
+
+  await db`INSERT INTO credit_ledger (user_id, delta, reason, ref)
+           VALUES (${uid}, ${coupon.credits}, 'coupon', ${c})`;
+  return { ok: true, credits: coupon.credits, balance: await creditBalance(db, uid) };
 }
 
 // Map an Apple/Stripe product id back to its credit grant.

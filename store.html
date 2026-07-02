@@ -79,6 +79,12 @@
 
   <div class="cards" id="packs"></div>
 
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:-6px 0 18px;">
+    <span style="font-size:13px;color:var(--muted);font-weight:600;">Have a code?</span>
+    <input type="text" id="redeem-code" placeholder="e.g. WELCOME25" style="font:inherit;padding:8px 12px;border:2px solid var(--line);border-radius:10px;background:#fff;text-transform:uppercase;width:170px;">
+    <button class="btn secondary" id="redeem-btn">Redeem</button>
+  </div>
+
   <div class="filters">
     <select id="f-col"><option value="">All sections</option></select>
     <select id="f-cat"><option value="">All categories</option></select>
@@ -250,6 +256,21 @@
   }
   ['f-col', 'f-cat'].forEach((id) => document.getElementById(id).addEventListener('change', renderShop));
   document.getElementById('f-q').addEventListener('input', renderShop);
+
+  document.getElementById('redeem-btn').addEventListener('click', async () => {
+    const input = document.getElementById('redeem-code');
+    const code = input.value.trim();
+    if (!code) return;
+    const btn = document.getElementById('redeem-btn');
+    btn.disabled = true;
+    try {
+      const d = await api('/api/store?action=redeem', { method: 'POST', body: JSON.stringify({ code }) });
+      toast(`💎${d.credited} added — enjoy!`);
+      input.value = '';
+      await loadCatalog();
+    } catch (e) { toast(e.message); }
+    btn.disabled = false;
+  });
 
   (async () => {
     if (!CHILD) { document.getElementById('shop').innerHTML = '<div class="empty">Open the store from your parent dashboard.</div>'; return; }
