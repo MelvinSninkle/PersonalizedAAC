@@ -218,7 +218,7 @@
   <div class="brand fred">Fletcher's World <small>Parent dashboard</small></div>
   <div class="right">
     <span class="device-pill"><span class="dot"></span> Tablet · online</span>
-    <span class="role-switch"><span id="therapist-switch" style="display:none;">View as <a href="#" id="to-therapist">Therapist</a> · </span><a href="#" id="device-default">Change device default</a><a href="/admin/taxonomy.html" id="admin-taxonomy" style="display:none;"> · 🧬 Taxonomy</a></span>
+    <span class="role-switch"><a href="#" id="store-link" style="font-weight:700;">🛍️ Word Store <span id="store-balance"></span></a> · <span id="therapist-switch" style="display:none;">View as <a href="#" id="to-therapist">Therapist</a> · </span><a href="#" id="device-default">Change device default</a><a href="/admin/taxonomy.html" id="admin-taxonomy" style="display:none;"> · 🧬 Taxonomy</a></span>
   </div>
 </header>
 
@@ -1025,6 +1025,15 @@
     }
   });
   document.getElementById('to-therapist').href = '/therapist/' + encodeURIComponent(slug);
+  // Word Store link + live credit balance chip.
+  const storeLink = document.getElementById('store-link');
+  if (storeLink) {
+    storeLink.href = '/store.html?child=' + encodeURIComponent(slug);
+    fetch('/api/store?action=catalog&childId=' + encodeURIComponent(slug), { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && typeof d.balance === 'number') document.getElementById('store-balance').textContent = '💎' + d.balance; })
+      .catch(() => {});
+  }
   // Re-open the per-device "who uses this device?" chooser on the board.
   const deviceDefaultLink = document.getElementById('device-default');
   if (deviceDefaultLink) deviceDefaultLink.addEventListener('click', (e) => {

@@ -20,6 +20,7 @@ import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { loadStyleGuide, loadChildAnchor, loadChildStyleGuideId, renderTaxonomyTile,
          loadChildVoiceId, synthesizeVoice, isDefaultableTile } from './onboarding-render.js';
+import { archivePriorImage } from './image-history.js';
 
 export const MAX_SEED_ATTEMPTS = 3;
 
@@ -41,6 +42,20 @@ export async function ensureSeedJobs(db) {
            ON seed_jobs(child_id, kind, COALESCE(taxonomy_id, ''))`;
   await db`CREATE INDEX IF NOT EXISTS seed_jobs_status_idx ON seed_jobs(status, updated_at)`;
   await db`CREATE INDEX IF NOT EXISTS seed_jobs_child_idx  ON seed_jobs(child_id, kind, status)`;
+  // force = re-render even when the tile already has custom art (store retries
+  // and whole-board rebuilds). The prior image is archived first — a family's
+  // images are theirs to keep, so a replacement never deletes anything.
+  await db`ALTER TABLE seed_jobs ADD COLUMN IF NOT EXISTS force BOOLEAN NOT NULL DEFAULT FALSE`;
+}
+
+// Queue (or re-arm) one render job. Store checkout, retries, and rebuilds all
+// funnel through here — ON CONFLICT resets a finished/failed job back to queued.
+export async function enqueueRenderJob(db, childId, taxonomyId, { force = false } = {}) {
+  await db`INSERT INTO seed_jobs (child_id, kind, taxonomy_id, force)
+           VALUES (${childId}, 'render', ${taxonomyId}, ${force})
+           ON CONFLICT (child_id, kind, COALESCE(taxonomy_id, ''))
+           DO UPDATE SET status = 'queued', attempts = 0, error = NULL,
+                         force = ${force}, updated_at = NOW()`;
 }
 
 // ── Scope ────────────────────────────────────────────────────────────────────
@@ -186,7 +201,7 @@ export async function claimSeedJobs(db, kind, limit) {
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING id, child_id, kind, taxonomy_id, attempts`;
+    RETURNING id, child_id, kind, taxonomy_id, attempts, force`;
 }
 
 async function jobDone(db, id, patch = {}) {
@@ -233,15 +248,19 @@ export async function processSeedJob(db, job, getCtx) {
                                  prompt_template, subject_mode, related_images, default_image_key
                           FROM taxonomy WHERE id = ${job.taxonomy_id} LIMIT 1`)[0];
     if (!tax) { await jobDone(db, job.id); return { ok: true, skipped: 'taxonomy row gone' }; }
-    const item = (await db`SELECT id, image_key, sound_key FROM items
+    const item = (await db`SELECT id, image_key, sound_key, label, section FROM items
                            WHERE child_id = ${job.child_id} AND taxonomy_slug = ${job.taxonomy_id} LIMIT 1`)[0];
     if (!item) { await jobDone(db, job.id); return { ok: true, skipped: 'item gone' }; }
     const c = await getCtx(job.child_id);
 
     if (job.kind === 'render') {
-      // Skip if a parent already personalized this tile themselves.
+      // Skip if a parent already personalized this tile themselves — UNLESS this
+      // is a forced job (paid retry / whole-board rebuild), which replaces on
+      // purpose. A replaced image is archived first, never deleted: the family
+      // keeps every image they've made.
       const cur = item.image_key || '';
-      const replaceable = !cur || cur.startsWith('taxonomy-defaults/');
+      const isDefaultKey = cur.startsWith('taxonomy-defaults/');
+      const replaceable = job.force || !cur || isDefaultKey;
       let imageKey = null;
       if (replaceable) {
         const r = await renderTaxonomyTile({ tax, styleGuide: c.styleGuide, childAnchor: c.childAnchor, settings: c.settings });
@@ -249,8 +268,18 @@ export async function processSeedJob(db, job, getCtx) {
         const png = Buffer.from(r.b64, 'base64');
         imageKey = `onboarding/${job.child_id}/core/${randomUUID()}.png`;
         await put(imageKey, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
-        await db`UPDATE items SET image_key = ${imageKey}, updated_at = NOW()
-                 WHERE id = ${item.id} AND (image_key IS NULL OR image_key LIKE 'taxonomy-defaults/%')`;
+        if (cur && !isDefaultKey) {
+          try {
+            await archivePriorImage({ db, childId: job.child_id, itemId: item.id, oldKey: cur,
+                                      label: item.label, section: item.section, source: 'seed-render', who: null });
+          } catch (_) { /* archive is best-effort; the render still lands */ }
+        }
+        if (job.force) {
+          await db`UPDATE items SET image_key = ${imageKey}, updated_at = NOW() WHERE id = ${item.id}`;
+        } else {
+          await db`UPDATE items SET image_key = ${imageKey}, updated_at = NOW()
+                   WHERE id = ${item.id} AND (image_key IS NULL OR image_key LIKE 'taxonomy-defaults/%')`;
+        }
         try {
           await db`INSERT INTO image_generations
                      (child_id, actor_email, actor_role, label, style, prompt, size, cost_cents)

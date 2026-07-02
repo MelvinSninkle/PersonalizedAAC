@@ -524,6 +524,30 @@ struct APIClient {
         s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? s
     }
 
+    // MARK: -- Store / credits
+
+    /// Current credit balance (nil on any failure — the UI shows a placeholder).
+    func storeBalance() async -> Int? {
+        struct R: Decodable { let balance: Int? }
+        guard let (data, _) = try? await request(method: "GET", path: "/api/store?action=catalog", body: nil),
+              let r = try? JSONDecoder().decode(R.self, from: data) else { return nil }
+        return r.balance
+    }
+
+    /// Report a verified StoreKit transaction; the server grants the credits
+    /// idempotently (safe to re-send). Returns the credits granted this call.
+    func iapVerify(jws: String, productId: String, transactionId: String) async -> Int? {
+        struct R: Decodable { let credited: Int? }
+        let body = try? JSONSerialization.data(withJSONObject: [
+            "jws": jws, "productId": productId, "transactionId": transactionId,
+        ])
+        guard let body,
+              let (data, _) = try? await request(method: "POST", path: "/api/store?action=iap-verify",
+                                                 body: body, contentType: "application/json"),
+              let r = try? JSONDecoder().decode(R.self, from: data) else { return nil }
+        return r.credited
+    }
+
     // MARK: -- Seed starter words (chunked)
 
     /// One chunk of onboarding's resumable seed-core build. Mirrors the JSON the

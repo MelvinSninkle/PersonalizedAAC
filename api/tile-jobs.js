@@ -17,6 +17,7 @@ import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
 import { ensureTileJobs, processTileJob } from './_lib/tile-jobs.js';
+import { chargeForGeneration, COST } from './_lib/credits.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 300 };
 
@@ -71,6 +72,17 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+
+  // Credits: a photo-to-tile render is one nano-banana image = 1 credit.
+  // Charged at enqueue (the job WILL render); admins exempt.
+  {
+    const charge = await chargeForGeneration(db, auth.user, { credits: COST.nano, reason: 'tile:photo', ref: childId });
+    if (!charge.ok) {
+      res.status(402).json({ error: 'not_enough_credits', needed: COST.nano, balance: charge.balance,
+                             detail: 'Making a tile from a photo uses 1 credit. Add credits in the store and try again.' });
+      return;
+    }
+  }
 
   // ── Enqueue (durable) ───────────────────────────────────────────────────────
   let buffer;

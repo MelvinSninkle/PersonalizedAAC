@@ -63,6 +63,10 @@ struct ParentHomeView: View {
                         navCard(icon: "sparkles.rectangle.stack.fill", tint: "#06b6d4",
                                 title: "Auto-teach",
                                 subtitle: "Hands-off slideshow + daily game") { AutoTeachView() }
+
+                        navCard(icon: "diamond.fill", tint: "#a855f7",
+                                title: "Credits & Store",
+                                subtitle: "Image credits & monthly plan") { StoreView() }
                     }
 
                     if addQueue.hasActiveJobs {
