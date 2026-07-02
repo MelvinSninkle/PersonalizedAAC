@@ -14,10 +14,24 @@ struct ListenToken: Identifiable {
 /// longest phrase as one tile, shrink to single words; unmatched words stay text.
 /// Runs locally against the board's own tiles so it's instant and offline.
 enum ListenTokenizer {
+    /// The recognizer emits digits ("12") while tile labels are usually spelled
+    /// ("twelve") — canonicalize both sides token-by-token so they meet.
+    private static let numberWords: [String: String] = [
+        "0": "zero", "1": "one", "2": "two", "3": "three", "4": "four",
+        "5": "five", "6": "six", "7": "seven", "8": "eight", "9": "nine",
+        "10": "ten", "11": "eleven", "12": "twelve", "13": "thirteen",
+        "14": "fourteen", "15": "fifteen", "16": "sixteen", "17": "seventeen",
+        "18": "eighteen", "19": "nineteen", "20": "twenty",
+    ]
+
     static func normalize(_ s: String) -> String {
-        s.lowercased()
+        let cleaned = s.lowercased()
             .replacingOccurrences(of: "[.,!?;:\"()\\[\\]{}]", with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
+        // Token-level digit → word ("12 o'clock" → "twelve o'clock").
+        return cleaned.split(separator: " ")
+            .map { numberWords[String($0)] ?? String($0) }
+            .joined(separator: " ")
     }
 
     static func lexicon(from tiles: [Tile]) -> [String: Tile] {

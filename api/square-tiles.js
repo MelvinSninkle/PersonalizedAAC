@@ -32,8 +32,17 @@ export default async function handler(req, res) {
           SELECT id FROM categories WHERE child_id = ${childId}
             AND (label ~* '(movie|show|poster|cinema)' OR label ~* '(^|[^a-z])tvs?([^a-z]|$)')))
       RETURNING i.id`;
+    // Category CHIPS square up too — stray keep_aspect flags on folder icons
+    // were the other half of the "some tiles aren't squares" glitch on the
+    // prototype board. Poster folders keep their natural ratio.
+    const squaredCats = await db`
+      UPDATE categories SET keep_aspect = FALSE, updated_at = NOW()
+      WHERE child_id = ${childId}
+        AND keep_aspect = TRUE
+        AND NOT (label ~* '(movie|show|poster|cinema)' OR label ~* '(^|[^a-z])tvs?([^a-z]|$)')
+      RETURNING id`;
     res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json({ ok: true, squared: squared.length, posters: posters.length });
+    res.status(200).json({ ok: true, squared: squared.length, squaredCats: squaredCats.length, posters: posters.length });
   } catch (err) {
     res.status(500).json({ error: 'square-tiles failed', detail: String(err.message || err) });
   }

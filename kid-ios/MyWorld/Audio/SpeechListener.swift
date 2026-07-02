@@ -44,6 +44,10 @@ final class SpeechListener {
     private var restarts = 0
     private var nextWordId = 0
     private var utteranceBase = 0                  // committed words in the current utterance
+    /// The current utterance's LAST word, already in `words` so it tokenizes in
+    /// real time, but still owned by the recognizer — revised in place (same id,
+    /// so the strip morphs instead of flickering) until the next word arrives.
+    private var provisionalId: Int?
 
     func start() {
         guard !isListening else { return }
@@ -79,7 +83,7 @@ final class SpeechListener {
     private func beginSession() {
         guard isListening else { return }
         teardown()
-        utteranceBase = 0; liveTail = ""     // a fresh utterance; keep the rolling history
+        utteranceBase = 0; liveTail = ""; provisionalId = nil   // fresh utterance; keep the rolling history
 
         do {
             let s = AVAudioSession.sharedInstance()
@@ -145,21 +149,55 @@ final class SpeechListener {
         }
     }
 
-    /// Fold the growing partial transcript into the rolling word buffer. We hold
-    /// the last word back until it's stable (recognition keeps revising it), then
-    /// commit it — so words don't flicker or double up.
+    /// Fold the growing partial transcript into the rolling word buffer.
+    ///
+    /// The last word is committed IMMEDIATELY as a provisional TimedWord — so it
+    /// tokenizes against the board in real time instead of waiting for the next
+    /// word — and is revised in place (same id) while the recognizer keeps
+    /// changing its mind about it. Because the strip re-tokenizes the whole
+    /// rolling buffer greedily on every change, a word that didn't match alone
+    /// consolidates retroactively once its neighbor lands ("papa" + "gary" →
+    /// the one "Papa Gary" tile).
     private func ingest(_ utter: String, final: Bool) {
         let all = utter.split(separator: " ").map(String.init)
-        let commitCount = final ? all.count : max(0, all.count - 1)
-        if commitCount > utteranceBase {
-            let now = Date()
-            for w in all[utteranceBase..<commitCount] {
+        if all.isEmpty { if final { utteranceBase = 0; provisionalId = nil }; return }
+        utteranceBase = min(utteranceBase, all.count)   // recognizer shrank a revision
+        let now = Date()
+        let stableCount = final ? all.count : all.count - 1
+
+        // 1) Reconcile the provisional word with the current transcript: refresh
+        //    its text if revised; promote it to stable once a word follows it.
+        if let pid = provisionalId {
+            if let idx = words.firstIndex(where: { $0.id == pid }) {
+                if utteranceBase < all.count, words[idx].text != all[utteranceBase] {
+                    words[idx] = TimedWord(id: pid, text: all[utteranceBase], at: words[idx].at)
+                }
+                if stableCount > utteranceBase {
+                    provisionalId = nil
+                    utteranceBase += 1
+                }
+            } else {
+                provisionalId = nil   // it faded out of the rolling window
+            }
+        }
+
+        // 2) Commit any further stable words.
+        if stableCount > utteranceBase {
+            for w in all[utteranceBase..<stableCount] {
                 words.append(TimedWord(id: nextWordId, text: w, at: now)); nextWordId += 1
             }
-            utteranceBase = commitCount
+            utteranceBase = stableCount
         }
-        liveTail = final ? "" : (all.last ?? "")
-        if final { utteranceBase = 0 }     // next utterance starts fresh
+
+        // 3) The in-progress last word becomes a live, provisional token.
+        if !final, all.count > utteranceBase, provisionalId == nil {
+            words.append(TimedWord(id: nextWordId, text: all[all.count - 1], at: now))
+            provisionalId = nextWordId
+            nextWordId += 1
+        }
+
+        liveTail = ""   // the tail now renders as a real token, not faint text
+        if final { utteranceBase = 0; provisionalId = nil }   // next utterance starts fresh
         trim()
     }
 

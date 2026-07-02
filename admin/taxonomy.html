@@ -188,6 +188,7 @@
     <button class="secondary" id="btn-seed-defaults" title="Copy the reference board's (Fletcher's) already-drawn tiles into shared 'default' images for every tile that doesn't reference a specific person. Onboarding reuses these instead of generating them per-child.">🖼️ Default images…</button>
     <a class="secondary" id="btn-defaults-board" href="/admin/defaults.html" style="text-decoration:none;display:inline-flex;align-items:center;" title="See the whole default board — default images plus empty word-tiles for anything personalized.">🔎 Default board</a>
     <button class="secondary" id="btn-build-board" title="RESCUE: run the full board build for any child by slug — places every word, queues the per-child renders/voices, re-arms dead jobs. Idempotent.">🧰 Build board…</button>
+    <button class="secondary" id="btn-square-tiles" title="Normalize a board's tile shapes: every tile + folder chip squares up (keep_aspect off), except TV/movie/poster folders which keep their natural ratio. Fixes older boards with stray aspect flags.">⬜ Square tiles…</button>
     <div class="menu-wrap">
       <button class="secondary" id="btn-export">Export ▾</button>
       <div class="menu" id="export-menu">
@@ -1037,6 +1038,23 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     } finally {
       btn.disabled = false;
       document.getElementById('stat').textContent = `${allRows.length} rows`;
+    }
+  });
+
+  // ---- Square tiles: normalize a board's aspect flags (older boards picked up
+  // stray keep_aspect=true, rendering some tiles rectangular) ----
+  document.getElementById('btn-square-tiles').addEventListener('click', async () => {
+    const childId = prompt('Square up a board.\n\nEnter the child slug (e.g. fletcherpeterson). Every tile + folder chip goes square, except TV/movie/poster folders which keep their natural shape. Safe to re-run.', 'fletcherpeterson');
+    if (!childId || !childId.trim()) return;
+    const btn = document.getElementById('btn-square-tiles');
+    btn.disabled = true;
+    try {
+      const r = await api('/api/square-tiles?childId=' + encodeURIComponent(childId.trim()), { method: 'POST' });
+      alert(`Squared ${r.squared} tiles + ${r.squaredCats || 0} folder chips on ${childId.trim()} (${r.posters} poster tiles kept rectangular).\n\nHave the device pull-to-refresh (or wait for its 2-minute resync) to see it.`);
+    } catch (e) {
+      alert('Square tiles failed: ' + (e.message || e));
+    } finally {
+      btn.disabled = false;
     }
   });
 
