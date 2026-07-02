@@ -15,6 +15,7 @@
 // since this file's config governs all of them now.
 import batchGenerate from './_lab-batch-generate.js';
 import boardState from './_lab-board-state.js';
+import buildBoard from './_lab-build-board.js';
 import categories from './_lab-categories.js';
 import categoryGenerate from './_lab-category-generate.js';
 import categoryUpload from './_lab-category-upload.js';
@@ -38,6 +39,7 @@ const HANDLERS = {
   'category-upload': categoryUpload,
   'categories': categories,
   'board-state': boardState,
+  'build-board': buildBoard,
   'port-image': portImage,
   'publish-tile': publishTile,
   'publish-default': publishDefault,

@@ -67,12 +67,14 @@ struct SectionColumn: View {
             let cats = board.roots(in: section)
             CategoryTabStrip(categories: cats,
                              selectedId: $selectedCategoryId,
-                             hideLabels: prefs.hideLabels)
+                             hideLabels: prefs.hideLabels,
+                             onDropTile: chipDropHandler)
 
             if let cat = activeCategory(in: cats), !board.children(of: cat).isEmpty {
                 SubcategoryStrip(subcategories: board.children(of: cat),
                                  selectedId: $selectedSubcategoryId,
-                                 hideLabels: prefs.hideLabels)
+                                 hideLabels: prefs.hideLabels,
+                                 onDropTile: chipDropHandler)
             }
 
             tilesGrid
@@ -146,6 +148,16 @@ struct SectionColumn: View {
                              editMode: editMode, onEdit: onEditTile,
                              posterMode: effectiveCategory?.isPoster ?? false)
                     .frame(width: tileSize)
+                    // Unlocked-board drag: long-press-drag a tile onto another
+                    // tile to reorder, or onto a category/subcategory chip to
+                    // move it there. The payload carries the section so a tile
+                    // can never cross the People/Nouns/Verbs family boundary.
+                    // Only attached while unlocked — the child's long-presses
+                    // must never start a drag session.
+                    .draggableIf(editMode, "tile|\(section.rawValue)|\(tile.id)")
+                    .dropDestination(for: String.self) { items, _ in
+                        handleTileDrop(items, onto: tile)
+                    }
                 }
                 if editMode {
                     AddTileCell(size: tileSize) { onAdd(section, effectiveCategory?.id) }
@@ -156,6 +168,71 @@ struct SectionColumn: View {
             .padding(.vertical, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: -- Drag & drop (unlocked board only)
+
+    /// Payload → tile id, enforcing the same-section rule ("no crossing the
+    /// major tile families").
+    private func draggedTileId(_ items: [String]) -> Int? {
+        guard editMode, let s = items.first else { return nil }
+        let parts = s.split(separator: "|")
+        guard parts.count == 3, parts[0] == "tile",
+              parts[1] == section.rawValue,
+              let id = Int(parts[2]) else { return nil }
+        return id
+    }
+
+    /// Drop on a TILE: same category → reorder in place (mirrors the web's
+    /// splice + i*1000 resequence); different category in this section → move
+    /// it here, inserted at the target's spot.
+    private func handleTileDrop(_ items: [String], onto target: Tile) -> Bool {
+        guard let dragId = draggedTileId(items), dragId != target.id,
+              let cat = effectiveCategory else { return false }
+        Task { await reorderOrMove(draggedId: dragId, targetId: target.id, in: cat) }
+        return true
+    }
+
+    /// Drop on a CATEGORY / SUBCATEGORY chip: move the tile into that folder,
+    /// landing at the end (same semantics as the web's moveItemToCategory).
+    private var chipDropHandler: (Category, [String]) -> Bool {
+        { chip, items in
+            guard let dragId = draggedTileId(items) else { return false }
+            Task { await moveTile(dragId, toCategory: chip.id) }
+            return true
+        }
+    }
+
+    private func reorderOrMove(draggedId: Int, targetId: Int, in cat: Category) async {
+        var list = board.tiles(in: cat)
+        guard let ti = list.firstIndex(where: { $0.id == targetId }) else { return }
+        let api = APIClient()
+        if let di = list.firstIndex(where: { $0.id == draggedId }) {
+            guard di != ti else { return }
+            let moved = list.remove(at: di)
+            list.insert(moved, at: di < ti ? ti - 1 : ti)
+            for (i, t) in list.enumerated() {
+                let newOrder = i * 1000
+                if t.order != newOrder {
+                    _ = try? await api.updateItem(id: t.id, order: newOrder, childId: auth.childSlug)
+                }
+            }
+        } else {
+            // Dragged in from another category of this section — insert at the
+            // target's position: move first, then resequence around it.
+            _ = try? await api.updateItem(id: draggedId, category: .set(cat.id),
+                                          order: (list[ti].order) - 500, childId: auth.childSlug)
+        }
+        await board.refresh(childId: auth.childSlug)
+    }
+
+    private func moveTile(_ tileId: Int, toCategory catId: Int) async {
+        guard let tile = board.tiles.first(where: { $0.id == tileId }),
+              tile.categoryId != catId else { return }
+        let maxOrder = board.tiles.filter { $0.categoryId == catId }.map(\.order).max() ?? 0
+        _ = try? await APIClient().updateItem(id: tileId, category: .set(catId),
+                                              order: maxOrder + 1000, childId: auth.childSlug)
+        await board.refresh(childId: auth.childSlug)
     }
 
     /// When the selected chip is a LOCATION, the grid shows that location's
@@ -203,6 +280,15 @@ struct SectionColumn: View {
     /// uses, falling back to system TTS when no recorded sound exists).
     private func speakCategory(_ cat: Category) {
         GameAudio.shared.speak(cat.label, childId: auth.childSlug)
+    }
+}
+
+/// Conditionally-attached drag source: only unlocked boards make tiles
+/// draggable, so a child's long-press can never start a drag session.
+extension View {
+    @ViewBuilder
+    func draggableIf(_ condition: Bool, _ payload: String) -> some View {
+        if condition { self.draggable(payload) } else { self }
     }
 }
 

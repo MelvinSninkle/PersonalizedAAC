@@ -103,51 +103,60 @@ async function populate(req, res, db) {
     if (best.length && best[0].c > 0) { sourceChildId = best[0].child_id; sourceImages = Number(best[0].c); }
   }
 
-  // Primary: the reference board's tiles joined to their taxonomy row by slug.
-  // NB: no status filter — copying a default is fine on a draft row. Dedupe by
-  // taxonomy id (first item on a slug wins).
-  const linked = await db`
-    SELECT t.id AS tax_id, t.column_name, t.subject_mode, t.prompt_template,
-           t.default_image_key, i.image_key AS src_key
-    FROM items i
-    JOIN taxonomy t ON t.id = i.taxonomy_slug
-    WHERE i.child_id = ${sourceChildId}
-      AND i.image_key IS NOT NULL
-      AND COALESCE(t.archived, FALSE) = FALSE
-    ORDER BY t.id`;
-  const seen = new Set();
-  let defaultable = linked.filter((r) => {
-    if (seen.has(r.tax_id) || !isDefaultableTile(r)) return false;
-    seen.add(r.tax_id); return true;
-  });
-  let matchedBy = 'slug';
+  // Gather the sources once, then fill every default-able taxonomy row from the
+  // best available image, in priority order:
+  //   1. the reference board's slug-linked item image (what the child sees today)
+  //   2. the Lab's ★ marked-best generation for that row (already generated,
+  //      just never pushed to a board)
+  //   3. label fill — another default-able row with the SAME word already has a
+  //      default (e.g. "train" in Vehicles and in Toys) → reuse its key
+  //   4. reference-board item with the same label (old boards without slug links)
+  const [tax, boardItems, bestGens] = await Promise.all([
+    db`SELECT id, column_name, subject_mode, prompt_template, label, default_image_key
+       FROM taxonomy WHERE COALESCE(archived, FALSE) = FALSE ORDER BY id`,
+    db`SELECT taxonomy_slug, label, image_key FROM items
+       WHERE child_id = ${sourceChildId} AND image_key IS NOT NULL`,
+    db`SELECT DISTINCT ON (taxonomy_id) taxonomy_id, blob_key FROM tile_generations
+       WHERE marked_best = TRUE AND blob_key IS NOT NULL ORDER BY taxonomy_id, created_at DESC`,
+  ]);
 
-  // Fallback: no slug-linked default-able tiles → match this board's item labels
-  // to unambiguous default-able taxonomy labels.
-  if (defaultable.length === 0) {
-    const [map, items] = await Promise.all([
-      defaultableLabelMap(db),
-      db`SELECT label, image_key FROM items WHERE child_id = ${sourceChildId} AND image_key IS NOT NULL`,
-    ]);
-    const seen2 = new Set(); const alt = [];
-    for (const it of items) {
-      const t = map.get(norm(it.label));
-      if (!t || seen2.has(t.id)) continue;
-      seen2.add(t.id);
-      alt.push({ tax_id: t.id, column_name: t.column_name, subject_mode: t.subject_mode,
-                 prompt_template: t.prompt_template, default_image_key: t.default_image_key, src_key: it.image_key });
-    }
-    if (alt.length) { defaultable = alt; matchedBy = 'label'; }
+  const bySlug = new Map();
+  const byItemLabel = new Map();
+  for (const i of boardItems) {
+    if (i.taxonomy_slug && !bySlug.has(i.taxonomy_slug)) bySlug.set(i.taxonomy_slug, i.image_key);
+    const k = norm(i.label);
+    if (k && !byItemLabel.has(k)) byItemLabel.set(k, i.image_key);
+  }
+  const byBest = new Map(bestGens.map((g) => [g.taxonomy_id, g.blob_key]));
+  const defaultKeyByLabel = new Map();   // label → an already-set default key
+  const defaultable = tax.filter(isDefaultableTile);
+  for (const t of defaultable) {
+    const k = norm(t.label);
+    if (t.default_image_key && k && !defaultKeyByLabel.has(k)) defaultKeyByLabel.set(k, t.default_image_key);
   }
 
-  const pending = defaultable.filter((t) => force || !t.default_image_key);
+  // Work list: default-able rows that need a default, with their chosen source.
+  const pending = [];
+  for (const t of defaultable) {
+    if (t.default_image_key && !force) continue;
+    const srcKey = bySlug.get(t.id) || byBest.get(t.id) || null;
+    const labelKey = defaultKeyByLabel.get(norm(t.label)) || null;       // reuse, no copy
+    const labelSrc = byItemLabel.get(norm(t.label)) || null;            // copy
+    if (srcKey) pending.push({ tax_id: t.id, srcKey, via: bySlug.has(t.id) ? 'board' : 'lab-best' });
+    else if (labelKey) pending.push({ tax_id: t.id, reuseKey: labelKey, via: 'label-reuse' });
+    else if (labelSrc) pending.push({ tax_id: t.id, srcKey: labelSrc, via: 'label-board' });
+  }
   const total = pending.length;
   const slice = pending.slice(offset, offset + POPULATE_BUDGET);
 
   const results = await mapPool(slice, 4, async (row) => {
-    const { buffer, contentType } = await readBlobBytes(row.src_key);
-    const ext = String(contentType || '').includes('png') ? 'png'
-              : (String(contentType || '').includes('jpeg') || String(contentType || '').includes('jpg')) ? 'jpg' : 'png';
+    if (row.reuseKey) {
+      // Same word, another category — point at the existing default, no new blob.
+      await db`UPDATE taxonomy SET default_image_key = ${row.reuseKey}, updated_at = NOW() WHERE id = ${row.tax_id}`;
+      return row.reuseKey;
+    }
+    const { buffer, contentType } = await readBlobBytes(row.srcKey);
+    const ext = (String(contentType || '').includes('jpeg') || String(contentType || '').includes('jpg')) ? 'jpg' : 'png';
     const key = `taxonomy-defaults/${row.tax_id}/${randomUUID()}.${ext}`;
     await put(key, buffer, { access: 'private', contentType: contentType || 'image/png', addRandomSuffix: false });
     await db`UPDATE taxonomy SET default_image_key = ${key}, updated_at = NOW() WHERE id = ${row.tax_id}`;
@@ -159,20 +168,18 @@ async function populate(req, res, db) {
   const nextOffset = offset + slice.length;
   const done = nextOffset >= total;
 
-  // If there's genuinely nothing to do, say WHY.
-  let note = `${defaultable.length} default-able tiles on ${sourceChildId} (matched by ${matchedBy}); ${total} ${force ? 'to (re)copy' : 'missing a default'}.`;
+  const stillMissing = defaultable.filter((t) => !t.default_image_key).length - processed;
+  let note = `${defaultable.length} default-able rows; ${total} fillable this run (board/lab-best/label); ~${Math.max(0, stillMissing)} still have no source image anywhere.`;
   let diag;
-  if (defaultable.length === 0 && offset === 0) {
-    diag = { sourceChildId, itemsWithImage: sourceImages, slugLinkedRows: linked.length };
-    note = sourceImages === 0
-      ? `Reference board "${sourceChildId}" has no tiles with images — pass ?sourceChildId=<slug> for the right board.`
-      : `"${sourceChildId}" has ${sourceImages} tiles but none matched a default-able taxonomy row (by slug or label).`;
+  if (total === 0 && offset === 0) {
+    diag = { sourceChildId, itemsWithImage: sourceImages, labBest: byBest.size, defaultable: defaultable.length };
+    note = `Nothing fillable: ${defaultable.length} default-able rows, ${byBest.size} Lab ★ best images, ${sourceImages} board images on "${sourceChildId}". Rows without any existing image need to be generated in the Lab first.`;
   }
 
   res.setHeader('Cache-Control', 'no-store');
   res.status(200).json({
     ok: true, mode: 'populate', done, nextOffset, total, processed, failed,
-    sourceChildId, matchedBy, defaultableCount: defaultable.length, note, ...(diag ? { diag } : {}),
+    sourceChildId, defaultableCount: defaultable.length, note, ...(diag ? { diag } : {}),
   });
 }
 

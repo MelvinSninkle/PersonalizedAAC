@@ -8,6 +8,7 @@ import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
 import { geminiKey, geminiDefaultModel, isGeminiModel, geminiCostCents, geminiGenerateImage } from './_lib/gemini.js';
 import { loadStyleGuide, loadChildStyleGuideId, SQUARE_RULE } from './_lib/onboarding-render.js';
+import { chargeForGeneration, COST } from './_lib/credits.js';
 
 // gpt-image-1.5 / -2 at high quality + input_fidelity:high can legitimately run
 // 60-120s for an edit. 300s is Vercel Pro's hard ceiling for serverless
@@ -167,6 +168,17 @@ export default async function handler(req, res) {
           AND COALESCE(actor_role, '') NOT IN ('onboarding_draft', 'onboarding_seed')`;
       if (((q[0] && q[0].n) || 0) >= DAILY_LIMIT) { res.status(429).json({ error: 'Daily image-generation limit reached', limit: DAILY_LIMIT }); return; }
     } catch (_) { /* quota check is best-effort — never block on a counting error */ }
+  }
+
+  // Credits: one per generated image (nano banana tier). Admins exempt; parents
+  // get a starter wallet + monthly subscription credits — see api/_lib/credits.js.
+  {
+    const charge = await chargeForGeneration(sql(), auth.user, { credits: COST.nano, reason: 'tile:generate', ref: childId });
+    if (!charge.ok) {
+      res.status(402).json({ error: 'not_enough_credits', needed: COST.nano, balance: charge.balance,
+                             detail: 'Making a tile image uses 1 credit. Add credits in the store and try again.' });
+      return;
+    }
   }
 
   let buffer;

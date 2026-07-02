@@ -12,6 +12,7 @@ import { isValidRelationship, relationshipNeedsSide } from './_lib/relationships
 import { geminiKey, geminiProModel, geminiGenerateImage } from './_lib/gemini.js';
 import { openaiEditImage, openaiKeystoneModel } from './_lib/openai-image.js';
 import { loadStyleGuide, loadChildStyleGuideId, loadChildVoiceId, synthesizeVoice, buildPortraitPrompt } from './_lib/onboarding-render.js';
+import { chargeForGeneration, COST } from './_lib/credits.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
 
@@ -54,6 +55,17 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
+    // Family portraits run on the OpenAI keystone tier = 3 credits (admins
+    // exempt; the initial onboarding family flow is a different endpoint and
+    // stays free). Charged up front — the generation below is the expensive part.
+    const charge = await chargeForGeneration(db, auth.user, {
+      credits: COST.person, reason: 'family:add', ref: childId,
+    });
+    if (!charge.ok) {
+      res.status(402).json({ error: 'not_enough_credits', needed: COST.person, balance: charge.balance,
+                             detail: 'Adding a family member uses 3 image credits. Add credits in the store and try again.' });
+      return;
+    }
     // 1) Stylize the person in the child's HOUSE STYLE. This MUST match the
     //    onboarding keystone path (api/onboarding/family.js) exactly, so a family
     //    member added here looks like the child + first parent: the same shared

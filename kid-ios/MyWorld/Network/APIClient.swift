@@ -93,6 +93,19 @@ struct APIClient {
                                body: body, contentType: "application/json")
     }
 
+    /// POST a facilitator command to the board's live channel — the same
+    /// `{kind:'cmd', action}` shape the web parent dashboard sends (the board
+    /// polls /api/live and reacts, e.g. listen-start flips on Listening Mode).
+    func sendLiveCommand(childId: String, action: String) async -> Bool {
+        guard let body = try? JSONSerialization.data(withJSONObject: ["kind": "cmd", "action": action]) else { return false }
+        do {
+            _ = try await request(method: "POST",
+                                  path: "/api/live?childId=\(percentEscape(childId))",
+                                  body: body, contentType: "application/json")
+            return true
+        } catch { return false }
+    }
+
     /// GET /api/media?key=<key> — streams blob bytes. Used for images + audio.
     func media(key: String) async throws -> (Data, String) {
         let (data, resp) = try await request(method: "GET",
@@ -283,6 +296,7 @@ struct APIClient {
                     pinned: Bool? = nil,
                     description: String? = nil,
                     needsReview: Bool? = nil,
+                    order: Int? = nil,
                     childId: String) async throws -> Tile {
         var body: [String: Any] = ["childId": childId]
         if let label   { body["label"]   = label }
@@ -295,6 +309,7 @@ struct APIClient {
         if let soundKey    { body["soundKey"]    = soundKey }
         if let keepAspect  { body["keepAspect"]  = keepAspect }
         if let pinned      { body["pinned"]      = pinned }
+        if let order       { body["order"]       = order }
         // Explicit "" clears the description back to the game's fallback prompt;
         // nil leaves it untouched (so we only send it when the editor changed it).
         if let description { body["description"] = description }
@@ -524,6 +539,78 @@ struct APIClient {
         s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? s
     }
 
+    // MARK: -- Store / credits
+
+    /// Current credit balance (nil on any failure — the UI shows a placeholder).
+    func storeBalance() async -> Int? {
+        struct R: Decodable { let balance: Int? }
+        guard let (data, _) = try? await request(method: "GET", path: "/api/store?action=catalog", body: nil),
+              let r = try? JSONDecoder().decode(R.self, from: data) else { return nil }
+        return r.balance
+    }
+
+    /// Report a verified StoreKit transaction; the server grants the credits
+    /// idempotently (safe to re-send). Returns the credits granted this call.
+    func iapVerify(jws: String, productId: String, transactionId: String) async -> Int? {
+        struct R: Decodable { let credited: Int? }
+        let body = try? JSONSerialization.data(withJSONObject: [
+            "jws": jws, "productId": productId, "transactionId": transactionId,
+        ])
+        guard let body,
+              let (data, _) = try? await request(method: "POST", path: "/api/store?action=iap-verify",
+                                                 body: body, contentType: "application/json"),
+              let r = try? JSONDecoder().decode(R.self, from: data) else { return nil }
+        return r.credited
+    }
+
+    /// One shoppable word from the store library.
+    struct ShopTile: Decodable, Identifiable, Hashable {
+        let id: String
+        let label: String
+        let column: String
+        let category: String?
+        let subcategory: String?
+        let previewKey: String?
+        let onBoard: Bool
+        let personalized: Bool
+        let itemId: Int?
+        let freeRetryUsed: Bool
+        let credits: Int
+    }
+    private struct ShopBrowse: Decodable { let tiles: [ShopTile] }
+    func storeBrowse(childId: String) async throws -> [ShopTile] {
+        let (data, _) = try await request(method: "GET",
+                                          path: "/api/store?action=browse&childId=\(percentEscape(childId))",
+                                          body: nil)
+        return (try JSONDecoder().decode(ShopBrowse.self, from: data)).tiles
+    }
+
+    struct StoreCheckoutResult: Decodable { let ok: Bool; let charged: Int; let queued: Int; let balance: Int?; let note: String? }
+    func storeCheckout(childId: String, taxonomyIds: [String]) async throws -> StoreCheckoutResult {
+        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "taxonomyIds": taxonomyIds])
+        let (data, _) = try await request(method: "POST", path: "/api/store?action=checkout",
+                                          body: body, contentType: "application/json", timeout: 120)
+        return try JSONDecoder().decode(StoreCheckoutResult.self, from: data)
+    }
+
+    struct StoreRetryResult: Decodable { let ok: Bool; let charged: Int; let freeRetry: Bool?; let balance: Int? }
+    /// Re-draw a tile's picture in the child's style. First retry per tile is
+    /// free; after that it costs one credit (server-enforced).
+    func storeRetry(childId: String, itemId: Int) async throws -> StoreRetryResult {
+        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "itemId": itemId])
+        let (data, _) = try await request(method: "POST", path: "/api/store?action=retry",
+                                          body: body, contentType: "application/json")
+        return try JSONDecoder().decode(StoreRetryResult.self, from: data)
+    }
+
+    struct StoreRedeemResult: Decodable { let ok: Bool; let credited: Int; let balance: Int }
+    func storeRedeem(code: String) async throws -> StoreRedeemResult {
+        let body = try JSONSerialization.data(withJSONObject: ["code": code])
+        let (data, _) = try await request(method: "POST", path: "/api/store?action=redeem",
+                                          body: body, contentType: "application/json")
+        return try JSONDecoder().decode(StoreRedeemResult.self, from: data)
+    }
+
     // MARK: -- Seed starter words (chunked)
 
     /// One chunk of onboarding's resumable seed-core build. Mirrors the JSON the
@@ -535,6 +622,20 @@ struct APIClient {
         let total: Int
         let placed: Int
         let failed: Int
+    }
+
+    /// Live board-build progress (the durable seed_jobs draining server-side).
+    struct SeedKindStatus: Decodable { let total: Int; let done: Int; let dead: Int }
+    struct SeedStatus: Decodable {
+        let active: Bool
+        let render: SeedKindStatus
+        let voice: SeedKindStatus
+    }
+    func seedStatus(childId: String) async -> SeedStatus? {
+        guard let (data, _) = try? await request(method: "GET",
+                                                 path: "/api/onboarding/seed-core?childId=\(percentEscape(childId))",
+                                                 body: nil) else { return nil }
+        return try? JSONDecoder().decode(SeedStatus.self, from: data)
     }
 
     /// Build ONE chunk of the child's starter board — the SAME resumable engine

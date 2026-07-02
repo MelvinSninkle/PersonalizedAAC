@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Word Store — My World</title>
+<style>
+  :root { --pink:#ff1493; --pink-deep:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#f3c6dd; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; background:#fff7fb; color:var(--ink); }
+  header {
+    position:sticky; top:0; z-index:20; background:#fff; border-bottom:2px solid var(--line);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; padding:12px 18px;
+  }
+  header h1 { font-size:19px; margin:0; color:var(--pink-deep); }
+  .balance { font-weight:800; color:var(--pink-deep); background:#fce7f3; border-radius:999px; padding:7px 14px; font-size:14px; }
+  .spacer { flex:1; }
+  a.back { color:var(--pink-deep); text-decoration:none; font-size:13px; font-weight:600; }
+  main { max-width:1100px; margin:0 auto; padding:18px 18px 120px; }
+
+  .promise {
+    background:#fff; border:2px solid var(--line); border-radius:16px; padding:14px 18px; margin:6px 0 18px;
+    font-size:14px; color:var(--muted); display:flex; gap:12px; align-items:center;
+  }
+  .promise b { color:var(--pink-deep); }
+
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-bottom:22px; }
+  .card {
+    background:#fff; border:2px solid var(--line); border-radius:16px; padding:16px; text-align:center;
+  }
+  .card h3 { margin:0 0 4px; font-size:15px; color:var(--pink-deep); }
+  .card .big { font-size:24px; font-weight:800; }
+  .card .sub { font-size:12px; color:var(--muted); margin:4px 0 10px; }
+  .btn {
+    display:inline-block; border:none; border-radius:999px; padding:10px 18px; font-size:14px; font-weight:700;
+    background:var(--pink); color:#fff; cursor:pointer;
+  }
+  .btn.secondary { background:#fff; color:var(--pink-deep); border:2px solid var(--line); }
+  .btn:disabled { opacity:.5; cursor:default; }
+
+  .filters { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:8px 0 14px; }
+  select, input[type=search] { font:inherit; padding:8px 12px; border:2px solid var(--line); border-radius:10px; background:#fff; }
+  .group-title { margin:20px 0 10px; font-size:13px; font-weight:800; color:var(--pink-deep); text-transform:uppercase; letter-spacing:.05em; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:12px; }
+  .tile {
+    position:relative; background:#fff; border:2px solid var(--line); border-radius:14px; overflow:hidden; cursor:pointer;
+    transition:transform .1s;
+  }
+  .tile:active { transform:scale(.97); }
+  .tile .sq { aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; background:#fdf2f8; }
+  .tile .sq img { width:100%; height:100%; object-fit:cover; }
+  .tile .sq .word { font-weight:800; color:#9d2463; font-size:15px; text-align:center; padding:6px; }
+  .tile .cap { font-size:11px; text-align:center; padding:4px 4px 6px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tile .flag { position:absolute; top:6px; left:6px; font-size:10px; font-weight:800; padding:2px 7px; border-radius:999px; background:#ecfdf5; color:#047857; }
+  .tile .flag.default { background:#eff6ff; color:#1d4ed8; }
+  .tile .pick { position:absolute; top:6px; right:6px; width:22px; height:22px; border-radius:50%; border:2px solid var(--line); background:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; color:#fff; }
+  .tile.selected { border-color:var(--pink); }
+  .tile.selected .pick { background:var(--pink); border-color:var(--pink); }
+
+  #cartbar {
+    position:fixed; left:0; right:0; bottom:0; z-index:30; display:none;
+    background:#fff; border-top:2px solid var(--line); padding:12px 18px;
+    align-items:center; gap:14px; box-shadow:0 -4px 20px rgba(0,0,0,.08);
+  }
+  #cartbar .info { flex:1; font-size:14px; font-weight:700; color:var(--pink-deep); }
+  .empty { color:var(--muted); text-align:center; padding:40px; }
+  .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:84px; z-index:40; background:#111827; color:#fff; padding:10px 18px; border-radius:999px; font-size:13px; display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛍️ Word Store</h1>
+  <span class="balance" id="balance">💎 …</span>
+  <div class="spacer"></div>
+  <a class="back" id="back-link" href="#">← Dashboard</a>
+</header>
+<main>
+  <div class="promise">💛 <span><b>Every image you make is your family's to keep.</b> Images are stored safely forever — even when you change or regenerate one, the earlier version is archived, never deleted.</span></div>
+
+  <div class="cards" id="packs"></div>
+
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:-6px 0 18px;">
+    <span style="font-size:13px;color:var(--muted);font-weight:600;">Have a code?</span>
+    <input type="text" id="redeem-code" placeholder="e.g. WELCOME25" style="font:inherit;padding:8px 12px;border:2px solid var(--line);border-radius:10px;background:#fff;text-transform:uppercase;width:170px;">
+    <button class="btn secondary" id="redeem-btn">Redeem</button>
+  </div>
+
+  <div class="filters">
+    <select id="f-col"><option value="">All sections</option></select>
+    <select id="f-cat"><option value="">All categories</option></select>
+    <input type="search" id="f-q" placeholder="Search words…">
+    <span style="font-size:12px;color:var(--muted);" id="shop-note"></span>
+  </div>
+  <div id="shop"><div class="empty">Loading the word library…</div></div>
+</main>
+
+<div id="cartbar">
+  <div class="info" id="cart-info"></div>
+  <button class="btn secondary" id="cart-clear">Clear</button>
+  <button class="btn" id="cart-buy">Get these words</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const CHILD = params.get('child') || localStorage.getItem('aacChildSlug') || '';
+  document.getElementById('back-link').href = CHILD ? ('/parent/' + encodeURIComponent(CHILD)) : '/';
+
+  async function api(path, opts = {}) {
+    const r = await fetch(path, { credentials: 'same-origin', ...opts,
+      headers: { ...(opts.body ? { 'Content-Type': 'application/json' } : {}), ...(opts.headers || {}) } });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error(d.detail || d.error || ('HTTP ' + r.status)); e.status = r.status; e.data = d; throw e; }
+    return d;
+  }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.style.display = 'block';
+    clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, 3200);
+  }
+
+  let CATALOG = null, TILES = [], CART = new Set();
+
+  function money(cents) { return '$' + (cents / 100).toFixed(2); }
+
+  function renderPacks() {
+    const el = document.getElementById('packs');
+    const c = CATALOG;
+    let html = '';
+    for (const p of c.packs) {
+      const per = (p.cents / p.credits).toFixed(1);
+      html += `<div class="card"><h3>${esc(p.label)} pack</h3>
+        <div class="big">💎 ${p.credits}</div>
+        <div class="sub">${money(p.cents)} · ${per}¢ per image credit</div>
+        <button class="btn" data-sku="${esc(p.sku)}">Buy</button></div>`;
+    }
+    html += `<div class="card"><h3>${esc(c.subscription.label)}</h3>
+      <div class="big">💎 ${c.subscription.creditsPerPeriod}<span style="font-size:13px;font-weight:600;color:var(--muted);">/month</span></div>
+      <div class="sub">${money(c.subscription.cents)}/month · packs stack on top anytime</div>
+      <button class="btn" data-sku="${esc(c.subscription.sku)}">Subscribe</button></div>`;
+    if (c.rebuild && c.rebuild.words) {
+      html += `<div class="card"><h3>Whole-board rebuild</h3>
+        <div class="big">💎 ${c.rebuild.credits}</div>
+        <div class="sub">${c.rebuild.words} words re-made in your child's style — ${Math.round((1 - c.rebuild.credits / c.rebuild.listCredits) * 100)}% off one-by-one</div>
+        <button class="btn secondary" id="rebuild-btn">Rebuild the board</button></div>`;
+    }
+    el.innerHTML = html;
+    el.querySelectorAll('[data-sku]').forEach((b) => b.addEventListener('click', () => buySku(b.dataset.sku, b)));
+    const rb = document.getElementById('rebuild-btn');
+    if (rb) rb.addEventListener('click', doRebuild);
+  }
+
+  async function buySku(sku, btn) {
+    btn.disabled = true;
+    try {
+      const d = await api('/api/store?action=stripe-checkout', { method: 'POST', body: JSON.stringify({ sku }) });
+      location.href = d.url;
+    } catch (e) {
+      if (e.status === 501) toast('Purchases open soon on the web — for now, buy credits in the My World iPhone app.');
+      else toast(e.message);
+      btn.disabled = false;
+    }
+  }
+
+  async function doRebuild() {
+    const c = CATALOG.rebuild;
+    if (!confirm(`Rebuild all ${c.words} words in your child's style for ${c.credits} credits?\n\nEvery current image is archived first — you keep them all.`)) return;
+    try {
+      const d = await api('/api/store?action=rebuild', { method: 'POST', body: JSON.stringify({ childId: CHILD }) });
+      toast(d.note || 'Rebuild started!');
+      await loadCatalog();
+    } catch (e) { handleSpendError(e); }
+  }
+
+  function handleSpendError(e) {
+    if (e.status === 402) toast(`Not enough credits — you need ${e.data.needed}, you have ${e.data.balance}. Grab a pack above!`);
+    else toast(e.message);
+  }
+
+  function groupKey(t) { return t.column + (t.category ? ' › ' + t.category : ''); }
+
+  function renderShop() {
+    const col = document.getElementById('f-col').value;
+    const cat = document.getElementById('f-cat').value;
+    const q = document.getElementById('f-q').value.trim().toLowerCase();
+    const el = document.getElementById('shop');
+    const shown = TILES.filter((t) =>
+      (!col || t.column === col) && (!cat || t.category === cat) &&
+      (!q || t.label.toLowerCase().includes(q)));
+    if (!shown.length) { el.innerHTML = '<div class="empty">No words match.</div>'; return; }
+    const groups = new Map();
+    for (const t of shown) { const k = groupKey(t); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
+    let html = '';
+    for (const [k, list] of groups) {
+      html += `<div class="group-title">${esc(k)} (${list.length})</div><div class="grid">`;
+      for (const t of list) {
+        const sel = CART.has(t.id) ? ' selected' : '';
+        const img = t.previewKey
+          ? `<img loading="lazy" src="/api/media?key=${encodeURIComponent(t.previewKey)}" alt="">`
+          : `<div class="word">${esc(t.label)}</div>`;
+        const flag = t.personalized ? '<span class="flag">on board · yours</span>'
+                   : t.onBoard ? '<span class="flag default">on board · classic art</span>' : '';
+        html += `<div class="tile${sel}" data-id="${esc(t.id)}">
+          <div class="sq">${img}</div>${flag}
+          <div class="pick">${CART.has(t.id) ? '✓' : ''}</div>
+          <div class="cap">${esc(t.label)} · 💎${t.credits}</div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+    el.innerHTML = html;
+    el.querySelectorAll('.tile').forEach((n) => n.addEventListener('click', () => {
+      const id = n.dataset.id;
+      if (CART.has(id)) CART.delete(id); else CART.add(id);
+      renderShop(); renderCart();
+    }));
+  }
+
+  function renderCart() {
+    const bar = document.getElementById('cartbar');
+    if (!CART.size) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    document.getElementById('cart-info').textContent =
+      `${CART.size} word${CART.size === 1 ? '' : 's'} · 💎${CART.size} — made in your child's style + voice`;
+  }
+  document.getElementById('cart-clear').addEventListener('click', () => { CART.clear(); renderShop(); renderCart(); });
+  document.getElementById('cart-buy').addEventListener('click', async () => {
+    const btn = document.getElementById('cart-buy');
+    btn.disabled = true;
+    try {
+      const d = await api('/api/store?action=checkout', { method: 'POST',
+        body: JSON.stringify({ childId: CHILD, taxonomyIds: [...CART] }) });
+      toast(d.note || 'Words queued!');
+      CART.clear();
+      await Promise.all([loadCatalog(), loadShop()]);
+      renderCart();
+    } catch (e) { handleSpendError(e); }
+    btn.disabled = false;
+  });
+
+  async function loadCatalog() {
+    CATALOG = await api('/api/store?action=catalog&childId=' + encodeURIComponent(CHILD));
+    document.getElementById('balance').textContent = `💎 ${CATALOG.balance} credits`;
+    renderPacks();
+  }
+  async function loadShop() {
+    const d = await api('/api/store?action=browse&childId=' + encodeURIComponent(CHILD));
+    TILES = d.tiles || [];
+    const cols = [...new Set(TILES.map((t) => t.column).filter(Boolean))];
+    const cats = [...new Set(TILES.map((t) => t.category).filter(Boolean))].sort();
+    document.getElementById('f-col').innerHTML = '<option value="">All sections</option>' + cols.map((c) => `<option>${esc(c)}</option>`).join('');
+    document.getElementById('f-cat').innerHTML = '<option value="">All categories</option>' + cats.map((c) => `<option>${esc(c)}</option>`).join('');
+    document.getElementById('shop-note').textContent = `${TILES.length} words · 💎1 each, drawn in your child's style`;
+    renderShop();
+  }
+  ['f-col', 'f-cat'].forEach((id) => document.getElementById(id).addEventListener('change', renderShop));
+  document.getElementById('f-q').addEventListener('input', renderShop);
+
+  document.getElementById('redeem-btn').addEventListener('click', async () => {
+    const input = document.getElementById('redeem-code');
+    const code = input.value.trim();
+    if (!code) return;
+    const btn = document.getElementById('redeem-btn');
+    btn.disabled = true;
+    try {
+      const d = await api('/api/store?action=redeem', { method: 'POST', body: JSON.stringify({ code }) });
+      toast(`💎${d.credited} added — enjoy!`);
+      input.value = '';
+      await loadCatalog();
+    } catch (e) { toast(e.message); }
+    btn.disabled = false;
+  });
+
+  (async () => {
+    if (!CHILD) { document.getElementById('shop').innerHTML = '<div class="empty">Open the store from your parent dashboard.</div>'; return; }
+    if (params.get('paid')) toast('Payment received — your credits are ready! 💎');
+    try { await Promise.all([loadCatalog(), loadShop()]); }
+    catch (e) { document.getElementById('shop').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
+  })();
+</script>
+</body>
+</html>

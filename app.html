@@ -670,6 +670,35 @@
     font-style: italic;
   }
 
+  /* A tile whose art hasn't been generated yet: show the word, big and warm. */
+  .tile-square.word-tile {
+    display: flex; align-items: center; justify-content: center;
+    background: #fdf2f8;
+    border: 2px dashed #f3c6dd;
+  }
+  .word-tile-text {
+    font-weight: 800;
+    color: #9d2463;
+    text-align: center;
+    padding: 6px;
+    font-size: clamp(12px, 1.6vw, 20px);
+    overflow-wrap: anywhere;
+  }
+
+  /* "Making {name}'s words…" build-progress pill (bottom corner, non-blocking). */
+  #seed-banner {
+    position: fixed; left: 12px; bottom: 12px; z-index: 8000;
+    display: none; align-items: center; gap: 10px;
+    background: #fff; border: 2px solid #f3c6dd; border-radius: 999px;
+    padding: 8px 16px; font-size: 13px; font-weight: 600; color: #9d2463;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  }
+  #seed-banner .dotpulse {
+    width: 10px; height: 10px; border-radius: 50%; background: #ff1493;
+    animation: seedpulse 1.2s ease-in-out infinite;
+  }
+  @keyframes seedpulse { 0%,100% { opacity: .35; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.1); } }
+
   /* Empty-board welcome overlay (brand-new board, no tiles yet). */
   #empty-cta {
     position: fixed; inset: 0; z-index: 5000;
@@ -1061,6 +1090,10 @@
   </section>
 </main>
 
+<!-- Build-progress pill: shows while the server-side seed jobs are still
+     rendering this child's personalized words. Tiles pop in as they land. -->
+<div id="seed-banner"><span class="dotpulse"></span><span id="seed-banner-text"></span></div>
+
 <!-- Empty-board welcome: shown only when the board has zero tiles (a brand-new
      account that hasn't generated its starter words yet). For a parent/admin it
      offers to build the starter set right here; for a child it points to a
@@ -1171,6 +1204,10 @@
     <textarea id="item-description" rows="2" placeholder='e.g. "Lives in a field, has four legs, eats grass." Spoken aloud — the child picks the matching tile.' style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font:inherit;box-sizing:border-box;"></textarea>
     <div style="font-size:12px;color:#666;margin-top:4px;">If left blank the game falls back to "Who or what is the [tile name]?"</div>
     <div class="error" id="item-error"></div>
+    <div id="item-redraw-row" style="display:none;margin:6px 0 2px;">
+      <button class="secondary" id="item-redraw" title="Re-draw this word's picture in your child's style. The first redo of each tile is free; after that it uses 1 credit. The old picture is archived, never deleted.">🪄 Redraw picture</button>
+      <span id="item-redraw-note" style="font-size:12px;color:#2e7d32;margin-left:8px;"></span>
+    </div>
     <div class="button-row">
       <button class="danger" id="item-delete" style="display:none;">Delete</button>
       <button class="secondary" id="item-cancel">Cancel</button>
@@ -1902,6 +1939,16 @@
     const sq = document.createElement('div');
     sq.className = 'tile-square';
     applyImage(sq, imageKey, keepAspect);
+    // No art yet (a freshly built board whose custom render is still queued) →
+    // a friendly WORD TILE: the label big in the square, not a blank box. The
+    // real image replaces it on a later sync without any layout change.
+    if (!imageKey) {
+      sq.classList.add('word-tile');
+      const w = document.createElement('div');
+      w.className = 'word-tile-text';
+      w.textContent = label || '';
+      sq.appendChild(w);
+    }
 
     if (pinned) {
       const pin = document.createElement('div');
@@ -2899,6 +2946,10 @@
     document.getElementById('pin-row').style.display = section === 'people' ? 'flex' : 'none';
     document.getElementById('item-pin').checked = !!item?.pinned;
     document.getElementById('item-delete').style.display = item ? 'block' : 'none';
+    // Redraw only applies to LIBRARY words (linked by taxonomySlug) — the
+    // server re-renders them in the child's style (first redo free, then 1 credit).
+    document.getElementById('item-redraw-row').style.display = (item && item.taxonomySlug) ? 'block' : 'none';
+    document.getElementById('item-redraw-note').textContent = '';
 
     // AI-tile section: restore the last-used style, clear status/preview.
     const styleSel = document.getElementById('item-style');
@@ -3110,6 +3161,30 @@
       saveBtn.disabled = false;
       saveBtn.textContent = prevText;
     }
+  });
+
+  // Redraw a library word in the child's style (server: first redo per tile
+  // free, then 1 credit; renders in the background and pops in on a resync).
+  document.getElementById('item-redraw').addEventListener('click', async () => {
+    if (!editingItem || !editingItem.id) return;
+    const btn = document.getElementById('item-redraw');
+    const note = document.getElementById('item-redraw-note');
+    btn.disabled = true; note.textContent = 'Queuing…';
+    try {
+      // Local item ids ARE the server ids (hydrateFromServer stores them 1:1).
+      const r = await apiJSON('/api/store?action=retry', {
+        method: 'POST', body: JSON.stringify({ childId: CHILD_ID, itemId: editingItem.id }),
+      });
+      note.textContent = (r.freeRetry ? 'Redrawing (free)' : 'Redrawing (💎' + r.charged + ')')
+        + ' — the new picture lands in a minute or two.';
+    } catch (err) {
+      note.textContent = '';
+      const msg = String(err.message || err);
+      document.getElementById('item-error').textContent = msg.includes('not_enough_credits')
+        ? 'Not enough credits — open the Word Store from the parent dashboard to add more.'
+        : msg;
+    }
+    btn.disabled = false;
   });
 
   document.getElementById('item-delete').addEventListener('click', async () => {
@@ -5413,6 +5488,46 @@
   });
 
   // On-screen boot status so failures are visible without a console (iPad has none).
+  // ---- Build-progress pill ("Making {name}'s words… 34 of 120") -------------
+  // The onboarding pipeline places every word instantly, then renders the
+  // personalized art server-side (seed_jobs + cron). While that's running we
+  // show a soft pill and re-sync so finished tiles pop in live. Closing the app
+  // never stops the build — this is display only.
+  let _seedTimer = null, _seedLastDone = -1;
+  async function watchSeedProgress() {
+    const banner = document.getElementById('seed-banner');
+    const textEl = document.getElementById('seed-banner-text');
+    if (!banner || !textEl) return;
+    const tick = async () => {
+      let s = null;
+      try {
+        const r = await apiFetch('/api/onboarding/seed-core?childId=' + encodeURIComponent(CHILD_ID));
+        if (r.ok) s = await r.json();
+      } catch (_) {}
+      if (!s || !s.active) {
+        banner.style.display = 'none';
+        if (_seedTimer) { clearInterval(_seedTimer); _seedTimer = null; }
+        if (s && _seedLastDone > -1) resyncIfChanged().catch(() => {});   // final pull
+        return;
+      }
+      const name = CHILD_NAME || 'your child';
+      const r = s.render || { total: 0, done: 0 }, v = s.voice || { total: 0, done: 0 };
+      textEl.textContent = (r.total > r.done)
+        ? `Making ${name}’s words… ${r.done} of ${r.total}`
+        : `Adding ${name}’s voice… ${v.done} of ${v.total}`;
+      banner.style.display = 'flex';
+      const doneNow = (r.done || 0) + (v.done || 0);
+      if (doneNow !== _seedLastDone) {
+        _seedLastDone = doneNow;
+        resyncIfChanged().catch(() => {});   // finished tiles pop in
+      }
+    };
+    await tick();
+    if (!_seedTimer && document.getElementById('seed-banner').style.display !== 'none') {
+      _seedTimer = setInterval(tick, 12000);
+    }
+  }
+
   function bootBanner(text, isError) {
     let el = document.getElementById('boot-banner');
     if (!el) {
@@ -5465,6 +5580,9 @@
       clearTimeout(watchdog);
       // Warm the full media cache (pictures + voices) for offline use.
       if (navigator.onLine !== false) precacheAllMedia();
+      // If this board is still being built (onboarding seed jobs pending), show
+      // the progress pill and pull fresh tiles in as they finish rendering.
+      watchSeedProgress();
       // Listen for remote (phone) game commands the whole time the app is open.
       startLiveListener();
       // Pick up reward cheers/music + scheduled prompts the parent set (e.g. from

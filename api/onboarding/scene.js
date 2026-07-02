@@ -23,6 +23,7 @@ import { geminiKey, geminiProModel, geminiGenerateImage } from '../_lib/gemini.j
 import { openaiEditImage, openaiKeystoneModel } from '../_lib/openai-image.js';
 import { ensureProgress, setStep } from '../_lib/onboarding.js';
 import { loadStyleGuide, SQUARE_RULE } from '../_lib/onboarding-render.js';
+import { ensureSeedJobs } from '../_lib/seed-board.js';
 
 export const config = { maxDuration: 300 };
 
@@ -122,6 +123,19 @@ export default async function handler(req, res) {
       }
 
       await setStep(db, Number(auth.user.uid), 'seed_core', { sceneKeystoneKey: draftKey, styleGuideId: anchorId });
+
+      // AUTO-BUILD: the style anchor is committed, so the board can build itself
+      // from here with no further parent action. Enqueue the server-side 'place'
+      // job — the every-minute cron places the full default board and queues the
+      // per-child renders/voices, even if the parent closes the tab right now.
+      // (The onboarding UI still drives the visible placement loop for instant
+      // feedback; both paths are idempotent.)
+      try {
+        await ensureSeedJobs(db);
+        await db`INSERT INTO seed_jobs (child_id, kind, taxonomy_id) VALUES (${childId}, 'place', NULL)
+                 ON CONFLICT (child_id, kind, COALESCE(taxonomy_id, '')) DO NOTHING`;
+      } catch (_) { /* best-effort — the client loop / rescue tool also builds */ }
+
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ ok: true, step: 'seed_core', styleGuideId: anchorId });
       return;

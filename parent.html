@@ -218,7 +218,7 @@
   <div class="brand fred">Fletcher's World <small>Parent dashboard</small></div>
   <div class="right">
     <span class="device-pill"><span class="dot"></span> Tablet · online</span>
-    <span class="role-switch"><span id="therapist-switch" style="display:none;">View as <a href="#" id="to-therapist">Therapist</a> · </span><a href="#" id="device-default">Change device default</a><a href="/admin/taxonomy.html" id="admin-taxonomy" style="display:none;"> · 🧬 Taxonomy</a></span>
+    <span class="role-switch"><a href="#" id="store-link" style="font-weight:700;">🛍️ Word Store <span id="store-balance"></span></a> · <span id="therapist-switch" style="display:none;">View as <a href="#" id="to-therapist">Therapist</a> · </span><a href="#" id="device-default">Change device default</a><a href="/admin/taxonomy.html" id="admin-taxonomy" style="display:none;"> · 🧬 Taxonomy</a></span>
   </div>
 </header>
 
@@ -265,6 +265,18 @@
     </div>
     <button class="btn primary" id="seed-now-btn">✨ Generate starter words</button>
     <a class="btn" id="onboard-nudge-go" href="/onboard">Full setup →</a>
+  </div>
+
+  <!-- BOARD-BUILD PROGRESS — while the server-side seed jobs are still rendering
+       this child's personalized words/voices. Purely informational; the build
+       runs on the server and finishes even if this page closes. -->
+  <div id="build-banner" style="display:none;flex-wrap:wrap;align-items:center;gap:12px 14px;background:#fff7fb;border:2px solid var(--pink);border-radius:16px;padding:14px 18px;margin:8px 0 18px;">
+    <span style="font-size:24px;">✨</span>
+    <div style="flex:1;min-width:220px;">
+      <div style="font-weight:700;color:var(--pink-deep,#ad1457);font-size:15px;" id="build-banner-title">Building the board…</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:2px;">Words show up on the board as each one finishes — you can close this page, it keeps going.</div>
+      <div style="height:8px;background:#fce4ec;border-radius:999px;overflow:hidden;margin-top:8px;"><div id="build-bar" style="height:100%;width:0;background:var(--pink);transition:width .5s;"></div></div>
+    </div>
   </div>
 
   <!-- BULK-IMPORT REVIEW QUEUE — tiles imported in bulk (iOS app or web) land
@@ -945,6 +957,38 @@
     } catch (_) {}
   })();
 
+  // Board-build progress: while the server-side seed jobs (personalized word
+  // renders + voices) are still draining, show a live bar. Server-driven — the
+  // build continues even if this page closes.
+  (async () => {
+    const banner = document.getElementById('build-banner');
+    const title = document.getElementById('build-banner-title');
+    const bar = document.getElementById('build-bar');
+    if (!banner) return;
+    let timer = null;
+    const tick = async () => {
+      let s = null;
+      try {
+        const r = await fetch('/api/onboarding/seed-core?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+        if (r.ok) s = await r.json();
+      } catch (_) {}
+      if (!s || !s.active) {
+        banner.style.display = 'none';
+        if (timer) { clearInterval(timer); timer = null; }
+        return;
+      }
+      const rj = s.render || { total: 0, done: 0 }, vj = s.voice || { total: 0, done: 0 };
+      const total = rj.total + vj.total, done = rj.done + vj.done;
+      title.textContent = (rj.total > rj.done)
+        ? `Making ${pretty || 'your child'}’s words… ${rj.done} of ${rj.total}`
+        : `Adding ${pretty || 'your child'}’s voice… ${vj.done} of ${vj.total}`;
+      if (bar) bar.style.width = (total ? Math.round(done / total * 100) : 0) + '%';
+      banner.style.display = 'flex';
+    };
+    await tick();
+    if (banner.style.display !== 'none' && !timer) timer = setInterval(tick, 12000);
+  })();
+
   // Generate the core + needs starter vocabulary on demand — the same chunked,
   // resumable engine onboarding uses. Upserts by taxonomy_slug so it never dupes.
   const seedNowBtn = document.getElementById('seed-now-btn');
@@ -981,6 +1025,15 @@
     }
   });
   document.getElementById('to-therapist').href = '/therapist/' + encodeURIComponent(slug);
+  // Word Store link + live credit balance chip.
+  const storeLink = document.getElementById('store-link');
+  if (storeLink) {
+    storeLink.href = '/store.html?child=' + encodeURIComponent(slug);
+    fetch('/api/store?action=catalog&childId=' + encodeURIComponent(slug), { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && typeof d.balance === 'number') document.getElementById('store-balance').textContent = '💎' + d.balance; })
+      .catch(() => {});
+  }
   // Re-open the per-device "who uses this device?" chooser on the board.
   const deviceDefaultLink = document.getElementById('device-default');
   if (deviceDefaultLink) deviceDefaultLink.addEventListener('click', (e) => {
