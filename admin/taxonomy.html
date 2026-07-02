@@ -189,6 +189,7 @@
     <a class="secondary" id="btn-defaults-board" href="/admin/defaults.html" style="text-decoration:none;display:inline-flex;align-items:center;" title="See the whole default board — default images plus empty word-tiles for anything personalized.">🔎 Default board</a>
     <button class="secondary" id="btn-build-board" title="RESCUE: run the full board build for any child by slug — places every word, queues the per-child renders/voices, re-arms dead jobs. Idempotent.">🧰 Build board…</button>
     <button class="secondary" id="btn-square-tiles" title="Normalize a board's tile shapes: every tile + folder chip squares up (keep_aspect off), except TV/movie/poster folders which keep their natural ratio. Fixes older boards with stray aspect flags.">⬜ Square tiles…</button>
+    <button class="secondary" id="btn-index-objects" title="Backfill objects_present — the reverse index behind 'you added a fork; these pictures mention a fork'. Only fills rows missing it; AI pass when OpenAI is configured, mechanical otherwise.">🧠 Index objects…</button>
     <div class="menu-wrap">
       <button class="secondary" id="btn-export">Export ▾</button>
       <div class="menu" id="export-menu">
@@ -1021,6 +1022,25 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       btn.disabled = false;
       document.getElementById('stat').textContent = `${allRows.length} rows`;
     }
+  });
+
+  // ---- Index objects: backfill the objects_present reverse index ----
+  document.getElementById('btn-index-objects').addEventListener('click', async () => {
+    if (!confirm('Index the objects in every prompt that\'s missing objects_present?\n\nPowers the "your new fork appears in these pictures" magic. Chunked; safe to re-run (only fills missing rows).')) return;
+    const btn = document.getElementById('btn-index-objects');
+    btn.disabled = true;
+    let offset = 0, indexed = 0, failed = 0, guard = 0, method = '';
+    try {
+      for (;;) {
+        const r = await api(`/api/admin/lab?action=index-objects&offset=${offset}`, { method: 'POST' });
+        indexed += r.indexed || 0; failed += r.failed || 0; method = r.method || method;
+        document.getElementById('stat').textContent = `indexing… ${r.nextOffset}/${r.total}`;
+        if (r.done || r.nextOffset <= offset || ++guard > 200) break;
+        offset = r.nextOffset;
+      }
+      alert(`Indexed ${indexed} prompts (${method})` + (failed ? `, ${failed} failed — re-run to retry them.` : '.'));
+    } catch (e) { alert('Indexing failed: ' + (e.message || e)); }
+    finally { btn.disabled = false; document.getElementById('stat').textContent = `${allRows.length} rows`; }
   });
 
   // ---- Rescue: run the full board build for any child by slug ----

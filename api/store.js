@@ -61,6 +61,8 @@ export default async function handler(req, res) {
       case 'browse':         return browse(req, res, db, auth);
       case 'history':        return history(req, res, db, uid);
       case 'checkout':       return checkout(req, res, db, auth, uid, body);
+      case 'impact':         return impact(req, res, db, auth);
+      case 'regen-with':     return regenWith(req, res, db, auth, uid, body);
       case 'retry':          return retryTile(req, res, db, auth, uid, body);
       case 'rebuild':        return rebuild(req, res, db, auth, uid, body);
       case 'iap-verify':     return iapVerify(req, res, db, uid, body);
@@ -204,6 +206,76 @@ async function checkout(req, res, db, auth, uid, body) {
     ok: true, charged: isAdmin ? 0 : cost, queued,
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${queued} word${queued === 1 ? '' : 's'} queued — they render in your child's style over the next few minutes.`,
+  });
+}
+
+// ── Contextual magic: "your new fork appears in these pictures" ─────────────
+
+// GET ?action=impact&childId=&word=  →
+//   { existing: {itemId,label,imageKey,isDefault} | null,   // exact-word tile on the board
+//     affected: [{taxonomyId,itemId,label,previewKey}] }    // OTHER board tiles whose prompt
+//                                                           // mentions the word (objects_present)
+// Matching runs against the curated objects_present index — never raw prompt
+// text — so filler words ("a", "the") are structurally unmatchable.
+async function impact(req, res, db, auth) {
+  const childId = String((req.query && req.query.childId) || '').slice(0, 64);
+  const raw = String((req.query && req.query.word) || '').trim().toLowerCase();
+  if (!childId || !raw) { res.status(400).json({ error: 'childId and word required' }); return; }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  // Simple singular/plural variants so "forks" finds "fork" prompts.
+  const variants = [...new Set([raw, raw + 's', raw.endsWith('s') ? raw.slice(0, -1) : raw])].filter(Boolean);
+
+  const [exact, mentions] = await Promise.all([
+    db`SELECT id, label, image_key FROM items
+       WHERE child_id = ${childId} AND lower(label) = ${raw} LIMIT 2`,
+    db`SELECT t.id AS tax_id, i.id AS item_id, i.label, i.image_key, t.default_image_key
+       FROM taxonomy t
+       JOIN items i ON i.taxonomy_slug = t.id AND i.child_id = ${childId}
+       WHERE t.objects_present && ${variants}
+         AND lower(t.label) != ${raw}
+       ORDER BY i.label LIMIT 100`,
+  ]);
+  const ex = exact[0] || null;
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(200).json({
+    ok: true,
+    existing: ex ? {
+      itemId: Number(ex.id), label: ex.label, imageKey: ex.image_key,
+      isDefault: !ex.image_key || String(ex.image_key).startsWith('taxonomy-defaults/'),
+    } : null,
+    affected: mentions.map((m) => ({
+      taxonomyId: m.tax_id, itemId: Number(m.item_id), label: m.label,
+      previewKey: m.image_key || m.default_image_key || null,
+    })),
+  });
+}
+
+// POST ?action=regen-with { childId, taxonomyIds:[], refItemId }
+// Re-render the chosen pictures WITH the new tile's image attached as a
+// reference ("include this exact fork"). 1 credit each; replaced art archives.
+async function regenWith(req, res, db, auth, uid, body) {
+  const childId = String(body.childId || '').slice(0, 64);
+  const ids = Array.isArray(body.taxonomyIds) ? body.taxonomyIds.map(String).slice(0, 100) : [];
+  const refItemId = Number(body.refItemId);
+  if (!childId || !ids.length || !refItemId) { res.status(400).json({ error: 'childId, taxonomyIds, refItemId required' }); return; }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  const ref = (await db`SELECT image_key FROM items WHERE id = ${refItemId} AND child_id = ${childId} LIMIT 1`)[0];
+  if (!ref || !ref.image_key) { res.status(404).json({ error: 'reference tile has no image yet' }); return; }
+
+  const cost = ids.length * COST.nano;
+  const isAdmin = auth.user.role === 'admin';
+  if (!isAdmin) {
+    const s = await spendCredits(db, { userId: uid, credits: cost, reason: 'store:regen-with', ref: childId });
+    if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: cost, balance: s.balance }); return; }
+  }
+  await ensureSeedJobs(db);
+  for (const id of ids) await enqueueRenderJob(db, childId, id, { force: true, refKey: ref.image_key });
+  res.status(200).json({
+    ok: true, queued: ids.length, charged: isAdmin ? 0 : cost,
+    balance: uid ? await creditBalance(db, uid) : null,
+    note: `${ids.length} picture${ids.length === 1 ? '' : 's'} re-rendering with your new tile in the scene. Replaced art is archived.`,
   });
 }
 

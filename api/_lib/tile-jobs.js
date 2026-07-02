@@ -13,6 +13,7 @@
 import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { geminiKey, geminiDefaultModel, isGeminiModel, geminiGenerateImage, geminiCostCents } from './gemini.js';
+import { openaiEditImage, openaiKeystoneModel, openaiCostCents } from './openai-image.js';
 import { describePhotoLabel } from './vision.js';
 import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, SQUARE_RULE } from './onboarding-render.js';
 
@@ -78,7 +79,7 @@ async function describeLabel(buffer, contentType) {
 // image so the result matches the board. `section` tunes the subject rule:
 // People keep their face; objects never grow cartoon faces. Returns
 // { ok, b64, prompt, costCents } or { ok:false, detail }.
-export async function renderStyledPhoto({ photo, contentType, label, detail, style, styleGuide, model, bg, section }) {
+export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, bg, section }) {
   const subject = label ? `"${label}"` : 'the main subject';
   const isPerson = String(section || '').toLowerCase() === 'people';
   const detailClause = detail ? ` Important detail from the family: ${detail}.` : '';
@@ -111,12 +112,27 @@ export async function renderStyledPhoto({ photo, contentType, label, detail, sty
   legend.push(`Image ${images.length} is the source photo — re-illustrate THIS subject in the style above.`);
   prompt += '\n\n' + legend.join(' ');
 
+  // MODEL ROUTING (when the client sends none): PEOPLE render on the OpenAI
+  // keystone tier — likeness fidelity is what that tier is for — and everything
+  // else on nano banana. An explicit model (a taxonomy per-row override or an
+  // admin pick) is honored as-is.
+  const oaKey = process.env.OPENAI_API_KEY;
   const gKey = geminiKey();
+  let useModel = model;
+  if (!useModel) {
+    useModel = (isPerson && oaKey) ? await openaiKeystoneModel(db) : geminiDefaultModel();
+  }
+  const wantsOpenAI = !isGeminiModel(useModel);
+  if (wantsOpenAI && oaKey) {
+    const g = await openaiEditImage({ apiKey: oaKey, model: useModel, prompt, images, size: '1024x1024' });
+    if (g.ok) return { ok: true, b64: g.b64, prompt, model: useModel, costCents: g.costCents ?? openaiCostCents(useModel) };
+    // OpenAI hiccup → fall through to nano banana rather than failing the tile.
+  }
   if (!gKey) return { ok: false, detail: 'GEMINI_API_KEY not configured' };
-  const useModel = isGeminiModel(model) ? model : geminiDefaultModel();
-  const g = await geminiGenerateImage({ apiKey: gKey, model: useModel, prompt, images, aspectRatio: '1:1' });
+  const gm = isGeminiModel(useModel) ? useModel : geminiDefaultModel();
+  const g = await geminiGenerateImage({ apiKey: gKey, model: gm, prompt, images, aspectRatio: '1:1' });
   if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
-  return { ok: true, b64: g.b64, prompt, model: useModel, costCents: geminiCostCents(useModel) };
+  return { ok: true, b64: g.b64, prompt, model: gm, costCents: geminiCostCents(gm) };
 }
 
 // Run one job to completion. Reads the durable source, names it (if needed),
@@ -147,7 +163,7 @@ export async function processTileJob(db, jobId) {
     // save-first: keep the raw photo as the tile so a usable tile still lands.
     let imageBytes, imageExt, imageCT, artFailed = false, usedPrompt = null, costCents = 4;
     const r = await renderStyledPhoto({
-      photo: src.buffer, contentType: ct, label, detail: job.detail,
+      db, photo: src.buffer, contentType: ct, label, detail: job.detail,
       style: job.style, styleGuide, model: job.model, bg: job.bg,
       section: job.section,
     });
