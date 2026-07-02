@@ -187,6 +187,7 @@
     <button class="secondary" id="btn-backfill" title="Link a child's existing tiles to canonical taxonomy slugs">🔗 Backfill slugs…</button>
     <button class="secondary" id="btn-seed-defaults" title="Copy the reference board's (Fletcher's) already-drawn tiles into shared 'default' images for every tile that doesn't reference a specific person. Onboarding reuses these instead of generating them per-child.">🖼️ Default images…</button>
     <a class="secondary" id="btn-defaults-board" href="/admin/defaults.html" style="text-decoration:none;display:inline-flex;align-items:center;" title="See the whole default board — default images plus empty word-tiles for anything personalized.">🔎 Default board</a>
+    <button class="secondary" id="btn-build-board" title="RESCUE: run the full board build for any child by slug — places every word, queues the per-child renders/voices, re-arms dead jobs. Idempotent.">🧰 Build board…</button>
     <div class="menu-wrap">
       <button class="secondary" id="btn-export">Export ▾</button>
       <div class="menu" id="export-menu">
@@ -1015,6 +1016,24 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       await loadRows();
     } catch (e) {
       alert('Default images failed: ' + (e.message || e));
+    } finally {
+      btn.disabled = false;
+      document.getElementById('stat').textContent = `${allRows.length} rows`;
+    }
+  });
+
+  // ---- Rescue: run the full board build for any child by slug ----
+  document.getElementById('btn-build-board').addEventListener('click', async () => {
+    const childId = prompt('Build (or repair) a board.\n\nEnter the child slug (e.g. simon-5ba4). Places every word instantly, queues per-child renders + voices for the cron, re-arms dead jobs. Safe to re-run.', '');
+    if (!childId || !childId.trim()) return;
+    const btn = document.getElementById('btn-build-board');
+    btn.disabled = true;
+    document.getElementById('stat').textContent = 'Building board for ' + childId.trim() + '…';
+    try {
+      const r = await api('/api/admin/lab?action=build-board', { method: 'POST', body: { childId: childId.trim() } });
+      alert(r.note || 'Build queued.');
+    } catch (e) {
+      alert('Build failed: ' + (e.message || e));
     } finally {
       btn.disabled = false;
       document.getElementById('stat').textContent = `${allRows.length} rows`;
