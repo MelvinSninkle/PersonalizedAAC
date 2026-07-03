@@ -61,7 +61,8 @@ struct RoomTile: View {
         .task(id: category.imageKey) {
             guard let key = category.imageKey, !key.isEmpty else { return }
             if let img = await MediaCache.shared.image(for: key) {
-                await MainActor.run { self.image = img }
+                let display = category.isPoster ? img : img.trimmingFlatBorders()
+                await MainActor.run { self.image = display }
             }
         }
     }
