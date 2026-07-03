@@ -1029,16 +1029,21 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     if (!confirm('Index the objects in every prompt that\'s missing objects_present?\n\nPowers the "your new fork appears in these pictures" magic. Chunked; safe to re-run (only fills missing rows).')) return;
     const btn = document.getElementById('btn-index-objects');
     btn.disabled = true;
-    let offset = 0, indexed = 0, failed = 0, guard = 0, method = '';
+    let offset = 0, indexed = 0, failed = 0, guard = 0, method = '', populated = 0, empty = 0;
     try {
       for (;;) {
         const r = await api(`/api/admin/lab?action=index-objects&offset=${offset}`, { method: 'POST' });
         indexed += r.indexed || 0; failed += r.failed || 0; method = r.method || method;
+        populated = r.populated ?? populated; empty = r.empty ?? empty;
         document.getElementById('stat').textContent = `indexing… ${r.nextOffset}/${r.total}`;
         if (r.done || r.nextOffset <= offset || ++guard > 200) break;
         offset = r.nextOffset;
       }
-      alert(`Indexed ${indexed} prompts (${method})` + (failed ? `, ${failed} failed — re-run to retry them.` : '.'));
+      const remaining = Math.max(0, empty - indexed);
+      let msg = `Indexed ${indexed} prompts this run (${method})` + (failed ? `, ${failed} failed — re-run to retry.` : '.');
+      msg += `\n\nIndex state: ${populated + indexed} rows populated, ${remaining} still empty.`;
+      if (indexed === 0 && remaining === 0) msg += '\nEverything is already indexed — the magic has full coverage. ✅';
+      alert(msg);
     } catch (e) { alert('Indexing failed: ' + (e.message || e)); }
     finally { btn.disabled = false; document.getElementById('stat').textContent = `${allRows.length} rows`; }
   });

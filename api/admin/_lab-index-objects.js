@@ -71,12 +71,22 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
+    // "Unindexed" = NULL **or empty array** — bulk imports write [] for rows
+    // whose CSV carried no objects, and [] is NOT NULL, so a NULL-only filter
+    // would skip them and report "Indexed 0" over an effectively empty index.
     const rows = force
       ? await db`SELECT id, label, prompt_template FROM taxonomy
                  WHERE COALESCE(archived, FALSE) = FALSE ORDER BY id`
       : await db`SELECT id, label, prompt_template FROM taxonomy
-                 WHERE COALESCE(archived, FALSE) = FALSE AND objects_present IS NULL ORDER BY id`;
+                 WHERE COALESCE(archived, FALSE) = FALSE
+                   AND (objects_present IS NULL OR cardinality(objects_present) = 0)
+                 ORDER BY id`;
     const total = rows.length;
+    // State of the index, so "0 to do" is self-explaining in the admin alert.
+    const stats = (await db`
+      SELECT COUNT(*) FILTER (WHERE objects_present IS NOT NULL AND cardinality(objects_present) > 0)::int AS populated,
+             COUNT(*) FILTER (WHERE objects_present IS NULL OR cardinality(objects_present) = 0)::int AS empty
+      FROM taxonomy WHERE COALESCE(archived, FALSE) = FALSE`)[0];
     const slice = rows.slice(offset, offset + BUDGET);
 
     const results = await mapPool(slice, 6, async (t) => {
@@ -93,6 +103,7 @@ export default async function handler(req, res) {
     res.status(200).json({
       ok: true, done: nextOffset >= total, nextOffset, total, indexed, failed,
       method: apiKey ? 'ai' : 'mechanical',
+      populated: stats.populated, empty: stats.empty,
     });
   } catch (err) {
     res.status(500).json({ error: 'index-objects failed', detail: String(err.message || err) });
