@@ -294,23 +294,27 @@ struct ParentSettingsView: View {
                         Text("Loading…").foregroundStyle(.secondary)
                     }
                 }
-                Section("Board") {
-                    Button {
-                        Task {
-                            squaring = true; defer { squaring = false }
-                            do {
-                                let r = try await api.squareAllTiles(childId: auth.childSlug)
-                                squareMsg = "Squared \(r.squared) tile\(r.squared == 1 ? "" : "s")."
-                                    + (r.posters > 0 ? " Kept \(r.posters) poster\(r.posters == 1 ? "" : "s")." : "")
-                            } catch { squareMsg = "Couldn't update: \(error.localizedDescription)" }
+                // Admin-only rescue for older boards with stray aspect flags —
+                // new boards are always square, so parents never need this.
+                if auth.user?.role == "admin" {
+                    Section("Board (admin)") {
+                        Button {
+                            Task {
+                                squaring = true; defer { squaring = false }
+                                do {
+                                    let r = try await api.squareAllTiles(childId: auth.childSlug)
+                                    squareMsg = "Squared \(r.squared) tile\(r.squared == 1 ? "" : "s")."
+                                        + (r.posters > 0 ? " Kept \(r.posters) poster\(r.posters == 1 ? "" : "s")." : "")
+                                } catch { squareMsg = "Couldn't update: \(error.localizedDescription)" }
+                            }
+                        } label: {
+                            Label(squaring ? "Making tiles square…" : "Make all tiles square", systemImage: "square.dashed")
                         }
-                    } label: {
-                        Label(squaring ? "Making tiles square…" : "Make all tiles square", systemImage: "square.dashed")
+                        .disabled(squaring)
+                        Text("Crops every tile to a square. Tiles in a folder named TV / Movies / Shows keep their poster shape.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        if let squareMsg { Text(squareMsg).font(.footnote).foregroundStyle(.secondary) }
                     }
-                    .disabled(squaring)
-                    Text("Crops every tile to a square. Tiles in a folder named TV / Movies / Shows keep their poster shape.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    if let squareMsg { Text(squareMsg).font(.footnote).foregroundStyle(.secondary) }
                 }
                 Section("This device") {
                     Button {

@@ -34,14 +34,23 @@ export default async function handler(req, res) {
       FROM image_generations`;
     out.overall = { count: o[0].count, costCents: o[0].cost, monthCount: o[0].mcount, monthCostCents: o[0].mcost };
 
+    // Attribution: the acting account when known, else the BOARD OWNER's
+    // account (cron-run seed jobs and admin rescues have no signed-in actor —
+    // the spend still belongs to the family whose board it built).
     const pa = await db`
-      SELECT coalesce(actor_email, '(token)') AS account, count(*)::int AS count, coalesce(sum(cost_cents), 0)::float AS cost
-      FROM image_generations GROUP BY 1 ORDER BY cost DESC`;
+      SELECT coalesce(g.actor_email, u.email, '(token)') AS account,
+             count(*)::int AS count, coalesce(sum(g.cost_cents), 0)::float AS cost
+      FROM image_generations g
+      LEFT JOIN users u ON u.child_slug = g.child_id
+      GROUP BY 1 ORDER BY cost DESC`;
     out.perAccount = pa.map((r) => ({ account: r.account, count: r.count, costCents: r.cost }));
 
     const rec = await db`
-      SELECT id, child_id, actor_email, label, style, prompt, reference_keys, input_tokens, output_tokens, cost_cents, created_at
-      FROM image_generations ORDER BY created_at DESC LIMIT 100`;
+      SELECT g.id, g.child_id, coalesce(g.actor_email, u.email) AS actor_email, g.label, g.style, g.prompt,
+             g.reference_keys, g.input_tokens, g.output_tokens, g.cost_cents, g.created_at
+      FROM image_generations g
+      LEFT JOIN users u ON u.child_slug = g.child_id
+      ORDER BY g.created_at DESC LIMIT 100`;
     out.recent = rec.map((r) => ({
       id: Number(r.id),
       childId: r.child_id,

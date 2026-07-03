@@ -222,16 +222,20 @@ export function makeSeedContext(db) {
   const cache = new Map();
   return async function ctx(childId) {
     if (cache.has(childId)) return cache.get(childId);
-    const [styleGuideId, settingsRows, childAnchor, voiceId] = await Promise.all([
+    const [styleGuideId, settingsRows, childAnchor, voiceId, ownerRows] = await Promise.all([
       loadChildStyleGuideId(db, childId),
       db`SELECT master_prompt, size_default FROM lab_settings WHERE id = 1`,
       loadChildAnchor(db, childId),
       loadChildVoiceId(db, childId),
+      // Cron-run renders have no signed-in actor; attribute the spend to the
+      // board's parent account so the usage report never shows "(token)".
+      db`SELECT email FROM users WHERE child_slug = ${childId} LIMIT 1`,
     ]);
     let styleGuide = null;
     try { styleGuide = await loadStyleGuide(db, styleGuideId); } catch (_) { styleGuide = null; }
     const out = {
       styleGuide, childAnchor, voiceId,
+      ownerEmail: (ownerRows[0] && ownerRows[0].email) || null,
       settings: settingsRows[0] || { master_prompt: '', size_default: '1024x1024' },
     };
     cache.set(childId, out);
@@ -287,7 +291,7 @@ export async function processSeedJob(db, job, getCtx) {
         try {
           await db`INSERT INTO image_generations
                      (child_id, actor_email, actor_role, label, style, prompt, size, cost_cents)
-                   VALUES (${job.child_id}, NULL, 'onboarding_seed', ${tax.label},
+                   VALUES (${job.child_id}, ${c.ownerEmail}, 'onboarding_seed', ${tax.label},
                       ${c.styleGuide ? c.styleGuide.label : 'default'}, ${r.prompt}, '1024x1024', ${r.costCents ?? 4})`;
         } catch (_) {}
       }

@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import UIKit
 
 /// Two separate charts on this screen:
 ///   • Overall pass rate per category (the headline trend)
@@ -23,10 +24,14 @@ struct AccuracyView: View {
                 } else if let e = errorText {
                     Text(e).font(.footnote).foregroundStyle(.red)
                 } else {
-                    ProgressView("Loading…").padding(.top, 60)
+                    ProgressView("Loading game data…").padding(.top, 60)
                 }
             }
             .padding(16)
+            // Full-height from the FIRST frame: without this the page mounts as
+            // a thin strip sized to the spinner and visibly expands when the
+            // charts arrive — the "middle-fourth pop" glitch.
+            .frame(maxWidth: .infinity, minHeight: UIScreen.main.bounds.height * 0.8, alignment: .top)
         }
         .background(Color(hex: Brand.bg))
         .navigationTitle("Game accuracy")

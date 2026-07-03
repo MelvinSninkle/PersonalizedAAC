@@ -6,6 +6,10 @@ import SwiftUI
 struct RolePickerView: View {
     @Environment(DeviceMode.self) private var mode
     @Environment(AuthManager.self) private var auth
+    /// The tapped role while the destination view spins up — the first load
+    /// pulls the whole board over the network, which can take several seconds
+    /// with NOTHING on screen unless we say so here.
+    @State private var opening: DeviceMode.Role?
 
     var body: some View {
         VStack(spacing: 28) {
@@ -38,10 +42,21 @@ struct RolePickerView: View {
             .frame(maxWidth: 560)
 
             Spacer()
-            Text("You can change this any time in Settings.")
-                .font(.footnote)
-                .foregroundStyle(Color(hex: "#9ca3af"))
+            if opening != nil {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text(opening == .childBoard ? "Opening the board — loading pictures & voices…"
+                                                : "Opening the parent app…")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#ad1457"))
+                }
                 .padding(.bottom, 24)
+            } else {
+                Text("You can change this any time in Settings.")
+                    .font(.footnote)
+                    .foregroundStyle(Color(hex: "#9ca3af"))
+                    .padding(.bottom, 24)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(hex: "#fff7fb"))
@@ -49,7 +64,14 @@ struct RolePickerView: View {
 
     private func roleButton(icon: String, title: String, subtitle: String, role: DeviceMode.Role) -> some View {
         Button {
-            mode.role = role
+            guard opening == nil else { return }
+            opening = role
+            // Let SwiftUI paint the spinner frame BEFORE the heavy destination
+            // swap starts, so the tap visibly did something immediately.
+            Task { @MainActor in
+                await Task.yield()
+                mode.role = role
+            }
         } label: {
             HStack(spacing: 14) {
                 Image(systemName: icon)
@@ -70,9 +92,13 @@ struct RolePickerView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#c9b3bf"))
+                if opening == role {
+                    ProgressView()
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#c9b3bf"))
+                }
             }
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)

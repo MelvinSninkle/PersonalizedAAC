@@ -20,6 +20,8 @@ struct BoardView: View {
     @Environment(Scheduler.self) private var scheduler
     @Environment(AddTileQueue.self) private var addQueue
     @Environment(AutoTeachRunner.self) private var autoTeach
+    @Environment(\.horizontalSizeClass) private var hSize
+    @Environment(\.verticalSizeClass) private var vSize
 
     @State private var showSettings = false
     @State private var showDisplay  = false
@@ -55,6 +57,22 @@ struct BoardView: View {
                       showSettings: $showSettings,
                       listening: $listening,
                       speech: speech)
+
+            // Edit mode on a PORTRAIT PHONE squishes the toolbar buttons into
+            // unreadable stubs — tell the parent the easy fix instead of
+            // letting them squint. (Portrait phone = compact width + regular
+            // height; rotating to landscape clears the hint automatically.)
+            if editMode && hSize == .compact && vSize == .regular {
+                HStack(spacing: 8) {
+                    Text("🔄")
+                    Text("Turn the phone sideways for the full editing toolbar")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                }
+                .foregroundStyle(Color(hex: "#9d2463"))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Color(hex: "#fce4ec"))
+            }
 
             GeometryReader { geo in
                 // One uniform tile size for the WHOLE board — columns and the
