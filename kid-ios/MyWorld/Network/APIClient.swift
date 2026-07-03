@@ -351,7 +351,7 @@ struct APIClient {
     func createTileJob(photoJPEG: Data, label: String, detail: String, section: String,
                        categoryId: Int?, style: String, styleGuideId: Int?, model: String,
                        bg: String, keepAspect: Bool, needsReview: Bool, emotion: String,
-                       childId: String, relationship: String? = nil) async throws -> Int {
+                       childId: String, relationship: String? = nil, raw: Bool = false) async throws -> Int {
         var path = "/api/tile-jobs?childId=\(percentEscape(childId))&section=\(percentEscape(section))"
             + "&style=\(percentEscape(style))&model=\(percentEscape(model))&bg=\(percentEscape(bg))"
             + "&emotion=\(percentEscape(emotion))"
@@ -362,6 +362,7 @@ struct APIClient {
         if let relationship, !relationship.isEmpty { path += "&relationship=\(percentEscape(relationship))" }
         if keepAspect  { path += "&keepAspect=1" }
         if needsReview { path += "&needsReview=1" }
+        if raw         { path += "&raw=1" }        // photo-as-is: no restyle, no charge
         let (data, _) = try await request(method: "POST", path: path,
                                           body: photoJPEG, contentType: "image/jpeg", timeout: 60)
         return (try JSONDecoder().decode(TileJobCreated.self, from: data)).id
@@ -446,7 +447,7 @@ struct APIClient {
     }
 
     /// Read the full child_settings blob (empty dict on any failure).
-    private func childSettings(childId: String) async -> [String: Any] {
+    func childSettings(childId: String) async -> [String: Any] {
         guard let (data, _) = try? await request(
                 method: "GET",
                 path: "/api/child-settings?childId=\(percentEscape(childId))",
@@ -591,8 +592,9 @@ struct APIClient {
     }
 
     struct StoreCheckoutResult: Decodable { let ok: Bool; let charged: Int; let queued: Int; let balance: Int?; let note: String? }
-    func storeCheckout(childId: String, taxonomyIds: [String]) async throws -> StoreCheckoutResult {
-        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "taxonomyIds": taxonomyIds])
+    func storeCheckout(childId: String, taxonomyIds: [String], bundle: Bool = false) async throws -> StoreCheckoutResult {
+        // bundle=true (a whole folder at once) earns the server's 20% discount.
+        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "taxonomyIds": taxonomyIds, "bundle": bundle])
         let (data, _) = try await request(method: "POST", path: "/api/store?action=checkout",
                                           body: body, contentType: "application/json", timeout: 120)
         return try JSONDecoder().decode(StoreCheckoutResult.self, from: data)
@@ -601,8 +603,37 @@ struct APIClient {
     struct StoreRetryResult: Decodable { let ok: Bool; let charged: Int; let freeRetry: Bool?; let balance: Int? }
     /// Re-draw a tile's picture in the child's style. First retry per tile is
     /// free; after that it costs one credit (server-enforced).
-    func storeRetry(childId: String, itemId: Int) async throws -> StoreRetryResult {
-        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "itemId": itemId])
+    struct FreeBoardResult: Decodable { let ok: Bool; let placed: Int?; let removed: Int?; let note: String? }
+    func storeFreeBoard(childId: String, column: String, category: String, on: Bool) async throws -> FreeBoardResult {
+        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "column": column, "category": category, "on": on])
+        let (data, _) = try await request(method: "POST", path: "/api/store?action=free-board",
+                                          body: body, contentType: "application/json")
+        return try JSONDecoder().decode(FreeBoardResult.self, from: data)
+    }
+
+    struct PersonalizeAllResult: Decodable {
+        let ok: Bool
+        let remaining: Int?
+        let total: Int?
+        let cost: Int?
+        let charged: Int?
+        let queued: Int?
+        let balance: Int?
+        let note: String?
+    }
+    func storePersonalizeAll(childId: String, quote: Bool) async throws -> PersonalizeAllResult {
+        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "quote": quote])
+        let (data, _) = try await request(method: "POST", path: "/api/store?action=personalize-all",
+                                          body: body, contentType: "application/json")
+        return try JSONDecoder().decode(PersonalizeAllResult.self, from: data)
+    }
+
+    func storeRetry(childId: String, itemId: Int, guidance: String = "") async throws -> StoreRetryResult {
+        // guidance = the parent's correction; the server attaches the current
+        // image as the previous attempt so the model improves, not re-rolls.
+        var payload: [String: Any] = ["childId": childId, "itemId": itemId]
+        if !guidance.isEmpty { payload["guidance"] = guidance }
+        let body = try JSONSerialization.data(withJSONObject: payload)
         let (data, _) = try await request(method: "POST", path: "/api/store?action=retry",
                                           body: body, contentType: "application/json")
         return try JSONDecoder().decode(StoreRetryResult.self, from: data)

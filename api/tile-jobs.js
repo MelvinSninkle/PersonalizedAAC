@@ -75,18 +75,21 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
 
   // Credits: a photo-to-tile render is one nano-banana image = 1 credit.
-  // A PERSON runs the keystone-portrait pipeline (best likeness model) = 3,
-  // same price as the web family flow. Charged at enqueue; admins exempt.
+  // A PERSON runs the keystone-portrait pipeline (best likeness model) =
+  // COST.person, same as the web family flow. Charged at enqueue; admins exempt.
   {
     const isPerson = String(qs(req, 'section') || '').toLowerCase() === 'people';
-    const credits = isPerson ? COST.person : COST.nano;
+    const isRaw = qbool(req, 'raw');
+    const credits = isRaw ? 0 : (isPerson ? COST.person : COST.nano);
+    if (credits > 0) {
     const charge = await chargeForGeneration(db, auth.user, { credits, reason: isPerson ? 'tile:person' : 'tile:photo', ref: childId });
     if (!charge.ok) {
       res.status(402).json({ error: 'not_enough_credits', needed: credits, balance: charge.balance,
                              detail: isPerson
-                               ? 'A family-member portrait uses 3 credits (it runs on our best likeness model). Add credits in the store and try again.'
+                               ? 'A family-member portrait uses 5 credits (it runs on our best likeness model). Add credits in the store and try again.'
                                : 'Making a tile from a photo uses 1 credit. Add credits in the store and try again.' });
       return;
+    }
     }
   }
 
@@ -115,7 +118,7 @@ export default async function handler(req, res) {
     const rows = await db`
       INSERT INTO tile_jobs
         (child_id, actor_email, status, source_key, source_content_type, label, detail, section,
-         category_id, style, style_guide_id, model, bg, keep_aspect, needs_review, emotion, relationship)
+         category_id, style, style_guide_id, model, bg, keep_aspect, needs_review, emotion, relationship, raw)
       VALUES
         (${childId}, ${auth.user.email || null}, 'queued', ${sourceKey}, ${contentType},
          ${qs(req, 'label').slice(0, 80) || null}, ${qs(req, 'detail').slice(0, 200) || null},
@@ -123,7 +126,7 @@ export default async function handler(req, res) {
          ${qs(req, 'style').slice(0, 80) || null}, ${qint(req, 'styleGuideId')},
          ${qs(req, 'model').slice(0, 60) || null}, ${qs(req, 'bg').slice(0, 16) || null},
          ${qbool(req, 'keepAspect')}, ${qbool(req, 'needsReview')}, ${qs(req, 'emotion') || 'default'},
-         ${qs(req, 'relationship').slice(0, 40) || null})
+         ${qs(req, 'relationship').slice(0, 40) || null}, ${qbool(req, 'raw')})
       RETURNING id`;
     id = Number(rows[0].id);
   } catch (err) {

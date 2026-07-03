@@ -12,7 +12,7 @@
 import { checkAuth } from '../_lib/auth.js';
 import { canAccessChild } from '../_lib/access.js';
 import { sql } from '../_lib/db.js';
-import { loadSettings, CADENCE, TIER_CAPS, inBlackout, recentlyActive,
+import { loadSettings, scheduleReady, CADENCE, TIER_CAPS, inBlackout, recentlyActive,
          lastTriggerAt, todaysBudgetUsed, masteryByCategory } from '../_lib/auto-teach.js';
 
 export default async function handler(req, res) {
@@ -33,7 +33,8 @@ export default async function handler(req, res) {
     const schedule = (csRow && csRow.settings && csRow.settings.schedule) || {};
 
     const now = new Date();
-    const blackout = inBlackout(schedule, now);
+    const blackout = inBlackout(schedule, now, settings.tz);
+    const schedReady = scheduleReady(schedule);
     const cadence = CADENCE[settings.cadence] || CADENCE.conservative;
     const tier = TIER_CAPS[settings.tier] || TIER_CAPS.under3;
 
@@ -56,6 +57,7 @@ export default async function handler(req, res) {
       tier: { sessionMaxMin: tier.sessionMaxMin, microSec: tier.microSec },
       gates: {
         enabled: !!settings.enabled,
+        scheduleReady: schedReady,
         inBlackout: blackout,
         recentlyActive: recent,
         cooldownLeftMin,
@@ -63,6 +65,7 @@ export default async function handler(req, res) {
         budgetCapMin,
         budgetExhausted,
       },
+      schedule,                       // quiet-hours blob for the parent editor
       mastery,
       now: now.toISOString(),
     });

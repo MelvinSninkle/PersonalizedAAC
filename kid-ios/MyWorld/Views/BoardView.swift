@@ -110,6 +110,7 @@ struct BoardView: View {
         .background(Color(hex: "#fff7fb"))
         .overlay { emptyBoardOverlay }
         .overlay(alignment: .top) { scheduledPromptOverlay }
+        .overlay(alignment: .top) { autoTeachOverlay }
         .overlay(alignment: .bottom) { reviewBanner }
         .overlay(alignment: .bottomLeading) { seedProgressPill }
         .fullScreenCover(isPresented: Binding(
@@ -212,7 +213,15 @@ struct BoardView: View {
         }
         // Pause the scheduler tick while a game / unlock / settings sheet is up
         // so a fired schedule doesn't try to stack a second sheet on top.
-        .onChange(of: game.current) { _, c in scheduler.isBlocked = (c != nil) || showSettings || showDisplay }
+        .onChange(of: game.current) { _, c in
+            scheduler.isBlocked = (c != nil) || showSettings || showDisplay
+            // A REMOTELY-ended game (parent's "End the activity") clears
+            // game.current without the cover's onExit ever running — which left
+            // the heartbeat re-publishing "running" + the dead session's payload
+            // forever, so the facilitator overlay resurrected it on every parent
+            // app launch. Any transition to no-game must publish standby.
+            if c == nil { live.setStandby() }
+        }
         .onChange(of: showSettings) { _, on in scheduler.isBlocked = on || showDisplay || (game.current != nil) }
         .onChange(of: showDisplay)  { _, on in scheduler.isBlocked = on || showSettings || (game.current != nil) }
     }
@@ -253,6 +262,31 @@ struct BoardView: View {
                     onDismiss: { scheduler.acknowledge() }
                 )
             }
+        }
+    }
+
+    /// Auto-teach staged an activity: friendly countdown card, then the
+    /// slideshow/game takes the screen. A grown-up can ✕ to skip this round.
+    @ViewBuilder
+    private var autoTeachOverlay: some View {
+        if let s = autoTeach.staged, game.current == nil, scheduler.pending == nil, !editMode, !listening {
+            AutoTeachCountdownCard(mode: s.mode) {
+                let session = GameController.Session(
+                    mode: s.mode == "game" ? .matching
+                                           : .slideshow(firstPerson: s.labelStyle == "first_person"),
+                    scope: "slugs:" + s.slugs.joined(separator: ","),
+                    choices: s.mode == "game" ? 3 : nil,
+                    from: nil, to: nil, sample: nil,
+                    limitMin: s.mode == "game" ? s.sessionMaxMin : nil,
+                    secondsPerImage: s.secondsPerImage,
+                    music: nil
+                )
+                game.startStaged(session)
+                autoTeach.consumeStaged(fired: true)
+            } onSkip: {
+                autoTeach.consumeStaged(fired: false)
+            }
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 

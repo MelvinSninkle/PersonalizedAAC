@@ -11,8 +11,8 @@
 import { checkAuth } from '../_lib/auth.js';
 import { canAccessChild } from '../_lib/access.js';
 import { sql } from '../_lib/db.js';
-import { loadSettings, CADENCE, TIER_CAPS, inBlackout, recentlyActive,
-         lastTriggerAt, todaysBudgetUsed, pickNextBatch } from '../_lib/auto-teach.js';
+import { loadSettings, saveTimezone, localParts, scheduleReady, CADENCE, TIER_CAPS,
+         inBlackout, recentlyActive, lastTriggerAt, todaysBudgetUsed, pickNextBatch } from '../_lib/auto-teach.js';
 
 const VALID_MODES = new Set(['exposure', 'game']);
 
@@ -29,7 +29,11 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
+    // The iPad reports its IANA timezone with every poll — persist it so all
+    // wall-clock gates below run in FAMILY time, not the server's UTC.
+    if (b.tz) await saveTimezone(db, childId, String(b.tz).slice(0, 64));
     const settings = await loadSettings(db, childId);
+    const tz = (typeof b.tz === 'string' && b.tz) || settings.tz || null;
     if (!settings.enabled) {
       res.status(200).json({ ok: false, reason: 'disabled' }); return;
     }
@@ -37,8 +41,11 @@ export default async function handler(req, res) {
     // All gates. Any closed gate → refusal with a reason the iPad can log.
     const csRow = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
     const schedule = (csRow && csRow.settings && csRow.settings.schedule) || {};
+    // Never run without knowing when NOT to: sleep + school/therapy windows
+    // (or an explicit "no outside care") are required before anything fires.
+    if (!scheduleReady(schedule)) { res.status(200).json({ ok: false, reason: 'needs_schedule' }); return; }
     const now = new Date();
-    if (inBlackout(schedule, now))         { res.status(200).json({ ok: false, reason: 'blackout' }); return; }
+    if (inBlackout(schedule, now, tz))     { res.status(200).json({ ok: false, reason: 'blackout' }); return; }
     if (await recentlyActive(db, childId)) { res.status(200).json({ ok: false, reason: 'recently_active' }); return; }
 
     const last = await lastTriggerAt(db, childId);
@@ -56,11 +63,12 @@ export default async function handler(req, res) {
       res.status(200).json({ ok: false, reason: 'budget_exhausted', budgetUsedMin, budgetCapMin }); return;
     }
     // Game-mode minimum spacing: only run a game session once per day, at the
-    // parent's chosen time (±15 min).
+    // parent's chosen time (±15 min) — in the family's timezone.
     if (mode === 'game') {
       const [hh, mm] = String(settings.dailyGameAt || '15:30').split(':').map(Number);
-      const target = new Date(now); target.setHours(hh || 0, mm || 0, 0, 0);
-      if (Math.abs(now.getTime() - target.getTime()) > 15 * 60 * 1000) {
+      const targetMin = (hh || 0) * 60 + (mm || 0);
+      const { minutes: nowMin } = localParts(now, tz);
+      if (Math.abs(nowMin - targetMin) > 15) {
         res.status(200).json({ ok: false, reason: 'not_game_window' }); return;
       }
       const gameToday = await db`

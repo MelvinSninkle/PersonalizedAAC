@@ -15,12 +15,36 @@ struct AutoTeachView: View {
     @State private var dailyGameDate = Date()
     @State private var saving = false
     @State private var errorText: String?
+    @State private var needsQuietHoursAlert = false
+
+    // Quiet hours (settings.schedule) — auto-teach may not be enabled until
+    // sleep + school/therapy windows are entered (or explicitly n/a).
+    struct CareWindow: Identifiable, Equatable {
+        let id = UUID()
+        var type: String = "school"          // school | therapy
+        var days: Set<Int> = [1, 2, 3, 4, 5] // 0=Sun … 6=Sat
+        var start = "09:00"
+        var end = "15:00"
+    }
+    @State private var wake = "07:00"
+    @State private var bedtime = "19:30"
+    @State private var care: [CareWindow] = []
+    @State private var noOutsideCare = false
+    @State private var quietLoaded = false
+
+    /// Mirrors the server's scheduleReady() so the enable toggle can gate
+    /// locally without a round trip.
+    private var quietHoursReady: Bool {
+        !wake.isEmpty && !bedtime.isEmpty
+            && (noOutsideCare || care.contains { !$0.days.isEmpty })
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
                 if let e = errorText { Text(e).font(.footnote).foregroundStyle(.red) }
                 settingsCard
+                quietHoursCard
                 gatesCard
                 masteryCard
                 helpFootnote
@@ -31,6 +55,11 @@ struct AutoTeachView: View {
         .navigationTitle("Auto-teach")
         .navigationBarTitleDisplayMode(.inline)
         .task { await reload() }
+        .alert("Quiet hours first", isPresented: $needsQuietHoursAlert) {
+            Button("OK") {}
+        } message: {
+            Text("Before auto-teach can run, tell it when NOT to: set sleep times and add the school/therapy windows below (or confirm there are none). It will never fire inside those.")
+        }
     }
 
     // MARK: -- Settings
@@ -43,12 +72,23 @@ struct AutoTeachView: View {
 
             Toggle(isOn: Binding(
                 get: { settings.enabled },
-                set: { settings.enabled = $0; Task { await save() } }
+                set: { on in
+                    // HARD GATE: no quiet hours → no auto-teach. The alert
+                    // explains what to fill in below.
+                    if on && !quietHoursReady { needsQuietHoursAlert = true; return }
+                    settings.enabled = on
+                    Task { await save() }
+                }
             )) {
                 Text("Run learning automatically")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
             }
             .tint(Color(hex: Brand.pink))
+            if !quietHoursReady {
+                Text("Set sleep times and school/therapy windows below to unlock.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: Brand.muted))
+            }
 
             row("Cadence",
                 value: AnyView(Picker("", selection: Binding(
@@ -98,6 +138,108 @@ struct AutoTeachView: View {
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: Brand.line), lineWidth: 1))
     }
 
+    // MARK: -- Quiet hours (required before enabling)
+
+    private var quietHoursCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Quiet hours — when NOT to run")
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: Brand.pinkDeep))
+            Text("Auto-teach never fires while your child is asleep, at school, or in therapy. Required before it can be turned on.")
+                .font(.system(size: 12))
+                .foregroundStyle(Color(hex: Brand.muted))
+
+            row("Wake time", value: AnyView(timePicker($wake)))
+            row("Bedtime", value: AnyView(timePicker($bedtime)))
+
+            ForEach($care) { $w in
+                careWindowRow($w)
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    care.append(CareWindow(type: "school"))
+                } label: { addChip("＋ School window") }
+                Button {
+                    care.append(CareWindow(type: "therapy", days: [2], start: "13:00", end: "14:00"))
+                } label: { addChip("＋ Therapy window") }
+            }
+            .buttonStyle(.plain)
+
+            Toggle(isOn: Binding(
+                get: { noOutsideCare },
+                set: { noOutsideCare = $0; Task { await saveQuiet() } }
+            )) {
+                Text("No school or therapy right now")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .tint(Color(hex: Brand.pink))
+        }
+        .padding(14)
+        .background(Color(hex: Brand.card), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: Brand.line), lineWidth: 1))
+    }
+
+    private func careWindowRow(_ w: Binding<CareWindow>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(w.wrappedValue.type == "therapy" ? "🩺 Therapy" : "🏫 School")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(hex: Brand.ink))
+                Spacer()
+                timePicker(w.start)
+                Text("–").foregroundStyle(Color(hex: Brand.muted))
+                timePicker(w.end)
+                Button {
+                    care.removeAll { $0.id == w.wrappedValue.id }
+                    Task { await saveQuiet() }
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: Brand.muted))
+                }
+                .buttonStyle(.plain)
+            }
+            // Day-of-week chips (Sun…Sat).
+            HStack(spacing: 6) {
+                ForEach(0..<7, id: \.self) { d in
+                    let on = w.wrappedValue.days.contains(d)
+                    Button {
+                        if on { w.wrappedValue.days.remove(d) } else { w.wrappedValue.days.insert(d) }
+                        Task { await saveQuiet() }
+                    } label: {
+                        Text(["S", "M", "T", "W", "T", "F", "S"][d])
+                            .font(.system(size: 12, weight: .bold))
+                            .frame(width: 28, height: 28)
+                            .background(on ? Color(hex: Brand.pink) : Color(hex: "#fff7fb"), in: Circle())
+                            .foregroundStyle(on ? .white : Color(hex: Brand.muted))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(10)
+        .background(Color(hex: "#fff7fb"), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Compact HH:MM wheel bound to a "HH:MM" string; every change saves.
+    private func timePicker(_ text: Binding<String>) -> some View {
+        let f = DateFormatter(); f.dateFormat = "HH:mm"
+        return DatePicker("", selection: Binding(
+            get: { f.date(from: text.wrappedValue) ?? Date() },
+            set: { text.wrappedValue = f.string(from: $0); Task { await saveQuiet() } }
+        ), displayedComponents: .hourAndMinute)
+        .labelsHidden()
+    }
+
+    private func addChip(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: 13, weight: .bold))
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(Color(hex: "#fce4ef"), in: Capsule())
+            .foregroundStyle(Color(hex: Brand.pinkDeep))
+    }
+
     // MARK: -- Gates
 
     private var gatesCard: some View {
@@ -107,6 +249,9 @@ struct AutoTeachView: View {
                 .foregroundStyle(Color(hex: Brand.pinkDeep))
             if let g = state?.gates {
                 gateLine(ok: g.enabled, ok_text: "Auto-teach is on", ko_text: "Auto-teach is off")
+                gateLine(ok: g.scheduleReady ?? true,
+                         ok_text: "Quiet hours are set",
+                         ko_text: "Quiet hours missing — set them below")
                 gateLine(ok: !g.inBlackout, ok_text: "Currently a teachable window", ko_text: "Inside a blackout (sleep / school / meal)")
                 gateLine(ok: !g.recentlyActive, ok_text: "Child isn't actively tapping", ko_text: "Child is using the board — won't interrupt")
                 if g.cooldownLeftMin > 0 {
@@ -229,6 +374,38 @@ struct AutoTeachView: View {
         } catch {
             errorText = "Could not load: \(error.localizedDescription)"
         }
+        await loadQuiet()
+    }
+
+    /// Read the quiet-hours blob (settings.schedule) into the editor.
+    private func loadQuiet() async {
+        let cs = await api.childSettings(childId: auth.childSlug)
+        let sched = (cs["schedule"] as? [String: Any]) ?? [:]
+        if let w = sched["wake"] as? String, !w.isEmpty { wake = w }
+        if let b = sched["bedtime"] as? String, !b.isEmpty { bedtime = b }
+        noOutsideCare = (sched["noOutsideCare"] as? Bool) ?? false
+        let locs = (sched["locations"] as? [[String: Any]]) ?? []
+        care = locs.compactMap { l in
+            guard let t = l["type"] as? String, t == "school" || t == "therapy" else { return nil }
+            var w = CareWindow(type: t)
+            if let d = l["days"] as? [Int] { w.days = Set(d) }
+            else if let d = l["days"] as? [Any] { w.days = Set(d.compactMap { ($0 as? NSNumber)?.intValue }) }
+            if let st = l["start"] as? String { w.start = st }
+            if let en = l["end"] as? String { w.end = en }
+            return w
+        }
+        quietLoaded = true
+    }
+
+    /// Persist the editor state (merge-safe; other schedule keys survive).
+    private func saveQuiet() async {
+        guard quietLoaded else { return }
+        let windows: [[String: Any]] = care.map {
+            ["type": $0.type, "days": Array($0.days).sorted(), "start": $0.start, "end": $0.end]
+        }
+        await api.saveQuietHours(childId: auth.childSlug, wake: wake, bedtime: bedtime,
+                                 careWindows: windows, noOutsideCare: noOutsideCare)
+        if let s = try? await api.autoTeachState(childId: auth.childSlug) { state = s }
     }
 
     private func save() async {

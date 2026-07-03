@@ -36,10 +36,6 @@ struct AddTileView: View {
     // taxonomy overrides win). The chip below just explains + links out.
     @State private var showStyleChange = false
     @State private var magic: MagicCandidate?
-    /// Background-color preset for the generated tile. Defaults to pink to
-    /// match the board brand; the user picks a different one per batch when
-    /// they want some variety across categories.
-    @State private var bg: TileBackground = .pink
 
     init(defaultSection: BoardSection = .needs, defaultCategoryId: Int? = nil, onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -84,9 +80,9 @@ struct AddTileView: View {
                         PreGenerateSheet(
                             photoJPEG: pending.data,
                             destination: destinationName(),
-                            onGenerate: { name, detail in
+                            onGenerate: { name, detail, raw in
                                 pendingCapture = nil
-                                enqueue(pending.data, name: name, detail: detail)
+                                enqueue(pending.data, name: name, detail: detail, raw: raw)
                             },
                             onCancel: { pendingCapture = nil }
                         )
@@ -195,28 +191,6 @@ struct AddTileView: View {
                     } label: {
                         menuChip(icon: "paintpalette", text: "Board style ✓")
                     }
-                    Menu {
-                        ForEach(TileBackground.allCases) { c in
-                            Button {
-                                bg = c
-                            } label: {
-                                Label(c.label, systemImage: "circle.fill")
-                                    .foregroundStyle(Color(hex: c.hex))
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 5) {
-                            Circle()
-                                .fill(Color(hex: bg.hex))
-                                .frame(width: 14, height: 14)
-                                .overlay(Circle().stroke(Color(hex: "#ad1457").opacity(0.3), lineWidth: 1))
-                            Text(bg.label)
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Color(hex: "#ad1457"))
-                        }
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(Color(hex: "#fce4ec"), in: Capsule())
-                    }
                 }
             }
         }
@@ -318,14 +292,15 @@ struct AddTileView: View {
     /// `name`/`detail` come from the pre-gen review sheet: an empty name lets the
     /// AI auto-label; `detail` is the parent's optional "here's more info" hint
     /// passed to generation to steer the art.
-    private func enqueue(_ data: Data, name: String = "", detail: String = "") {
+    private func enqueue(_ data: Data, name: String = "", detail: String = "", raw: Bool = false) {
         queue.enqueue(photoJPEG: data,
                       section: section,
                       categoryId: categoryId,
                       style: .soft,
                       model: "",
-                      bg: bg.rawValue,
+                      bg: "",
                       emotion: "default",
+                      raw: raw,
                       prefilledLabel: name.trimmingCharacters(in: .whitespaces),
                       prefilledDetail: detail.trimmingCharacters(in: .whitespaces),
                       childId: auth.childSlug,
@@ -354,7 +329,7 @@ struct AddTileView: View {
                                categoryId: categoryId,
                                style: .soft,
                                model: "",
-                               bg: bg.rawValue,
+                               bg: "",
                                emotion: "default",
                                childId: auth.childSlug,
                                board: board)
@@ -533,11 +508,14 @@ struct PendingCapture: Identifiable {
 private struct PreGenerateSheet: View {
     let photoJPEG: Data
     let destination: String
-    let onGenerate: (_ name: String, _ detail: String) -> Void
+    let onGenerate: (_ name: String, _ detail: String, _ raw: Bool) -> Void
     let onCancel: () -> Void
 
     @State private var name = ""
     @State private var detail = ""
+    /// True = skip the AI restyle entirely and put the photo on the board
+    /// exactly as taken (free — no credit spent).
+    @State private var useAsIs = false
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -580,6 +558,18 @@ private struct PreGenerateSheet: View {
                         Text("A quick hint helps the art look right — who or what this is.")
                             .font(.system(size: 12))
                             .foregroundStyle(Color(hex: "#999"))
+
+                        Toggle(isOn: $useAsIs) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Use my photo as-is")
+                                    .font(.system(size: 15, weight: .semibold))
+                                Text("No restyle — the photo itself becomes the tile. Free.")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color(hex: "#999"))
+                            }
+                        }
+                        .tint(Color(hex: "#ff1493"))
+                        .padding(.top, 4)
                     }
                     .padding(16)
                 }
@@ -591,7 +581,7 @@ private struct PreGenerateSheet: View {
                     Button("Cancel") { onCancel() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Generate") { onGenerate(name, detail) }
+                    Button(useAsIs ? "Add photo" : "Generate") { onGenerate(name, detail, useAsIs) }
                         .font(.system(size: 16, weight: .bold))
                 }
             }

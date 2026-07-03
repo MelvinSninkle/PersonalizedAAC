@@ -64,10 +64,9 @@ struct Category: Codable, Identifiable, Hashable {
 /// (so it never trips on words that merely contain those letters) and on
 /// substrings for the unambiguous ones.
 func categoryNameIsPoster(_ label: String) -> Bool {
-    let l = label.lowercased()
-    if l.contains("movie") || l.contains("show") || l.contains("poster") || l.contains("cinema") {
-        return true
-    }
-    let words = l.split { !$0.isLetter }.map(String.init)
+    // THE one exception to the guillotine rule: a folder named "TV" (word
+    // match — "TV", "TV shows", "TVs") keeps its natural poster aspect.
+    // Every other folder center-crops square, no matter what it's called.
+    let words = label.lowercased().split { !$0.isLetter }.map(String.init)
     return words.contains("tv") || words.contains("tvs")
 }

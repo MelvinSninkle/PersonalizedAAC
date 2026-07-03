@@ -74,6 +74,11 @@ final class BoardStore {
             result = tiles
         } else if let sec = BoardSection(rawValue: s) {
             result = tiles.filter { $0.section == sec }
+        } else if s.hasPrefix("slugs:") {
+            // Auto-teach batches: an explicit list of taxonomy ids. Only tiles
+            // anchored to one of those skills play — NOT the whole board.
+            let wanted = Set(s.dropFirst(6).split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+            result = tiles.filter { t in t.taxonomySlug.map { wanted.contains($0) } ?? false }
         } else if s.hasPrefix("cat:"), let id = Int(s.dropFirst(4)) {
             var ids: Set<Int> = [id]
             var frontier = [id]

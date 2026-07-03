@@ -4,7 +4,7 @@
 // Game sessions tick internally inside /api/game-log (no separate roundtrip).
 //
 // Body: { childId, skillSlug, source?, sessionId? }
-//   source = 'slideshow' (default) | 'game' | 'free_use'
+//   source = 'slideshow' (default) | 'game' | 'free_use' | 'auto_slideshow' | 'auto_game'
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
 import { tickExposure } from './_lib/exposure.js';
@@ -19,7 +19,11 @@ export default async function handler(req, res) {
   const childId = typeof b.childId === 'string' && b.childId ? b.childId.slice(0, 64) : 'fletcherpeterson';
   const skillSlug = typeof b.skillSlug === 'string' && b.skillSlug ? b.skillSlug.slice(0, 200) : null;
   if (!skillSlug) { res.status(400).json({ error: 'skillSlug required' }); return; }
-  const source = (b.source === 'game' || b.source === 'free_use') ? b.source : 'slideshow';
+  // auto_* sources arm the auto-teach gates (cooldown, daily budget, one-game-
+  // per-day) — coercing them to 'slideshow' silently disabled all three, so
+  // auto-teach could never see its own activity.
+  const ALLOWED_SOURCES = new Set(['game', 'free_use', 'slideshow', 'auto_slideshow', 'auto_game']);
+  const source = ALLOWED_SOURCES.has(b.source) ? b.source : 'slideshow';
   const sessionId = Number.isFinite(b.sessionId) ? Math.trunc(b.sessionId) : null;
 
   try {

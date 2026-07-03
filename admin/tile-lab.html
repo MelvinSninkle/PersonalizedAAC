@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add-Tile Lab — photo → tile pipeline</title>
+<style>
+  * { box-sizing: border-box; }
+  :root { --pink:#ff1493; --pink-deep:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#fce4ec; --bg:#fdf2f8; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  header { background:#fff; border-bottom:1px solid var(--line); padding:14px 20px; }
+  header h1 { margin:0; font-size:18px; color:var(--pink-deep); }
+  header p { margin:4px 0 0; font-size:13px; color:var(--muted); }
+  .wrap { max-width:1100px; margin:0 auto; padding:20px; display:grid; grid-template-columns:360px 1fr; gap:20px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; }
+  label { display:block; font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:14px 0 6px; }
+  label:first-child { margin-top:0; }
+  select, input[type=text], textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; }
+  textarea { min-height:70px; resize:vertical; }
+  .btn { border:none; cursor:pointer; font:inherit; font-weight:700; border-radius:999px; padding:12px 18px; background:var(--pink); color:#fff; font-size:15px; }
+  .btn:hover { background:var(--pink-deep); } .btn:disabled { opacity:.5; cursor:default; }
+  .btn.ghost { background:#fff0f6; color:var(--pink-deep); }
+  .thumb { width:100%; aspect-ratio:1; border:2px solid var(--line); border-radius:12px; background:#fff7fb center/contain no-repeat; display:grid; place-items:center; color:var(--muted); font-size:13px; overflow:hidden; }
+  .thumb img { width:100%; height:100%; object-fit:contain; }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .msg { font-size:13px; color:var(--muted); margin-top:10px; min-height:18px; }
+  .msg.err { color:#dc2626; }
+  pre { white-space:pre-wrap; font-size:12px; background:#fff7fb; border:1px solid var(--line); border-radius:10px; padding:12px; color:#374151; max-height:300px; overflow:auto; }
+  .pill { display:inline-block; font-size:12px; font-weight:700; padding:2px 10px; border-radius:999px; }
+  .pill.ok { background:#dcfce7; color:#166534; } .pill.no { background:#fee2e2; color:#991b1b; }
+  .check { display:flex; align-items:center; gap:8px; font-size:14px; margin-top:10px; }
+  .check input { width:auto; }
+  .seg { display:flex; gap:0; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
+  .seg button { flex:1; border:none; background:#fff; padding:9px 0; font:inherit; font-weight:600; cursor:pointer; color:var(--muted); }
+  .seg button.on { background:var(--pink); color:#fff; }
+  #error { display:none; margin-top:10px; font-size:12px; color:#991b1b; background:#fee2e2; border:1px solid #fecaca; border-radius:10px; padding:10px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧩 Add-Tile Lab</h1>
+  <p>Bench for the add-a-photo tile pipeline — the exact renderStyledPhoto the iPad runs (style guide attached, people → keystone portrait, things → nano). Retries send the RESULT + your correction, mirroring the board. Admin only.</p>
+</header>
+<div class="wrap">
+  <!-- Controls -->
+  <div class="card">
+    <label>Photo</label>
+    <input type="file" id="photo" accept="image/*">
+    <div class="thumb" id="photo-thumb" style="margin-top:8px;">Pick a photo</div>
+
+    <label>Subject type</label>
+    <div class="seg">
+      <button id="seg-thing" class="on">Thing (nano)</button>
+      <button id="seg-person">Person (keystone)</button>
+    </div>
+
+    <div class="row2">
+      <div>
+        <label>Name / label</label>
+        <input type="text" id="label" placeholder="e.g. train">
+      </div>
+      <div>
+        <label>Hint (optional)</label>
+        <input type="text" id="detail" placeholder="e.g. the red cup">
+      </div>
+    </div>
+
+    <label>Style guide</label>
+    <select id="style-select"><option value="">Loading…</option></select>
+    <div class="check"><input type="checkbox" id="no-style"><span>No style matching (raw restyle, no style-guide image)</span></div>
+    <div class="thumb" id="style-thumb" style="margin-top:8px;height:120px;aspect-ratio:auto;">Style preview</div>
+
+    <div style="margin-top:16px;display:flex;gap:10px;">
+      <button class="btn" id="gen">Generate</button>
+    </div>
+
+    <label style="margin-top:18px;">Retry — what should be different? <span style="text-transform:none;font-weight:500;">(required for a retry)</span></label>
+    <textarea id="guidance" placeholder='e.g. "make the cup red like ours" or "remove the extra wheel"'></textarea>
+    <div style="margin-top:8px;">
+      <button class="btn ghost" id="retry" disabled>↻ Retry from result</button>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div id="error"></div>
+  </div>
+
+  <!-- Output -->
+  <div class="card">
+    <div class="row2">
+      <div>
+        <div class="thumb" id="style-out">Style ref</div>
+        <div class="msg" style="text-align:center;">Style reference</div>
+      </div>
+      <div>
+        <div class="thumb" id="result">Result appears here</div>
+        <div class="msg" id="result-cap" style="text-align:center;">Result</div>
+      </div>
+    </div>
+    <label>Prompt sent</label>
+    <pre id="prompt">—</pre>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let photoB64 = '';
+  let lastResultB64 = '';
+  let section = 'nouns';
+
+  async function api(path, body) {
+    const r = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    let d = null; try { d = await r.json(); } catch (_) {}
+    if (!r.ok) throw new Error((d && [d.error, d.detail].filter(Boolean).join(' — ')) || ('HTTP ' + r.status));
+    return d;
+  }
+  function msg(t, err) { const m = $('msg'); m.textContent = t || ''; m.className = 'msg' + (err ? ' err' : ''); }
+
+  $('seg-thing').addEventListener('click', () => { section = 'nouns'; $('seg-thing').classList.add('on'); $('seg-person').classList.remove('on'); });
+  $('seg-person').addEventListener('click', () => { section = 'people'; $('seg-person').classList.add('on'); $('seg-thing').classList.remove('on'); });
+
+  $('photo').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const bmp = await createImageBitmap(f);
+      const scale = Math.min(1, 1024 / Math.max(bmp.width, bmp.height));
+      const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(bmp, 0, 0, w, h); if (bmp.close) bmp.close();
+      const dataUrl = c.toDataURL('image/jpeg', 0.9);
+      photoB64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
+      $('photo-thumb').innerHTML = '<img src="' + dataUrl + '" alt="">';
+    } catch (err) { msg('Could not read photo: ' + err.message, true); }
+  });
+
+  (async () => {
+    try {
+      const r = await fetch('/api/admin/style-guides', { credentials: 'same-origin' }).then(x => x.json());
+      const guides = (r && r.styleGuides) || [];
+      $('style-select').innerHTML = '<option value="">— none —</option>' +
+        guides.map(g => '<option value="' + g.id + '">' + (g.label || ('#' + g.id)) + (g.active ? '' : ' (inactive)') + '</option>').join('');
+    } catch (_) { $('style-select').innerHTML = '<option value="">(could not load styles)</option>'; }
+  })();
+
+  function showStylePreview() {
+    const id = $('style-select').value;
+    $('style-thumb').innerHTML = (id && !$('no-style').checked)
+      ? '<img src="/api/onboarding/styles?image=' + encodeURIComponent(id) + '" alt="">'
+      : 'No style';
+  }
+  $('style-select').addEventListener('change', showStylePreview);
+  $('no-style').addEventListener('change', showStylePreview);
+
+  async function run(usePrior) {
+    if (!photoB64 && !usePrior) { msg('Pick a photo first.', true); return; }
+    const guidance = ($('guidance').value || '').trim();
+    // Mirror the board's rule: a retry MUST say what to change — a blind
+    // re-roll wastes the credit. (First generation needs no guidance.)
+    if (usePrior && !guidance) {
+      msg('Add text telling it what to change (or pick a different style to reference) — that\'s what makes the retry worth it.', true);
+      return;
+    }
+    $('gen').disabled = true; $('retry').disabled = true;
+    msg('Generating… ~15–40s');
+    $('error').style.display = 'none'; $('error').textContent = '';
+    $('result').innerHTML = '<div style="font-size:13px;color:#9ca3af;">Working…</div>';
+    $('style-out').innerHTML = ($('no-style').checked || !$('style-select').value)
+      ? 'No style'
+      : '<img src="/api/onboarding/styles?image=' + encodeURIComponent($('style-select').value) + '" alt="">';
+    try {
+      const d = await api('/api/admin/lab?action=tile-lab', {
+        photoB64,
+        priorB64: usePrior ? lastResultB64 : undefined,
+        photoType: 'image/jpeg',
+        label: ($('label').value || '').trim(),
+        detail: usePrior ? guidance : (($('detail').value || '').trim()),
+        section,
+        styleGuideId: $('no-style').checked ? undefined : ($('style-select').value || undefined),
+        noStyle: $('no-style').checked,
+      });
+      lastResultB64 = d.b64;
+      $('retry').disabled = false;
+      $('result').innerHTML = '<img src="data:image/png;base64,' + d.b64 + '" alt="">';
+      $('prompt').textContent = d.prompt || '—';
+      const pill = d.styleImageAttached ? '<span class="pill ok">style ATTACHED</span>' : '<span class="pill no">no style</span>';
+      $('result-cap').innerHTML = 'Result · ' + pill + (d.engine ? ' · ' + d.engine : '')
+        + (d.retriedFromPrior ? ' · <span class="pill ok">retry from prior</span>' : '');
+      msg('Done.' + (d.costCents != null ? ' (~' + d.costCents + '¢)' : ''));
+    } catch (err) {
+      $('result').innerHTML = '<div style="font-size:13px;color:#dc2626;">Failed</div>';
+      msg('Generation failed — see the error below.', true);
+      $('error').textContent = (err.message || String(err));
+      $('error').style.display = 'block';
+    } finally { $('gen').disabled = false; if (lastResultB64) $('retry').disabled = false; }
+  }
+  $('gen').addEventListener('click', () => run(false));
+  $('retry').addEventListener('click', () => run(true));
+</script>
+</body>
+</html>

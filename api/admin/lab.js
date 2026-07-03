@@ -29,6 +29,7 @@ import publishTile from './_lab-publish-tile.js';
 import seedDefaults from './_lab-seed-defaults.js';
 import settings from './_lab-settings.js';
 import uploadImage from './_lab-upload-image.js';
+import tileLab from './_lab-tile-lab.js';
 
 export const config = { maxDuration: 300 };
 
@@ -48,6 +49,7 @@ const HANDLERS = {
   'index-objects': indexObjects,
   'seed-defaults': seedDefaults,
   'settings': settings,
+  'tile-lab': tileLab,
   'upload-image': uploadImage,
 };
 

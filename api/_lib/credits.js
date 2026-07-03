@@ -2,7 +2,7 @@
 //
 // PRICING MODEL (per the product decision):
 //   · 1 credit  = one image generated with nano banana (Gemini Flash)
-//   · 3 credits = one family-member portrait (OpenAI keystone quality)
+//   · 5 credits = one family-member portrait (keystone quality + its retries)
 //   · list price 10¢/credit; bundles discount it; the $9.99/mo subscription
 //     grants 50 credits each period (packs stack on top)
 //   · every image gets ONE free retry (tracked per tile / per person)
@@ -25,17 +25,32 @@ import { randomBytes } from 'node:crypto';
 export const CREDIT_CENTS = 10;   // list price per credit
 
 export const PACKS = [
-  { sku: 'credits20',  credits: 20,  cents: 199,  label: 'Starter',  appleProductId: 'credits20'  },
-  { sku: 'credits60',  credits: 60,  cents: 499,  label: 'Family',   appleProductId: 'credits60'  },
-  { sku: 'credits150', credits: 150, cents: 999,  label: 'Super',    appleProductId: 'credits150' },
+  { sku: 'credits50',   credits: 50,   cents: 499,  label: 'Starter', appleProductId: 'credits50'   },
+  { sku: 'credits100',  credits: 100,  cents: 999,  label: 'Family',  appleProductId: 'credits100'  },
+  { sku: 'credits250',  credits: 250,  cents: 2499, label: 'Super',   appleProductId: 'credits250'  },
+  { sku: 'credits500',  credits: 500,  cents: 4999, label: 'Mega',    appleProductId: 'credits500'  },
+  { sku: 'credits1000', credits: 1000, cents: 9999, label: 'Ultra',   appleProductId: 'credits1000' },
 ];
+
+// Retired packs stay redeemable so purchases already in Apple's pipeline
+// still credit correctly. Never shown in any storefront.
+export const LEGACY_PACKS = [
+  { sku: 'credits20',  credits: 20  },
+  { sku: 'credits60',  credits: 60  },
+  { sku: 'credits150', credits: 150 },
+];
+
+// One whole category/subcategory personalized at once: 20% off per-tile.
+export function bundleQuote(words) {
+  return Math.max(1, Math.ceil(words * 0.8));
+}
 
 export const SUBSCRIPTION = {
   sku: 'plus.monthly', cents: 999, creditsPerPeriod: 50, label: 'My World Plus',
   appleProductId: 'plus.monthly',
 };
 
-export const COST = { nano: 1, person: 3 };
+export const COST = { nano: 1, person: 5 };
 
 // New parent accounts start with a small wallet so nothing hard-blocks the
 // first days (the initial board build is free anyway — actor 'onboarding_seed').
@@ -225,7 +240,8 @@ export async function redeemCoupon(db, { userId, code }) {
 
 // Map an Apple/Stripe product id back to its credit grant.
 export function productCredits(productId) {
-  const pack = PACKS.find((p) => p.sku === productId || p.appleProductId === productId);
+  const pack = PACKS.find((p) => p.sku === productId || p.appleProductId === productId)
+            || LEGACY_PACKS.find((p) => p.sku === productId);
   if (pack) return { credits: pack.credits, kind: 'pack' };
   if (productId === SUBSCRIPTION.sku || productId === SUBSCRIPTION.appleProductId) {
     return { credits: SUBSCRIPTION.creditsPerPeriod, kind: 'subscription' };

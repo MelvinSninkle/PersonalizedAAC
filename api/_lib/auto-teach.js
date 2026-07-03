@@ -57,42 +57,90 @@ export const TIER_CAPS = {
 export async function loadSettings(db, childId) {
   const rows = await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`;
   const s = (rows[0] && rows[0].settings) || {};
-  return { ...DEFAULTS, ...(s.autoTeach || {}) };
+  // Family timezone (IANA, e.g. "America/Denver") — auto-detected and saved by
+  // the devices. Every time gate MUST evaluate in this zone: the server runs
+  // UTC, so comparing wall-clock strings against new Date() hours made
+  // "bedtime 20:00" trip at ~1pm Mountain — auto-teach refused all afternoon.
+  return { tz: s.tz || null, ...DEFAULTS, ...(s.autoTeach || {}) };
+}
+
+/// Persist the device-reported IANA timezone (best-effort, only sane values).
+export async function saveTimezone(db, childId, tz) {
+  if (typeof tz !== 'string' || !/^[A-Za-z_]+\/[A-Za-z_+-]+/.test(tz)) return;
+  try {
+    await db`INSERT INTO child_settings (child_id, settings)
+             VALUES (${childId}, ${JSON.stringify({ tz })}::jsonb)
+             ON CONFLICT (child_id) DO UPDATE
+             SET settings = COALESCE(child_settings.settings, '{}'::jsonb) || ${JSON.stringify({ tz })}::jsonb`;
+  } catch (_) { /* best-effort */ }
+}
+
+/// Wall-clock parts of `now` in the family's timezone: { hhmm: "HH:MM", dow: 0-6,
+/// minutes: minutes-since-midnight }. Falls back to server time without a tz.
+export function localParts(now = new Date(), tz = null) {
+  if (tz) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit', weekday: 'short',
+      }).formatToParts(now);
+      const get = (t) => (parts.find((p) => p.type === t) || {}).value || '';
+      const dowMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      const hh = get('hour') === '24' ? '00' : get('hour');   // Intl quirk at midnight
+      const h = parseInt(hh, 10) || 0, m = parseInt(get('minute'), 10) || 0;
+      return { hhmm: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`,
+               dow: dowMap[get('weekday')] ?? now.getDay(), minutes: h * 60 + m };
+    } catch (_) { /* bad tz string → server time */ }
+  }
+  return { hhmm: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+           dow: now.getDay(), minutes: now.getHours() * 60 + now.getMinutes() };
 }
 
 // ---- Schedule + cooldown gates ----------------------------------------
 
 /// Is `now` within any blackout window the parent has declared?
 /// Reads child_settings.schedule (the existing routine + locations payload).
-/// Blackouts:
+/// Blackouts (all evaluated in the FAMILY's timezone, not the server's):
 ///   - Outside [wake, bedtime] (default 7am-8pm if unset)
 ///   - During [breakfast/lunch/dinner ± 20 min]
-///   - During any active school location time window
-export function inBlackout(scheduleObj, now = new Date()) {
+///   - During any active school OR therapy location time window
+export function inBlackout(scheduleObj, now = new Date(), tz = null) {
   if (!scheduleObj || typeof scheduleObj !== 'object') return false;
-  const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const { hhmm, dow, minutes } = localParts(now, tz);
   const within = (start, end) => {
     if (!start || !end) return false;
     return start <= hhmm && hhmm <= end;
   };
+  const toMin = (t) => {
+    if (!t || !/^\d\d:\d\d$/.test(t)) return null;
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
   const aroundMeal = (mealTime) => {
-    if (!mealTime || !/^\d\d:\d\d$/.test(mealTime)) return false;
-    const [mh, mm] = mealTime.split(':').map(Number);
-    const start = new Date(now); start.setHours(mh, mm - 20, 0, 0);
-    const end   = new Date(now); end.setHours(mh, mm + 20, 0, 0);
-    return now >= start && now <= end;
+    const mm = toMin(mealTime);
+    return mm != null && Math.abs(minutes - mm) <= 20;
   };
   const wake    = scheduleObj.wake    || '07:00';
   const bedtime = scheduleObj.bedtime || '20:00';
   if (hhmm < wake || hhmm > bedtime) return true;
   for (const m of ['breakfast', 'lunch', 'dinner']) if (aroundMeal(scheduleObj[m])) return true;
   for (const t of (scheduleObj.snacks || [])) if (aroundMeal(t)) return true;
-  const dow = now.getDay();
   for (const loc of (scheduleObj.locations || [])) {
-    if (loc.type === 'school' && Array.isArray(loc.days) && loc.days.includes(dow)
+    if ((loc.type === 'school' || loc.type === 'therapy')
+        && Array.isArray(loc.days) && loc.days.includes(dow)
         && within(loc.start, loc.end)) return true;
   }
   return false;
+}
+
+/// Auto-teach may only be ENABLED once the parent has told us when NOT to run:
+/// sleep times are required; school/therapy windows must be entered or
+/// explicitly declared not-applicable (schedule.noOutsideCare = true).
+export function scheduleReady(scheduleObj) {
+  const s = scheduleObj && typeof scheduleObj === 'object' ? scheduleObj : {};
+  const hasSleep = /^\d\d:\d\d$/.test(s.wake || '') && /^\d\d:\d\d$/.test(s.bedtime || '');
+  const hasCare = (s.locations || []).some((l) => l && (l.type === 'school' || l.type === 'therapy')
+                                                   && l.start && l.end && Array.isArray(l.days) && l.days.length);
+  return hasSleep && (hasCare || s.noOutsideCare === true);
 }
 
 // Has the child tapped anything in the last 5 minutes? Active board use beats

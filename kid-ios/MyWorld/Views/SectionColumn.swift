@@ -23,6 +23,7 @@ struct SectionColumn: View {
     @Environment(BoardStore.self) private var board
     @Environment(DisplayPrefs.self) private var prefs
     @Environment(AuthManager.self) private var auth
+    @Environment(AddTileQueue.self) private var addQueue
     @State private var selectedCategoryId: Int?
     @State private var selectedSubcategoryId: Int?
     @State private var openRoom: Category?
@@ -173,7 +174,16 @@ struct SectionColumn: View {
                         handleTileDrop(items, onto: tile)
                     }
                 }
+                // In-flight adds land WHERE THE + CELL WAS: each rendering job
+                // for this folder shows as a shimmering placeholder in the
+                // grid, and the + cell slides one further down. When the render
+                // finishes, the real tile takes the placeholder's spot (new
+                // tiles order to the end of the folder, which is exactly here).
                 if editMode {
+                    ForEach(renderingJobs, id: \.id) { job in
+                        RenderingTileCell(size: tileSize, thumbnail: job.thumbnail, label: job.label)
+                            .frame(width: tileSize)
+                    }
                     AddTileCell(size: tileSize) { onAdd(section, effectiveCategory?.id) }
                         .frame(width: tileSize)
                 }
@@ -182,6 +192,14 @@ struct SectionColumn: View {
             .padding(.vertical, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Active add-tile jobs headed for the folder on screen right now.
+    private var renderingJobs: [TileJob] {
+        addQueue.jobs.filter { j in
+            j.phase == .working && j.section == section
+                && (j.categoryId == effectiveCategory?.id || (j.categoryId == nil && effectiveCategory?.id == nil))
+        }
     }
 
     // MARK: -- Drag & drop (unlocked board only)
@@ -336,5 +354,41 @@ struct AddTileCell: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// A tile-sized placeholder for an add-tile job still rendering server-side:
+/// the captured photo, dimmed, with a spinner — sitting exactly where the
+/// finished tile will land. (The + cell renders after these, one slot down.)
+struct RenderingTileCell: View {
+    let size: CGFloat
+    let thumbnail: UIImage
+    let label: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .opacity(0.45)
+                ProgressView()
+                    .tint(Color(hex: "#ad1457"))
+                    .scaleEffect(1.2)
+            }
+            .frame(width: size, height: size)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Color(hex: "#f3c6dd"), lineWidth: 2)
+            )
+            if !label.isEmpty {
+                Text(label)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(hex: "#9d2463"))
+                    .lineLimit(1)
+            }
+        }
     }
 }

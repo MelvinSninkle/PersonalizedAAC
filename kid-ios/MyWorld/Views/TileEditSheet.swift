@@ -277,7 +277,6 @@ struct BoardTileEditSheet: View {
     @State private var stagedImageCT  = "image/png"
     @State private var style: ArtStyle = .threeD
     @State private var model: ImageModel = .nanoBanana
-    @State private var bg: TileBackground = .pink
     @State private var generating = false
 
     // Voice staging — a re-recorded clip to upload on save.
@@ -288,6 +287,11 @@ struct BoardTileEditSheet: View {
     @State private var showLibrary = false
     @State private var redrawing = false
     @State private var redrawNote: String?
+    /// Guided-retry sheet: the redraw button asks WHAT to change (required)
+    /// before spending the retry — a blind re-roll wastes the credit.
+    @State private var showRedrawSheet = false
+    @State private var redrawGuidance = ""
+    @State private var redrawGuidanceError: String?
     @State private var libraryItem: PhotosPickerItem?
     @State private var saving = false
     @State private var errorText: String?
@@ -342,6 +346,7 @@ struct BoardTileEditSheet: View {
                 }
                 .ignoresSafeArea()
             }
+            .sheet(isPresented: $showRedrawSheet) { redrawSheet }
             .photosPicker(isPresented: $showLibrary, selection: $libraryItem, matching: .images)
             .onChange(of: libraryItem) { _, item in
                 guard let item else { return }
@@ -410,7 +415,7 @@ struct BoardTileEditSheet: View {
                     // first redo of each tile is free, then 1 credit (server-
                     // enforced; renders in the background and lands on its own).
                     if tile.taxonomySlug != nil {
-                        Button { Task { await redrawTile() } } label: {
+                        Button { redrawGuidance = ""; redrawGuidanceError = nil; showRedrawSheet = true } label: {
                             pill(redrawing ? "Redrawing…" : "Redraw picture", filled: false, icon: "wand.and.stars")
                         }
                         .buttonStyle(.plain).disabled(redrawing)
@@ -439,8 +444,6 @@ struct BoardTileEditSheet: View {
                     label: { chip("paintpalette", style.label) }
                 Menu { ForEach(ImageModel.allCases) { m in Button(m.label) { model = m } } }
                     label: { chip("wand.and.stars", model.label) }
-                Menu { ForEach(TileBackground.allCases) { c in Button(c.label) { bg = c } } }
-                    label: { chip("paintbrush.pointed", bg.label) }
             }
         }
     }
@@ -563,7 +566,7 @@ struct BoardTileEditSheet: View {
                                                   label: label.trimmingCharacters(in: .whitespaces),
                                                   style: style.prompt,
                                                   model: model.apiValue,
-                                                  bg: bg.rawValue,
+                                                  bg: "",
                                                   childId: auth.childSlug)
             stagedImage = png; stagedImageExt = "png"; stagedImageCT = "image/png"
             newPhoto = nil
@@ -667,17 +670,67 @@ struct BoardTileEditSheet: View {
     /// gives every tile ONE free redo, then charges a credit; the new art
     /// renders in the background and replaces the tile on a later sync (the
     /// old image is archived to the Album, never deleted).
-    private func redrawTile() async {
+    private func redrawTile(guidance: String) async {
         redrawing = true; errorText = nil; redrawNote = nil
         defer { redrawing = false }
         do {
-            let r = try await api.storeRetry(childId: auth.childSlug, itemId: tile.id)
+            let r = try await api.storeRetry(childId: auth.childSlug, itemId: tile.id, guidance: guidance)
             redrawNote = (r.freeRetry == true)
                 ? "Redrawing now (free) — the new picture lands on the board in a minute or two."
                 : "Redrawing now (⭐\(r.charged)) — the new picture lands on the board in a minute or two."
         } catch {
             errorText = friendly(error)
         }
+    }
+
+    /// Guided-retry sheet: the current image + the parent's correction go to
+    /// the model together, so the retry improves THIS picture instead of
+    /// rolling fresh dice. Text is required — that's where the value is.
+    private var redrawSheet: some View {
+        NavigationStack {
+            ZStack {
+                Color(hex: "#fff7fb").ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("WHAT SHOULD BE DIFFERENT?")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color(hex: "#999"))
+                    TextField("e.g. \"make the cup red like ours\" or \"remove the extra hand\"",
+                              text: $redrawGuidance, axis: .vertical)
+                        .lineLimit(3...5)
+                        .textFieldStyle(.roundedBorder)
+                    Text("We send your current picture plus this note, so the redraw fixes exactly what's wrong instead of starting over.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(hex: "#999"))
+                    if let e = redrawGuidanceError {
+                        Text(e)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.red)
+                    }
+                    Spacer()
+                }
+                .padding(16)
+            }
+            .navigationTitle("Redraw picture")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { showRedrawSheet = false }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Redraw") {
+                        let g = redrawGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !g.isEmpty else {
+                            redrawGuidanceError = "Tell it what to change first — that's what makes the retry better than a re-roll."
+                            return
+                        }
+                        showRedrawSheet = false
+                        Task { await redrawTile(guidance: g) }
+                    }
+                    .font(.system(size: 16, weight: .bold))
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 
     // MARK: Helpers

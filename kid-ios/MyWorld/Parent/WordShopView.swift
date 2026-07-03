@@ -20,6 +20,10 @@ struct WordShopView: View {
     /// scroll was unusable. A search (or picking a section) opens everything
     /// it matches so results are never hidden behind a closed folder.
     @State private var openFolders: Set<String> = []
+    /// "Personalize every tile" quote (remaining / total / cost) from the server.
+    @State private var paQuote: APIClient.PersonalizeAllResult?
+    @State private var paBusy = false
+    @State private var freeBusy: String?     // category label mid free-add/remove
 
     private let api = APIClient()
 
@@ -28,16 +32,6 @@ struct WordShopView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Every image you make is your family's to keep — stored forever, even when you change one.")
                     .font(.system(size: 13)).foregroundStyle(.secondary)
-
-                HStack {
-                    TextField("Search words…", text: $search)
-                        .textFieldStyle(.roundedBorder)
-                    Picker("Section", selection: $column) {
-                        Text("All").tag("")
-                        ForEach(columns, id: \.self) { Text($0).tag($0) }
-                    }
-                    .pickerStyle(.menu)
-                }
 
                 if let e = errorText {
                     Text(e).font(.system(size: 13, weight: .semibold)).foregroundStyle(.red)
@@ -49,11 +43,44 @@ struct WordShopView: View {
 
                 if tiles.isEmpty {
                     ProgressView().frame(maxWidth: .infinity).padding(.top, 30)
+                } else if column.isEmpty && search.isEmpty {
+                    // SHOP HOME — a loadable page instead of one endless scroll:
+                    // personalize-the-board, free common boards, then one card
+                    // per shop section that drills in.
+                    personalizeCard
+                    freeBoardsSection
+                    Text("SHOP BY SECTION")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(Color(hex: "#ad1457"))
+                        .padding(.top, 6)
+                    sectionCard("🧑‍🤝‍🧑", "Shop People", "people")
+                    sectionCard("🧸", "Shop Nouns, Adjectives & More", "other")
+                    sectionCard("🏃", "Shop Verbs", "verbs")
+                    HStack {
+                        TextField("…or search every word", text: $search)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    .padding(.top, 6)
                 } else {
+                    HStack {
+                        if !column.isEmpty {
+                            Button {
+                                column = ""; search = ""
+                            } label: {
+                                Label("Shop home", systemImage: "chevron.left")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(Color(hex: "#ad1457"))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        TextField("Search words…", text: $search)
+                            .textFieldStyle(.roundedBorder)
+                    }
                     ForEach(groups, id: \.key) { group in
                         let isOpen = allOpen || openFolders.contains(group.key)
                         folderHeader(group, isOpen: isOpen)
                         if isOpen {
+                            bundleRow(group)
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 10)], spacing: 10) {
                                 ForEach(group.tiles) { t in
                                     shopTile(t)
@@ -85,10 +112,143 @@ struct WordShopView: View {
         Array(Set(tiles.map(\.column))).sorted()
     }
 
-    /// Searching or filtering to one section = the parent is looking for
-    /// something specific — show it all, don't make them open folders.
+    /// "other" is the Nouns-Adjectives-and-More card: everything that isn't
+    /// People or Verbs.
+    private func matchesColumn(_ t: APIClient.ShopTile) -> Bool {
+        switch column {
+        case "":      return true
+        case "other": return t.column != "people" && t.column != "verbs"
+        default:      return t.column == column
+        }
+    }
+
+    /// Searching = show everything matched, don't make them open folders.
+    /// (Inside a section, folders still start closed to keep the page light.)
     private var allOpen: Bool {
-        !search.trimmingCharacters(in: .whitespaces).isEmpty || !column.isEmpty
+        !search.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    // MARK: -- Shop home pieces
+
+    /// "Personalize every tile on the board" — xx of yyyy remaining + price.
+    /// Tracked from the board itself: a custom image_key IS the record.
+    @ViewBuilder
+    private var personalizeCard: some View {
+        if let q = paQuote, let remaining = q.remaining, let total = q.total, remaining > 0 {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("✨ Personalize every tile")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(hex: "#ad1457"))
+                Text("\(remaining) of \(total) tiles still wear the shared pictures. Finish the whole set in your child's style — 20% off.")
+                    .font(.system(size: 13)).foregroundStyle(.secondary)
+                Button {
+                    Task { await personalizeAll() }
+                } label: {
+                    Text(paBusy ? "Queuing…" : "Personalize \(remaining) tiles · ⭐\(q.cost ?? remaining)")
+                        .font(.system(size: 14, weight: .bold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 11)
+                        .background(Color(hex: "#ff1493")).foregroundStyle(.white)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain).disabled(paBusy)
+            }
+            .padding(14)
+            .background(Color(hex: "#fff7fb"), in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#f3c6dd"), lineWidth: 1.5))
+        }
+    }
+
+    /// Free common-use boards: whole categories placed with the shared default
+    /// art at no cost — personalizing is what costs credits.
+    private var freeBoardsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("FREE — COMMON USE BOARDS")
+                .font(.system(size: 12, weight: .heavy))
+                .foregroundStyle(Color(hex: "#047857"))
+            Text("Add whole categories with the shared pictures for free. Remove keeps anything you personalized.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+            ForEach(freeGroups, id: \.key) { g in
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(g.category)
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        Text("\(g.onBoard) of \(g.total) on the board")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        Task { await toggleFreeBoard(g, on: g.onBoard < g.total) }
+                    } label: {
+                        Text(freeBusy == g.key ? "…" : (g.onBoard < g.total ? "Add free" : "Remove"))
+                            .font(.system(size: 12, weight: .bold))
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(g.onBoard < g.total ? Color(hex: "#047857") : Color(hex: "#fce4ef"))
+                            .foregroundStyle(g.onBoard < g.total ? .white : Color(hex: "#ad1457"))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain).disabled(freeBusy != nil)
+                }
+                .padding(10)
+                .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#d1fae5"), lineWidth: 1.5))
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private struct FreeGroup { let key: String; let column: String; let category: String; let total: Int; let onBoard: Int }
+    private var freeGroups: [FreeGroup] {
+        var order: [String] = []
+        var agg: [String: (col: String, cat: String, total: Int, on: Int)] = [:]
+        for t in tiles {
+            guard let cat = t.category, !cat.isEmpty else { continue }
+            let key = t.column + "|" + cat
+            if agg[key] == nil { order.append(key); agg[key] = (t.column, cat, 0, 0) }
+            agg[key]!.total += 1
+            if t.onBoard { agg[key]!.on += 1 }
+        }
+        return order.compactMap { k in
+            guard let a = agg[k] else { return nil }
+            return FreeGroup(key: k, column: a.col, category: a.cat, total: a.total, onBoard: a.on)
+        }
+    }
+
+    private func sectionCard(_ emoji: String, _ title: String, _ value: String) -> some View {
+        Button { column = value } label: {
+            HStack(spacing: 12) {
+                Text(emoji).font(.system(size: 28))
+                Text(title)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(hex: "#ad1457"))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color(hex: "#d6a8c6"))
+            }
+            .padding(14)
+            .background(.white, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#f3c6dd"), lineWidth: 1.5))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// One-tap bundle purchase for an open folder: 20% off vs word-by-word.
+    @ViewBuilder
+    private func bundleRow(_ group: Group) -> some View {
+        let unpersonalized = group.tiles.filter { !$0.personalized }
+        if unpersonalized.count >= 3 {
+            let cost = max(1, Int((Double(unpersonalized.count) * 0.8).rounded(.up)))
+            Button {
+                Task { await buyBundle(unpersonalized.map(\.id)) }
+            } label: {
+                Text(busy ? "…" : "✨ Personalize all \(unpersonalized.count) · ⭐\(cost) (20% off)")
+                    .font(.system(size: 13, weight: .bold))
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    .background(Color(hex: "#fce4ef")).foregroundStyle(Color(hex: "#ad1457"))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain).disabled(busy)
+        }
     }
 
     /// Tappable folder row: chevron + name + word count. In-cart words keep a
@@ -135,8 +295,7 @@ struct WordShopView: View {
     private var groups: [Group] {
         let q = search.trimmingCharacters(in: .whitespaces).lowercased()
         let shown = tiles.filter { t in
-            (column.isEmpty || t.column == column) &&
-            (q.isEmpty || t.label.lowercased().contains(q))
+            matchesColumn(t) && (q.isEmpty || t.label.lowercased().contains(q))
         }
         var order: [String] = []
         var byKey: [String: [APIClient.ShopTile]] = [:]
@@ -229,6 +388,47 @@ struct WordShopView: View {
         balance = await api.storeBalance()
         do { tiles = try await api.storeBrowse(childId: auth.childSlug) }
         catch { errorText = "Couldn't load the word library. Pull to retry." }
+        paQuote = try? await api.storePersonalizeAll(childId: auth.childSlug, quote: true)
+    }
+
+    private func buyBundle(_ ids: [String]) async {
+        busy = true; errorText = nil; note = nil
+        defer { busy = false }
+        do {
+            let r = try await api.storeCheckout(childId: auth.childSlug, taxonomyIds: ids, bundle: true)
+            balance = r.balance ?? balance
+            note = r.note ?? "\(r.queued) words queued."
+            tiles = (try? await api.storeBrowse(childId: auth.childSlug)) ?? tiles
+        } catch let APIError.badStatus(status, body) {
+            errorText = (status == 402 || body.contains("not_enough_credits"))
+                ? "Not enough credits — add a pack on the Credits & Store screen first."
+                : "Bundle failed: \(String(body.prefix(120)))"
+        } catch { errorText = "Bundle failed: \(error.localizedDescription)" }
+    }
+
+    private func toggleFreeBoard(_ g: FreeGroup, on: Bool) async {
+        freeBusy = g.key; errorText = nil; note = nil
+        defer { freeBusy = nil }
+        do {
+            let r = try await api.storeFreeBoard(childId: auth.childSlug, column: g.column, category: g.category, on: on)
+            note = r.note
+            tiles = (try? await api.storeBrowse(childId: auth.childSlug)) ?? tiles
+        } catch { errorText = "Couldn't update: \(error.localizedDescription)" }
+    }
+
+    private func personalizeAll() async {
+        paBusy = true; errorText = nil; note = nil
+        defer { paBusy = false }
+        do {
+            let r = try await api.storePersonalizeAll(childId: auth.childSlug, quote: false)
+            balance = r.balance ?? balance
+            note = r.note
+            paQuote = try? await api.storePersonalizeAll(childId: auth.childSlug, quote: true)
+        } catch let APIError.badStatus(status, body) {
+            errorText = (status == 402 || body.contains("not_enough_credits"))
+                ? "Not enough credits — add a pack on the Credits & Store screen first."
+                : "Couldn't start: \(String(body.prefix(120)))"
+        } catch { errorText = "Couldn't start: \(error.localizedDescription)" }
     }
 
     private func checkout() async {
