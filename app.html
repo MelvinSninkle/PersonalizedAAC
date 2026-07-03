@@ -670,6 +670,36 @@
     font-style: italic;
   }
 
+  /* ── PHONE MODE — the web board on a phone-width screen ──────────────────
+     The 3-columns-side-by-side layout is a tablet design; on a phone it
+     renders enormous half-offscreen tiles (the "poor representation").
+     Under 700px the board becomes the mini-board the parent app shows:
+     one section at a time behind a tab bar, tiles 3-across, the Needs
+     strip as a horizontal scroller pinned above the tabs. */
+  #phone-tabs { display: none; }
+  @media (max-width: 700px) {
+    main { display: block !important; }
+    .aac-section { width: 100% !important; display: none !important; }
+    .aac-section.phone-active { display: flex !important; }
+    .items-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    /* Needs: one horizontal swipe row, like the native strip. */
+    #items-needs {
+      display: flex !important; overflow-x: auto; gap: 8px;
+      -webkit-overflow-scrolling: touch;
+    }
+    #items-needs > * { flex: 0 0 31%; }
+    #phone-tabs {
+      display: flex; position: sticky; top: 0; z-index: 900;
+      background: #fff; border-bottom: 2px solid #f3c6dd;
+    }
+    #phone-tabs button {
+      flex: 1; border: none; background: none; padding: 10px 4px;
+      font: 700 14px -apple-system, system-ui, sans-serif; color: #9d2463;
+      border-bottom: 3px solid transparent;
+    }
+    #phone-tabs button.active { border-bottom-color: #ff1493; background: #fdf2f8; }
+  }
+
   /* A tile whose art hasn't been generated yet: show the word, big and warm. */
   .tile-square.word-tile {
     display: flex; align-items: center; justify-content: center;
@@ -1056,6 +1086,13 @@
   </div>
   <div class="hdr-right"></div>
 </header>
+
+<!-- Phone-width section tabs (hidden ≥700px; see PHONE MODE styles). -->
+<div id="phone-tabs">
+  <button data-ptab="people">People</button>
+  <button data-ptab="nouns">Nouns</button>
+  <button data-ptab="verbs">Verbs</button>
+</div>
 
 <main>
   <section class="aac-section" data-section="people">
@@ -5488,6 +5525,24 @@
   });
 
   // On-screen boot status so failures are visible without a console (iPad has none).
+  // ---- Phone mode: one section at a time behind tabs -------------------------
+  // The tab bar is display:none above 700px, so this is inert on tablets.
+  (function () {
+    const KEY = 'aacPhoneTab';
+    const tabs = document.querySelectorAll('#phone-tabs button');
+    if (!tabs.length) return;
+    function activate(sec) {
+      try { localStorage.setItem(KEY, sec); } catch (_) {}
+      tabs.forEach(b => b.classList.toggle('active', b.dataset.ptab === sec));
+      document.querySelectorAll('.aac-section').forEach(s =>
+        s.classList.toggle('phone-active', s.dataset.section === sec));
+    }
+    tabs.forEach(b => b.addEventListener('click', () => activate(b.dataset.ptab)));
+    let start = 'people';
+    try { start = localStorage.getItem(KEY) || 'people'; } catch (_) {}
+    activate(start);
+  })();
+
   // ---- Build-progress pill ("Making {name}'s words… 34 of 120") -------------
   // The onboarding pipeline places every word instantly, then renders the
   // personalized art server-side (seed_jobs + cron). While that's running we
