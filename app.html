@@ -681,7 +681,6 @@
     main { display: block !important; }
     .aac-section { width: 100% !important; display: none !important; }
     .aac-section.phone-active { display: flex !important; }
-    .items-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
     /* Needs: one horizontal swipe row, like the native strip. */
     #items-needs {
       display: flex !important; overflow-x: auto; gap: 8px;
@@ -1618,6 +1617,24 @@
     headerColors: { bg: '#ff1493', text: '#ffffff' },
   };
   let display = structuredClone(DISPLAY_DEFAULTS);
+  // Phone-mode column defaults (tuned ratio: People 2, Nouns 5, Verbs 2).
+  // Applied ONLY when the parent hasn't chosen their own tiles-across on this
+  // device — an explicit Display-panel choice always wins, phone or tablet.
+  const PHONE_ACROSS = { people: 2, nouns: 5, verbs: 2 };
+  const phoneMQ = window.matchMedia('(max-width: 700px)');
+  function acrossFor(section) {
+    if (phoneMQ.matches && PHONE_ACROSS[section]) {
+      let userSet = false;
+      try {
+        const raw = JSON.parse(localStorage.getItem(DISPLAY_KEY) || '{}');
+        userSet = !!(raw.tilesAcross && raw.tilesAcross[section] != null);
+      } catch (_) {}
+      if (!userSet) return PHONE_ACROSS[section];
+    }
+    return display.tilesAcross[section];
+  }
+  // Rotating past the 700px breakpoint re-lays the grids out.
+  try { phoneMQ.addEventListener('change', () => { renderAll().catch(() => {}); }); } catch (_) {}
   function sanitizeColor(v, fallback) {
     return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : fallback;
   }
@@ -1702,7 +1719,7 @@
           // back to one column per tile — exactly the "huge People tile"
           // distortion. Force a sane integer here so a corrupted display object
           // can never deform the board.
-          const cols = clampAcross(display.tilesAcross[s] ?? DISPLAY_DEFAULTS.tilesAcross[s]);
+          const cols = clampAcross(acrossFor(s) ?? DISPLAY_DEFAULTS.tilesAcross[s]);
           itemsEl.style.setProperty('--items-cols', `repeat(${cols}, minmax(0, 1fr))`);
         }
       }
@@ -2194,7 +2211,7 @@
 
   async function renderSection(section) {
     if (section === 'needs') return renderNeeds();
-    const N = display.tilesAcross[section];
+    const N = acrossFor(section);
     const cats = await getAllCats(section);
     const items = sortItems(await getAllItems(section), section);
 
