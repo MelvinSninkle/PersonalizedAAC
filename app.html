@@ -1076,7 +1076,7 @@
       <img class="hdr-icon" src="/icons/myworld-globe.png" alt="">
       <span class="cwt">My World</span>
     </h1>
-    <button id="play-request-btn" class="btn-play-req" aria-label="Play with me" title="Tell a grown-up you want to play">🙋</button>
+    <button id="play-request-btn" class="btn-play-req" aria-label="Play a game" title="Play a quick game about what you were just looking at">🙋</button>
     <div id="listen-bar" aria-live="polite">
       <span id="listen-mic" aria-hidden="true">🎙️</span>
       <div id="listen-tiles"></div>
@@ -1752,6 +1752,14 @@
   const objectURLs = new Map();
   const activeCategoryId = { people: null, nouns: null, verbs: null };
 
+  // ---- Self-learning play scope ----
+  // Every category/subcategory chip the child presses is remembered (per child,
+  // survives reloads) so the 🙋 play button can quiz exactly what they were
+  // just exploring. Mirrors UserDefaults playScope:<slug> in the native app.
+  const PLAY_SCOPE_KEY = () => 'aacPlayScope:' + CHILD_ID;
+  function notePlayScope(scope) { try { localStorage.setItem(PLAY_SCOPE_KEY(), scope); } catch (_) {} }
+  function recallPlayScope() { try { return localStorage.getItem(PLAY_SCOPE_KEY()); } catch (_) { return null; } }
+
   // ---- Per-device client id (for activity logging) ----
   // Role distinction is shelved for now — every tap is logged with role
   // 'student' so the column stays populated for when we bring roles back.
@@ -2256,7 +2264,7 @@
       const tile = makeTile({
         kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
         label: cat.label, isCategory: true, isActive, forgivingTap: !editMode,
-        onClick: () => { activeCategoryId[section] = cat.id; renderSection(section); },
+        onClick: () => { activeCategoryId[section] = cat.id; notePlayScope('cat:' + cat.id); renderSection(section); },
         onEdit: () => openCatModal(section, cat),
       });
       tile.dataset.dragKind = 'cat-top';
@@ -2296,7 +2304,7 @@
         eb.textContent = '✎';
         eb.addEventListener('click', (e) => { e.stopPropagation(); openCatModal(section, sub); });
         tile.appendChild(eb);
-        const subNav = () => { activeCategoryId[section] = sub.id; renderSection(section); };
+        const subNav = () => { activeCategoryId[section] = sub.id; notePlayScope('cat:' + sub.id); renderSection(section); };
         if (editMode) tile.addEventListener('click', subNav); else attachForgivingTap(tile, subNav);
         tile.dataset.dragKind = 'cat-sub';
         tile.dataset.entityId = sub.id;
@@ -4890,6 +4898,8 @@
     }
     G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true; G.sequence = !!opts.sequence; G.routine = !!opts.routine;
     G.queue = gShuffle(items.slice()); G.i = 0; G.attempts = []; G.locked = false;
+    // Child-launched quizzes cap the round count (random sample of the scope).
+    if (Number.isFinite(opts.sample) && opts.sample > 0) G.queue = G.queue.slice(0, opts.sample);
     G.session = { mode: G.facilitated ? 'facilitated' : 'self_paced', category: scope, startedAt: new Date().toISOString() };
     document.getElementById('game-setup').classList.remove('show');
     document.getElementById('game-overlay').classList.add('show');
@@ -5439,17 +5449,17 @@
   }
 
   // ---- Game UI wiring ----
-  // Fletcher's "Play with me" → ping the parent's phone (push) + dashboard banner.
-  let _playReqAt = 0;
+  // The child's 🙋 button is a SELF-LEARNING button: it instantly starts a
+  // self-paced quiz of 10 randomly sampled tiles from the category or
+  // subcategory chip they pressed most recently (falling back to the whole
+  // board when that scope is too thin). No parent needed.
   const playReqBtn = document.getElementById('play-request-btn');
   if (playReqBtn) playReqBtn.addEventListener('click', async () => {
-    if (Date.now() - _playReqAt < 45000) return;   // gentle cooldown so it can't be spammed
-    _playReqAt = Date.now();
-    const orig = playReqBtn.dataset.label || playReqBtn.textContent;
-    playReqBtn.dataset.label = orig;
-    playReqBtn.textContent = '💌 Told them!';
-    try { await apiFetch('/api/play-request?childId=' + encodeURIComponent(CHILD_ID), { method: 'POST' }); } catch (_) {}
-    setTimeout(() => { playReqBtn.textContent = playReqBtn.dataset.label; }, 4000);
+    if (G.running) return;
+    const choices = (gameSettings().choices) || 3;
+    let scope = recallPlayScope() || 'all';
+    if (scope !== 'all' && (await gatherPlayable(scope)).length < choices) scope = 'all';
+    startGame(scope, choices, { sample: 10 });
   });
 
   document.getElementById('play-btn').addEventListener('click', async () => {

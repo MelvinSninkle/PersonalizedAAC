@@ -14,6 +14,8 @@ struct HeaderBar: View {
     @Environment(DisplayPrefs.self) private var prefs
     @Environment(AddTileQueue.self) private var addQueue
     @Environment(DeviceMode.self) private var mode
+    @Environment(BoardStore.self) private var board
+    @Environment(GameController.self) private var game
 
     @Binding var editMode: Bool
     @Binding var showDisplay: Bool
@@ -150,7 +152,7 @@ struct HeaderBar: View {
 
     private var playWithMeButton: some View {
         Button {
-            Task { await sendPlayRequest() }
+            startSelfQuiz()
         } label: {
             Text("🙋 Play with me")
                 .font(.system(size: 14, weight: .semibold))
@@ -188,9 +190,16 @@ struct HeaderBar: View {
         }
     }
 
-    private func sendPlayRequest() async {
-        let slug = auth.user?.slug ?? auth.childSlug
-        let api = APIClient()
-        await api.postEmpty(path: "/api/play-request?childId=\(slug)")
+    /// Self-learning quiz: 10 randomly sampled tiles from whatever category or
+    /// subcategory chip the child pressed last (persisted per child), falling
+    /// back to the whole board when that scope is too thin to make a game.
+    private func startSelfQuiz() {
+        guard game.current == nil else { return }
+        let playable = { (s: String) in
+            board.tilesForScope(s).filter { ($0.imageKey?.isEmpty == false) }.count
+        }
+        var scope = GameController.PlayScope.recall(slug: auth.childSlug) ?? "all"
+        if playable(scope) < 3 { scope = "all" }
+        game.startLocal(.matching, scope: scope, sample: 10)
     }
 }

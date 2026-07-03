@@ -86,9 +86,9 @@ final class GameController {
         }
     }
 
-    func startLocal(_ mode: Mode, scope: String? = nil, choices: Int? = nil) {
+    func startLocal(_ mode: Mode, scope: String? = nil, choices: Int? = nil, sample: Int? = nil) {
         current = Session(mode: mode, scope: scope, choices: choices,
-                          from: nil, to: nil, sample: nil, limitMin: nil,
+                          from: nil, to: nil, sample: sample, limitMin: nil,
                           secondsPerImage: nil, music: nil)
     }
 
@@ -131,6 +131,20 @@ final class GameController {
         current = nil
         inGameCommand = nil
         abortRoutine()
+    }
+
+    /// Remembers the most recent category/subcategory chip the child pressed so
+    /// the header Play button can quiz exactly what they were just exploring.
+    /// Scope strings match the game engine ("cat:<id>"); persisted per child so
+    /// the memory survives relaunches. Mirrors localStorage aacPlayScope on web.
+    enum PlayScope {
+        private static func key(_ slug: String) -> String { "playScope:\(slug)" }
+        static func note(_ scope: String, slug: String) {
+            UserDefaults.standard.set(scope, forKey: key(slug))
+        }
+        static func recall(slug: String) -> String? {
+            UserDefaults.standard.string(forKey: key(slug))
+        }
     }
 
     private func startCurrentRoutineStep() {
