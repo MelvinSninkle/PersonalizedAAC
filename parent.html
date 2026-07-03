@@ -359,6 +359,24 @@
       </div>
     </div>
     <div class="mode">
+      <div class="icon">📖</div><span class="tag">Teach · Passive</span>
+      <h3>Teach Me Slideshow</h3>
+      <p>Each picture shows with its word — spoken, then every teaching clue read aloud. Same show as the board's 📖 button, but you pick the words.</p>
+      <div class="actions">
+        <button class="btn primary" data-launch="Teach Me Slideshow">Start</button>
+        <button class="btn ghost" data-config="Teach Me Slideshow">Configure</button>
+      </div>
+    </div>
+    <div class="mode">
+      <div class="icon">🧩</div><span class="tag">Quiz · Active</span>
+      <h3>Clue Quiz</h3>
+      <p>Hears a teaching clue ("you drink it when you're thirsty") and taps the picture it describes. Each miss reveals another clue; a correct tap plays the word.</p>
+      <div class="actions">
+        <button class="btn primary" data-launch="Clue Quiz">Start</button>
+        <button class="btn ghost" data-config="Clue Quiz">Configure</button>
+      </div>
+    </div>
+    <div class="mode">
       <div class="icon">👂</div><span class="tag">Mode 5 · Active</span>
       <h3>Auditory Comprehension</h3>
       <p>Hear a description ("lives in a field, four legs, eats grass") and pick the matching picture. Builds receptive comprehension and inference, not just word-to-image recognition.</p>
@@ -1064,7 +1082,7 @@
   function renderRecent(rows) {
     const tb = document.getElementById('recent-body');
     if (!tb) return;
-    const chipFor = m => /Game|Facilitated/.test(m) ? 'game' : (/Exposure/.test(m) ? 'expo' : 'slide');
+    const chipFor = m => /Game|Facilitated|Quiz|Comprehension|Naming/.test(m) ? 'game' : (/Exposure/.test(m) ? 'expo' : 'slide');
     tb.innerHTML = rows.map(r =>
       `<tr><td>${schEsc(r.date)}</td><td><span class="chip ${chipFor(r.mode)}">${schEsc(r.mode)}</span></td><td>${schEsc(r.category)}</td><td>${r.result === '—' ? '—' : '<span class="pill-acc hi">' + schEsc(r.result) + '</span>'}</td><td>${schEsc(r.length)}</td></tr>`).join('');
   }
@@ -1466,8 +1484,10 @@
   const MODE_KEY = {
     'Self-Paced Matching Game': 'self_paced', 'Facilitated Matching Game': 'facilitated',
     'Auditory Comprehension': 'auditory_comprehension',
+    'Clue Quiz': 'clue_quiz',
     'Expressive Naming': 'expressive_naming',
-    'Learn Slideshow': 'learn_slideshow', 'Exposure Slideshow': 'exposure_slideshow', 'Celebration': 'celebration',
+    'Learn Slideshow': 'learn_slideshow', 'Exposure Slideshow': 'exposure_slideshow',
+    'Teach Me Slideshow': 'teach_slideshow', 'Celebration': 'celebration',
   };
   const SECT_LABEL = { people: 'People', nouns: 'Nouns', verbs: 'Verbs' };
   let LAUNCH_CATS = [];
@@ -1528,6 +1548,10 @@
     'Learn Slideshow': () => catSelect() + secsField() + limitField() + musicField(),
     'Exposure Slideshow': () => catSelect() + secsField() + limitField() +
       `<p class="hint" style="margin:0 0 10px;">Labels are spoken gently, first-person ("I can see a …").</p>` + musicField(),
+    'Teach Me Slideshow': () => catSelect() +
+      `<p class="hint" style="margin:0 0 10px;">One pass, no music: each picture shows with its word, the word is spoken, then every teaching clue is read aloud. Ends by itself after the last tile.</p>`,
+    'Clue Quiz': () => catSelect() + choicesField() + limitField() +
+      `<p class="hint" style="margin:0 0 10px;">The clue is the prompt — the word is only spoken after a correct tap. Words with clues are quizzed first; each miss reveals another clue.</p>` + musicField(),
     'Celebration': () => `<p class="hint" style="margin:0 0 6px;">Plays the flowers + your recorded cheer on the tablet right now. Edit the cheer & music under "Reward cheers & game music" below.</p>`,
   };
 
@@ -1599,7 +1623,7 @@
     const scope = scopeEl ? scopeEl.value : 'all';
     const musicEl = body.querySelector('#lc-music'); if (musicEl) cmd.music = musicEl.value;
     const limEl = body.querySelector('#lc-limit'); if (limEl) { const v = parseInt(limEl.value, 10); if (Number.isFinite(v)) cmd.limitMin = v; }
-    if (mode === 'self_paced' || mode === 'facilitated' || mode === 'auditory_comprehension') {
+    if (mode === 'self_paced' || mode === 'facilitated' || mode === 'auditory_comprehension' || mode === 'clue_quiz') {
       // Same choice-grid configuration as matching — these all show N tiles
       // on the iPad and credit the right one. Expressive Naming has no
       // grid so it skips this.
@@ -1613,6 +1637,9 @@
       cmd.scope = scope;
       const sc = body.querySelector('#lc-secs'); cmd.secondsPerImage = sc ? (parseInt(sc.value, 10) || 5) : 5;
       cmd.labelStyle = mode === 'exposure_slideshow' ? 'first_person' : 'plain';
+    } else if (mode === 'teach_slideshow') {
+      // Event-paced (advances when the speech ends) — no secondsPerImage/music.
+      cmd.scope = scope;
     }
     return cmd;
   }
