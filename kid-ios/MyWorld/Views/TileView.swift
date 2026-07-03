@@ -10,9 +10,9 @@ struct TileView: View {
     /// speaking (matching the web organizer). A pencil badge marks it editable.
     var editMode: Bool = false
     var onEdit: (Tile) -> Void = { _ in }
-    /// Historical knob — poster folders used to letterbox their natural
-    /// aspect, which broke the board's uniformity. Every image now center-
-    /// crops to fill the square; the parameter stays so call sites compile.
+    /// THE one exception to the guillotine rule: tiles inside a folder named
+    /// "TV" (see categoryNameIsPoster) show their natural poster aspect.
+    /// Everything else center-crops to fill the square.
     var posterMode: Bool = false
 
     @Environment(DisplayPrefs.self) private var prefs
@@ -29,7 +29,7 @@ struct TileView: View {
                     if let img = image {
                         Image(uiImage: img)
                             .resizable()
-                            .aspectRatio(contentMode: .fill)   // guillotine: center-crop, no exceptions
+                            .aspectRatio(contentMode: posterMode ? .fit : .fill)   // guillotine everywhere but the TV folder
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()
                     } else if tile.imageKey == nil || tile.imageKey?.isEmpty == true {
@@ -101,8 +101,9 @@ struct TileView: View {
         guard let key = tile.imageKey, !key.isEmpty else { return }
         if let img = await MediaCache.shared.image(for: key) {
             // GUILLOTINE RULE: trim baked-in margins, then the view center-
-            // crops to fill the square. Every tile, every folder — uniform.
-            let display = img.trimmingFlatBorders()
+            // crops to fill the square. Sole exception: the TV folder keeps
+            // its posters untouched.
+            let display = posterMode ? img : img.trimmingFlatBorders()
             await MainActor.run { self.image = display }
         }
     }

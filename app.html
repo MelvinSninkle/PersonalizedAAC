@@ -1845,10 +1845,15 @@
 
   // Set a tile's background image from its storage key (lazy fetch + cache).
   // GUILLOTINE RULE: on the board, every image is centered and hard-cropped
-  // to fill its square — no keep-aspect exceptions. Uniformity is the UI;
-  // the flag still exists in the editor/organizer but never bends the board.
+  // to fill its square. THE one exception: tiles inside a folder named "TV"
+  // (word match) keep their natural poster aspect — the FOLDER decides, the
+  // per-item flag never bends the board.
+  function labelIsTv(label) {
+    const words = String(label || '').toLowerCase().split(/[^a-z]+/).filter(Boolean);
+    return words.includes('tv') || words.includes('tvs');
+  }
   function applyImage(el, imageKey, keepAspect) {
-    el.classList.remove('contain');
+    el.classList.toggle('contain', !!keepAspect);
     if (!imageKey) return;
     const cached = getMediaURLSync(imageKey);
     if (cached) { el.style.backgroundImage = `url("${cached}")`; return; }
@@ -2259,7 +2264,7 @@
     topCats.forEach(cat => {
       const isActive = cat.id === topAncestorId;
       const tile = makeTile({
-        kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
+        kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: false,
         label: cat.label, isCategory: true, isActive, forgivingTap: !editMode,
         onClick: () => { activeCategoryId[section] = cat.id; notePlayScope('cat:' + cat.id); renderSection(section); },
         onEdit: () => openCatModal(section, cat),
@@ -2290,7 +2295,7 @@
         tile.className = 'subcat-tile' + (sub.id === activeCat.id ? ' active' : '');
         const sq = document.createElement('div');
         sq.className = 'sq';
-        applyImage(sq, sub.imageKey, sub.keepAspect);
+        applyImage(sq, sub.imageKey, false);
         const lbl = document.createElement('div');
         lbl.className = 'lbl';
         lbl.textContent = sub.label;
@@ -2352,9 +2357,11 @@
     const tapCategoryName = topForLog?.label || null;
     const tapSubcategoryName = isSub ? (activeCat?.label || null) : null;
 
+    // Guillotine exception: only a "TV" folder shows natural poster aspect.
+    const tvPoster = labelIsTv(activeCat?.label) || labelIsTv(topForLog?.label);
     items.filter(i => i.categoryId === activeId).forEach(it => {
       const tile = makeTile({
-        kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: it.keepAspect,
+        kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: tvPoster,
         label: it.label, pinned: it.pinned, forgivingTap: !editMode,
         onClick: () => {
           if (editMode) { openItemModal(section, activeId, it); return; }
@@ -2465,7 +2472,7 @@
 
     items.forEach(it => {
       const tile = makeTile({
-        kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: it.keepAspect,
+        kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: false,
         label: it.label, pinned: false, forgivingTap: !editMode,
         onClick: () => {
           if (editMode) { openItemModal('needs', null, it); return; }
