@@ -324,7 +324,7 @@ async function retryTile(req, res, db, auth, uid, body) {
   if (!childId || !itemId) { res.status(400).json({ error: 'childId and itemId required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
-  const item = (await db`SELECT id, taxonomy_slug, free_retry_used FROM items
+  const item = (await db`SELECT id, taxonomy_slug, image_key, free_retry_used FROM items
                          WHERE id = ${itemId} AND child_id = ${childId} LIMIT 1`)[0];
   if (!item || !item.taxonomy_slug) { res.status(404).json({ error: 'tile not found (or not a library word)' }); return; }
 
@@ -337,8 +337,15 @@ async function retryTile(req, res, db, auth, uid, body) {
     if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: COST.nano, balance: s.balance }); return; }
     charged = COST.nano;
   }
+  // Guided retry: the parent's correction text rides along and the CURRENT
+  // image is attached as the previous attempt — the model improves the same
+  // picture per the instruction instead of rolling fresh dice. (Old app builds
+  // send no guidance and get the legacy blind re-roll.)
+  const guidance = String(body.guidance || '').trim().slice(0, 400);
+  const priorKey = (guidance && item.image_key && !String(item.image_key).startsWith('taxonomy-defaults/'))
+    ? item.image_key : null;
   await ensureSeedJobs(db);
-  await enqueueRenderJob(db, childId, item.taxonomy_slug, { force: true });
+  await enqueueRenderJob(db, childId, item.taxonomy_slug, { force: true, refKey: priorKey, guidance: guidance || null });
   res.status(200).json({ ok: true, charged, freeRetry: charged === 0 && !isAdmin,
                          balance: uid ? await creditBalance(db, uid) : null });
 }

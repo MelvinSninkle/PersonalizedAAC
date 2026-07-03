@@ -77,6 +77,8 @@ final class TileJob: Identifiable {
     let model: String
     let bg: String
     let emotion: String
+    /// True = no AI restyle; the photo itself becomes the tile (free).
+    let raw: Bool
     let childId: String
     /// Non-nil when part of a multi-photo bulk import (drives the review notice).
     let batchId: UUID?
@@ -115,7 +117,7 @@ final class TileJob: Identifiable {
 
     init(thumbnail: UIImage, photoJPEG: Data, section: BoardSection,
          categoryId: Int?, style: ArtStyle, model: String, bg: String, emotion: String,
-         childId: String, batchId: UUID? = nil, needsReview: Bool = false) {
+         childId: String, batchId: UUID? = nil, needsReview: Bool = false, raw: Bool = false) {
         self.thumbnail = thumbnail
         self.photoJPEG = photoJPEG
         self.section = section
@@ -127,6 +129,7 @@ final class TileJob: Identifiable {
         self.childId = childId
         self.batchId = batchId
         self.needsReview = needsReview
+        self.raw = raw
     }
 }
 
@@ -187,6 +190,7 @@ final class AddTileQueue {
                  model: String,
                  bg: String = "pink",
                  emotion: String,
+                 raw: Bool = false,
                  prefilledLabel: String,
                  prefilledDetail: String = "",
                  childId: String,
@@ -199,7 +203,7 @@ final class AddTileQueue {
         let job = TileJob(thumbnail: thumb, photoJPEG: photoJPEG, section: section,
                           categoryId: categoryId, style: style, model: model, bg: bg,
                           emotion: emotion, childId: childId, batchId: batchId,
-                          needsReview: needsReview)
+                          needsReview: needsReview, raw: raw)
         job.label = prefilledLabel
         job.detail = prefilledDetail
         job.statusText = "Uploading photo…"
@@ -245,7 +249,8 @@ final class AddTileQueue {
                 keepAspect: false,
                 needsReview: job.needsReview,
                 emotion: job.emotion,
-                childId: job.childId)
+                childId: job.childId,
+                raw: job.raw)
             job.serverId = serverId
             job.statusText = "Saved — making the tile…"
             job.progress = max(job.progress, 0.15)

@@ -49,16 +49,19 @@ export async function ensureSeedJobs(db) {
   // ref_key: an extra reference image attached to the render — the "you added a
   // fork, remake the pictures that mention a fork WITH your fork" flow.
   await db`ALTER TABLE seed_jobs ADD COLUMN IF NOT EXISTS ref_key TEXT`;
+  // guidance: parent's correction text on a guided retry. When set, ref_key is
+  // treated as the PREVIOUS attempt (improve-this) rather than a related tile.
+  await db`ALTER TABLE seed_jobs ADD COLUMN IF NOT EXISTS guidance TEXT`;
 }
 
 // Queue (or re-arm) one render job. Store checkout, retries, and rebuilds all
 // funnel through here — ON CONFLICT resets a finished/failed job back to queued.
-export async function enqueueRenderJob(db, childId, taxonomyId, { force = false, refKey = null } = {}) {
-  await db`INSERT INTO seed_jobs (child_id, kind, taxonomy_id, force, ref_key)
-           VALUES (${childId}, 'render', ${taxonomyId}, ${force}, ${refKey})
+export async function enqueueRenderJob(db, childId, taxonomyId, { force = false, refKey = null, guidance = null } = {}) {
+  await db`INSERT INTO seed_jobs (child_id, kind, taxonomy_id, force, ref_key, guidance)
+           VALUES (${childId}, 'render', ${taxonomyId}, ${force}, ${refKey}, ${guidance})
            ON CONFLICT (child_id, kind, COALESCE(taxonomy_id, ''))
            DO UPDATE SET status = 'queued', attempts = 0, error = NULL,
-                         force = ${force}, ref_key = ${refKey}, updated_at = NOW()`;
+                         force = ${force}, ref_key = ${refKey}, guidance = ${guidance}, updated_at = NOW()`;
 }
 
 // ── Scope ────────────────────────────────────────────────────────────────────
@@ -204,7 +207,7 @@ export async function claimSeedJobs(db, kind, limit) {
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING id, child_id, kind, taxonomy_id, attempts, force, ref_key`;
+    RETURNING id, child_id, kind, taxonomy_id, attempts, force, ref_key, guidance`;
 }
 
 async function jobDone(db, id, patch = {}) {
@@ -270,8 +273,13 @@ export async function processSeedJob(db, job, getCtx) {
       const replaceable = job.force || !cur || isDefaultKey;
       let imageKey = null;
       if (replaceable) {
+        // Guided retry (guidance set): ref_key is the PREVIOUS attempt to
+        // improve. Otherwise it's a related-tile composition reference.
+        const isGuidedRetry = !!job.guidance;
         const r = await renderTaxonomyTile({ tax, styleGuide: c.styleGuide, childAnchor: c.childAnchor, settings: c.settings,
-                                             referenceImageKeys: job.ref_key ? [job.ref_key] : [] });
+                                             referenceImageKeys: (!isGuidedRetry && job.ref_key) ? [job.ref_key] : [],
+                                             guidance: job.guidance || '',
+                                             priorKey: isGuidedRetry ? job.ref_key : null });
         if (!r.ok) throw new Error(r.detail || 'render failed');
         const png = Buffer.from(r.b64, 'base64');
         imageKey = `onboarding/${job.child_id}/core/${randomUUID()}.png`;

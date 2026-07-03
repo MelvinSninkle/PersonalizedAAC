@@ -115,9 +115,9 @@ extension APIClient {
         }
     }
 
-    func analytics(childId: String) async throws -> AnalyticsResponse {
+    func analytics(childId: String, bucket: String = "day") async throws -> AnalyticsResponse {
         let (data, _) = try await request(method: "GET",
-                                          path: "/api/analytics?childId=\(percentEscapeParent(childId))",
+                                          path: "/api/analytics?childId=\(percentEscapeParent(childId))&bucket=\(bucket)",
                                           body: nil)
         do { return try JSONDecoder().decode(AnalyticsResponse.self, from: data) }
         catch { throw APIError.decoding(error) }

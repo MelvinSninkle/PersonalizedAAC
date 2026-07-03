@@ -50,6 +50,8 @@ export async function ensureTileJobs(db) {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
   await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS relationship TEXT`;
+  // raw = TRUE → use the photo AS-IS as the tile (no AI restyle, no charge).
+  await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS raw BOOLEAN NOT NULL DEFAULT FALSE`;
   await db`CREATE INDEX IF NOT EXISTS tile_jobs_child_idx  ON tile_jobs(child_id, status)`;
   await db`CREATE INDEX IF NOT EXISTS tile_jobs_status_idx ON tile_jobs(status, updated_at)`;
 }
@@ -195,6 +197,13 @@ export async function processTileJob(db, jobId) {
     // Generate the art. On failure, retry the whole job (cron) until MAX, then
     // save-first: keep the raw photo as the tile so a usable tile still lands.
     let imageBytes, imageExt, imageCT, artFailed = false, usedPrompt = null, costCents = 4;
+    if (job.raw) {
+      // Parent chose "use my photo as-is" — no restyle, no model, no cost.
+      imageBytes = src.buffer;
+      imageExt = ct.includes('png') ? 'png' : 'jpg';
+      imageCT = ct;
+      costCents = 0;
+    } else {
     const r = await renderStyledPhoto({
       db, photo: src.buffer, contentType: ct, label, detail: job.detail,
       style: job.style, styleGuide, model: job.model, bg: job.bg,
@@ -207,6 +216,7 @@ export async function processTileJob(db, jobId) {
       throw new Error('art generation failed (will retry): ' + (r.detail || '').slice(0, 160));
     } else {
       imageBytes = src.buffer; imageExt = ct.includes('png') ? 'png' : 'jpg'; imageCT = ct; artFailed = true;
+    }
     }
 
     const imageKey = `tile-jobs/${job.child_id}/${randomUUID()}.${imageExt}`;

@@ -159,7 +159,7 @@ function noFaceRule(category) {
 // Render one taxonomy tile. `styleGuide` is the loaded { image, label } (or null),
 // `childAnchor` the loaded { buffer, contentType, name } (or null), `settings`
 // the lab_settings row. Returns { ok, b64?, contentType?, prompt?, costCents?, model?, detail? }.
-export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], model = null }) {
+export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], guidance = '', priorKey = null, model = null }) {
   const section = String(tax.column_name || '').toLowerCase();
   let content = tax.prompt_template || `A friendly illustration of ${tax.label}.`;
   const mentionsRef = /\{reference\}/i.test(content);
@@ -213,6 +213,19 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
       images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
       legend.push(`Image ${images.length} is a RELATED tile already drawn — match its scene, composition, and props exactly; change only what this word requires.`);
     } catch (_) { /* a missing reference never blocks generation */ }
+  }
+  // Guided retry: the PREVIOUS attempt rides along so the model improves the
+  // same picture instead of rolling fresh dice, and the parent's correction is
+  // applied verbatim. This is what makes a paid retry worth paying for.
+  if (priorKey) {
+    try {
+      const bytes = await readBlobBytes(priorKey);
+      images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
+      legend.push(`Image ${images.length} is the PREVIOUS attempt at this exact tile — keep what already works, and change it per the parent's correction; do not repeat its mistakes.`);
+    } catch (_) { /* missing prior never blocks the retry */ }
+  }
+  if (guidance) {
+    prompt += ` Important correction from the parent — apply this exactly: ${String(guidance).slice(0, 400)}.`;
   }
   // Enforce framing + caption in code so they hold regardless of the editable
   // master prompt: square/centered/frame-filling, then the black-on-white label.

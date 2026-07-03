@@ -351,7 +351,7 @@ struct APIClient {
     func createTileJob(photoJPEG: Data, label: String, detail: String, section: String,
                        categoryId: Int?, style: String, styleGuideId: Int?, model: String,
                        bg: String, keepAspect: Bool, needsReview: Bool, emotion: String,
-                       childId: String, relationship: String? = nil) async throws -> Int {
+                       childId: String, relationship: String? = nil, raw: Bool = false) async throws -> Int {
         var path = "/api/tile-jobs?childId=\(percentEscape(childId))&section=\(percentEscape(section))"
             + "&style=\(percentEscape(style))&model=\(percentEscape(model))&bg=\(percentEscape(bg))"
             + "&emotion=\(percentEscape(emotion))"
@@ -362,6 +362,7 @@ struct APIClient {
         if let relationship, !relationship.isEmpty { path += "&relationship=\(percentEscape(relationship))" }
         if keepAspect  { path += "&keepAspect=1" }
         if needsReview { path += "&needsReview=1" }
+        if raw         { path += "&raw=1" }        // photo-as-is: no restyle, no charge
         let (data, _) = try await request(method: "POST", path: path,
                                           body: photoJPEG, contentType: "image/jpeg", timeout: 60)
         return (try JSONDecoder().decode(TileJobCreated.self, from: data)).id
@@ -601,8 +602,12 @@ struct APIClient {
     struct StoreRetryResult: Decodable { let ok: Bool; let charged: Int; let freeRetry: Bool?; let balance: Int? }
     /// Re-draw a tile's picture in the child's style. First retry per tile is
     /// free; after that it costs one credit (server-enforced).
-    func storeRetry(childId: String, itemId: Int) async throws -> StoreRetryResult {
-        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "itemId": itemId])
+    func storeRetry(childId: String, itemId: Int, guidance: String = "") async throws -> StoreRetryResult {
+        // guidance = the parent's correction; the server attaches the current
+        // image as the previous attempt so the model improves, not re-rolls.
+        var payload: [String: Any] = ["childId": childId, "itemId": itemId]
+        if !guidance.isEmpty { payload["guidance"] = guidance }
+        let body = try JSONSerialization.data(withJSONObject: payload)
         let (data, _) = try await request(method: "POST", path: "/api/store?action=retry",
                                           body: body, contentType: "application/json")
         return try JSONDecoder().decode(StoreRetryResult.self, from: data)
