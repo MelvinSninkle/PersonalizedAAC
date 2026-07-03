@@ -62,6 +62,7 @@ export default async function handler(req, res) {
     mastery: [],
     recentSessions: [],
     recentSpikes: [],                    // PRD §6 mastery signal
+    stats: null,                         // "This week" cards: this vs last 7 days
   };
 
   // ---- USE: taps per category per bucket ----
@@ -270,6 +271,37 @@ export default async function handler(req, res) {
       };
     });
     out.hasLegacyScoring = out.recentSessions.some(s => s.scoringVersion < 2);
+  } catch (_) { /* */ }
+
+  // ---- "THIS WEEK" STAT CARDS (this vs previous 7 days) ----
+  try {
+    const rows = await db`
+      SELECT (started_at >= now() - interval '7 days') AS this_week,
+             mode, correct_count, item_count, slides_attempted, started_at, ended_at
+      FROM sessions
+      WHERE child_id = ${childId} AND started_at >= now() - interval '14 days'`;
+    const half = () => ({ sessions: 0, correct: 0, denom: 0, items: 0, passiveSecs: 0 });
+    const now7 = half(), prev7 = half();
+    for (const r of rows) {
+      const h = r.this_week ? now7 : prev7;
+      h.sessions += 1;
+      const denom = Number.isFinite(Number(r.slides_attempted)) && r.slides_attempted != null
+        ? Number(r.slides_attempted) : Number(r.item_count) || 0;
+      h.items += denom;
+      const scored = r.mode === 'self_paced' || r.mode === 'facilitated'
+                  || r.mode === 'auditory_comprehension' || r.mode === 'expressive_naming';
+      if (scored && denom) { h.correct += Number(r.correct_count) || 0; h.denom += denom; }
+      if ((r.mode === 'learn_slideshow' || r.mode === 'exposure_slideshow') && r.ended_at) {
+        h.passiveSecs += Math.max(0, (new Date(r.ended_at) - new Date(r.started_at)) / 1000);
+      }
+    }
+    const pct = (h) => h.denom ? Math.round(100 * h.correct / h.denom) : null;
+    out.stats = {
+      sessions: { now: now7.sessions, prev: prev7.sessions },
+      accuracyPct: { now: pct(now7), prev: pct(prev7) },
+      items: { now: now7.items, prev: prev7.items },
+      exposureMin: { now: Math.round(now7.passiveSecs / 60), prev: Math.round(prev7.passiveSecs / 60) },
+    };
   } catch (_) { /* */ }
 
   // ---- RECENT SPIKES (PRD §6 mastery signal) ----

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The native word shop — browse the library by section/category, tap words
-/// into a cart, and check out in CREDITS (💎1 per word). Each bought word is
+/// into a cart, and check out in CREDITS (⭐1 per word). Each bought word is
 /// placed on the board and rendered in the child's own style + voice within a
 /// few minutes. Spending credits is not an in-app purchase (the credits were
 /// bought via StoreKit / web), so this screen is Apple-compliant as-is.
@@ -66,7 +66,7 @@ struct WordShopView: View {
         .navigationTitle("Word Shop")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Text(balance.map { "💎 \($0)" } ?? "")
+                Text(balance.map { "⭐ \($0)" } ?? "")
                     .font(.system(size: 15, weight: .heavy, design: .rounded))
                     .foregroundStyle(Color(hex: "#ad1457"))
             }
@@ -149,7 +149,7 @@ struct WordShopView: View {
     private var cartBar: some View {
         if !cart.isEmpty {
             HStack(spacing: 12) {
-                Text("\(cart.count) word\(cart.count == 1 ? "" : "s") · 💎\(cart.count)")
+                Text("\(cart.count) word\(cart.count == 1 ? "" : "s") · ⭐\(cart.count)")
                     .font(.system(size: 14, weight: .heavy, design: .rounded))
                     .foregroundStyle(Color(hex: "#ad1457"))
                 Spacer()

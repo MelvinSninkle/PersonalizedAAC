@@ -30,3 +30,17 @@ enum Brand {
     static let nextBg  = "#eef2ff"
     static let nextInk = "#4338ca"
 }
+
+
+/// "people.community.workers" → "People › Community › Workers" — skill slugs
+/// are taxonomy artifacts; parents get readable breadcrumbs. Known overflow
+/// segments get real names (expr → Expressive).
+func prettySkillName(_ slug: String) -> String {
+    let special: [String: String] = ["expr": "Expressive", "more": "More", "extra": "Extra"]
+    let parts = slug.split(separator: ".").map { seg -> String in
+        let s = String(seg)
+        if let mapped = special[s] { return mapped }
+        return s.prefix(1).uppercased() + s.dropFirst()
+    }
+    return parts.joined(separator: " › ")
+}

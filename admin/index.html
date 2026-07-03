@@ -165,7 +165,7 @@
     </div>
 
     <div class="tool">
-      <h3>💎 Grant credits</h3>
+      <h3>⭐ Grant credits</h3>
       <p>Give image credits directly — to one parent by email, or to every account at once (a goodwill drop). Grants land instantly; parents see them in the Word Store.</p>
       <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;">
         <input id="cr-email" placeholder="parent@email.com" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:230px;">
@@ -365,7 +365,7 @@
     status.textContent = 'Granting…';
     try {
       const d = await api('/api/store?action=grant', { method: 'POST', body: JSON.stringify({ email, credits }) });
-      status.textContent = `💎${d.credited} → ${email} (balance now ${d.balance})`;
+      status.textContent = `⭐${d.credited} → ${email} (balance now ${d.balance})`;
       $('cr-email').value = ''; $('cr-amount').value = '';
     } catch (err) { status.textContent = err.message; status.className = 'status err'; }
   });
@@ -374,11 +374,11 @@
     const credits = Number($('cr-all-amount').value);
     const note = $('cr-all-note').value.trim();
     if (!(credits > 0)) { status.textContent = 'Enter a positive credit amount for the global grant.'; status.className = 'status err'; return; }
-    if (!confirm(`Grant 💎${credits} to EVERY non-admin account? This can't be undone.`)) return;
+    if (!confirm(`Grant ⭐${credits} to EVERY non-admin account? This can't be undone.`)) return;
     status.textContent = 'Granting to everyone…';
     try {
       const d = await api('/api/store?action=grant-all', { method: 'POST', body: JSON.stringify({ credits, note }) });
-      status.textContent = `💎${d.credited} granted to ${d.users} accounts.`;
+      status.textContent = `⭐${d.credited} granted to ${d.users} accounts.`;
       $('cr-all-amount').value = ''; $('cr-all-note').value = '';
     } catch (err) { status.textContent = err.message; status.className = 'status err'; }
   });
@@ -393,7 +393,7 @@
         ? `<table><thead><tr><th>Code</th><th>Credits</th><th>Used</th><th>Expires</th><th>Note</th><th>Status</th><th></th></tr></thead><tbody>` +
           list.map(c => `<tr>
             <td><strong>${esc(c.code)}</strong></td>
-            <td>💎${c.credits}</td>
+            <td>⭐${c.credits}</td>
             <td>${c.redemptions}${c.max_redemptions ? ' / ' + c.max_redemptions : ' / ∞'}</td>
             <td>${c.expires_at ? esc(new Date(c.expires_at).toLocaleDateString()) : 'never'}</td>
             <td>${esc(c.note || '')}</td>

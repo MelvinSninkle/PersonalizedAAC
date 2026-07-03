@@ -747,7 +747,7 @@ private struct MagicFollowUpSheet: View {
             Text("Your \(candidate.label) shows up in \(affected.count) other picture\(affected.count == 1 ? "" : "s")")
                 .font(.system(size: 18, weight: .heavy, design: .rounded))
                 .multilineTextAlignment(.center)
-            Text("Remake them so they show YOUR \(candidate.label)? 💎1 each — replaced art is archived.")
+            Text("Remake them so they show YOUR \(candidate.label)? ⭐1 each — replaced art is archived.")
                 .font(.system(size: 13)).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             ScrollView {
@@ -785,7 +785,7 @@ private struct MagicFollowUpSheet: View {
             if let e = note, phase == .regen { Text(e).font(.system(size: 12)).foregroundStyle(.secondary) }
             HStack(spacing: 12) {
                 Button { Task { await doRegen() } } label: {
-                    Text(busy ? "Queuing…" : "Remake \(selected.count) (💎\(selected.count))")
+                    Text(busy ? "Queuing…" : "Remake \(selected.count) (⭐\(selected.count))")
                         .font(.system(size: 16, weight: .bold))
                         .padding(.horizontal, 22).padding(.vertical, 12)
                         .background(Color(hex: "#ff1493")).foregroundStyle(.white)

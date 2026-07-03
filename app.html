@@ -3229,7 +3229,7 @@
       const r = await apiJSON('/api/store?action=retry', {
         method: 'POST', body: JSON.stringify({ childId: CHILD_ID, itemId: editingItem.id }),
       });
-      note.textContent = (r.freeRetry ? 'Redrawing (free)' : 'Redrawing (💎' + r.charged + ')')
+      note.textContent = (r.freeRetry ? 'Redrawing (free)' : 'Redrawing (⭐' + r.charged + ')')
         + ' — the new picture lands in a minute or two.';
     } catch (err) {
       note.textContent = '';

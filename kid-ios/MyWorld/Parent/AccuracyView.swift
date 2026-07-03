@@ -50,7 +50,7 @@ struct AccuracyView: View {
         let points: [Pt] = top.flatMap { s in
             s.data.enumerated().compactMap { i, pct in
                 guard i < labels.count, pct > 0 else { return nil }
-                return Pt(category: s.name, bucketIndex: i, pct: pct)
+                return Pt(category: prettySkillName(s.name), bucketIndex: i, pct: pct)
             }
         }
         return chartCard(title: "Pass rate by category",
@@ -92,7 +92,7 @@ struct AccuracyView: View {
         let points: [Pt] = series.flatMap { s in
             s.data.enumerated().compactMap { i, pct in
                 guard i < labels.count, pct > 0 else { return nil }
-                return Pt(category: s.name, bucketIndex: i, pct: pct)
+                return Pt(category: prettySkillName(s.name), bucketIndex: i, pct: pct)
             }
         }
         return chartCard(title: "Pass rate by game mode",

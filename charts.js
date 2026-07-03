@@ -28,6 +28,12 @@ window.Insights = (function () {
   };
   let childName = 'your child';
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // Series named by taxonomy slug ("people.community.workers") read as raw
+  // artifacts to a parent — render them as "People › Community › Workers".
+  // Mirrors prettySkillName in the iOS app; plain names pass through untouched.
+  const SKILL_WORDS = { expr: 'Expressive', more: 'More', extra: 'Extra' };
+  const prettySkill = (name) => String(name == null ? '' : name).split('.').map(seg =>
+    SKILL_WORDS[seg] || (seg.charAt(0).toUpperCase() + seg.slice(1))).join(' › ');
   const $ = (id) => document.getElementById(id);
   function niceMax(v) {
     if (v <= 10) return Math.max(2, Math.ceil(v / 2) * 2);
@@ -73,10 +79,10 @@ window.Insights = (function () {
     labels.forEach((w, i) => { if (i % step === 0 || i === n - 1) svg += `<text x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="#9ca3af">${w}</text>`; });
     if ($('ins-svg')) $('ins-svg').innerHTML = svg;
     if ($('ins-legend')) $('ins-legend').innerHTML = drawn.map(s =>
-      `<span class="lg"><i style="background:${s.color}"></i>${esc(s.name)} <b>${s.data[n - 1]}${cfg.unit}</b></span>`).join('');
+      `<span class="lg"><i style="background:${s.color}"></i>${esc(prettySkill(s.name))} <b>${s.data[n - 1]}${cfg.unit}</b></span>`).join('');
     const starred = cfg.list.filter(cfg.star);
     if ($('ins-stars')) $('ins-stars').innerHTML = starred.length
-      ? `<span class="lbl">${cfg.starLabel}</span>` + starred.map(s => `<span class="ins-star">⭐ ${esc(s.name)}</span>`).join('')
+      ? `<span class="lbl">${cfg.starLabel}</span>` + starred.map(s => `<span class="ins-star">⭐ ${esc(prettySkill(s.name))}</span>`).join('')
       : '';
   }
 
@@ -89,12 +95,12 @@ window.Insights = (function () {
     }
     el.innerHTML = list.map(([name, pct]) => `
     <div class="bar-row">
-      <span>${esc(name)}</span>
+      <span>${esc(prettySkill(name))}</span>
       <span class="bar-track"><span class="bar-fill" style="width:${pct}%"></span></span>
       <span class="pct">${pct}%</span>
     </div>`).join('');
   }
 
   function init(opts) { if (opts && opts.childName) childName = opts.childName; }
-  return { SERIES, WEEKS, niceMax, COLORS, PALETTE, colorFor, renderChart, renderMastery, init };
+  return { SERIES, WEEKS, niceMax, COLORS, PALETTE, colorFor, prettySkill, renderChart, renderMastery, init };
 })();
