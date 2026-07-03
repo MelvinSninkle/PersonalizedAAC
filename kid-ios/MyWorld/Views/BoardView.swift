@@ -139,7 +139,7 @@ struct BoardView: View {
         .fullScreenCover(item: gameSessionBinding) { session in
             Group {
                 switch session.mode {
-                case .matching, .auditoryComprehension:
+                case .matching, .auditoryComprehension, .clueQuiz:
                     // Auditory Comprehension reuses MatchingView's lifecycle
                     // and choice grid; only the prompt source differs
                     // (description TTS vs. recorded label audio — handled

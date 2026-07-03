@@ -165,6 +165,7 @@ struct TeachShowView: View {
     @State private var image: UIImage?
     @State private var clue = ""
     @State private var runner: Task<Void, Never>?
+    @State private var limitTask: Task<Void, Never>?
 
     private var current: Tile? { deck.indices.contains(pos) ? deck[pos] : nil }
 
@@ -213,16 +214,26 @@ struct TeachShowView: View {
         .task { start() }
         .onDisappear {
             runner?.cancel()
+            limitTask?.cancel()
             tickDominantSkillOnExit()
         }
     }
 
     private func start() {
-        deck = board.tilesForScope(session.scope, from: nil, to: nil)
+        deck = board.tilesForScope(session.scope, from: session.from, to: session.to)
             .filter { $0.imageKey?.isEmpty == false && !$0.label.isEmpty }
             .shuffled()
+        // Parent-launched runs can cap the deck ("5 random") and set a limit.
+        if let n = session.sample, n > 0 { deck = Array(deck.prefix(n)) }
         guard !deck.isEmpty else { onExit(); return }
         runner = Task { await run() }
+        if let mins = session.limitMin, mins > 0 {
+            limitTask = Task {
+                try? await Task.sleep(nanoseconds: UInt64(mins * 60 * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                await MainActor.run { onExit() }
+            }
+        }
     }
 
     /// The teaching loop — event-paced (advances when the speech is done), not

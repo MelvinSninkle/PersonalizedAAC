@@ -87,7 +87,9 @@ struct MatchingView: View {
     /// shows NO text (the child isn't reading the answer, they're hearing it).
     private func listenButton(_ target: Tile) -> some View {
         Button {
-            Task { await TilePlayer.shared.play(target) }
+            // Replays the PROMPT — in the clue/auditory modes that's the clue
+            // or description, never the answer word (which would give it away).
+            announceTarget()
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "speaker.wave.3.fill")
@@ -160,8 +162,15 @@ struct MatchingView: View {
     }
 
     private func setup() {
-        let pool = board.tilesForScope(session.scope, from: session.from, to: session.to)
+        var pool = board.tilesForScope(session.scope, from: session.from, to: session.to)
             .filter { ($0.imageKey?.isEmpty == false) }
+        // Clue quiz: targets prefer tiles with something to speak (a teaching
+        // clue or an auditory description) — clue-less tiles still serve as
+        // distractors via buildChoices' board-wide fallback.
+        if case .clueQuiz = session.mode {
+            let cluey = pool.filter { ($0.descriptiveClues?.isEmpty == false) || ($0.description?.isEmpty == false) }
+            if !cluey.isEmpty { pool = cluey }
+        }
         var picked = pool.shuffled()
         if let n = session.sample, n > 0 { picked = Array(picked.prefix(n)) }
         targets = picked
@@ -206,8 +215,10 @@ struct MatchingView: View {
         switch session.mode {
         case .matching:                modeStr = "self_paced"
         case .auditoryComprehension:   modeStr = "auditory_comprehension"
+        case .clueQuiz:                modeStr = "clue_quiz"
         case .expressiveNaming:        modeStr = "expressive_naming"
         case .slideshow(let fp):       modeStr = fp ? "exposure_slideshow" : "learn_slideshow"
+        case .teach:                   modeStr = "teach_slideshow"   // never runs here; keeps the switch exhaustive
         case .celebration:             modeStr = "celebration"
         }
         let payload = APIClient.GameLogPayload(
@@ -274,15 +285,31 @@ struct MatchingView: View {
     /// eats grass" → horse). PRD §5.
     private func announceTarget() {
         guard let target else { return }
-        if case .auditoryComprehension = session.mode {
+        switch session.mode {
+        case .auditoryComprehension:
             let desc = target.description?.trimmingCharacters(in: .whitespacesAndNewlines)
             let prompt = (desc?.isEmpty == false)
                 ? desc!
                 : "Who or what is the \(target.label)?"
             GameAudio.shared.speak(prompt, childId: auth.childSlug)
-        } else {
+        case .clueQuiz:
+            GameAudio.shared.speak(cluePrompt(for: target), childId: auth.childSlug)
+        default:
             Task { await TilePlayer.shared.play(target) }
         }
+    }
+
+    /// Clue quiz prompt: the clue at the current miss count — clues are
+    /// authored easiest-first, so each wrong tap reveals the next one.
+    /// Tiles without clues fall back to their auditory description, then to
+    /// a generic question.
+    private func cluePrompt(for target: Tile) -> String {
+        let clues = (target.descriptiveClues ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if !clues.isEmpty { return clues[min(misses, clues.count - 1)] }
+        if let d = target.description?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty { return d }
+        return "Who or what is the \(target.label)?"
     }
 
     private func buildChoices() {

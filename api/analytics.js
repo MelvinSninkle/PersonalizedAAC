@@ -14,6 +14,8 @@ const MODE_LABEL = {
   facilitated: 'Facilitated',
   // PRD §5 — the three scored game modes.
   auditory_comprehension: 'Auditory Comprehension',
+  clue_quiz: 'Clue Quiz',
+  teach_slideshow: 'Teach Slideshow',
   expressive_naming: 'Expressive Naming',
   learn_slideshow: 'Learn Slideshow',
   exposure_slideshow: 'Exposure',

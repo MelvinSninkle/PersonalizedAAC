@@ -4909,10 +4909,22 @@
       return;
     }
     G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true; G.sequence = !!opts.sequence; G.routine = !!opts.routine;
+    G.clueQuiz = !!opts.clueQuiz;
     G.queue = gShuffle(items.slice()); G.i = 0; G.attempts = []; G.locked = false;
+    // Clue quiz: TARGETS prefer tiles that actually have a clue (or an
+    // auditory description) to speak; clue-less tiles stay available as
+    // distractors so the grid still fills on mixed boards.
+    if (G.clueQuiz) {
+      const cluey = items.filter(t => (Array.isArray(t.descriptiveClues) && t.descriptiveClues.length) || t.description);
+      if (cluey.length) {
+        const ids = new Set(cluey.map(x => x.id));
+        G.fillPool = [...G.fillPool, ...items.filter(x => !ids.has(x.id))];
+        G.queue = gShuffle(cluey.slice());
+      }
+    }
     // Child-launched quizzes cap the round count (random sample of the scope).
     if (Number.isFinite(opts.sample) && opts.sample > 0) G.queue = G.queue.slice(0, opts.sample);
-    G.session = { mode: G.facilitated ? 'facilitated' : 'self_paced', category: scope, startedAt: new Date().toISOString() };
+    G.session = { mode: G.clueQuiz ? 'clue_quiz' : (G.facilitated ? 'facilitated' : 'self_paced'), category: scope, startedAt: new Date().toISOString() };
     document.getElementById('game-setup').classList.remove('show');
     document.getElementById('game-overlay').classList.add('show');
     const m = gMusic();
@@ -4963,7 +4975,20 @@
   }
 
   async function playPrompt() {
-    const t = G.target; if (!t || !t.soundKey) return;
+    const t = G.target; if (!t) return;
+    // Clue quiz: the PROMPT is a teaching clue, not the word (which would give
+    // the answer away). Progressive mercy — each miss reveals the next clue
+    // (they're authored easiest-first); description, then a generic question,
+    // fill in for tiles without clues.
+    if (G.clueQuiz) {
+      const clues = (t.descriptiveClues || []).filter(Boolean);
+      const text = clues.length ? clues[Math.min(G.misses || 0, clues.length - 1)]
+                 : (t.description || ('Who or what is the ' + t.label + '?'));
+      const url = await teachAudioURL(text);
+      if (url) { const v = gVoice(); v.src = url; v.currentTime = 0; v.play().catch(() => {}); }
+      return;
+    }
+    if (!t.soundKey) return;
     const url = await getMediaURL(t.soundKey);
     if (url) { const v = gVoice(); v.src = url; v.currentTime = 0; v.play().catch(() => {}); }
   }
@@ -4996,6 +5021,9 @@
       el.classList.add('correct');
       document.querySelectorAll('.game-choice').forEach(x => { if (x !== el) x.classList.add('dim'); });
       chime();
+      // Clue quiz reinforces the WORD on success — the clue was the prompt,
+      // so this is the first time the child hears the answer named.
+      if (G.clueQuiz && G.target.soundKey) getMediaURL(G.target.soundKey).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } });
       // PRD §3.2 mercy cutover: 2nd- or 3rd-attempt pass is a FULL PASS.
       logAttempt(true);
       publishState();
@@ -5460,7 +5488,7 @@
   // reports an error — so a remote launch never silently no-ops on a thin category
   // (the bug where "Start" on the phone appeared to do nothing).
   async function startFromCmd(cmd) {
-    if (G.running || SLIDE.running || ROUTINE.active) return;          // one activity at a time
+    if (G.running || SLIDE.running || TEACH.running || ROUTINE.active) return;   // one activity at a time
     if (Array.isArray(cmd.steps) && cmd.steps.length) { runRoutine(cmd.steps); return; }
     const mode = cmd.mode || 'facilitated';        // back-compat: therapist sends no mode → facilitated
     const range = (cmd.from || cmd.to) ? { from: cmd.from || 0, to: cmd.to || 0 } : null;
@@ -5470,9 +5498,11 @@
       startSlideshow({ scope: cmd.scope || 'all', secondsPerImage: cmd.secondsPerImage || 5, limitMin, labelStyle: cmd.labelStyle || (mode === 'exposure_slideshow' ? 'first_person' : 'plain') });
       return;
     }
+    if (mode === 'teach_slideshow') { startTeachShow(cmd.scope || 'all'); return; }
     if (mode === 'celebration') { playCelebration(); return; }
     // Matching game(s): filter to scopes that can actually be played.
     const choices = cmd.choices || 3;
+    const sample = (Number.isFinite(cmd.sample) && cmd.sample > 0) ? cmd.sample : undefined;
     const wanted = (Array.isArray(cmd.scopes) && cmd.scopes.length) ? cmd.scopes.slice() : [cmd.scope || 'all'];
     const playable = [];
     for (const sc of wanted) { try { const its = await gatherPlayable(sc, range); if (its.length >= choices) playable.push(sc); } catch (_) {} }
@@ -5480,8 +5510,9 @@
     if (!playable.length) { publishLive('error', { message: 'Not enough picture tiles to play a game yet.' }); return; }
     saveGameSettings({ choices, ...(Number.isFinite(cmd.limitMin) ? { limitMin: cmd.limitMin } : {}) });
     if (mode === 'facilitated') startGame(playable[0], choices, { facilitated: true, range, limitMin });
+    else if (mode === 'clue_quiz') startGame(playable[0], choices, { range, limitMin, sample, clueQuiz: true, fillFromBoard: true });
     else if (playable.length > 1) { gameSeq = playable.slice(); startNextSeqGame(); }
-    else startGame(playable[0], choices, { range, limitMin });
+    else startGame(playable[0], choices, { range, limitMin, sample });
   }
   function markRemote(method) {
     if (G.locked || !G.target) return;

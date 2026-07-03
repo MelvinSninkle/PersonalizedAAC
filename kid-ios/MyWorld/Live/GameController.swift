@@ -21,6 +21,10 @@ final class GameController {
         /// scope, speaking each word and then all of its taxonomy teaching
         /// clues (descriptive_clues).
         case teach
+        /// Clue quiz — hear a teaching clue, tap the picture it describes.
+        /// MatchingView lifecycle; each miss speaks the tile's NEXT clue, so
+        /// wrong taps accumulate information instead of punishing.
+        case clueQuiz
         case celebration
     }
 
@@ -52,6 +56,7 @@ final class GameController {
         case "learn_slideshow", "slideshow":  return .slideshow(firstPerson: false)
         case "exposure_slideshow":            return .slideshow(firstPerson: true)
         case "teach_slideshow":               return .teach
+        case "clue_quiz":                     return .clueQuiz
         case "celebration":                   return .celebration
         case "auditory_comprehension":        return .auditoryComprehension
         case "expressive_naming":             return .expressiveNaming
