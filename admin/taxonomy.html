@@ -1008,7 +1008,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     try {
       const g = await seedDefaultsLoop('populate');
       let msg = `Defaults: copied ${g.processed} of ${g.total} tiles from "${g.sourceChildId || 'reference'}"` + (g.failed ? `, ${g.failed} failed` : '') + '.';
-      if (g.total === 0 && g.note) msg += '\n\n' + g.note;
+      if (g.note) msg += '\n\n' + g.note;
       const childId = prompt(msg + '\n\nApply these defaults to an EXISTING child board now? Enter the child id (blank to skip):', '');
       if (childId && childId.trim()) {
         const a = await seedDefaultsLoop('apply', '&childId=' + encodeURIComponent(childId.trim()));

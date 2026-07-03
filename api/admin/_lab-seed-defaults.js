@@ -116,8 +116,14 @@ async function populate(req, res, db) {
        FROM taxonomy WHERE COALESCE(archived, FALSE) = FALSE ORDER BY id`,
     db`SELECT taxonomy_slug, label, image_key FROM items
        WHERE child_id = ${sourceChildId} AND image_key IS NOT NULL`,
-    db`SELECT DISTINCT ON (taxonomy_id) taxonomy_id, blob_key FROM tile_generations
-       WHERE marked_best = TRUE AND blob_key IS NOT NULL ORDER BY taxonomy_id, created_at DESC`,
+    // Best available Lab generation per tile: the ★ starred one first, then the
+    // highest-rated, then the newest. blob_key OR blob_url — early Lab rows
+    // predate the blob_key column and only carry the URL, which is exactly why
+    // hundreds of vetted tiles used to be skipped as "no source".
+    db`SELECT DISTINCT ON (taxonomy_id) taxonomy_id, blob_key, blob_url, marked_best
+       FROM tile_generations
+       WHERE blob_key IS NOT NULL OR blob_url IS NOT NULL
+       ORDER BY taxonomy_id, marked_best DESC, rating DESC NULLS LAST, created_at DESC`,
   ]);
 
   const bySlug = new Map();
@@ -127,7 +133,7 @@ async function populate(req, res, db) {
     const k = norm(i.label);
     if (k && !byItemLabel.has(k)) byItemLabel.set(k, i.image_key);
   }
-  const byBest = new Map(bestGens.map((g) => [g.taxonomy_id, g.blob_key]));
+  const byBest = new Map(bestGens.map((g) => [g.taxonomy_id, { key: g.blob_key, url: g.blob_url, starred: !!g.marked_best }]));
   const defaultKeyByLabel = new Map();   // label → an already-set default key
   const defaultable = tax.filter(isDefaultableTile);
   for (const t of defaultable) {
@@ -137,17 +143,41 @@ async function populate(req, res, db) {
 
   // Work list: default-able rows that need a default, with their chosen source.
   const pending = [];
+  const noSource = [];
+  let fromUnstarred = 0;
   for (const t of defaultable) {
     if (t.default_image_key && !force) continue;
-    const srcKey = bySlug.get(t.id) || byBest.get(t.id) || null;
+    const boardKey = bySlug.get(t.id) || null;
+    const gen = byBest.get(t.id) || null;
     const labelKey = defaultKeyByLabel.get(norm(t.label)) || null;       // reuse, no copy
     const labelSrc = byItemLabel.get(norm(t.label)) || null;            // copy
-    if (srcKey) pending.push({ tax_id: t.id, srcKey, via: bySlug.has(t.id) ? 'board' : 'lab-best' });
+    if (boardKey) pending.push({ tax_id: t.id, srcKey: boardKey, via: 'board' });
+    else if (gen) {
+      if (!gen.starred) fromUnstarred++;
+      pending.push({ tax_id: t.id, srcKey: gen.key, srcUrl: gen.url, via: 'lab' });
+    }
     else if (labelKey) pending.push({ tax_id: t.id, reuseKey: labelKey, via: 'label-reuse' });
     else if (labelSrc) pending.push({ tax_id: t.id, srcKey: labelSrc, via: 'label-board' });
+    else noSource.push(t.label);
   }
   const total = pending.length;
   const slice = pending.slice(offset, offset + POPULATE_BUDGET);
+
+  // Read source bytes by key (private Blob) with a URL fallback — early Lab
+  // rows only have blob_url, and some uploads are public where the private
+  // getter errors. Either path yields the same bytes.
+  async function fetchSource(row) {
+    if (row.srcKey) {
+      try { return await readBlobBytes(row.srcKey); } catch (_) { /* fall through */ }
+    }
+    if (row.srcUrl) {
+      const r = await fetch(row.srcUrl);
+      if (!r.ok) throw new Error('source fetch ' + r.status);
+      return { buffer: Buffer.from(await r.arrayBuffer()),
+               contentType: r.headers.get('content-type') || 'image/png' };
+    }
+    throw new Error('no readable source');
+  }
 
   const results = await mapPool(slice, 4, async (row) => {
     if (row.reuseKey) {
@@ -155,7 +185,7 @@ async function populate(req, res, db) {
       await db`UPDATE taxonomy SET default_image_key = ${row.reuseKey}, updated_at = NOW() WHERE id = ${row.tax_id}`;
       return row.reuseKey;
     }
-    const { buffer, contentType } = await readBlobBytes(row.srcKey);
+    const { buffer, contentType } = await fetchSource(row);
     const ext = (String(contentType || '').includes('jpeg') || String(contentType || '').includes('jpg')) ? 'jpg' : 'png';
     const key = `taxonomy-defaults/${row.tax_id}/${randomUUID()}.${ext}`;
     await put(key, buffer, { access: 'private', contentType: contentType || 'image/png', addRandomSuffix: false });
@@ -168,12 +198,15 @@ async function populate(req, res, db) {
   const nextOffset = offset + slice.length;
   const done = nextOffset >= total;
 
-  const stillMissing = defaultable.filter((t) => !t.default_image_key).length - processed;
-  let note = `${defaultable.length} default-able rows; ${total} fillable this run (board/lab-best/label); ~${Math.max(0, stillMissing)} still have no source image anywhere.`;
+  let note = `${defaultable.length} default-able rows; ${total} fillable this run` +
+    (fromUnstarred ? ` (${fromUnstarred} from unstarred Lab generations — audit them on the Default board)` : '') +
+    `; ${noSource.length} have no image anywhere (need Lab generation first)` +
+    (noSource.length ? `: ${noSource.slice(0, 8).join(', ')}${noSource.length > 8 ? '…' : ''}` : '.');
   let diag;
   if (total === 0 && offset === 0) {
-    diag = { sourceChildId, itemsWithImage: sourceImages, labBest: byBest.size, defaultable: defaultable.length };
-    note = `Nothing fillable: ${defaultable.length} default-able rows, ${byBest.size} Lab ★ best images, ${sourceImages} board images on "${sourceChildId}". Rows without any existing image need to be generated in the Lab first.`;
+    diag = { sourceChildId, itemsWithImage: sourceImages, labGenerations: byBest.size, defaultable: defaultable.length, noSource: noSource.slice(0, 20) };
+    note = `Nothing fillable: ${defaultable.length} default-able rows, ${byBest.size} Lab generations, ${sourceImages} board images on "${sourceChildId}".` +
+      (noSource.length ? ` Missing everywhere (${noSource.length}): ${noSource.slice(0, 10).join(', ')}…` : '');
   }
 
   res.setHeader('Cache-Control', 'no-store');
