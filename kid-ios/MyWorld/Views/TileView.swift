@@ -10,9 +10,9 @@ struct TileView: View {
     /// speaking (matching the web organizer). A pencil badge marks it editable.
     var editMode: Bool = false
     var onEdit: (Tile) -> Void = { _ in }
-    /// Tiles are square everywhere EXCEPT a TV/movies folder, where they show
-    /// their natural rectangular aspect (movie posters). Driven by the folder,
-    /// not the per-tile flag, so the board stays consistent.
+    /// Historical knob — poster folders used to letterbox their natural
+    /// aspect, which broke the board's uniformity. Every image now center-
+    /// crops to fill the square; the parameter stays so call sites compile.
     var posterMode: Bool = false
 
     @Environment(DisplayPrefs.self) private var prefs
@@ -29,7 +29,7 @@ struct TileView: View {
                     if let img = image {
                         Image(uiImage: img)
                             .resizable()
-                            .aspectRatio(contentMode: posterMode ? .fit : .fill)
+                            .aspectRatio(contentMode: .fill)   // guillotine: center-crop, no exceptions
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()
                     } else if tile.imageKey == nil || tile.imageKey?.isEmpty == true {
@@ -100,10 +100,9 @@ struct TileView: View {
     private func loadImage() async {
         guard let key = tile.imageKey, !key.isEmpty else { return }
         if let img = await MediaCache.shared.image(for: key) {
-            // Poster folders keep their natural framing; everything else gets
-            // the baked-in letterbox margins trimmed so the square fill-crop
-            // shows the PICTURE, not the white card it was drawn on.
-            let display = posterMode ? img : img.trimmingFlatBorders()
+            // GUILLOTINE RULE: trim baked-in margins, then the view center-
+            // crops to fill the square. Every tile, every folder — uniform.
+            let display = img.trimmingFlatBorders()
             await MainActor.run { self.image = display }
         }
     }

@@ -80,7 +80,7 @@ struct CategoryChip: View {
                     if let img = image {
                         Image(uiImage: img)
                             .resizable()
-                            .aspectRatio(contentMode: category.keepAspect ? .fit : .fill)
+                            .aspectRatio(contentMode: .fill)   // guillotine: center-crop, no exceptions
                             .frame(width: side, height: side)
                             .clipped()
                     } else {
@@ -115,7 +115,7 @@ struct CategoryChip: View {
         .task(id: category.imageKey) {
             guard let key = category.imageKey, !key.isEmpty else { return }
             if let img = await MediaCache.shared.image(for: key) {
-                let display = category.keepAspect ? img : img.trimmingFlatBorders()
+                let display = img.trimmingFlatBorders()
                 await MainActor.run { self.image = display }
             }
         }

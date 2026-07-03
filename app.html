@@ -1844,8 +1844,11 @@
   }
 
   // Set a tile's background image from its storage key (lazy fetch + cache).
+  // GUILLOTINE RULE: on the board, every image is centered and hard-cropped
+  // to fill its square — no keep-aspect exceptions. Uniformity is the UI;
+  // the flag still exists in the editor/organizer but never bends the board.
   function applyImage(el, imageKey, keepAspect) {
-    el.classList.toggle('contain', !!keepAspect);
+    el.classList.remove('contain');
     if (!imageKey) return;
     const cached = getMediaURLSync(imageKey);
     if (cached) { el.style.backgroundImage = `url("${cached}")`; return; }
