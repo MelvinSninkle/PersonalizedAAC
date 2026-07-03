@@ -12,10 +12,10 @@
 // cron until attempts hit MAX, then save-first keeps the raw photo as the tile).
 import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
-import { geminiKey, geminiDefaultModel, isGeminiModel, geminiGenerateImage, geminiCostCents } from './gemini.js';
+import { geminiKey, geminiDefaultModel, geminiProModel, isGeminiModel, geminiGenerateImage, geminiCostCents } from './gemini.js';
 import { openaiEditImage, openaiKeystoneModel, openaiCostCents } from './openai-image.js';
 import { describePhotoLabel } from './vision.js';
-import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, SQUARE_RULE } from './onboarding-render.js';
+import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, buildPortraitPrompt, SQUARE_RULE } from './onboarding-render.js';
 
 export const MAX_ATTEMPTS = 3;
 
@@ -82,6 +82,41 @@ async function describeLabel(buffer, contentType) {
 export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, bg, section }) {
   const subject = label ? `"${label}"` : 'the main subject';
   const isPerson = String(section || '').toLowerCase() === 'people';
+
+  // PEOPLE mimic the Portrait Lab / onboarding family pipeline 1:1 — the SAME
+  // buildPortraitPrompt (strict style transfer + likeness language), the same
+  // image order (style ref first, real photo second), and the same engine
+  // ladder: OpenAI keystone model, retried once on transient errors, then
+  // Gemini PRO (never nano — likeness fidelity is the whole point). Any model
+  // the client sent is deliberately ignored here; old app builds still send
+  // nano for people and were producing off-style portraits.
+  if (isPerson) {
+    const oaKey0 = process.env.OPENAI_API_KEY;
+    const gKey0 = geminiKey();
+    if (!oaKey0 && !gKey0) return { ok: false, detail: 'No image API key configured' };
+    const images = [];
+    if (styleGuide && styleGuide.image && styleGuide.image.buffer) {
+      images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
+    }
+    images.push({ buffer: photo, contentType: contentType || 'image/jpeg' });
+    const prompt = buildPortraitPrompt({ styleGuide, guidance: detail || '' });
+    const callOpenAI = async () =>
+      openaiEditImage({ apiKey: oaKey0, model: await openaiKeystoneModel(db), prompt, images, size: '1024x1024' });
+    const callGemini = async () =>
+      geminiGenerateImage({ apiKey: gKey0, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
+    const transient = (r) => !r.ok && (r.status === 429 || r.status >= 500 || !r.status);
+    const primary = oaKey0 ? callOpenAI : callGemini;
+    const fallback = (oaKey0 && gKey0) ? callGemini : null;
+    let g = await primary().catch((e) => ({ ok: false, detail: String(e.message || e) }));
+    if (transient(g)) {
+      await new Promise((r) => setTimeout(r, 1500));
+      g = await primary().catch((e) => ({ ok: false, detail: String(e.message || e) }));
+    }
+    if (!g.ok && fallback) g = await fallback().catch((e) => ({ ok: false, detail: String(e.message || e) }));
+    if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
+    return { ok: true, b64: g.b64, prompt, model: 'keystone-portrait', costCents: g.costCents ?? 13 };
+  }
+
   const detailClause = detail ? ` Important detail from the family: ${detail}.` : '';
   const captionClause = label
     ? ` At the very bottom, add a clean caption band with the word “${label}”, spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered; put no other text anywhere else.`
@@ -112,16 +147,14 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
   legend.push(`Image ${images.length} is the source photo — re-illustrate THIS subject in the style above.`);
   prompt += '\n\n' + legend.join(' ');
 
-  // MODEL ROUTING (when the client sends none): PEOPLE render on the OpenAI
-  // keystone tier — likeness fidelity is what that tier is for — and everything
-  // else on nano banana. An explicit model (a taxonomy per-row override or an
-  // admin pick) is honored as-is.
+  // MODEL ROUTING (when the client sends none): objects render on nano banana.
+  // (People never reach here — they take the keystone-portrait branch above.)
+  // An explicit model (a taxonomy per-row override or an admin pick) is
+  // honored as-is.
   const oaKey = process.env.OPENAI_API_KEY;
   const gKey = geminiKey();
   let useModel = model;
-  if (!useModel) {
-    useModel = (isPerson && oaKey) ? await openaiKeystoneModel(db) : geminiDefaultModel();
-  }
+  if (!useModel) useModel = geminiDefaultModel();
   const wantsOpenAI = !isGeminiModel(useModel);
   if (wantsOpenAI && oaKey) {
     const g = await openaiEditImage({ apiKey: oaKey, model: useModel, prompt, images, size: '1024x1024' });
@@ -196,6 +229,28 @@ export async function processTileJob(db, jobId) {
     // photo from the Family screen) updates their one tile rather than dupes it.
     const needsReview = !!job.needs_review || artFailed;
     const section = String(job.section || 'nouns').toLowerCase();
+
+    // The board only renders tiles that live inside a category chip, so a
+    // person added without one (the Family & people screen sends no folder)
+    // would be ORPHANED — placed but invisible. Land them in the same
+    // "Family" root category onboarding uses, creating it if needed.
+    let categoryId = job.category_id ? Number(job.category_id) : null;
+    if (!categoryId && section === 'people') {
+      try {
+        const fam = await db`SELECT id FROM categories
+                             WHERE child_id = ${job.child_id} AND section = 'people'
+                               AND parent_id IS NULL AND lower(label) = 'family' LIMIT 1`;
+        if (fam.length) categoryId = Number(fam[0].id);
+        else {
+          const ins = await db`INSERT INTO categories
+              (section, label, parent_id, image_key, keep_aspect, display_order, child_id, updated_at)
+            VALUES ('people', 'Family', NULL, NULL, FALSE, 0, ${job.child_id}, NOW())
+            RETURNING id`;
+          categoryId = Number(ins[0].id);
+        }
+      } catch (_) { /* fall through — worst case the tile lands uncategorized */ }
+    }
+
     let itemId = job.item_id ? Number(job.item_id) : null;
     if (!itemId && section === 'people' && label) {
       const ex = await db`SELECT id FROM items WHERE child_id = ${job.child_id}
@@ -205,13 +260,13 @@ export async function processTileJob(db, jobId) {
     if (itemId) {
       await db`UPDATE items SET label = ${label || 'New tile'}, image_key = ${imageKey},
                  sound_key = COALESCE(${soundKey}, sound_key), section = ${section},
-                 category_id = ${job.category_id}, keep_aspect = ${!!job.keep_aspect},
+                 category_id = COALESCE(${categoryId}, category_id), keep_aspect = ${!!job.keep_aspect},
                  needs_review = ${needsReview}, updated_at = NOW() WHERE id = ${itemId}`;
     } else {
       const it = await db`INSERT INTO items
           (section, category_id, label, image_key, sound_key, keep_aspect, display_order, pinned,
            child_id, needs_review, updated_at)
-        VALUES (${section}, ${job.category_id}, ${label || 'New tile'}, ${imageKey}, ${soundKey},
+        VALUES (${section}, ${categoryId}, ${label || 'New tile'}, ${imageKey}, ${soundKey},
            ${!!job.keep_aspect}, ${Date.now()}, FALSE, ${job.child_id}, ${needsReview}, NOW())
         RETURNING id`;
       itemId = Number(it[0].id);

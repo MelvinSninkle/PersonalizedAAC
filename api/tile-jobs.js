@@ -75,12 +75,17 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
 
   // Credits: a photo-to-tile render is one nano-banana image = 1 credit.
-  // Charged at enqueue (the job WILL render); admins exempt.
+  // A PERSON runs the keystone-portrait pipeline (best likeness model) = 3,
+  // same price as the web family flow. Charged at enqueue; admins exempt.
   {
-    const charge = await chargeForGeneration(db, auth.user, { credits: COST.nano, reason: 'tile:photo', ref: childId });
+    const isPerson = String(qs(req, 'section') || '').toLowerCase() === 'people';
+    const credits = isPerson ? COST.person : COST.nano;
+    const charge = await chargeForGeneration(db, auth.user, { credits, reason: isPerson ? 'tile:person' : 'tile:photo', ref: childId });
     if (!charge.ok) {
-      res.status(402).json({ error: 'not_enough_credits', needed: COST.nano, balance: charge.balance,
-                             detail: 'Making a tile from a photo uses 1 credit. Add credits in the store and try again.' });
+      res.status(402).json({ error: 'not_enough_credits', needed: credits, balance: charge.balance,
+                             detail: isPerson
+                               ? 'A family-member portrait uses 3 credits (it runs on our best likeness model). Add credits in the store and try again.'
+                               : 'Making a tile from a photo uses 1 credit. Add credits in the store and try again.' });
       return;
     }
   }

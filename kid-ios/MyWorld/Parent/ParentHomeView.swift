@@ -625,12 +625,15 @@ private struct PersonEditorSheet: View {
                                            relationship: draft.isSelf ? "self" : relationship,
                                            childId: childId)
             // 2) New photo → durable pipeline renders the portrait, registers the
-            //    person's reference, and drops/updates their People tile.
+            //    person's reference, and drops/updates their People tile. No
+            //    model is sent on purpose: the server routes people through the
+            //    SAME keystone-portrait pipeline as the Portrait Lab (style
+            //    guide attached, likeness prompt, best likeness model).
             if let jpeg = capturedJPEG {
                 _ = try await api.createTileJob(
                     photoJPEG: jpeg, label: trimmed, detail: "", section: "people",
                     categoryId: nil, style: ArtStyle.soft.prompt, styleGuideId: nil,
-                    model: ImageModel.nanoBanana.apiValue, bg: "pink", keepAspect: false,
+                    model: "", bg: "pink", keepAspect: false,
                     needsReview: false, emotion: "default", childId: childId,
                     relationship: draft.isSelf ? nil : relationship)
             }
