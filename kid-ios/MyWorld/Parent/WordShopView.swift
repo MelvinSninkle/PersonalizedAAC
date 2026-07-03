@@ -16,6 +16,10 @@ struct WordShopView: View {
     @State private var busy = false
     @State private var note: String?
     @State private var errorText: String?
+    /// Folders start CLOSED — the library is hundreds of words, and one flat
+    /// scroll was unusable. A search (or picking a section) opens everything
+    /// it matches so results are never hidden behind a closed folder.
+    @State private var openFolders: Set<String> = []
 
     private let api = APIClient()
 
@@ -47,13 +51,13 @@ struct WordShopView: View {
                     ProgressView().frame(maxWidth: .infinity).padding(.top, 30)
                 } else {
                     ForEach(groups, id: \.key) { group in
-                        Text(group.key.uppercased())
-                            .font(.system(size: 12, weight: .heavy))
-                            .foregroundStyle(Color(hex: "#ad1457"))
-                            .padding(.top, 4)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 10)], spacing: 10) {
-                            ForEach(group.tiles) { t in
-                                shopTile(t)
+                        let isOpen = allOpen || openFolders.contains(group.key)
+                        folderHeader(group, isOpen: isOpen)
+                        if isOpen {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 10)], spacing: 10) {
+                                ForEach(group.tiles) { t in
+                                    shopTile(t)
+                                }
                             }
                         }
                     }
@@ -79,6 +83,52 @@ struct WordShopView: View {
 
     private var columns: [String] {
         Array(Set(tiles.map(\.column))).sorted()
+    }
+
+    /// Searching or filtering to one section = the parent is looking for
+    /// something specific — show it all, don't make them open folders.
+    private var allOpen: Bool {
+        !search.trimmingCharacters(in: .whitespaces).isEmpty || !column.isEmpty
+    }
+
+    /// Tappable folder row: chevron + name + word count. In-cart words keep a
+    /// pink badge on the closed folder so a browsing parent can find their
+    /// picks again.
+    private func folderHeader(_ group: Group, isOpen: Bool) -> some View {
+        let inCart = group.tiles.filter { cart.contains($0.id) }.count
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                if openFolders.contains(group.key) { openFolders.remove(group.key) }
+                else { openFolders.insert(group.key) }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isOpen ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(hex: "#d6a8c6"))
+                Text(group.key.uppercased())
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(Color(hex: "#ad1457"))
+                    .lineLimit(1)
+                Spacer()
+                if inCart > 0 {
+                    Text("\(inCart) in cart")
+                        .font(.system(size: 10, weight: .heavy))
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Capsule().fill(Color(hex: "#ff1493")))
+                        .foregroundStyle(.white)
+                }
+                Text("\(group.tiles.count)")
+                    .font(.system(size: 11, weight: .bold))
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(Capsule().fill(Color(hex: "#fdf2f8")))
+                    .foregroundStyle(Color(hex: "#9d2463"))
+            }
+            .padding(.horizontal, 12).padding(.vertical, 11)
+            .background(.white, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#f3c6dd"), lineWidth: 1.5))
+        }
+        .buttonStyle(.plain)
     }
 
     private struct Group { let key: String; let tiles: [APIClient.ShopTile] }

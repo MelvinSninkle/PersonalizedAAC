@@ -1,9 +1,13 @@
 import SwiftUI
 
-/// PRD §4.7 — type a message, the child sees it as a sequence of their own
-/// tiles (and hears it in the board's voice). The server tokenizes against the
-/// board greedy-longest ("I love you" = one tile when one exists) and pushes
-/// the sequence through the live channel; the response doubles as the preview.
+/// PRD §4.7 — talking TO the board, both directions in one place:
+///   • Type a message → the child sees it as a sequence of their own tiles
+///     (and hears it in the board's voice). The server tokenizes against the
+///     board greedy-longest ("I love you" = one tile when one exists) and
+///     pushes the sequence through the live channel; the response doubles as
+///     the preview.
+///   • Listening mode → the board captions everything said near the tablet as
+///     live tiles (same toggle that used to be its own home card).
 struct MessageBoardView: View {
     @Environment(AuthManager.self) private var auth
 
@@ -12,6 +16,11 @@ struct MessageBoardView: View {
     @State private var result: APIClient.MessageResult?
     @State private var errorText: String?
     @FocusState private var focused: Bool
+
+    /// Remote Listening Mode — sends the live command; the board flips its
+    /// header into the live word-strip (and auto-stops after 2 min of silence).
+    @State private var listeningOn = false
+    @State private var listenBusy = false
 
     private let api = APIClient()
 
@@ -61,6 +70,8 @@ struct MessageBoardView: View {
                     .padding(14)
                     .background(.white, in: RoundedRectangle(cornerRadius: 16))
                 }
+
+                listeningCard
             }
             .padding(16)
         }
@@ -68,6 +79,48 @@ struct MessageBoardView: View {
         .navigationTitle("Message the board")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { focused = true }
+    }
+
+    /// The other direction: live speech near the tablet → tiles on the board.
+    private var listeningCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Listening mode", systemImage: listeningOn ? "waveform.circle.fill" : "mic.circle.fill")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: listeningOn ? "#ef4444" : "#ad1457"))
+            Text(listeningOn
+                 ? "The board is captioning live — everything said near the tablet shows as tiles."
+                 : "Turn the board into a live word-strip: speech near the tablet becomes tiles as it's said.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Button {
+                Task { await toggleListening() }
+            } label: {
+                HStack {
+                    if listenBusy { ProgressView().tint(.white) }
+                    Text(listeningOn ? "Stop listening" : "Start listening on the tablet")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color(hex: listeningOn ? "#ef4444" : "#ad1457"), in: RoundedRectangle(cornerRadius: 999))
+                .foregroundStyle(.white)
+            }
+            .disabled(listenBusy)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: "#f3c6da"), lineWidth: 1))
+    }
+
+    private func toggleListening() async {
+        guard !listenBusy else { return }
+        listenBusy = true
+        defer { listenBusy = false }
+        let next = !listeningOn
+        let ok = await api.sendLiveCommand(childId: auth.childSlug,
+                                           action: next ? "listen-start" : "listen-stop")
+        if ok { listeningOn = next }
     }
 
     private func tokenStrip(_ tokens: [APIClient.MessageToken]) -> some View {

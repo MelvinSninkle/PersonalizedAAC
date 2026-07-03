@@ -18,10 +18,6 @@ struct ParentHomeView: View {
     @State private var showQuickBoard = false
     @State private var showSettings = false
     @State private var showFacilitator = false
-    /// Remote Listening Mode — mirrors the web dashboard toggle. Sends the
-    /// live command; the board flips its header into the live word-strip.
-    @State private var listeningOn = false
-    @State private var listenBusy = false
     /// Board-build progress (server-side seed jobs still rendering).
     @State private var buildStatus: APIClient.SeedStatus?
 
@@ -34,33 +30,29 @@ struct ParentHomeView: View {
                     brandedHeader
 
                     LazyVGrid(columns: columns, spacing: 14) {
+                        navCard(icon: "star.fill", tint: "#f59e0b",
+                                title: "Credits & Store",
+                                subtitle: "Credits, packs & the word shop") { StoreView() }
+
                         homeCard(icon: "camera.fill", tint: "#ff1493",
                                  title: "Add a tile",
                                  subtitle: "Snap it, it's on the board") { showAddTile = true }
 
-                        homeCard(icon: listeningOn ? "waveform.circle.fill" : "mic.circle.fill",
-                                 tint: listeningOn ? "#ef4444" : "#e11d48",
-                                 title: listeningOn ? "Listening… (tap to stop)" : "Listening mode",
-                                 subtitle: listeningOn ? "The board is captioning live"
-                                                       : "Board turns speech into tiles") {
-                            Task { await toggleListening() }
-                        }
+                        navCard(icon: "text.bubble.fill", tint: "#3b82f6",
+                                title: "Message the board",
+                                subtitle: "Type it — or turn on listening") { MessageBoardView() }
 
                         homeCard(icon: "square.grid.3x3.fill", tint: "#14b8a6",
                                  title: "Quick board",
                                  subtitle: "The child can talk on this device") { showQuickBoard = true }
 
-                        navCard(icon: "person.2.crop.square.stack.fill", tint: "#f59e0b",
+                        navCard(icon: "person.2.crop.square.stack.fill", tint: "#a855f7",
                                 title: "Family & people",
                                 subtitle: "Faces that anchor their tiles") { PeopleManagerView() }
 
                         navCard(icon: "gamecontroller.fill", tint: "#8b5cf6",
                                 title: "Start a game",
                                 subtitle: "Runs on the child's iPad") { StartGameView() }
-
-                        navCard(icon: "text.bubble.fill", tint: "#3b82f6",
-                                title: "Message the board",
-                                subtitle: "Your words as their tiles") { MessageBoardView() }
 
                         navCard(icon: "chart.bar.fill", tint: "#10b981",
                                 title: "Stats",
@@ -77,10 +69,6 @@ struct ParentHomeView: View {
                         navCard(icon: "sparkles.rectangle.stack.fill", tint: "#06b6d4",
                                 title: "Auto-teach",
                                 subtitle: "Hands-off slideshow + daily game") { AutoTeachView() }
-
-                        navCard(icon: "diamond.fill", tint: "#a855f7",
-                                title: "Credits & Store",
-                                subtitle: "Image credits & monthly plan") { StoreView() }
                     }
 
                     if addQueue.hasActiveJobs {
@@ -109,15 +97,10 @@ struct ParentHomeView: View {
                 .padding(16)
             }
             .background(Color(hex: "#fff7fb"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape.fill")
-                            .foregroundStyle(Color(hex: "#ff1493"))
-                    }
-                }
-            }
+            // The home screen owns its header (gear lives in the branded card),
+            // so the empty navigation bar — and its dead space — goes away.
+            // Pushed screens still show their own bars + back buttons.
+            .toolbar(.hidden, for: .navigationBar)
             .fullScreenCover(isPresented: $showAddTile) {
                 AddTileView { showAddTile = false }
             }
@@ -151,19 +134,6 @@ struct ParentHomeView: View {
         }
     }
 
-    /// Flip the board's Listening Mode remotely (same live command the web
-    /// dashboard sends; BoardView reacts to listen-start / listen-stop). The
-    /// board also auto-stops itself after 2 minutes of silence.
-    private func toggleListening() async {
-        guard !listenBusy else { return }
-        listenBusy = true
-        defer { listenBusy = false }
-        let next = !listeningOn
-        let ok = await APIClient().sendLiveCommand(childId: auth.childSlug,
-                                                   action: next ? "listen-start" : "listen-stop")
-        if ok { listeningOn = next }
-    }
-
     /// Poll seed progress while a board build is running (12s cadence, stops
     /// itself when the queue drains).
     private func watchBuildProgress() async {
@@ -175,11 +145,14 @@ struct ParentHomeView: View {
         }
     }
 
-    /// Branded header — the app icon + wordmark, then the child-personalized
-    /// title underneath. Soft pink card so it reads as the "My World" brand,
-    /// not a generic settings page.
+    /// Branded header — one compact row: app icon, "My World: <child>", the
+    /// Tap-to-Talk tagline, and the settings gear (which used to float in a
+    /// mostly-empty navigation bar above — the bar is hidden now, so the grid
+    /// starts higher). When no child is set up yet, a CTA appears instead of
+    /// the name.
     private var brandedHeader: some View {
-        VStack(spacing: 10) {
+        let name = prettyChildName(auth.user?.slug)
+        return VStack(spacing: 12) {
             HStack(spacing: 12) {
                 Image("MyWorldLogo")
                     .resizable()
@@ -188,24 +161,35 @@ struct ParentHomeView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("My World")
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                    Text(name.isEmpty ? "My World" : "My World: \(name)")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundStyle(Color(hex: "#ff1493"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                     Text("Tap to Talk")
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color(hex: "#ad1457").opacity(0.8))
                 }
                 Spacer()
+                Button { showSettings = true } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 19))
+                        .foregroundStyle(Color(hex: "#ff1493"))
+                        .padding(10)
+                        .background(Color.white.opacity(0.75), in: Circle())
+                }
+                .buttonStyle(.plain)
             }
-            Divider().background(Color(hex: "#f3c6da"))
-            HStack {
-                Text(worldTitle(auth.user?.slug))
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(hex: "#1f2937"))
-                Spacer()
-                Text("What do you want to do?")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color(hex: "#9d174d").opacity(0.75))
+            if name.isEmpty {
+                NavigationLink { PeopleManagerView() } label: {
+                    Label("Add your child", systemImage: "person.crop.circle.badge.plus")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color(hex: "#ff1493"), in: Capsule())
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(16)
@@ -376,6 +360,23 @@ struct PeopleManagerView: View {
                 if loading {
                     ProgressView().padding(.top, 20)
                 } else {
+                    // No child registered yet (interrupted onboarding) — the
+                    // home header's "Add your child" CTA lands here, so give it
+                    // a dedicated button that creates the is_self person.
+                    if !persons.contains(where: { $0.isSelf }) {
+                        Button {
+                            var d = PersonDraft()
+                            d.isSelf = true
+                            editing = d
+                        } label: {
+                            Label("Add your child", systemImage: "figure.child")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                                .background(Color(hex: "#ad1457")).foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                        }
+                        .buttonStyle(.plain)
+                    }
                     ForEach(persons) { p in
                         Button { editing = PersonDraft(p) } label: { personRow(p) }
                             .buttonStyle(.plain)
@@ -400,6 +401,9 @@ struct PeopleManagerView: View {
         .sheet(item: $editing) { draft in
             PersonEditorSheet(draft: draft, childId: auth.childSlug) {
                 editing = nil
+                // Refresh the cached child name too — the home header shows
+                // "My World: <name>" the moment the child is registered.
+                ChildNames.shared.refresh(auth.childSlug)
                 Task { await load(); await board.refresh(childId: auth.childSlug) }
             }
         }
