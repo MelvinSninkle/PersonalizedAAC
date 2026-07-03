@@ -17,6 +17,10 @@ final class GameController {
         /// live-session bridge with method = verbal / gesture / object.
         case expressiveNaming
         case slideshow(firstPerson: Bool)
+        /// "Teach me" — child-launched teaching slideshow: one pass through the
+        /// scope, speaking each word and then all of its taxonomy teaching
+        /// clues (descriptive_clues).
+        case teach
         case celebration
     }
 
@@ -47,6 +51,7 @@ final class GameController {
         switch raw {
         case "learn_slideshow", "slideshow":  return .slideshow(firstPerson: false)
         case "exposure_slideshow":            return .slideshow(firstPerson: true)
+        case "teach_slideshow":               return .teach
         case "celebration":                   return .celebration
         case "auditory_comprehension":        return .auditoryComprehension
         case "expressive_naming":             return .expressiveNaming

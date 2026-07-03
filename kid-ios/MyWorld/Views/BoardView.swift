@@ -149,6 +149,8 @@ struct BoardView: View {
                     ExpressiveNamingView(session: session) { endGame() }
                 case .slideshow:
                     SlideshowView(session: session) { endGame() }
+                case .teach:
+                    TeachShowView(session: session) { endGame() }
                 case .celebration:
                     CelebrationView { endGame() }
                 }

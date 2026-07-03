@@ -30,13 +30,13 @@ actor SpeechCache {
     /// Returns the MP3 bytes for a phrase + emotion, fetching from /api/tts on
     /// miss. Concurrent calls for the same phrase share the in-flight fetch
     /// (so a slideshow that asks twice in fast succession doesn't double up).
-    func data(text: String, emotion: String, api: APIClient) async -> Data? {
-        let key = Self.key(text: text, emotion: emotion)
+    func data(text: String, emotion: String, childId: String? = nil, api: APIClient) async -> Data? {
+        let key = Self.key(text: text, emotion: emotion, childId: childId)
         let file = dir.appendingPathComponent(key + ".mp3")
         if let d = try? Data(contentsOf: file, options: .mappedIfSafe) { return d }
         if let task = inFlight[key] { return try? await task.value }
         let task = Task<Data, Error> {
-            guard let bytes = await api.tts(text: text, emotion: emotion) else {
+            guard let bytes = await api.tts(text: text, emotion: emotion, childId: childId) else {
                 throw NSError(domain: "SpeechCache", code: -1)
             }
             try? bytes.write(to: file, options: .atomic)
@@ -77,8 +77,8 @@ actor SpeechCache {
     /// Same hash recipe the server uses (sans model+voice, which the device
     /// can't know reliably — collisions across voice changes are caught by
     /// the server cache anyway).
-    private static func key(text: String, emotion: String) -> String {
-        let raw = "\(emotion)|\(text)"
+    private static func key(text: String, emotion: String, childId: String? = nil) -> String {
+        let raw = "\(childId ?? "")|\(emotion)|\(text)"
         let h = SHA256.hash(data: Data(raw.utf8))
         return h.compactMap { String(format: "%02x", $0) }.joined().prefix(40).lowercased()
     }

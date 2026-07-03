@@ -87,9 +87,19 @@ export default async function handler(req, res) {
     const slugs = [...new Set(items.map(i => i.taxonomy_slug).filter(Boolean))];
     const taxBySlug = new Map();
     if (slugs.length) {
-      const rows = await db`SELECT id, acquisition_age, default_image_key, column_name, subject_mode, prompt_template
+      const rows = await db`SELECT id, acquisition_age, default_image_key, column_name, subject_mode, prompt_template, descriptive_clues
                             FROM taxonomy WHERE id = ANY(${slugs})`;
       for (const r of rows) taxBySlug.set(r.id, r);
+    }
+
+    // Teaching clues ride along on each linked tile (taxonomy.descriptive_clues)
+    // so the boards' "Teach me" slideshow can speak the word + all its clues
+    // without a second fetch.
+    for (const i of items) {
+      const tax = i.taxonomy_slug ? taxBySlug.get(i.taxonomy_slug) : null;
+      if (tax && Array.isArray(tax.descriptive_clues) && tax.descriptive_clues.length) {
+        i.descriptive_clues = tax.descriptive_clues;
+      }
     }
 
     // Read-through defaults: a default-able tile (one that never references a

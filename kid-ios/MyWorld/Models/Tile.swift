@@ -21,6 +21,9 @@ struct Tile: Codable, Identifiable, Hashable {
     /// Comprehension mode (e.g. "lives in a field, four legs, eats grass").
     /// Falls back to "Who/what is the [label]?" in the view when empty.
     let description: String?
+    /// Taxonomy teaching clues (easiest first) — spoken after the word by the
+    /// "Teach me" slideshow. Attached by /api/sync from descriptive_clues.
+    let descriptiveClues: [String]?
     /// True while a bulk-imported tile is awaiting the parent's review. The
     /// tile is already live on the board; this just surfaces it in the review
     /// queue. Cleared when the parent confirms it.
@@ -40,6 +43,7 @@ struct Tile: Codable, Identifiable, Hashable {
         case ownerUserId
         case taxonomySlug
         case description
+        case descriptiveClues
         case needsReview
     }
 
@@ -61,6 +65,7 @@ struct Tile: Codable, Identifiable, Hashable {
         ownerUserId = try c.decodeIfPresent(Int.self, forKey: .ownerUserId)
         taxonomySlug = try c.decodeIfPresent(String.self, forKey: .taxonomySlug)
         description = try c.decodeIfPresent(String.self, forKey: .description)
+        descriptiveClues = try c.decodeIfPresent([String].self, forKey: .descriptiveClues)
         needsReview = try c.decodeIfPresent(Bool.self, forKey: .needsReview) ?? false
     }
 }

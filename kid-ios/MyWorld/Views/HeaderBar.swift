@@ -146,8 +146,29 @@ struct HeaderBar: View {
                              url: URL(string: "https://aac.andrewpeterson.io/therapist/\(slug)")!)
                 }
             }
-            playWithMeButton
+            // Hidden while the listening strip owns the header (mirrors the
+            // web, which hides the play button in listening mode) — the wide
+            // strip needs the room.
+            if !listening {
+                teachMeButton
+                playWithMeButton
+            }
         }
+    }
+
+    private var teachMeButton: some View {
+        Button {
+            startTeachShow()
+        } label: {
+            Text("📖 Teach me")
+                .font(.system(size: 14, weight: .semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Color.white.opacity(0.18))
+                .foregroundStyle(Color(hex: hex))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private var playWithMeButton: some View {
@@ -190,16 +211,31 @@ struct HeaderBar: View {
         }
     }
 
-    /// Self-learning quiz: 10 randomly sampled tiles from whatever category or
-    /// subcategory chip the child pressed last (persisted per child), falling
-    /// back to the whole board when that scope is too thin to make a game.
+    private func playableCount(_ scope: String) -> Int {
+        board.tilesForScope(scope).filter { ($0.imageKey?.isEmpty == false) }.count
+    }
+
+    /// The last category/subcategory chip the child pressed (persisted per
+    /// child), falling back to the whole board only when that scope has
+    /// NOTHING playable (deleted category, fresh install). A short list stays
+    /// a short list — thin categories must remain learnable, so the quiz pulls
+    /// its distractors from the whole board instead of bailing out.
+    private func lastScope() -> String {
+        let scope = GameController.PlayScope.recall(slug: auth.childSlug) ?? "all"
+        return playableCount(scope) > 0 ? scope : "all"
+    }
+
+    /// Self-learning quiz: up to 10 randomly sampled tiles from the last-pressed
+    /// scope — fewer items just means a shorter quiz, never a scope switch.
     private func startSelfQuiz() {
         guard game.current == nil else { return }
-        let playable = { (s: String) in
-            board.tilesForScope(s).filter { ($0.imageKey?.isEmpty == false) }.count
-        }
-        var scope = GameController.PlayScope.recall(slug: auth.childSlug) ?? "all"
-        if playable(scope) < 3 { scope = "all" }
-        game.startLocal(.matching, scope: scope, sample: 10)
+        game.startLocal(.matching, scope: lastScope(), sample: 10)
+    }
+
+    /// "Teach me": slideshow of the same last-pressed scope that speaks each
+    /// word and then all of its taxonomy teaching clues.
+    private func startTeachShow() {
+        guard game.current == nil else { return }
+        game.startLocal(.teach, scope: lastScope())
     }
 }

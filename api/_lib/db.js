@@ -63,6 +63,8 @@ export function rowToItem(r) {
     taxonomySlug: r.taxonomy_slug || null,
     description: r.description || null,
     descriptions: Array.isArray(r.descriptions) ? r.descriptions : null,
+    // Taxonomy teaching clues (attached in /api/sync) — spoken by "Teach me".
+    descriptiveClues: Array.isArray(r.descriptive_clues) && r.descriptive_clues.length ? r.descriptive_clues : null,
     needsReview: !!r.needs_review,
   };
 }
