@@ -2,7 +2,7 @@
 //
 // PRICING MODEL (per the product decision):
 //   · 1 credit  = one image generated with nano banana (Gemini Flash)
-//   · 3 credits = one family-member portrait (OpenAI keystone quality)
+//   · 5 credits = one family-member portrait (keystone quality + its retries)
 //   · list price 10¢/credit; bundles discount it; the $9.99/mo subscription
 //     grants 50 credits each period (packs stack on top)
 //   · every image gets ONE free retry (tracked per tile / per person)
@@ -35,7 +35,7 @@ export const SUBSCRIPTION = {
   appleProductId: 'plus.monthly',
 };
 
-export const COST = { nano: 1, person: 3 };
+export const COST = { nano: 1, person: 5 };
 
 // New parent accounts start with a small wallet so nothing hard-blocks the
 // first days (the initial board build is free anyway — actor 'onboarding_seed').

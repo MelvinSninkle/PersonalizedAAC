@@ -4848,6 +4848,14 @@
   function gShuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
   async function gatherPlayable(scope, range) {
+    // Auto-teach batches: explicit taxonomy ids ("slugs:duck,ball") — only
+    // tiles anchored to those skills play.
+    if (scope && scope.startsWith('slugs:')) {
+      const wanted = new Set(scope.slice(6).split(',').map(s => s.trim()).filter(Boolean));
+      const items = [];
+      for (const s of MAIN_SECTIONS) (await getAllItems(s)).forEach(i => { if (i.taxonomySlug && wanted.has(i.taxonomySlug)) items.push(i); });
+      return items.filter(i => i.imageKey && i.label);
+    }
     // A specific category/subcategory (e.g. Numbers) — optionally sliced to a range.
     if (scope && scope.startsWith('cat:')) {
       const id = Number(scope.slice(4));

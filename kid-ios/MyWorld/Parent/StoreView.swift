@@ -39,7 +39,7 @@ struct StoreView: View {
                     .background(Color(hex: "#fff7fb"))
                     .clipShape(RoundedRectangle(cornerRadius: 14))
 
-                Text("1 credit makes one picture tile. A family-member portrait uses 3 (it runs on our best likeness model). Every image includes one free retry.")
+                Text("1 credit makes one picture tile. A family-member portrait uses 5 (it runs on our best likeness model). Every image includes one free retry.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
 

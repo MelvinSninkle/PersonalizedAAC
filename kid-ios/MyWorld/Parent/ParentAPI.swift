@@ -273,6 +273,9 @@ extension APIClient {
     }
     struct AutoTeachGates: Codable {
         let enabled: Bool
+        /// False until sleep + school/therapy windows are entered (or "no
+        /// outside care" confirmed) — auto-teach can't be enabled before then.
+        var scheduleReady: Bool? = nil
         let inBlackout: Bool
         let recentlyActive: Bool
         let cooldownLeftMin: Int
@@ -318,6 +321,8 @@ extension APIClient {
            let obj = try? JSONSerialization.jsonObject(with: enc) {
             all["autoTeach"] = obj
         }
+        // Keep the family timezone fresh — every wall-clock gate uses it.
+        all["tz"] = TimeZone.current.identifier
         guard let body = try? JSONSerialization.data(withJSONObject: ["settings": all]) else { return }
         _ = try? await request(method: "POST",
                                path: "/api/child-settings?childId=\(percentEscapeParent(childId))",
@@ -344,12 +349,45 @@ extension APIClient {
         let tiles: [AutoTeachTile]?
         let session: AutoTeachSession?
     }
-    func autoTeachNext(childId: String, mode: String) async throws -> AutoTeachNextResponse {
-        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "mode": mode])
+    func autoTeachNext(childId: String, mode: String, tz: String? = nil) async throws -> AutoTeachNextResponse {
+        var payload: [String: Any] = ["childId": childId, "mode": mode]
+        if let tz, !tz.isEmpty { payload["tz"] = tz }   // family-time gates need the device zone
+        let body = try JSONSerialization.data(withJSONObject: payload)
         let (data, _) = try await request(method: "POST", path: "/api/auto-teach/next",
                                           body: body, contentType: "application/json")
         do { return try JSONDecoder().decode(AutoTeachNextResponse.self, from: data) }
         catch { throw APIError.decoding(error) }
+    }
+
+    /// Merge-safe write of the QUIET-HOURS blob (settings.schedule): wake,
+    /// bedtime, the school/therapy care windows, and the explicit "no outside
+    /// care" flag. Location entries of OTHER types (web-created) survive; only
+    /// school/therapy rows are replaced by the editor's list. Meals/snacks the
+    /// web may have stored are untouched.
+    func saveQuietHours(childId: String, wake: String, bedtime: String,
+                        careWindows: [[String: Any]], noOutsideCare: Bool) async {
+        guard let (data, _) = try? await request(
+                method: "GET",
+                path: "/api/child-settings?childId=\(percentEscapeParent(childId))",
+                body: nil),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return }
+        var settings = (root["settings"] as? [String: Any]) ?? [:]
+        var sched = (settings["schedule"] as? [String: Any]) ?? [:]
+        sched["wake"] = wake
+        sched["bedtime"] = bedtime
+        let others = ((sched["locations"] as? [[String: Any]]) ?? []).filter {
+            let t = ($0["type"] as? String) ?? ""
+            return t != "school" && t != "therapy"
+        }
+        sched["locations"] = others + careWindows
+        sched["noOutsideCare"] = noOutsideCare
+        settings["schedule"] = sched
+        settings["tz"] = TimeZone.current.identifier
+        guard let body = try? JSONSerialization.data(withJSONObject: ["settings": settings]) else { return }
+        _ = try? await request(method: "POST",
+                               path: "/api/child-settings?childId=\(percentEscapeParent(childId))",
+                               body: body, contentType: "application/json")
     }
 
     // MARK: -- schedules (merge-safe write, mirrors saveDisplayPrefs)

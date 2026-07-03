@@ -270,3 +270,71 @@ struct GameNudgeCard: View {
         }
     }
 }
+
+// MARK: -- Auto-teach countdown card
+
+/// "Learning time!" — auto-teach staged an activity. Counts down ~10s, speaks
+/// the announcement once, then fires; a grown-up (or the child) can ✕ to skip
+/// this round — the runner just tries again at its next poll. The countdown
+/// exists so the iPad never appears to act on its own out of nowhere.
+struct AutoTeachCountdownCard: View {
+    let mode: String                 // "exposure" | "game"
+    let onStart: () -> Void
+    let onSkip: () -> Void
+
+    @Environment(AuthManager.self) private var auth
+    @State private var secondsLeft = 10
+    @State private var countTask: Task<Void, Never>?
+
+    private var headline: String {
+        mode == "game" ? "Game time! 🎮" : "Learning time! 📚"
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text(mode == "game" ? "🎮" : "📚").font(.system(size: 34))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(headline)
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                Text("Starting in \(secondsLeft)…")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .monospacedDigit()
+            }
+            Spacer()
+            Button {
+                countTask?.cancel()
+                onSkip()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(10)
+                    .background(Color.white.opacity(0.22), in: Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 18).padding(.vertical, 14)
+        .background(Color(hex: "#ad1457"))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
+        .padding(.top, 18)
+        .frame(maxWidth: 480)
+        .task {
+            GameAudio.shared.speak(mode == "game" ? "Game time!" : "Learning time!",
+                                   childId: auth.childSlug)
+            countTask?.cancel()
+            countTask = Task {
+                while secondsLeft > 0 {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run { secondsLeft -= 1 }
+                }
+                guard !Task.isCancelled else { return }
+                await MainActor.run { onStart() }
+            }
+        }
+        .onDisappear { countTask?.cancel() }
+    }
+}

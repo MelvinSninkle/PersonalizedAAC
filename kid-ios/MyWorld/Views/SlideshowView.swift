@@ -79,7 +79,10 @@ struct SlideshowView: View {
     /// Most-common taxonomy_slug across the played deck. Slideshows that
     /// scope to a category usually have a coherent skill (e.g. "Numbers");
     /// for mixed decks we pick whichever skill the child saw most.
+    /// Auto-teach runs (scope "slugs:…") skip this — the runner already ticked
+    /// every batch slug with source auto_slideshow when the countdown fired.
     private func tickDominantSkillOnExit() {
+        if session.scope?.hasPrefix("slugs:") == true { return }
         var counts: [String: Int] = [:]
         for t in deck {
             guard let s = t.taxonomySlug, !s.isEmpty else { continue }

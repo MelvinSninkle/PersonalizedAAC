@@ -446,7 +446,7 @@ struct APIClient {
     }
 
     /// Read the full child_settings blob (empty dict on any failure).
-    private func childSettings(childId: String) async -> [String: Any] {
+    func childSettings(childId: String) async -> [String: Any] {
         guard let (data, _) = try? await request(
                 method: "GET",
                 path: "/api/child-settings?childId=\(percentEscape(childId))",

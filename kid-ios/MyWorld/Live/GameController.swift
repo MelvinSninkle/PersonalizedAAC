@@ -96,6 +96,13 @@ final class GameController {
         }
     }
 
+    /// Auto-teach's countdown card fires a fully-built session — same guard
+    /// as a remote start so a running activity is never clobbered.
+    func startStaged(_ session: Session) {
+        guard current == nil, !isRoutineActive else { return }
+        current = session
+    }
+
     func startLocal(_ mode: Mode, scope: String? = nil, choices: Int? = nil, sample: Int? = nil) {
         current = Session(mode: mode, scope: scope, choices: choices,
                           from: nil, to: nil, sample: sample, limitMin: nil,
