@@ -17,6 +17,14 @@ final class GameController {
         /// live-session bridge with method = verbal / gesture / object.
         case expressiveNaming
         case slideshow(firstPerson: Bool)
+        /// "Teach me" — child-launched teaching slideshow: one pass through the
+        /// scope, speaking each word and then all of its taxonomy teaching
+        /// clues (descriptive_clues).
+        case teach
+        /// Clue quiz — hear a teaching clue, tap the picture it describes.
+        /// MatchingView lifecycle; each miss speaks the tile's NEXT clue, so
+        /// wrong taps accumulate information instead of punishing.
+        case clueQuiz
         case celebration
     }
 
@@ -47,6 +55,8 @@ final class GameController {
         switch raw {
         case "learn_slideshow", "slideshow":  return .slideshow(firstPerson: false)
         case "exposure_slideshow":            return .slideshow(firstPerson: true)
+        case "teach_slideshow":               return .teach
+        case "clue_quiz":                     return .clueQuiz
         case "celebration":                   return .celebration
         case "auditory_comprehension":        return .auditoryComprehension
         case "expressive_naming":             return .expressiveNaming
@@ -86,9 +96,9 @@ final class GameController {
         }
     }
 
-    func startLocal(_ mode: Mode, scope: String? = nil, choices: Int? = nil) {
+    func startLocal(_ mode: Mode, scope: String? = nil, choices: Int? = nil, sample: Int? = nil) {
         current = Session(mode: mode, scope: scope, choices: choices,
-                          from: nil, to: nil, sample: nil, limitMin: nil,
+                          from: nil, to: nil, sample: sample, limitMin: nil,
                           secondsPerImage: nil, music: nil)
     }
 
@@ -131,6 +141,20 @@ final class GameController {
         current = nil
         inGameCommand = nil
         abortRoutine()
+    }
+
+    /// Remembers the most recent category/subcategory chip the child pressed so
+    /// the header Play button can quiz exactly what they were just exploring.
+    /// Scope strings match the game engine ("cat:<id>"); persisted per child so
+    /// the memory survives relaunches. Mirrors localStorage aacPlayScope on web.
+    enum PlayScope {
+        private static func key(_ slug: String) -> String { "playScope:\(slug)" }
+        static func note(_ scope: String, slug: String) {
+            UserDefaults.standard.set(scope, forKey: key(slug))
+        }
+        static func recall(slug: String) -> String? {
+            UserDefaults.standard.string(forKey: key(slug))
+        }
     }
 
     private func startCurrentRoutineStep() {

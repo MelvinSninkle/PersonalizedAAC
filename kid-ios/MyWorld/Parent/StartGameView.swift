@@ -16,13 +16,15 @@ struct StartGameView: View {
     enum GameMode: String, CaseIterable, Identifiable {
         // Names match the backend's GameController dispatch (see iPad's
         // Live/GameController.swift `parseMode`). Each is a real iPad game.
-        case matching, learn_slideshow, exposure_slideshow, auditory_comprehension, expressive_naming, celebration
+        case matching, teach_slideshow, learn_slideshow, exposure_slideshow, clue_quiz, auditory_comprehension, expressive_naming, celebration
         var id: String { rawValue }
         var label: String {
             switch self {
             case .matching:               return "Matching"
+            case .teach_slideshow:        return "Teach me (word + clues)"
             case .learn_slideshow:        return "Learn slideshow"
             case .exposure_slideshow:     return "Exposure slideshow"
+            case .clue_quiz:              return "Clue quiz"
             case .auditory_comprehension: return "Listening (auditory)"
             case .expressive_naming:      return "Expressive naming"
             case .celebration:            return "Celebration"
@@ -31,14 +33,16 @@ struct StartGameView: View {
         var blurb: String {
             switch self {
             case .matching:               return "Hear a word, tap the matching picture. No wrong-answer sounds — ever."
+            case .teach_slideshow:        return "Each picture shows with its word — spoken, then every teaching clue read aloud. Watch-and-listen; advances when the speech finishes."
             case .learn_slideshow:        return "Calm watch-and-listen flashcards (\"This is a dog.\")."
             case .exposure_slideshow:     return "Same pacing, first-person framing (\"This is your dog.\") for self-modeling."
+            case .clue_quiz:              return "Hear a teaching clue, tap the picture it describes. Each miss reveals another clue."
             case .auditory_comprehension: return "Hear a clue (\"lives in a field, eats grass\"), find the tile it describes."
             case .expressive_naming:      return "The child sees a picture and names what they see."
             case .celebration:            return "Flowers and cheers — celebrate a moment."
             }
         }
-        var usesChoices: Bool { self == .matching || self == .auditory_comprehension }
+        var usesChoices: Bool { self == .matching || self == .auditory_comprehension || self == .clue_quiz }
         var isSlideshow:  Bool { self == .learn_slideshow || self == .exposure_slideshow }
     }
 

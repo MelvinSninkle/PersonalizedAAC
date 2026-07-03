@@ -116,7 +116,7 @@ struct StoreView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Your credits").font(.system(size: 13)).foregroundStyle(.secondary)
-                Text(balance.map { "💎 \($0)" } ?? "💎 …")
+                Text(balance.map { "⭐ \($0)" } ?? "⭐ …")
                     .font(.system(size: 30, weight: .heavy, design: .rounded))
                     .foregroundStyle(Color(hex: "#ad1457"))
             }
@@ -181,7 +181,7 @@ struct StoreView: View {
                                                    transactionId: String(tx.id))
                 await tx.finish()
                 balance = await api.storeBalance()
-                if let credited, credited > 0 { note = "Added 💎\(credited) — thank you!" }
+                if let credited, credited > 0 { note = "Added ⭐\(credited) — thank you!" }
             case .userCancelled, .pending: break
             @unknown default: break
             }
@@ -199,7 +199,7 @@ struct StoreView: View {
             let r = try await api.storeRedeem(code: code)
             balance = r.balance
             couponCode = ""
-            note = "Added 💎\(r.credited) — enjoy!"
+            note = "Added ⭐\(r.credited) — enjoy!"
         } catch let APIError.badStatus(_, body) {
             note = body.contains("already used") ? "You've already used this code."
                  : body.contains("expired") ? "That code has expired."

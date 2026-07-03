@@ -70,7 +70,7 @@
 <body>
 <header>
   <h1>🛍️ Word Store</h1>
-  <span class="balance" id="balance">💎 …</span>
+  <span class="balance" id="balance">⭐ …</span>
   <div class="spacer"></div>
   <a class="back" id="back-link" href="#">← Dashboard</a>
 </header>
@@ -131,17 +131,17 @@
     for (const p of c.packs) {
       const per = (p.cents / p.credits).toFixed(1);
       html += `<div class="card"><h3>${esc(p.label)} pack</h3>
-        <div class="big">💎 ${p.credits}</div>
+        <div class="big">⭐ ${p.credits}</div>
         <div class="sub">${money(p.cents)} · ${per}¢ per image credit</div>
         <button class="btn" data-sku="${esc(p.sku)}">Buy</button></div>`;
     }
     html += `<div class="card"><h3>${esc(c.subscription.label)}</h3>
-      <div class="big">💎 ${c.subscription.creditsPerPeriod}<span style="font-size:13px;font-weight:600;color:var(--muted);">/month</span></div>
+      <div class="big">⭐ ${c.subscription.creditsPerPeriod}<span style="font-size:13px;font-weight:600;color:var(--muted);">/month</span></div>
       <div class="sub">${money(c.subscription.cents)}/month · packs stack on top anytime</div>
       <button class="btn" data-sku="${esc(c.subscription.sku)}">Subscribe</button></div>`;
     if (c.rebuild && c.rebuild.words) {
       html += `<div class="card"><h3>Whole-board rebuild</h3>
-        <div class="big">💎 ${c.rebuild.credits}</div>
+        <div class="big">⭐ ${c.rebuild.credits}</div>
         <div class="sub">${c.rebuild.words} words re-made in your child's style — ${Math.round((1 - c.rebuild.credits / c.rebuild.listCredits) * 100)}% off one-by-one</div>
         <button class="btn secondary" id="rebuild-btn">Rebuild the board</button></div>`;
     }
@@ -204,7 +204,7 @@
         html += `<div class="tile${sel}" data-id="${esc(t.id)}">
           <div class="sq">${img}</div>${flag}
           <div class="pick">${CART.has(t.id) ? '✓' : ''}</div>
-          <div class="cap">${esc(t.label)} · 💎${t.credits}</div>
+          <div class="cap">${esc(t.label)} · ⭐${t.credits}</div>
         </div>`;
       }
       html += '</div>';
@@ -222,7 +222,7 @@
     if (!CART.size) { bar.style.display = 'none'; return; }
     bar.style.display = 'flex';
     document.getElementById('cart-info').textContent =
-      `${CART.size} word${CART.size === 1 ? '' : 's'} · 💎${CART.size} — made in your child's style + voice`;
+      `${CART.size} word${CART.size === 1 ? '' : 's'} · ⭐${CART.size} — made in your child's style + voice`;
   }
   document.getElementById('cart-clear').addEventListener('click', () => { CART.clear(); renderShop(); renderCart(); });
   document.getElementById('cart-buy').addEventListener('click', async () => {
@@ -241,7 +241,7 @@
 
   async function loadCatalog() {
     CATALOG = await api('/api/store?action=catalog&childId=' + encodeURIComponent(CHILD));
-    document.getElementById('balance').textContent = `💎 ${CATALOG.balance} credits`;
+    document.getElementById('balance').textContent = `⭐ ${CATALOG.balance} credits`;
     renderPacks();
   }
   async function loadShop() {
@@ -251,7 +251,7 @@
     const cats = [...new Set(TILES.map((t) => t.category).filter(Boolean))].sort();
     document.getElementById('f-col').innerHTML = '<option value="">All sections</option>' + cols.map((c) => `<option>${esc(c)}</option>`).join('');
     document.getElementById('f-cat').innerHTML = '<option value="">All categories</option>' + cats.map((c) => `<option>${esc(c)}</option>`).join('');
-    document.getElementById('shop-note').textContent = `${TILES.length} words · 💎1 each, drawn in your child's style`;
+    document.getElementById('shop-note').textContent = `${TILES.length} words · ⭐1 each, drawn in your child's style`;
     renderShop();
   }
   ['f-col', 'f-cat'].forEach((id) => document.getElementById(id).addEventListener('change', renderShop));
@@ -265,7 +265,7 @@
     btn.disabled = true;
     try {
       const d = await api('/api/store?action=redeem', { method: 'POST', body: JSON.stringify({ code }) });
-      toast(`💎${d.credited} added — enjoy!`);
+      toast(`⭐${d.credited} added — enjoy!`);
       input.value = '';
       await loadCatalog();
     } catch (e) { toast(e.message); }
@@ -274,7 +274,7 @@
 
   (async () => {
     if (!CHILD) { document.getElementById('shop').innerHTML = '<div class="empty">Open the store from your parent dashboard.</div>'; return; }
-    if (params.get('paid')) toast('Payment received — your credits are ready! 💎');
+    if (params.get('paid')) toast('Payment received — your credits are ready! ⭐');
     try { await Promise.all([loadCatalog(), loadShop()]); }
     catch (e) { document.getElementById('shop').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
   })();

@@ -66,13 +66,13 @@ struct SectionColumn: View {
 
             let cats = board.roots(in: section)
             CategoryTabStrip(categories: cats,
-                             selectedId: $selectedCategoryId,
+                             selectedId: noting($selectedCategoryId),
                              hideLabels: prefs.hideLabels,
                              onDropTile: chipDropHandler)
 
             if let cat = activeCategory(in: cats), !board.children(of: cat).isEmpty {
                 SubcategoryStrip(subcategories: board.children(of: cat),
-                                 selectedId: $selectedSubcategoryId,
+                                 selectedId: noting($selectedSubcategoryId),
                                  hideLabels: prefs.hideLabels,
                                  onDropTile: chipDropHandler)
             }
@@ -123,6 +123,20 @@ struct SectionColumn: View {
         if selectedCategoryId == nil || !cats.contains(where: { $0.id == selectedCategoryId }) {
             selectedCategoryId = cats.first?.id
         }
+    }
+
+    /// Wraps a chip-selection binding so every REAL press (the strips only
+    /// write through the binding on taps — programmatic resets like
+    /// ensureSelection write the @State directly) is remembered as the scope
+    /// the header Play button quizzes next.
+    private func noting(_ base: Binding<Int?>) -> Binding<Int?> {
+        Binding(
+            get: { base.wrappedValue },
+            set: { id in
+                base.wrappedValue = id
+                if let id { GameController.PlayScope.note("cat:\(id)", slug: auth.childSlug) }
+            }
+        )
     }
 
     // MARK: -- Grid

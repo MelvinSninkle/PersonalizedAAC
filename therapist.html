@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!--
-  THERAPIST VIEW — visual mockup with sample data.
-  This is the facilitator remote control for Mode 2 (PRD v1.0): the therapist
-  drives a matching session from their phone while Fletcher's tablet shows the
-  game. Marking a verbal/physical response correct here counts the same as a
-  tap on the tablet. Layout is phone-first. No backend / sync is wired yet.
+  THERAPIST VIEW — live facilitator remote control for Mode 2 (PRD v1.0): the
+  therapist drives a matching session from their phone while the child's tablet
+  shows the game. Marking a verbal/physical response correct here counts the
+  same as a tap on the tablet. Layout is phone-first. Charts and analytics are
+  real (/api/analytics) and render honest empty states until data exists.
 -->
 <style>
   * { box-sizing: border-box; }
@@ -376,7 +376,7 @@
 
   renderMastery([]);
 
-  // ---- Wire to live analytics (real where data exists; sample otherwise) ----
+  // ---- Wire to live analytics (empty states until real data exists) ----
 
   function applyAnalytics(a) {
     const labels = a.labels || WEEKS;
@@ -394,7 +394,7 @@
     }
     if (a.mastery && a.mastery.length) renderMastery(a.mastery.map(m => [m.name, m.pct]));
   }
-  // Granularity (day/week/month). Uses the session cookie; empty/401 → sample.
+  // Granularity (day/week/month). Uses the session cookie; empty/401 → empty state.
   let gran = localStorage.getItem('aacGran') || 'day';
   async function loadAnalytics() {
     try {
@@ -404,7 +404,7 @@
       if (!r.ok) return;
       applyAnalytics(await r.json());
       renderChart(currentTab);
-    } catch (_) { /* keep sample data */ }
+    } catch (_) { /* leave the empty placeholders */ }
   }
   (function initGran() {
     const wrap = document.getElementById('ins-gran');

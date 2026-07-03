@@ -80,7 +80,7 @@ final class GameAudio {
         Task {
             // Disk-cache hit on the second+ playback of a phrase — slideshows
             // and scheduled prompts replay the same captions a lot.
-            guard let data = await SpeechCache.shared.data(text: text, emotion: "default", api: api) else { return }
+            guard let data = await SpeechCache.shared.data(text: text, emotion: "default", childId: childId, api: api) else { return }
             do {
                 let p = try AVAudioPlayer(data: data)
                 p.volume = 1.0
@@ -91,6 +91,23 @@ final class GameAudio {
         }
     }
 
+    /// Speak a phrase and suspend until playback (roughly) finishes — the
+    /// "Teach me" slideshow chains word → clue → clue → clue this way. Same
+    /// disk cache as speak(); paces on the clip's decoded duration plus a
+    /// small breath rather than a delegate (good enough for speech pacing).
+    func speakAwait(_ text: String, childId: String) async {
+        guard let data = await SpeechCache.shared.data(text: text, emotion: "default", childId: childId, api: api) else { return }
+        do {
+            let p = try AVAudioPlayer(data: data)
+            p.volume = 1.0
+            p.prepareToPlay()
+            p.play()
+            speakPlayer = p
+            let secs = max(0.3, p.duration) + 0.25
+            try? await Task.sleep(nanoseconds: UInt64(secs * 1_000_000_000))
+        } catch { }
+    }
+
     /// Pick a random cheer phrase and speak it (plays over the music, which the
     /// caller stops a moment later — same as the web's celebration).
     func playCheer(childId: String) {
@@ -98,7 +115,7 @@ final class GameAudio {
             let rewards = await api.fetchRewards(childId: childId)
             let phrases = rewards.phrases.isEmpty ? Self.defaultPhrases : rewards.phrases
             let phrase = phrases.randomElement() ?? "Hooray!"
-            guard let data = await SpeechCache.shared.data(text: phrase, emotion: "excited", api: api) else { return }
+            guard let data = await SpeechCache.shared.data(text: phrase, emotion: "excited", childId: childId, api: api) else { return }
             do {
                 let p = try AVAudioPlayer(data: data)
                 p.volume = 1.0

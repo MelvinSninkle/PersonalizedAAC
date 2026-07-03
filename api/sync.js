@@ -62,15 +62,44 @@ export default async function handler(req, res) {
       SELECT i.* FROM items i
       WHERE i.child_id IS NULL AND i.category_id IN (SELECT id FROM shared_tree)
       ORDER BY display_order, id`;
+    // Folder-icon read-through: a chip with no custom icon (or one already on
+    // a shared default key) shows the shared category_defaults icon for its
+    // section + label. Custom icons always win; a chip the parent re-imaged
+    // keeps their image. This is what fills the blank chips on boards built
+    // before folder icons existed — live, no per-child copy.
+    try {
+      const needIcon = cats.filter((c) => !c.image_key || String(c.image_key).startsWith('category-defaults/'));
+      if (needIcon.length) {
+        const defs = await db`SELECT section, label_norm, image_key FROM category_defaults`;
+        if (defs.length) {
+          const dmap = new Map(defs.map((d) => [d.section + '|' + d.label_norm, d.image_key]));
+          for (const c of needIcon) {
+            const k = dmap.get(c.section + '|' + String(c.label || '').trim().toLowerCase());
+            if (k) c.image_key = k;
+          }
+        }
+      }
+    } catch (_) { /* defaults table may not exist yet — chips just stay plain */ }
+
     // Resolve the canonical taxonomy row for every linked item once — used both
     // for the age-band filter below AND to read default-able tiles' art straight
     // from the "generic board" (taxonomy.default_image_key).
     const slugs = [...new Set(items.map(i => i.taxonomy_slug).filter(Boolean))];
     const taxBySlug = new Map();
     if (slugs.length) {
-      const rows = await db`SELECT id, acquisition_age, default_image_key, column_name, subject_mode, prompt_template
+      const rows = await db`SELECT id, acquisition_age, default_image_key, column_name, subject_mode, prompt_template, descriptive_clues
                             FROM taxonomy WHERE id = ANY(${slugs})`;
       for (const r of rows) taxBySlug.set(r.id, r);
+    }
+
+    // Teaching clues ride along on each linked tile (taxonomy.descriptive_clues)
+    // so the boards' "Teach me" slideshow can speak the word + all its clues
+    // without a second fetch.
+    for (const i of items) {
+      const tax = i.taxonomy_slug ? taxBySlug.get(i.taxonomy_slug) : null;
+      if (tax && Array.isArray(tax.descriptive_clues) && tax.descriptive_clues.length) {
+        i.descriptive_clues = tax.descriptive_clues;
+      }
     }
 
     // Read-through defaults: a default-able tile (one that never references a

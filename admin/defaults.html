@@ -48,6 +48,11 @@
   .tile.missing .who { position:absolute; bottom:5px; left:0; right:0; font-size:9px; color:#b45309; text-transform:uppercase; letter-spacing:.05em; }
   .tile .cap { position:absolute; bottom:0; left:0; right:0; font-size:10px; color:#64748b; background:rgba(255,255,255,.85); padding:2px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .tile .badge { position:absolute; top:5px; right:5px; font-size:14px; }
+  /* Folder icons — their own lavender family so chips read separately from tiles. */
+  .tile.folder { border-color:#c4b5fd; background:#f5f3ff; }
+  .tile.folder.missing { border:2px dashed #8b5cf6; background:#f5f3ff; }
+  .tile.folder.missing .word { color:#5b21b6; }
+  .tile.folder.missing .who { color:#7c3aed; }
   .empty { color:var(--muted); padding:40px; text-align:center; }
   .legend { display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:4px; }
   .legend span { display:inline-flex; align-items:center; gap:6px; }
@@ -65,6 +70,7 @@
     <option value="defaultable">Default-able only</option>
     <option value="missing">Missing default</option>
     <option value="personal">Personalized only</option>
+    <option value="folders">Folder icons only</option>
   </select>
   <button id="refresh">↻ Refresh</button>
   <a class="back" href="/admin/taxonomy.html">← Taxonomy</a>
@@ -91,7 +97,7 @@
     return r.json();
   }
 
-  let TILES = [];
+  let TILES = [], FOLDERS = [];
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   function passesFilter(t, mode) {
@@ -118,12 +124,38 @@
     </div>`;
   }
 
+  function folderHTML(f) {
+    const cap = esc(f.section + ' › ' + f.label);
+    if (f.imageKey) {
+      return `<div class="tile folder" title="${cap} — folder icon">
+        <img loading="lazy" src="/api/media?key=${encodeURIComponent(f.imageKey)}" alt="${esc(f.label)}">
+        <div class="cap">${esc(f.label)}</div>
+      </div>`;
+    }
+    return `<div class="tile folder missing" title="${cap} — no shared icon yet">
+      <span class="word">${esc(f.label)}</span><span class="who">no icon</span><span class="badge">⚠️</span>
+    </div>`;
+  }
+
   function render() {
     const mode = document.getElementById('filter').value;
     const q = document.getElementById('q').value.trim().toLowerCase();
     const board = document.getElementById('board');
     const shown = TILES.filter((t) => passesFilter(t, mode) && (!q || String(t.label).toLowerCase().includes(q)));
-    if (!shown.length) { board.innerHTML = '<div class="empty">No tiles match.</div>'; return; }
+    // Folder icons: their own lavender block up top (or exclusively via the
+    // "Folder icons only" filter) — grouped by section, sorted server-side.
+    let folderBlock = '';
+    if (mode === 'all' || mode === 'folders') {
+      const shownF = FOLDERS.filter((f) => !q || f.label.toLowerCase().includes(q));
+      const bySec = new Map();
+      for (const f of shownF) { if (!bySec.has(f.section)) bySec.set(f.section, []); bySec.get(f.section).push(f); }
+      for (const [sec, list] of bySec) {
+        folderBlock += `<div class="group-title" style="color:#6d28d9;">📁 ${esc(sec)} folders (${list.length})</div>`;
+        folderBlock += '<div class="grid">' + list.map(folderHTML).join('') + '</div>';
+      }
+    }
+    if (mode === 'folders') { board.innerHTML = folderBlock || '<div class="empty">No folders match.</div>'; return; }
+    if (!shown.length && !folderBlock) { board.innerHTML = '<div class="empty">No tiles match.</div>'; return; }
 
     // Group by column, then category, preserving the server's order.
     const groups = new Map();
@@ -137,7 +169,7 @@
       html += `<div class="group-title">${esc(key)} <span style="font-weight:400;color:#94a3b8;">(${list.length})</span></div>`;
       html += '<div class="grid">' + list.map(tileHTML).join('') + '</div>';
     }
-    board.innerHTML = html;
+    board.innerHTML = folderBlock + html;
   }
 
   async function load() {
@@ -146,9 +178,12 @@
     try {
       const d = await api('/api/admin/lab?action=defaults-view');
       TILES = d.tiles || [];
+      FOLDERS = d.folders || [];
+      const fHave = d.foldersWithIcon || 0, fMiss = FOLDERS.length - fHave;
       document.getElementById('stat').innerHTML =
         `<b>${d.total}</b> tiles · <b>${d.withImage}</b> default images · ` +
-        `<span class="warn"><b>${d.missing}</b> missing</span> · <b>${d.personalized}</b> personalized`;
+        `<span class="warn"><b>${d.missing}</b> missing</span> · <b>${d.personalized}</b> personalized · ` +
+        `📁 <b>${fHave}</b>/${FOLDERS.length} folder icons` + (fMiss ? ` <span class="warn">(${fMiss} missing)</span>` : '');
       render();
     } catch (e) {
       board.innerHTML = '<div class="empty">' + esc(e.message || e) + '</div>';

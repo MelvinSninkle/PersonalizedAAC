@@ -372,6 +372,17 @@ private struct OnboardingDemoView: View {
             Text("Free to set up. Personalized board takes about 5 minutes.")
                 .font(.system(size: 12))
                 .foregroundStyle(Color(hex: Brand.muted))
+            // Returning families skip the pitch — the account step defaults to
+            // its "Welcome back" login mode, so this is a straight shot in.
+            Button {
+                coord.go(to: .account)
+            } label: {
+                (Text("Already have a board? ") + Text("Log in").bold().underline())
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color(hex: Brand.pinkDeep))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 6)
         }
     }
 }

@@ -145,3 +145,135 @@ struct SlideshowView: View {
         }
     }
 }
+
+/// "Teach me" — the child-launched teaching slideshow (header 📖 button).
+/// One pass through the scope's tiles, shuffled. Unlike the passive slideshow,
+/// reading along is the point: each slide shows the picture WITH the word on
+/// screen, speaks the word, then speaks every taxonomy teaching clue
+/// (descriptive_clues, easiest first) while showing it as a caption, then
+/// advances. Exits by itself after the last tile; long-hold ✕ to leave early.
+/// (Lives in this file so XcodeGen doesn't need a regen for a new file.)
+struct TeachShowView: View {
+    let session: GameController.Session
+    let onExit: () -> Void
+
+    @Environment(BoardStore.self) private var board
+    @Environment(AuthManager.self) private var auth
+
+    @State private var deck: [Tile] = []
+    @State private var pos = 0
+    @State private var image: UIImage?
+    @State private var clue = ""
+    @State private var runner: Task<Void, Never>?
+    @State private var limitTask: Task<Void, Never>?
+
+    private var current: Tile? { deck.indices.contains(pos) ? deck[pos] : nil }
+
+    var body: some View {
+        ZStack {
+            Color(hex: "#fff7fb").ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                if let img = image {
+                    Image(uiImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: 720, maxHeight: 480)
+                        .clipShape(RoundedRectangle(cornerRadius: 32))
+                        .shadow(color: .black.opacity(0.12), radius: 28, y: 8)
+                } else if current != nil {
+                    ProgressView().tint(Color(hex: "#ad1457")).frame(height: 300)
+                }
+
+                if let t = current {
+                    Text(t.label)
+                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(hex: "#ad1457"))
+                    // The clue being spoken right now — empty between clues.
+                    Text(clue)
+                        .font(.system(size: 24, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(hex: "#6b7280"))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 44)
+                        .frame(minHeight: 70)
+                }
+
+                if !deck.isEmpty {
+                    Text("\(min(pos + 1, deck.count)) / \(deck.count)")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(hex: "#d6a8c6"))
+                }
+            }
+            .padding(28)
+
+            LongPressExitButton.corner(
+                tint: Color(hex: "#ad1457"),
+                background: Color.black.opacity(0.06)
+            ) { onExit() }
+        }
+        .task { start() }
+        .onDisappear {
+            runner?.cancel()
+            limitTask?.cancel()
+            tickDominantSkillOnExit()
+        }
+    }
+
+    private func start() {
+        deck = board.tilesForScope(session.scope, from: session.from, to: session.to)
+            .filter { $0.imageKey?.isEmpty == false && !$0.label.isEmpty }
+            .shuffled()
+        // Parent-launched runs can cap the deck ("5 random") and set a limit.
+        if let n = session.sample, n > 0 { deck = Array(deck.prefix(n)) }
+        guard !deck.isEmpty else { onExit(); return }
+        runner = Task { await run() }
+        if let mins = session.limitMin, mins > 0 {
+            limitTask = Task {
+                try? await Task.sleep(nanoseconds: UInt64(mins * 60 * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                await MainActor.run { onExit() }
+            }
+        }
+    }
+
+    /// The teaching loop — event-paced (advances when the speech is done), not
+    /// timer-paced like the passive slideshow.
+    private func run() async {
+        let childId = auth.childSlug
+        for (i, tile) in deck.enumerated() {
+            if Task.isCancelled { return }
+            await MainActor.run { pos = i; clue = ""; image = nil }
+            if let key = tile.imageKey, !key.isEmpty,
+               let img = await MediaCache.shared.image(for: key) {
+                if Task.isCancelled { return }
+                await MainActor.run { image = img }
+            }
+            // The word first…
+            await GameAudio.shared.speakAwait(tile.label, childId: childId)
+            // …then every teaching clue, shown while it's spoken.
+            for c in tile.descriptiveClues ?? [] {
+                if Task.isCancelled { return }
+                await MainActor.run { clue = c }
+                await GameAudio.shared.speakAwait(c, childId: childId)
+                try? await Task.sleep(nanoseconds: 350_000_000)
+            }
+            try? await Task.sleep(nanoseconds: 900_000_000)
+        }
+        if !Task.isCancelled { await MainActor.run { onExit() } }
+    }
+
+    /// Same PRD §8 semantics as the passive slideshow — a teach run is one
+    /// exposure of its dominant skill.
+    private func tickDominantSkillOnExit() {
+        var counts: [String: Int] = [:]
+        for t in deck {
+            guard let s = t.taxonomySlug, !s.isEmpty else { continue }
+            counts[s, default: 0] += 1
+        }
+        guard let skill = counts.max(by: { $0.value < $1.value })?.key else { return }
+        let childId = auth.childSlug
+        Task.detached(priority: .utility) {
+            await APIClient().tickExposure(childId: childId, skillSlug: skill, source: "slideshow")
+        }
+    }
+}

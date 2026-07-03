@@ -674,7 +674,7 @@ struct BoardTileEditSheet: View {
             let r = try await api.storeRetry(childId: auth.childSlug, itemId: tile.id)
             redrawNote = (r.freeRetry == true)
                 ? "Redrawing now (free) — the new picture lands on the board in a minute or two."
-                : "Redrawing now (💎\(r.charged)) — the new picture lands on the board in a minute or two."
+                : "Redrawing now (⭐\(r.charged)) — the new picture lands on the board in a minute or two."
         } catch {
             errorText = friendly(error)
         }

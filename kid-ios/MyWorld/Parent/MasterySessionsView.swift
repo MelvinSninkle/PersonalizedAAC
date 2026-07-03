@@ -44,7 +44,7 @@ struct MasterySessionsView: View {
             ForEach(rows) { r in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(r.name).font(.system(size: 14, weight: .semibold))
+                        Text(prettySkillName(r.name)).font(.system(size: 14, weight: .semibold))
                         Spacer()
                         Text("\(r.pct)%")
                             .font(.system(size: 12)).foregroundStyle(Color(hex: Brand.muted))

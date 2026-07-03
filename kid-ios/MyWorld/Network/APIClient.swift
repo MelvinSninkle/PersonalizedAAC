@@ -503,8 +503,12 @@ struct APIClient {
     }
 
     /// POST /api/tts { text, emotion } → audio/mpeg bytes (ElevenLabs voice).
-    func tts(text: String, emotion: String = "excited") async -> Data? {
-        guard let body = try? JSONSerialization.data(withJSONObject: ["text": text, "emotion": emotion]) else { return nil }
+    func tts(text: String, emotion: String = "excited", childId: String? = nil) async -> Data? {
+        // childId lets the server resolve the family's chosen ElevenLabs voice
+        // (child_settings.voiceId) so spoken prompts match the board's tiles.
+        var payload: [String: Any] = ["text": text, "emotion": emotion]
+        if let childId, !childId.isEmpty { payload["childId"] = childId }
+        guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
         guard let (data, _) = try? await request(method: "POST", path: "/api/tts",
                                                  body: body, contentType: "application/json") else { return nil }
         return data

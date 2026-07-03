@@ -19,6 +19,30 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
+    // Folder icons: every category/subcategory named in the taxonomy, with its
+    // shared default icon (category_defaults) when one exists. Sections are
+    // lowercased to match the board's section keys.
+    let folders = [];
+    try {
+      const [tax, defs] = await Promise.all([
+        db`SELECT DISTINCT lower(column_name) AS section, category, subcategory FROM taxonomy
+           WHERE COALESCE(archived, FALSE) = FALSE AND category IS NOT NULL`,
+        db`SELECT section, label_norm, image_key FROM category_defaults`,
+      ]);
+      const dmap = new Map(defs.map((d) => [d.section + '|' + d.label_norm, d.image_key]));
+      const seen = new Set();
+      for (const t of tax) {
+        for (const lbl of [t.category, t.subcategory]) {
+          if (!lbl) continue;
+          const key = t.section + '|' + String(lbl).trim().toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          folders.push({ section: t.section, label: lbl, imageKey: dmap.get(key) || null });
+        }
+      }
+      folders.sort((a, b) => a.section.localeCompare(b.section) || a.label.localeCompare(b.label));
+    } catch (_) { folders = []; }
+
     const rows = await db`
       SELECT id, column_name, category, subcategory, label, prompt_template,
              subject_mode, status, default_image_key
@@ -52,6 +76,8 @@ export default async function handler(req, res) {
       personalized: tiles.length - defaultable,
       withImage,
       missing: defaultable - withImage,
+      folders,
+      foldersWithIcon: folders.filter((f) => f.imageKey).length,
       tiles,
     });
   } catch (err) {

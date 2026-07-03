@@ -156,11 +156,13 @@
   }
   header button.btn-play-req { background: #16a34a; }
   header button.btn-play-req:hover { background: #15803d; }
+  header button.btn-teach { background: #0ea5e9; }
+  header button.btn-teach:hover { background: #0284c7; }
   header button.btn-listen { background: #7c3aed; }
   header button.btn-listen:hover { background: #6d28d9; }
   header button.btn-listen.on { background: #dc2626; }   /* red = listening, tap to stop */
-  /* Listen + Play are icon-only round buttons — big, obvious, kid-tappable. */
-  header button.btn-listen, header button.btn-play-req {
+  /* Listen + Teach + Play are icon-only round buttons — big, obvious, kid-tappable. */
+  header button.btn-listen, header button.btn-play-req, header button.btn-teach {
     width: 52px; height: 52px; min-width: 0; border-radius: 50%; padding: 0; font-size: 26px;
   }
   header button.btn-listen.on { animation: listenBtnPulse 1.1s ease-in-out infinite; }
@@ -168,10 +170,10 @@
     0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.55); }
     50% { box-shadow: 0 0 0 9px rgba(220,38,38,0); }
   }
-  @media (max-width: 749px) { header button.btn-listen, header button.btn-play-req { width: 44px; height: 44px; font-size: 22px; } }
+  @media (max-width: 749px) { header button.btn-listen, header button.btn-play-req, header button.btn-teach { width: 44px; height: 44px; font-size: 22px; } }
   /* Listening mode: a one-tile-high live strip takes over the branding spot. */
   #listen-bar { display: none; }
-  body.listening .hdr-center h1, body.listening .btn-play-req { display: none; }
+  body.listening .hdr-center h1, body.listening .btn-play-req, body.listening .btn-teach { display: none; }
   body.listening #listen-bar { display: flex; align-items: center; gap: 10px; width: 100%; max-width: min(96vw, 1100px); }
   #listen-mic { font-size: 26px; flex: 0 0 auto; animation: listenPulse 1.4s ease-in-out infinite; }
   @keyframes listenPulse { 0%, 100% { opacity: .45; transform: scale(1); } 50% { opacity: 1; transform: scale(1.12); } }
@@ -670,6 +672,35 @@
     font-style: italic;
   }
 
+  /* ── PHONE MODE — the web board on a phone-width screen ──────────────────
+     The 3-columns-side-by-side layout is a tablet design; on a phone it
+     renders enormous half-offscreen tiles (the "poor representation").
+     Under 700px the board becomes the mini-board the parent app shows:
+     one section at a time behind a tab bar, tiles 3-across, the Needs
+     strip as a horizontal scroller pinned above the tabs. */
+  #phone-tabs { display: none; }
+  @media (max-width: 700px) {
+    main { display: block !important; }
+    .aac-section { width: 100% !important; display: none !important; }
+    .aac-section.phone-active { display: flex !important; }
+    /* Needs: one horizontal swipe row, like the native strip. */
+    #items-needs {
+      display: flex !important; overflow-x: auto; gap: 8px;
+      -webkit-overflow-scrolling: touch;
+    }
+    #items-needs > * { flex: 0 0 31%; }
+    #phone-tabs {
+      display: flex; position: sticky; top: 0; z-index: 900;
+      background: #fff; border-bottom: 2px solid #f3c6dd;
+    }
+    #phone-tabs button {
+      flex: 1; border: none; background: none; padding: 10px 4px;
+      font: 700 14px -apple-system, system-ui, sans-serif; color: #9d2463;
+      border-bottom: 3px solid transparent;
+    }
+    #phone-tabs button.active { border-bottom-color: #ff1493; background: #fdf2f8; }
+  }
+
   /* A tile whose art hasn't been generated yet: show the word, big and warm. */
   .tile-square.word-tile {
     display: flex; align-items: center; justify-content: center;
@@ -1047,7 +1078,8 @@
       <img class="hdr-icon" src="/icons/myworld-globe.png" alt="">
       <span class="cwt">My World</span>
     </h1>
-    <button id="play-request-btn" class="btn-play-req" aria-label="Play with me" title="Tell a grown-up you want to play">🙋</button>
+    <button id="teach-btn" class="btn-teach" aria-label="Teach me" title="Watch and listen — the board teaches the words you were just looking at">📖</button>
+    <button id="play-request-btn" class="btn-play-req" aria-label="Play a game" title="Play a quick game about what you were just looking at">🙋</button>
     <div id="listen-bar" aria-live="polite">
       <span id="listen-mic" aria-hidden="true">🎙️</span>
       <div id="listen-tiles"></div>
@@ -1056,6 +1088,13 @@
   </div>
   <div class="hdr-right"></div>
 </header>
+
+<!-- Phone-width section tabs (hidden ≥700px; see PHONE MODE styles). -->
+<div id="phone-tabs">
+  <button data-ptab="people">People</button>
+  <button data-ptab="nouns">Nouns</button>
+  <button data-ptab="verbs">Verbs</button>
+</div>
 
 <main>
   <section class="aac-section" data-section="people">
@@ -1581,6 +1620,24 @@
     headerColors: { bg: '#ff1493', text: '#ffffff' },
   };
   let display = structuredClone(DISPLAY_DEFAULTS);
+  // Phone-mode column defaults (tuned ratio: People 2, Nouns 5, Verbs 2).
+  // Applied ONLY when the parent hasn't chosen their own tiles-across on this
+  // device — an explicit Display-panel choice always wins, phone or tablet.
+  const PHONE_ACROSS = { people: 2, nouns: 5, verbs: 2 };
+  const phoneMQ = window.matchMedia('(max-width: 700px)');
+  function acrossFor(section) {
+    if (phoneMQ.matches && PHONE_ACROSS[section]) {
+      let userSet = false;
+      try {
+        const raw = JSON.parse(localStorage.getItem(DISPLAY_KEY) || '{}');
+        userSet = !!(raw.tilesAcross && raw.tilesAcross[section] != null);
+      } catch (_) {}
+      if (!userSet) return PHONE_ACROSS[section];
+    }
+    return display.tilesAcross[section];
+  }
+  // Rotating past the 700px breakpoint re-lays the grids out.
+  try { phoneMQ.addEventListener('change', () => { renderAll().catch(() => {}); }); } catch (_) {}
   function sanitizeColor(v, fallback) {
     return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : fallback;
   }
@@ -1665,7 +1722,7 @@
           // back to one column per tile — exactly the "huge People tile"
           // distortion. Force a sane integer here so a corrupted display object
           // can never deform the board.
-          const cols = clampAcross(display.tilesAcross[s] ?? DISPLAY_DEFAULTS.tilesAcross[s]);
+          const cols = clampAcross(acrossFor(s) ?? DISPLAY_DEFAULTS.tilesAcross[s]);
           itemsEl.style.setProperty('--items-cols', `repeat(${cols}, minmax(0, 1fr))`);
         }
       }
@@ -1697,6 +1754,14 @@
   function canEdit() { return !!sessionUser && (sessionUser.role === 'admin' || sessionUser.role === 'parent'); }
   const objectURLs = new Map();
   const activeCategoryId = { people: null, nouns: null, verbs: null };
+
+  // ---- Self-learning play scope ----
+  // Every category/subcategory chip the child presses is remembered (per child,
+  // survives reloads) so the 🙋 play button can quiz exactly what they were
+  // just exploring. Mirrors UserDefaults playScope:<slug> in the native app.
+  const PLAY_SCOPE_KEY = () => 'aacPlayScope:' + CHILD_ID;
+  function notePlayScope(scope) { try { localStorage.setItem(PLAY_SCOPE_KEY(), scope); } catch (_) {} }
+  function recallPlayScope() { try { return localStorage.getItem(PLAY_SCOPE_KEY()); } catch (_) { return null; } }
 
   // ---- Per-device client id (for activity logging) ----
   // Role distinction is shelved for now — every tap is logged with role
@@ -2157,7 +2222,7 @@
 
   async function renderSection(section) {
     if (section === 'needs') return renderNeeds();
-    const N = display.tilesAcross[section];
+    const N = acrossFor(section);
     const cats = await getAllCats(section);
     const items = sortItems(await getAllItems(section), section);
 
@@ -2202,7 +2267,7 @@
       const tile = makeTile({
         kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: cat.keepAspect,
         label: cat.label, isCategory: true, isActive, forgivingTap: !editMode,
-        onClick: () => { activeCategoryId[section] = cat.id; renderSection(section); },
+        onClick: () => { activeCategoryId[section] = cat.id; notePlayScope('cat:' + cat.id); renderSection(section); },
         onEdit: () => openCatModal(section, cat),
       });
       tile.dataset.dragKind = 'cat-top';
@@ -2242,7 +2307,7 @@
         eb.textContent = '✎';
         eb.addEventListener('click', (e) => { e.stopPropagation(); openCatModal(section, sub); });
         tile.appendChild(eb);
-        const subNav = () => { activeCategoryId[section] = sub.id; renderSection(section); };
+        const subNav = () => { activeCategoryId[section] = sub.id; notePlayScope('cat:' + sub.id); renderSection(section); };
         if (editMode) tile.addEventListener('click', subNav); else attachForgivingTap(tile, subNav);
         tile.dataset.dragKind = 'cat-sub';
         tile.dataset.entityId = sub.id;
@@ -2684,6 +2749,7 @@
           imageKey: it.imageKey, soundKey: it.soundKey, keepAspect: !!it.keepAspect,
           description: it.description || null,                    // PRD §5 auditory-comp prompt
           taxonomySlug: it.taxonomySlug || null,                  // PRD §11 skill anchor
+          descriptiveClues: Array.isArray(it.descriptiveClues) ? it.descriptiveClues : null,   // "Teach me" clues
         });
       }
       t.oncomplete = () => res();
@@ -2730,14 +2796,14 @@
   // re-warms the media cache so no tile is ever silent or missing for Fletcher.
   function structSig(data) {
     const c = (data.categories || []).map(x => [x.id, x.imageKey || '', x.parentId ?? '', x.order ?? 0, x.keepAspect ? 1 : 0, x.label].join(':')).join('|');
-    const i = (data.items || []).map(x => [x.id, x.imageKey || '', x.soundKey || '', x.categoryId ?? '', x.order ?? 0, x.pinned ? 1 : 0, x.keepAspect ? 1 : 0, x.label].join(':')).join('|');
+    const i = (data.items || []).map(x => [x.id, x.imageKey || '', x.soundKey || '', x.categoryId ?? '', x.order ?? 0, x.pinned ? 1 : 0, x.keepAspect ? 1 : 0, x.label, (x.descriptiveClues || []).length].join(':')).join('|');
     return c + '#' + i;
   }
   let _lastSig = null, _resyncing = false;
   async function resyncIfChanged() {
     // Never reshuffle the board out from under an active game/slideshow or a parent
     // mid-edit; the kid-facing board is what we keep fresh.
-    if (_resyncing || editMode || G.running || SLIDE.running || ROUTINE.active) return;
+    if (_resyncing || editMode || G.running || SLIDE.running || TEACH.running || ROUTINE.active) return;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     _resyncing = true;
     try {
@@ -3175,7 +3241,7 @@
       const r = await apiJSON('/api/store?action=retry', {
         method: 'POST', body: JSON.stringify({ childId: CHILD_ID, itemId: editingItem.id }),
       });
-      note.textContent = (r.freeRetry ? 'Redrawing (free)' : 'Redrawing (💎' + r.charged + ')')
+      note.textContent = (r.freeRetry ? 'Redrawing (free)' : 'Redrawing (⭐' + r.charged + ')')
         + ' — the new picture lands in a minute or two.';
     } catch (err) {
       note.textContent = '';
@@ -4825,7 +4891,15 @@
     const s = gameSettings();
     G.settings = { ...s, choices };
     const items = await gatherPlayable(scope, opts.range);
-    if (items.length < choices) {
+    // Child-launched quizzes must work on SHORT lists (a 2-item category is
+    // still learnable): keep the scope's items as targets and borrow
+    // distractors from the whole board to fill the choice grid.
+    G.fillPool = [];
+    if (opts.fillFromBoard && items.length) {
+      const ids = new Set(items.map(i => i.id));
+      G.fillPool = (await gatherPlayable('all')).filter(x => !ids.has(x.id));
+    }
+    if (items.length < choices && !(opts.fillFromBoard && items.length && items.length + G.fillPool.length >= choices)) {
       const msg = 'Add at least ' + choices + ' tiles (with pictures) here first.';
       const errEl = document.getElementById('game-setup-error'); if (errEl) errEl.textContent = msg;
       if (opts.facilitated) publishState({ status: 'error', message: msg });
@@ -4835,8 +4909,22 @@
       return;
     }
     G.facilitated = !!opts.facilitated; G.standby = false; G.ended = false; G.running = true; G.sequence = !!opts.sequence; G.routine = !!opts.routine;
+    G.clueQuiz = !!opts.clueQuiz;
     G.queue = gShuffle(items.slice()); G.i = 0; G.attempts = []; G.locked = false;
-    G.session = { mode: G.facilitated ? 'facilitated' : 'self_paced', category: scope, startedAt: new Date().toISOString() };
+    // Clue quiz: TARGETS prefer tiles that actually have a clue (or an
+    // auditory description) to speak; clue-less tiles stay available as
+    // distractors so the grid still fills on mixed boards.
+    if (G.clueQuiz) {
+      const cluey = items.filter(t => (Array.isArray(t.descriptiveClues) && t.descriptiveClues.length) || t.description);
+      if (cluey.length) {
+        const ids = new Set(cluey.map(x => x.id));
+        G.fillPool = [...G.fillPool, ...items.filter(x => !ids.has(x.id))];
+        G.queue = gShuffle(cluey.slice());
+      }
+    }
+    // Child-launched quizzes cap the round count (random sample of the scope).
+    if (Number.isFinite(opts.sample) && opts.sample > 0) G.queue = G.queue.slice(0, opts.sample);
+    G.session = { mode: G.clueQuiz ? 'clue_quiz' : (G.facilitated ? 'facilitated' : 'self_paced'), category: scope, startedAt: new Date().toISOString() };
     document.getElementById('game-setup').classList.remove('show');
     document.getElementById('game-overlay').classList.add('show');
     const m = gMusic();
@@ -4856,7 +4944,9 @@
     const pool = G.queue.filter(x => x.id !== target.id);
     const same = pool.filter(x => x.categoryId === target.categoryId);
     const sect = pool.filter(x => x.section === target.section);
-    const ranked = [...gShuffle(same), ...gShuffle(sect), ...gShuffle(pool)];
+    // fillPool (board-wide distractors) ranks last — scope-mates are always
+    // preferred; it only tops up thin categories.
+    const ranked = [...gShuffle(same), ...gShuffle(sect), ...gShuffle(pool), ...gShuffle(G.fillPool || [])];
     const seen = new Set([target.id]); const picked = [];
     for (const x of ranked) { if (picked.length >= n - 1) break; if (!seen.has(x.id)) { seen.add(x.id); picked.push(x); } }
     return gShuffle([target, ...picked]);
@@ -4885,7 +4975,20 @@
   }
 
   async function playPrompt() {
-    const t = G.target; if (!t || !t.soundKey) return;
+    const t = G.target; if (!t) return;
+    // Clue quiz: the PROMPT is a teaching clue, not the word (which would give
+    // the answer away). Progressive mercy — each miss reveals the next clue
+    // (they're authored easiest-first); description, then a generic question,
+    // fill in for tiles without clues.
+    if (G.clueQuiz) {
+      const clues = (t.descriptiveClues || []).filter(Boolean);
+      const text = clues.length ? clues[Math.min(G.misses || 0, clues.length - 1)]
+                 : (t.description || ('Who or what is the ' + t.label + '?'));
+      const url = await teachAudioURL(text);
+      if (url) { const v = gVoice(); v.src = url; v.currentTime = 0; v.play().catch(() => {}); }
+      return;
+    }
+    if (!t.soundKey) return;
     const url = await getMediaURL(t.soundKey);
     if (url) { const v = gVoice(); v.src = url; v.currentTime = 0; v.play().catch(() => {}); }
   }
@@ -4918,6 +5021,9 @@
       el.classList.add('correct');
       document.querySelectorAll('.game-choice').forEach(x => { if (x !== el) x.classList.add('dim'); });
       chime();
+      // Clue quiz reinforces the WORD on success — the clue was the prompt,
+      // so this is the first time the child hears the answer named.
+      if (G.clueQuiz && G.target.soundKey) getMediaURL(G.target.soundKey).then(u => { if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } });
       // PRD §3.2 mercy cutover: 2nd- or 3rd-attempt pass is a FULL PASS.
       logAttempt(true);
       publishState();
@@ -5026,6 +5132,94 @@
     if (opts.manual) { abortRoutine(); publishLive('ready'); relockAfterActivity(); }
     else if (wasRoutine && ROUTINE.active) routineNext();   // time limit reached → next step
     else { publishLive('ready'); relockAfterActivity(); }   // standalone slideshow ended → re-lock
+  }
+
+  // ===== "Teach me" — child-launched teaching slideshow =====
+  // One shuffled pass through the last-pressed category: each slide shows the
+  // picture + the word, speaks the word, then speaks every taxonomy teaching
+  // clue (descriptive_clues) while showing it. Event-paced (advances when the
+  // speech finishes), then exits by itself.
+  const TEACH = { running: false };
+  const teachTTS = new Map();   // clue text → object URL (session cache; /api/tts caches server-side)
+  async function teachAudioURL(text) {
+    if (teachTTS.has(text)) return teachTTS.get(text);
+    try {
+      const r = await apiFetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, childId: CHILD_ID }) });
+      if (!r.ok) return null;
+      const url = URL.createObjectURL(await r.blob());
+      teachTTS.set(text, url);
+      return url;
+    } catch (_) { return null; }
+  }
+  // Play a URL on the shared voice element and resolve when it finishes
+  // (or errors, or after a 20s safety net — never wedge the show).
+  function playAwait(url) {
+    return new Promise((resolve) => {
+      const v = gVoice();
+      let done = false;
+      const finish = () => { if (done) return; done = true; v.removeEventListener('ended', finish); v.removeEventListener('error', finish); resolve(); };
+      v.addEventListener('ended', finish); v.addEventListener('error', finish);
+      setTimeout(finish, 20000);
+      v.src = url; v.currentTime = 0;
+      v.play().catch(finish);
+    });
+  }
+  const teachSleep = (ms) => new Promise(r => setTimeout(r, ms));
+  function teachOverlay() {
+    let o = document.getElementById('teach-overlay');
+    if (!o) {
+      o = document.createElement('div'); o.id = 'teach-overlay';
+      o.style.cssText = 'position:fixed;inset:0;z-index:2300;background:#fff7fb;display:none;flex-direction:column;align-items:center;justify-content:center;';
+      o.innerHTML = '<img id="teach-img" alt="" style="max-width:88vw;max-height:56vh;object-fit:contain;border-radius:22px;background:#fff;">'
+        + '<div id="teach-word" style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;color:#ad1457;font-size:clamp(30px,6vw,60px);font-weight:700;margin-top:20px;text-align:center;padding:0 24px;line-height:1.15;"></div>'
+        + '<div id="teach-clue" style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;color:#6b7280;font-size:clamp(17px,3vw,28px);font-weight:600;margin-top:12px;text-align:center;padding:0 40px;line-height:1.3;min-height:2.6em;"></div>'
+        + '<div id="teach-progress" style="position:absolute;top:24px;left:20px;font-family:Fredoka,ui-rounded,system-ui,sans-serif;color:#d6a8c6;font-weight:600;font-size:15px;"></div>'
+        + '<button id="teach-stop" aria-label="Stop" style="position:absolute;top:16px;right:18px;width:50px;height:50px;border-radius:50%;border:none;background:rgba(173,20,87,.12);color:#ad1457;font-size:24px;cursor:pointer;">✕</button>';
+      document.body.appendChild(o);
+      o.querySelector('#teach-stop').addEventListener('click', () => stopTeachShow());
+    }
+    return o;
+  }
+  async function startTeachShow(scope) {
+    if (G.running || SLIDE.running || TEACH.running) return;
+    let items = await gatherPlayable(scope);
+    if (!items.length && scope !== 'all') { scope = 'all'; items = await gatherPlayable(scope); }
+    if (!items.length) return;
+    TEACH.running = true;
+    const o = teachOverlay(); o.style.display = 'flex';
+    publishLive('running', { mode: 'teach', scope });
+    const deck = gShuffle(items.slice());
+    const img = document.getElementById('teach-img'), word = document.getElementById('teach-word'),
+          clueEl = document.getElementById('teach-clue'), prog = document.getElementById('teach-progress');
+    for (let i = 0; i < deck.length && TEACH.running; i++) {
+      const it = deck[i];
+      prog.textContent = (i + 1) + ' / ' + deck.length;
+      word.textContent = it.label; clueEl.textContent = ''; img.removeAttribute('src');
+      const iu = await getMediaURL(it.imageKey); if (iu) img.src = iu;
+      // The word first — the tile's recorded audio when it has one, else TTS.
+      let wu = null;
+      if (it.soundKey) wu = await getMediaURL(it.soundKey);
+      if (!wu) wu = await teachAudioURL(it.label);
+      if (wu && TEACH.running) await playAwait(wu);
+      // …then every teaching clue, shown while it's spoken.
+      for (const clue of (it.descriptiveClues || [])) {
+        if (!TEACH.running) break;
+        clueEl.textContent = clue;
+        const cu = await teachAudioURL(clue);
+        if (cu) await playAwait(cu);
+        await teachSleep(350);
+      }
+      if (TEACH.running) await teachSleep(900);
+    }
+    stopTeachShow();
+  }
+  function stopTeachShow() {
+    const o = document.getElementById('teach-overlay'); if (o) o.style.display = 'none';
+    if (!TEACH.running) return;   // idempotent — the loop calls this again after ✕
+    TEACH.running = false;
+    gVoice().pause();
+    publishLive('ready'); relockAfterActivity();
   }
 
   // Standalone celebration (also used at game end) — flowers + recorded cheer.
@@ -5294,7 +5488,7 @@
   // reports an error — so a remote launch never silently no-ops on a thin category
   // (the bug where "Start" on the phone appeared to do nothing).
   async function startFromCmd(cmd) {
-    if (G.running || SLIDE.running || ROUTINE.active) return;          // one activity at a time
+    if (G.running || SLIDE.running || TEACH.running || ROUTINE.active) return;   // one activity at a time
     if (Array.isArray(cmd.steps) && cmd.steps.length) { runRoutine(cmd.steps); return; }
     const mode = cmd.mode || 'facilitated';        // back-compat: therapist sends no mode → facilitated
     const range = (cmd.from || cmd.to) ? { from: cmd.from || 0, to: cmd.to || 0 } : null;
@@ -5304,9 +5498,11 @@
       startSlideshow({ scope: cmd.scope || 'all', secondsPerImage: cmd.secondsPerImage || 5, limitMin, labelStyle: cmd.labelStyle || (mode === 'exposure_slideshow' ? 'first_person' : 'plain') });
       return;
     }
+    if (mode === 'teach_slideshow') { startTeachShow(cmd.scope || 'all'); return; }
     if (mode === 'celebration') { playCelebration(); return; }
     // Matching game(s): filter to scopes that can actually be played.
     const choices = cmd.choices || 3;
+    const sample = (Number.isFinite(cmd.sample) && cmd.sample > 0) ? cmd.sample : undefined;
     const wanted = (Array.isArray(cmd.scopes) && cmd.scopes.length) ? cmd.scopes.slice() : [cmd.scope || 'all'];
     const playable = [];
     for (const sc of wanted) { try { const its = await gatherPlayable(sc, range); if (its.length >= choices) playable.push(sc); } catch (_) {} }
@@ -5314,8 +5510,9 @@
     if (!playable.length) { publishLive('error', { message: 'Not enough picture tiles to play a game yet.' }); return; }
     saveGameSettings({ choices, ...(Number.isFinite(cmd.limitMin) ? { limitMin: cmd.limitMin } : {}) });
     if (mode === 'facilitated') startGame(playable[0], choices, { facilitated: true, range, limitMin });
+    else if (mode === 'clue_quiz') startGame(playable[0], choices, { range, limitMin, sample, clueQuiz: true, fillFromBoard: true });
     else if (playable.length > 1) { gameSeq = playable.slice(); startNextSeqGame(); }
-    else startGame(playable[0], choices, { range, limitMin });
+    else startGame(playable[0], choices, { range, limitMin, sample });
   }
   function markRemote(method) {
     if (G.locked || !G.target) return;
@@ -5385,17 +5582,27 @@
   }
 
   // ---- Game UI wiring ----
-  // Fletcher's "Play with me" → ping the parent's phone (push) + dashboard banner.
-  let _playReqAt = 0;
+  // The child's 🙋 button is a SELF-LEARNING button: it instantly starts a
+  // self-paced quiz of 10 randomly sampled tiles from the category or
+  // subcategory chip they pressed most recently (falling back to the whole
+  // board when that scope is too thin). No parent needed.
   const playReqBtn = document.getElementById('play-request-btn');
   if (playReqBtn) playReqBtn.addEventListener('click', async () => {
-    if (Date.now() - _playReqAt < 45000) return;   // gentle cooldown so it can't be spammed
-    _playReqAt = Date.now();
-    const orig = playReqBtn.dataset.label || playReqBtn.textContent;
-    playReqBtn.dataset.label = orig;
-    playReqBtn.textContent = '💌 Told them!';
-    try { await apiFetch('/api/play-request?childId=' + encodeURIComponent(CHILD_ID), { method: 'POST' }); } catch (_) {}
-    setTimeout(() => { playReqBtn.textContent = playReqBtn.dataset.label; }, 4000);
+    if (G.running) return;
+    const choices = (gameSettings().choices) || 3;
+    // Fall back to the whole board ONLY when the remembered scope has nothing
+    // playable (deleted category, fresh start). A short list stays a short
+    // list — fewer than 10 tiles just means a shorter quiz, with distractors
+    // borrowed from the rest of the board.
+    let scope = recallPlayScope() || 'all';
+    if (scope !== 'all' && !(await gatherPlayable(scope)).length) scope = 'all';
+    startGame(scope, choices, { sample: 10, fillFromBoard: true });
+  });
+
+  // 📖 Teach me — teaching slideshow of the same last-pressed scope.
+  const teachBtn = document.getElementById('teach-btn');
+  if (teachBtn) teachBtn.addEventListener('click', () => {
+    startTeachShow(recallPlayScope() || 'all');
   });
 
   document.getElementById('play-btn').addEventListener('click', async () => {
@@ -5488,6 +5695,24 @@
   });
 
   // On-screen boot status so failures are visible without a console (iPad has none).
+  // ---- Phone mode: one section at a time behind tabs -------------------------
+  // The tab bar is display:none above 700px, so this is inert on tablets.
+  (function () {
+    const KEY = 'aacPhoneTab';
+    const tabs = document.querySelectorAll('#phone-tabs button');
+    if (!tabs.length) return;
+    function activate(sec) {
+      try { localStorage.setItem(KEY, sec); } catch (_) {}
+      tabs.forEach(b => b.classList.toggle('active', b.dataset.ptab === sec));
+      document.querySelectorAll('.aac-section').forEach(s =>
+        s.classList.toggle('phone-active', s.dataset.section === sec));
+    }
+    tabs.forEach(b => b.addEventListener('click', () => activate(b.dataset.ptab)));
+    let start = 'people';
+    try { start = localStorage.getItem(KEY) || 'people'; } catch (_) {}
+    activate(start);
+  })();
+
   // ---- Build-progress pill ("Making {name}'s words… 34 of 120") -------------
   // The onboarding pipeline places every word instantly, then renders the
   // personalized art server-side (seed_jobs + cron). While that's running we
