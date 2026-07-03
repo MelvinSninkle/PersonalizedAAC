@@ -45,9 +45,13 @@ struct HeaderBar: View {
                 }
             }
 
-            HStack {
-                lockButton
+            HStack(spacing: 10) {
+                // While the listening strip owns the header, the lock hides
+                // too — only the stop button remains, with room to breathe,
+                // so the controls never crowd the live tiles.
+                if !listening { lockButton }
                 listenButton
+                    .padding(.trailing, listening ? 6 : 0)
                 Spacer()
                 trailingControls
             }

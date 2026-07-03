@@ -61,8 +61,9 @@ struct SlideshowView: View {
                 background: Color.black.opacity(0.06)
             ) { onExit() }
         }
+        // Taps do NOTHING in a passive slideshow — a child mashing the screen
+        // shouldn't skip slides. Long-hold ✕ is the only exit.
         .contentShape(Rectangle())
-        .onTapGesture { advance() }     // any tap advances
         .task { setup() }
         .onDisappear {
             advanceTask?.cancel()
@@ -188,10 +189,9 @@ struct TeachShowView: View {
                     ProgressView().tint(Color(hex: "#ad1457")).frame(height: 300)
                 }
 
-                if let t = current {
-                    Text(t.label)
-                        .font(.system(size: 44, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color(hex: "#ad1457"))
+                if current != nil {
+                    // No separate word label — the tile art carries its own
+                    // caption band; repeating it read as clutter.
                     // The clue being spoken right now — empty between clues.
                     Text(clue)
                         .font(.system(size: 24, weight: .semibold, design: .rounded))
@@ -251,6 +251,10 @@ struct TeachShowView: View {
                 if Task.isCancelled { return }
                 await MainActor.run { image = img }
             }
+            // Let the new image actually be ON SCREEN before the word plays —
+            // speaking over the previous slide's tail read as out-of-sync.
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            if Task.isCancelled { return }
             // The word first…
             await GameAudio.shared.speakAwait(tile.label, childId: childId)
             // …then every teaching clue, shown while it's spoken.

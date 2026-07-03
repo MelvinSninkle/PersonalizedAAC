@@ -673,32 +673,21 @@
   }
 
   /* ── PHONE MODE — the web board on a phone-width screen ──────────────────
-     The 3-columns-side-by-side layout is a tablet design; on a phone it
-     renders enormous half-offscreen tiles (the "poor representation").
-     Under 700px the board becomes the mini-board the parent app shows:
-     one section at a time behind a tab bar, tiles 3-across, the Needs
-     strip as a horizontal scroller pinned above the tabs. */
-  #phone-tabs { display: none; }
+     On a phone the board is the SAME whole-board layout as the tablet —
+     People left, Nouns middle, Verbs right, Needs at the bottom — just
+     scaled down, exactly like the parent app's mini board. No tabs, no
+     one-section-at-a-time: the parent sees everything at once. Tiles stay
+     small because PHONE_ACROSS caps each section's columns. */
+  #phone-tabs { display: none !important; }
   @media (max-width: 700px) {
-    main { display: block !important; }
-    .aac-section { width: 100% !important; display: none !important; }
-    .aac-section.phone-active { display: flex !important; }
+    main { gap: 4px; padding: 4px; }
+    .aac-section h2 { font-size: 12px; }
     /* Needs: one horizontal swipe row, like the native strip. */
     #items-needs {
-      display: flex !important; overflow-x: auto; gap: 8px;
+      display: flex !important; overflow-x: auto; gap: 6px;
       -webkit-overflow-scrolling: touch;
     }
-    #items-needs > * { flex: 0 0 31%; }
-    #phone-tabs {
-      display: flex; position: sticky; top: 0; z-index: 900;
-      background: #fff; border-bottom: 2px solid #f3c6dd;
-    }
-    #phone-tabs button {
-      flex: 1; border: none; background: none; padding: 10px 4px;
-      font: 700 14px -apple-system, system-ui, sans-serif; color: #9d2463;
-      border-bottom: 3px solid transparent;
-    }
-    #phone-tabs button.active { border-bottom-color: #ff1493; background: #fdf2f8; }
+    #items-needs > * { flex: 0 0 23%; }
   }
 
   /* A tile whose art hasn't been generated yet: show the word, big and warm. */
@@ -1623,7 +1612,9 @@
   // Phone-mode column defaults (tuned ratio: People 2, Nouns 5, Verbs 2).
   // Applied ONLY when the parent hasn't chosen their own tiles-across on this
   // device — an explicit Display-panel choice always wins, phone or tablet.
-  const PHONE_ACROSS = { people: 2, nouns: 5, verbs: 2 };
+  // Mini-board tile density: columns per SECTION (sections sit side by side
+  // on the phone, so the totals stay small enough to read).
+  const PHONE_ACROSS = { people: 2, nouns: 3, verbs: 2 };
   const phoneMQ = window.matchMedia('(max-width: 700px)');
   function acrossFor(section) {
     if (phoneMQ.matches && PHONE_ACROSS[section]) {

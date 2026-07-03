@@ -213,7 +213,15 @@ struct BoardView: View {
         }
         // Pause the scheduler tick while a game / unlock / settings sheet is up
         // so a fired schedule doesn't try to stack a second sheet on top.
-        .onChange(of: game.current) { _, c in scheduler.isBlocked = (c != nil) || showSettings || showDisplay }
+        .onChange(of: game.current) { _, c in
+            scheduler.isBlocked = (c != nil) || showSettings || showDisplay
+            // A REMOTELY-ended game (parent's "End the activity") clears
+            // game.current without the cover's onExit ever running — which left
+            // the heartbeat re-publishing "running" + the dead session's payload
+            // forever, so the facilitator overlay resurrected it on every parent
+            // app launch. Any transition to no-game must publish standby.
+            if c == nil { live.setStandby() }
+        }
         .onChange(of: showSettings) { _, on in scheduler.isBlocked = on || showDisplay || (game.current != nil) }
         .onChange(of: showDisplay)  { _, on in scheduler.isBlocked = on || showSettings || (game.current != nil) }
     }

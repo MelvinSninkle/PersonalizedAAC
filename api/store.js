@@ -29,7 +29,7 @@ import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus } from './
 import { ensureCredits, ensureStarter, creditBalance, spendCredits, grantCredits,
          recordPurchase, productCredits, rebuildQuote,
          ensureCoupons, redeemCoupon, randomCouponCode,
-         PACKS, SUBSCRIPTION, COST, CREDIT_CENTS } from './_lib/credits.js';
+         PACKS, SUBSCRIPTION, COST, CREDIT_CENTS, bundleQuote } from './_lib/credits.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
 
@@ -62,6 +62,8 @@ export default async function handler(req, res) {
       case 'browse':         return browse(req, res, db, auth);
       case 'history':        return history(req, res, db, uid);
       case 'checkout':       return checkout(req, res, db, auth, uid, body);
+      case 'free-board':     return freeBoard(req, res, db, auth, body);
+      case 'personalize-all': return personalizeAll(req, res, db, auth, uid, body);
       case 'impact':         return impact(req, res, db, auth);
       case 'adopt-image':    return adoptImage(req, res, db, auth);
       case 'regen-with':     return regenWith(req, res, db, auth, uid, body);
@@ -178,10 +180,13 @@ async function checkout(req, res, db, auth, uid, body) {
   const rows = ids.map((id) => byId.get(id)).filter(Boolean);
   if (!rows.length) { res.status(400).json({ error: 'no valid words in cart' }); return; }
 
-  const cost = rows.length * COST.nano;
+  // Bundle checkout (a whole category/subcategory at once) earns 20% off —
+  // gated to 3+ words so single-word buys can't claim the discount.
+  const bundle = body.bundle === true && rows.length >= 3;
+  const cost = bundle ? bundleQuote(rows.length) : rows.length * COST.nano;
   const isAdmin = auth.user.role === 'admin';
   if (!isAdmin) {
-    const s = await spendCredits(db, { userId: uid, credits: cost, reason: 'store:words', ref: childId });
+    const s = await spendCredits(db, { userId: uid, credits: cost, reason: bundle ? 'store:bundle' : 'store:words', ref: childId });
     if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: cost, balance: s.balance }); return; }
   }
 
@@ -209,6 +214,92 @@ async function checkout(req, res, db, auth, uid, body) {
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${queued} word${queued === 1 ? '' : 's'} queued — they render in your child's style over the next few minutes.`,
   });
+}
+
+// ── Free common-use boards: place/remove a whole category with DEFAULT art ──
+//
+// Placement with the shared default images is FREE — personalization is what
+// costs credits. ON places every shoppable word in (column, category) that is
+// missing from the board (no render jobs; /api/sync's read-through fills the
+// default art live). OFF removes ONLY non-personalized tiles in that group —
+// custom art the family paid for is never deleted.
+async function freeBoard(req, res, db, auth, body) {
+  const childId = String(body.childId || '').slice(0, 64);
+  const column = String(body.column || '').toLowerCase().slice(0, 24);
+  const category = String(body.category || '').slice(0, 80);
+  const on = body.on !== false;
+  if (!childId || !column || !category) { res.status(400).json({ error: 'childId, column, category required' }); return; }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  const all = await shoppableRows(db);
+  const group = all.filter((t) => String(t.column_name || '').toLowerCase() === column
+                                   && String(t.category || '') === category);
+  if (!group.length) { res.status(404).json({ error: 'no words in that category' }); return; }
+  const slugs = group.map((t) => t.id);
+
+  if (on) {
+    await ensureSeedJobs(db);
+    const catCache = new Map();
+    let placed = 0;
+    for (const t of group) {
+      const section = String(t.column_name || 'needs').toLowerCase();
+      const catId = section === 'needs' ? null
+        : await ensureCategory(db, childId, catCache, section, t.category, t.subcategory);
+      const ex = await db`SELECT id FROM items WHERE child_id = ${childId} AND taxonomy_slug = ${t.id} LIMIT 1`;
+      if (ex.length) continue;
+      await db`INSERT INTO items (section, category_id, label, image_key, sound_key, keep_aspect, display_order,
+                                  pinned, child_id, taxonomy_slug, needs_review, updated_at)
+               VALUES (${section}, ${catId}, ${t.label}, NULL, NULL, FALSE, ${Date.now() + placed}, FALSE,
+                       ${childId}, ${t.id}, FALSE, NOW())`;
+      placed++;
+    }
+    res.status(200).json({ ok: true, placed,
+      note: placed ? `${placed} words added with the shared pictures — personalize them any time.`
+                   : 'Everything in that set is already on the board.' });
+    return;
+  }
+
+  const gone = await db`DELETE FROM items
+    WHERE child_id = ${childId} AND taxonomy_slug = ANY(${slugs})
+      AND (image_key IS NULL OR image_key LIKE 'taxonomy-defaults/%')
+    RETURNING id`;
+  res.status(200).json({ ok: true, removed: gone.length,
+    note: `${gone.length} removed. Personalized tiles in this set were kept.` });
+}
+
+// ── "Personalize every tile on the board" ───────────────────────────────────
+//
+// Quote (body.quote=true): how many taxonomy-linked tiles still wear the
+// shared default (or no art at all), out of how many total, and the bundle
+// price for finishing the set. Buy: spend + force-render every remaining one.
+// Personalization is tracked from the board itself: a custom image_key (not
+// a taxonomy-defaults/ read-through) IS the record of a personalized tile.
+async function personalizeAll(req, res, db, auth, uid, body) {
+  const childId = String(body.childId || '').slice(0, 64);
+  if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  const rows = await db`SELECT id, taxonomy_slug, image_key FROM items
+                        WHERE child_id = ${childId} AND taxonomy_slug IS NOT NULL`;
+  const remaining = rows.filter((r) => !r.image_key || String(r.image_key).startsWith('taxonomy-defaults/'));
+  const total = rows.length;
+  const cost = remaining.length ? bundleQuote(remaining.length) : 0;
+
+  if (body.quote === true || !remaining.length) {
+    res.status(200).json({ ok: true, remaining: remaining.length, total, cost });
+    return;
+  }
+
+  const isAdmin = auth.user.role === 'admin';
+  if (!isAdmin) {
+    const s = await spendCredits(db, { userId: uid, credits: cost, reason: 'store:personalize_all', ref: childId });
+    if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: cost, balance: s.balance }); return; }
+  }
+  await ensureSeedJobs(db);
+  for (const r of remaining) await enqueueRenderJob(db, childId, r.taxonomy_slug, { force: true });
+  res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length,
+    balance: uid ? await creditBalance(db, uid) : null,
+    note: `${remaining.length} tiles queued — the whole board personalizes over the next while.` });
 }
 
 // ── Contextual magic: "your new fork appears in these pictures" ─────────────

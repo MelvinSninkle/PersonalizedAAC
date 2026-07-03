@@ -11,7 +11,7 @@ import StoreKit
 /// (idempotent per transaction id — safe to re-send on relaunch).
 ///
 /// Product ids must exist in App Store Connect:
-///   credits20, credits60, credits150 (consumables), plus.monthly (auto-renew).
+///   credits50/100/250/500/1000 (consumables), plus.monthly (auto-renew).
 struct StoreView: View {
     @Environment(AuthManager.self) private var auth
 
@@ -23,7 +23,7 @@ struct StoreView: View {
     @State private var couponCode = ""
     @State private var redeeming = false
 
-    private static let productIDs = ["credits20", "credits60", "credits150", "plus.monthly"]
+    private static let productIDs = ["credits50", "credits100", "credits250", "credits500", "credits1000", "plus.monthly"]
     private let api = APIClient()
 
     var body: some View {
