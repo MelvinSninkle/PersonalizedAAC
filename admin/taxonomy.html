@@ -1007,7 +1007,9 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     btn.disabled = true;
     try {
       const g = await seedDefaultsLoop('populate');
-      let msg = `Defaults: copied ${g.processed} of ${g.total} tiles from "${g.sourceChildId || 'reference'}"` + (g.failed ? `, ${g.failed} failed` : '') + '.';
+      const fc = await seedDefaultsLoop('cats');
+      let msg = `Defaults: copied ${g.processed} of ${g.total} tiles + ${fc.processed} of ${fc.total} folder icons from "${g.sourceChildId || 'reference'}"`
+        + ((g.failed || fc.failed) ? `, ${g.failed + fc.failed} failed` : '') + '.';
       if (g.note) msg += '\n\n' + g.note;
       const childId = prompt(msg + '\n\nApply these defaults to an EXISTING child board now? Enter the child id (blank to skip):', '');
       if (childId && childId.trim()) {

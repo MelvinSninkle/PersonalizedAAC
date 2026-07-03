@@ -76,6 +76,7 @@ export default async function handler(req, res) {
   const db = sql();
   try {
     if (mode === 'apply') return await applyToChild(req, res, db, gate);
+    if (mode === 'cats')  return await populateCats(req, res, db);
     return await populate(req, res, db);
   } catch (err) {
     res.status(500).json({ error: 'seed-defaults failed', mode, detail: String(err.message || err) });
@@ -285,5 +286,65 @@ async function applyToChild(req, res, db, gate) {
   res.status(200).json({
     ok: true, mode: 'apply', childId, matchedBy, done, nextOffset, total, updated, failed,
     note: `${total} default-able items on this board can adopt a default image (matched by ${matchedBy}).`,
+  });
+}
+
+
+// ── mode=cats — folder-icon defaults ─────────────────────────────────────────
+// Copy the reference board's category/subcategory chip images into the shared
+// category_defaults store (keyed by section + normalized label). /api/sync
+// read-throughs these onto any board whose chip has no custom icon — which is
+// what fills the blank folder chips on boards built before icons existed.
+async function populateCats(req, res, db) {
+  const force = String((req.query && req.query.force) || '') === '1';
+  const sourceChildId = String((req.query && req.query.sourceChildId) || DEFAULT_SOURCE_CHILD).trim();
+  const offset = Math.max(0, parseInt((req.query && req.query.offset) || '0', 10) || 0);
+
+  await db`
+    CREATE TABLE IF NOT EXISTS category_defaults (
+      id BIGSERIAL PRIMARY KEY,
+      section TEXT NOT NULL,
+      label_norm TEXT NOT NULL,
+      image_key TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (section, label_norm)
+    )`;
+
+  const [chips, existing] = await Promise.all([
+    db`SELECT section, label, image_key FROM categories
+       WHERE child_id = ${sourceChildId} AND image_key IS NOT NULL
+       ORDER BY section, label`,
+    db`SELECT section, label_norm FROM category_defaults`,
+  ]);
+  const have = new Set(existing.map((e) => e.section + '|' + e.label_norm));
+  const seen = new Set();
+  const pending = chips.filter((c) => {
+    const k = c.section + '|' + norm(c.label);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return force || !have.has(k);
+  });
+  const total = pending.length;
+  const slice = pending.slice(offset, offset + POPULATE_BUDGET);
+
+  const results = await mapPool(slice, 4, async (c) => {
+    const { buffer, contentType } = await readBlobBytes(c.image_key);
+    const ext = (String(contentType || '').includes('jpeg') || String(contentType || '').includes('jpg')) ? 'jpg' : 'png';
+    const key = `category-defaults/${c.section}/${randomUUID()}.${ext}`;
+    await put(key, buffer, { access: 'private', contentType: contentType || 'image/png', addRandomSuffix: false });
+    await db`INSERT INTO category_defaults (section, label_norm, image_key)
+             VALUES (${c.section}, ${norm(c.label)}, ${key})
+             ON CONFLICT (section, label_norm) DO UPDATE SET image_key = ${key}, updated_at = NOW()`;
+    return key;
+  });
+  let processed = 0, failed = 0;
+  for (const r of results) { if (r && r.ok) processed++; else failed++; }
+  const nextOffset = offset + slice.length;
+
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(200).json({
+    ok: true, mode: 'cats', done: nextOffset >= total, nextOffset, total, processed, failed,
+    sourceChildId,
+    note: `${chips.length} folder chips with icons on ${sourceChildId}; ${total} ${force ? 'to (re)copy' : 'missing a default'}.`,
   });
 }

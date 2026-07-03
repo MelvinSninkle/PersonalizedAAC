@@ -564,6 +564,21 @@ export default async function handler(req, res) {
     // voice). NULL = no default yet → fall back to per-child generation.
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS default_image_key TEXT`;
 
+    // Default FOLDER ICONS (category/subcategory chips), keyed by section +
+    // normalized label — chips aren't taxonomy rows, so they need their own
+    // little defaults store. Populated by copying the reference board's chips
+    // (admin: Default images…); consumed by /api/sync read-through, so every
+    // board whose chip has no custom icon shows the shared one.
+    await db`
+      CREATE TABLE IF NOT EXISTS category_defaults (
+        id BIGSERIAL PRIMARY KEY,
+        section TEXT NOT NULL,
+        label_norm TEXT NOT NULL,
+        image_key TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (section, label_norm)
+      )`;
+
     // Prompt version history: every time a tile's prompt_template changes (single
     // edit OR bulk import overwrite), the PRIOR value is saved here first, so an
     // accidental overwrite is always recoverable. Kept separate from full-taxonomy
