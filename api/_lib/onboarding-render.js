@@ -112,18 +112,24 @@ export function buildPortraitPrompt({ styleGuide, attempt = 0, guidance = '' } =
   let prompt;
   if (hasStyleImg) {
     prompt =
-      "TASK: Redraw the real person shown in IMAGE 2 in the EXACT art style of IMAGE 1.\n" +
+      "TASK: Redraw the real person or people shown in IMAGE 2 in the EXACT art style of IMAGE 1.\n" +
       "IMAGE 1 is the STYLE reference. Copy its art style faithfully and obviously: its linework weight and color, " +
       "its flat cel coloring and shading, its proportions and shapes, and ESPECIALLY its eye treatment — match how " +
-      "eyes, pupils, and the whites of the eyes are drawn. Do NOT copy IMAGE 1's content, background, or the people in it. " +
+      "eyes, pupils, and the whites of the eyes are drawn. Also match its BACKGROUND TREATMENT: give this picture " +
+      "the same kind of setting, backdrop, and palette that IMAGE 1 uses, so it feels like a scene from the same " +
+      "world — do NOT copy IMAGE 1's specific content or the people in it, and do NOT default to a plain empty backdrop. " +
       (styleDesc ? `The style can be described as: ${styleDesc}. ` : '') +
-      "\nIMAGE 2 is the real person. Keep their IDENTITY unmistakable — same skin tone, hair color and hairstyle, " +
-      "face shape, eyebrows, apparent age and sex, and any glasses, freckles, or distinctive features — but DRAW every " +
-      "one of those features in IMAGE 1's art style (do not render them realistically or in a different cartoon style).\n" +
+      "\nIMAGE 2 shows ONE person OR A GROUP. Draw EVERY person present in IMAGE 2 — never drop, merge, or add " +
+      "anyone; the count of people in your picture must equal the count in the photo. Keep EACH person's IDENTITY " +
+      "unmistakable — same skin tone, hair color and hairstyle, face shape, eyebrows, apparent age and sex, and any " +
+      "glasses, freckles, or distinctive features — but DRAW every one of those features in IMAGE 1's art style " +
+      "(do not render them realistically or in a different cartoon style).\n" +
       "WHY: this is a tile for a young child's AAC communication device; the child has a developmental disability and " +
-      "must instantly recognize BOTH this exact person AND the shared art style that helps them focus — so a faithful " +
-      "style match and a faithful likeness matter equally.\n" +
-      "Head-and-shoulders portrait, centered, clean soft pastel background, bright friendly colors, no text or letters." + variant;
+      "must instantly recognize BOTH these exact people AND the shared art style that helps them focus — so a faithful " +
+      "style match and faithful likenesses matter equally.\n" +
+      "FRAMING: one person → a centered head-and-shoulders portrait. A group → frame everyone together from the " +
+      "waist up, close and warm, each face clearly visible and large enough to recognize. Bright friendly colors, " +
+      "no text or letters." + variant;
   } else {
     prompt = PORTRAIT_NO_STYLE_BASE + variant;
   }

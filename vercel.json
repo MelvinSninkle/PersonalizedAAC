@@ -1,17 +1,61 @@
 {
   "rewrites": [
-    { "source": "/u/:slug", "destination": "/app.html" },
-    { "source": "/parent/:slug", "destination": "/parent.html" },
-    { "source": "/therapist", "destination": "/therapist-home.html" },
-    { "source": "/therapist/library", "destination": "/therapist-library.html" },
-    { "source": "/therapist/:slug", "destination": "/therapist.html" },
-    { "source": "/login", "destination": "/login.html" },
-    { "source": "/signup", "destination": "/signup.html" },
-    { "source": "/reset", "destination": "/reset.html" },
-    { "source": "/welcome", "destination": "/welcome.html" },
-    { "source": "/accept-invite", "destination": "/accept-invite.html" },
-    { "source": "/onboard/:slug", "destination": "/onboard.html" },
-    { "source": "/onboard", "destination": "/onboard.html" }
+    {
+      "source": "/u/:slug",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/parent/:slug",
+      "destination": "/parent.html"
+    },
+    {
+      "source": "/therapist",
+      "destination": "/therapist-home.html"
+    },
+    {
+      "source": "/therapist/library",
+      "destination": "/therapist-library.html"
+    },
+    {
+      "source": "/therapist/:slug",
+      "destination": "/therapist.html"
+    },
+    {
+      "source": "/login",
+      "destination": "/login.html"
+    },
+    {
+      "source": "/signup",
+      "destination": "/signup.html"
+    },
+    {
+      "source": "/reset",
+      "destination": "/reset.html"
+    },
+    {
+      "source": "/welcome",
+      "destination": "/welcome.html"
+    },
+    {
+      "source": "/accept-invite",
+      "destination": "/accept-invite.html"
+    },
+    {
+      "source": "/onboard/:slug",
+      "destination": "/onboard.html"
+    },
+    {
+      "source": "/onboard",
+      "destination": "/onboard.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    }
   ],
   "crons": [
     {

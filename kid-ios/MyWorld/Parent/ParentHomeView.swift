@@ -247,6 +247,10 @@ struct ParentSettingsView: View {
     @State private var advanceMsg: String?
     @State private var squaring = false
     @State private var squareMsg: String?
+    @State private var showDeleteConfirm = false
+    @State private var deleteText = ""
+    @State private var deleting = false
+    @State private var deleteError: String?
 
     private let api = APIClient()
 
@@ -316,12 +320,57 @@ struct ParentSettingsView: View {
                     Button("Sign out", role: .destructive) {
                         Task { await auth.signOut(); dismiss() }
                     }
+                    // Apple requires in-app account deletion (5.1.1(v)) since
+                    // accounts are created in-app. Same endpoint as the web
+                    // dashboard: removes the account and EVERYTHING with it.
+                    Button("Delete account…", role: .destructive) { showDeleteConfirm = true }
+                    if let msg = deleteError {
+                        Text(msg).font(.footnote).foregroundStyle(.red)
+                    }
+                }
+                Section {
+                    HStack(spacing: 16) {
+                        Link("Terms of Service", destination: URL(string: "\(APIClient.defaultOrigin)/terms")!)
+                        Link("Privacy Policy", destination: URL(string: "\(APIClient.defaultOrigin)/privacy")!)
+                    }
+                    .font(.footnote)
                 }
             }
             .navigationTitle("Settings")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
             .task { band = try? await api.bandStatus(childId: auth.childSlug) }
+            .alert("Delete this account?", isPresented: $showDeleteConfirm) {
+                TextField("Type DELETE to confirm", text: $deleteText)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.characters)
+                Button("Cancel", role: .cancel) { deleteText = "" }
+                Button("Delete everything", role: .destructive) {
+                    Task { await deleteAccount() }
+                }
+            } message: {
+                Text("Permanently deletes this account and everything on the board — every tile, photo, generated image, recording, and all history. This cannot be undone.")
+            }
         }
+    }
+
+    private func deleteAccount() async {
+        guard deleteText.trimmingCharacters(in: .whitespaces).uppercased() == "DELETE" else {
+            deleteError = "Type DELETE (all caps) to confirm."
+            deleteText = ""
+            return
+        }
+        deleting = true
+        defer { deleting = false }
+        do {
+            let body = try JSONSerialization.data(withJSONObject: ["confirm": "DELETE"])
+            _ = try await api.request(method: "POST", path: "/api/auth/delete-account",
+                                      body: body, contentType: "application/json")
+            await auth.signOut()
+            dismiss()
+        } catch {
+            deleteError = "Couldn't delete: \(error.localizedDescription)"
+        }
+        deleteText = ""
     }
 
     private var webDashboardURL: URL {
@@ -593,7 +642,7 @@ private struct PersonEditorSheet: View {
                 Button { showCamera = true } label: { photoBtn("Take photo", "camera.fill") }.buttonStyle(.plain)
                 Button { showLibrary = true } label: { photoBtn("Choose photo", "photo.on.rectangle") }.buttonStyle(.plain)
             }
-            Text(isNew ? "A clear head-and-shoulders photo works best."
+            Text(isNew ? "A clear head-and-shoulders photo works best. Only upload someone who's given you permission — it's used solely to draw their tile."
                        : "Pick a new photo to replace their portrait, or leave it.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
         }

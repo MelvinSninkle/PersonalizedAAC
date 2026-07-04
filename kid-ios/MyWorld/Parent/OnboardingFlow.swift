@@ -420,6 +420,28 @@ private struct OnboardingAccountView: View {
                 }
                 .pickerStyle(.segmented)
 
+                // The COPPA/consent anchor — required before EITHER create
+                // path (Apple or email). Log-ins don't need it.
+                if mode == .signup {
+                    Toggle(isOn: $consented) {
+                        (Text("I'm the parent or legal guardian (or a caregiver with their permission), I'm 18+, and I agree to the ")
+                         + Text("Terms of Service").underline()
+                         + Text(" and ")
+                         + Text("Privacy Policy").underline()
+                         + Text(". Photos I upload are used only to illustrate our board."))
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(Color(hex: Brand.muted))
+                    }
+                    .toggleStyle(.switch)
+                    .tint(Color(hex: Brand.pink))
+                    .onTapGesture { }   // let the links below take real taps
+                    HStack(spacing: 14) {
+                        Link("Terms of Service", destination: URL(string: "\(APIClient.defaultOrigin)/terms")!)
+                        Link("Privacy Policy", destination: URL(string: "\(APIClient.defaultOrigin)/privacy")!)
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                }
+
                 // Apple works for BOTH modes — it signs in if the account
                 // exists, creates it if not. Primary per App Store Review 4.8.
                 SignInWithAppleButton(mode == .login ? .signIn : .signUp) { request in
@@ -430,6 +452,8 @@ private struct OnboardingAccountView: View {
                 .signInWithAppleButtonStyle(.black)
                 .frame(height: 52)
                 .clipShape(RoundedRectangle(cornerRadius: 999))
+                .disabled(mode == .signup && !consented)
+                .opacity(mode == .signup && !consented ? 0.45 : 1)
 
                 divider
 
@@ -476,6 +500,7 @@ private struct OnboardingAccountView: View {
     }
     private var emailFormValid: Bool {
         guard !email.isEmpty else { return false }
+        if mode == .signup && !consented { return false }
         if mode == .login { return !password.isEmpty }
         return password.count >= 8 && password == confirm
     }
@@ -521,6 +546,8 @@ private struct OnboardingAccountView: View {
         }
     }
 
+    @State private var consented = false
+
     private func logIn() async {
         busy = true; errorText = nil
         defer { busy = false }
@@ -533,6 +560,10 @@ private struct OnboardingAccountView: View {
     }
 
     private func createEmailAccount() async {
+        guard consented else {
+            errorText = "Please confirm the consent switch above — it covers the Terms, Privacy Policy, and how photos are used."
+            return
+        }
         busy = true; errorText = nil
         defer { busy = false }
         do {
@@ -540,6 +571,8 @@ private struct OnboardingAccountView: View {
                 "email": email.trimmingCharacters(in: .whitespaces),
                 "password": password,
                 "role": "parent",
+                "consent": true,
+                "consentVersion": "2026-07",
             ])
             _ = try await api.request(method: "POST", path: "/api/auth/register",
                                       body: body, contentType: "application/json")
