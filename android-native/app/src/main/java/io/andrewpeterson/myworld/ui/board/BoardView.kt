@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.andrewpeterson.myworld.LocalAppContainer
+import io.andrewpeterson.myworld.game.GameController
 import io.andrewpeterson.myworld.model.BoardMetrics
 import io.andrewpeterson.myworld.model.BoardSection
 import io.andrewpeterson.myworld.model.Category
@@ -50,12 +51,51 @@ fun BoardView() {
     var showSettings by remember { mutableStateOf(false) }
     var showDisplay by remember { mutableStateOf(false) }
 
+    val gameSession by c.game.current.collectAsState()
+    val liveCommand by c.live.latest.collectAsState()
+    val staged by c.autoTeach.staged.collectAsState()
+
     LaunchedEffect(Unit) {
         val slug = c.auth.childSlug
         c.displayPrefs.attach(slug)
         c.board.refresh(slug)
         didInitialLoad = true
-        // M5+: live.start, scheduler.start, autoTeach.start, seed watch.
+        c.live.start(slug)
+        c.autoTeach.start(slug)
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { c.live.stop(); c.autoTeach.stop() }
+    }
+
+    // Route incoming facilitator commands (listen toggles land in M6; message
+    // overlay in M7 — everything else goes to the game engine).
+    LaunchedEffect(liveCommand) {
+        val cmd = liveCommand ?: return@LaunchedEffect
+        when (cmd.action) {
+            "listen-start", "listen-stop", "message" -> { /* M6/M7 */ }
+            else -> c.game.apply(cmd)
+        }
+        c.live.acknowledge()
+    }
+
+    // A remotely-ended game clears current without the cover's onExit running —
+    // ANY transition to no-game must publish standby (the ghost-session lesson).
+    LaunchedEffect(gameSession) {
+        if (gameSession == null) c.live.setStandby()
+    }
+
+    // Header Play/Teach: quiz or teach the last-pressed scope (10 sampled).
+    fun startSelfQuiz() {
+        val scope = io.andrewpeterson.myworld.game.PlayScope.recall(c.auth.childSlug) ?: "all"
+        val playable = c.board.tilesForScope(scope).count { !it.imageKey.isNullOrEmpty() }
+        val useScope = if (playable >= 2) scope else "all"
+        c.game.startLocal(GameController.Mode.Matching, scope = useScope, choices = 3, sample = 10)
+    }
+    fun startTeachShow() {
+        val scope = io.andrewpeterson.myworld.game.PlayScope.recall(c.auth.childSlug) ?: "all"
+        val playable = c.board.tilesForScope(scope).count { !it.imageKey.isNullOrEmpty() }
+        val useScope = if (playable >= 1) scope else "all"
+        c.game.startLocal(GameController.Mode.Teach, scope = useScope)
     }
 
     Column(Modifier.fillMaxSize().background(hexColor("#fff7fb"))) {
@@ -65,6 +105,8 @@ fun BoardView() {
             onLockLongPress = { if (!editMode) showUnlock = true },
             onTripleTap = { showSettings = true },
             onShowDisplay = { showDisplay = true },
+            onTeachTap = { startTeachShow() },
+            onPlayTap = { startSelfQuiz() },
         )
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -119,6 +161,61 @@ fun BoardView() {
     if (showUnlock) UnlockSheet(onDismiss = { showUnlock = false }, onUnlock = { editMode = true })
     if (showSettings) SettingsView { showSettings = false }
     if (showDisplay) DisplaySettingsView { showDisplay = false }
+
+    // Auto-teach staged an activity: countdown card → session with the
+    // slugs: scope; ✕ skips this round. Never over a running game/edit.
+    staged?.let { s ->
+        if (gameSession == null && !editMode) {
+            io.andrewpeterson.myworld.ui.game.AutoTeachCountdownCard(
+                mode = s.mode,
+                onFire = {
+                    val session = GameController.Session(
+                        mode = if (s.mode == "game") GameController.Mode.Matching
+                               else GameController.Mode.Slideshow(firstPerson = s.labelStyle == "first_person"),
+                        scope = "slugs:" + s.slugs.joinToString(","),
+                        choices = if (s.mode == "game") 3 else null,
+                        limitMin = if (s.mode == "game") s.sessionMaxMin else null,
+                        secondsPerImage = s.secondsPerImage,
+                    )
+                    c.game.startStaged(session)
+                    c.autoTeach.consumeStaged(fired = true)
+                },
+                onSkip = { c.autoTeach.consumeStaged(fired = false) },
+            )
+        }
+    }
+
+    // Full-screen game cover — routes the session's mode to its view, exactly
+    // like the iOS fullScreenCover switch.
+    gameSession?.let { session ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { /* games exit via hold-✕ or completion only */ },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+            ),
+        ) {
+            val endGame: () -> Unit = {
+                val routineContinues = c.game.sessionDidEnd()
+                if (!routineContinues) c.live.setStandby()
+            }
+            when (session.mode) {
+                is GameController.Mode.Matching,
+                is GameController.Mode.AuditoryComprehension,
+                is GameController.Mode.ClueQuiz ->
+                    io.andrewpeterson.myworld.ui.game.MatchingView(session, endGame)
+                is GameController.Mode.ExpressiveNaming ->
+                    io.andrewpeterson.myworld.ui.game.ExpressiveNamingView(session, endGame)
+                is GameController.Mode.Slideshow ->
+                    io.andrewpeterson.myworld.ui.game.SlideshowView(session, endGame)
+                is GameController.Mode.Teach ->
+                    io.andrewpeterson.myworld.ui.game.TeachShowView(session, endGame)
+                is GameController.Mode.Celebration ->
+                    io.andrewpeterson.myworld.ui.game.CelebrationView(endGame)
+            }
+        }
+    }
 }
 
 /**

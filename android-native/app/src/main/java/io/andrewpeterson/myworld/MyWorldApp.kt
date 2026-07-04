@@ -3,10 +3,14 @@ package io.andrewpeterson.myworld
 import android.app.Application
 import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
+import io.andrewpeterson.myworld.audio.GameAudio
 import io.andrewpeterson.myworld.audio.SpeechCache
 import io.andrewpeterson.myworld.audio.TilePlayer
 import io.andrewpeterson.myworld.auth.AuthManager
+import io.andrewpeterson.myworld.game.GameController
 import io.andrewpeterson.myworld.game.PlayScope
+import io.andrewpeterson.myworld.live.AutoTeachRunner
+import io.andrewpeterson.myworld.live.LiveSession
 import io.andrewpeterson.myworld.model.DeviceMode
 import io.andrewpeterson.myworld.model.DisplayPrefs
 import io.andrewpeterson.myworld.net.ApiClient
@@ -44,12 +48,17 @@ class AppContainer(context: Context) {
     // M3 — display preferences (server-synced) + play-scope memory.
     val displayPrefs = DisplayPrefs(context, api)
 
+    // M5 — game engine + live channel + auto-teach.
+    val game = GameController()
+    val gameAudio = GameAudio(context, api, speechCache)
+    val live = LiveSession(api)
+    val autoTeach = AutoTeachRunner(api)
+
     init {
         PlayScope.init(context)
     }
 
-    // M5+: gameController, gameAudio, scheduler, autoTeachRunner …
-    // M6+: speechListener · M7+: liveSession, parentLive · M8+: addTileQueue
+    // M6+: speechListener · M7+: parentLive · M8+: addTileQueue
 }
 
 val LocalAppContainer = staticCompositionLocalOf<AppContainer> {
