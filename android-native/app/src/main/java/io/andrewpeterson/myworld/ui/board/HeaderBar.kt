@@ -59,50 +59,63 @@ fun HeaderBar(
         if (n >= 3) { taps = 0L to 0; onTripleTap() }
     }
 
+    // Listening takes over the whole bar: title, lock, teach, play all hide —
+    // one red stop button, then the live caption strip (iOS/web parity).
     Box(
-        Modifier.fillMaxWidth().height(48.dp).background(hexColor(prefs.colorHeaderBg))
+        Modifier.fillMaxWidth().height(if (listening) 104.dp else 48.dp)
+            .background(hexColor(prefs.colorHeaderBg))
             .combinedClickable(onClick = { noteTap() }, onLongClick = {}),
     ) {
-        // Centered brand title (the listen strip takes this spot in M6).
-        Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
-            Text("🌍", fontSize = 18.sp)
-            Spacer(Modifier.width(8.dp))
-            Text(worldTitle(user?.slug), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textColor)
-        }
-
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp).align(Alignment.CenterStart),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Lock: tap when unlocked re-locks; long-press opens the unlock
-            // sheet. A kid's tap while locked does nothing at all.
-            Box(
-                Modifier.size(40.dp).combinedClickable(
-                    onClick = onLockTap,
-                    onLongClick = onLockLongPress,
-                ),
-                contentAlignment = Alignment.Center,
+        if (listening) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp).align(Alignment.CenterStart),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(if (editMode) "🔓" else "🔒", fontSize = 17.sp,
-                    color = textColor.copy(alpha = if (editMode) 1f else 0.55f))
+                Box(
+                    Modifier.size(44.dp).combinedClickable(onClick = onListenTap, onLongClick = {}),
+                    contentAlignment = Alignment.Center,
+                ) { Text("⏹", fontSize = 22.sp, color = Color(0xFFDC2626)) }
+                Spacer(Modifier.width(6.dp))
+                ListenStripView()
             }
-            // Mic / listening toggle (M6 wires the engine; the gate copy is live).
-            Box(
-                Modifier.size(44.dp).combinedClickable(onClick = onListenTap, onLongClick = {}),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(if (listening) "⏹" else "🎙", fontSize = 20.sp,
-                    color = if (listening) Color(0xFFDC2626) else textColor.copy(alpha = 0.9f))
-            }
-            Spacer(Modifier.weight(1f))
-            if (editMode) {
-                HeaderRound("⚙", onShowDisplay)
+        } else {
+            Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
+                Text("🌍", fontSize = 18.sp)
                 Spacer(Modifier.width(8.dp))
+                Text(worldTitle(user?.slug), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textColor)
             }
-            // Teach me + Play with me (M5 wires the sessions).
-            HeaderRound("📖", onTeachTap)
-            Spacer(Modifier.width(8.dp))
-            HeaderRound("🙋", onPlayTap)
+
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp).align(Alignment.CenterStart),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Lock: tap when unlocked re-locks; long-press opens the unlock
+                // sheet. A kid's tap while locked does nothing at all.
+                Box(
+                    Modifier.size(40.dp).combinedClickable(
+                        onClick = onLockTap,
+                        onLongClick = onLockLongPress,
+                    ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(if (editMode) "🔓" else "🔒", fontSize = 17.sp,
+                        color = textColor.copy(alpha = if (editMode) 1f else 0.55f))
+                }
+                Box(
+                    Modifier.size(44.dp).combinedClickable(onClick = onListenTap, onLongClick = {}),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("🎙", fontSize = 20.sp, color = textColor.copy(alpha = 0.9f))
+                }
+                Spacer(Modifier.weight(1f))
+                if (editMode) {
+                    HeaderRound("⚙", onShowDisplay)
+                    Spacer(Modifier.width(8.dp))
+                }
+                HeaderRound("📖", onTeachTap)
+                Spacer(Modifier.width(8.dp))
+                HeaderRound("🙋", onPlayTap)
+            }
         }
     }
 }

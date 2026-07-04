@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
 import io.andrewpeterson.myworld.audio.GameAudio
 import io.andrewpeterson.myworld.audio.SpeechCache
+import io.andrewpeterson.myworld.audio.SpeechListener
 import io.andrewpeterson.myworld.audio.TilePlayer
 import io.andrewpeterson.myworld.auth.AuthManager
 import io.andrewpeterson.myworld.game.GameController
@@ -54,11 +55,14 @@ class AppContainer(context: Context) {
     val live = LiveSession(api)
     val autoTeach = AutoTeachRunner(api)
 
+    // M6 — listening mode.
+    val speechListener = SpeechListener(context)
+
     init {
         PlayScope.init(context)
     }
 
-    // M6+: speechListener · M7+: parentLive · M8+: addTileQueue
+    // M7+: parentLive · M8+: addTileQueue
 }
 
 val LocalAppContainer = staticCompositionLocalOf<AppContainer> {

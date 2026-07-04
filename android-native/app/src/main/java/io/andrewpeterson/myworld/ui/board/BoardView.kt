@@ -55,6 +55,41 @@ fun BoardView() {
     val liveCommand by c.live.latest.collectAsState()
     val staged by c.autoTeach.staged.collectAsState()
 
+    var listening by remember { mutableStateOf(false) }
+    var showSttUpsell by remember { mutableStateOf(false) }
+    var showSttUnavailable by remember { mutableStateOf(false) }
+    val lastHeardAt by c.speechListener.lastHeardAt.collectAsState()
+    val micPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted -> if (granted) { listening = true } }
+
+    fun toggleListening() {
+        if (listening) { listening = false; return }
+        if (!c.board.sttAllowed) { showSttUpsell = true; return }
+        if (!c.speechListener.available) { showSttUnavailable = true; return }
+        if (!c.speechListener.hasPermission) {
+            micPermission.launch(android.Manifest.permission.RECORD_AUDIO); return
+        }
+        listening = true
+    }
+
+    // Start/stop the mic on toggle; auto-stop after 2 minutes of silence
+    // (each recognized phrase reschedules via lastHeardAt).
+    LaunchedEffect(listening) {
+        if (listening) {
+            if (gameSession != null) { listening = false; return@LaunchedEffect }
+            c.speechListener.start()
+            var deadline = System.currentTimeMillis() + 120_000
+            while (listening) {
+                kotlinx.coroutines.delay(2_000)
+                if (lastHeardAt + 120_000 > deadline) deadline = lastHeardAt + 120_000
+                if (System.currentTimeMillis() > deadline) { listening = false }
+            }
+        } else {
+            c.speechListener.stop()
+        }
+    }
+
     LaunchedEffect(Unit) {
         val slug = c.auth.childSlug
         c.displayPrefs.attach(slug)
@@ -67,12 +102,13 @@ fun BoardView() {
         onDispose { c.live.stop(); c.autoTeach.stop() }
     }
 
-    // Route incoming facilitator commands (listen toggles land in M6; message
-    // overlay in M7 — everything else goes to the game engine).
+    // Route incoming facilitator commands (message overlay lands in M7).
     LaunchedEffect(liveCommand) {
         val cmd = liveCommand ?: return@LaunchedEffect
         when (cmd.action) {
-            "listen-start", "listen-stop", "message" -> { /* M6/M7 */ }
+            "listen-start" -> if (c.speechListener.available && c.speechListener.hasPermission) listening = true
+            "listen-stop" -> listening = false
+            "message" -> { /* M7: MessageOverlayView */ }
             else -> c.game.apply(cmd)
         }
         c.live.acknowledge()
@@ -107,6 +143,8 @@ fun BoardView() {
             onShowDisplay = { showDisplay = true },
             onTeachTap = { startTeachShow() },
             onPlayTap = { startSelfQuiz() },
+            onListenTap = { toggleListening() },
+            listening = listening,
         )
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -161,6 +199,32 @@ fun BoardView() {
     if (showUnlock) UnlockSheet(onDismiss = { showUnlock = false }, onUnlock = { editMode = true })
     if (showSettings) SettingsView { showSettings = false }
     if (showDisplay) DisplaySettingsView { showDisplay = false }
+    if (showSttUpsell) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showSttUpsell = false },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showSttUpsell = false }) {
+                    androidx.compose.material3.Text("OK")
+                }
+            },
+            title = { androidx.compose.material3.Text("Speech-to-text is a membership feature") },
+            text = { androidx.compose.material3.Text(
+                "Turn spoken words into picture tiles in real time — part of every My World membership, from $4.99/month. Join in the parent app under Credits & Store. Everything you've already made stays yours forever.") },
+        )
+    }
+    if (showSttUnavailable) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showSttUnavailable = false },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showSttUnavailable = false }) {
+                    androidx.compose.material3.Text("OK")
+                }
+            },
+            title = { androidx.compose.material3.Text("Speech isn't supported on this device") },
+            text = { androidx.compose.material3.Text(
+                "This device has no speech-recognition service (that's normal on Fire tablets). Everything else works — the board, games, Teach Me, and all of your personalized tiles.") },
+        )
+    }
 
     // Auto-teach staged an activity: countdown card → session with the
     // slugs: scope; ✕ skips this round. Never over a running game/edit.
