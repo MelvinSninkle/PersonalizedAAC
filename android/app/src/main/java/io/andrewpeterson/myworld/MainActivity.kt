@@ -79,9 +79,27 @@ class MainActivity : AppCompatActivity() {
             mediaPlaybackRequiresUserGesture = false   // tile voices must autoplay
             loadWithOverviewMode = true
             useWideViewPort = true
+            // KID-PROOFING (the OS layer of it — the board's CSS handles the
+            // rest): no pinch/double-tap zoom, ever. A child's palm on the
+            // board must never rescale the UI.
+            setSupportZoom(false)
+            builtInZoomControls = false
+            displayZoomControls = false
             // The board reads this to tailor its device messaging.
             userAgentString = "$userAgentString MyWorldShell/1.0 (${if (isFire) "fire" else "android"})"
         }
+
+        // KID-PROOFING, continued — the lessons from the iPad WebView era:
+        //   · long-press must never start text selection (blue handles that a
+        //     drag then smears across the whole board) or pop a context menu
+        //   · no haptic buzz on long-press (kids chase the buzz)
+        //   · no overscroll glow/stretch when a swipe overshoots
+        // The web board's own CSS (user-select:none, touch-callout:none,
+        // touch-action) covers the DOM layer; these cover the Android layer.
+        webView.isLongClickable = false
+        webView.setOnLongClickListener { true }        // swallow before ActionMode starts
+        webView.isHapticFeedbackEnabled = false
+        webView.overScrollMode = View.OVER_SCROLL_NEVER
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
 
@@ -211,10 +229,16 @@ class MainActivity : AppCompatActivity() {
         if (hasFocus) applyImmersive()
     }
 
-    @Deprecated("Simple two-level back: web history, then background")
+    @Deprecated("Kid-proof back: web history only — never background the board")
     override fun onBackPressed() {
+        // A child's edge-swipe fires Android's back gesture. On the iPad this
+        // class of accident is what Guided Access exists for; here the board
+        // simply refuses to leave. (Parents exit via Home/Recents, and can use
+        // Android's Screen Pinning — Settings → Security — as the true
+        // Guided-Access equivalent.) Sticky-immersive already means the first
+        // edge swipe only reveals the bars; this stops the second one too.
         if (webView.canGoBack()) webView.goBack()
-        else moveTaskToBack(true)
+        // else: deliberately nothing.
     }
 
     override fun onPause() {

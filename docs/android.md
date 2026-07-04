@@ -2,18 +2,37 @@
 
 ## Architecture — why this is a true 1:1, not a second codebase
 
-The iOS "board app" families use is a thin Capacitor shell around the live web
-board (`app.html` + `parent.html` + `store.html`) plus one native capability:
-speech recognition. The Android build follows the identical recipe with a
-hand-written native shell (`android/`, ~2 files of Kotlin):
+To be precise about what exists on iOS: the iPad/iPhone app is a **native
+SwiftUI app** (`kid-ios/`); the **web board** (`app.html` + `parent.html` +
+`store.html`) is the functionally-equivalent cross-platform surface that shares
+the same server brain (there's also `cap-shell/`, the earlier Capacitor wrapper
+around the web board). Both UIs implement the same features against the same
+APIs.
+
+The Android build wraps the WEB surface in a hand-written native shell
+(`android/`, ~2 files of Kotlin) rather than rewriting SwiftUI in Compose —
+one codebase to maintain, and Android gains every future feature the moment
+the web deploys:
 
 - **WebView on the live site** (`https://aac.andrewpeterson.io/`) — every board
   feature ships to Android the moment it deploys to the web. No drift, ever.
 - **`SpeechBridge`** exposes Android's on-device `SpeechRecognizer` through a JS
   shim that mimics `Capacitor.Plugins.SpeechRecognition` — the exact surface
   the board already calls, so listening mode works unchanged.
-- **Kid-proofing**: fullscreen sticky-immersive, keep-screen-on, session
-  cookies flushed to disk, offline retry page.
+- **Kid-proofing** (the lessons from the iPad-WebView era, both layers):
+  - Web CSS already ships `user-select:none`, `-webkit-touch-callout:none`,
+    `overscroll-behavior:none`, and `touch-action` rules — so a finger dragged
+    across the board pans, it does NOT smear a text-selection highlight over
+    the tiles, and taps only fire on press+release without movement.
+  - The shell kills what CSS can't reach: long-press is swallowed before
+    Android's selection ActionMode can start, long-press haptics are off,
+    pinch/double-tap zoom is disabled at the WebView level, overscroll
+    glow/stretch is off, and the system BACK gesture never exits the board
+    (web history only; parents leave via Home/Recents). Android's **Screen
+    Pinning** (Settings → Security) is the Guided-Access equivalent for
+    full lock-in.
+  - Fullscreen sticky-immersive, keep-screen-on, session cookies flushed to
+    disk, offline retry page.
 - **Add-a-photo flows**: the WebView file chooser offers camera + photo library
   (FileProvider handles the capture handoff).
 - **Capability flags**: the shell sets `window.MyWorldShell = { platform:
