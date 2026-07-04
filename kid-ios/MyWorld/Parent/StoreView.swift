@@ -124,6 +124,9 @@ struct StoreView: View {
         }
         .navigationTitle("Credits & Store")
         .task { await load() }
+        // Warm the Word Shop's catalog cache while the parent is still on this
+        // screen, so tapping "Shop words for the board" opens instantly.
+        .task { await ShopCatalog.refresh(childId: auth.childSlug) }
     }
 
     private var header: some View {

@@ -569,8 +569,9 @@ struct APIClient {
         return r.credited
     }
 
-    /// One shoppable word from the store library.
-    struct ShopTile: Decodable, Identifiable, Hashable {
+    /// One shoppable word from the store library. Codable (not just Decodable)
+    /// so the Word Shop can disk-cache the catalog and open instantly.
+    struct ShopTile: Codable, Identifiable, Hashable {
         let id: String
         let label: String
         let column: String

@@ -1,5 +1,35 @@
 import SwiftUI
 
+/// Disk-cached copy of the shop catalog. The catalog barely changes between
+/// visits, and the device already knows every preview image (MediaCache) and
+/// which tiles are personalized — so the shop should never make a parent stare
+/// at a spinner. Last visit's catalog renders instantly; a fresh copy loads
+/// behind it and swaps in.
+enum ShopCatalog {
+    private static func url(_ childId: String) -> URL {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let safe = childId.replacingOccurrences(of: "/", with: "_")
+        return dir.appendingPathComponent("shop-catalog-\(safe).json")
+    }
+    static func cached(childId: String) -> [APIClient.ShopTile]? {
+        guard let data = try? Data(contentsOf: url(childId)) else { return nil }
+        return try? JSONDecoder().decode([APIClient.ShopTile].self, from: data)
+    }
+    static func save(_ tiles: [APIClient.ShopTile], childId: String) {
+        guard let data = try? JSONEncoder().encode(tiles) else { return }
+        try? data.write(to: url(childId), options: .atomic)
+    }
+    /// Fetch a fresh catalog into the cache. Called in the background the
+    /// moment the Credits & Store screen opens, so by the time the parent taps
+    /// "Shop words" the cache is already warm.
+    @discardableResult
+    static func refresh(childId: String, api: APIClient = APIClient()) async -> [APIClient.ShopTile]? {
+        guard let fresh = try? await api.storeBrowse(childId: childId) else { return nil }
+        save(fresh, childId: childId)
+        return fresh
+    }
+}
+
 /// The native word shop — browse the library by section/category, tap words
 /// into a cart, and check out in CREDITS (⭐1 per word). Each bought word is
 /// placed on the board and rendered in the child's own style + voice within a
@@ -41,26 +71,37 @@ struct WordShopView: View {
                         .foregroundStyle(Color(hex: "#047857"))
                 }
 
-                if tiles.isEmpty {
-                    ProgressView().frame(maxWidth: .infinity).padding(.top, 30)
-                } else if column.isEmpty && search.isEmpty {
-                    // SHOP HOME — a loadable page instead of one endless scroll:
-                    // personalize-the-board, free common boards, then one card
-                    // per shop section that drills in.
-                    personalizeCard
-                    freeBoardsSection
+                if column.isEmpty && search.isEmpty {
+                    // SHOP HOME — the four ribbons need no data, so they render
+                    // the instant the page opens; the catalog (cached from last
+                    // visit, refreshed in the background) streams in the free
+                    // boards + personalize card underneath.
                     Text("SHOP BY SECTION")
                         .font(.system(size: 12, weight: .heavy))
                         .foregroundStyle(Color(hex: "#ad1457"))
-                        .padding(.top, 6)
+                        .padding(.top, 2)
                     sectionCard("🧑‍🤝‍🧑", "Shop People", "people")
                     sectionCard("🧸", "Shop Nouns, Adjectives & More", "other")
                     sectionCard("🏃", "Shop Verbs", "verbs")
+                    sectionCard("⭐", "Shop Core Words", "needs")
                     HStack {
                         TextField("…or search every word", text: $search)
                             .textFieldStyle(.roundedBorder)
                     }
                     .padding(.top, 6)
+                    if tiles.isEmpty {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Loading your word library…")
+                                .font(.system(size: 12)).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity).padding(.top, 14)
+                    } else {
+                        personalizeCard
+                        freeBoardsSection
+                    }
+                } else if tiles.isEmpty {
+                    ProgressView().frame(maxWidth: .infinity).padding(.top, 30)
                 } else {
                     HStack {
                         if !column.isEmpty {
@@ -113,11 +154,11 @@ struct WordShopView: View {
     }
 
     /// "other" is the Nouns-Adjectives-and-More card: everything that isn't
-    /// People or Verbs.
+    /// People, Verbs, or the Core Words strip (column "needs" — its own ribbon).
     private func matchesColumn(_ t: APIClient.ShopTile) -> Bool {
         switch column {
         case "":      return true
-        case "other": return t.column != "people" && t.column != "verbs"
+        case "other": return t.column != "people" && t.column != "verbs" && t.column != "needs"
         default:      return t.column == column
         }
     }
@@ -385,9 +426,21 @@ struct WordShopView: View {
     // MARK: -- Actions
 
     private func load() async {
-        balance = await api.storeBalance()
-        do { tiles = try await api.storeBrowse(childId: auth.childSlug) }
-        catch { errorText = "Couldn't load the word library. Pull to retry." }
+        // 1) Last visit's catalog renders the whole shop instantly — folders,
+        //    free-board counts, "yours" badges are all in it, and the preview
+        //    images are already in the on-disk MediaCache.
+        if tiles.isEmpty, let cached = ShopCatalog.cached(childId: auth.childSlug) {
+            tiles = cached
+        }
+        // 2) Fresh data streams in behind it (balance in parallel with the
+        //    catalog; the personalize-all quote after, it's below the fold).
+        async let bal = api.storeBalance()
+        if let fresh = await ShopCatalog.refresh(childId: auth.childSlug, api: api) {
+            tiles = fresh
+        } else if tiles.isEmpty {
+            errorText = "Couldn't load the word library. Pull to retry."
+        }
+        balance = await bal
         paQuote = try? await api.storePersonalizeAll(childId: auth.childSlug, quote: true)
     }
 
@@ -398,7 +451,7 @@ struct WordShopView: View {
             let r = try await api.storeCheckout(childId: auth.childSlug, taxonomyIds: ids, bundle: true)
             balance = r.balance ?? balance
             note = r.note ?? "\(r.queued) words queued."
-            tiles = (try? await api.storeBrowse(childId: auth.childSlug)) ?? tiles
+            tiles = await ShopCatalog.refresh(childId: auth.childSlug, api: api) ?? tiles
         } catch let APIError.badStatus(status, body) {
             errorText = (status == 402 || body.contains("not_enough_credits"))
                 ? "Not enough credits — add a pack on the Credits & Store screen first."
@@ -412,7 +465,7 @@ struct WordShopView: View {
         do {
             let r = try await api.storeFreeBoard(childId: auth.childSlug, column: g.column, category: g.category, on: on)
             note = r.note
-            tiles = (try? await api.storeBrowse(childId: auth.childSlug)) ?? tiles
+            tiles = await ShopCatalog.refresh(childId: auth.childSlug, api: api) ?? tiles
         } catch { errorText = "Couldn't update: \(error.localizedDescription)" }
     }
 
@@ -440,7 +493,7 @@ struct WordShopView: View {
             cart.removeAll()
             balance = r.balance ?? balance
             note = r.note ?? "\(r.queued) words queued — they render in your child's style over the next few minutes."
-            tiles = (try? await api.storeBrowse(childId: auth.childSlug)) ?? tiles
+            tiles = await ShopCatalog.refresh(childId: auth.childSlug, api: api) ?? tiles
         } catch let APIError.badStatus(status, body) {
             errorText = (status == 402 || body.contains("not_enough_credits"))
                 ? "Not enough credits — add a pack on the Credits & Store screen, then try again."

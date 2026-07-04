@@ -5181,7 +5181,8 @@
       o = document.createElement('div'); o.id = 'teach-overlay';
       o.style.cssText = 'position:fixed;inset:0;z-index:2300;background:#fff7fb;display:none;flex-direction:column;align-items:center;justify-content:center;';
       o.innerHTML = '<img id="teach-img" alt="" style="max-width:88vw;max-height:56vh;object-fit:contain;border-radius:22px;background:#fff;">'
-        + '<div id="teach-word" style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;color:#ad1457;font-size:clamp(30px,6vw,60px);font-weight:700;margin-top:20px;text-align:center;padding:0 24px;line-height:1.15;"></div>'
+        // No separate word element — the tile art already carries its caption
+        // band, and repeating the word under it read as clutter.
         + '<div id="teach-clue" style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;color:#6b7280;font-size:clamp(17px,3vw,28px);font-weight:600;margin-top:12px;text-align:center;padding:0 40px;line-height:1.3;min-height:2.6em;"></div>'
         + '<div id="teach-progress" style="position:absolute;top:24px;left:20px;font-family:Fredoka,ui-rounded,system-ui,sans-serif;color:#d6a8c6;font-weight:600;font-size:15px;"></div>'
         + '<button id="teach-stop" aria-label="Stop" style="position:absolute;top:16px;right:18px;width:50px;height:50px;border-radius:50%;border:none;background:rgba(173,20,87,.12);color:#ad1457;font-size:24px;cursor:pointer;">✕</button>';
@@ -5199,13 +5200,14 @@
     const o = teachOverlay(); o.style.display = 'flex';
     publishLive('running', { mode: 'teach', scope });
     const deck = gShuffle(items.slice());
-    const img = document.getElementById('teach-img'), word = document.getElementById('teach-word'),
+    const img = document.getElementById('teach-img'),
           clueEl = document.getElementById('teach-clue'), prog = document.getElementById('teach-progress');
     for (let i = 0; i < deck.length && TEACH.running; i++) {
       const it = deck[i];
       prog.textContent = (i + 1) + ' / ' + deck.length;
-      word.textContent = it.label; clueEl.textContent = ''; img.removeAttribute('src');
+      clueEl.textContent = ''; img.removeAttribute('src');
       const iu = await getMediaURL(it.imageKey); if (iu) img.src = iu;
+      await teachSleep(350);   // let the new image settle on screen before the word plays
       // The word first — the tile's recorded audio when it has one, else TTS.
       let wu = null;
       if (it.soundKey) wu = await getMediaURL(it.soundKey);
