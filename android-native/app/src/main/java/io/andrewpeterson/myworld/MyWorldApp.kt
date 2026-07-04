@@ -12,6 +12,7 @@ import io.andrewpeterson.myworld.game.GameController
 import io.andrewpeterson.myworld.game.PlayScope
 import io.andrewpeterson.myworld.live.AutoTeachRunner
 import io.andrewpeterson.myworld.live.LiveSession
+import io.andrewpeterson.myworld.live.ParentLive
 import io.andrewpeterson.myworld.model.DeviceMode
 import io.andrewpeterson.myworld.model.DisplayPrefs
 import io.andrewpeterson.myworld.net.ApiClient
@@ -58,11 +59,14 @@ class AppContainer(context: Context) {
     // M6 — listening mode.
     val speechListener = SpeechListener(context)
 
+    // M7 — parent-side live channel.
+    val parentLive = ParentLive(api)
+
     init {
         PlayScope.init(context)
     }
 
-    // M7+: parentLive · M8+: addTileQueue
+    // M8+: addTileQueue
 }
 
 val LocalAppContainer = staticCompositionLocalOf<AppContainer> {

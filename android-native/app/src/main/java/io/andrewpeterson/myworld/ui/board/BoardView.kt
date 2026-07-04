@@ -58,6 +58,7 @@ fun BoardView() {
     var listening by remember { mutableStateOf(false) }
     var showSttUpsell by remember { mutableStateOf(false) }
     var showSttUnavailable by remember { mutableStateOf(false) }
+    var pendingMessage by remember { mutableStateOf<List<io.andrewpeterson.myworld.live.MessageToken>?>(null) }
     val lastHeardAt by c.speechListener.lastHeardAt.collectAsState()
     val micPermission = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
@@ -108,7 +109,7 @@ fun BoardView() {
         when (cmd.action) {
             "listen-start" -> if (c.speechListener.available && c.speechListener.hasPermission) listening = true
             "listen-stop" -> listening = false
-            "message" -> { /* M7: MessageOverlayView */ }
+            "message" -> cmd.tokens?.takeIf { it.isNotEmpty() }?.let { pendingMessage = it }
             else -> c.game.apply(cmd)
         }
         c.live.acknowledge()
@@ -246,6 +247,16 @@ fun BoardView() {
                 },
                 onSkip = { c.autoTeach.consumeStaged(fired = false) },
             )
+        }
+    }
+
+    // Parent's message-to-the-board — overlay-only, never via GameController.
+    pendingMessage?.let { toks ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { pendingMessage = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            MessageOverlayView(tokens = toks, childId = c.auth.childSlug) { pendingMessage = null }
         }
     }
 
