@@ -12,7 +12,7 @@ import { isValidRelationship, relationshipNeedsSide } from './_lib/relationships
 import { geminiKey, geminiProModel, geminiGenerateImage } from './_lib/gemini.js';
 import { openaiEditImage, openaiKeystoneModel } from './_lib/openai-image.js';
 import { loadStyleGuide, loadChildStyleGuideId, loadChildVoiceId, synthesizeVoice, buildPortraitPrompt } from './_lib/onboarding-render.js';
-import { chargeForGeneration, COST } from './_lib/credits.js';
+import { chargeForGeneration, grantCredits, COST } from './_lib/credits.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
 
@@ -86,10 +86,27 @@ export default async function handler(req, res) {
       }
       images.push({ buffer, contentType });
       const prompt = buildPortraitPrompt({ styleGuide });
-      const g = oaKey
+      // Keystone tier only — no cross-engine fallback (below 1.5 the portraits
+      // don't hold up). Retry the same engine once on a transient error; on a
+      // real failure, refund the credits so "try again" never double-charges.
+      const render = async () => oaKey
         ? await openaiEditImage({ apiKey: oaKey, model: await openaiKeystoneModel(db), prompt, images, size: '1024x1024' })
         : await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
-      if (!g.ok) { res.status(g.status === 429 ? 429 : 502).json({ error: 'Image generation failed', detail: (g.detail || '').slice(0, 400) }); return; }
+      let g = await render().catch((e) => ({ ok: false, detail: String(e.message || e) }));
+      if (!g.ok && (g.status === 429 || g.status >= 500 || !g.status)) {
+        await new Promise((r) => setTimeout(r, 1500));
+        g = await render().catch((e) => ({ ok: false, detail: String(e.message || e) }));
+      }
+      if (!g.ok) {
+        if (!charge.exempt) {
+          try { await grantCredits(db, { userId: Number(auth.user.uid || auth.user.id), credits: COST.person, reason: 'family:add:refund', ref: childId }); } catch (_) {}
+        }
+        res.status(g.status === 429 ? 429 : 502).json({
+          error: 'Image generation failed — your credits were returned. Please try again in a moment.',
+          detail: (g.detail || '').slice(0, 400),
+        });
+        return;
+      }
       key = await uploadBytes('refimage', 'png', Buffer.from(g.b64, 'base64'), 'image/png');
     } else {
       key = await uploadBytes('refimage', 'jpg', buffer, contentType);

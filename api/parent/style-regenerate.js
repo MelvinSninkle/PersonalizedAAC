@@ -16,6 +16,7 @@ import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
 import { isParentOf } from '../_lib/access.js';
 import { geminiKey, geminiProModel, geminiGenerateImage } from '../_lib/gemini.js';
+import { openaiEditImage, openaiKeystoneModel } from '../_lib/openai-image.js';
 import { loadStyleGuide, SQUARE_RULE } from '../_lib/onboarding-render.js';
 
 export const config = { maxDuration: 300 };
@@ -66,8 +67,9 @@ export default async function handler(req, res) {
     if (!styleGuideId) { res.status(400).json({ error: 'No style to regenerate from yet' }); return; }
 
     if (action === 'draft') {
+      const oaKey = process.env.OPENAI_API_KEY;
       const gKey = geminiKey();
-      if (!gKey) { res.status(500).json({ error: 'GEMINI_API_KEY not configured' }); return; }
+      if (!oaKey && !gKey) { res.status(500).json({ error: 'No image API key configured' }); return; }
       const styleGuide = await loadStyleGuide(db, styleGuideId);
       const images = [];
       let prompt = SCENE_PROMPT_BASE + ' Vary the composition and objects from any previous version.';
@@ -80,14 +82,23 @@ export default async function handler(req, res) {
       }
       prompt += SQUARE_RULE;
 
-      const g = await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
-      if (!g.ok) { res.status(g.status || 502).json({ error: 'Render failed', detail: (g.detail || '').slice(0, 200) }); return; }
+      // KEYSTONE tier, same as the onboarding scene (api/onboarding/scene.js):
+      // this image DEFINES the board's style, so it renders on the keystone
+      // model whenever we have a style image to edit from — no fallback to a
+      // lesser engine on failure; a miss is just "tap again". (Gemini Pro only
+      // when OpenAI is unconfigured or there is no input image for edits.)
+      const g = (oaKey && images.length)
+        ? await openaiEditImage({ apiKey: oaKey, model: await openaiKeystoneModel(db), prompt, images, size: '1024x1024' })
+        : (gKey
+            ? await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' })
+            : { ok: false, detail: 'GEMINI_API_KEY not configured (needed when no style image exists yet)' });
+      if (!g.ok) { res.status(g.status || 502).json({ error: 'Render failed — nothing changed, tap again in a moment.', detail: (g.detail || '').slice(0, 200) }); return; }
       const draftKey = `parent/${childId}/style/${randomUUID()}.png`;
       await put(draftKey, Buffer.from(g.b64, 'base64'), { access: 'private', contentType: 'image/png', addRandomSuffix: false });
       try {
         await db`INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, size, cost_cents)
                  VALUES (${childId}, ${auth.user.email || null}, 'style_regen', 'parent-style-regen',
-                         ${styleGuide ? styleGuide.label : 'default'}, ${prompt}, '1024x1024', 13)`;
+                         ${styleGuide ? styleGuide.label : 'default'}, ${prompt}, '1024x1024', ${g.costCents != null ? g.costCents : 13})`;
       } catch (_) {}
       res.status(200).json({ ok: true, draftKey, previewUrl: `/api/media?key=${encodeURIComponent(draftKey)}` });
       return;

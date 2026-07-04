@@ -15,9 +15,13 @@ import { randomUUID } from 'node:crypto';
 import { geminiKey, geminiDefaultModel, geminiProModel, isGeminiModel, geminiGenerateImage, geminiCostCents } from './gemini.js';
 import { openaiEditImage, openaiKeystoneModel, openaiCostCents } from './openai-image.js';
 import { describePhotoLabel } from './vision.js';
+import { grantCredits, COST } from './credits.js';
 import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, buildPortraitPrompt, SQUARE_RULE } from './onboarding-render.js';
 
-export const MAX_ATTEMPTS = 3;
+// 5 attempts with a growing gap between them (see claimRunnableJobs) rides out
+// a ~15-minute provider outage before the save-first raw photo lands — there is
+// no cheaper-model fallback anywhere in this pipeline, retry-later is the plan.
+export const MAX_ATTEMPTS = 5;
 
 export async function ensureTileJobs(db) {
   await db`
@@ -77,11 +81,14 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
 
   // PEOPLE mimic the Portrait Lab / onboarding family pipeline 1:1 — the SAME
   // buildPortraitPrompt (strict style transfer + likeness language), the same
-  // image order (style ref first, real photo second), and the same engine
-  // ladder: OpenAI keystone model, retried once on transient errors, then
-  // Gemini PRO (never nano — likeness fidelity is the whole point). Any model
-  // the client sent is deliberately ignored here; old app builds still send
-  // nano for people and were producing off-style portraits.
+  // image order (style ref first, real photo second), and the same engine:
+  // the OpenAI keystone model, retried once on transient errors. There is NO
+  // cross-engine fallback — anything below the keystone tier produces portraits
+  // that just don't hold up, so a failure here fails the attempt and the durable
+  // job queue retries the keystone model later instead of shipping a worse
+  // picture. (Gemini Pro is used only when no OpenAI key is configured at all.)
+  // Any model the client sent is deliberately ignored here; old app builds
+  // still send nano for people and were producing off-style portraits.
   if (isPerson) {
     const oaKey0 = process.env.OPENAI_API_KEY;
     const gKey0 = geminiKey();
@@ -98,13 +105,11 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
       geminiGenerateImage({ apiKey: gKey0, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
     const transient = (r) => !r.ok && (r.status === 429 || r.status >= 500 || !r.status);
     const primary = oaKey0 ? callOpenAI : callGemini;
-    const fallback = (oaKey0 && gKey0) ? callGemini : null;
     let g = await primary().catch((e) => ({ ok: false, detail: String(e.message || e) }));
     if (transient(g)) {
       await new Promise((r) => setTimeout(r, 1500));
       g = await primary().catch((e) => ({ ok: false, detail: String(e.message || e) }));
     }
-    if (!g.ok && fallback) g = await fallback().catch((e) => ({ ok: false, detail: String(e.message || e) }));
     if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
     return { ok: true, b64: g.b64, prompt, model: 'keystone-portrait', costCents: g.costCents ?? 13 };
   }
@@ -155,10 +160,14 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
   let useModel = model;
   if (!useModel) useModel = geminiDefaultModel();
   const wantsOpenAI = !isGeminiModel(useModel);
-  if (wantsOpenAI && oaKey) {
+  if (wantsOpenAI) {
+    // A tile explicitly routed to an OpenAI model NEVER downgrades to a lesser
+    // engine on a hiccup — fail the attempt instead, so the durable job queue
+    // retries the requested model later rather than shipping a worse image.
+    if (!oaKey) return { ok: false, detail: 'OPENAI_API_KEY not configured' };
     const g = await openaiEditImage({ apiKey: oaKey, model: useModel, prompt, images, size: '1024x1024' });
-    if (g.ok) return { ok: true, b64: g.b64, prompt, model: useModel, costCents: g.costCents ?? openaiCostCents(useModel) };
-    // OpenAI hiccup → fall through to nano banana rather than failing the tile.
+    if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
+    return { ok: true, b64: g.b64, prompt, model: useModel, costCents: g.costCents ?? openaiCostCents(useModel) };
   }
   if (!gKey) return { ok: false, detail: 'GEMINI_API_KEY not configured' };
   const gm = isGeminiModel(useModel) ? useModel : geminiDefaultModel();
@@ -307,6 +316,19 @@ export async function processTileJob(db, jobId) {
     await db`UPDATE tile_jobs SET status = 'done', label = ${label}, image_key = ${imageKey},
                sound_key = ${soundKey}, item_id = ${itemId}, art_failed = ${artFailed},
                needs_review = ${needsReview}, error = NULL, updated_at = NOW() WHERE id = ${jobId}`;
+
+    // Every retry attempt is exhausted and the raw photo landed instead of the
+    // styled art the parent paid for — give the credits back (charged at
+    // enqueue). Admins were never charged (chargeForGeneration exempts them).
+    if (artFailed && job.actor_email) {
+      try {
+        const u = (await db`SELECT id, role FROM users WHERE lower(email) = lower(${job.actor_email}) LIMIT 1`)[0];
+        if (u && u.role !== 'admin') {
+          const credits = String(job.section || '').toLowerCase() === 'people' ? COST.person : COST.nano;
+          await grantCredits(db, { userId: Number(u.id), credits, reason: 'tile:refund:art_failed', ref: String(jobId) });
+        }
+      } catch (_) { /* refund is best-effort — never fail a landed tile over it */ }
+    }
     return { ok: true, itemId, artFailed };
   } catch (err) {
     await db`UPDATE tile_jobs SET status = 'failed', error = ${String(err.message || err).slice(0, 300)},
@@ -317,13 +339,16 @@ export async function processTileJob(db, jobId) {
 
 // Pick the next batch of jobs the cron should run: fresh queued ones, jobs stuck
 // 'processing' (the fire-and-forget kick died), and failed jobs with attempts
-// left. Oldest first.
+// left. Failed jobs back off (attempts × 90s) so a provider outage is retried
+// over ~15 minutes instead of burning every attempt inside three cron ticks.
+// Oldest first.
 export async function claimRunnableJobs(db, limit = 5) {
   return await db`
     SELECT id FROM tile_jobs
     WHERE status = 'queued'
        OR (status = 'processing' AND updated_at < NOW() - INTERVAL '3 minutes')
-       OR (status = 'failed' AND attempts < ${MAX_ATTEMPTS})
+       OR (status = 'failed' AND attempts < ${MAX_ATTEMPTS}
+           AND updated_at < NOW() - (INTERVAL '90 seconds' * attempts))
     ORDER BY created_at ASC
     LIMIT ${limit}`;
 }
