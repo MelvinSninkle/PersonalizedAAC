@@ -56,18 +56,6 @@ export async function ensureTileJobs(db) {
   await db`CREATE INDEX IF NOT EXISTS tile_jobs_status_idx ON tile_jobs(status, updated_at)`;
 }
 
-const BG_PRESETS = {
-  pink:   'a soft pastel pink', mint:   'a soft pastel mint green',
-  yellow: 'a soft pastel cream yellow', blue: 'a soft pastel periwinkle blue',
-  peach:  'a soft pastel peach', white: 'a clean off-white',
-};
-function bgPhrase(bg) {
-  const k = String(bg || '').trim().toLowerCase();
-  if (BG_PRESETS[k]) return BG_PRESETS[k];
-  if (/^#?[0-9a-f]{6}$/i.test(k)) return `the exact color ${k.startsWith('#') ? k : '#' + k}`;
-  return 'a soft pastel';
-}
-
 // Best-effort vision naming, only used when the parent didn't type a name.
 async function describeLabel(buffer, contentType) {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -81,7 +69,9 @@ async function describeLabel(buffer, contentType) {
 // image so the result matches the board. `section` tunes the subject rule:
 // People keep their face; objects never grow cartoon faces. Returns
 // { ok, b64, prompt, costCents } or { ok:false, detail }.
-export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, bg, section }) {
+// (`bg` is still accepted from old app builds but no longer shapes the prompt —
+// the photo's real setting, translated into the style, is the background now.)
+export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, section }) {
   const subject = label ? `"${label}"` : 'the main subject';
   const isPerson = String(section || '').toLowerCase() === 'people';
 
@@ -132,10 +122,17 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
     ? ` This is a person — keep their face and likeness clearly recognizable from the source photo.`
     : ` If ${subject} is an inanimate object, draw it as it appears in the photo — do NOT add eyes, mouths, ` +
       `faces, or smiles unless the real object physically has them.`;
+  // The real setting stays — translated into the style. An object floating on
+  // a flat pastel void reads as clip-art; the same object centered in a
+  // simplified, in-style version of its actual surroundings reads as THEIR
+  // cup on THEIR counter, which is the whole point of a personalized tile.
   let prompt =
     `Re-illustrate this photograph as a ${style || 'soft illustration'} of ${subject} for a young child's ` +
-    `communication app. Keep ${subject} clearly recognizable and centered, on a simple ${bgPhrase(bg)} ` +
-    `background, with bright friendly colors and a gentle, age-appropriate look.` +
+    `communication app. Make ${subject} unmistakably the focus: centered, large in the frame, clearly ` +
+    `recognizable. PRESERVE the recognizable background and setting from the photo — the room, surface, and ` +
+    `nearby surroundings — but translate them fully into the art style: simplified, softly rendered, and ` +
+    `uncluttered, never photographic, so the background supports the subject without competing with it. ` +
+    `Bright friendly colors and a gentle, age-appropriate look.` +
     detailClause + captionClause + styleClause + subjectRule + SQUARE_RULE;
 
   // Ordered images + positional legend (style guide first, source photo second).
