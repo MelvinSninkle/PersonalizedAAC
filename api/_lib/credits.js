@@ -45,16 +45,45 @@ export function bundleQuote(words) {
   return Math.max(1, Math.ceil(words * 0.8));
 }
 
-export const SUBSCRIPTION = {
-  sku: 'plus.monthly', cents: 999, creditsPerPeriod: 50, label: 'My World Plus',
-  appleProductId: 'plus.monthly',
-};
+// ── Membership tiers ─────────────────────────────────────────────────────────
+// Three auto-renewing tiers. ALL paid tiers unlock the same features (speech-
+// to-text listening mode, auto-teach, reporting, data saving) — they differ in
+// monthly image credits and the voice-generation budget (new ElevenLabs
+// renders; cached phrases are always free). Pro = Plus + ~$9.99 worth of extra
+// credits each month until its exclusive features ship.
+// voiceCharsPerMonth counts CHARACTERS of newly synthesized speech (cache
+// misses only) — ~25 chars per word/clue, so Starter ≈ 4,000 new phrases/mo.
+export const SUBSCRIPTIONS = [
+  { sku: 'starter.monthly', cents: 499,  creditsPerPeriod: 10,  label: 'My World Starter',
+    appleProductId: 'starter.monthly', voiceCharsPerMonth: 100_000 },
+  { sku: 'plus.monthly',    cents: 999,  creditsPerPeriod: 50,  label: 'My World Plus',
+    appleProductId: 'plus.monthly',    voiceCharsPerMonth: 300_000 },
+  { sku: 'pro.monthly',     cents: 1999, creditsPerPeriod: 150, label: 'My World Pro',
+    appleProductId: 'pro.monthly',     voiceCharsPerMonth: 750_000 },
+];
+// Legacy alias — older call sites treated "the subscription" as Plus.
+export const SUBSCRIPTION = SUBSCRIPTIONS[1];
+
+export function subscriptionBySku(sku) {
+  return SUBSCRIPTIONS.find((s) => s.sku === sku || s.appleProductId === sku) || null;
+}
+
+// What a tier can do. Free = the onboarding portraits (child + parent) plus
+// the shared default board; every paid tier turns the platform features on.
+export function tierFeatures(sub) {
+  const paid = !!sub;
+  return {
+    stt: paid, autoTeach: paid, reporting: paid, dataSaving: paid,
+    voiceCharsPerMonth: sub ? sub.voiceCharsPerMonth : 0,
+  };
+}
 
 export const COST = { nano: 1, person: 5 };
 
-// New parent accounts start with a small wallet so nothing hard-blocks the
-// first days (the initial board build is free anyway — actor 'onboarding_seed').
-export const STARTER_CREDITS = 25;
+// Free tier = the two onboarding portraits + the default board. No starter
+// wallet anymore (accounts that already received the old 25-credit grant keep
+// it — the ledger is append-only and the grant was idempotent by reason).
+export const STARTER_CREDITS = 0;
 
 // Whole-board rebuild: 30% off à la carte, floor of 50 credits.
 export function rebuildQuote(wordCount) {
@@ -90,6 +119,13 @@ export async function ensureCredits(db) {
   // One free retry per tile; personal portraits track theirs on persons.
   await db`ALTER TABLE items   ADD COLUMN IF NOT EXISTS free_retry_used BOOLEAN NOT NULL DEFAULT FALSE`;
   await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS free_retry_used BOOLEAN NOT NULL DEFAULT FALSE`;
+  // Admin-only tier simulator: 'free' | a subscription sku | NULL (real state).
+  // While set, the account behaves EXACTLY like that tier — including paying
+  // credits — so gating and metering can be verified end to end.
+  await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_override TEXT`;
+  // Stripe customer id (saved by the checkout webhook) → powers the billing
+  // portal so web subscribers can upgrade/downgrade/cancel themselves.
+  await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`;
 }
 
 // ── Wallet ───────────────────────────────────────────────────────────────────
@@ -101,7 +137,9 @@ export async function creditBalance(db, userId) {
 }
 
 // Lazily grant the starter wallet exactly once (idempotent via the ledger).
+// A no-op while STARTER_CREDITS is 0 (free tier ships no wallet).
 export async function ensureStarter(db, userId) {
+  if (!(STARTER_CREDITS > 0)) return;
   const uid = Number(userId);
   const has = await db`SELECT 1 FROM credit_ledger WHERE user_id = ${uid} AND reason = 'starter' LIMIT 1`;
   if (!has.length) {
@@ -109,6 +147,73 @@ export async function ensureStarter(db, userId) {
       await db`INSERT INTO credit_ledger (user_id, delta, reason) VALUES (${uid}, ${STARTER_CREDITS}, 'starter')`;
     } catch (_) {}
   }
+}
+
+// ── Entitlements ─────────────────────────────────────────────────────────────
+
+// A subscription is "active" when a periodic grant landed within the last 35
+// days — renewals re-grant monthly on both platforms (Stripe invoice.paid;
+// StoreKit renewal transactions re-verified by the app), so the window covers
+// a full period plus grace.
+export async function activeSubscription(db, userId) {
+  const uid = Number(userId);
+  if (!uid) return null;
+  const skus = SUBSCRIPTIONS.flatMap((s) => [s.sku, s.appleProductId]);
+  try {
+    const r = await db`
+      SELECT product_id FROM purchases
+      WHERE user_id = ${uid} AND product_id = ANY(${skus})
+        AND created_at > NOW() - INTERVAL '35 days'
+      ORDER BY created_at DESC LIMIT 1`;
+    return r.length ? subscriptionBySku(r[0].product_id) : null;
+  } catch (_) { return null; }
+}
+
+// The one entitlement resolver. Order:
+//   1. users.sub_override (the admin tier simulator) — behaves exactly like
+//      that tier, INCLUDING charging credits (charge: true).
+//   2. admin role — unlimited, never charged.
+//   3. an active subscription purchase.
+//   4. free tier.
+// Accepts an auth.user-shaped object ({ uid, role }) or a bare user id.
+export async function entitlementFor(db, user) {
+  const uid = Number(typeof user === 'object' && user ? (user.uid || user.id) : user) || null;
+  let role = (typeof user === 'object' && user && user.role) || null;
+  let override = null;
+  if (uid) {
+    try {
+      const r = await db`SELECT sub_override, role FROM users WHERE id = ${uid} LIMIT 1`;
+      if (r.length) { override = r[0].sub_override || null; if (!role) role = r[0].role; }
+    } catch (_) { /* users table variants — fall through */ }
+  }
+  if (override) {
+    const sub = override === 'free' ? null : subscriptionBySku(override);
+    return { tier: sub ? sub.sku : 'free', label: sub ? sub.label : 'Free',
+             source: 'override', sub, features: tierFeatures(sub), charge: true };
+  }
+  if (role === 'admin') {
+    return { tier: 'admin', label: 'Admin (unlimited)', source: 'admin', sub: null,
+             features: { stt: true, autoTeach: true, reporting: true, dataSaving: true,
+                         voiceCharsPerMonth: Number.POSITIVE_INFINITY },
+             charge: false };
+  }
+  if (uid) {
+    const sub = await activeSubscription(db, uid);
+    if (sub) return { tier: sub.sku, label: sub.label, source: 'purchase', sub,
+                      features: tierFeatures(sub), charge: true };
+  }
+  return { tier: 'free', label: 'Free', source: 'none', sub: null,
+           features: tierFeatures(null), charge: true };
+}
+
+// Resolve the account that owns a child's board (cron jobs and board-device
+// requests have no signed-in parent — the entitlement is still the family's).
+export async function boardOwnerId(db, childId) {
+  if (!childId) return null;
+  try {
+    const r = await db`SELECT id FROM users WHERE child_slug = ${childId} LIMIT 1`;
+    return r.length ? Number(r[0].id) : null;
+  } catch (_) { return null; }
 }
 
 export async function grantCredits(db, { userId, credits, reason, ref = null }) {
@@ -150,11 +255,23 @@ export async function recordPurchase(db, { userId, platform, productId, credits,
   return { granted: true, duplicate: false };
 }
 
-// Charge helper for the generation endpoints. Admins never pay; everyone else
-// spends (after the lazy starter grant). Returns { ok, balance, exempt }.
+// Charge helper for the generation endpoints. Admins never pay — UNLESS they
+// set a tier override (the simulator must drain credits like a real account).
+// Everyone else spends (after the lazy starter grant). Returns { ok, balance,
+// exempt }.
 export async function chargeForGeneration(db, user, { credits, reason, ref = null }) {
-  if (!user || user.role === 'admin') return { ok: true, exempt: true, balance: null };
+  if (!user) return { ok: true, exempt: true, balance: null };
   const uid = Number(user.uid || user.id);
+  if (user.role === 'admin') {
+    let override = null;
+    if (uid) {
+      try {
+        const r = await db`SELECT sub_override FROM users WHERE id = ${uid} LIMIT 1`;
+        override = (r[0] && r[0].sub_override) || null;
+      } catch (_) {}
+    }
+    if (!override) return { ok: true, exempt: true, balance: null };
+  }
   if (!uid) return { ok: true, exempt: true, balance: null };   // legacy token — never hard-block
   await ensureCredits(db);
   await ensureStarter(db, uid);
@@ -243,8 +360,7 @@ export function productCredits(productId) {
   const pack = PACKS.find((p) => p.sku === productId || p.appleProductId === productId)
             || LEGACY_PACKS.find((p) => p.sku === productId);
   if (pack) return { credits: pack.credits, kind: 'pack' };
-  if (productId === SUBSCRIPTION.sku || productId === SUBSCRIPTION.appleProductId) {
-    return { credits: SUBSCRIPTION.creditsPerPeriod, kind: 'subscription' };
-  }
+  const sub = subscriptionBySku(productId);
+  if (sub) return { credits: sub.creditsPerPeriod, kind: 'subscription', sku: sub.sku };
   return null;
 }

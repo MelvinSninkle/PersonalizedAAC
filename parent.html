@@ -934,6 +934,41 @@
         const el = document.getElementById('admin-taxonomy'); if (el) el.style.display = '';
         const ts = document.getElementById('therapist-switch'); if (ts) ts.style.display = '';
         document.querySelectorAll('.therapist-only').forEach(n => { n.style.display = ''; });
+
+        // ---- Tier simulator (admin only) — sets users.sub_override on THIS
+        // account so the whole product behaves like that membership level:
+        // features gate, voice budgets bite, and image credits actually drain
+        // (the admin charge exemption is suspended while simulating). "Real"
+        // clears the override and restores normal admin behavior. ----
+        try {
+          const cat = await (await fetch('/api/store?action=catalog', { credentials: 'same-origin' })).json();
+          const ent = cat.entitlement || {};
+          const wrap = document.createElement('div');
+          wrap.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:3000;background:#fff;border:2px solid #f3c6dd;border-radius:12px;padding:8px 10px;box-shadow:0 4px 14px rgba(0,0,0,.12);font-size:12px;display:flex;gap:8px;align-items:center;';
+          const OPTS = [['real', 'Real (admin)'], ['free', 'Free'], ['starter.monthly', 'Starter $4.99'],
+                        ['plus.monthly', 'Plus $9.99'], ['pro.monthly', 'Pro $19.99']];
+          wrap.innerHTML = '<span style="font-weight:800;color:#ad1457;">Tier sim</span>'
+            + '<select id="tier-sim" style="font-size:12px;padding:4px 6px;border:1px solid #f3c6dd;border-radius:8px;">'
+            + OPTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')
+            + '</select><span id="tier-sim-now" style="color:#6b7280;"></span>';
+          document.body.appendChild(wrap);
+          const sel = wrap.querySelector('#tier-sim'), now = wrap.querySelector('#tier-sim-now');
+          now.textContent = ent.label || '';
+          sel.value = ent.source === 'override' ? (ent.tier === 'free' ? 'free' : ent.tier) : 'real';
+          sel.addEventListener('change', async () => {
+            now.textContent = '…';
+            try {
+              const r = await fetch('/api/store?action=sub-override', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tier: sel.value }),
+              });
+              const d = await r.json();
+              if (!r.ok) throw new Error(d.error || 'failed');
+              now.textContent = d.label + (d.source === 'override' ? ' (simulated)' : '');
+            } catch (e) { now.textContent = 'failed: ' + e.message; }
+          });
+        } catch (_) {}
       }
     } catch (_) {}
   })();

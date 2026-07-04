@@ -167,9 +167,22 @@ export async function placeChunk({ db, childId, rows, catCache }) {
 // ── 2+3. Enqueue the background jobs ────────────────────────────────────────
 
 export async function enqueueSeedJobs(db, childId, rows) {
+  // FREE TIER: the free experience is the two onboarding portraits + the
+  // shared default board (sync overlays taxonomy.default_image_key onto any
+  // tile without custom art). Personal in-your-style renders of the seed scope
+  // are a membership perk — without one, every seed job is voice-only. Bought
+  // words / retries still render for anyone: those are paid with credits.
+  let personalRenders = true;
+  try {
+    const { entitlementFor, boardOwnerId } = await import('./credits.js');
+    const ownerId = await boardOwnerId(db, childId);
+    const ent = await entitlementFor(db, ownerId);
+    personalRenders = !!ent.sub || ent.tier === 'admin';
+  } catch (_) { /* on any doubt keep the historical behavior */ }
+
   let renders = 0, voices = 0;
   for (const t of rows) {
-    const kind = isRenderScope(t) ? 'render' : 'voice';
+    const kind = (personalRenders && isRenderScope(t)) ? 'render' : 'voice';
     try {
       const r = await db`INSERT INTO seed_jobs (child_id, kind, taxonomy_id)
                          VALUES (${childId}, ${kind}, ${t.id})
@@ -304,7 +317,7 @@ export async function processSeedJob(db, job, getCtx) {
         } catch (_) {}
       }
       if (!item.sound_key) {
-        const mp3 = await synthesizeVoice({ text: tax.label, voiceId: c.voiceId });
+        const mp3 = await synthesizeVoice({ text: tax.label, voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
         if (mp3) {
           const soundKey = `onboarding/${job.child_id}/voice/${randomUUID()}.mp3`;
           await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });
@@ -318,7 +331,7 @@ export async function processSeedJob(db, job, getCtx) {
 
     if (job.kind === 'voice') {
       if (!item.sound_key) {
-        const mp3 = await synthesizeVoice({ text: tax.label, voiceId: c.voiceId });
+        const mp3 = await synthesizeVoice({ text: tax.label, voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
         if (mp3) {
           const soundKey = `onboarding/${job.child_id}/voice/${randomUUID()}.mp3`;
           await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });

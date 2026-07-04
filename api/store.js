@@ -29,7 +29,9 @@ import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus } from './
 import { ensureCredits, ensureStarter, creditBalance, spendCredits, grantCredits,
          recordPurchase, productCredits, rebuildQuote,
          ensureCoupons, redeemCoupon, randomCouponCode,
-         PACKS, SUBSCRIPTION, COST, CREDIT_CENTS, bundleQuote } from './_lib/credits.js';
+         PACKS, SUBSCRIPTION, SUBSCRIPTIONS, subscriptionBySku, entitlementFor,
+         COST, CREDIT_CENTS, bundleQuote } from './_lib/credits.js';
+import { voiceCharsThisMonth } from './_lib/voice-usage.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
 
@@ -71,6 +73,8 @@ export default async function handler(req, res) {
       case 'rebuild':        return rebuild(req, res, db, auth, uid, body);
       case 'iap-verify':     return iapVerify(req, res, db, uid, body);
       case 'stripe-checkout': return stripeCheckout(req, res, db, auth, uid, body);
+      case 'stripe-portal':  return stripePortal(req, res, db, auth, uid);
+      case 'sub-override':   return subOverride(req, res, db, auth, uid, body);
       case 'redeem':         return redeem(req, res, db, uid, body);
       case 'grant':          return adminGrant(req, res, db, auth, body);
       case 'grant-all':      return adminGrantAll(req, res, db, auth, body);
@@ -97,17 +101,53 @@ async function catalog(req, res, db, auth, uid) {
     // Surface live build progress so the store can show "still rendering".
     try { await ensureSeedJobs(db); rebuild = { ...rebuild, status: await seedStatus(db, childId) }; } catch (_) {}
   }
+  // Effective entitlement (honors the admin tier-override simulator) + this
+  // month's voice budget so both storefronts can show tier state.
+  const ent = await entitlementFor(db, auth.user);
+  const voiceUsed = uid ? await voiceCharsThisMonth(db, uid) : 0;
+  const voiceCap = ent.features.voiceCharsPerMonth;
+
   res.setHeader('Cache-Control', 'no-store');
   res.status(200).json({
     ok: true,
     balance: uid ? await creditBalance(db, uid) : 0,
     creditCents: CREDIT_CENTS,
     packs: PACKS.map(({ sku, credits, cents, label, appleProductId }) => ({ sku, credits, cents, label, appleProductId })),
-    subscription: SUBSCRIPTION,
+    subscription: SUBSCRIPTION,           // legacy field (= Plus)
+    subscriptions: SUBSCRIPTIONS,
+    entitlement: {
+      tier: ent.tier, label: ent.label, source: ent.source,
+      features: { stt: ent.features.stt, autoTeach: ent.features.autoTeach,
+                  reporting: ent.features.reporting, dataSaving: ent.features.dataSaving },
+      voice: { used: voiceUsed, cap: Number.isFinite(voiceCap) ? voiceCap : null },
+      creditsPerPeriod: ent.sub ? ent.sub.creditsPerPeriod : 0,
+    },
     cost: COST,
     rebuild,
     stripeConfigured: !!process.env.STRIPE_SECRET_KEY,
   });
+}
+
+// Admin tier simulator: set users.sub_override on YOUR OWN account to walk the
+// product through every tier ('free' | starter/plus/pro sku | null = real).
+// While set, the account behaves exactly like that tier — features gate and
+// credits actually drain (chargeForGeneration skips the admin exemption).
+async function subOverride(req, res, db, auth, uid, body) {
+  if (auth.user.role !== 'admin') { res.status(403).json({ error: 'Admins only' }); return; }
+  if (!uid) { res.status(400).json({ error: 'no account' }); return; }
+  const raw = String(body.tier || '').trim().toLowerCase();
+  let value = null;
+  if (raw && raw !== 'real' && raw !== 'none') {
+    if (raw === 'free') value = 'free';
+    else {
+      const sub = subscriptionBySku(raw);
+      if (!sub) { res.status(400).json({ error: 'unknown tier', tier: raw, valid: ['real', 'free', ...SUBSCRIPTIONS.map((s) => s.sku)] }); return; }
+      value = sub.sku;
+    }
+  }
+  await db`UPDATE users SET sub_override = ${value} WHERE id = ${uid}`;
+  const ent = await entitlementFor(db, auth.user);
+  res.status(200).json({ ok: true, override: value, tier: ent.tier, label: ent.label, source: ent.source });
 }
 
 async function history(req, res, db, uid) {
@@ -511,23 +551,23 @@ async function stripeCheckout(req, res, db, auth, uid, body) {
   if (!uid) { res.status(400).json({ error: 'no account' }); return; }
   const sku = String(body.sku || '');
   const pack = PACKS.find((p) => p.sku === sku);
-  const isSub = sku === SUBSCRIPTION.sku;
-  if (!pack && !isSub) { res.status(400).json({ error: 'unknown sku', sku }); return; }
+  const sub = subscriptionBySku(sku);
+  if (!pack && !sub) { res.status(400).json({ error: 'unknown sku', sku }); return; }
 
   const origin = `https://${req.headers.host}`;
   const form = new URLSearchParams();
-  form.set('mode', isSub ? 'subscription' : 'payment');
+  form.set('mode', sub ? 'subscription' : 'payment');
   form.set('success_url', origin + '/store.html?paid=1');
   form.set('cancel_url', origin + '/store.html?canceled=1');
   form.set('client_reference_id', String(uid));
   form.set('metadata[userId]', String(uid));
   form.set('metadata[sku]', sku);
   form.set('line_items[0][quantity]', '1');
-  if (isSub) {
+  if (sub) {
     form.set('line_items[0][price_data][currency]', 'usd');
-    form.set('line_items[0][price_data][unit_amount]', String(SUBSCRIPTION.cents));
+    form.set('line_items[0][price_data][unit_amount]', String(sub.cents));
     form.set('line_items[0][price_data][recurring][interval]', 'month');
-    form.set('line_items[0][price_data][product_data][name]', `${SUBSCRIPTION.label} — ${SUBSCRIPTION.creditsPerPeriod} credits/month`);
+    form.set('line_items[0][price_data][product_data][name]', `${sub.label} — ${sub.creditsPerPeriod} credits/month`);
   } else {
     form.set('line_items[0][price_data][currency]', 'usd');
     form.set('line_items[0][price_data][unit_amount]', String(pack.cents));
@@ -537,6 +577,31 @@ async function stripeCheckout(req, res, db, auth, uid, body) {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form.toString(),
+  });
+  const d = await r.json();
+  if (!r.ok) { res.status(502).json({ error: 'stripe error', detail: d.error && d.error.message }); return; }
+  res.status(200).json({ ok: true, url: d.url });
+}
+
+// "Manage billing" on the web: a Stripe billing-portal session where the
+// subscriber can upgrade, downgrade, or cancel. (Apple subscriptions are
+// managed in iOS Settings — the app links there instead.)
+async function stripePortal(req, res, db, auth, uid) {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) { res.status(501).json({ error: 'stripe_not_configured' }); return; }
+  if (!uid) { res.status(400).json({ error: 'no account' }); return; }
+  const row = (await db`SELECT stripe_customer_id FROM users WHERE id = ${uid} LIMIT 1`)[0];
+  const customer = row && row.stripe_customer_id;
+  if (!customer) {
+    res.status(404).json({ error: 'no_stripe_customer',
+      detail: 'No web subscription on file for this account. Subscribe here first — or, if you subscribed on the iPad/iPhone, manage it in the App Store settings.' });
+    return;
+  }
+  const origin = `https://${req.headers.host}`;
+  const r = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ customer, return_url: origin + '/store.html' }).toString(),
   });
   const d = await r.json();
   if (!r.ok) { res.status(502).json({ error: 'stripe error', detail: d.error && d.error.message }); return; }
@@ -580,13 +645,21 @@ async function stripeWebhook(req, res, db, raw) {
           });
         } catch (_) {}
       }
+      // Remember the Stripe customer so the billing portal ("Manage billing")
+      // can find this account later.
+      if (uid && s.customer) {
+        try { await db`UPDATE users SET stripe_customer_id = ${String(s.customer)} WHERE id = ${uid}`; } catch (_) {}
+      }
     } else if (event.type === 'invoice.paid') {
       const inv = event.data.object;
       const meta = (inv.subscription_details && inv.subscription_details.metadata) || inv.metadata || {};
       const uid = Number(meta.userId) || null;
       if (uid) {
-        await recordPurchase(db, { userId: uid, platform: 'stripe', productId: SUBSCRIPTION.sku,
-                                   credits: SUBSCRIPTION.creditsPerPeriod,
+        // The tier comes from the subscription's metadata sku (tagged at
+        // checkout); older subs without one are the original Plus.
+        const sub = subscriptionBySku(meta.sku) || SUBSCRIPTION;
+        await recordPurchase(db, { userId: uid, platform: 'stripe', productId: sub.sku,
+                                   credits: sub.creditsPerPeriod,
                                    amountCents: inv.amount_paid || null, externalId: 'stripe:' + inv.id });
       }
     }

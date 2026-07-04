@@ -136,8 +136,8 @@
       <span class="status" id="usage-status"></span>
     </div>
     <div class="tool">
-      <h3>AI image cost</h3>
-      <p>Estimated from the model's token usage for each generated tile.</p>
+      <h3>AI cost — images + voice</h3>
+      <p>Images estimated from model token usage; voice booked per ElevenLabs character (only NEW phrases cost — every rendition is cached forever).</p>
       <div id="usage-overall" style="display:flex;gap:12px;flex-wrap:wrap;"></div>
     </div>
     <div class="tool">
@@ -440,17 +440,29 @@
     const status = $('usage-status'); status.textContent = 'Loading…'; status.className = 'status';
     try {
       const d = await api('/api/usage');
-      $('usage-overall').innerHTML = [
-        ['Images · all time', d.overall.count],
-        ['Cost · all time', cents(d.overall.costCents)],
-        ['Images · this month', d.overall.monthCount],
-        ['Cost · this month', cents(d.overall.monthCostCents)],
-      ].map(([k, v]) => `<div style="min-width:128px;background:#fff0f6;border:1px solid var(--line);border-radius:12px;padding:12px 14px;">
-          <div style="font-size:24px;font-weight:700;color:var(--ink);">${v}</div>
-          <div style="font-size:12px;color:var(--muted);">${k}</div></div>`).join('');
+      const v = d.voice || { count: 0, chars: 0, costCents: 0, monthCount: 0, monthChars: 0, monthCostCents: 0 };
+      const tile = ([k, v2], hot) => `<div style="min-width:128px;background:${hot ? '#fde8f1' : '#fff0f6'};border:1px solid var(--line);border-radius:12px;padding:12px 14px;">
+          <div style="font-size:24px;font-weight:700;color:var(--ink);">${v2}</div>
+          <div style="font-size:12px;color:var(--muted);">${k}</div></div>`;
+      $('usage-overall').innerHTML =
+        // The combined tally leads — one number for total AI spend.
+        tile(['TOTAL AI · all time', cents(d.overall.costCents + v.costCents)], true) +
+        tile(['TOTAL AI · this month', cents(d.overall.monthCostCents + v.monthCostCents)], true) +
+        [
+          ['Images · all time', d.overall.count],
+          ['Image cost · all time', cents(d.overall.costCents)],
+          ['Images · this month', d.overall.monthCount],
+          ['Image cost · this month', cents(d.overall.monthCostCents)],
+          ['Voice clips · all time', v.count],
+          ['Voice cost · all time', cents(v.costCents)],
+          [`Voice · this month (${(v.monthChars / 1000).toFixed(1)}k chars)`, v.monthCount],
+          ['Voice cost · this month', cents(v.monthCostCents)],
+        ].map((p) => tile(p, false)).join('');
       $('usage-accounts').innerHTML = d.perAccount.length
-        ? `<table><thead><tr><th>Account</th><th>Images</th><th>Cost</th></tr></thead><tbody>` +
-          d.perAccount.map(a => `<tr><td>${esc(a.account)}</td><td>${a.count}</td><td>${cents(a.costCents)}</td></tr>`).join('') + `</tbody></table>`
+        ? `<table><thead><tr><th>Account</th><th>Images</th><th>Image cost</th><th>Voice chars</th><th>Voice cost</th><th>Total</th></tr></thead><tbody>` +
+          d.perAccount.map(a => `<tr><td>${esc(a.account)}</td><td>${a.count}</td><td>${cents(a.costCents)}</td>
+            <td>${((a.voiceChars || 0) / 1000).toFixed(1)}k</td><td>${cents(a.voiceCostCents || 0)}</td>
+            <td><strong>${cents((a.costCents || 0) + (a.voiceCostCents || 0))}</strong></td></tr>`).join('') + `</tbody></table>`
         : '<p style="font-size:13px;color:var(--muted)">No generations yet.</p>';
       $('usage-recent').innerHTML = d.recent.length
         ? d.recent.map(r => `<details style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;">

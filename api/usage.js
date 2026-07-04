@@ -22,6 +22,7 @@ export default async function handler(req, res) {
   const db = sql();
   const out = {
     overall: { count: 0, costCents: 0, monthCount: 0, monthCostCents: 0 },
+    voice: { count: 0, chars: 0, costCents: 0, monthCount: 0, monthChars: 0, monthCostCents: 0 },
     perAccount: [],
     recent: [],
   };
@@ -43,7 +44,39 @@ export default async function handler(req, res) {
       FROM image_generations g
       LEFT JOIN users u ON u.child_slug = g.child_id
       GROUP BY 1 ORDER BY cost DESC`;
-    out.perAccount = pa.map((r) => ({ account: r.account, count: r.count, costCents: r.cost }));
+    out.perAccount = pa.map((r) => ({ account: r.account, count: r.count, costCents: r.cost,
+                                      voiceChars: 0, voiceCostCents: 0 }));
+
+    // ElevenLabs voice spend — the same per-account attribution (the logged
+    // user id when known, else the board owner), merged into the image rows so
+    // one table shows a family's full AI cost.
+    try {
+      const vo = await db`
+        SELECT count(*)::int AS count, coalesce(sum(chars), 0)::int AS chars,
+               coalesce(sum(cost_cents), 0)::float AS cost,
+               coalesce(sum(case when created_at >= date_trunc('month', now()) then 1 else 0 end), 0)::int AS mcount,
+               coalesce(sum(case when created_at >= date_trunc('month', now()) then chars else 0 end), 0)::int AS mchars,
+               coalesce(sum(case when created_at >= date_trunc('month', now()) then cost_cents else 0 end), 0)::float AS mcost
+        FROM voice_generations`;
+      out.voice = { count: vo[0].count, chars: vo[0].chars, costCents: vo[0].cost,
+                    monthCount: vo[0].mcount, monthChars: vo[0].mchars, monthCostCents: vo[0].mcost };
+
+      const vpa = await db`
+        SELECT coalesce(u1.email, u2.email, '(token)') AS account,
+               coalesce(sum(v.chars), 0)::int AS chars, coalesce(sum(v.cost_cents), 0)::float AS cost
+        FROM voice_generations v
+        LEFT JOIN users u1 ON u1.id = v.user_id
+        LEFT JOIN users u2 ON u2.child_slug = v.child_id
+        GROUP BY 1`;
+      const byAccount = new Map(out.perAccount.map((a) => [a.account, a]));
+      for (const r of vpa) {
+        const row = byAccount.get(r.account);
+        if (row) { row.voiceChars = r.chars; row.voiceCostCents = r.cost; }
+        else out.perAccount.push({ account: r.account, count: 0, costCents: 0,
+                                   voiceChars: r.chars, voiceCostCents: r.cost });
+      }
+      out.perAccount.sort((a, b) => (b.costCents + b.voiceCostCents) - (a.costCents + a.voiceCostCents));
+    } catch (_) { /* voice_generations may not exist yet */ }
 
     const rec = await db`
       SELECT g.id, g.child_id, coalesce(g.actor_email, u.email) AS actor_email, g.label, g.style, g.prompt,

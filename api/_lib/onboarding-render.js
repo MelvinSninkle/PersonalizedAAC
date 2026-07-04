@@ -288,18 +288,30 @@ export async function loadChildStyleGuideId(db, childId) {
 // Synthesize `text` to MP3 via ElevenLabs in the chosen voice. Returns a Buffer
 // or null — best-effort, so a TTS hiccup never fails a tile (the board falls
 // back to the system voice when a tile has no recorded clip).
-export async function synthesizeVoice({ text, voiceId } = {}) {
+// Pass { db, childId } to book the spend in voice_generations so the admin
+// Usage tally covers EVERY ElevenLabs call, not just /api/tts (tile voicing is
+// part of board builds — logged, never capped).
+export async function synthesizeVoice({ text, voiceId, db = null, childId = null, kind = 'tile' } = {}) {
   const key = process.env.Fletchers_AAC_Device;
   if (!key || !text || !String(text).trim()) return null;
   const vid = voiceId || process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
   const mid = process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
+  const body = String(text).slice(0, 300);
   try {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(vid)}`, {
       method: 'POST',
       headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-      body: JSON.stringify({ text: String(text).slice(0, 300), model_id: mid }),
+      body: JSON.stringify({ text: body, model_id: mid }),
     });
     if (!r.ok) return null;
+    if (db) {
+      try {
+        const { logVoiceGeneration } = await import('./voice-usage.js');
+        const { boardOwnerId } = await import('./credits.js');
+        const uid = childId ? await boardOwnerId(db, childId) : null;
+        await logVoiceGeneration(db, { userId: uid, childId, chars: body.length, kind, voiceId: vid, text: body });
+      } catch (_) { /* metering is best-effort */ }
+    }
     return Buffer.from(await r.arrayBuffer());
   } catch (_) { return null; }
 }

@@ -555,6 +555,20 @@ struct APIClient {
         return r.balance
     }
 
+    /// The account's effective membership (server-resolved: admin override →
+    /// live subscription → free), plus this month's voice budget.
+    struct StoreEntitlement: Decodable {
+        struct Voice: Decodable { let used: Int; let cap: Int? }
+        let tier: String; let label: String; let source: String
+        let voice: Voice?
+    }
+    func storeEntitlement() async -> StoreEntitlement? {
+        struct R: Decodable { let entitlement: StoreEntitlement? }
+        guard let (data, _) = try? await request(method: "GET", path: "/api/store?action=catalog", body: nil),
+              let r = try? JSONDecoder().decode(R.self, from: data) else { return nil }
+        return r.entitlement
+    }
+
     /// Report a verified StoreKit transaction; the server grants the credits
     /// idempotently (safe to re-send). Returns the credits granted this call.
     func iapVerify(jws: String, productId: String, transactionId: String) async -> Int? {

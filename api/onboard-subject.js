@@ -131,7 +131,7 @@ export default async function handler(req, res) {
       // admin voice instead of the one selected during enrollment.
       try {
         const voiceId = await loadChildVoiceId(db, childId);
-        const mp3 = await synthesizeVoice({ text: pronunciation || name, voiceId });
+        const mp3 = await synthesizeVoice({ text: pronunciation || name, voiceId, db, childId, kind: 'tile' });
         if (mp3) soundKey = await uploadBytes('itemsound', 'mp3', mp3, 'audio/mpeg');
       } catch (_) {}
 

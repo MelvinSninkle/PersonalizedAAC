@@ -232,7 +232,7 @@ export async function processTileJob(db, jobId) {
     let soundKey = null;
     if (label) {
       const voiceId = await loadChildVoiceId(db, job.child_id);
-      const mp3 = await synthesizeVoice({ text: label, voiceId });
+      const mp3 = await synthesizeVoice({ text: label, voiceId, db, childId: job.child_id, kind: 'tile' });
       if (mp3) {
         soundKey = `tile-jobs/${job.child_id}/${randomUUID()}.mp3`;
         await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });
