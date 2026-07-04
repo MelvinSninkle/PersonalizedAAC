@@ -52,6 +52,13 @@ export default async function handler(req, res) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       res.status(400).json({ error: 'A valid email is required' }); return;
     }
+    // COPPA anchor: self-signup REQUIRES the consent box (guardian status,
+    // 18+, Terms + Privacy, photo processing). Recorded with a version so a
+    // future policy change can re-prompt. Old app builds without the field
+    // are invite-path only, which is admin-vetted.
+    if (body.consent !== true) {
+      res.status(400).json({ error: 'consent_required', detail: 'Please accept the Terms, Privacy Policy, and photo-use consent.' }); return;
+    }
     const childName = typeof body.childName === 'string' ? body.childName.trim().slice(0, 60) : '';
     try {
       const db = sql();
@@ -111,6 +118,14 @@ export default async function handler(req, res) {
         }
       }
       if (!user) { res.status(500).json({ error: 'Could not allocate a board name — please try again.' }); return; }
+
+      // Record the consent event (timestamp + policy version) with the account.
+      try {
+        await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS consented_at TIMESTAMPTZ`;
+        await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version TEXT`;
+        const cv = typeof body.consentVersion === 'string' ? body.consentVersion.slice(0, 20) : '2026-07';
+        await db`UPDATE users SET consented_at = NOW(), consent_version = ${cv} WHERE id = ${user.id}`;
+      } catch (_) { /* consent columns are best-effort on legacy schemas */ }
 
       // Link the parent to their child's board (the source of truth for access
       // checks — isParentOf/canEditContent read child_access, not child_slug).

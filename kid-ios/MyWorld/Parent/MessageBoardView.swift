@@ -89,7 +89,7 @@ struct MessageBoardView: View {
                 .foregroundStyle(Color(hex: listeningOn ? "#ef4444" : "#ad1457"))
             Text(listeningOn
                  ? "The board is captioning live — everything said near the tablet shows as tiles."
-                 : "Turn the board into a live word-strip: speech near the tablet becomes tiles as it's said.")
+                 : "Turn the board into a live word-strip: speech near the tablet becomes tiles as it's said. Audio is processed for live transcription only — no recording is kept — and it stops itself after 2 minutes of quiet. Make sure everyone in the room is okay with it.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Button {

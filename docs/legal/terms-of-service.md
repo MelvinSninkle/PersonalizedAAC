@@ -1,6 +1,6 @@
 # My World — Terms of Service (DRAFT for review)
 
-> **Placeholders:** [LEGAL ENTITY NAME], [SUPPORT EMAIL], [GOVERNING STATE],
+> **Placeholders:** Extelligence LLC, [SUPPORT EMAIL], [GOVERNING STATE],
 > [EFFECTIVE DATE]. Publish at `/terms`. Attorney review recommended — this draft is a
 > working baseline, not legal advice. Apple requires these terms (or the standard Apple
 > EULA) to be reachable from the app's subscription screen and App Store listing.
@@ -12,7 +12,7 @@
 My World is a personalized communication-board (AAC-style) app: a parent or caregiver
 builds a picture board a child can tap to communicate, with AI-illustrated tiles, spoken
 words, learning games, and progress tracking. These terms are an agreement between you
-and [LEGAL ENTITY NAME].
+and Extelligence LLC.
 
 ## 2. Who may use it
 
@@ -95,4 +95,4 @@ use after that is acceptance.
 
 ## 11. Contact
 
-[LEGAL ENTITY NAME] · [SUPPORT EMAIL]
+Extelligence LLC · [SUPPORT EMAIL]

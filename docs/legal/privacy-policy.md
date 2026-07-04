@@ -1,13 +1,13 @@
 # My World — Privacy Policy (DRAFT for review)
 
-> **Placeholders to fill before publishing:** [LEGAL ENTITY NAME], [BUSINESS ADDRESS],
+> **Placeholders to fill before publishing:** Extelligence LLC, [BUSINESS ADDRESS],
 > [SUPPORT EMAIL], [EFFECTIVE DATE], [GOVERNING STATE]. Publish at `/privacy` and list
 > that URL in App Store Connect. Have an attorney review before launch — this draft is
 > a working baseline, not legal advice.
 
 **Effective date:** [EFFECTIVE DATE]
 
-My World ("the Service") is operated by [LEGAL ENTITY NAME] ("we", "us"). My World is a
+My World ("the Service") is operated by Extelligence LLC ("we", "us"). My World is a
 communication-board app that parents and caregivers set up for a child. Because the
 Service is built around a child's photos, voice, and communication, we hold ourselves to
 a simple rule: **we collect only what the board needs to work, we never sell it, and you
@@ -131,4 +131,4 @@ we will notify you by email and in-app before the change takes effect.
 
 ## 11. Contact
 
-[LEGAL ENTITY NAME] · [BUSINESS ADDRESS] · [SUPPORT EMAIL]
+Extelligence LLC · [BUSINESS ADDRESS] · [SUPPORT EMAIL]

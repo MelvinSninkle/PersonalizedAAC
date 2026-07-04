@@ -105,6 +105,20 @@ struct StoreView: View {
                 Button("Restore purchases") { Task { await restore() } }
                     .font(.system(size: 13))
                     .padding(.top, 6)
+
+                // Apple Review 3.1.2: the auto-renew terms + working links to
+                // the Terms and Privacy Policy must live in the app.
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("My World Plus is $9.99/month and adds 50 credits monthly. Payment is charged to your Apple ID at confirmation of purchase. The subscription renews automatically unless cancelled at least 24 hours before the end of the current period — manage or cancel any time in Settings → Apple ID → Subscriptions. Credits are non-refundable once spent on completed images, and every image you make is yours to keep.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 14) {
+                        Link("Terms of Service", destination: URL(string: "\(APIClient.defaultOrigin)/terms")!)
+                        Link("Privacy Policy", destination: URL(string: "\(APIClient.defaultOrigin)/privacy")!)
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                }
+                .padding(.top, 10)
             }
             .padding(18)
         }

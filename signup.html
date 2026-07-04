@@ -49,6 +49,13 @@
       <label for="password">Password</label>
       <input id="password" type="password" autocomplete="new-password" placeholder="At least 8 characters" required>
 
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;font-weight:500;text-transform:none;letter-spacing:0;line-height:1.45;margin:14px 0 10px;color:#4b5563;">
+        <input type="checkbox" id="consent" style="width:auto;margin-top:2px;flex:0 0 auto;">
+        <span>I'm the parent or legal guardian (or a caregiver with their permission), I'm 18+,
+        and I agree to the <a href="/terms" target="_blank">Terms of Service</a> and
+        <a href="/privacy" target="_blank">Privacy Policy</a>. I understand photos I upload
+        are used only to illustrate our board.</span>
+      </label>
       <button type="submit" id="signup-btn">Create account &amp; start →</button>
     </form>
     <div class="msg" id="msg"></div>
@@ -76,6 +83,9 @@
     if (password.length < 8) {
       msg.className = 'msg err'; msg.textContent = 'Password must be at least 8 characters.'; return;
     }
+    if (!$('consent').checked) {
+      msg.className = 'msg err'; msg.textContent = 'Please confirm the consent box — it covers the Terms, Privacy Policy, and how photos are used.'; return;
+    }
     const btn = $('signup-btn'); const prev = btn.textContent;
     btn.disabled = true; btn.textContent = 'Creating your account…';
     try {
@@ -83,7 +93,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ selfSignup: true, email, password, childName }),
+        body: JSON.stringify({ selfSignup: true, email, password, childName, consent: true, consentVersion: '2026-07' }),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -102,5 +112,7 @@
     }
   });
 </script>
+
+<div style="text-align:center;font-size:12px;color:#9ca3af;padding:18px 10px;">© Extelligence LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home — it isn’t a medical device and doesn’t replace your child’s care team.</div>
 </body>
 </html>
