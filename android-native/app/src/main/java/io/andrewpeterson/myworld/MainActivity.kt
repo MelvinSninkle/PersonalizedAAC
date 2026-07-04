@@ -49,7 +49,7 @@ fun RootView() {
     when {
         user == null -> LoginView()
         role == DeviceMode.Role.UNSET -> RolePickerView()
-        role == DeviceMode.Role.CHILD_BOARD -> PlaceholderScreen("Board — arrives in M3")
+        role == DeviceMode.Role.CHILD_BOARD -> io.andrewpeterson.myworld.ui.board.BoardView()
         else -> PlaceholderScreen("Parent app — arrives in M9")
     }
 }

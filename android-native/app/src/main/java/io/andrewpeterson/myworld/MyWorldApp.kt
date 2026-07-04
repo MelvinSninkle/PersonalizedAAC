@@ -6,7 +6,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import io.andrewpeterson.myworld.audio.SpeechCache
 import io.andrewpeterson.myworld.audio.TilePlayer
 import io.andrewpeterson.myworld.auth.AuthManager
+import io.andrewpeterson.myworld.game.PlayScope
 import io.andrewpeterson.myworld.model.DeviceMode
+import io.andrewpeterson.myworld.model.DisplayPrefs
 import io.andrewpeterson.myworld.net.ApiClient
 import io.andrewpeterson.myworld.net.PersistentCookieJar
 import io.andrewpeterson.myworld.storage.BoardStore
@@ -38,6 +40,13 @@ class AppContainer(context: Context) {
     val board = BoardStore(context, api, media)
     val speechCache = SpeechCache(context, api)
     val tilePlayer = TilePlayer(context, api, media)
+
+    // M3 — display preferences (server-synced) + play-scope memory.
+    val displayPrefs = DisplayPrefs(context, api)
+
+    init {
+        PlayScope.init(context)
+    }
 
     // M5+: gameController, gameAudio, scheduler, autoTeachRunner …
     // M6+: speechListener · M7+: liveSession, parentLive · M8+: addTileQueue
