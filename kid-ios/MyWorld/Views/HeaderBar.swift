@@ -24,6 +24,7 @@ struct HeaderBar: View {
     let speech: SpeechListener
     @State private var showUnlock = false
     @State private var showAddTile = false
+    @State private var showSttUpsell = false
 
     var title: String { worldTitle(auth.user?.slug) }
     private var hex: String { prefs.colorHeaderText }
@@ -109,6 +110,10 @@ struct HeaderBar: View {
 
     private var listenButton: some View {
         Button {
+            // Membership gate: speech-to-text is a paid feature. Show the
+            // friendly join popup instead of a dead toggle (turning OFF is
+            // always allowed).
+            if !listening && !board.sttAllowed { showSttUpsell = true; return }
             listening.toggle()
         } label: {
             Image(systemName: listening ? "stop.circle.fill" : "mic.circle.fill")
@@ -118,6 +123,11 @@ struct HeaderBar: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .alert("Speech-to-text is a membership feature", isPresented: $showSttUpsell) {
+            Button("OK") {}
+        } message: {
+            Text("Turn spoken words into picture tiles in real time — part of every My World membership, from $4.99/month. Join in the parent app under Credits & Store. Everything you've already made stays yours forever.")
+        }
     }
 
     // MARK: -- Right: Play with me + (edit-only) toolbar

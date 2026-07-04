@@ -37,9 +37,22 @@ struct APIClient {
         let user: APIClient.LoginResponse.User?
     }
 
+    /// Membership flags for this FAMILY (resolved server-side from the board
+    /// owner's account) — drives friendly join-a-membership popups at the
+    /// gates. nil = unknown (old server / offline) → be permissive; the server
+    /// still enforces.
+    struct Entitlement: Codable {
+        let tier: String
+        let label: String
+        let stt: Bool
+        let autoTeach: Bool
+        let styling: Bool
+    }
+
     struct SyncResponse: Codable {
         let categories: [Category]
         let items: [Tile]
+        var entitlement: Entitlement? = nil
     }
 
     /// POST /api/auth/login — captures the Set-Cookie session.

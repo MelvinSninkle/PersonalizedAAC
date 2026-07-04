@@ -30,8 +30,23 @@ import { ensureCredits, ensureStarter, creditBalance, spendCredits, grantCredits
          recordPurchase, productCredits, rebuildQuote,
          ensureCoupons, redeemCoupon, randomCouponCode,
          PACKS, SUBSCRIPTION, SUBSCRIPTIONS, subscriptionBySku, entitlementFor,
+         requireStyling, NEEDS_SUBSCRIPTION_DETAIL,
          COST, CREDIT_CENTS, bundleQuote } from './_lib/credits.js';
 import { voiceCharsThisMonth } from './_lib/voice-usage.js';
+
+// Every styled-render purchase path shares this gate: personalized renders are
+// a membership perk (free tier keeps the default board + raw photo adds, and
+// keeps everything previously generated forever). Sends the 402 itself and
+// returns false when gated.
+async function memberOr402(res, db, auth, childId) {
+  const gate = await requireStyling(db, { user: auth.user, childId });
+  if (!gate.ok) {
+    res.status(402).json({ error: 'needs_subscription', tier: gate.ent.tier,
+                           detail: NEEDS_SUBSCRIPTION_DETAIL });
+    return false;
+  }
+  return true;
+}
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
 
@@ -214,6 +229,7 @@ async function checkout(req, res, db, auth, uid, body) {
   if (!childId || !ids.length) { res.status(400).json({ error: 'childId and taxonomyIds required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
   if (!uid) { res.status(400).json({ error: 'no account' }); return; }
+  if (!(await memberOr402(res, db, auth, childId))) return;
 
   const all = await shoppableRows(db);
   const byId = new Map(all.map((t) => [t.id, t]));
@@ -329,6 +345,7 @@ async function personalizeAll(req, res, db, auth, uid, body) {
     res.status(200).json({ ok: true, remaining: remaining.length, total, cost });
     return;
   }
+  if (!(await memberOr402(res, db, auth, childId))) return;
 
   const isAdmin = auth.user.role === 'admin';
   if (!isAdmin) {
@@ -429,6 +446,7 @@ async function regenWith(req, res, db, auth, uid, body) {
   const refItemId = Number(body.refItemId);
   if (!childId || !ids.length || !refItemId) { res.status(400).json({ error: 'childId, taxonomyIds, refItemId required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+  if (!(await memberOr402(res, db, auth, childId))) return;
 
   const ref = (await db`SELECT image_key FROM items WHERE id = ${refItemId} AND child_id = ${childId} LIMIT 1`)[0];
   if (!ref || !ref.image_key) { res.status(404).json({ error: 'reference tile has no image yet' }); return; }
@@ -454,6 +472,7 @@ async function retryTile(req, res, db, auth, uid, body) {
   const itemId = Number(body.itemId);
   if (!childId || !itemId) { res.status(400).json({ error: 'childId and itemId required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+  if (!(await memberOr402(res, db, auth, childId))) return;
 
   const item = (await db`SELECT id, taxonomy_slug, image_key, free_retry_used FROM items
                          WHERE id = ${itemId} AND child_id = ${childId} LIMIT 1`)[0];
@@ -486,6 +505,8 @@ async function rebuild(req, res, db, auth, uid, body) {
   const childId = String(body.childId || '').slice(0, 64);
   if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  if (!(await memberOr402(res, db, auth, childId))) return;
 
   const words = await db`SELECT DISTINCT taxonomy_slug FROM items
                          WHERE child_id = ${childId} AND taxonomy_slug IS NOT NULL`;

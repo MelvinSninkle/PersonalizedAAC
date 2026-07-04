@@ -273,6 +273,9 @@ extension APIClient {
     }
     struct AutoTeachGates: Codable {
         let enabled: Bool
+        /// False when the family has no active membership — auto-teach is a
+        /// membership feature (nil on older servers → treat as subscribed).
+        var subscribed: Bool? = nil
         /// False until sleep + school/therapy windows are entered (or "no
         /// outside care" confirmed) — auto-teach can't be enabled before then.
         var scheduleReady: Bool? = nil

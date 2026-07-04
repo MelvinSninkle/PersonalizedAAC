@@ -206,6 +206,21 @@ export async function entitlementFor(db, user) {
            features: tierFeatures(null), charge: true };
 }
 
+// Styled (in-your-art-style) AI renders are a membership perk on every path —
+// photo adds, store words, retries, rebuilds. Raw photo adds and the shared
+// default board stay free for everyone. Resolves from the signed-in user when
+// known, else the board owner's account.
+export async function requireStyling(db, { user = null, childId = null } = {}) {
+  let uid = Number(user && (user.uid || user.id)) || null;
+  if (!uid && childId) uid = await boardOwnerId(db, childId);
+  const ent = await entitlementFor(db, uid ? { uid, role: user && user.role } : user);
+  return { ok: !!ent.sub || ent.tier === 'admin', ent };
+}
+
+export const NEEDS_SUBSCRIPTION_DETAIL =
+  'Making pictures in your child’s own art style is part of My World memberships '
+  + '(from $4.99/month). Join in the Store — everything you’ve already made stays yours forever.';
+
 // Resolve the account that owns a child's board (cron jobs and board-device
 // requests have no signed-in parent — the entitlement is still the family's).
 export async function boardOwnerId(db, childId) {

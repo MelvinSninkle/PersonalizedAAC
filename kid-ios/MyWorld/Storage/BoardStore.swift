@@ -14,6 +14,14 @@ final class BoardStore {
     var tiles: [Tile] = []
     var loading: Bool = false
     var lastError: String?
+    /// Family membership flags from the last sync (nil = unknown → permissive;
+    /// the server enforces regardless). Persisted with the board cache.
+    var entitlement: APIClient.Entitlement?
+
+    /// Convenience gates for the UI. Unknown = allowed, so an offline board
+    /// never locks features it can't verify.
+    var sttAllowed: Bool { entitlement?.stt ?? true }
+    var stylingAllowed: Bool { entitlement?.styling ?? true }
 
     private let api: APIClient
     private let cacheURL: URL
@@ -116,6 +124,7 @@ final class BoardStore {
             let resp = try await api.sync(childId: childId)
             self.categories = resp.categories
             self.tiles = resp.items
+            self.entitlement = resp.entitlement ?? self.entitlement
             self.lastError = nil
             persistToDisk(resp)
             precacheMedia()
@@ -158,6 +167,7 @@ final class BoardStore {
         guard let resp = try? JSONDecoder().decode(APIClient.SyncResponse.self, from: data) else { return }
         self.categories = resp.categories
         self.tiles = resp.items
+        self.entitlement = resp.entitlement
         precacheMedia()   // start warming from the cached board on cold launch
     }
 

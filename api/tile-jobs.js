@@ -17,7 +17,7 @@ import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
 import { ensureTileJobs, processTileJob } from './_lib/tile-jobs.js';
-import { chargeForGeneration, COST } from './_lib/credits.js';
+import { chargeForGeneration, requireStyling, NEEDS_SUBSCRIPTION_DETAIL, COST } from './_lib/credits.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 300 };
 
@@ -80,6 +80,17 @@ export default async function handler(req, res) {
   {
     const isPerson = String(qs(req, 'section') || '').toLowerCase() === 'people';
     const isRaw = qbool(req, 'raw');
+    // Raw ("use my photo as-is") adds are free on EVERY tier. STYLING the
+    // photo into the board's art style is a membership perk — free accounts
+    // get a friendly join CTA instead of a render.
+    if (!isRaw) {
+      const gate = await requireStyling(db, { user: auth.user, childId });
+      if (!gate.ok) {
+        res.status(402).json({ error: 'needs_subscription', tier: gate.ent.tier,
+                               detail: NEEDS_SUBSCRIPTION_DETAIL });
+        return;
+      }
+    }
     const credits = isRaw ? 0 : (isPerson ? COST.person : COST.nano);
     if (credits > 0) {
     const charge = await chargeForGeneration(db, auth.user, { credits, reason: isPerson ? 'tile:person' : 'tile:photo', ref: childId });

@@ -2727,7 +2727,43 @@
   document.getElementById('login-submit').addEventListener('click', attemptLogin);
   document.getElementById('login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
 
+  // ── Membership entitlement (from /api/sync) ──────────────────────────────
+  // What this family's tier can do — drives the friendly "join a membership"
+  // popups instead of dead buttons or raw server errors. Persisted so an
+  // offline board keeps the last-known answer; null = unknown → permissive
+  // (the server still enforces).
+  let ENT = (() => { try { return JSON.parse(localStorage.getItem('aacEntitlement') || 'null'); } catch (_) { return null; } })();
+  function noteEntitlement(data) {
+    if (!data || !data.entitlement) return;
+    ENT = data.entitlement;
+    try { localStorage.setItem('aacEntitlement', JSON.stringify(ENT)); } catch (_) {}
+  }
+  function entAllows(feature) { return !ENT || ENT[feature] !== false; }
+  function showMembershipUpsell(title, msg) {
+    let o = document.getElementById('upsell-overlay');
+    if (!o) {
+      o = document.createElement('div'); o.id = 'upsell-overlay';
+      o.style.cssText = 'position:fixed;inset:0;z-index:2600;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:24px;';
+      o.innerHTML = '<div style="background:#fff;border-radius:22px;max-width:440px;padding:26px 24px;text-align:center;font-family:Fredoka,ui-rounded,system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.25);">'
+        + '<div style="font-size:40px;">✨</div>'
+        + '<div id="upsell-title" style="font-size:20px;font-weight:700;color:#ad1457;margin-top:6px;"></div>'
+        + '<div id="upsell-msg" style="font-size:14px;color:#4b5563;margin-top:10px;line-height:1.45;"></div>'
+        + '<div style="margin-top:18px;display:flex;gap:10px;justify-content:center;">'
+        + '<a id="upsell-store" style="background:#ff1493;color:#fff;font-weight:700;border-radius:999px;padding:11px 20px;text-decoration:none;font-size:14px;">See memberships</a>'
+        + '<button id="upsell-close" style="background:#fce4ec;color:#ad1457;font-weight:700;border:none;border-radius:999px;padding:11px 20px;font-size:14px;cursor:pointer;">Not now</button>'
+        + '</div></div>';
+      document.body.appendChild(o);
+      o.querySelector('#upsell-close').addEventListener('click', () => { o.style.display = 'none'; });
+      o.addEventListener('click', (e) => { if (e.target === o) o.style.display = 'none'; });
+    }
+    o.querySelector('#upsell-title').textContent = title;
+    o.querySelector('#upsell-msg').textContent = msg;
+    o.querySelector('#upsell-store').href = '/store.html?child=' + encodeURIComponent(CHILD_ID);
+    o.style.display = 'flex';
+  }
+
   async function hydrateFromServer(data) {
+    noteEntitlement(data);
     // Clear + write the whole server snapshot in ONE transaction. Writing each
     // tile as its own transaction floods iOS Safari's IndexedDB and can stall
     // or abort, leaving the board blank — especially on a fresh device with no
@@ -2815,6 +2851,7 @@
       const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID) + (showAll ? '&showAllVocab=1' : ''));
       if (!r.ok) return;
       const data = await r.json();
+      noteEntitlement(data);   // tier flags refresh even when the board itself is unchanged
       if (!(data.categories || []).length && !(data.items || []).length) return;   // never wipe to empty
       const sig = structSig(data);
       if (sig === _lastSig) { precacheAllMedia(); return; }   // unchanged → just keep media warm (retries failures)
@@ -3148,6 +3185,11 @@
       });
       if (!ir.ok) {
         const d = await ir.text();
+        if (ir.status === 402 && /needs_subscription/.test(d)) {
+          showMembershipUpsell('Styled tiles are a membership feature',
+            'Making pictures in ' + (window.CHILD_NAME || 'your child') + '’s own art style is part of every My World membership, from $4.99/month. You can still add the photo as-is for free — and everything already made stays yours forever.');
+          throw new Error('Styling needs a membership — you can still upload the photo as-is.');
+        }
         const hint = /must be verified/i.test(d)
           ? "OpenAI organization isn't verified for image generation. Open platform.openai.com → Settings → Organization → Verify, then try again."
           : d.slice(0, 200);
@@ -3576,6 +3618,7 @@
     if (!bulkItems.length) { errEl.textContent = 'Add some photos first.'; return; }
     const style = document.getElementById('bulk-style').value;
     btn.disabled = true; const prev = btn.textContent;
+    let stylingGated = false;
     for (let i = 0; i < bulkItems.length; i++) {
       const it = bulkItems[i];
       btn.textContent = 'Working…';
@@ -3586,14 +3629,19 @@
           const dr = await apiFetch('/api/describe-image', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
           if (dr.ok) { const d = await dr.json(); if (d.label) it.label = d.label; if (d.pronunciation) it.pronunciation = d.pronunciation; }
         } catch (_) {}
-        if (style) {
+        if (style && !stylingGated) {
           try {
             const ir = await apiFetch('/api/generate-image?label=' + encodeURIComponent(it.label || '') + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(CHILD_ID), { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
             if (ir.ok) { const blob = await ir.blob(); URL.revokeObjectURL(it.previewUrl); it.file = blob; it.previewUrl = URL.createObjectURL(blob); }
+            else if (ir.status === 402 && /needs_subscription/.test(await ir.text())) stylingGated = true;
           } catch (_) {}
         }
         renderBulkList();
       } catch (_) {}
+    }
+    if (stylingGated) {
+      showMembershipUpsell('Styled tiles are a membership feature',
+        'Your photos were added as-is (free on every plan). Making them into your child’s art style is part of My World memberships, from $4.99/month.');
     }
     prog.textContent = '✅ AI done — review the names and Save.';
     btn.disabled = false; btn.textContent = prev;
@@ -5460,6 +5508,11 @@
   }
   async function setListenMode(on) {
     if (on && (G.running || SLIDE.running || ROUTINE.active || _messagePlaying)) return; // never hijack an activity
+    if (on && !entAllows('stt')) {
+      showMembershipUpsell('Speech-to-text is a membership feature',
+        'Turn spoken words into picture tiles in real time — part of every My World membership, from $4.99/month. Everything you already made stays yours forever.');
+      return;
+    }
     if (on === _listening) return;
     _listening = on;
     document.body.classList.toggle('listening', on);

@@ -137,11 +137,27 @@ export default async function handler(req, res) {
       }
     }
 
+    // Membership flags for the boards (web + native): what this FAMILY's tier
+    // can do, so the UIs can show a friendly join-a-membership popup at the
+    // gate instead of a mysterious server error. Resolved from the board
+    // owner's account (the board itself authenticates as a device).
+    let entitlementOut = null;
+    try {
+      const { entitlementFor, boardOwnerId } = await import('./_lib/credits.js');
+      const ownerId = await boardOwnerId(db, childId);
+      const ent = await entitlementFor(db, ownerId || auth.user);
+      const member = !!ent.sub || ent.tier === 'admin';
+      entitlementOut = { tier: ent.tier, label: ent.label,
+                         stt: !!ent.features.stt, autoTeach: !!ent.features.autoTeach,
+                         styling: member };
+    } catch (_) { /* flags are advisory — sync must never fail over them */ }
+
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
       categories: cats.map(rowToCategory),
       items: outItems.map(rowToItem),
       ageFilter: { applied: !!appliedBand, band: appliedBand, hiddenCount: items.length - outItems.length },
+      entitlement: entitlementOut,
     });
   } catch (err) {
     res.status(500).json({ error: 'Sync failed', detail: String(err.message || err) });
