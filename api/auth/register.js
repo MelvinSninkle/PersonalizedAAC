@@ -244,6 +244,17 @@ export default async function handler(req, res) {
     `;
     const user = rows[0];
 
+    // Record consent whenever the client sent it (native onboarding gates its
+    // create buttons on the consent switch and sends these fields).
+    if (body.consent === true) {
+      try {
+        await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS consented_at TIMESTAMPTZ`;
+        await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version TEXT`;
+        const cv = typeof body.consentVersion === 'string' ? body.consentVersion.slice(0, 20) : '2026-07';
+        await db`UPDATE users SET consented_at = NOW(), consent_version = ${cv} WHERE id = ${user.id}`;
+      } catch (_) { /* best-effort */ }
+    }
+
     // Self-signup path: drop a session cookie so the very next request from
     // accept-invite.html can call /api/access/respond as the new user.
     if (invitePayload) {
