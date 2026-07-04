@@ -2762,6 +2762,54 @@
     o.style.display = 'flex';
   }
 
+  // ── One-time device notice ────────────────────────────────────────────────
+  // Different devices can do different things (Fire tablets have no speech
+  // service; browsers vary) — say so ONCE, up front, in parent-friendly words,
+  // instead of letting a dead microphone feel like a bug.
+  function maybeShowDeviceNotice() {
+    const KEY = 'aacDeviceNotice:v1';
+    try { if (localStorage.getItem(KEY)) return; } catch (_) {}
+    const shell = window.MyWorldShell || null;
+    const isAndroidUA = /Android/i.test(navigator.userAgent);
+    let title = null, msg = null;
+    if (shell && shell.platform === 'fire') {
+      title = 'Welcome to My World on your Fire tablet! 🎉';
+      msg = 'Everything works here — talking tiles, games, Teach Me, automatic teaching, and all of your personalized pictures. '
+          + 'Two things Fire tablets can’t do: real-time speech-to-text (Fire OS doesn’t include a speech service) and app notifications. '
+          + 'Memberships and credits are managed right here on the web store.';
+    } else if (shell && shell.platform === 'android') {
+      title = 'Welcome to My World on Android! 🎉';
+      msg = (shell.speech
+          ? 'Everything works on this device — including speech-to-text listening mode. '
+          : 'Everything works on this device except speech-to-text (no speech service was found). ')
+          + 'Memberships and credits are managed right here on the web store.';
+    } else if (isAndroidUA) {
+      title = 'Using My World in the browser';
+      msg = 'The whole board works right here. Two tips: speech-to-text listening mode needs the Chrome browser (or the My World app), '
+          + 'and you can “Add to Home screen” from the browser menu for a fullscreen, app-like board.';
+    }
+    if (!title) return;
+    try { localStorage.setItem(KEY, '1'); } catch (_) {}
+    let o = document.getElementById('device-notice');
+    if (!o) {
+      o = document.createElement('div'); o.id = 'device-notice';
+      o.style.cssText = 'position:fixed;inset:0;z-index:2590;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:24px;';
+      o.innerHTML = '<div style="background:#fff;border-radius:22px;max-width:460px;padding:26px 24px;text-align:center;font-family:Fredoka,ui-rounded,system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.25);">'
+        + '<div style="font-size:40px;">📱</div>'
+        + '<div id="device-notice-title" style="font-size:19px;font-weight:700;color:#ad1457;margin-top:6px;"></div>'
+        + '<div id="device-notice-msg" style="font-size:14px;color:#4b5563;margin-top:10px;line-height:1.45;text-align:left;"></div>'
+        + '<button id="device-notice-ok" style="margin-top:18px;background:#ff1493;color:#fff;font-weight:700;border:none;border-radius:999px;padding:11px 26px;font-size:14px;cursor:pointer;">Got it</button>'
+        + '</div>';
+      document.body.appendChild(o);
+      o.querySelector('#device-notice-ok').addEventListener('click', () => { o.style.display = 'none'; });
+    }
+    o.querySelector('#device-notice-title').textContent = title;
+    o.querySelector('#device-notice-msg').textContent = msg;
+    o.style.display = 'flex';
+  }
+  // Delayed so the shell's shim (injected on page finish) has set MyWorldShell.
+  setTimeout(maybeShowDeviceNotice, 2500);
+
   async function hydrateFromServer(data) {
     noteEntitlement(data);
     // Clear + write the whole server snapshot in ONE transaction. Writing each
@@ -5470,7 +5518,60 @@
     wrap.scrollLeft = wrap.scrollWidth;   // keep the newest words in view (slider)
   }
   function speechPlugin() {
-    return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition) || null;
+    // 1) A native shell (iOS Capacitor, or the Android shell's shim — both
+    //    install the same plugin surface).
+    const cap = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition) || null;
+    if (cap) return cap;
+    // 2) Browser fallback: Chrome's built-in Web Speech API wrapped in the
+    //    SAME surface, so listening mode also works with no app installed
+    //    (Chrome on Android/desktop; not Firefox, not most WebViews).
+    return webSpeechShim();
+  }
+  let _wsShim = null;
+  function webSpeechShim() {
+    const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Ctor) return null;
+    if (_wsShim) return _wsShim;
+    const listeners = {};
+    let rec = null;
+    const emit = (ev, d) => (listeners[ev] || []).forEach((cb) => { try { cb(d); } catch (_) {} });
+    _wsShim = {
+      async requestPermissions() {
+        try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach(t => t.stop()); } catch (_) {}
+        return { speechRecognition: 'granted' };
+      },
+      async addListener(ev, cb) {
+        (listeners[ev] = listeners[ev] || []).push(cb);
+        return { remove() { const i = (listeners[ev] || []).indexOf(cb); if (i >= 0) listeners[ev].splice(i, 1); } };
+      },
+      async removeAllListeners() {
+        Object.keys(listeners).forEach((k) => { listeners[k] = []; });
+        if (rec) { try { rec.onend = null; rec.stop(); } catch (_) {} rec = null; }
+      },
+      // One utterance per session (continuous:false) + 'stopped' on end — the
+      // board's kickSpeech restart loop then matches the native plugin's cadence.
+      async start(opts) {
+        if (rec) { try { rec.onend = null; rec.stop(); } catch (_) {} }
+        rec = new Ctor();
+        rec.lang = (opts && opts.language) || 'en-US';
+        rec.interimResults = true;
+        rec.continuous = false;
+        rec.onresult = (e) => {
+          let txt = '';
+          for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript + ' ';
+          txt = txt.trim();
+          if (txt) emit('partialResults', { matches: [txt] });
+        };
+        rec.onend = () => emit('listeningState', { status: 'stopped' });
+        rec.onerror = () => {};
+        try { rec.start(); } catch (_) { emit('listeningState', { status: 'stopped' }); }
+      },
+      async stop() {
+        if (rec) { try { rec.onend = null; rec.stop(); } catch (_) {} rec = null; }
+        emit('listeningState', { status: 'stopped' });
+      },
+    };
+    return _wsShim;
   }
   async function kickSpeech() {
     const SR = speechPlugin(); if (!SR || !_listening) return;
@@ -5481,7 +5582,16 @@
   async function startSpeech() {
     const SR = speechPlugin();
     const hint = document.getElementById('listen-hint');
-    if (!SR) { if (hint) hint.textContent = 'Open the installed app to use the mic'; return; }
+    if (!SR) {
+      if (hint) {
+        // Say WHY, per device: Fire tablets ship no speech service at all;
+        // non-Chrome browsers lack the Web Speech API.
+        hint.textContent = (window.MyWorldShell && window.MyWorldShell.speech === false)
+          ? 'This device doesn’t support speech-to-text — everything else works!'
+          : 'Speech-to-text needs the My World app or the Chrome browser';
+      }
+      return;
+    }
     try {
       try { await SR.requestPermissions(); } catch (_) {}
       try { await SR.removeAllListeners(); } catch (_) {}
@@ -5554,6 +5664,96 @@
   // enough picture-tiles to actually play, falls back to Everything, and otherwise
   // reports an error — so a remote launch never silently no-ops on a thin category
   // (the bug where "Start" on the phone appeared to do nothing).
+  // ===== AUTO-TEACH runner — parity with the iPad's AutoTeachRunner =========
+  // Polls /api/auto-teach/next every ~5 minutes; the SERVER owns every gate
+  // (enabled, membership, quiet hours, cooldown, budget, child-active). On a
+  // "go", the activity is STAGED behind a friendly 10-second "Learning time!"
+  // countdown a grown-up can ✕ to skip; on fire, every batch slug is ticked
+  // with the auto source (this is what arms the server's cooldown + budget),
+  // then the normal slideshow/game machinery takes over.
+  const AT = { staged: null, timer: null, cd: null };
+  function autoTeachStart() {
+    if (AT.timer) return;
+    const loop = async () => {
+      try { await autoTeachTick(); } catch (_) {}
+      AT.timer = setTimeout(loop, 5 * 60 * 1000);
+    };
+    // Stagger the first poll so several devices don't race the same minute.
+    AT.timer = setTimeout(loop, 15000 + Math.random() * 45000);
+  }
+  async function autoTeachTick() {
+    if (AT.staged || editMode || G.running || SLIDE.running || TEACH.running || ROUTINE.active || _listening || _messagePlaying) return;
+    if (document.hidden) return;                        // backgrounded tab never interrupts
+    if (await autoTeachTrigger('exposure')) return;     // high-frequency lane first
+    await autoTeachTrigger('game');                     // then the once-a-day game window
+  }
+  async function autoTeachTrigger(mode) {
+    let tz = '';
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_) {}
+    let d = null;
+    try {
+      const r = await apiFetch('/api/auto-teach/next', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: CHILD_ID, mode, tz }),
+      });
+      if (!r.ok) return false;
+      d = await r.json();
+    } catch (_) { return false; }
+    if (!d || !d.ok || !(d.tiles || []).length || !d.session) return false;
+    autoTeachStage({ mode, slugs: d.tiles.map((t) => t.slug), session: d.session });
+    return true;
+  }
+  function autoTeachStage(staged) {
+    AT.staged = staged;
+    let o = document.getElementById('at-card');
+    if (!o) {
+      o = document.createElement('div'); o.id = 'at-card';
+      o.style.cssText = 'position:fixed;inset:0;z-index:2550;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:24px;';
+      o.innerHTML = '<div style="background:#fff;border-radius:26px;max-width:420px;padding:30px 26px;text-align:center;font-family:Fredoka,ui-rounded,system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.25);position:relative;">'
+        + '<button id="at-skip" aria-label="Skip" style="position:absolute;top:10px;right:12px;width:40px;height:40px;border-radius:50%;border:none;background:#fce4ec;color:#ad1457;font-size:18px;cursor:pointer;">✕</button>'
+        + '<div style="font-size:52px;">📚</div>'
+        + '<div style="font-size:24px;font-weight:700;color:#ad1457;margin-top:6px;">Learning time!</div>'
+        + '<div id="at-sub" style="font-size:15px;color:#6b7280;margin-top:8px;"></div>'
+        + '</div>';
+      document.body.appendChild(o);
+      o.querySelector('#at-skip').addEventListener('click', () => autoTeachConsume(false));
+    }
+    o.style.display = 'flex';
+    let left = 10;
+    const sub = o.querySelector('#at-sub');
+    const label = staged.mode === 'game' ? 'A quick game is starting' : 'A picture show is starting';
+    sub.textContent = `${label} in ${left}…`;
+    clearInterval(AT.cd);
+    AT.cd = setInterval(() => {
+      left--;
+      if (left > 0) { sub.textContent = `${label} in ${left}…`; return; }
+      clearInterval(AT.cd); AT.cd = null;
+      autoTeachConsume(true);
+    }, 1000);
+  }
+  function autoTeachConsume(fired) {
+    const s = AT.staged; AT.staged = null;
+    clearInterval(AT.cd); AT.cd = null;
+    const o = document.getElementById('at-card'); if (o) o.style.display = 'none';
+    if (!s || !fired) return;
+    // Tick FIRST — the auto_* source arms cooldown/budget/one-game-per-day.
+    for (const slug of s.slugs) {
+      apiFetch('/api/exposure-tick', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: CHILD_ID, skillSlug: slug, source: s.session.source }),
+      }).catch(() => {});
+    }
+    const scope = 'slugs:' + s.slugs.join(',');
+    if (s.mode === 'game') {
+      startFromCmd({ mode: 'game', scope, limitMin: s.session.sessionMaxMin, sample: 6 });
+    } else {
+      startFromCmd({ mode: 'exposure_slideshow', scope,
+                     secondsPerImage: s.session.microSec, labelStyle: s.session.labelStyle,
+                     limitMin: s.session.sessionMaxMin });
+    }
+  }
+  autoTeachStart();
+
   async function startFromCmd(cmd) {
     if (G.running || SLIDE.running || TEACH.running || ROUTINE.active) return;   // one activity at a time
     if (Array.isArray(cmd.steps) && cmd.steps.length) { runRoutine(cmd.steps); return; }

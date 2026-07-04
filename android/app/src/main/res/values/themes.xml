@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- No action bar; the web app IS the chrome. Window background matches
+         the board's yellow "needs" strip so the first paint doesn't flash white. -->
+    <style name="Theme.MyWorld" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@color/board_bg</item>
+        <item name="android:statusBarColor">@color/brand_pink</item>
+        <item name="android:navigationBarColor">@color/board_bg</item>
+    </style>
+</resources>
