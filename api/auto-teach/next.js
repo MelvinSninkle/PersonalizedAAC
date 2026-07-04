@@ -13,6 +13,7 @@ import { canAccessChild } from '../_lib/access.js';
 import { sql } from '../_lib/db.js';
 import { loadSettings, saveTimezone, localParts, scheduleReady, CADENCE, TIER_CAPS,
          inBlackout, recentlyActive, lastTriggerAt, todaysBudgetUsed, pickNextBatch } from '../_lib/auto-teach.js';
+import { entitlementFor, boardOwnerId } from '../_lib/credits.js';
 
 const VALID_MODES = new Set(['exposure', 'game']);
 
@@ -37,6 +38,17 @@ export default async function handler(req, res) {
     if (!settings.enabled) {
       res.status(200).json({ ok: false, reason: 'disabled' }); return;
     }
+
+    // Automatic teaching is a membership feature — the FAMILY's entitlement
+    // (board owner's account) decides, since this poll comes from the child's
+    // device. The admin tier-override simulator gates here too.
+    try {
+      const ownerId = await boardOwnerId(db, childId);
+      const ent = await entitlementFor(db, ownerId ? { uid: ownerId } : auth.user);
+      if (!ent.features.autoTeach) {
+        res.status(200).json({ ok: false, reason: 'needs_subscription' }); return;
+      }
+    } catch (_) { /* entitlement lookup must never brick the poll */ }
 
     // All gates. Any closed gate → refusal with a reason the iPad can log.
     const csRow = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];

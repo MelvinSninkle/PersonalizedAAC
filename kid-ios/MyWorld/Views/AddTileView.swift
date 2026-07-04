@@ -80,6 +80,7 @@ struct AddTileView: View {
                         PreGenerateSheet(
                             photoJPEG: pending.data,
                             destination: destinationName(),
+                            stylingAllowed: board.stylingAllowed,
                             onGenerate: { name, detail, raw in
                                 pendingCapture = nil
                                 enqueue(pending.data, name: name, detail: detail, raw: raw)
@@ -508,6 +509,9 @@ struct PendingCapture: Identifiable {
 private struct PreGenerateSheet: View {
     let photoJPEG: Data
     let destination: String
+    /// False on the free tier: styling is a membership perk, so the sheet
+    /// locks to "use my photo as-is" (free on every plan) with a join note.
+    var stylingAllowed: Bool = true
     let onGenerate: (_ name: String, _ detail: String, _ raw: Bool) -> Void
     let onCancel: () -> Void
 
@@ -570,6 +574,19 @@ private struct PreGenerateSheet: View {
                         }
                         .tint(Color(hex: "#ff1493"))
                         .padding(.top, 4)
+                        .disabled(!stylingAllowed)
+
+                        if !stylingAllowed {
+                            // Free tier: the photo still lands (as-is, free) —
+                            // and here's what a membership would add.
+                            (Text("✨ Want this drawn in your child's art style? ")
+                                .fontWeight(.bold)
+                             + Text("Styled tiles are part of My World memberships, from $4.99/month — join in the parent app under Credits & Store. Everything you've already made is yours forever."))
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color(hex: "#ad1457"))
+                                .padding(12)
+                                .background(Color(hex: "#fce4ec"), in: RoundedRectangle(cornerRadius: 12))
+                        }
                     }
                     .padding(16)
                 }
@@ -586,6 +603,7 @@ private struct PreGenerateSheet: View {
                 }
             }
             .task {
+                if !stylingAllowed { useAsIs = true }   // free tier: as-is is the (locked) default
                 // Tiny delay so the keyboard doesn't fight the sheet animation.
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 nameFocused = true

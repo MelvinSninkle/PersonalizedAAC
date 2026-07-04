@@ -18,6 +18,8 @@ import { createHash } from 'node:crypto';
 import { put, get } from '@vercel/blob';
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { entitlementFor, boardOwnerId } from './_lib/credits.js';
+import { voiceCharsThisMonth, logVoiceGeneration } from './_lib/voice-usage.js';
 
 const MAX_TEXT_LEN = 300;
 
@@ -111,7 +113,34 @@ export default async function handler(req, res) {
     }
   }
 
-  // 2) MISS — call ElevenLabs.
+  // 2) MISS — this is the only path that costs money, so it's the only path
+  //    that's metered. Attribute the spend to the signed-in account, else the
+  //    board owner's account (the kid board authenticates as a device).
+  //    Enforce the tier's monthly voice budget: cached phrases above never
+  //    count; only NEW synthesis does.
+  const meterChildId = String((typeof body.childId === 'string' && body.childId) || (req.query && req.query.childId) || '').slice(0, 64);
+  let meterUid = Number(auth.user && (auth.user.uid || auth.user.id)) || null;
+  let db2 = null;
+  try {
+    db2 = sql();
+    if (!meterUid && meterChildId) meterUid = await boardOwnerId(db2, meterChildId);
+    const ent = await entitlementFor(db2, meterUid ? { uid: meterUid, role: auth.user && auth.user.role } : (auth.user || null));
+    const cap = ent.features.voiceCharsPerMonth;
+    if (Number.isFinite(cap)) {
+      const used = meterUid ? await voiceCharsThisMonth(db2, meterUid) : 0;
+      if (cap <= 0 || used + text.length > cap) {
+        res.status(402).json({
+          error: 'voice_limit',
+          detail: cap <= 0
+            ? 'Speech mode is part of My World memberships — subscribe to turn spoken words into tiles.'
+            : 'This month’s voice budget is used up. Already-spoken words keep working; new ones resume next month (or upgrade for a bigger budget).',
+          used, cap: cap <= 0 ? 0 : cap, tier: ent.tier,
+        });
+        return;
+      }
+    }
+  } catch (_) { /* metering must never take speech down — fall through */ }
+
   const elevenBody = { text, model_id: modelId };
   if (voiceSettings) elevenBody.voice_settings = voiceSettings;
 
@@ -144,6 +173,15 @@ export default async function handler(req, res) {
   try {
     await put(key, buffer, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });
   } catch (_) { /* logging-only path; caller already has its audio */ }
+
+  // 4) Book the spend (admin Usage panel + the monthly tier budget). The
+  //    client may tag what kind of speech this was (listen | teach | board |
+  //    reward); untagged calls book as 'other'.
+  try {
+    const kind = ['listen', 'teach', 'board', 'reward'].includes(String(body.kind || '')) ? String(body.kind) : 'other';
+    if (db2) await logVoiceGeneration(db2, { userId: meterUid, childId: meterChildId || null,
+                                             chars: text.length, kind, voiceId, text });
+  } catch (_) { /* metering must never take speech down */ }
 
   res.setHeader('Content-Type', 'audio/mpeg');
   res.setHeader('Content-Length', buffer.length);

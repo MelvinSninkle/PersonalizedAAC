@@ -171,12 +171,16 @@
     50% { box-shadow: 0 0 0 9px rgba(220,38,38,0); }
   }
   @media (max-width: 749px) { header button.btn-listen, header button.btn-play-req, header button.btn-teach { width: 44px; height: 44px; font-size: 22px; } }
-  /* Listening mode: a one-tile-high live strip takes over the branding spot. */
+  /* Listening mode TAKES OVER the top bar: title, Teach, Play, and the lock all
+     hide (a parent doesn't need to unlock mid-listen), leaving exactly ONE
+     control — the red pulsing stop button — followed by the live tile strip.
+     No second mic glyph next to it; two icons on top of each other read as
+     one confusing blob. */
   #listen-bar { display: none; }
-  body.listening .hdr-center h1, body.listening .btn-play-req, body.listening .btn-teach { display: none; }
+  body.listening .hdr-center h1, body.listening .btn-play-req, body.listening .btn-teach,
+  body.listening #login-btn { display: none; }
+  body.listening #listen-btn { margin-right: 10px; }
   body.listening #listen-bar { display: flex; align-items: center; gap: 10px; width: 100%; max-width: min(96vw, 1100px); }
-  #listen-mic { font-size: 26px; flex: 0 0 auto; animation: listenPulse 1.4s ease-in-out infinite; }
-  @keyframes listenPulse { 0%, 100% { opacity: .45; transform: scale(1); } 50% { opacity: 1; transform: scale(1.12); } }
   #listen-tiles { display: flex; align-items: center; gap: 8px; overflow-x: auto; flex: 1 1 auto; padding: 4px 2px; scrollbar-width: none; }
   #listen-tiles::-webkit-scrollbar { display: none; }
   .listen-chip { flex: 0 0 auto; height: 92px; width: 92px; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.14); overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -1070,7 +1074,6 @@
     <button id="teach-btn" class="btn-teach" aria-label="Teach me" title="Watch and listen — the board teaches the words you were just looking at">📖</button>
     <button id="play-request-btn" class="btn-play-req" aria-label="Play a game" title="Play a quick game about what you were just looking at">🙋</button>
     <div id="listen-bar" aria-live="polite">
-      <span id="listen-mic" aria-hidden="true">🎙️</span>
       <div id="listen-tiles"></div>
       <span id="listen-hint">Listening…</span>
     </div>
@@ -2724,7 +2727,43 @@
   document.getElementById('login-submit').addEventListener('click', attemptLogin);
   document.getElementById('login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
 
+  // ── Membership entitlement (from /api/sync) ──────────────────────────────
+  // What this family's tier can do — drives the friendly "join a membership"
+  // popups instead of dead buttons or raw server errors. Persisted so an
+  // offline board keeps the last-known answer; null = unknown → permissive
+  // (the server still enforces).
+  let ENT = (() => { try { return JSON.parse(localStorage.getItem('aacEntitlement') || 'null'); } catch (_) { return null; } })();
+  function noteEntitlement(data) {
+    if (!data || !data.entitlement) return;
+    ENT = data.entitlement;
+    try { localStorage.setItem('aacEntitlement', JSON.stringify(ENT)); } catch (_) {}
+  }
+  function entAllows(feature) { return !ENT || ENT[feature] !== false; }
+  function showMembershipUpsell(title, msg) {
+    let o = document.getElementById('upsell-overlay');
+    if (!o) {
+      o = document.createElement('div'); o.id = 'upsell-overlay';
+      o.style.cssText = 'position:fixed;inset:0;z-index:2600;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:24px;';
+      o.innerHTML = '<div style="background:#fff;border-radius:22px;max-width:440px;padding:26px 24px;text-align:center;font-family:Fredoka,ui-rounded,system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.25);">'
+        + '<div style="font-size:40px;">✨</div>'
+        + '<div id="upsell-title" style="font-size:20px;font-weight:700;color:#ad1457;margin-top:6px;"></div>'
+        + '<div id="upsell-msg" style="font-size:14px;color:#4b5563;margin-top:10px;line-height:1.45;"></div>'
+        + '<div style="margin-top:18px;display:flex;gap:10px;justify-content:center;">'
+        + '<a id="upsell-store" style="background:#ff1493;color:#fff;font-weight:700;border-radius:999px;padding:11px 20px;text-decoration:none;font-size:14px;">See memberships</a>'
+        + '<button id="upsell-close" style="background:#fce4ec;color:#ad1457;font-weight:700;border:none;border-radius:999px;padding:11px 20px;font-size:14px;cursor:pointer;">Not now</button>'
+        + '</div></div>';
+      document.body.appendChild(o);
+      o.querySelector('#upsell-close').addEventListener('click', () => { o.style.display = 'none'; });
+      o.addEventListener('click', (e) => { if (e.target === o) o.style.display = 'none'; });
+    }
+    o.querySelector('#upsell-title').textContent = title;
+    o.querySelector('#upsell-msg').textContent = msg;
+    o.querySelector('#upsell-store').href = '/store.html?child=' + encodeURIComponent(CHILD_ID);
+    o.style.display = 'flex';
+  }
+
   async function hydrateFromServer(data) {
+    noteEntitlement(data);
     // Clear + write the whole server snapshot in ONE transaction. Writing each
     // tile as its own transaction floods iOS Safari's IndexedDB and can stall
     // or abort, leaving the board blank — especially on a fresh device with no
@@ -2812,6 +2851,7 @@
       const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID) + (showAll ? '&showAllVocab=1' : ''));
       if (!r.ok) return;
       const data = await r.json();
+      noteEntitlement(data);   // tier flags refresh even when the board itself is unchanged
       if (!(data.categories || []).length && !(data.items || []).length) return;   // never wipe to empty
       const sig = structSig(data);
       if (sig === _lastSig) { precacheAllMedia(); return; }   // unchanged → just keep media warm (retries failures)
@@ -3145,6 +3185,11 @@
       });
       if (!ir.ok) {
         const d = await ir.text();
+        if (ir.status === 402 && /needs_subscription/.test(d)) {
+          showMembershipUpsell('Styled tiles are a membership feature',
+            'Making pictures in ' + (window.CHILD_NAME || 'your child') + '’s own art style is part of every My World membership, from $4.99/month. You can still add the photo as-is for free — and everything already made stays yours forever.');
+          throw new Error('Styling needs a membership — you can still upload the photo as-is.');
+        }
         const hint = /must be verified/i.test(d)
           ? "OpenAI organization isn't verified for image generation. Open platform.openai.com → Settings → Organization → Verify, then try again."
           : d.slice(0, 200);
@@ -3573,6 +3618,7 @@
     if (!bulkItems.length) { errEl.textContent = 'Add some photos first.'; return; }
     const style = document.getElementById('bulk-style').value;
     btn.disabled = true; const prev = btn.textContent;
+    let stylingGated = false;
     for (let i = 0; i < bulkItems.length; i++) {
       const it = bulkItems[i];
       btn.textContent = 'Working…';
@@ -3583,14 +3629,19 @@
           const dr = await apiFetch('/api/describe-image', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
           if (dr.ok) { const d = await dr.json(); if (d.label) it.label = d.label; if (d.pronunciation) it.pronunciation = d.pronunciation; }
         } catch (_) {}
-        if (style) {
+        if (style && !stylingGated) {
           try {
             const ir = await apiFetch('/api/generate-image?label=' + encodeURIComponent(it.label || '') + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(CHILD_ID), { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
             if (ir.ok) { const blob = await ir.blob(); URL.revokeObjectURL(it.previewUrl); it.file = blob; it.previewUrl = URL.createObjectURL(blob); }
+            else if (ir.status === 402 && /needs_subscription/.test(await ir.text())) stylingGated = true;
           } catch (_) {}
         }
         renderBulkList();
       } catch (_) {}
+    }
+    if (stylingGated) {
+      showMembershipUpsell('Styled tiles are a membership feature',
+        'Your photos were added as-is (free on every plan). Making them into your child’s art style is part of My World memberships, from $4.99/month.');
     }
     prog.textContent = '✅ AI done — review the names and Save.';
     btn.disabled = false; btn.textContent = prev;
@@ -5181,7 +5232,8 @@
       o = document.createElement('div'); o.id = 'teach-overlay';
       o.style.cssText = 'position:fixed;inset:0;z-index:2300;background:#fff7fb;display:none;flex-direction:column;align-items:center;justify-content:center;';
       o.innerHTML = '<img id="teach-img" alt="" style="max-width:88vw;max-height:56vh;object-fit:contain;border-radius:22px;background:#fff;">'
-        + '<div id="teach-word" style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;color:#ad1457;font-size:clamp(30px,6vw,60px);font-weight:700;margin-top:20px;text-align:center;padding:0 24px;line-height:1.15;"></div>'
+        // No separate word element — the tile art already carries its caption
+        // band, and repeating the word under it read as clutter.
         + '<div id="teach-clue" style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;color:#6b7280;font-size:clamp(17px,3vw,28px);font-weight:600;margin-top:12px;text-align:center;padding:0 40px;line-height:1.3;min-height:2.6em;"></div>'
         + '<div id="teach-progress" style="position:absolute;top:24px;left:20px;font-family:Fredoka,ui-rounded,system-ui,sans-serif;color:#d6a8c6;font-weight:600;font-size:15px;"></div>'
         + '<button id="teach-stop" aria-label="Stop" style="position:absolute;top:16px;right:18px;width:50px;height:50px;border-radius:50%;border:none;background:rgba(173,20,87,.12);color:#ad1457;font-size:24px;cursor:pointer;">✕</button>';
@@ -5199,13 +5251,14 @@
     const o = teachOverlay(); o.style.display = 'flex';
     publishLive('running', { mode: 'teach', scope });
     const deck = gShuffle(items.slice());
-    const img = document.getElementById('teach-img'), word = document.getElementById('teach-word'),
+    const img = document.getElementById('teach-img'),
           clueEl = document.getElementById('teach-clue'), prog = document.getElementById('teach-progress');
     for (let i = 0; i < deck.length && TEACH.running; i++) {
       const it = deck[i];
       prog.textContent = (i + 1) + ' / ' + deck.length;
-      word.textContent = it.label; clueEl.textContent = ''; img.removeAttribute('src');
+      clueEl.textContent = ''; img.removeAttribute('src');
       const iu = await getMediaURL(it.imageKey); if (iu) img.src = iu;
+      await teachSleep(350);   // let the new image settle on screen before the word plays
       // The word first — the tile's recorded audio when it has one, else TTS.
       let wu = null;
       if (it.soundKey) wu = await getMediaURL(it.soundKey);
@@ -5455,6 +5508,11 @@
   }
   async function setListenMode(on) {
     if (on && (G.running || SLIDE.running || ROUTINE.active || _messagePlaying)) return; // never hijack an activity
+    if (on && !entAllows('stt')) {
+      showMembershipUpsell('Speech-to-text is a membership feature',
+        'Turn spoken words into picture tiles in real time — part of every My World membership, from $4.99/month. Everything you already made stays yours forever.');
+      return;
+    }
     if (on === _listening) return;
     _listening = on;
     document.body.classList.toggle('listening', on);

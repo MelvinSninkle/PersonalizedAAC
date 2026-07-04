@@ -14,6 +14,7 @@ import { canAccessChild } from '../_lib/access.js';
 import { sql } from '../_lib/db.js';
 import { loadSettings, scheduleReady, CADENCE, TIER_CAPS, inBlackout, recentlyActive,
          lastTriggerAt, todaysBudgetUsed, masteryByCategory } from '../_lib/auto-teach.js';
+import { entitlementFor, boardOwnerId } from '../_lib/credits.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -51,12 +52,22 @@ export default async function handler(req, res) {
 
     const mastery = await masteryByCategory(db, childId);
 
+    // Membership gate (same check the /next picker enforces) so the parent
+    // panel can explain WHY auto-teach won't fire instead of looking broken.
+    let subscribed = true;
+    try {
+      const ownerId = await boardOwnerId(db, childId);
+      const ent = await entitlementFor(db, ownerId ? { uid: ownerId } : auth.user);
+      subscribed = !!ent.features.autoTeach;
+    } catch (_) {}
+
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
       settings,
       tier: { sessionMaxMin: tier.sessionMaxMin, microSec: tier.microSec },
       gates: {
         enabled: !!settings.enabled,
+        subscribed,
         scheduleReady: schedReady,
         inBlackout: blackout,
         recentlyActive: recent,

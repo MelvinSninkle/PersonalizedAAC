@@ -11,7 +11,9 @@ import StoreKit
 /// (idempotent per transaction id — safe to re-send on relaunch).
 ///
 /// Product ids must exist in App Store Connect:
-///   credits50/100/250/500/1000 (consumables), plus.monthly (auto-renew).
+///   credits50/100/250/500/1000 (consumables);
+///   starter.monthly / plus.monthly / pro.monthly (auto-renew, ONE subscription
+///   group so Apple handles upgrades/downgrades between tiers natively).
 struct StoreView: View {
     @Environment(AuthManager.self) private var auth
 
@@ -22,9 +24,14 @@ struct StoreView: View {
     @State private var loadFailed = false
     @State private var couponCode = ""
     @State private var redeeming = false
+    @State private var entitlement: APIClient.StoreEntitlement?
 
-    private static let productIDs = ["credits50", "credits100", "credits250", "credits500", "credits1000", "plus.monthly"]
+    private static let productIDs = ["starter.monthly", "plus.monthly", "pro.monthly",
+                                     "credits50", "credits100", "credits250", "credits500", "credits1000"]
     private let api = APIClient()
+
+    private var memberships: [Product] { products.filter { $0.type == .autoRenewable }.sorted { $0.price < $1.price } }
+    private var packs: [Product] { products.filter { $0.type != .autoRenewable }.sorted { $0.price < $1.price } }
 
     var body: some View {
         ScrollView {
@@ -51,7 +58,24 @@ struct StoreView: View {
                         ProgressView().frame(maxWidth: .infinity)
                     }
                 } else {
-                    ForEach(products, id: \.id) { p in
+                    if !memberships.isEmpty {
+                        Text("MEMBERSHIPS")
+                            .font(.system(size: 12, weight: .heavy))
+                            .foregroundStyle(Color(hex: "#ad1457"))
+                        Text("Every membership unlocks speech-to-text mode, automatic teaching, reporting, and data saving — they differ in monthly image credits and voice budget.")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                        ForEach(memberships, id: \.id) { p in
+                            membershipRow(p)
+                        }
+                        // Upgrades/downgrades/cancel live in Apple's own sheet.
+                        Link("Manage subscription", destination: URL(string: "https://apps.apple.com/account/subscriptions")!)
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    Text("CREDIT PACKS")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(Color(hex: "#ad1457"))
+                        .padding(.top, 4)
+                    ForEach(packs, id: \.id) { p in
                         productRow(p)
                     }
                 }
@@ -109,7 +133,7 @@ struct StoreView: View {
                 // Apple Review 3.1.2: the auto-renew terms + working links to
                 // the Terms and Privacy Policy must live in the app.
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("My World Plus is $9.99/month and adds 50 credits monthly. Payment is charged to your Apple ID at confirmation of purchase. The subscription renews automatically unless cancelled at least 24 hours before the end of the current period — manage or cancel any time in Settings → Apple ID → Subscriptions. Credits are non-refundable once spent on completed images, and every image you make is yours to keep.")
+                    Text("Memberships: My World Starter is $4.99/month (10 credits monthly), My World Plus is $9.99/month (50 credits monthly), and My World Pro is $19.99/month (150 credits monthly). Payment is charged to your Apple ID at confirmation of purchase. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period — manage, switch tiers, or cancel any time in Settings → Apple ID → Subscriptions. Credits are non-refundable once spent on completed images, and every image you make is yours to keep.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     HStack(spacing: 14) {
@@ -124,6 +148,9 @@ struct StoreView: View {
         }
         .navigationTitle("Credits & Store")
         .task { await load() }
+        // Warm the Word Shop's catalog cache while the parent is still on this
+        // screen, so tapping "Shop words for the board" opens instantly.
+        .task { await ShopCatalog.refresh(childId: auth.childSlug) }
     }
 
     private var header: some View {
@@ -135,18 +162,43 @@ struct StoreView: View {
                     .foregroundStyle(Color(hex: "#ad1457"))
             }
             Spacer()
+            if let e = entitlement {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("Your plan").font(.system(size: 13)).foregroundStyle(.secondary)
+                    Text(e.label)
+                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .foregroundStyle(e.tier == "free" ? Color.secondary : Color(hex: "#047857"))
+                }
+            }
+        }
+    }
+
+    private func membershipBlurb(_ id: String) -> String {
+        switch id {
+        case "starter.monthly": return "10 image credits/month · speech-to-text · auto-teach · reporting"
+        case "plus.monthly":    return "50 image credits/month · everything in Starter · a bigger voice budget"
+        case "pro.monthly":     return "150 image credits/month · everything in Plus · the biggest voice budget · first in line for new features"
+        default:                return "Membership"
         }
     }
 
     @ViewBuilder
-    private func productRow(_ p: Product) -> some View {
-        let isSub = p.type == .autoRenewable
+    private func membershipRow(_ p: Product) -> some View {
+        let isCurrent = entitlement?.tier == p.id
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(p.displayName.isEmpty ? p.id : p.displayName)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                Text(isSub ? "50 credits every month — packs stack on top"
-                           : p.description.isEmpty ? "Image credits" : p.description)
+                HStack(spacing: 6) {
+                    Text(p.displayName.isEmpty ? p.id : p.displayName)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                    if isCurrent {
+                        Text("CURRENT")
+                            .font(.system(size: 9, weight: .heavy))
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Capsule().fill(Color(hex: "#ecfdf5")))
+                            .foregroundStyle(Color(hex: "#047857"))
+                    }
+                }
+                Text(membershipBlurb(p.id))
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
             Spacer()
@@ -155,7 +207,40 @@ struct StoreView: View {
             } label: {
                 if busy == p.id { ProgressView() }
                 else {
-                    Text(isSub ? "\(p.displayPrice)/mo" : p.displayPrice)
+                    Text(isCurrent ? "Yours" : "\(p.displayPrice)/mo")
+                        .font(.system(size: 14, weight: .bold))
+                        .padding(.horizontal, 16).padding(.vertical, 9)
+                        .background(isCurrent ? Color(hex: "#f3c6dd") : Color(hex: "#ff1493"))
+                        .foregroundStyle(.white)
+                        .clipShape(Capsule())
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(busy != nil || isCurrent)
+        }
+        .padding(14)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14)
+            .stroke(isCurrent ? Color(hex: "#047857") : Color(hex: "#f3c6dd"), lineWidth: 2))
+    }
+
+    @ViewBuilder
+    private func productRow(_ p: Product) -> some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(p.displayName.isEmpty ? p.id : p.displayName)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                Text(p.description.isEmpty ? "Image credits" : p.description)
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button {
+                Task { await buy(p) }
+            } label: {
+                if busy == p.id { ProgressView() }
+                else {
+                    Text(p.displayPrice)
                         .font(.system(size: 14, weight: .bold))
                         .padding(.horizontal, 16).padding(.vertical, 9)
                         .background(Color(hex: "#ff1493"))
@@ -179,7 +264,19 @@ struct StoreView: View {
             products = try await Product.products(for: Self.productIDs)
                 .sorted { $0.price < $1.price }
         } catch { loadFailed = true }
+        // Silently re-post current entitlements so subscription RENEWALS land
+        // server-side (idempotent per transaction id) — this is what keeps the
+        // membership "active" month after month without the parent doing
+        // anything.
+        for await entitlement in Transaction.currentEntitlements {
+            if case .verified(let tx) = entitlement, tx.productType == .autoRenewable {
+                _ = await api.iapVerify(jws: entitlement.jwsRepresentation,
+                                        productId: tx.productID,
+                                        transactionId: String(tx.id))
+            }
+        }
         balance = await api.storeBalance()
+        entitlement = await api.storeEntitlement()
     }
 
     private func buy(_ p: Product) async {
@@ -195,6 +292,7 @@ struct StoreView: View {
                                                    transactionId: String(tx.id))
                 await tx.finish()
                 balance = await api.storeBalance()
+                entitlement = await api.storeEntitlement()
                 if let credited, credited > 0 { note = "Added ⭐\(credited) — thank you!" }
             case .userCancelled, .pending: break
             @unknown default: break

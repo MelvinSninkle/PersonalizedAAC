@@ -8,7 +8,7 @@ import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
 import { geminiKey, geminiDefaultModel, isGeminiModel, geminiCostCents, geminiGenerateImage } from './_lib/gemini.js';
 import { loadStyleGuide, loadChildStyleGuideId, SQUARE_RULE } from './_lib/onboarding-render.js';
-import { chargeForGeneration, COST } from './_lib/credits.js';
+import { chargeForGeneration, requireStyling, NEEDS_SUBSCRIPTION_DETAIL, COST } from './_lib/credits.js';
 
 // gpt-image-1.5 / -2 at high quality + input_fidelity:high can legitimately run
 // 60-120s for an edit. 300s is Vercel Pro's hard ceiling for serverless
@@ -168,6 +168,16 @@ export default async function handler(req, res) {
           AND COALESCE(actor_role, '') NOT IN ('onboarding_draft', 'onboarding_seed')`;
       if (((q[0] && q[0].n) || 0) >= DAILY_LIMIT) { res.status(429).json({ error: 'Daily image-generation limit reached', limit: DAILY_LIMIT }); return; }
     } catch (_) { /* quota check is best-effort — never block on a counting error */ }
+  }
+
+  // Styled generation is a membership perk — free accounts get the join CTA.
+  {
+    const gate = await requireStyling(sql(), { user: auth.user, childId });
+    if (!gate.ok) {
+      res.status(402).json({ error: 'needs_subscription', tier: gate.ent.tier,
+                             detail: NEEDS_SUBSCRIPTION_DETAIL });
+      return;
+    }
   }
 
   // Credits: one per generated image (nano banana tier). Admins exempt; parents

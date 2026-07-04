@@ -229,7 +229,7 @@ export default async function handler(req, res) {
       let soundKey = null;
       try {
         const voiceId = await loadChildVoiceId(db, childId);
-        const mp3 = await synthesizeVoice({ text: name, voiceId });
+        const mp3 = await synthesizeVoice({ text: name, voiceId, db, childId, kind: 'tile' });
         if (mp3) {
           soundKey = `onboarding/${childId}/voice/${randomUUID()}.mp3`;
           await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });

@@ -135,10 +135,27 @@
         <div class="sub">${money(p.cents)} · ${per}¢ per image credit</div>
         <button class="btn" data-sku="${esc(p.sku)}">Buy</button></div>`;
     }
-    html += `<div class="card"><h3>${esc(c.subscription.label)}</h3>
-      <div class="big">⭐ ${c.subscription.creditsPerPeriod}<span style="font-size:13px;font-weight:600;color:var(--muted);">/month</span></div>
-      <div class="sub">${money(c.subscription.cents)}/month · packs stack on top anytime</div>
-      <button class="btn" data-sku="${esc(c.subscription.sku)}">Subscribe</button></div>`;
+    // Memberships — every tier unlocks speech-to-text, auto-teach, reporting,
+    // and data saving; tiers differ in monthly credits + voice budget.
+    const ent = c.entitlement || null;
+    const subs = c.subscriptions || (c.subscription ? [c.subscription] : []);
+    const PERKS = {
+      'starter.monthly': 'speech-to-text · auto-teach · reporting',
+      'plus.monthly':    'everything in Starter · bigger voice budget',
+      'pro.monthly':     'everything in Plus · biggest voice budget · new features first',
+    };
+    for (const s of subs) {
+      const mine = ent && ent.tier === s.sku;
+      html += `<div class="card"${mine ? ' style="border-color:#047857;"' : ''}><h3>${esc(s.label)}${mine ? ' <span style="font-size:10px;font-weight:800;color:#047857;">CURRENT</span>' : ''}</h3>
+        <div class="big">⭐ ${s.creditsPerPeriod}<span style="font-size:13px;font-weight:600;color:var(--muted);">/month</span></div>
+        <div class="sub">${money(s.cents)}/month · ${esc(PERKS[s.sku] || 'membership')} · packs stack anytime</div>
+        ${mine ? `<button class="btn secondary" id="manage-billing">Manage billing</button>`
+               : `<button class="btn" data-sku="${esc(s.sku)}">Subscribe</button>`}</div>`;
+    }
+    if (ent && ent.tier !== 'free' && !subs.some((s) => ent.tier === s.sku)) {
+      // Admin / override states still get the manage button when relevant.
+      html += `<div class="card"><h3>Your plan</h3><div class="sub">${esc(ent.label)}</div></div>`;
+    }
     if (c.rebuild && c.rebuild.words) {
       html += `<div class="card"><h3>Whole-board rebuild</h3>
         <div class="big">⭐ ${c.rebuild.credits}</div>
@@ -149,6 +166,17 @@
     el.querySelectorAll('[data-sku]').forEach((b) => b.addEventListener('click', () => buySku(b.dataset.sku, b)));
     const rb = document.getElementById('rebuild-btn');
     if (rb) rb.addEventListener('click', doRebuild);
+    const mb = document.getElementById('manage-billing');
+    if (mb) mb.addEventListener('click', async () => {
+      mb.disabled = true;
+      try {
+        const d = await api('/api/store?action=stripe-portal', { method: 'POST', body: JSON.stringify({}) });
+        location.href = d.url;
+      } catch (e) {
+        toast(e.status === 404 ? 'This membership is managed in the iPhone app (App Store subscription).' : e.message);
+        mb.disabled = false;
+      }
+    });
   }
 
   async function buySku(sku, btn) {
