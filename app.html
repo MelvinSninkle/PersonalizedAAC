@@ -171,12 +171,16 @@
     50% { box-shadow: 0 0 0 9px rgba(220,38,38,0); }
   }
   @media (max-width: 749px) { header button.btn-listen, header button.btn-play-req, header button.btn-teach { width: 44px; height: 44px; font-size: 22px; } }
-  /* Listening mode: a one-tile-high live strip takes over the branding spot. */
+  /* Listening mode TAKES OVER the top bar: title, Teach, Play, and the lock all
+     hide (a parent doesn't need to unlock mid-listen), leaving exactly ONE
+     control — the red pulsing stop button — followed by the live tile strip.
+     No second mic glyph next to it; two icons on top of each other read as
+     one confusing blob. */
   #listen-bar { display: none; }
-  body.listening .hdr-center h1, body.listening .btn-play-req, body.listening .btn-teach { display: none; }
+  body.listening .hdr-center h1, body.listening .btn-play-req, body.listening .btn-teach,
+  body.listening #login-btn { display: none; }
+  body.listening #listen-btn { margin-right: 10px; }
   body.listening #listen-bar { display: flex; align-items: center; gap: 10px; width: 100%; max-width: min(96vw, 1100px); }
-  #listen-mic { font-size: 26px; flex: 0 0 auto; animation: listenPulse 1.4s ease-in-out infinite; }
-  @keyframes listenPulse { 0%, 100% { opacity: .45; transform: scale(1); } 50% { opacity: 1; transform: scale(1.12); } }
   #listen-tiles { display: flex; align-items: center; gap: 8px; overflow-x: auto; flex: 1 1 auto; padding: 4px 2px; scrollbar-width: none; }
   #listen-tiles::-webkit-scrollbar { display: none; }
   .listen-chip { flex: 0 0 auto; height: 92px; width: 92px; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.14); overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -1070,7 +1074,6 @@
     <button id="teach-btn" class="btn-teach" aria-label="Teach me" title="Watch and listen — the board teaches the words you were just looking at">📖</button>
     <button id="play-request-btn" class="btn-play-req" aria-label="Play a game" title="Play a quick game about what you were just looking at">🙋</button>
     <div id="listen-bar" aria-live="polite">
-      <span id="listen-mic" aria-hidden="true">🎙️</span>
       <div id="listen-tiles"></div>
       <span id="listen-hint">Listening…</span>
     </div>
