@@ -3,10 +3,14 @@ package io.andrewpeterson.myworld
 import android.app.Application
 import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
+import io.andrewpeterson.myworld.audio.SpeechCache
+import io.andrewpeterson.myworld.audio.TilePlayer
 import io.andrewpeterson.myworld.auth.AuthManager
 import io.andrewpeterson.myworld.model.DeviceMode
 import io.andrewpeterson.myworld.net.ApiClient
 import io.andrewpeterson.myworld.net.PersistentCookieJar
+import io.andrewpeterson.myworld.storage.BoardStore
+import io.andrewpeterson.myworld.storage.MediaCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,7 +33,12 @@ class AppContainer(context: Context) {
     val auth = AuthManager(context, api)
     val deviceMode = DeviceMode(context)
 
-    // M2+: boardStore, mediaCache, speechCache, tilePlayer, displayPrefs …
+    // M2 — board data + media/audio plumbing.
+    val media = MediaCache(context, api)
+    val board = BoardStore(context, api, media)
+    val speechCache = SpeechCache(context, api)
+    val tilePlayer = TilePlayer(context, api, media)
+
     // M5+: gameController, gameAudio, scheduler, autoTeachRunner …
     // M6+: speechListener · M7+: liveSession, parentLive · M8+: addTileQueue
 }
