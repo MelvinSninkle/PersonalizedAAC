@@ -8,7 +8,10 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "io.andrewpeterson.myworld"
+        // The NATIVE app (android-native/) now owns io.andrewpeterson.myworld;
+        // this WebView shell is a dev/testing tool under a .shell suffix so
+        // both can coexist on a device without upgrade collisions.
+        applicationId = "io.andrewpeterson.myworld.shell"
         // minSdk 24 covers every Google Android device back to 2016 AND every
         // Kindle Fire on Fire OS 6+ (Fire OS is Android under the hood).
         minSdk = 24

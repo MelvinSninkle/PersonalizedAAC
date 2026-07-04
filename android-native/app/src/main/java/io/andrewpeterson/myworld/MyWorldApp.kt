@@ -1,0 +1,49 @@
+package io.andrewpeterson.myworld
+
+import android.app.Application
+import android.content.Context
+import androidx.compose.runtime.staticCompositionLocalOf
+import io.andrewpeterson.myworld.auth.AuthManager
+import io.andrewpeterson.myworld.model.DeviceMode
+import io.andrewpeterson.myworld.net.ApiClient
+import io.andrewpeterson.myworld.net.PersistentCookieJar
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+
+/**
+ * Manual DI — the Android twin of the 11 `@Observable` stores the iOS app
+ * injects via `.environment(...)` in `MyWorldApp.swift`. One hand-built
+ * container, app-scoped, exposed to Compose through [LocalAppContainer].
+ * Stores are added milestone by milestone; every one is a plain class
+ * exposing StateFlow, constructed here exactly once.
+ */
+class AppContainer(context: Context) {
+
+    /** App-lifetime scope for store-owned coroutines (pollers bind to
+     *  ProcessLifecycleOwner separately so they run foreground-only). */
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    val cookieJar = PersistentCookieJar(context)
+    val api = ApiClient(cookieJar, onUnauthorized = { auth.handleUnauthorized() })
+    val auth = AuthManager(context, api)
+    val deviceMode = DeviceMode(context)
+
+    // M2+: boardStore, mediaCache, speechCache, tilePlayer, displayPrefs …
+    // M5+: gameController, gameAudio, scheduler, autoTeachRunner …
+    // M6+: speechListener · M7+: liveSession, parentLive · M8+: addTileQueue
+}
+
+val LocalAppContainer = staticCompositionLocalOf<AppContainer> {
+    error("AppContainer not provided")
+}
+
+class MyWorldApp : Application() {
+    lateinit var container: AppContainer
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        container = AppContainer(this)
+    }
+}
