@@ -46,6 +46,9 @@ fun BoardView() {
     var editMode by remember { mutableStateOf(false) }
     var openRoom by remember { mutableStateOf<Category?>(null) }
     var didInitialLoad by remember { mutableStateOf(false) }
+    var showUnlock by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var showDisplay by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val slug = c.auth.childSlug
@@ -59,7 +62,9 @@ fun BoardView() {
         HeaderBar(
             editMode = editMode,
             onLockTap = { if (editMode) editMode = false },
-            onLockLongPress = { /* M4: UnlockSheet */ },
+            onLockLongPress = { if (!editMode) showUnlock = true },
+            onTripleTap = { showSettings = true },
+            onShowDisplay = { showDisplay = true },
         )
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -111,6 +116,9 @@ fun BoardView() {
             RoomInteriorView(room, tileSize = 120.dp) { openRoom = null }
         }
     }
+    if (showUnlock) UnlockSheet(onDismiss = { showUnlock = false }, onUnlock = { editMode = true })
+    if (showSettings) SettingsView { showSettings = false }
+    if (showDisplay) DisplaySettingsView { showDisplay = false }
 }
 
 /**

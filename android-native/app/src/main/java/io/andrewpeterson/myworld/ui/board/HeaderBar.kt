@@ -40,6 +40,8 @@ fun HeaderBar(
     onListenTap: () -> Unit = {},
     onTeachTap: () -> Unit = {},
     onPlayTap: () -> Unit = {},
+    onTripleTap: () -> Unit = {},
+    onShowDisplay: () -> Unit = {},
     listening: Boolean = false,
 ) {
     val c = LocalAppContainer.current
@@ -47,8 +49,19 @@ fun HeaderBar(
     val user by c.auth.user.collectAsState()
     val textColor = hexColor(prefs.colorHeaderText, Color.White)
 
+    // Hidden gesture: triple-tap the bar opens settings (sign out, cache).
+    var taps by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0L to 0) }
+    fun noteTap() {
+        val now = System.currentTimeMillis()
+        val (last, count) = taps
+        val n = if (now - last < 600) count + 1 else 1
+        taps = now to n
+        if (n >= 3) { taps = 0L to 0; onTripleTap() }
+    }
+
     Box(
-        Modifier.fillMaxWidth().height(48.dp).background(hexColor(prefs.colorHeaderBg)),
+        Modifier.fillMaxWidth().height(48.dp).background(hexColor(prefs.colorHeaderBg))
+            .combinedClickable(onClick = { noteTap() }, onLongClick = {}),
     ) {
         // Centered brand title (the listen strip takes this spot in M6).
         Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
@@ -82,6 +95,10 @@ fun HeaderBar(
                     color = if (listening) Color(0xFFDC2626) else textColor.copy(alpha = 0.9f))
             }
             Spacer(Modifier.weight(1f))
+            if (editMode) {
+                HeaderRound("⚙", onShowDisplay)
+                Spacer(Modifier.width(8.dp))
+            }
             // Teach me + Play with me (M5 wires the sessions).
             HeaderRound("📖", onTeachTap)
             Spacer(Modifier.width(8.dp))
