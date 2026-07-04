@@ -20,7 +20,7 @@ export default async function handler(req, res) {
         listOpenaiImageModels(process.env.OPENAI_API_KEY),
       ]);
       res.setHeader('Cache-Control', 'no-store');
-      res.status(200).json({ current, available, fallback: process.env.OPENAI_KEYSTONE_MODEL || 'gpt-image-1' });
+      res.status(200).json({ current, available, fallback: process.env.OPENAI_KEYSTONE_MODEL || 'gpt-image-1.5' });
       return;
     }
     if (req.method === 'PUT') {

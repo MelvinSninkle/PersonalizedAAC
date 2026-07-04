@@ -10,7 +10,8 @@
 // The keystone image model, resolved in priority order:
 //   1. lab_settings.model_defaults.keystone  (set from the Portrait Lab — drives prod)
 //   2. env OPENAI_KEYSTONE_MODEL
-//   3. 'gpt-image-1' (the confirmed base model)
+//   3. 'gpt-image-1.5' — Lab testing showed anything below 1.5 doesn't hold up
+//      for portraits, so the floor IS 1.5; never default lower.
 export async function openaiKeystoneModel(db) {
   try {
     if (db) {
@@ -19,7 +20,7 @@ export async function openaiKeystoneModel(db) {
       if (typeof k === 'string' && k.trim()) return k.trim();
     }
   } catch (_) { /* fall through to env/default */ }
-  return process.env.OPENAI_KEYSTONE_MODEL || 'gpt-image-1';
+  return process.env.OPENAI_KEYSTONE_MODEL || 'gpt-image-1.5';
 }
 
 // Ask OpenAI which gpt-image-* models THIS account can actually use, so the Lab
