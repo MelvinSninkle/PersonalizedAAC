@@ -17,6 +17,7 @@ import io.andrewpeterson.myworld.model.DeviceMode
 import io.andrewpeterson.myworld.model.DisplayPrefs
 import io.andrewpeterson.myworld.net.ApiClient
 import io.andrewpeterson.myworld.net.PersistentCookieJar
+import io.andrewpeterson.myworld.storage.AddTileQueue
 import io.andrewpeterson.myworld.storage.BoardStore
 import io.andrewpeterson.myworld.storage.MediaCache
 import kotlinx.coroutines.CoroutineScope
@@ -62,11 +63,12 @@ class AppContainer(context: Context) {
     // M7 — parent-side live channel.
     val parentLive = ParentLive(api)
 
+    // M8 — tile authoring queue (durable server jobs).
+    val addTileQueue = AddTileQueue(api, board)
+
     init {
         PlayScope.init(context)
     }
-
-    // M8+: addTileQueue
 }
 
 val LocalAppContainer = staticCompositionLocalOf<AppContainer> {

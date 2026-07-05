@@ -51,6 +51,12 @@ fun BoardView() {
     var showSettings by remember { mutableStateOf(false) }
     var showDisplay by remember { mutableStateOf(false) }
 
+    // M8 — tile authoring: the add-cell opens AddTileView pre-set to its
+    // section + folder; tapping a tile while unlocked opens the editor.
+    var addTileRequest by remember { mutableStateOf<Pair<BoardSection, Int?>?>(null) }
+    var editingTile by remember { mutableStateOf<io.andrewpeterson.myworld.model.Tile?>(null) }
+    val reviewNotice by c.addTileQueue.pendingReviewNotice.collectAsState()
+
     val gameSession by c.game.current.collectAsState()
     val liveCommand by c.live.latest.collectAsState()
     val staged by c.autoTeach.staged.collectAsState()
@@ -98,6 +104,7 @@ fun BoardView() {
         didInitialLoad = true
         c.live.start(slug)
         c.autoTeach.start(slug)
+        c.addTileQueue.restore(slug)   // resume watching in-flight renders
     }
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose { c.live.stop(); c.autoTeach.stop() }
@@ -166,7 +173,9 @@ fun BoardView() {
                                 section = section,
                                 tileSize = tile.dp,
                                 editMode = editMode,
+                                onEditTile = { editingTile = it },
                                 onOpenRoom = { openRoom = it },
+                                onAdd = { sec, catId -> addTileRequest = sec to catId },
                             )
                         }
                         if (idx < visible.size - 1) VerticalDivider()
@@ -175,7 +184,9 @@ fun BoardView() {
                 }
                 if (prefs.showNeeds) {
                     HorizontalDivider()
-                    NeedsStrip(tileSize = tile.dp, editMode = editMode)
+                    NeedsStrip(tileSize = tile.dp, editMode = editMode,
+                        onEditTile = { editingTile = it },
+                        onAdd = { addTileRequest = BoardSection.NEEDS to null })
                 }
             }
 
@@ -200,6 +211,27 @@ fun BoardView() {
     if (showUnlock) UnlockSheet(onDismiss = { showUnlock = false }, onUnlock = { editMode = true })
     if (showSettings) SettingsView { showSettings = false }
     if (showDisplay) DisplaySettingsView { showDisplay = false }
+
+    addTileRequest?.let { (sec, catId) ->
+        AddTileView(defaultSection = sec, defaultCategoryId = catId) { addTileRequest = null }
+    }
+    editingTile?.let { t ->
+        BoardTileEditSheet(tile = t) { editingTile = null }
+    }
+    reviewNotice?.let { notice ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { c.addTileQueue.clearReviewNotice() },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { c.addTileQueue.clearReviewNotice() }) {
+                    androidx.compose.material3.Text("OK")
+                }
+            },
+            title = { androidx.compose.material3.Text("${notice.count} new tiles are ready") },
+            text = { androidx.compose.material3.Text(
+                "They're on the board now. Tap any tile while unlocked to rename it, " +
+                    "fix the picture with a note, or move it where it belongs.") },
+        )
+    }
     if (showSttUpsell) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showSttUpsell = false },

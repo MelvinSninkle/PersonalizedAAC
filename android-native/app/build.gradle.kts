@@ -37,6 +37,7 @@ android {
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.exifinterface)
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)

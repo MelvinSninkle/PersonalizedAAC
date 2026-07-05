@@ -24,13 +24,14 @@ import io.andrewpeterson.myworld.ui.theme.hexColor
 /**
  * The full-width Needs strip along the board's bottom — the most-used words
  * (yes, no, more, all done…) one tap away no matter which column has focus.
- * Port of `Views/NeedsStrip.swift` (M3 scope: no edit-mode add cell yet).
+ * Port of `Views/NeedsStrip.swift`.
  */
 @Composable
 fun NeedsStrip(
     tileSize: Dp,
     editMode: Boolean = false,
     onEditTile: (Tile) -> Unit = {},
+    onAdd: (() -> Unit)? = null,
 ) {
     val c = LocalAppContainer.current
     val prefs by c.displayPrefs.data.collectAsState()
@@ -59,6 +60,9 @@ fun NeedsStrip(
                 editMode = editMode, onEdit = onEditTile,
             )
             Spacer(Modifier.width(BoardMetrics.TILE_GAP.dp))
+        }
+        if (editMode && onAdd != null) {
+            AddTileCell(tileSize, onAdd)
         }
     }
 }
