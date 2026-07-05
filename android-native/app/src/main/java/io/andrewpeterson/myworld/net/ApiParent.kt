@@ -173,6 +173,32 @@ suspend fun ApiClient.advanceBand(childId: String) {
     raw("POST", "/api/advance-band", body.encodeToByteArray())
 }
 
+// ── /api/album — picture memorabilia, grouped by tile ──────────────────────
+
+@Serializable
+data class AlbumEntry(
+    val label: String? = null,
+    val section: String? = null,
+    val blobKey: String = "",
+    @SerialName("when") val whenAt: String? = null,
+    val kind: String? = null,        // 'current' | 'history'
+)
+
+@Serializable
+data class AlbumTile(
+    val itemId: Int? = null,
+    val label: String? = null,
+    val section: String? = null,
+    val current: AlbumEntry? = null,
+    val history: List<AlbumEntry> = emptyList(),
+)
+
+@Serializable
+private data class AlbumByTileResponse(val tiles: List<AlbumTile> = emptyList())
+
+suspend fun ApiClient.albumByTile(childId: String, limit: Int = 600): List<AlbumTile> =
+    getJson<AlbumByTileResponse>("/api/album?childId=${esc(childId)}&mode=by-tile&limit=$limit").tiles
+
 // ── /api/store?action=catalog — balance + membership (read-only in M9) ─────
 
 @Serializable

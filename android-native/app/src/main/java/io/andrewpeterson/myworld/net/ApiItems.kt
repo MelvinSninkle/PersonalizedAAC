@@ -90,8 +90,11 @@ suspend fun ApiClient.createTileJob(
     return decode(this.raw("POST", path, jpeg, contentType = "image/jpeg", long = true))
 }
 
+@Serializable
+private data class TileJobsList(val jobs: List<TileJobStatus> = emptyList())
+
 suspend fun ApiClient.listTileJobs(childId: String): List<TileJobStatus> =
-    getJson("/api/tile-jobs?childId=${esc(childId)}")
+    getJson<TileJobsList>("/api/tile-jobs?childId=${esc(childId)}").jobs
 
 suspend fun ApiClient.deleteTileJob(id: Long, childId: String) {
     raw("DELETE", "/api/tile-jobs?id=$id&childId=${esc(childId)}")

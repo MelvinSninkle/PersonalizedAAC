@@ -132,6 +132,9 @@ fun ParentHomeView() {
         "quickboard" -> QuickBoardView { open = null }
         "stats" -> StatsView { open = null }
         "store" -> StoreView { open = null }
+        "album" -> AlbumView { open = null }
+        "schedules" -> SchedulesView { open = null }
+        "people" -> PeopleManagerView { open = null }
         null -> {}
         else -> ComingSoonDialog(open!!) { open = null }
     }

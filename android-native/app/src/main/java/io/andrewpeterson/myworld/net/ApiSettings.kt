@@ -76,5 +76,26 @@ suspend fun ApiClient.saveDisplayPrefs(childId: String, data: DisplayPrefsData) 
     saveChildSettingsKey(childId, "kidDisplay", el)
 }
 
+@Serializable
+private data class PersonsList(val persons: List<Person> = emptyList())
+
 suspend fun ApiClient.listPersons(childId: String): List<Person> =
-    getJson("/api/persons?childId=${esc(childId)}")
+    getJson<PersonsList>("/api/persons?childId=${esc(childId)}").persons
+
+@Serializable
+private data class PersonUpserted(val id: Int = 0)
+
+/** POST structured person fields (no photo). Upserts by id, else by name. */
+suspend fun ApiClient.upsertPerson(id: Int?, displayName: String, relationship: String, childId: String): Int {
+    val body = buildJsonObject {
+        put("childId", childId)
+        put("displayName", displayName)
+        put("relationship", relationship)
+        if (id != null) put("id", id)
+    }
+    return decode<PersonUpserted>(raw("POST", "/api/persons", body.toString().encodeToByteArray())).id
+}
+
+suspend fun ApiClient.deletePerson(id: Int, childId: String) {
+    try { raw("DELETE", "/api/persons?id=$id&childId=${esc(childId)}") } catch (_: Exception) {}
+}
