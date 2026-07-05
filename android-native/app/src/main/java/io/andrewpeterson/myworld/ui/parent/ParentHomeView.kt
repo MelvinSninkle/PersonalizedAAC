@@ -135,6 +135,11 @@ fun ParentHomeView() {
         "album" -> AlbumView { open = null }
         "schedules" -> SchedulesView { open = null }
         "people" -> PeopleManagerView { open = null }
+        "autoteach" -> AutoTeachView { open = null }
+        "addtile" -> io.andrewpeterson.myworld.ui.board.AddTileView(
+            defaultSection = io.andrewpeterson.myworld.model.BoardSection.NOUNS,
+            defaultCategoryId = null,
+        ) { open = null }
         null -> {}
         else -> ComingSoonDialog(open!!) { open = null }
     }

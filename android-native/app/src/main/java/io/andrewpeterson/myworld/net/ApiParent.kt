@@ -238,6 +238,137 @@ data class StoreCatalog(
 
 suspend fun ApiClient.storeCatalog(): StoreCatalog = getJson("/api/store?action=catalog")
 
+// ── /api/auto-teach — settings + gates + mastery roll-up ───────────────────
+
+@Serializable
+data class AutoTeachSettings(
+    val enabled: Boolean = false,
+    val cadence: String = "conservative",   // conservative | standard | intensive
+    val tier: String = "under3",            // under3 | 3to5 | 5plus
+    val dailyGameAt: String = "15:30",      // "HH:MM"
+    val cooldownMin: Int = 30,
+    val batchSize: Int = 4,
+)
+
+@Serializable
+data class AutoTeachGates(
+    val enabled: Boolean = false,
+    /** False when the family has no active membership (nil on older servers). */
+    val subscribed: Boolean? = null,
+    /** False until sleep + school/therapy windows are entered (or n/a). */
+    val scheduleReady: Boolean? = null,
+    val inBlackout: Boolean = false,
+    val recentlyActive: Boolean = false,
+    val cooldownLeftMin: Int = 0,
+    val budgetUsedMin: Int = 0,
+    val budgetCapMin: Int = 0,
+    val budgetExhausted: Boolean = false,
+)
+
+@Serializable
+data class AutoTeachMastery(
+    val category: String = "",
+    val active: Int = 0,
+    val acquired: Int = 0,
+    val mastered: Int = 0,
+    val maintenance: Int = 0,
+    val unmet: Int = 0,
+    val total: Int = 0,
+)
+
+@Serializable
+data class AutoTeachState(
+    val settings: AutoTeachSettings = AutoTeachSettings(),
+    val gates: AutoTeachGates = AutoTeachGates(),
+    val mastery: List<AutoTeachMastery> = emptyList(),
+)
+
+suspend fun ApiClient.autoTeachState(childId: String): AutoTeachState =
+    getJson("/api/auto-teach/state?childId=${esc(childId)}")
+
+/**
+ * Merge-safe write of settings.autoTeach (+ a fresh settings.tz — every
+ * wall-clock gate uses it). Everything else in the blob survives.
+ */
+suspend fun ApiClient.saveAutoTeach(childId: String, settings: AutoTeachSettings) {
+    try {
+        val current = childSettings(childId)
+        val merged = kotlinx.serialization.json.buildJsonObject {
+            for ((k, v) in current) if (k != "autoTeach" && k != "tz") put(k, v)
+            put("autoTeach", ApiClient.json.encodeToJsonElement(AutoTeachSettings.serializer(), settings))
+            put("tz", kotlinx.serialization.json.JsonPrimitive(java.util.TimeZone.getDefault().id))
+        }
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("childId", kotlinx.serialization.json.JsonPrimitive(childId))
+            put("settings", merged)
+        }
+        raw("POST", "/api/child-settings?childId=${esc(childId)}", body.toString().encodeToByteArray())
+    } catch (_: Exception) { /* best-effort */ }
+}
+
+/** One school/therapy window in the quiet-hours editor. */
+data class CareWindow(
+    val type: String = "school",            // school | therapy
+    val days: Set<Int> = setOf(1, 2, 3, 4, 5),   // 0=Sun … 6=Sat
+    val start: String = "09:00",
+    val end: String = "15:00",
+)
+
+/**
+ * Merge-safe write of the QUIET-HOURS blob (settings.schedule): wake, bedtime,
+ * school/therapy windows, the "no outside care" flag. Location entries of
+ * OTHER types (meals the web wrote, etc.) survive; only school/therapy rows
+ * are replaced by the editor's list.
+ */
+suspend fun ApiClient.saveQuietHours(
+    childId: String,
+    wake: String,
+    bedtime: String,
+    careWindows: List<CareWindow>,
+    noOutsideCare: Boolean,
+) {
+    try {
+        val current = childSettings(childId)
+        val sched = (current["schedule"] as? kotlinx.serialization.json.JsonObject)
+            ?: kotlinx.serialization.json.buildJsonObject { }
+        val others = (sched["locations"] as? kotlinx.serialization.json.JsonArray)
+            ?.filter { el ->
+                val t = ((el as? kotlinx.serialization.json.JsonObject)
+                    ?.get("type") as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
+                t != "school" && t != "therapy"
+            } ?: emptyList()
+        val newSched = kotlinx.serialization.json.buildJsonObject {
+            for ((k, v) in sched) if (k !in listOf("wake", "bedtime", "locations", "noOutsideCare")) put(k, v)
+            put("wake", kotlinx.serialization.json.JsonPrimitive(wake))
+            put("bedtime", kotlinx.serialization.json.JsonPrimitive(bedtime))
+            put("noOutsideCare", kotlinx.serialization.json.JsonPrimitive(noOutsideCare))
+            put("locations", kotlinx.serialization.json.buildJsonArray {
+                others.forEach { add(it) }
+                careWindows.forEach { w ->
+                    add(kotlinx.serialization.json.buildJsonObject {
+                        put("type", kotlinx.serialization.json.JsonPrimitive(w.type))
+                        put("days", kotlinx.serialization.json.buildJsonArray {
+                            w.days.sorted().forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) }
+                        })
+                        put("start", kotlinx.serialization.json.JsonPrimitive(w.start))
+                        put("end", kotlinx.serialization.json.JsonPrimitive(w.end))
+                    })
+                }
+            })
+        }
+        val merged = kotlinx.serialization.json.buildJsonObject {
+            for ((k, v) in current) if (k != "schedule" && k != "tz") put(k, v)
+            put("schedule", newSched)
+            put("tz", kotlinx.serialization.json.JsonPrimitive(java.util.TimeZone.getDefault().id))
+        }
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("childId", kotlinx.serialization.json.JsonPrimitive(childId))
+            put("settings", merged)
+        }
+        raw("POST", "/api/child-settings?childId=${esc(childId)}", body.toString().encodeToByteArray())
+    } catch (_: Exception) { /* best-effort */ }
+}
+
 // ── /api/auth/delete-account — type-DELETE confirmation lives in the UI ────
 
 suspend fun ApiClient.deleteAccount() {

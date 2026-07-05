@@ -35,6 +35,8 @@ import io.andrewpeterson.myworld.LocalAppContainer
 import io.andrewpeterson.myworld.net.ApiClient
 import io.andrewpeterson.myworld.net.StoreCatalog
 import io.andrewpeterson.myworld.net.storeCatalog
+import io.andrewpeterson.myworld.net.storeRedeem
+import kotlinx.coroutines.launch
 import io.andrewpeterson.myworld.ui.theme.Brand
 import io.andrewpeterson.myworld.ui.theme.hexColor
 
@@ -51,10 +53,17 @@ fun StoreView(onDismiss: () -> Unit) {
     val context = LocalContext.current
     var catalog by remember { mutableStateOf<StoreCatalog?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var showShop by remember { mutableStateOf(false) }
+    var coupon by remember { mutableStateOf("") }
+    var couponNote by remember { mutableStateOf<String?>(null) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         try { catalog = c.api.storeCatalog() }
         catch (e: Exception) { error = "Could not load the store: ${e.message}" }
+        // Warm the Word Shop's catalog cache while the parent is still here,
+        // so "Shop words for the board" opens instantly (iOS parity).
+        io.andrewpeterson.myworld.storage.ShopCatalogCache.refresh(context, c.auth.childSlug, c.api)
     }
 
     fun openWebStore() {
@@ -135,12 +144,42 @@ fun StoreView(onDismiss: () -> Unit) {
 
             Spacer(Modifier.height(16.dp))
             Button(
+                onClick = { showShop = true },
+                colors = ButtonDefaults.buttonColors(containerColor = hexColor("#ad1457")),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+            ) {
+                Text("🛍 Shop words for the board", fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(10.dp))
+            Button(
                 onClick = { openWebStore() },
                 colors = ButtonDefaults.buttonColors(containerColor = Brand.pink),
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
                 Text("Manage membership & buy credits", fontWeight = FontWeight.Bold)
             }
+
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = coupon, onValueChange = { coupon = it },
+                    label = { Text("Have a code?") }, singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = {
+                    val code = coupon.trim()
+                    if (code.isEmpty()) return@TextButton
+                    scope.launch {
+                        couponNote = try {
+                            val r = c.api.storeRedeem(code)
+                            coupon = ""
+                            try { catalog = c.api.storeCatalog() } catch (_: Exception) {}
+                            "⭐ ${r.credited} credits added!"
+                        } catch (e: Exception) { "Couldn't redeem: ${e.message}" }
+                    }
+                }) { Text("Redeem", fontWeight = FontWeight.Bold, color = Brand.pinkDeep) }
+            }
+            couponNote?.let { Text(it, fontSize = 12.sp, color = Brand.muted) }
             Text(
                 "Opens the secure web store — purchases made there appear here right away. In-app purchasing on Google Play is coming in the next update.",
                 fontSize = 11.sp, color = Brand.muted,
@@ -151,4 +190,6 @@ fun StoreView(onDismiss: () -> Unit) {
             }
         }
     }
+
+    if (showShop) WordShopView { showShop = false }
 }
