@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,15 +22,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.zIndex.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -39,9 +49,11 @@ import io.andrewpeterson.myworld.model.BoardMetrics
 import io.andrewpeterson.myworld.model.BoardSection
 import io.andrewpeterson.myworld.model.Category
 import io.andrewpeterson.myworld.model.Tile
+import io.andrewpeterson.myworld.net.updateItem
 import io.andrewpeterson.myworld.storage.AddTileQueue
 import io.andrewpeterson.myworld.ui.theme.Brand
 import io.andrewpeterson.myworld.ui.theme.hexColor
+import kotlinx.coroutines.launch
 
 /**
  * One of the three main columns (People / Nouns / Verbs) — port of
@@ -66,6 +78,10 @@ fun SectionColumn(
 
     var selectedCategoryId by remember { mutableStateOf<Int?>(null) }
     var selectedSubcategoryId by remember { mutableStateOf<Int?>(null) }
+
+    // Chip drop-targets (root coords) — a long-press drag that ends over a
+    // chip moves the tile into that folder (iOS drag-to-chip parity).
+    val chipRects = remember { mutableStateMapOf<Int, Rect>() }
 
     val roots = c.board.roots(section)
 
@@ -106,14 +122,16 @@ fun SectionColumn(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp))
         }
 
-        CategoryTabStrip(roots, selectedCategoryId, prefs.hideLabels) { id ->
+        CategoryTabStrip(roots, selectedCategoryId, prefs.hideLabels,
+            onChipBounds = if (editMode) ({ id, r -> chipRects[id] = r }) else null) { id ->
             selectedCategoryId = id
             // Every REAL chip press is remembered as the header Play/Teach scope.
             io.andrewpeterson.myworld.game.PlayScope.note("cat:$id", c.auth.childSlug)
         }
 
         if (activeCategory != null && subs.isNotEmpty()) {
-            SubcategoryStrip(subs, selectedSubcategoryId ?: subs.first().id, prefs.hideLabels) { id ->
+            SubcategoryStrip(subs, selectedSubcategoryId ?: subs.first().id, prefs.hideLabels,
+                onChipBounds = if (editMode) ({ id, r -> chipRects[id] = r }) else null) { id ->
                 selectedSubcategoryId = id
                 io.andrewpeterson.myworld.game.PlayScope.note("cat:$id", c.auth.childSlug)
                 // Location chips speak their name on selection.
@@ -163,7 +181,8 @@ fun SectionColumn(
                 onTap = { playWithLogging(it) },
                 onAdd = if (editMode) ({ onAdd(section, effectiveCategory?.id) }) else null,
                 renderingJobs = jobsHere,
-                onDismissJob = { c.addTileQueue.dismiss(it) })
+                onDismissJob = { c.addTileQueue.dismiss(it) },
+                chipRects = chipRects)
         }
     }
 
@@ -184,7 +203,56 @@ private fun TileGrid(
     onAdd: (() -> Unit)? = null,
     renderingJobs: List<AddTileQueue.TileJob> = emptyList(),
     onDismissJob: (Long) -> Unit = {},
+    chipRects: Map<Int, Rect> = emptyMap(),
 ) {
+    val c = LocalAppContainer.current
+    val scope = rememberCoroutineScope()
+
+    // Long-press drag state — uniform tile size means the drop target is just
+    // "whichever cell rect the pointer ends inside" (the plan's port #7).
+    val cellRects = remember { mutableStateMapOf<Int, Rect>() }
+    var dragId by remember { mutableStateOf<Int?>(null) }
+    var dragOrigin by remember { mutableStateOf(Offset.Zero) }
+    var dragPos by remember { mutableStateOf(Offset.Zero) }
+
+    fun completeDrag() {
+        val id = dragId ?: return
+        dragId = null
+        val moved = tiles.firstOrNull { it.id == id } ?: return
+        val point = dragPos
+        // Dropped on a folder chip → move the tile into that folder.
+        val chip = chipRects.entries.firstOrNull { it.value.contains(point) }
+        if (chip != null) {
+            if (chip.key != moved.categoryId) scope.launch {
+                try {
+                    c.api.updateItem(id = moved.id, childId = c.auth.childSlug, categoryId = chip.key)
+                } catch (_: Exception) {}
+                c.board.refresh(c.auth.childSlug)
+            }
+            return
+        }
+        // Dropped on a sibling cell → splice + i*1000 resequence (web parity).
+        val target = cellRects.entries.firstOrNull { it.key != id && it.value.contains(point) }?.key
+            ?: return
+        val list = tiles.toMutableList()
+        val from = list.indexOfFirst { it.id == id }
+        val to = list.indexOfFirst { it.id == target }
+        if (from < 0 || to < 0 || from == to) return
+        val item = list.removeAt(from)
+        list.add(to, item)
+        scope.launch {
+            for ((idx, t) in list.withIndex()) {
+                val newOrder = idx * 1000
+                if (t.order != newOrder) {
+                    try {
+                        c.api.updateItem(id = t.id, childId = c.auth.childSlug, order = newOrder)
+                    } catch (_: Exception) {}
+                }
+            }
+            c.board.refresh(c.auth.childSlug)
+        }
+    }
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(cols),
         horizontalArrangement = Arrangement.spacedBy(BoardMetrics.TILE_GAP.dp),
@@ -193,8 +261,38 @@ private fun TileGrid(
             .padding(horizontal = BoardMetrics.COLUMN_PAD.dp, vertical = 8.dp),
     ) {
         items(tiles, key = { it.id }) { tile ->
-            TileView(tile, tileSize, hideLabels, onTap,
-                editMode = editMode, onEdit = onEditTile, posterMode = posterMode)
+            val isDragging = dragId == tile.id
+            Box(
+                Modifier
+                    .onGloballyPositioned {
+                        // Freeze the dragged tile's rect so the float offset
+                        // stays anchored to where the drag began.
+                        if (dragId != tile.id) cellRects[tile.id] = it.boundsInRoot()
+                    }
+                    .zIndex(if (isDragging) 1f else 0f)
+                    .graphicsLayer {
+                        if (isDragging) {
+                            translationX = dragPos.x - dragOrigin.x
+                            translationY = dragPos.y - dragOrigin.y
+                            scaleX = 1.06f; scaleY = 1.06f; alpha = 0.85f
+                        }
+                    }
+                    .then(if (editMode) Modifier.pointerInput(tile.id, tiles.map { it.id }) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                dragOrigin = cellRects[tile.id]?.center ?: Offset.Zero
+                                dragPos = dragOrigin
+                                dragId = tile.id
+                            },
+                            onDrag = { change, amount -> change.consume(); dragPos += amount },
+                            onDragEnd = { completeDrag() },
+                            onDragCancel = { dragId = null },
+                        )
+                    } else Modifier),
+            ) {
+                TileView(tile, tileSize, hideLabels, onTap,
+                    editMode = editMode, onEdit = onEditTile, posterMode = posterMode)
+            }
         }
         // In-flight tile jobs paint as dimmed spinner cells just before the
         // add-cell, so a new photo visibly "lands where it was added".

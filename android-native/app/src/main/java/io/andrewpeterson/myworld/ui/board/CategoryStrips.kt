@@ -22,9 +22,12 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -45,6 +48,7 @@ fun CategoryTabStrip(
     categories: List<Category>,
     selectedId: Int?,
     hideLabels: Boolean,
+    onChipBounds: ((Int, Rect) -> Unit)? = null,
     onSelect: (Int) -> Unit,
 ) {
     Row(
@@ -53,7 +57,8 @@ fun CategoryTabStrip(
     ) {
         categories.forEach { cat ->
             CategoryChip(cat, selected = selectedId == cat.id, compact = false,
-                hideLabel = hideLabels) { onSelect(cat.id) }
+                hideLabel = hideLabels,
+                onBounds = onChipBounds?.let { report -> { r -> report(cat.id, r) } }) { onSelect(cat.id) }
             androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
         }
     }
@@ -64,6 +69,7 @@ fun SubcategoryStrip(
     subcategories: List<Category>,
     selectedId: Int?,
     hideLabels: Boolean,
+    onChipBounds: ((Int, Rect) -> Unit)? = null,
     onSelect: (Int) -> Unit,
 ) {
     Row(
@@ -72,7 +78,8 @@ fun SubcategoryStrip(
     ) {
         subcategories.forEach { sub ->
             CategoryChip(sub, selected = selectedId == sub.id, compact = true,
-                hideLabel = hideLabels) { onSelect(sub.id) }
+                hideLabel = hideLabels,
+                onBounds = onChipBounds?.let { report -> { r -> report(sub.id, r) } }) { onSelect(sub.id) }
             androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
         }
     }
@@ -84,6 +91,7 @@ fun CategoryChip(
     selected: Boolean,
     compact: Boolean,
     hideLabel: Boolean,
+    onBounds: ((Rect) -> Unit)? = null,
     onTap: () -> Unit,
 ) {
     val c = LocalAppContainer.current
@@ -100,6 +108,9 @@ fun CategoryChip(
         Box(
             Modifier
                 .size(side)
+                .then(if (onBounds != null)
+                    Modifier.onGloballyPositioned { onBounds(it.boundsInRoot()) }
+                else Modifier)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White)
                 .border(
