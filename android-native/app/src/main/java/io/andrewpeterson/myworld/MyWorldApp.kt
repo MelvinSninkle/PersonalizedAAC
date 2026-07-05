@@ -15,6 +15,7 @@ import io.andrewpeterson.myworld.live.LiveSession
 import io.andrewpeterson.myworld.live.ParentLive
 import io.andrewpeterson.myworld.model.DeviceMode
 import io.andrewpeterson.myworld.model.DisplayPrefs
+import io.andrewpeterson.myworld.model.OnboardingCoordinator
 import io.andrewpeterson.myworld.net.ApiClient
 import io.andrewpeterson.myworld.net.PersistentCookieJar
 import io.andrewpeterson.myworld.storage.AddTileQueue
@@ -65,6 +66,9 @@ class AppContainer(context: Context) {
 
     // M8 — tile authoring queue (durable server jobs).
     val addTileQueue = AddTileQueue(api, board)
+
+    // M11 — onboarding navigation (server owns the step cursor).
+    val onboarding = OnboardingCoordinator(api)
 
     init {
         PlayScope.init(context)
