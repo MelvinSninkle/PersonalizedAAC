@@ -24,12 +24,14 @@ import { randomBytes } from 'node:crypto';
 
 export const CREDIT_CENTS = 10;   // list price per credit
 
+// googleProductId reuses the sku verbatim — valid Play product ids, and one
+// id across stores keeps the client + verify paths symmetrical with Apple.
 export const PACKS = [
-  { sku: 'credits50',   credits: 50,   cents: 499,  label: 'Starter', appleProductId: 'credits50'   },
-  { sku: 'credits100',  credits: 100,  cents: 999,  label: 'Family',  appleProductId: 'credits100'  },
-  { sku: 'credits250',  credits: 250,  cents: 2499, label: 'Super',   appleProductId: 'credits250'  },
-  { sku: 'credits500',  credits: 500,  cents: 4999, label: 'Mega',    appleProductId: 'credits500'  },
-  { sku: 'credits1000', credits: 1000, cents: 9999, label: 'Ultra',   appleProductId: 'credits1000' },
+  { sku: 'credits50',   credits: 50,   cents: 499,  label: 'Starter', appleProductId: 'credits50',   googleProductId: 'credits50'   },
+  { sku: 'credits100',  credits: 100,  cents: 999,  label: 'Family',  appleProductId: 'credits100',  googleProductId: 'credits100'  },
+  { sku: 'credits250',  credits: 250,  cents: 2499, label: 'Super',   appleProductId: 'credits250',  googleProductId: 'credits250'  },
+  { sku: 'credits500',  credits: 500,  cents: 4999, label: 'Mega',    appleProductId: 'credits500',  googleProductId: 'credits500'  },
+  { sku: 'credits1000', credits: 1000, cents: 9999, label: 'Ultra',   appleProductId: 'credits1000', googleProductId: 'credits1000' },
 ];
 
 // Retired packs stay redeemable so purchases already in Apple's pipeline
@@ -55,17 +57,17 @@ export function bundleQuote(words) {
 // misses only) — ~25 chars per word/clue, so Starter ≈ 4,000 new phrases/mo.
 export const SUBSCRIPTIONS = [
   { sku: 'starter.monthly', cents: 499,  creditsPerPeriod: 10,  label: 'My World Starter',
-    appleProductId: 'starter.monthly', voiceCharsPerMonth: 100_000 },
+    appleProductId: 'starter.monthly', googleProductId: 'starter.monthly', voiceCharsPerMonth: 100_000 },
   { sku: 'plus.monthly',    cents: 999,  creditsPerPeriod: 50,  label: 'My World Plus',
-    appleProductId: 'plus.monthly',    voiceCharsPerMonth: 300_000 },
+    appleProductId: 'plus.monthly',    googleProductId: 'plus.monthly',    voiceCharsPerMonth: 300_000 },
   { sku: 'pro.monthly',     cents: 1999, creditsPerPeriod: 150, label: 'My World Pro',
-    appleProductId: 'pro.monthly',     voiceCharsPerMonth: 750_000 },
+    appleProductId: 'pro.monthly',     googleProductId: 'pro.monthly',     voiceCharsPerMonth: 750_000 },
 ];
 // Legacy alias — older call sites treated "the subscription" as Plus.
 export const SUBSCRIPTION = SUBSCRIPTIONS[1];
 
 export function subscriptionBySku(sku) {
-  return SUBSCRIPTIONS.find((s) => s.sku === sku || s.appleProductId === sku) || null;
+  return SUBSCRIPTIONS.find((s) => s.sku === sku || s.appleProductId === sku || s.googleProductId === sku) || null;
 }
 
 // What a tier can do. Free = the onboarding portraits (child + parent) plus
@@ -372,7 +374,7 @@ export async function redeemCoupon(db, { userId, code }) {
 
 // Map an Apple/Stripe product id back to its credit grant.
 export function productCredits(productId) {
-  const pack = PACKS.find((p) => p.sku === productId || p.appleProductId === productId)
+  const pack = PACKS.find((p) => p.sku === productId || p.appleProductId === productId || p.googleProductId === productId)
             || LEGACY_PACKS.find((p) => p.sku === productId);
   if (pack) return { credits: pack.credits, kind: 'pack' };
   const sub = subscriptionBySku(productId);

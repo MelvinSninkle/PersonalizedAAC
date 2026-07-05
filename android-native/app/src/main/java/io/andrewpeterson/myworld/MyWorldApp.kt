@@ -70,6 +70,9 @@ class AppContainer(context: Context) {
     // M11 — onboarding navigation (server owns the step cursor).
     val onboarding = OnboardingCoordinator(api)
 
+    // M12 — Google Play billing (verify-before-consume; Fire → web store).
+    val billing = io.andrewpeterson.myworld.billing.BillingClientManager(context, api)
+
     init {
         PlayScope.init(context)
     }

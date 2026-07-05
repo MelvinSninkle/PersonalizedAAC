@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,11 +42,11 @@ import io.andrewpeterson.myworld.ui.theme.Brand
 import io.andrewpeterson.myworld.ui.theme.hexColor
 
 /**
- * Credits & membership — M9 READ-ONLY port of `Parent/StoreView.swift`:
- * balance, current tier, this month's voice budget, and the tier ladder.
- * Native Google Play purchases arrive with M12 (BillingClientManager); until
- * then the buttons hand off to the web store, which works everywhere —
- * including Fire tablets, where it stays the permanent purchase path.
+ * Credits & membership — port of `Parent/StoreView.swift`: balance, tier,
+ * voice budget, and NATIVE Google Play purchases for the three memberships
+ * and credit packs (verify-before-acknowledge; server is source of truth).
+ * On devices without Play services (Fire tablets) the buttons hand off to
+ * the secure web store instead — that path works everywhere, permanently.
  */
 @Composable
 fun StoreView(onDismiss: () -> Unit) {
@@ -58,12 +59,20 @@ fun StoreView(onDismiss: () -> Unit) {
     var couponNote by remember { mutableStateOf<String?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
+    val billingAvailable by c.billing.available.collectAsState()
+    val billingNote by c.billing.note.collectAsState()
+    val purchaseTick by c.billing.purchaseTick.collectAsState()
+    val activity = context as? android.app.Activity
+
+    LaunchedEffect(Unit) { c.billing.start() }
+    LaunchedEffect(purchaseTick) {
         try { catalog = c.api.storeCatalog() }
-        catch (e: Exception) { error = "Could not load the store: ${e.message}" }
+        catch (e: Exception) { if (catalog == null) error = "Could not load the store: ${e.message}" }
         // Warm the Word Shop's catalog cache while the parent is still here,
         // so "Shop words for the board" opens instantly (iOS parity).
-        io.andrewpeterson.myworld.storage.ShopCatalogCache.refresh(context, c.auth.childSlug, c.api)
+        if (purchaseTick == 0) {
+            io.andrewpeterson.myworld.storage.ShopCatalogCache.refresh(context, c.auth.childSlug, c.api)
+        }
     }
 
     fun openWebStore() {
@@ -113,13 +122,14 @@ fun StoreView(onDismiss: () -> Unit) {
                     }
                     Spacer(Modifier.height(14.dp))
 
-                    // Tier ladder (display; purchase = web until M12 billing).
+                    // Tier ladder — native Play purchase when available.
                     Text("MEMBERSHIPS", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
                     Spacer(Modifier.height(6.dp))
                     cat.subscriptions.forEach { s ->
                         val active = cat.entitlement?.tier?.let { s.sku.startsWith(it) } == true
                         Row(
                             Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(s.label.ifEmpty { s.sku }, fontSize = 15.sp,
@@ -128,16 +138,51 @@ fun StoreView(onDismiss: () -> Unit) {
                                 Text("${s.creditsPerPeriod} image credits each month",
                                     fontSize = 12.sp, color = Brand.muted)
                             }
-                            Text(
-                                if (active) "Current" else "$" + "%.2f/mo".format(s.cents / 100.0),
-                                fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                                color = if (active) hexColor("#10b981") else Brand.muted,
-                            )
+                            when {
+                                active -> Text("Current", fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold, color = hexColor("#10b981"))
+                                billingAvailable && activity != null -> TextButton(onClick = {
+                                    c.billing.launchPurchase(activity, s.sku)
+                                }) {
+                                    Text(c.billing.price(s.sku) ?: ("$" + "%.2f/mo".format(s.cents / 100.0)),
+                                        fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
+                                }
+                                else -> Text("$" + "%.2f/mo".format(s.cents / 100.0),
+                                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Brand.muted)
+                            }
                         }
                     }
                     if (cat.subscriptions.isEmpty()) {
                         Text("Memberships from $4.99/month unlock speech-to-text, auto-teach, reporting, and styled tiles.",
                             fontSize = 12.sp, color = Brand.muted)
+                    }
+
+                    // Credit packs — native buy buttons when Play is present.
+                    if (billingAvailable && cat.packs.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text("CREDIT PACKS", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
+                        Spacer(Modifier.height(4.dp))
+                        cat.packs.forEach { p ->
+                            Row(
+                                Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            ) {
+                                Text("⭐ ${p.credits} — ${p.label.ifEmpty { p.sku }}",
+                                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                    color = Brand.ink, modifier = Modifier.weight(1f))
+                                TextButton(onClick = {
+                                    if (activity != null) c.billing.launchPurchase(activity, p.sku)
+                                }) {
+                                    Text(c.billing.price(p.sku) ?: ("$" + "%.2f".format(p.cents / 100.0)),
+                                        fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
+                                }
+                            }
+                        }
+                    }
+
+                    billingNote?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(it, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = hexColor("#047857"))
                     }
                 }
             }
@@ -156,7 +201,8 @@ fun StoreView(onDismiss: () -> Unit) {
                 colors = ButtonDefaults.buttonColors(containerColor = Brand.pink),
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
-                Text("Manage membership & buy credits", fontWeight = FontWeight.Bold)
+                Text(if (billingAvailable) "Manage billing on the web" else "Buy on the secure web store",
+                    fontWeight = FontWeight.Bold)
             }
 
             Spacer(Modifier.height(10.dp))
@@ -181,7 +227,10 @@ fun StoreView(onDismiss: () -> Unit) {
             }
             couponNote?.let { Text(it, fontSize = 12.sp, color = Brand.muted) }
             Text(
-                "Opens the secure web store — purchases made there appear here right away. In-app purchasing on Google Play is coming in the next update.",
+                if (billingAvailable)
+                    "Prices are billed through Google Play. Purchases made on the web appear here right away too — one wallet everywhere."
+                else
+                    "This device doesn't have Google Play (that's normal on Fire tablets), so purchases open the secure web store instead. Credits bought there land on the board right away.",
                 fontSize = 11.sp, color = Brand.muted,
                 modifier = Modifier.padding(top = 8.dp),
             )
