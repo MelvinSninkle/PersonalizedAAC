@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,6 +37,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.andrewpeterson.myworld.LocalAppContainer
 import io.andrewpeterson.myworld.model.prettyChildName
+import io.andrewpeterson.myworld.net.advanceBand
+import io.andrewpeterson.myworld.net.bandStatus
+import io.andrewpeterson.myworld.net.deleteAccount
 import io.andrewpeterson.myworld.ui.theme.Brand
 import io.andrewpeterson.myworld.ui.theme.hexColor
 import kotlinx.coroutines.launch
@@ -125,6 +130,8 @@ fun ParentHomeView() {
         "message" -> MessageBoardView { open = null }
         "settings" -> ParentSettingsView { open = null }
         "quickboard" -> QuickBoardView { open = null }
+        "stats" -> StatsView { open = null }
+        "store" -> StoreView { open = null }
         null -> {}
         else -> ComingSoonDialog(open!!) { open = null }
     }
@@ -167,29 +174,167 @@ private fun QuickBoardView(onDismiss: () -> Unit) {
     }
 }
 
-/** Parent settings — sign out, switch role (fuller port lands with M9). */
+/**
+ * Parent settings — port of `Parent/ParentHomeView.swift`'s ParentSettingsView:
+ * vocabulary band (status + unlock next), device role switch, web dashboard
+ * link, sign out, and Play-policy-compliant in-app account deletion behind a
+ * typed DELETE confirmation. Deep configuration stays on the web by design.
+ */
 @Composable
 private fun ParentSettingsView(onDismiss: () -> Unit) {
     val c = LocalAppContainer.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    var band by remember { mutableStateOf<io.andrewpeterson.myworld.net.BandStatus?>(null) }
+    var advancing by remember { mutableStateOf(false) }
+    var advanceMsg by remember { mutableStateOf<String?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var deleteText by remember { mutableStateOf("") }
+    var deleteError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        band = try { c.api.bandStatus(c.auth.childSlug) } catch (_: Exception) { null }
+    }
+    fun openUrl(url: String) {
+        try {
+            context.startActivity(android.content.Intent(
+                android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+        } catch (_: Exception) {}
+    }
+
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Column(Modifier.background(Color.White, RoundedCornerShape(22.dp)).padding(22.dp)) {
+        Column(
+            Modifier.background(Color.White, RoundedCornerShape(22.dp)).padding(22.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
             Text("Settings", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
             Text(c.auth.user.value?.email ?: "", fontSize = 13.sp, color = Brand.muted)
-            Spacer(Modifier.height(12.dp))
+
+            Spacer(Modifier.height(14.dp))
+            Text("VOCABULARY LEVEL", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
+            val b = band
+            if (b == null) {
+                Text("Loading…", fontSize = 13.sp, color = Brand.muted)
+            } else {
+                Text("Showing: ${bandLabel(b.current)}", fontSize = 14.sp, color = Brand.ink)
+                val next = b.next
+                if (next != null) {
+                    val m = b.mastery
+                    if (m != null && b.readyToAdvance == true) {
+                        Text("${m.correct} of ${m.total} recent answers correct — looks ready to grow.",
+                            fontSize = 12.sp, color = Brand.muted)
+                    }
+                    androidx.compose.material3.TextButton(onClick = {
+                        if (advancing) return@TextButton
+                        advancing = true
+                        scope.launch {
+                            try {
+                                c.api.advanceBand(c.auth.childSlug)
+                                band = try { c.api.bandStatus(c.auth.childSlug) } catch (_: Exception) { band }
+                                advanceMsg = "Unlocked."
+                            } catch (e: Exception) { advanceMsg = "Could not unlock: ${e.message}" }
+                            advancing = false
+                        }
+                    }) {
+                        Text(if (advancing) "Unlocking…" else "Unlock ${bandLabel(next)}",
+                            color = Brand.pinkDeep, fontWeight = FontWeight.SemiBold)
+                    }
+                } else {
+                    Text("Top vocabulary band reached.", fontSize = 12.sp, color = Brand.muted)
+                }
+                advanceMsg?.let { Text(it, fontSize = 12.sp, color = Brand.muted) }
+            }
+
+            Spacer(Modifier.height(14.dp))
+            Text("THIS DEVICE", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
             androidx.compose.material3.TextButton(onClick = {
                 c.deviceMode.set(io.andrewpeterson.myworld.model.DeviceMode.Role.CHILD_BOARD); onDismiss()
             }, modifier = Modifier.fillMaxWidth()) {
-                Text("Switch this device to the child board", color = Brand.ink)
+                Text("Use as the child's board", color = Brand.ink)
             }
+            androidx.compose.material3.TextButton(onClick = {
+                openUrl("${io.andrewpeterson.myworld.net.ApiClient.ORIGIN}/parent/${c.auth.childSlug}")
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("Full dashboard on the web", color = Brand.ink)
+            }
+
+            Spacer(Modifier.height(14.dp))
+            Text("ACCOUNT", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
             androidx.compose.material3.TextButton(onClick = {
                 scope.launch { c.auth.signOut() }; onDismiss()
             }, modifier = Modifier.fillMaxWidth()) {
                 Text("Sign out", color = Color(0xFFDC2626))
             }
+            androidx.compose.material3.TextButton(onClick = { showDeleteConfirm = true },
+                modifier = Modifier.fillMaxWidth()) {
+                Text("Delete account…", color = Color(0xFFDC2626))
+            }
+            deleteError?.let { Text(it, fontSize = 12.sp, color = Color(0xFFDC2626)) }
+
+            Row(Modifier.padding(top = 8.dp)) {
+                androidx.compose.material3.TextButton(onClick = {
+                    openUrl("${io.andrewpeterson.myworld.net.ApiClient.ORIGIN}/terms")
+                }) { Text("Terms of Service", fontSize = 12.sp, color = Brand.muted) }
+                androidx.compose.material3.TextButton(onClick = {
+                    openUrl("${io.andrewpeterson.myworld.net.ApiClient.ORIGIN}/privacy")
+                }) { Text("Privacy Policy", fontSize = 12.sp, color = Brand.muted) }
+            }
+
             androidx.compose.material3.TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
                 Text("Done", color = Brand.pinkDeep, fontWeight = FontWeight.Bold)
             }
         }
     }
+
+    if (showDeleteConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false; deleteText = "" },
+            title = { androidx.compose.material3.Text("Delete this account?") },
+            text = {
+                Column {
+                    androidx.compose.material3.Text(
+                        "Permanently deletes this account and everything on the board — every tile, photo, generated image, recording, and all history. This cannot be undone.")
+                    Spacer(Modifier.height(10.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = deleteText, onValueChange = { deleteText = it },
+                        label = { androidx.compose.material3.Text("Type DELETE to confirm") },
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    if (deleteText.trim().uppercase() != "DELETE") {
+                        deleteError = "Type DELETE (all caps) to confirm."
+                        deleteText = ""; showDeleteConfirm = false
+                        return@TextButton
+                    }
+                    showDeleteConfirm = false
+                    scope.launch {
+                        try {
+                            c.api.deleteAccount()
+                            c.auth.signOut(); onDismiss()
+                        } catch (e: Exception) { deleteError = "Couldn't delete: ${e.message}" }
+                        deleteText = ""
+                    }
+                }) { androidx.compose.material3.Text("Delete everything", color = Color(0xFFDC2626)) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showDeleteConfirm = false; deleteText = "" }) {
+                    androidx.compose.material3.Text("Cancel")
+                }
+            },
+        )
+    }
+}
+
+/** Vocabulary band ids → parent-friendly labels (ParentHomeView.swift parity). */
+fun bandLabel(band: String?): String = when (band) {
+    "12-18m" -> "12–18 months · first words"
+    "18-30m" -> "18–30 months · vocabulary burst"
+    "2-3y" -> "2–3 years · sentences"
+    "3-4y" -> "3–4 years · grammar"
+    "4y+" -> "4 years and up"
+    else -> "every band"
 }
