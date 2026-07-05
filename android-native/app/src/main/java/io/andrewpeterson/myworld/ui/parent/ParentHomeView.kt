@@ -268,6 +268,23 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
             }
 
             Spacer(Modifier.height(14.dp))
+            Text("KID-PROOFING", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
+            Text(
+                "On the child board the back gesture is disabled and the system bars hide. " +
+                    "For full lock-down, use Android's screen pinning: Settings → Security → " +
+                    "App pinning (on Fire: Settings → Security & Privacy), turn it on, open the " +
+                    "board, then pin it from the recent-apps view. Unpinning needs your device PIN.",
+                fontSize = 12.sp, color = Brand.muted,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text("THIS DEVICE CAN…", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
+            Text(
+                io.andrewpeterson.myworld.model.DeviceCapabilities.summary(
+                    context, playBilling = c.billing.available.value),
+                fontSize = 12.sp, color = Brand.muted,
+            )
+
+            Spacer(Modifier.height(14.dp))
             Text("ACCOUNT", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
             androidx.compose.material3.TextButton(onClick = {
                 scope.launch { c.auth.signOut() }; onDismiss()

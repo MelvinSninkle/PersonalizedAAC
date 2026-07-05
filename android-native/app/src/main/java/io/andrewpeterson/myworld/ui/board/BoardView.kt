@@ -110,6 +110,22 @@ fun BoardView() {
         onDispose { c.live.stop(); c.autoTeach.stop() }
     }
 
+    // KID-PROOFING: the back gesture does nothing on the child board (parents
+    // exit via the lock long-press / hold-to-exit), and the system bars hide
+    // in immersive mode so a swipe-happy kid can't surface the navigation.
+    androidx.activity.compose.BackHandler(enabled = !editMode) { /* swallowed */ }
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val window = (view.context as? android.app.Activity)?.window
+        val controller = window?.let {
+            androidx.core.view.WindowInsetsControllerCompat(it, view)
+        }
+        controller?.systemBarsBehavior =
+            androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        onDispose { controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
+    }
+
     // Route incoming facilitator commands (message overlay lands in M7).
     LaunchedEffect(liveCommand) {
         val cmd = liveCommand ?: return@LaunchedEffect
