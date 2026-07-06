@@ -47,13 +47,30 @@ export default async function handler(req, res) {
     out.perAccount = pa.map((r) => ({ account: r.account, count: r.count, costCents: r.cost,
                                       voiceChars: 0, voiceCostCents: 0 }));
 
-    // The child board each account owns — so the admin table can show WHO an
-    // account is (and jump to their board) without a separate lookup.
+    // The child board each account owns + its effective tier — so the admin
+    // table can show WHO an account is and comp/simulate their membership.
     try {
-      const slugs = await db`SELECT email, child_slug FROM users WHERE child_slug IS NOT NULL`;
-      const byEmail = new Map(slugs.map((r) => [r.email, r.child_slug]));
-      for (const row of out.perAccount) row.childId = byEmail.get(row.account) || null;
-    } catch (_) { /* users table variants — column stays null */ }
+      const users = await db`SELECT id, email, child_slug, sub_override FROM users`;
+      // Active subscription per user: newest sub-sku purchase in the same
+      // 35-day window activeSubscription() uses.
+      const { SUBSCRIPTIONS, subscriptionBySku } = await import('./_lib/credits.js');
+      const skus = SUBSCRIPTIONS.flatMap((s) => [s.sku, s.appleProductId, s.googleProductId]);
+      const subs = await db`
+        SELECT DISTINCT ON (user_id) user_id, product_id FROM purchases
+        WHERE product_id = ANY(${skus}) AND created_at > NOW() - INTERVAL '35 days'
+        ORDER BY user_id, created_at DESC`;
+      const subByUser = new Map(subs.map((r) => [Number(r.user_id), r.product_id]));
+      const byEmail = new Map(users.map((r) => [r.email, r]));
+      for (const row of out.perAccount) {
+        const u = byEmail.get(row.account);
+        if (!u) continue;
+        row.childId = u.child_slug || null;
+        row.override = u.sub_override || null;
+        const effective = u.sub_override || subByUser.get(Number(u.id)) || null;
+        const sub = effective && effective !== 'free' ? subscriptionBySku(effective) : null;
+        row.tier = sub ? sub.label : 'Free';
+      }
+    } catch (_) { /* users table variants — columns stay null */ }
 
     // ElevenLabs voice spend — the same per-account attribution (the logged
     // user id when known, else the board owner), merged into the image rows so

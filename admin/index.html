@@ -458,18 +458,44 @@
           [`Voice · this month (${(v.monthChars / 1000).toFixed(1)}k chars)`, v.monthCount],
           ['Voice cost · this month', cents(v.monthCostCents)],
         ].map((p) => tile(p, false)).join('');
+      const tierOptions = [
+        ['real', 'Real (no override)'], ['free', 'Free'],
+        ['starter.monthly', 'Starter'], ['plus.monthly', 'Plus'], ['pro.monthly', 'Pro'],
+      ];
       $('usage-accounts').innerHTML = d.perAccount.length
-        ? `<table><thead><tr><th>Account</th><th>Child</th><th>Images</th><th>Image cost</th><th>Voice chars</th><th>Voice cost</th><th>Total</th><th></th></tr></thead><tbody>` +
+        ? `<table><thead><tr><th>Account</th><th>Child</th><th>Tier</th><th>Images</th><th>Image cost</th><th>Voice chars</th><th>Voice cost</th><th>Total</th><th></th></tr></thead><tbody>` +
           d.perAccount.map(a => `<tr><td>${esc(a.account)}</td>
             <td>${a.childId ? `<a href="#" class="usage-child" data-slug="${esc(a.childId)}" title="Load this child in the admin">${esc(a.childId)}</a>` : '<span style="color:var(--faint)">—</span>'}</td>
+            <td>${a.account.includes('@')
+              ? `<select class="usage-tier" data-email="${esc(a.account)}" title="Effective now: ${esc(a.tier || 'Free')}${a.override ? ' (override)' : ''}" style="font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:8px;${a.override ? 'background:#fde7ef;' : ''}">` +
+                tierOptions.map(([v, l]) => `<option value="${v}"${(a.override || 'real') === v ? ' selected' : ''}>${l}${v === 'real' && !a.override ? ` · ${esc(a.tier || 'Free')}` : ''}</option>`).join('') +
+                `</select>`
+              : '<span style="color:var(--faint)">—</span>'}</td>
             <td>${a.count}</td><td>${cents(a.costCents)}</td>
             <td>${((a.voiceChars || 0) / 1000).toFixed(1)}k</td><td>${cents(a.voiceCostCents || 0)}</td>
             <td><strong>${cents((a.costCents || 0) + (a.voiceCostCents || 0))}</strong></td>
             <td>${a.account.includes('@')
               ? `<button class="btn ghost usage-reset" data-email="${esc(a.account)}" style="font-size:12px;padding:4px 10px;">🔑 Reset password</button>`
               : ''}</td></tr>`).join('') + `</tbody></table>
-          <p id="usage-reset-out" style="font-size:13px;margin:8px 2px 0;"></p>`
+          <p id="usage-reset-out" style="font-size:13px;margin:8px 2px 0;"></p>
+          <p style="font-size:12px;color:var(--muted);margin:6px 2px 0;">Tier overrides comp the tier's FEATURES (styled seed renders, speech-to-text, auto-teach, reporting) until set back to Real — they don't deposit monthly image credits; use ⭐ Grant credits on the Invites tab for that. "Real" means whatever the family actually purchased.</p>`
         : '<p style="font-size:13px;color:var(--muted)">No generations yet.</p>';
+      // Comp / simulate a tier for ANY account (sets users.sub_override on it).
+      document.querySelectorAll('.usage-tier').forEach(el => el.addEventListener('change', async () => {
+        const out = $('usage-reset-out');
+        const email = el.dataset.email, tier = el.value;
+        el.disabled = true; out.style.color = 'var(--muted)';
+        out.textContent = `Setting ${email} → ${tier}…`;
+        try {
+          const r = await api('/api/store?action=sub-override', { method: 'POST', body: JSON.stringify({ email, tier }) });
+          out.style.color = 'var(--ink)';
+          out.textContent = `${email} is now ${r.label} (${r.source}). Build board / renders follow this immediately.`;
+          loadUsage();
+        } catch (err) {
+          out.style.color = '#c0392b'; out.textContent = 'Failed: ' + err.message;
+          el.disabled = false;
+        }
+      }));
       // Child link → load that child everywhere in the admin.
       document.querySelectorAll('.usage-child').forEach(el => el.addEventListener('click', (e) => {
         e.preventDefault();

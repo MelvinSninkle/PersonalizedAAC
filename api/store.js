@@ -150,7 +150,17 @@ async function catalog(req, res, db, auth, uid) {
 // credits actually drain (chargeForGeneration skips the admin exemption).
 async function subOverride(req, res, db, auth, uid, body) {
   if (auth.user.role !== 'admin') { res.status(403).json({ error: 'Admins only' }); return; }
-  if (!uid) { res.status(400).json({ error: 'no account' }); return; }
+  // Target: another account by email (the admin COMP control — grants that
+  // family the tier's features until cleared), or yourself (the simulator).
+  const email = String(body.email || '').trim().toLowerCase();
+  let targetId = uid, targetRole = auth.user.role;
+  if (email) {
+    const t = await db`SELECT id, role FROM users WHERE email = ${email} LIMIT 1`;
+    if (!t.length) { res.status(404).json({ error: 'no account with that email', email }); return; }
+    targetId = Number(t[0].id);
+    targetRole = t[0].role || 'parent';
+  }
+  if (!targetId) { res.status(400).json({ error: 'no account' }); return; }
   const raw = String(body.tier || '').trim().toLowerCase();
   let value = null;
   if (raw && raw !== 'real' && raw !== 'none') {
@@ -161,9 +171,10 @@ async function subOverride(req, res, db, auth, uid, body) {
       value = sub.sku;
     }
   }
-  await db`UPDATE users SET sub_override = ${value} WHERE id = ${uid}`;
-  const ent = await entitlementFor(db, auth.user);
-  res.status(200).json({ ok: true, override: value, tier: ent.tier, label: ent.label, source: ent.source });
+  await db`UPDATE users SET sub_override = ${value} WHERE id = ${targetId}`;
+  const ent = await entitlementFor(db, { uid: targetId, role: targetRole });
+  res.status(200).json({ ok: true, override: value, ...(email ? { email } : {}),
+                         tier: ent.tier, label: ent.label, source: ent.source });
 }
 
 async function history(req, res, db, uid) {
