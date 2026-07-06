@@ -23,9 +23,9 @@ import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
-import { isDefaultableTile } from './_lib/onboarding-render.js';
+import { isDefaultableTile, loadChildStyleGuideId } from './_lib/onboarding-render.js';
 import { archivePriorImage } from './_lib/image-history.js';
-import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus } from './_lib/seed-board.js';
+import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus, needsStyling } from './_lib/seed-board.js';
 import { ensureCredits, ensureStarter, creditBalance, spendCredits, grantCredits,
          recordPurchase, productCredits, rebuildQuote,
          ensureCoupons, redeemCoupon, randomCouponCode,
@@ -220,16 +220,20 @@ async function browse(req, res, db, auth) {
   if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
-  const [rows, items] = await Promise.all([
+  await ensureSeedJobs(db);   // styled_style_id columns
+  const [rows, items, currentGuide] = await Promise.all([
     shoppableRows(db),
-    db`SELECT taxonomy_slug, image_key, free_retry_used, id FROM items
+    db`SELECT taxonomy_slug, image_key, free_retry_used, styled_style_id, id FROM items
        WHERE child_id = ${childId} AND taxonomy_slug IS NOT NULL`,
+    loadChildStyleGuideId(db, childId),
   ]);
   const mine = new Map(items.map((i) => [i.taxonomy_slug, i]));
   const tiles = rows.map((t) => {
     const it = mine.get(t.id);
     const img = it && it.image_key ? it.image_key : null;
-    const personalized = !!(img && !img.startsWith('taxonomy-defaults/'));
+    // "personalized" = styled under the child's CURRENT guide (or before
+    // tracking existed) — a style change makes tiles buyable again (§9).
+    const personalized = !!(it && !needsStyling(it, currentGuide) && img && !img.startsWith('taxonomy-defaults/'));
     return {
       id: t.id, label: t.label, column: t.column_name,
       category: t.category || null, subcategory: t.subcategory || null,
@@ -359,9 +363,14 @@ async function personalizeAll(req, res, db, auth, uid, body) {
   if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
-  const rows = await db`SELECT id, taxonomy_slug, image_key FROM items
+  await ensureSeedJobs(db);   // guarantees the styled_style_id columns exist
+  const rows = await db`SELECT id, taxonomy_slug, image_key, styled_style_id FROM items
                         WHERE child_id = ${childId} AND taxonomy_slug IS NOT NULL`;
-  const remaining = rows.filter((r) => !r.image_key || String(r.image_key).startsWith('taxonomy-defaults/'));
+  // Styled-flag dedup (§9): already-styled tiles are skipped and never
+  // re-charged — but a STYLE CHANGE makes previously-styled tiles eligible
+  // again (the quote the client confirms includes them).
+  const currentGuide = await loadChildStyleGuideId(db, childId);
+  const remaining = rows.filter((r) => needsStyling(r, currentGuide));
   const total = rows.length;
   const cost = remaining.length ? bundleQuote(remaining.length) : 0;
 

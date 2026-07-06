@@ -52,6 +52,26 @@ export async function ensureSeedJobs(db) {
   // guidance: parent's correction text on a guided retry. When set, ref_key is
   // treated as the PREVIOUS attempt (improve-this) rather than a related tile.
   await db`ALTER TABLE seed_jobs ADD COLUMN IF NOT EXISTS guidance TEXT`;
+  // Per-image styled tracking (§9): WHICH style guide an item's art was
+  // rendered under, so batch "match my style" ops can skip already-styled
+  // tiles (never double-charge) and treat a STYLE CHANGE as re-eligible.
+  await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS styled_style_id INT`;
+  await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS styled_at TIMESTAMPTZ`;
+}
+
+/**
+ * Does this item still need styling under the child's CURRENT guide?
+ *  - no art / default art            → yes
+ *  - custom art, styled_style_id NULL → no (grandfathered: personalized before
+ *    tracking existed — never re-charge those)
+ *  - custom art under another guide  → yes (style changed → stale)
+ */
+export function needsStyling(item, currentGuideId) {
+  const key = String(item.image_key || '');
+  if (!key || key.startsWith('taxonomy-defaults/')) return true;
+  if (item.styled_style_id == null) return false;
+  const cur = currentGuideId == null ? null : Number(currentGuideId);
+  return Number(item.styled_style_id) !== cur;
 }
 
 // Queue (or re-arm) one render job. Store checkout, retries, and rebuilds all
@@ -307,10 +327,15 @@ export async function processSeedJob(db, job, getCtx) {
                                       label: item.label, section: item.section, source: 'seed-render', who: null });
           } catch (_) { /* archive is best-effort; the render still lands */ }
         }
+        // Stamp WHICH guide painted it (styled_style_id) so batch style-match
+        // ops can skip it — and notice when the child's style later changes.
+        const guideId = c.styleGuide && c.styleGuide.id ? Number(c.styleGuide.id) : null;
         if (job.force) {
-          await db`UPDATE items SET image_key = ${imageKey}, updated_at = NOW() WHERE id = ${item.id}`;
+          await db`UPDATE items SET image_key = ${imageKey}, styled_style_id = ${guideId},
+                   styled_at = NOW(), updated_at = NOW() WHERE id = ${item.id}`;
         } else {
-          await db`UPDATE items SET image_key = ${imageKey}, updated_at = NOW()
+          await db`UPDATE items SET image_key = ${imageKey}, styled_style_id = ${guideId},
+                   styled_at = NOW(), updated_at = NOW()
                    WHERE id = ${item.id} AND (image_key IS NULL OR image_key LIKE 'taxonomy-defaults/%')`;
         }
         try {
