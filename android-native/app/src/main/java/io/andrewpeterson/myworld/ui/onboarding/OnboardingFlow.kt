@@ -344,6 +344,7 @@ private fun ChildStep() {
     }
     var language by remember { mutableStateOf(c.onboarding.language) }
     var tier by remember { mutableStateOf(c.onboarding.tier) }
+    var favoriteColor by remember { mutableStateOf("#ff1493") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var langMenu by remember { mutableStateOf(false) }
@@ -405,6 +406,30 @@ private fun ChildStep() {
             fontSize = 12.sp, color = Brand.muted)
 
         Spacer(Modifier.height(14.dp))
+        // Favorite color → the banner color everywhere (§1); text contrast is
+        // decided server-side by luminance, one rule for every surface.
+        Text("WHAT IS YOUR CHILD'S FAVORITE COLOR?", fontSize = 11.sp,
+            fontWeight = FontWeight.Bold, color = Brand.muted)
+        Text("It becomes their banner color across the whole app. You can change it later.",
+            fontSize = 12.sp, color = Brand.muted)
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState())) {
+            listOf("#ff1493", "#ef4444", "#f59e0b", "#facc15", "#22c55e",
+                "#0ea5e9", "#3b82f6", "#8b5cf6", "#111827").forEach { hex ->
+                val selected = favoriteColor == hex
+                Box(
+                    Modifier.size(36.dp)
+                        .background(hexColor(hex), androidx.compose.foundation.shape.CircleShape)
+                        .border(if (selected) 3.dp else 1.dp,
+                            if (selected) Brand.ink else Color.Black.copy(alpha = 0.15f),
+                            androidx.compose.foundation.shape.CircleShape)
+                        .clickable { favoriteColor = hex },
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
         StylePickerRow()
         Spacer(Modifier.height(14.dp))
         VoicePickerRow()
@@ -433,6 +458,7 @@ private fun ChildStep() {
                         name = name.trim(), birthDate = birth.trim(), tier = tier,
                         language = language, voiceId = c.onboarding.voiceId,
                         styleGuideId = c.onboarding.styleGuideId,
+                        favoriteColor = favoriteColor,
                     )
                     c.onboarding.childName = name.trim()
                     c.onboarding.birthDate = birth.trim()

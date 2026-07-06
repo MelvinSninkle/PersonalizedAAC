@@ -4582,6 +4582,14 @@
         if (Object.keys(patch).length) saveGameSettings(patch);
       }
       SCHEDULES = Array.isArray(s.schedules) ? s.schedules : [];
+      // Favorite-color banner (§1): kidDisplay carries the child's chosen
+      // header colors (text color pre-computed server-side by luminance).
+      const kd = s.kidDisplay;
+      if (kd && /^#[0-9a-fA-F]{6}$/.test(String(kd.colorHeaderBg || ''))) {
+        document.documentElement.style.setProperty('--hdr-bg', kd.colorHeaderBg);
+        document.documentElement.style.setProperty('--hdr-text',
+          /^#[0-9a-fA-F]{6}$/.test(String(kd.colorHeaderText || '')) ? kd.colorHeaderText : '#ffffff');
+      }
     } catch (_) {}
   }
 

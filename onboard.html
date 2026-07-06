@@ -94,6 +94,14 @@
     <input id="in-birth" type="date">
     <div style="font-size:11px;color:#666;margin-top:4px;line-height:1.3;">Used to start with vocabulary at the right level — older words stay hidden until they're ready. Never shown publicly.</div>
 
+    <label style="margin-top:16px;">What is your child's favorite color?</label>
+    <p class="note" style="margin:0 0 8px;">It becomes their banner color across the whole app — one more thing on the device that's personally THEIRS. You can change it later.</p>
+    <div id="fav-colors" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <!-- swatches injected; last cell is the free-pick input -->
+      <input type="color" id="fav-color-custom" value="#ff1493" title="Pick any color"
+             style="width:34px;height:34px;border:none;background:none;padding:0;cursor:pointer;">
+    </div>
+
     <label style="margin-top:16px;">Art style</label>
     <div class="style-grid" id="style-grid">
       <div class="center" style="grid-column:1/-1;color:var(--faint);font-size:13px;padding:14px;">Loading styles…</div>
@@ -370,6 +378,28 @@
   // parent exactly WHAT is missing (a disabled button explains nothing).
   function refreshContinue() { $('style-continue').disabled = false; }
   refreshContinue();
+
+  // ---- Favorite color (§1): swatches + free pick; sent with the child step,
+  // where the server sets the banner color + WCAG-contrast text color. ----
+  let favoriteColor = '#ff1493';   // brand pink until the family picks
+  (function wireFavColors() {
+    const wrap = $('fav-colors');
+    const custom = $('fav-color-custom');
+    const SWATCHES = ['#ff1493', '#ef4444', '#f59e0b', '#facc15', '#22c55e', '#0ea5e9', '#3b82f6', '#8b5cf6', '#111827'];
+    const mark = () => wrap.querySelectorAll('.fav-swatch').forEach((el) => {
+      el.style.outline = el.dataset.c === favoriteColor ? '3px solid #1f2937' : 'none';
+    });
+    for (const c of SWATCHES) {
+      const el = document.createElement('button');
+      el.type = 'button'; el.className = 'fav-swatch'; el.dataset.c = c;
+      el.title = c;
+      el.style.cssText = 'width:34px;height:34px;border-radius:50%;border:1px solid rgba(0,0,0,.15);cursor:pointer;background:' + c + ';';
+      el.addEventListener('click', () => { favoriteColor = c; custom.value = c; mark(); });
+      wrap.insertBefore(el, custom);
+    }
+    custom.addEventListener('input', () => { favoriteColor = custom.value; mark(); });
+    mark();
+  })();
   $('in-name').addEventListener('input', refreshContinue);
   $('in-birth').addEventListener('input', refreshContinue);
   $('style-upload-input').addEventListener('change', async (e) => {
@@ -397,7 +427,7 @@
     if (!birthDate) { msg.textContent = 'Please enter your child’s birthday.'; $('in-birth').focus(); return; }
     $('style-continue').disabled = true; $('style-msg').textContent = 'Saving…';
     try {
-      await apiJSON('/api/onboarding/child', { name, birthDate, tier: 'under3', styleGuideId: selectedStyle.id, voiceId: selectedVoiceId });
+      await apiJSON('/api/onboarding/child', { name, birthDate, tier: 'under3', styleGuideId: selectedStyle.id, voiceId: selectedVoiceId, favoriteColor });
       CHILD_NAME = name; applyName();
       await loadRelOptions();
       showPhase('people');

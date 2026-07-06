@@ -601,6 +601,7 @@ private struct OnboardingChildView: View {
     @Environment(OnboardingCoordinator.self) private var coord
     @State private var busy = false
     @State private var errorText: String?
+    @State private var favoriteColor = "#ff1493"
     private let api = APIClient()
 
     private struct Lang: Identifiable { let id: String; let label: String; let comingSoon: Bool }
@@ -667,6 +668,36 @@ private struct OnboardingChildView: View {
                     .foregroundStyle(Color(hex: Brand.muted))
                     .padding(.leading, 4)
 
+                // Favorite color → the banner color everywhere (§1); the server
+                // computes the text contrast by luminance, one rule for all apps.
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("WHAT IS YOUR CHILD'S FAVORITE COLOR?")
+                        .font(.system(size: 11, weight: .bold)).tracking(0.6)
+                        .foregroundStyle(Color(hex: Brand.muted))
+                    Text("It becomes their banner color across the whole app. You can change it later.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(hex: Brand.muted))
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(["#ff1493", "#ef4444", "#f59e0b", "#facc15", "#22c55e",
+                                     "#0ea5e9", "#3b82f6", "#8b5cf6", "#111827"], id: \.self) { hex in
+                                Button {
+                                    favoriteColor = hex
+                                } label: {
+                                    Circle()
+                                        .fill(Color(hex: hex))
+                                        .frame(width: 36, height: 36)
+                                        .overlay(Circle().stroke(
+                                            favoriteColor == hex ? Color(hex: Brand.ink) : Color.black.opacity(0.15),
+                                            lineWidth: favoriteColor == hex ? 3 : 1))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+
                 OBStylePicker()
                 OBVoicePicker()
 
@@ -714,7 +745,8 @@ private struct OnboardingChildView: View {
                 tier: coord.tier,
                 language: coord.language,
                 voiceId: coord.voiceId,
-                styleGuideId: coord.styleGuideId
+                styleGuideId: coord.styleGuideId,
+                favoriteColor: favoriteColor
             )
             coord.go(to: .childPhoto)
         } catch {
