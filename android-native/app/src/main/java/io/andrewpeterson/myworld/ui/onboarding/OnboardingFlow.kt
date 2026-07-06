@@ -415,8 +415,17 @@ private fun ChildStep() {
         }
 
         Spacer(Modifier.height(16.dp))
-        PrimaryButton(if (busy) "Saving…" else "Continue", busy = busy,
-            enabled = name.isNotBlank() && Regex("""\d{4}-\d{2}-\d{2}""").matches(birth.trim())) {
+        // Stays ENABLED: tapping with something missing names the exact field
+        // (a disabled button explains nothing to a stressed parent).
+        PrimaryButton(if (busy) "Saving…" else "Continue", busy = busy) {
+            when {
+                c.onboarding.styleGuideId == null -> { error = "You need to select a style."; return@PrimaryButton }
+                c.onboarding.voiceId == null -> { error = "Please select a voice."; return@PrimaryButton }
+                name.isBlank() -> { error = "Please enter your child's name."; return@PrimaryButton }
+                !Regex("""\d{4}-\d{2}-\d{2}""").matches(birth.trim()) -> {
+                    error = "Please enter their birthday as YYYY-MM-DD."; return@PrimaryButton
+                }
+            }
             busy = true; error = null
             scope.launch {
                 try {
@@ -720,14 +729,29 @@ private fun PhotoStep(isChild: Boolean) {
                 }
             }
             jpeg != null -> {
-                Row(
+                // Elapsed ticker (§2): a long render must read as WORKING, not
+                // broken. The counter dies with this state — a failure flips
+                // back to the capture card, so it can never run forever.
+                var elapsed by remember { mutableStateOf(0) }
+                LaunchedEffect(jpeg) {
+                    elapsed = 0
+                    while (true) { kotlinx.coroutines.delay(1000); elapsed++ }
+                }
+                Column(
                     Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).padding(vertical = 22.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    CircularProgressIndicator(color = Brand.pink, modifier = Modifier.size(22.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text("Painting the portrait…", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Brand.muted)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(color = Brand.pink, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            "Painting the portrait… " + (if (elapsed >= 60) "${elapsed / 60}m " else "") + "${elapsed % 60}s",
+                            fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Brand.muted,
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text("This may take anywhere from 1 to 5 minutes — don't be alarmed.",
+                        fontSize = 12.sp, color = Brand.muted)
                 }
             }
             else -> {
@@ -751,21 +775,25 @@ private fun PhotoStep(isChild: Boolean) {
                     }
                     Spacer(Modifier.height(10.dp))
                 }
-                val captureEnabled = isChild || subjectName.isNotBlank()
                 Column(
                     Modifier.fillMaxWidth()
                         .background(Color.White, RoundedCornerShape(18.dp))
                         .border(1.dp, hexColor("#f1e3ec"), RoundedCornerShape(18.dp))
-                        .clickable(enabled = captureEnabled) {
-                            pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        .clickable {
+                            // Field-specific gate (§3) instead of a mute disabled card.
+                            if (!isChild && subjectName.isBlank()) {
+                                error = "Please enter their name first."
+                            } else {
+                                error = null
+                                pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            }
                         }
                         .padding(vertical = 28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text("📷", fontSize = 34.sp)
-                    Text("Take or choose a photo", fontSize = 16.sp, fontWeight = FontWeight.Bold,
-                        color = if (captureEnabled) Brand.ink else Brand.muted)
-                    Text("About 30 seconds to render.", fontSize = 12.sp, color = Brand.muted)
+                    Text("Take or choose a photo", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Brand.ink)
+                    Text("Rendering takes 1–5 minutes.", fontSize = 12.sp, color = Brand.muted)
                 }
             }
         }

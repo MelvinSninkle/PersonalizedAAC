@@ -674,9 +674,15 @@ private struct OnboardingChildView: View {
                     Text(e).font(.footnote).foregroundStyle(.red)
                 }
 
-                OBPrimaryButton(title: busy ? "Saving…" : "Continue",
-                                busy: busy,
-                                disabled: coord.childName.trimmingCharacters(in: .whitespaces).isEmpty) {
+                // Stays ENABLED: tapping with something missing names the exact
+                // field (a disabled button explains nothing to a stressed parent).
+                OBPrimaryButton(title: busy ? "Saving…" : "Continue", busy: busy) {
+                    if coord.styleGuideId == nil { errorText = "You need to select a style."; return }
+                    if coord.voiceId == nil { errorText = "Please select a voice."; return }
+                    if coord.childName.trimmingCharacters(in: .whitespaces).isEmpty {
+                        errorText = "Please enter your child's name."; return
+                    }
+                    errorText = nil
                     Task { await save() }
                 }
             }
@@ -730,6 +736,7 @@ private struct OnboardingPhotoView: View {
     @State private var capturedJPEG: Data?
     @State private var draftKey: String?
     @State private var draftImage: UIImage?
+    @State private var genStartedAt: Date?
     @State private var attempt = 0
     @State private var busy = false
     @State private var showPicker = false
@@ -903,7 +910,15 @@ private struct OnboardingPhotoView: View {
     }
 
     private var captureCard: some View {
-        Button { showSourceChoice = true } label: {
+        Button {
+            // Field-specific gate instead of a mute disabled card (§3).
+            if role == .parent && subjectName.trimmingCharacters(in: .whitespaces).isEmpty {
+                errorText = "Please enter their name first."
+            } else {
+                errorText = nil
+                showSourceChoice = true
+            }
+        } label: {
             VStack(spacing: 10) {
                 Image(systemName: "camera.fill")
                     .font(.system(size: 32))
@@ -913,7 +928,7 @@ private struct OnboardingPhotoView: View {
                 Text("Take or choose a photo")
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(Color(hex: Brand.ink))
-                Text("About 30 seconds to render.")
+                Text("Rendering takes 1–5 minutes.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color(hex: Brand.muted))
             }
@@ -922,15 +937,24 @@ private struct OnboardingPhotoView: View {
             .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(hex: Brand.line), lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .disabled(role == .parent && subjectName.trimmingCharacters(in: .whitespaces).isEmpty)
-        .opacity(role == .parent && subjectName.trimmingCharacters(in: .whitespaces).isEmpty ? 0.45 : 1)
     }
 
+    /// Elapsed ticker (§2): a long render must read as WORKING, not broken.
+    /// The timeline dies with this card — failures return to the capture
+    /// card, so the timer can never run forever over a dead request.
     private var busyCard: some View {
-        HStack(spacing: 12) {
-            ProgressView().tint(Color(hex: Brand.pink))
-            Text("Painting the portrait…")
-                .font(.system(size: 14, weight: .semibold))
+        VStack(spacing: 6) {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let s = max(0, Int(context.date.timeIntervalSince(genStartedAt ?? context.date)))
+                HStack(spacing: 12) {
+                    ProgressView().tint(Color(hex: Brand.pink))
+                    Text("Painting the portrait… \(s >= 60 ? "\(s / 60)m " : "")\(s % 60)s")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color(hex: Brand.muted))
+                }
+            }
+            Text("This may take anywhere from 1 to 5 minutes — don't be alarmed.")
+                .font(.system(size: 12))
                 .foregroundStyle(Color(hex: Brand.muted))
         }
         .frame(maxWidth: .infinity).padding(.vertical, 22)
@@ -998,8 +1022,9 @@ private struct OnboardingPhotoView: View {
 
     private func draft(_ jpeg: Data) async {
         capturedJPEG = jpeg
+        genStartedAt = Date()
         busy = true; errorText = nil
-        defer { busy = false }
+        defer { busy = false; genStartedAt = nil }
         do {
             let key = try await api.onboardingPhotoDraft(jpeg: jpeg, styleGuideId: coord.styleGuideId)
             await loadPreview(key: key)
@@ -1011,8 +1036,9 @@ private struct OnboardingPhotoView: View {
 
     private func retry() async {
         guard let key = draftKey else { return }
+        genStartedAt = Date()
         busy = true; errorText = nil
-        defer { busy = false }
+        defer { busy = false; genStartedAt = nil }
         attempt += 1
         do {
             let next = try await api.onboardingPhotoRetry(draftKey: key, attempt: attempt, styleGuideId: coord.styleGuideId)

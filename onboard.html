@@ -249,7 +249,26 @@
   }
   const mediaUrl = (key) => '/api/media?key=' + encodeURIComponent(key);
   // Faded, pulsing My World icon + caption shown while an image is generating.
-  const GEN_LOADER = '<div class="gen-wrap"><img class="gen-load" src="/icons/myworld-globe.png" alt=""><div class="gen-cap">Please wait a few seconds…</div></div>';
+  const GEN_LOADER = '<div class="gen-wrap"><img class="gen-load" src="/icons/myworld-globe.png" alt=""><div class="gen-cap">Painting… this can take a few minutes.</div></div>';
+
+  // Generation takes long enough that parents assume something broke — say so
+  // up front and tick the elapsed time so a long render reads as WORKING.
+  // One timer at a time; callers stop it on success AND failure so it can
+  // never run forever over a dead request.
+  let genTimerId = null;
+  function startGenTimer(msgEl, verb) {
+    stopGenTimer();
+    const t0 = Date.now();
+    const tick = () => {
+      const s = Math.floor((Date.now() - t0) / 1000);
+      const mm = Math.floor(s / 60), ss = s % 60;
+      msgEl.textContent = verb + ' — ' + (mm ? mm + 'm ' : '') + ss + 's. '
+        + 'This may take anywhere from 1 to 5 minutes — don’t be alarmed.';
+    };
+    tick();
+    genTimerId = setInterval(tick, 5000);
+  }
+  function stopGenTimer() { if (genTimerId) { clearInterval(genTimerId); genTimerId = null; } }
   // Tap-to-enlarge the style reference.
   function openLightbox(src) {
     const lb = $('style-lightbox'); if (!lb) return;
@@ -347,9 +366,10 @@
     card.classList.add('sel');
     refreshContinue();
   }
-  function refreshContinue() {
-    $('style-continue').disabled = !(selectedStyle && selectedVoiceId && $('in-name').value.trim() && $('in-birth').value);
-  }
+  // §3: the button stays ENABLED — tapping it with something missing tells the
+  // parent exactly WHAT is missing (a disabled button explains nothing).
+  function refreshContinue() { $('style-continue').disabled = false; }
+  refreshContinue();
   $('in-name').addEventListener('input', refreshContinue);
   $('in-birth').addEventListener('input', refreshContinue);
   $('style-upload-input').addEventListener('change', async (e) => {
@@ -369,7 +389,12 @@
   $('style-continue').addEventListener('click', async () => {
     const name = $('in-name').value.trim();
     const birthDate = $('in-birth').value;
-    if (!selectedStyle || !name || !birthDate) return;
+    // Field-specific messages, first missing wins (§3).
+    const msg = $('style-msg');
+    if (!selectedStyle) { msg.textContent = 'You need to select a style.'; return; }
+    if (!selectedVoiceId) { msg.textContent = 'Please select a voice.'; return; }
+    if (!name) { msg.textContent = 'Please enter your child’s name.'; $('in-name').focus(); return; }
+    if (!birthDate) { msg.textContent = 'Please enter your child’s birthday.'; $('in-birth').focus(); return; }
     $('style-continue').disabled = true; $('style-msg').textContent = 'Saving…';
     try {
       await apiJSON('/api/onboarding/child', { name, birthDate, tier: 'under3', styleGuideId: selectedStyle.id, voiceId: selectedVoiceId });
@@ -446,7 +471,9 @@
     $('child-actions').style.display = 'none';
     refreshPeopleContinue();
   }
-  function refreshPeopleContinue() { $('people-continue').disabled = !(childDone && parentDone); }
+  // §3: always tappable — the click handler names the missing photo instead.
+  function refreshPeopleContinue() { $('people-continue').disabled = false; }
+  refreshPeopleContinue();
 
   // Persist generated drafts per child so they survive page navigation/reload —
   // no regenerating when you come back. The blobs live server-side; we just keep
@@ -489,7 +516,7 @@
     const thumb = $(role + '-thumb');
     const actions = $(role + '-actions');
     thumb.innerHTML = GEN_LOADER; actions.style.display = 'none';
-    $('people-msg').textContent = 'Drawing in your style… (about 20–30 seconds)';
+    startGenTimer($('people-msg'), 'Drawing in your style…');
     try {
       const blob = await downscale(file);
       const attempt = role === 'child' ? childAttempt : parentAttempt;
@@ -502,8 +529,10 @@
       onbSave(role === 'child' ? { childDraftKey: draftKey, childApproved: false } : { parentDraftKey: draftKey, parentApproved: false });
       thumb.innerHTML = '<img src="' + mediaUrl(draftKey) + '" alt="">';
       actions.style.display = 'flex';
+      stopGenTimer();
       $('people-msg').textContent = 'Like it? Approve, or try again for a different take.';
     } catch (err) {
+      stopGenTimer();   // a failed render must never leave a running timer
       thumb.textContent = 'Tap to try again';
       $('people-msg').textContent = 'Could not draw it: ' + (err.message || err);
     }
@@ -522,7 +551,11 @@
       $('subj-' + role).classList.add('done');
       onbSave(role === 'child' ? { childApproved: true } : { parentApproved: true, parentName: name, parentRel: $('parent-rel').value });
       if (role === 'child') { childDone = true; } else { parentDone = true; }
-      $('people-msg').textContent = (childDone && parentDone) ? 'Both saved ✓ — add more family, or continue.' : (name + ' saved ✓');
+      // Completion prompts the NEXT upload (§2 acceptance).
+      $('people-msg').textContent = (childDone && parentDone)
+        ? 'Both saved ✓ — add more family, or continue.'
+        : (childDone ? name + ' saved ✓ — now upload a photo of one grown-up.'
+                     : name + ' saved ✓ — now upload a photo of your child.');
       refreshPeopleContinue();
     } catch (err) { $(role + '-actions').style.display = 'flex'; $('people-msg').textContent = 'Could not save: ' + (err.message || err); }
   }
@@ -575,7 +608,11 @@
     finally { $('famx-save').disabled = false; }
   });
 
-  $('people-continue').addEventListener('click', () => { showPhase('scene'); if (!restoreScene()) startScene(); });
+  $('people-continue').addEventListener('click', () => {
+    if (!childDone) { $('people-msg').textContent = 'You need to upload a photo of your child first.'; return; }
+    if (!parentDone) { $('people-msg').textContent = 'You need to upload a photo of one grown-up.'; return; }
+    showPhase('scene'); if (!restoreScene()) startScene();
+  });
   // Backward navigation — change/re-upload the style, then Continue forward again.
   $('people-back').addEventListener('click', () => {
     showPhase('style');
@@ -589,25 +626,28 @@
     sceneAttempt = 0;
     $('scene-pic').innerHTML = GEN_LOADER;
     $('scene-approve').disabled = true; $('scene-retry').disabled = true;
-    $('scene-msg').textContent = 'Drawing a sample…';
+    startGenTimer($('scene-msg'), 'Drawing a sample…');
     try {
       const { draftKey } = await apiJSON('/api/onboarding/scene?action=draft');
       sceneDraftKey = draftKey; onbSave({ sceneDraftKey: draftKey });
       $('scene-pic').innerHTML = '<img src="' + mediaUrl(draftKey) + '" alt="">';
+      stopGenTimer();
       $('scene-msg').textContent = 'This is how toys, food, and places will look.';
       $('scene-approve').disabled = false; $('scene-retry').disabled = false;
-    } catch (err) { $('scene-msg').textContent = 'Could not draw it: ' + (err.message || err); $('scene-retry').disabled = false; }
+    } catch (err) { stopGenTimer(); $('scene-msg').textContent = 'Could not draw it: ' + (err.message || err); $('scene-retry').disabled = false; }
   }
   $('scene-retry').addEventListener('click', async () => {
     sceneAttempt++;
     $('scene-pic').innerHTML = GEN_LOADER;
-    $('scene-approve').disabled = true; $('scene-retry').disabled = true; $('scene-msg').textContent = 'Drawing another…';
+    $('scene-approve').disabled = true; $('scene-retry').disabled = true;
+    startGenTimer($('scene-msg'), 'Drawing another…');
     try {
       const { draftKey } = await apiJSON('/api/onboarding/scene?action=retry', { attempt: sceneAttempt });
       sceneDraftKey = draftKey; onbSave({ sceneDraftKey: draftKey });
       $('scene-pic').innerHTML = '<img src="' + mediaUrl(draftKey) + '" alt="">';
+      stopGenTimer();
       $('scene-msg').textContent = 'Better? Approve, or try again.';
-    } catch (err) { $('scene-msg').textContent = 'Could not draw it: ' + (err.message || err); }
+    } catch (err) { stopGenTimer(); $('scene-msg').textContent = 'Could not draw it: ' + (err.message || err); }
     finally { $('scene-approve').disabled = false; $('scene-retry').disabled = false; }
   });
   $('scene-approve').addEventListener('click', async () => {
