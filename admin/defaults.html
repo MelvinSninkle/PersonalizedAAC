@@ -73,6 +73,7 @@
     <option value="folders">Folder icons only</option>
   </select>
   <button id="refresh">↻ Refresh</button>
+  <button id="push-defaults" title="Copy the reference board's (Fletcher's) tile art AND folder icons into the shared defaults every new board inherits. Only missing entries are copied — safe to re-run.">⬆️ Push from reference</button>
   <a class="back" href="/admin/taxonomy.html">← Taxonomy</a>
 </header>
 <main>
@@ -190,6 +191,42 @@
       document.getElementById('stat').textContent = 'Error';
     }
   }
+
+  // ⬆️ Push defaults: run the same chunked seed-defaults loops the taxonomy
+  // page uses (populate = tile art, cats = folder icons) so the default-board
+  // panel itself can push headers/subheaders — then reload the audit.
+  async function apiPost(path) {
+    const headers = {};
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const r = await fetch(path, { method: 'POST', headers, credentials: 'same-origin' });
+    if (r.status === 401 || r.status === 403) throw new Error('Sign in as an admin first (open /login), then return here.');
+    if (!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0, 160));
+    return r.json();
+  }
+  async function pushLoop(mode) {
+    let offset = 0, processed = 0, total = 0;
+    for (let i = 0; i < 200; i++) {
+      const r = await apiPost(`/api/admin/lab?action=seed-defaults&mode=${mode}&offset=${offset}`);
+      total = r.total || 0; processed += r.processed || 0;
+      document.getElementById('stat').textContent = `Pushing ${mode}: ${r.nextOffset}/${total}…`;
+      if (r.done || r.nextOffset <= offset) break;
+      offset = r.nextOffset;
+    }
+    return { processed, total };
+  }
+  document.getElementById('push-defaults').addEventListener('click', async () => {
+    const btn = document.getElementById('push-defaults');
+    if (!confirm('Push the reference board (Fletcher’s) into the shared defaults?\n\nCopies tile art + folder icons that are missing a default. Every board — new and existing — reads these live. Safe to re-run.')) return;
+    btn.disabled = true;
+    try {
+      const t = await pushLoop('populate');
+      const f = await pushLoop('cats');
+      alert(`Pushed ${t.processed} of ${t.total} tile defaults + ${f.processed} of ${f.total} folder icons.`);
+      await load();
+    } catch (e) {
+      alert('Push failed: ' + (e.message || e));
+    } finally { btn.disabled = false; }
+  });
 
   document.getElementById('filter').addEventListener('change', render);
   document.getElementById('q').addEventListener('input', render);
