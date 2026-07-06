@@ -166,8 +166,26 @@ fun BoardTileEditSheet(tile: Tile, onDismiss: () -> Unit) {
 
             Spacer(Modifier.height(12.dp))
             Text("REDRAW THE PICTURE", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
+            // §8: ONE TAP — regenerates this picture in the child's selected
+            // style automatically. No style hunting, no note required.
+            TextButton(onClick = {
+                if (busy) return@TextButton
+                busy = true; error = null
+                scope.launch {
+                    try {
+                        c.api.storeRetry(c.auth.childSlug, tile.id, "")
+                        note = "Matching your child's style — the new picture lands in a couple of minutes. (First retry per tile is free.)"
+                    } catch (e: Exception) {
+                        error = if (e.message?.contains("needs_subscription") == true)
+                            "Styled redraws are part of My World memberships — join under Credits & Store."
+                        else "Couldn't start: ${e.message}"
+                    } finally { busy = false }
+                }
+            }, enabled = !busy) {
+                Text("✨ Match my child's style", color = Brand.pinkDeep, fontWeight = FontWeight.Bold)
+            }
             OutlinedTextField(value = guidance, onValueChange = { guidance = it },
-                label = { Text("What should change? (required)") },
+                label = { Text("…or say what should change") },
                 placeholder = { Text("e.g. \"the cup should be blue like ours\"") },
                 modifier = Modifier.fillMaxWidth())
             TextButton(onClick = { redraw() }, enabled = !busy) {

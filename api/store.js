@@ -81,6 +81,7 @@ export default async function handler(req, res) {
       case 'checkout':       return checkout(req, res, db, auth, uid, body);
       case 'free-board':     return freeBoard(req, res, db, auth, body);
       case 'personalize-all': return personalizeAll(req, res, db, auth, uid, body);
+      case 'personalize-category': return personalizeCategory(req, res, db, auth, uid, body);
       case 'impact':         return impact(req, res, db, auth);
       case 'adopt-image':    return adoptImage(req, res, db, auth);
       case 'regen-with':     return regenWith(req, res, db, auth, uid, body);
@@ -409,6 +410,47 @@ async function personalizeAll(req, res, db, auth, uid, body) {
   res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length + chips.length,
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${remaining.length} tiles + ${chips.length} folder icons queued — the whole board personalizes over the next while.` });
+}
+
+// §9: batch "match all images in THIS FOLDER to my child's style".
+// { childId, categoryId, quote? } — quote:true returns {remaining,total,cost}
+// so the client confirms with the real count/price before any charge.
+// Dedup rides the styled flag (needsStyling): already-styled tiles are
+// skipped and never re-charged; a style change makes them eligible again.
+async function personalizeCategory(req, res, db, auth, uid, body) {
+  const childId = String(body.childId || '').slice(0, 64);
+  const categoryId = Number(body.categoryId);
+  if (!childId || !Number.isFinite(categoryId) || categoryId <= 0) {
+    res.status(400).json({ error: 'childId and categoryId required' }); return;
+  }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  await ensureSeedJobs(db);
+  // Only taxonomy-linked tiles can re-render (they have canonical prompts);
+  // photo tiles the family added are theirs as-is.
+  const rows = await db`SELECT id, taxonomy_slug, image_key, styled_style_id FROM items
+                        WHERE child_id = ${childId} AND category_id = ${categoryId}
+                          AND taxonomy_slug IS NOT NULL`;
+  const currentGuide = await loadChildStyleGuideId(db, childId);
+  const remaining = rows.filter((r) => needsStyling(r, currentGuide));
+  const cost = remaining.length ? bundleQuote(remaining.length) : 0;
+
+  if (body.quote === true || !remaining.length) {
+    res.status(200).json({ ok: true, remaining: remaining.length, total: rows.length, cost });
+    return;
+  }
+  if (!(await memberOr402(res, db, auth, childId))) return;
+
+  const isAdmin = auth.user.role === 'admin';
+  if (!isAdmin) {
+    const s = await spendCredits(db, { userId: uid, credits: cost,
+      reason: 'store:personalize_category', ref: childId + ':' + categoryId });
+    if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: cost, balance: s.balance }); return; }
+  }
+  for (const r of remaining) await enqueueRenderJob(db, childId, r.taxonomy_slug, { force: true });
+  res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length,
+    balance: uid ? await creditBalance(db, uid) : null,
+    note: `${remaining.length} picture${remaining.length === 1 ? '' : 's'} queued — they land over the next few minutes.` });
 }
 
 // ── Contextual magic: "your new fork appears in these pictures" ─────────────

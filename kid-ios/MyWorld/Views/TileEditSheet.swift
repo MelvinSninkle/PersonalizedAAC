@@ -415,8 +415,14 @@ struct BoardTileEditSheet: View {
                     // first redo of each tile is free, then 1 credit (server-
                     // enforced; renders in the background and lands on its own).
                     if tile.taxonomySlug != nil {
+                        // §8: ONE TAP — regenerates in the child's selected
+                        // style automatically; no style hunting, no text.
+                        Button { Task { await redrawTile(guidance: "") } } label: {
+                            pill(redrawing ? "Redrawing…" : "Match my child's style", filled: false, icon: "sparkles")
+                        }
+                        .buttonStyle(.plain).disabled(redrawing)
                         Button { redrawGuidance = ""; redrawGuidanceError = nil; showRedrawSheet = true } label: {
-                            pill(redrawing ? "Redrawing…" : "Redraw picture", filled: false, icon: "wand.and.stars")
+                            pill("Fix with a note", filled: false, icon: "wand.and.stars")
                         }
                         .buttonStyle(.plain).disabled(redrawing)
                     }
