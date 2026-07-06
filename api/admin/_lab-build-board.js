@@ -37,14 +37,21 @@ export default async function handler(req, res) {
     const build = await buildBoard(db, childId);
     const status = await seedStatus(db, childId);
 
+    // Say WHY when renders were skipped — the silent free-tier downgrade is
+    // indistinguishable from "nothing happened" without this.
+    const gateNote = build.personalRenders === false
+      ? ` ⚠️ PERSONAL RENDERS SKIPPED — the family's tier is ${build.ownerTier}; seed jobs queued voice-only. Comp them a tier (admin Usage table) and rebuild to render in their style; the shared default art still applies via sync.`
+      : '';
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
       ok: true, childId,
       placed: build.placed, placeFailed: build.failed, totalWords: build.total,
       newRenderJobs: build.renders, newVoiceJobs: build.voices,
+      personalRenders: build.personalRenders !== false,
+      ownerTier: build.ownerTier || null,
       rearmedJobs: rearmed.length,
       status,
-      note: `Placed ${build.placed}/${build.total} words; queued ${build.renders} renders + ${build.voices} voices; re-armed ${rearmed.length} dead jobs. The cron finishes the rest server-side.`,
+      note: `Placed ${build.placed}/${build.total} words; queued ${build.renders} renders + ${build.voices} voices; re-armed ${rearmed.length} dead jobs. The cron finishes the rest server-side.${gateNote}`,
     });
   } catch (err) {
     res.status(500).json({ error: 'build-board failed', detail: String(err.message || err) });

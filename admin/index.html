@@ -199,6 +199,16 @@
   <!-- TOOLS -->
   <section class="panel" id="panel-tools">
     <div class="tool">
+      <h3>👪 Families — onboarding health</h3>
+      <p>One row per account: signup → payment → credits → what actually landed on the board. Rows flagged 🚩 paid (or hold credits) but have ZERO generated images — interrupted onboardings to rescue. "Rebuild" runs the full board build; "Defaults" stamps the shared default art onto their existing tiles.</p>
+      <div class="row" style="gap:8px;align-items:center;">
+        <button class="btn" id="fam-load">Load report</button>
+        <span class="status" id="fam-status"></span>
+      </div>
+      <div id="fam-table"></div>
+    </div>
+
+    <div class="tool">
       <h3>Admin workbenches</h3>
       <p>The full-screen tools, all in one place.</p>
       <ul style="margin:0;padding-left:18px;font-size:14px;line-height:1.9;">
@@ -458,18 +468,54 @@
           [`Voice · this month (${(v.monthChars / 1000).toFixed(1)}k chars)`, v.monthCount],
           ['Voice cost · this month', cents(v.monthCostCents)],
         ].map((p) => tile(p, false)).join('');
+      const tierOptions = [
+        ['real', 'Real (no override)'], ['free', 'Free'],
+        ['starter.monthly', 'Starter'], ['plus.monthly', 'Plus'], ['pro.monthly', 'Pro'],
+      ];
       $('usage-accounts').innerHTML = d.perAccount.length
-        ? `<table><thead><tr><th>Account</th><th>Child</th><th>Images</th><th>Image cost</th><th>Voice chars</th><th>Voice cost</th><th>Total</th><th></th></tr></thead><tbody>` +
+        ? `<table><thead><tr><th>Account</th><th>Child</th><th>Tier</th><th>Images</th><th>Image cost</th><th>Voice chars</th><th>Voice cost</th><th>Total</th><th></th></tr></thead><tbody>` +
           d.perAccount.map(a => `<tr><td>${esc(a.account)}</td>
             <td>${a.childId ? `<a href="#" class="usage-child" data-slug="${esc(a.childId)}" title="Load this child in the admin">${esc(a.childId)}</a>` : '<span style="color:var(--faint)">—</span>'}</td>
+            <td>${a.account.includes('@')
+              ? `<select class="usage-tier" data-email="${esc(a.account)}" title="Effective now: ${esc(a.tier || 'Free')}${a.override ? ' (override)' : ''}" style="font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:8px;${a.override ? 'background:#fde7ef;' : ''}">` +
+                tierOptions.map(([v, l]) => `<option value="${v}"${(a.override || 'real') === v ? ' selected' : ''}>${l}${v === 'real' && !a.override ? ` · ${esc(a.tier || 'Free')}` : ''}</option>`).join('') +
+                `</select>` +
+                (a.overrideExpires
+                  ? `<div style="font-size:10px;color:var(--muted);">${Math.max(1, Math.ceil((new Date(a.overrideExpires) - Date.now()) / 86400000))}d left</div>`
+                  : (a.override ? `<div style="font-size:10px;color:var(--muted);">forever</div>` : ''))
+              : '<span style="color:var(--faint)">—</span>'}</td>
             <td>${a.count}</td><td>${cents(a.costCents)}</td>
             <td>${((a.voiceChars || 0) / 1000).toFixed(1)}k</td><td>${cents(a.voiceCostCents || 0)}</td>
             <td><strong>${cents((a.costCents || 0) + (a.voiceCostCents || 0))}</strong></td>
             <td>${a.account.includes('@')
               ? `<button class="btn ghost usage-reset" data-email="${esc(a.account)}" style="font-size:12px;padding:4px 10px;">🔑 Reset password</button>`
               : ''}</td></tr>`).join('') + `</tbody></table>
-          <p id="usage-reset-out" style="font-size:13px;margin:8px 2px 0;"></p>`
+          <p id="usage-reset-out" style="font-size:13px;margin:8px 2px 0;"></p>
+          <p style="font-size:12px;color:var(--muted);margin:6px 2px 0;">Tier overrides comp the tier's FEATURES (styled seed renders, speech-to-text, auto-teach, reporting) until set back to Real — they don't deposit monthly image credits; use ⭐ Grant credits on the Invites tab for that. "Real" means whatever the family actually purchased.</p>`
         : '<p style="font-size:13px;color:var(--muted)">No generations yet.</p>';
+      // Comp / simulate a tier for ANY account (sets users.sub_override on it).
+      document.querySelectorAll('.usage-tier').forEach(el => el.addEventListener('change', async () => {
+        const out = $('usage-reset-out');
+        const email = el.dataset.email, tier = el.value;
+        // Time-bound comps: paid tiers ask for a duration (blank = forever).
+        let days = 0;
+        if (tier !== 'real' && tier !== 'free') {
+          const raw = prompt(`Comp ${email} the ${tier.split('.')[0]} tier for how many days?\n\n7 / 30 / 90 — or leave blank for forever.`, '30');
+          if (raw === null) { loadUsage(); return; }   // canceled — restore the dropdown
+          days = Math.max(0, parseInt(raw, 10) || 0);
+        }
+        el.disabled = true; out.style.color = 'var(--muted)';
+        out.textContent = `Setting ${email} → ${tier}…`;
+        try {
+          const r = await api('/api/store?action=sub-override', { method: 'POST', body: JSON.stringify({ email, tier, days }) });
+          out.style.color = 'var(--ink)';
+          out.textContent = `${email} is now ${r.label} (${r.source}${r.expires ? `, until ${new Date(r.expires).toLocaleDateString()}` : ''}). Build board / renders follow this immediately.`;
+          loadUsage();
+        } catch (err) {
+          out.style.color = '#c0392b'; out.textContent = 'Failed: ' + err.message;
+          el.disabled = false;
+        }
+      }));
       // Child link → load that child everywhere in the admin.
       document.querySelectorAll('.usage-child').forEach(el => el.addEventListener('click', (e) => {
         e.preventDefault();
@@ -511,6 +557,67 @@
     } catch (err) { status.textContent = err.message; status.className = 'status err'; }
   }
   $('usage-reload').addEventListener('click', loadUsage);
+
+  // ---- Families: onboarding health report + per-row rescue actions ----
+  async function loadFamilies() {
+    const status = $('fam-status'); status.textContent = 'Loading…'; status.className = 'status';
+    try {
+      const d = await api('/api/admin/lab?action=onboarding-report');
+      const dt = (s) => s ? new Date(s).toLocaleDateString() : '—';
+      const seedLine = (s) => !s ? '—'
+        : ['render', 'voice'].map(k => s[k] && s[k].total
+            ? `${k[0].toUpperCase()}${s[k].done}/${s[k].total}${s[k].dead ? `☠${s[k].dead}` : ''}` : '')
+            .filter(Boolean).join(' ') || '—';
+      $('fam-table').innerHTML = d.rows.length
+        ? `<table><thead><tr><th></th><th>Account</th><th>Child</th><th>Signed up</th><th>Paid</th><th>⭐</th><th>Tier</th><th>Step</th><th>Images</th><th>Seed jobs</th><th></th></tr></thead><tbody>` +
+          d.rows.map(r => `<tr${r.flagged ? ' style="background:#fff1f2;"' : ''}>
+            <td>${r.flagged ? '🚩' : ''}</td>
+            <td>${esc(r.email)}</td>
+            <td>${r.childId ? esc(r.childId) : '<span style="color:var(--faint)">—</span>'}</td>
+            <td>${dt(r.signupAt)}</td>
+            <td>${r.paidAt ? dt(r.paidAt) + ' · ' + esc(r.paidSku || '') : '—'}</td>
+            <td>${r.balance}</td>
+            <td>${esc(r.tier)}${r.tierSource === 'override' ? ' (comp)' : ''}</td>
+            <td>${esc(r.step || '—')}</td>
+            <td>${r.images}${r.lastImageAt ? '<div style="font-size:10px;color:var(--muted)">' + dt(r.lastImageAt) + '</div>' : ''}</td>
+            <td style="font-size:12px;">${seedLine(r.seeds)}</td>
+            <td style="white-space:nowrap;">${r.childId
+              ? `<button class="btn ghost fam-rebuild" data-slug="${esc(r.childId)}" style="font-size:12px;padding:4px 8px;">🧰 Rebuild</button>
+                 <button class="btn ghost fam-defaults" data-slug="${esc(r.childId)}" style="font-size:12px;padding:4px 8px;">🖼️ Defaults</button>`
+              : ''}</td></tr>`).join('') + `</tbody></table>`
+        : '<p style="font-size:13px;color:var(--muted)">No accounts yet.</p>';
+      status.textContent = d.flagged ? `${d.flagged} flagged` : '';
+      status.className = d.flagged ? 'status err' : 'status';
+
+      // Rebuild = the existing build-board rescue; report re-loads after so
+      // the retrigger outcome is visible in the same table (§4b).
+      document.querySelectorAll('.fam-rebuild').forEach(el => el.addEventListener('click', async () => {
+        el.disabled = true; status.textContent = `Building ${el.dataset.slug}…`;
+        try {
+          const r = await api('/api/admin/lab?action=build-board', { method: 'POST', body: JSON.stringify({ childId: el.dataset.slug }) });
+          alert(r.note || 'Build queued.');
+          loadFamilies();
+        } catch (err) { alert('Build failed: ' + err.message); el.disabled = false; }
+      }));
+      // Defaults = seed-defaults mode=apply (chunked loop until done).
+      document.querySelectorAll('.fam-defaults').forEach(el => el.addEventListener('click', async () => {
+        el.disabled = true;
+        try {
+          let offset = 0, updated = 0, total = 0;
+          for (let i = 0; i < 200; i++) {
+            const r = await api(`/api/admin/lab?action=seed-defaults&mode=apply&offset=${offset}&childId=${encodeURIComponent(el.dataset.slug)}`, { method: 'POST' });
+            total = r.total || 0; updated += r.updated || 0;
+            status.textContent = `Defaults → ${el.dataset.slug}: ${r.nextOffset}/${total}…`;
+            if (r.done || r.nextOffset <= offset) break;
+            offset = r.nextOffset;
+          }
+          alert(`Applied defaults to ${el.dataset.slug}: ${updated} of ${total} tiles updated.`);
+          loadFamilies();
+        } catch (err) { alert('Apply defaults failed: ' + err.message); el.disabled = false; }
+      }));
+    } catch (err) { status.textContent = err.message; status.className = 'status err'; }
+  }
+  $('fam-load').addEventListener('click', loadFamilies);
 
   // ---- content tree ----
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }

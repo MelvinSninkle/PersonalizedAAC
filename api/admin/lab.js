@@ -27,6 +27,8 @@ import portImage from './_lab-port-image.js';
 import publishDefault from './_lab-publish-default.js';
 import publishTile from './_lab-publish-tile.js';
 import seedDefaults from './_lab-seed-defaults.js';
+import seedStatusAction from './_lab-seed-status.js';
+import onboardingReport from './_lab-onboarding-report.js';
 import settings from './_lab-settings.js';
 import uploadImage from './_lab-upload-image.js';
 import tileLab from './_lab-tile-lab.js';
@@ -48,6 +50,8 @@ const HANDLERS = {
   'defaults-view': defaultsView,
   'index-objects': indexObjects,
   'seed-defaults': seedDefaults,
+  'seed-status': seedStatusAction,
+  'onboarding-report': onboardingReport,
   'settings': settings,
   'tile-lab': tileLab,
   'upload-image': uploadImage,

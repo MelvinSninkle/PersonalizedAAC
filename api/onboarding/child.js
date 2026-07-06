@@ -31,6 +31,11 @@ export default async function handler(req, res) {
   // visually consistent.
   const styleGuideId = Number.isFinite(Number(b.styleGuideId)) && Number(b.styleGuideId) > 0
     ? Number(b.styleGuideId) : null;
+  // Favorite color → the child's banner color everywhere (§1). Contrast is
+  // decided HERE by WCAG relative luminance — one rule for every client, and
+  // arbitrary picks stay readable (dark banner → white text, light → ink).
+  const favoriteColor = /^#[0-9a-fA-F]{6}$/.test(String(b.favoriteColor || '').trim())
+    ? String(b.favoriteColor).trim().toLowerCase() : null;
   if (!name) { res.status(400).json({ error: 'name required' }); return; }
   if (!birthDate) { res.status(400).json({ error: 'birthDate (YYYY-MM-DD) required' }); return; }
 
@@ -75,6 +80,17 @@ export default async function handler(req, res) {
     settings.language = language;
     if (voiceId) settings.voiceId = voiceId;
     if (styleGuideId) settings.styleGuideId = styleGuideId;
+    if (favoriteColor) {
+      // WCAG relative luminance (sRGB linearized) — not a hardcoded color list.
+      const lin = (c) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+      const L = 0.2126 * lin(parseInt(favoriteColor.slice(1, 3), 16))
+              + 0.7152 * lin(parseInt(favoriteColor.slice(3, 5), 16))
+              + 0.0722 * lin(parseInt(favoriteColor.slice(5, 7), 16));
+      settings.kidDisplay = Object.assign({}, settings.kidDisplay || {}, {
+        colorHeaderBg: favoriteColor,
+        colorHeaderText: L > 0.45 ? '#1f2937' : '#ffffff',
+      });
+    }
     settings.autoTeach = {
       enabled: false,
       cadence: 'conservative',

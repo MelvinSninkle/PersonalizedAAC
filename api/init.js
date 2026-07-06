@@ -255,6 +255,13 @@ export default async function handler(req, res) {
     // to "Who/what is the [label]?" in the game view.
     await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS description TEXT`;
 
+    // §9 styled tracking: WHICH style guide an item's art was rendered under
+    // (null = raw photo / default art / pre-tracking personalization). Batch
+    // "match my child's style" ops read this to skip-and-never-double-charge,
+    // and to treat a style CHANGE as re-eligible.
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS styled_style_id INT`;
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS styled_at TIMESTAMPTZ`;
+
     // Rotating TEACHING descriptions — 2-3 short, child-directed sentences per
     // tile, each from a different angle (function / feature / context) so the
     // child builds real understanding of the word, not just picture-recognition.

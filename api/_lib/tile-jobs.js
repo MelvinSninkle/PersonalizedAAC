@@ -56,6 +56,10 @@ export async function ensureTileJobs(db) {
   await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS relationship TEXT`;
   // raw = TRUE → use the photo AS-IS as the tile (no AI restyle, no charge).
   await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS raw BOOLEAN NOT NULL DEFAULT FALSE`;
+  // §9 styled tracking on items (also ensured by seed-board's ensureSeedJobs;
+  // duplicated here because this pipeline writes the columns independently).
+  await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS styled_style_id INT`;
+  await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS styled_at TIMESTAMPTZ`;
   await db`CREATE INDEX IF NOT EXISTS tile_jobs_child_idx  ON tile_jobs(child_id, status)`;
   await db`CREATE INDEX IF NOT EXISTS tile_jobs_status_idx ON tile_jobs(status, updated_at)`;
 }
@@ -273,17 +277,22 @@ export async function processTileJob(db, jobId) {
                           AND section = 'people' AND lower(label) = lower(${label}) LIMIT 1`;
       if (ex.length) itemId = Number(ex[0].id);
     }
+    // §9 styled tracking: a styled render records WHICH guide painted it;
+    // raw photos and save-first fallbacks are NOT styled (stay null).
+    const styledId = (!job.raw && !artFailed && sgId) ? Number(sgId) : null;
     if (itemId) {
       await db`UPDATE items SET label = ${label || 'New tile'}, image_key = ${imageKey},
                  sound_key = COALESCE(${soundKey}, sound_key), section = ${section},
                  category_id = COALESCE(${categoryId}, category_id), keep_aspect = ${!!job.keep_aspect},
+                 styled_style_id = ${styledId}, styled_at = ${styledId ? new Date().toISOString() : null},
                  needs_review = ${needsReview}, updated_at = NOW() WHERE id = ${itemId}`;
     } else {
       const it = await db`INSERT INTO items
           (section, category_id, label, image_key, sound_key, keep_aspect, display_order, pinned,
-           child_id, needs_review, updated_at)
+           child_id, needs_review, styled_style_id, styled_at, updated_at)
         VALUES (${section}, ${categoryId}, ${label || 'New tile'}, ${imageKey}, ${soundKey},
-           ${!!job.keep_aspect}, ${Date.now()}, FALSE, ${job.child_id}, ${needsReview}, NOW())
+           ${!!job.keep_aspect}, ${Date.now()}, FALSE, ${job.child_id}, ${needsReview},
+           ${styledId}, ${styledId ? new Date().toISOString() : null}, NOW())
         RETURNING id`;
       itemId = Number(it[0].id);
     }

@@ -23,9 +23,9 @@ import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
-import { isDefaultableTile } from './_lib/onboarding-render.js';
+import { isDefaultableTile, loadChildStyleGuideId } from './_lib/onboarding-render.js';
 import { archivePriorImage } from './_lib/image-history.js';
-import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus } from './_lib/seed-board.js';
+import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus, needsStyling } from './_lib/seed-board.js';
 import { ensureCredits, ensureStarter, creditBalance, spendCredits, grantCredits,
          recordPurchase, productCredits, rebuildQuote,
          ensureCoupons, redeemCoupon, randomCouponCode,
@@ -81,6 +81,7 @@ export default async function handler(req, res) {
       case 'checkout':       return checkout(req, res, db, auth, uid, body);
       case 'free-board':     return freeBoard(req, res, db, auth, body);
       case 'personalize-all': return personalizeAll(req, res, db, auth, uid, body);
+      case 'personalize-category': return personalizeCategory(req, res, db, auth, uid, body);
       case 'impact':         return impact(req, res, db, auth);
       case 'adopt-image':    return adoptImage(req, res, db, auth);
       case 'regen-with':     return regenWith(req, res, db, auth, uid, body);
@@ -150,7 +151,17 @@ async function catalog(req, res, db, auth, uid) {
 // credits actually drain (chargeForGeneration skips the admin exemption).
 async function subOverride(req, res, db, auth, uid, body) {
   if (auth.user.role !== 'admin') { res.status(403).json({ error: 'Admins only' }); return; }
-  if (!uid) { res.status(400).json({ error: 'no account' }); return; }
+  // Target: another account by email (the admin COMP control — grants that
+  // family the tier's features until cleared), or yourself (the simulator).
+  const email = String(body.email || '').trim().toLowerCase();
+  let targetId = uid, targetRole = auth.user.role;
+  if (email) {
+    const t = await db`SELECT id, role FROM users WHERE email = ${email} LIMIT 1`;
+    if (!t.length) { res.status(404).json({ error: 'no account with that email', email }); return; }
+    targetId = Number(t[0].id);
+    targetRole = t[0].role || 'parent';
+  }
+  if (!targetId) { res.status(400).json({ error: 'no account' }); return; }
   const raw = String(body.tier || '').trim().toLowerCase();
   let value = null;
   if (raw && raw !== 'real' && raw !== 'none') {
@@ -161,9 +172,22 @@ async function subOverride(req, res, db, auth, uid, body) {
       value = sub.sku;
     }
   }
-  await db`UPDATE users SET sub_override = ${value} WHERE id = ${uid}`;
-  const ent = await entitlementFor(db, auth.user);
-  res.status(200).json({ ok: true, override: value, tier: ent.tier, label: ent.label, source: ent.source });
+  // Time-bound comps: days = 7|30|90|… → the override expires by itself;
+  // absent/0 = forever (until manually set back to Real).
+  const days = Math.max(0, parseInt(body.days, 10) || 0);
+  const expires = value && days > 0 ? new Date(Date.now() + days * 86_400_000) : null;
+  try {
+    await db`UPDATE users SET sub_override = ${value},
+             sub_override_expires = ${expires ? expires.toISOString() : null}
+             WHERE id = ${targetId}`;
+  } catch (_) {
+    // Deploys that haven't run /api/init yet lack the expiry column.
+    await db`UPDATE users SET sub_override = ${value} WHERE id = ${targetId}`;
+  }
+  const ent = await entitlementFor(db, { uid: targetId, role: targetRole });
+  res.status(200).json({ ok: true, override: value, ...(email ? { email } : {}),
+                         expires: expires ? expires.toISOString() : null,
+                         tier: ent.tier, label: ent.label, source: ent.source });
 }
 
 async function history(req, res, db, uid) {
@@ -197,16 +221,20 @@ async function browse(req, res, db, auth) {
   if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
-  const [rows, items] = await Promise.all([
+  await ensureSeedJobs(db);   // styled_style_id columns
+  const [rows, items, currentGuide] = await Promise.all([
     shoppableRows(db),
-    db`SELECT taxonomy_slug, image_key, free_retry_used, id FROM items
+    db`SELECT taxonomy_slug, image_key, free_retry_used, styled_style_id, id FROM items
        WHERE child_id = ${childId} AND taxonomy_slug IS NOT NULL`,
+    loadChildStyleGuideId(db, childId),
   ]);
   const mine = new Map(items.map((i) => [i.taxonomy_slug, i]));
   const tiles = rows.map((t) => {
     const it = mine.get(t.id);
     const img = it && it.image_key ? it.image_key : null;
-    const personalized = !!(img && !img.startsWith('taxonomy-defaults/'));
+    // "personalized" = styled under the child's CURRENT guide (or before
+    // tracking existed) — a style change makes tiles buyable again (§9).
+    const personalized = !!(it && !needsStyling(it, currentGuide) && img && !img.startsWith('taxonomy-defaults/'));
     return {
       id: t.id, label: t.label, column: t.column_name,
       category: t.category || null, subcategory: t.subcategory || null,
@@ -336,14 +364,34 @@ async function personalizeAll(req, res, db, auth, uid, body) {
   if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
-  const rows = await db`SELECT id, taxonomy_slug, image_key FROM items
+  await ensureSeedJobs(db);   // guarantees the styled_style_id columns exist
+  const rows = await db`SELECT id, taxonomy_slug, image_key, styled_style_id FROM items
                         WHERE child_id = ${childId} AND taxonomy_slug IS NOT NULL`;
-  const remaining = rows.filter((r) => !r.image_key || String(r.image_key).startsWith('taxonomy-defaults/'));
+  // Styled-flag dedup (§9): already-styled tiles are skipped and never
+  // re-charged — but a STYLE CHANGE makes previously-styled tiles eligible
+  // again (the quote the client confirms includes them).
+  const currentGuide = await loadChildStyleGuideId(db, childId);
+  const remaining = rows.filter((r) => needsStyling(r, currentGuide));
   const total = rows.length;
-  const cost = remaining.length ? bundleQuote(remaining.length) : 0;
 
-  if (body.quote === true || !remaining.length) {
-    res.status(200).json({ ok: true, remaining: remaining.length, total, cost });
+  // §6: folder chips join the batch — every chip on the child's board still
+  // wearing the shared default icon (or none) renders in THEIR style too, so
+  // headers/subcategories match the tiles. 1 credit each, same as tiles.
+  let chips = [];
+  try {
+    const cats = await db`
+      SELECT c.id, c.section, c.label, p.label AS parent_label
+      FROM categories c LEFT JOIN categories p ON p.id = c.parent_id
+      WHERE c.child_id = ${childId}
+        AND (c.image_key IS NULL OR c.image_key LIKE 'category-defaults/%')`;
+    chips = cats.map((c) => ({ section: c.section, label: c.label, parent: c.parent_label || '' }));
+  } catch (_) { /* chips are additive — tiles still personalize */ }
+
+  const units = remaining.length + chips.length;
+  const cost = units ? bundleQuote(units) : 0;
+
+  if (body.quote === true || !units) {
+    res.status(200).json({ ok: true, remaining: remaining.length, chips: chips.length, total, cost });
     return;
   }
   if (!(await memberOr402(res, db, auth, childId))) return;
@@ -355,9 +403,54 @@ async function personalizeAll(req, res, db, auth, uid, body) {
   }
   await ensureSeedJobs(db);
   for (const r of remaining) await enqueueRenderJob(db, childId, r.taxonomy_slug, { force: true });
+  const { enqueueChipJob } = await import('./_lib/seed-board.js');
+  for (const ch of chips) {
+    try { await enqueueChipJob(db, childId, ch.section, ch.label, ch.parent); } catch (_) {}
+  }
+  res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length + chips.length,
+    balance: uid ? await creditBalance(db, uid) : null,
+    note: `${remaining.length} tiles + ${chips.length} folder icons queued — the whole board personalizes over the next while.` });
+}
+
+// §9: batch "match all images in THIS FOLDER to my child's style".
+// { childId, categoryId, quote? } — quote:true returns {remaining,total,cost}
+// so the client confirms with the real count/price before any charge.
+// Dedup rides the styled flag (needsStyling): already-styled tiles are
+// skipped and never re-charged; a style change makes them eligible again.
+async function personalizeCategory(req, res, db, auth, uid, body) {
+  const childId = String(body.childId || '').slice(0, 64);
+  const categoryId = Number(body.categoryId);
+  if (!childId || !Number.isFinite(categoryId) || categoryId <= 0) {
+    res.status(400).json({ error: 'childId and categoryId required' }); return;
+  }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  await ensureSeedJobs(db);
+  // Only taxonomy-linked tiles can re-render (they have canonical prompts);
+  // photo tiles the family added are theirs as-is.
+  const rows = await db`SELECT id, taxonomy_slug, image_key, styled_style_id FROM items
+                        WHERE child_id = ${childId} AND category_id = ${categoryId}
+                          AND taxonomy_slug IS NOT NULL`;
+  const currentGuide = await loadChildStyleGuideId(db, childId);
+  const remaining = rows.filter((r) => needsStyling(r, currentGuide));
+  const cost = remaining.length ? bundleQuote(remaining.length) : 0;
+
+  if (body.quote === true || !remaining.length) {
+    res.status(200).json({ ok: true, remaining: remaining.length, total: rows.length, cost });
+    return;
+  }
+  if (!(await memberOr402(res, db, auth, childId))) return;
+
+  const isAdmin = auth.user.role === 'admin';
+  if (!isAdmin) {
+    const s = await spendCredits(db, { userId: uid, credits: cost,
+      reason: 'store:personalize_category', ref: childId + ':' + categoryId });
+    if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: cost, balance: s.balance }); return; }
+  }
+  for (const r of remaining) await enqueueRenderJob(db, childId, r.taxonomy_slug, { force: true });
   res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length,
     balance: uid ? await creditBalance(db, uid) : null,
-    note: `${remaining.length} tiles queued — the whole board personalizes over the next while.` });
+    note: `${remaining.length} picture${remaining.length === 1 ? '' : 's'} queued — they land over the next few minutes.` });
 }
 
 // ── Contextual magic: "your new fork appears in these pictures" ─────────────

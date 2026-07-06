@@ -52,6 +52,37 @@ export async function ensureSeedJobs(db) {
   // guidance: parent's correction text on a guided retry. When set, ref_key is
   // treated as the PREVIOUS attempt (improve-this) rather than a related tile.
   await db`ALTER TABLE seed_jobs ADD COLUMN IF NOT EXISTS guidance TEXT`;
+  // Per-image styled tracking (§9): WHICH style guide an item's art was
+  // rendered under, so batch "match my style" ops can skip already-styled
+  // tiles (never double-charge) and treat a STYLE CHANGE as re-eligible.
+  await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS styled_style_id INT`;
+  await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS styled_at TIMESTAMPTZ`;
+}
+
+/**
+ * Does this item still need styling under the child's CURRENT guide?
+ *  - no art / default art            → yes
+ *  - custom art, styled_style_id NULL → no (grandfathered: personalized before
+ *    tracking existed — never re-charge those)
+ *  - custom art under another guide  → yes (style changed → stale)
+ */
+export function needsStyling(item, currentGuideId) {
+  const key = String(item.image_key || '');
+  if (!key || key.startsWith('taxonomy-defaults/')) return true;
+  if (item.styled_style_id == null) return false;
+  const cur = currentGuideId == null ? null : Number(currentGuideId);
+  return Number(item.styled_style_id) !== cur;
+}
+
+// Queue (or re-arm) one CHIP job (§6): a folder icon rendered in the child's
+// own style. Identity rides taxonomy_id as "chip:section|label|parentLabel"
+// so the (child, kind, taxonomy_id) unique index dedupes naturally.
+export async function enqueueChipJob(db, childId, section, label, parentLabel = '') {
+  const key = `chip:${section}|${label}|${parentLabel || ''}`;
+  await db`INSERT INTO seed_jobs (child_id, kind, taxonomy_id, force)
+           VALUES (${childId}, 'chip', ${key}, TRUE)
+           ON CONFLICT (child_id, kind, COALESCE(taxonomy_id, ''))
+           DO UPDATE SET status = 'queued', attempts = 0, error = NULL, updated_at = NOW()`;
 }
 
 // Queue (or re-arm) one render job. Store checkout, retries, and rebuilds all
@@ -173,11 +204,13 @@ export async function enqueueSeedJobs(db, childId, rows) {
   // are a membership perk — without one, every seed job is voice-only. Bought
   // words / retries still render for anyone: those are paid with credits.
   let personalRenders = true;
+  let ownerTier = 'unknown';
   try {
     const { entitlementFor, boardOwnerId } = await import('./credits.js');
     const ownerId = await boardOwnerId(db, childId);
     const ent = await entitlementFor(db, ownerId);
     personalRenders = !!ent.sub || ent.tier === 'admin';
+    ownerTier = ent.label || ent.tier || 'unknown';
   } catch (_) { /* on any doubt keep the historical behavior */ }
 
   let renders = 0, voices = 0;
@@ -191,7 +224,9 @@ export async function enqueueSeedJobs(db, childId, rows) {
       if (r.length) { if (kind === 'render') renders++; else voices++; }
     } catch (_) { /* best-effort; the rescue tool can re-enqueue */ }
   }
-  return { renders, voices };
+  // Surface the WHY so admin tooling can distinguish "renders queued" from
+  // "renders skipped — free tier" instead of a silent voice-only downgrade.
+  return { renders, voices, personalRenders, ownerTier };
 }
 
 // Run the whole build for a child in one call (used by the cron 'place' job and
@@ -267,6 +302,24 @@ export async function processSeedJob(db, job, getCtx) {
       return { ok: true, ...r };
     }
 
+    // §6: a folder icon rendered in the CHILD's own style guide (the ctx's
+    // guide is the child's saved one). Identity: "chip:section|label|parent".
+    if (job.kind === 'chip') {
+      const raw = String(job.taxonomy_id || '').replace(/^chip:/, '');
+      const [section, label, parentLabel] = raw.split('|');
+      if (!section || !label) { await jobDone(db, job.id); return { ok: true, skipped: 'malformed chip key' }; }
+      const c = await getCtx(job.child_id);
+      const { generateCategoryIcon } = await import('./category-icons.js');
+      const r = await generateCategoryIcon({
+        db, childId: job.child_id, section, label, parentLabel: parentLabel || '',
+        style: c.styleGuide, styleBuf: c.styleGuide && c.styleGuide.image ? c.styleGuide.image : undefined,
+        actorEmail: c.ownerEmail, attributeChildId: job.child_id,
+      });
+      if (!r.ok) throw new Error(r.error || 'chip render failed');
+      await jobDone(db, job.id, { imageKey: r.imageKey });
+      return { ok: true, imageKey: r.imageKey };
+    }
+
     const tax = (await db`SELECT id, id AS slug, column_name, category, subcategory, label,
                                  prompt_template, subject_mode, related_images, default_image_key
                           FROM taxonomy WHERE id = ${job.taxonomy_id} LIMIT 1`)[0];
@@ -303,10 +356,15 @@ export async function processSeedJob(db, job, getCtx) {
                                       label: item.label, section: item.section, source: 'seed-render', who: null });
           } catch (_) { /* archive is best-effort; the render still lands */ }
         }
+        // Stamp WHICH guide painted it (styled_style_id) so batch style-match
+        // ops can skip it — and notice when the child's style later changes.
+        const guideId = c.styleGuide && c.styleGuide.id ? Number(c.styleGuide.id) : null;
         if (job.force) {
-          await db`UPDATE items SET image_key = ${imageKey}, updated_at = NOW() WHERE id = ${item.id}`;
+          await db`UPDATE items SET image_key = ${imageKey}, styled_style_id = ${guideId},
+                   styled_at = NOW(), updated_at = NOW() WHERE id = ${item.id}`;
         } else {
-          await db`UPDATE items SET image_key = ${imageKey}, updated_at = NOW()
+          await db`UPDATE items SET image_key = ${imageKey}, styled_style_id = ${guideId},
+                   styled_at = NOW(), updated_at = NOW()
                    WHERE id = ${item.id} AND (image_key IS NULL OR image_key LIKE 'taxonomy-defaults/%')`;
         }
         try {
@@ -361,7 +419,8 @@ export async function seedStatus(db, childId) {
            COUNT(*) FILTER (WHERE NOT (status = 'failed' AND attempts >= ${MAX_SEED_ATTEMPTS}))::int AS live,
            COUNT(*) FILTER (WHERE status = 'failed' AND attempts >= ${MAX_SEED_ATTEMPTS})::int AS dead
     FROM seed_jobs WHERE child_id = ${childId} GROUP BY kind, status`;
-  const agg = { render: { total: 0, done: 0, dead: 0 }, voice: { total: 0, done: 0, dead: 0 }, place: { total: 0, done: 0, dead: 0 } };
+  const agg = { render: { total: 0, done: 0, dead: 0 }, voice: { total: 0, done: 0, dead: 0 },
+                place: { total: 0, done: 0, dead: 0 }, chip: { total: 0, done: 0, dead: 0 } };
   for (const r of rows) {
     const k = agg[r.kind]; if (!k) continue;
     k.total += r.live + r.dead;
@@ -369,6 +428,6 @@ export async function seedStatus(db, childId) {
     if (r.status === 'done') k.done += r.live;
   }
   const remaining = (k) => Math.max(0, k.total - k.done - k.dead);
-  const active = remaining(agg.place) + remaining(agg.render) + remaining(agg.voice) > 0;
+  const active = remaining(agg.place) + remaining(agg.render) + remaining(agg.voice) + remaining(agg.chip) > 0;
   return { active, ...agg };
 }

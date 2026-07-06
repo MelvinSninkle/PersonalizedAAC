@@ -224,6 +224,9 @@ export async function generateCategoryIcon({
   db, childId, section, label, parentLabel = '', promptOverride = null,
   style = undefined, styleBuf = undefined, styleGuideId = null,
   model, size = '1024x1024', actorEmail = null,
+  // Parent-paid chip renders (personalize-all §6) attribute the spend to the
+  // FAMILY in the usage report instead of the admin lab's __lab__ bucket.
+  attributeChildId = null,
 }) {
   childId = String(childId || '').slice(0, 64).trim();
   section = String(section || '').toLowerCase().trim();
@@ -293,7 +296,8 @@ export async function generateCategoryIcon({
   }
   try {
     await db`INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, reference_keys, size, input_tokens, output_tokens, cost_cents)
-      VALUES (${'__lab__'}, ${actorEmail}, 'admin', ${'[cat] ' + label}, ${style ? style.label : 'lab'}, ${prompt},
+      VALUES (${attributeChildId || '__lab__'}, ${actorEmail}, ${attributeChildId ? 'chip_render' : 'admin'},
+              ${'[cat] ' + label}, ${style ? style.label : 'lab'}, ${prompt},
               ${style && style.blob_key ? [style.blob_key] : []}, ${size}, ${u.input_tokens ?? null}, ${u.output_tokens ?? null}, ${costCents})`;
   } catch (_) {}
 

@@ -63,7 +63,8 @@ private data class OnboardingVoicesResult(val voices: List<OnboardingVoice> = em
 suspend fun ApiClient.onboardingVoices(): List<OnboardingVoice> =
     getJson<OnboardingVoicesResult>("/api/onboarding/voices").voices
 
-/** POST the child step: name + birthday + tier + language + style + voice. */
+/** POST the child step: name + birthday + tier + language + style + voice
+ *  (+ favorite color — the server turns it into the banner colors). */
 suspend fun ApiClient.onboardingChild(
     name: String,
     birthDate: String,      // "yyyy-MM-dd"
@@ -71,6 +72,7 @@ suspend fun ApiClient.onboardingChild(
     language: String,
     voiceId: String?,
     styleGuideId: Int?,
+    favoriteColor: String? = null,   // "#rrggbb"
 ) {
     val body = buildJsonObject {
         put("name", name)
@@ -79,6 +81,7 @@ suspend fun ApiClient.onboardingChild(
         put("language", language)
         voiceId?.takeIf { it.isNotEmpty() }?.let { put("voiceId", it) }
         styleGuideId?.let { put("styleGuideId", it) }
+        favoriteColor?.takeIf { it.isNotEmpty() }?.let { put("favoriteColor", it) }
     }
     raw("POST", "/api/onboarding/child", body.toString().encodeToByteArray())
 }

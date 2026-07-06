@@ -102,7 +102,8 @@ extension APIClient {
 
     @discardableResult
     func onboardingChild(name: String, birthDate: Date, tier: String, language: String,
-                         voiceId: String? = nil, styleGuideId: Int? = nil) async throws -> [String: Any] {
+                         voiceId: String? = nil, styleGuideId: Int? = nil,
+                         favoriteColor: String? = nil) async throws -> [String: Any] {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
         var payload: [String: Any] = [
             "name": name, "birthDate": f.string(from: birthDate),
@@ -110,6 +111,9 @@ extension APIClient {
         ]
         if let voiceId, !voiceId.isEmpty { payload["voiceId"] = voiceId }
         if let styleGuideId { payload["styleGuideId"] = styleGuideId }
+        // The server converts the child's favorite color into the banner
+        // colors (kidDisplay) with a WCAG-luminance text contrast rule.
+        if let favoriteColor, !favoriteColor.isEmpty { payload["favoriteColor"] = favoriteColor }
         let body = try JSONSerialization.data(withJSONObject: payload)
         let (data, _) = try await request(method: "POST", path: "/api/onboarding/child",
                                           body: body, contentType: "application/json")
