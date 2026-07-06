@@ -1051,20 +1051,46 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
   });
 
   // ---- Rescue: run the full board build for any child by slug ----
+  // After queueing, POLL seed-status until the jobs drain so the admin gets
+  // real assurance the images landed (counts + per-job failures), instead of
+  // a fire-and-forget button that looks identical on success and failure.
   document.getElementById('btn-build-board').addEventListener('click', async () => {
     const childId = prompt('Build (or repair) a board.\n\nEnter the child slug (e.g. simon-5ba4). Places every word instantly, queues per-child renders + voices for the cron, re-arms dead jobs. Safe to re-run.', '');
     if (!childId || !childId.trim()) return;
+    const slug = childId.trim();
     const btn = document.getElementById('btn-build-board');
+    const stat = document.getElementById('stat');
     btn.disabled = true;
-    document.getElementById('stat').textContent = 'Building board for ' + childId.trim() + '…';
+    stat.textContent = 'Building board for ' + slug + '…';
     try {
-      const r = await api('/api/admin/lab?action=build-board', { method: 'POST', body: { childId: childId.trim() } });
-      alert(r.note || 'Build queued.');
+      const r = await api('/api/admin/lab?action=build-board', { method: 'POST', body: { childId: slug } });
+      if (r.personalRenders === false) {
+        alert(r.note || 'Build queued.');   // the WHY (free tier) needs eyes NOW
+      }
+      // Watch the drain: up to 10 minutes, 5s apart.
+      let last = null;
+      for (let i = 0; i < 120; i++) {
+        last = await api('/api/admin/lab?action=seed-status&childId=' + encodeURIComponent(slug));
+        const s = last.status || {};
+        const line = (k) => s[k] ? `${k} ${s[k].done}/${s[k].total}${s[k].dead ? ` (${s[k].dead} dead)` : ''}` : '';
+        stat.textContent = `${slug}: ${['place', 'render', 'voice'].map(line).filter(Boolean).join(' · ')}${s.active ? ' — working…' : ' — done'}`;
+        if (!s.active) break;
+        await new Promise(res => setTimeout(res, 5000));
+      }
+      const s = (last && last.status) || {};
+      const fails = (last && last.failures) || [];
+      let msg = (r.note || 'Build queued.') + '\n\nFinal: '
+        + ['place', 'render', 'voice'].map(k => s[k] ? `${k} ${s[k].done}/${s[k].total} done, ${s[k].dead} dead` : '').filter(Boolean).join(' · ')
+        + (s.active ? '\n\nStill draining — re-check with Build board later (re-running is safe).' : '');
+      if (fails.length) {
+        msg += '\n\nRecent failures:\n' + fails.slice(0, 8).map(f => `• [${f.kind}] ${f.taxonomyId || ''} ×${f.attempts}: ${String(f.error || 'no error text').slice(0, 90)}`).join('\n');
+      }
+      alert(msg);
     } catch (e) {
       alert('Build failed: ' + (e.message || e));
     } finally {
       btn.disabled = false;
-      document.getElementById('stat').textContent = `${allRows.length} rows`;
+      stat.textContent = `${allRows.length} rows`;
     }
   });
 

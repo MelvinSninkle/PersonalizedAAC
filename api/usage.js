@@ -50,7 +50,12 @@ export default async function handler(req, res) {
     // The child board each account owns + its effective tier — so the admin
     // table can show WHO an account is and comp/simulate their membership.
     try {
-      const users = await db`SELECT id, email, child_slug, sub_override FROM users`;
+      let users;
+      try {
+        users = await db`SELECT id, email, child_slug, sub_override, sub_override_expires FROM users`;
+      } catch (_) {
+        users = await db`SELECT id, email, child_slug, sub_override, NULL AS sub_override_expires FROM users`;
+      }
       // Active subscription per user: newest sub-sku purchase in the same
       // 35-day window activeSubscription() uses.
       const { SUBSCRIPTIONS, subscriptionBySku } = await import('./_lib/credits.js');
@@ -65,8 +70,12 @@ export default async function handler(req, res) {
         const u = byEmail.get(row.account);
         if (!u) continue;
         row.childId = u.child_slug || null;
-        row.override = u.sub_override || null;
-        const effective = u.sub_override || subByUser.get(Number(u.id)) || null;
+        // An expired comp reads as no override (entitlementFor clears lazily).
+        const exp = u.sub_override_expires ? new Date(u.sub_override_expires) : null;
+        const expired = !!(exp && exp.getTime() <= Date.now());
+        row.override = expired ? null : (u.sub_override || null);
+        row.overrideExpires = row.override && exp ? exp.toISOString() : null;
+        const effective = row.override || subByUser.get(Number(u.id)) || null;
         const sub = effective && effective !== 'free' ? subscriptionBySku(effective) : null;
         row.tier = sub ? sub.label : 'Free';
       }

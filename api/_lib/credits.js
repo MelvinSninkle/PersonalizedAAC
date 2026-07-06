@@ -121,10 +121,13 @@ export async function ensureCredits(db) {
   // One free retry per tile; personal portraits track theirs on persons.
   await db`ALTER TABLE items   ADD COLUMN IF NOT EXISTS free_retry_used BOOLEAN NOT NULL DEFAULT FALSE`;
   await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS free_retry_used BOOLEAN NOT NULL DEFAULT FALSE`;
-  // Admin-only tier simulator: 'free' | a subscription sku | NULL (real state).
-  // While set, the account behaves EXACTLY like that tier — including paying
-  // credits — so gating and metering can be verified end to end.
+  // Admin-only tier simulator / comp: 'free' | a subscription sku | NULL
+  // (real state). While set, the account behaves EXACTLY like that tier —
+  // including paying credits — so gating and metering verify end to end.
   await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_override TEXT`;
+  // Time-bound comps: an expired override behaves as if it were never set
+  // (entitlementFor lazily clears it). NULL = no expiry (forever).
+  await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_override_expires TIMESTAMPTZ`;
   // Stripe customer id (saved by the checkout webhook) → powers the billing
   // portal so web subscribers can upgrade/downgrade/cancel themselves.
   await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`;
@@ -184,8 +187,25 @@ export async function entitlementFor(db, user) {
   let override = null;
   if (uid) {
     try {
-      const r = await db`SELECT sub_override, role FROM users WHERE id = ${uid} LIMIT 1`;
-      if (r.length) { override = r[0].sub_override || null; if (!role) role = r[0].role; }
+      let r;
+      try {
+        r = await db`SELECT sub_override, sub_override_expires, role FROM users WHERE id = ${uid} LIMIT 1`;
+      } catch (_) {
+        // Column predates a deploy that hasn't run /api/init yet.
+        r = await db`SELECT sub_override, NULL AS sub_override_expires, role FROM users WHERE id = ${uid} LIMIT 1`;
+      }
+      if (r.length) {
+        override = r[0].sub_override || null;
+        if (!role) role = r[0].role;
+        // Time-bound comp: past its expiry the override behaves as never set.
+        const exp = r[0].sub_override_expires ? new Date(r[0].sub_override_expires) : null;
+        if (override && exp && exp.getTime() <= Date.now()) {
+          override = null;
+          try {
+            await db`UPDATE users SET sub_override = NULL, sub_override_expires = NULL WHERE id = ${uid}`;
+          } catch (_) { /* lazy clear is best-effort */ }
+        }
+      }
     } catch (_) { /* users table variants — fall through */ }
   }
   if (override) {

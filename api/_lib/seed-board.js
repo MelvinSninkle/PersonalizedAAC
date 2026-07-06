@@ -173,11 +173,13 @@ export async function enqueueSeedJobs(db, childId, rows) {
   // are a membership perk — without one, every seed job is voice-only. Bought
   // words / retries still render for anyone: those are paid with credits.
   let personalRenders = true;
+  let ownerTier = 'unknown';
   try {
     const { entitlementFor, boardOwnerId } = await import('./credits.js');
     const ownerId = await boardOwnerId(db, childId);
     const ent = await entitlementFor(db, ownerId);
     personalRenders = !!ent.sub || ent.tier === 'admin';
+    ownerTier = ent.label || ent.tier || 'unknown';
   } catch (_) { /* on any doubt keep the historical behavior */ }
 
   let renders = 0, voices = 0;
@@ -191,7 +193,9 @@ export async function enqueueSeedJobs(db, childId, rows) {
       if (r.length) { if (kind === 'render') renders++; else voices++; }
     } catch (_) { /* best-effort; the rescue tool can re-enqueue */ }
   }
-  return { renders, voices };
+  // Surface the WHY so admin tooling can distinguish "renders queued" from
+  // "renders skipped — free tier" instead of a silent voice-only downgrade.
+  return { renders, voices, personalRenders, ownerTier };
 }
 
 // Run the whole build for a child in one call (used by the cron 'place' job and

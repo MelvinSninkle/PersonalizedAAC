@@ -171,9 +171,21 @@ async function subOverride(req, res, db, auth, uid, body) {
       value = sub.sku;
     }
   }
-  await db`UPDATE users SET sub_override = ${value} WHERE id = ${targetId}`;
+  // Time-bound comps: days = 7|30|90|… → the override expires by itself;
+  // absent/0 = forever (until manually set back to Real).
+  const days = Math.max(0, parseInt(body.days, 10) || 0);
+  const expires = value && days > 0 ? new Date(Date.now() + days * 86_400_000) : null;
+  try {
+    await db`UPDATE users SET sub_override = ${value},
+             sub_override_expires = ${expires ? expires.toISOString() : null}
+             WHERE id = ${targetId}`;
+  } catch (_) {
+    // Deploys that haven't run /api/init yet lack the expiry column.
+    await db`UPDATE users SET sub_override = ${value} WHERE id = ${targetId}`;
+  }
   const ent = await entitlementFor(db, { uid: targetId, role: targetRole });
   res.status(200).json({ ok: true, override: value, ...(email ? { email } : {}),
+                         expires: expires ? expires.toISOString() : null,
                          tier: ent.tier, label: ent.label, source: ent.source });
 }
 
