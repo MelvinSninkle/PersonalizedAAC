@@ -74,6 +74,17 @@ export function needsStyling(item, currentGuideId) {
   return Number(item.styled_style_id) !== cur;
 }
 
+// Queue (or re-arm) one CHIP job (§6): a folder icon rendered in the child's
+// own style. Identity rides taxonomy_id as "chip:section|label|parentLabel"
+// so the (child, kind, taxonomy_id) unique index dedupes naturally.
+export async function enqueueChipJob(db, childId, section, label, parentLabel = '') {
+  const key = `chip:${section}|${label}|${parentLabel || ''}`;
+  await db`INSERT INTO seed_jobs (child_id, kind, taxonomy_id, force)
+           VALUES (${childId}, 'chip', ${key}, TRUE)
+           ON CONFLICT (child_id, kind, COALESCE(taxonomy_id, ''))
+           DO UPDATE SET status = 'queued', attempts = 0, error = NULL, updated_at = NOW()`;
+}
+
 // Queue (or re-arm) one render job. Store checkout, retries, and rebuilds all
 // funnel through here — ON CONFLICT resets a finished/failed job back to queued.
 export async function enqueueRenderJob(db, childId, taxonomyId, { force = false, refKey = null, guidance = null } = {}) {
@@ -291,6 +302,24 @@ export async function processSeedJob(db, job, getCtx) {
       return { ok: true, ...r };
     }
 
+    // §6: a folder icon rendered in the CHILD's own style guide (the ctx's
+    // guide is the child's saved one). Identity: "chip:section|label|parent".
+    if (job.kind === 'chip') {
+      const raw = String(job.taxonomy_id || '').replace(/^chip:/, '');
+      const [section, label, parentLabel] = raw.split('|');
+      if (!section || !label) { await jobDone(db, job.id); return { ok: true, skipped: 'malformed chip key' }; }
+      const c = await getCtx(job.child_id);
+      const { generateCategoryIcon } = await import('./category-icons.js');
+      const r = await generateCategoryIcon({
+        db, childId: job.child_id, section, label, parentLabel: parentLabel || '',
+        style: c.styleGuide, styleBuf: c.styleGuide && c.styleGuide.image ? c.styleGuide.image : undefined,
+        actorEmail: c.ownerEmail, attributeChildId: job.child_id,
+      });
+      if (!r.ok) throw new Error(r.error || 'chip render failed');
+      await jobDone(db, job.id, { imageKey: r.imageKey });
+      return { ok: true, imageKey: r.imageKey };
+    }
+
     const tax = (await db`SELECT id, id AS slug, column_name, category, subcategory, label,
                                  prompt_template, subject_mode, related_images, default_image_key
                           FROM taxonomy WHERE id = ${job.taxonomy_id} LIMIT 1`)[0];
@@ -390,7 +419,8 @@ export async function seedStatus(db, childId) {
            COUNT(*) FILTER (WHERE NOT (status = 'failed' AND attempts >= ${MAX_SEED_ATTEMPTS}))::int AS live,
            COUNT(*) FILTER (WHERE status = 'failed' AND attempts >= ${MAX_SEED_ATTEMPTS})::int AS dead
     FROM seed_jobs WHERE child_id = ${childId} GROUP BY kind, status`;
-  const agg = { render: { total: 0, done: 0, dead: 0 }, voice: { total: 0, done: 0, dead: 0 }, place: { total: 0, done: 0, dead: 0 } };
+  const agg = { render: { total: 0, done: 0, dead: 0 }, voice: { total: 0, done: 0, dead: 0 },
+                place: { total: 0, done: 0, dead: 0 }, chip: { total: 0, done: 0, dead: 0 } };
   for (const r of rows) {
     const k = agg[r.kind]; if (!k) continue;
     k.total += r.live + r.dead;
@@ -398,6 +428,6 @@ export async function seedStatus(db, childId) {
     if (r.status === 'done') k.done += r.live;
   }
   const remaining = (k) => Math.max(0, k.total - k.done - k.dead);
-  const active = remaining(agg.place) + remaining(agg.render) + remaining(agg.voice) > 0;
+  const active = remaining(agg.place) + remaining(agg.render) + remaining(agg.voice) + remaining(agg.chip) > 0;
   return { active, ...agg };
 }

@@ -372,10 +372,25 @@ async function personalizeAll(req, res, db, auth, uid, body) {
   const currentGuide = await loadChildStyleGuideId(db, childId);
   const remaining = rows.filter((r) => needsStyling(r, currentGuide));
   const total = rows.length;
-  const cost = remaining.length ? bundleQuote(remaining.length) : 0;
 
-  if (body.quote === true || !remaining.length) {
-    res.status(200).json({ ok: true, remaining: remaining.length, total, cost });
+  // §6: folder chips join the batch — every chip on the child's board still
+  // wearing the shared default icon (or none) renders in THEIR style too, so
+  // headers/subcategories match the tiles. 1 credit each, same as tiles.
+  let chips = [];
+  try {
+    const cats = await db`
+      SELECT c.id, c.section, c.label, p.label AS parent_label
+      FROM categories c LEFT JOIN categories p ON p.id = c.parent_id
+      WHERE c.child_id = ${childId}
+        AND (c.image_key IS NULL OR c.image_key LIKE 'category-defaults/%')`;
+    chips = cats.map((c) => ({ section: c.section, label: c.label, parent: c.parent_label || '' }));
+  } catch (_) { /* chips are additive — tiles still personalize */ }
+
+  const units = remaining.length + chips.length;
+  const cost = units ? bundleQuote(units) : 0;
+
+  if (body.quote === true || !units) {
+    res.status(200).json({ ok: true, remaining: remaining.length, chips: chips.length, total, cost });
     return;
   }
   if (!(await memberOr402(res, db, auth, childId))) return;
@@ -387,9 +402,13 @@ async function personalizeAll(req, res, db, auth, uid, body) {
   }
   await ensureSeedJobs(db);
   for (const r of remaining) await enqueueRenderJob(db, childId, r.taxonomy_slug, { force: true });
-  res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length,
+  const { enqueueChipJob } = await import('./_lib/seed-board.js');
+  for (const ch of chips) {
+    try { await enqueueChipJob(db, childId, ch.section, ch.label, ch.parent); } catch (_) {}
+  }
+  res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length + chips.length,
     balance: uid ? await creditBalance(db, uid) : null,
-    note: `${remaining.length} tiles queued — the whole board personalizes over the next while.` });
+    note: `${remaining.length} tiles + ${chips.length} folder icons queued — the whole board personalizes over the next while.` });
 }
 
 // ── Contextual magic: "your new fork appears in these pictures" ─────────────

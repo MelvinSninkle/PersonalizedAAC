@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     //    then personalized renders (slow, the visible magic), then voices
     //    (fast) — each loop respects the shared time budget so the minute-tick
     //    cadence keeps every queue moving.
-    const seed = { placed: 0, rendered: 0, renderFailed: 0, voiced: 0 };
+    const seed = { placed: 0, rendered: 0, renderFailed: 0, voiced: 0, chips: 0, chipFailed: 0 };
     const getCtx = makeSeedContext(db);
 
     for (const j of await claimSeedJobs(db, 'place', 2)) {
@@ -67,6 +67,16 @@ export default async function handler(req, res) {
         if (overBudget()) break;
         const r = await processSeedJob(db, j, getCtx);
         if (r.ok) seed.voiced++;
+      }
+    }
+    // §6: folder-chip renders (personalize-all queues them for members).
+    while (!overBudget()) {
+      const batch = await claimSeedJobs(db, 'chip', 4);
+      if (!batch.length) break;
+      for (const j of batch) {
+        if (overBudget()) break;
+        const r = await processSeedJob(db, j, getCtx);
+        if (r.ok) seed.chips++; else seed.chipFailed++;
       }
     }
 
