@@ -459,11 +459,45 @@
           ['Voice cost · this month', cents(v.monthCostCents)],
         ].map((p) => tile(p, false)).join('');
       $('usage-accounts').innerHTML = d.perAccount.length
-        ? `<table><thead><tr><th>Account</th><th>Images</th><th>Image cost</th><th>Voice chars</th><th>Voice cost</th><th>Total</th></tr></thead><tbody>` +
-          d.perAccount.map(a => `<tr><td>${esc(a.account)}</td><td>${a.count}</td><td>${cents(a.costCents)}</td>
+        ? `<table><thead><tr><th>Account</th><th>Child</th><th>Images</th><th>Image cost</th><th>Voice chars</th><th>Voice cost</th><th>Total</th><th></th></tr></thead><tbody>` +
+          d.perAccount.map(a => `<tr><td>${esc(a.account)}</td>
+            <td>${a.childId ? `<a href="#" class="usage-child" data-slug="${esc(a.childId)}" title="Load this child in the admin">${esc(a.childId)}</a>` : '<span style="color:var(--faint)">—</span>'}</td>
+            <td>${a.count}</td><td>${cents(a.costCents)}</td>
             <td>${((a.voiceChars || 0) / 1000).toFixed(1)}k</td><td>${cents(a.voiceCostCents || 0)}</td>
-            <td><strong>${cents((a.costCents || 0) + (a.voiceCostCents || 0))}</strong></td></tr>`).join('') + `</tbody></table>`
+            <td><strong>${cents((a.costCents || 0) + (a.voiceCostCents || 0))}</strong></td>
+            <td>${a.account.includes('@')
+              ? `<button class="btn ghost usage-reset" data-email="${esc(a.account)}" style="font-size:12px;padding:4px 10px;">🔑 Reset password</button>`
+              : ''}</td></tr>`).join('') + `</tbody></table>
+          <p id="usage-reset-out" style="font-size:13px;margin:8px 2px 0;"></p>`
         : '<p style="font-size:13px;color:var(--muted)">No generations yet.</p>';
+      // Child link → load that child everywhere in the admin.
+      document.querySelectorAll('.usage-child').forEach(el => el.addEventListener('click', (e) => {
+        e.preventDefault();
+        $('child').value = el.dataset.slug;
+        $('child').dispatchEvent(new Event('change'));
+      }));
+      // Reset password: mint the one-hour token; as admin we get the link back
+      // to hand to the parent directly (works even when Resend is down/unset —
+      // the email still goes out too when it IS configured).
+      document.querySelectorAll('.usage-reset').forEach(el => el.addEventListener('click', async () => {
+        const out = $('usage-reset-out');
+        const email = el.dataset.email;
+        if (!confirm(`Create a password-reset link for ${email}?\n\nThe link works for 1 hour. They'll also get an email if email sending is configured.`)) return;
+        el.disabled = true; out.textContent = 'Creating…'; out.style.color = 'var(--muted)';
+        try {
+          const r = await api('/api/auth/reset-request', { method: 'POST', body: JSON.stringify({ email }) });
+          if (r.resetUrl) {
+            const url = location.origin + r.resetUrl;
+            try { await navigator.clipboard.writeText(url); } catch (_) {}
+            out.style.color = 'var(--ink)';
+            out.innerHTML = `Reset link for <strong>${esc(email)}</strong> (copied to clipboard, valid 1 hour):<br><a href="${esc(url)}" target="_blank">${esc(url)}</a>`;
+          } else {
+            out.style.color = '#c0392b';
+            out.textContent = 'No link returned — is that email actually an account?';
+          }
+        } catch (err) { out.style.color = '#c0392b'; out.textContent = 'Failed: ' + err.message; }
+        el.disabled = false;
+      }));
       $('usage-recent').innerHTML = d.recent.length
         ? d.recent.map(r => `<details style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
             <summary style="cursor:pointer;font-size:13px;"><strong>${esc(r.label || '(no label)')}</strong> · ${esc(r.style || '')} · ${cents(r.costCents)} · ${esc(r.actor)} · ${new Date(r.createdAt).toLocaleString()}</summary>
