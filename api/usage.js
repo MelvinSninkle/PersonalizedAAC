@@ -47,6 +47,14 @@ export default async function handler(req, res) {
     out.perAccount = pa.map((r) => ({ account: r.account, count: r.count, costCents: r.cost,
                                       voiceChars: 0, voiceCostCents: 0 }));
 
+    // The child board each account owns — so the admin table can show WHO an
+    // account is (and jump to their board) without a separate lookup.
+    try {
+      const slugs = await db`SELECT email, child_slug FROM users WHERE child_slug IS NOT NULL`;
+      const byEmail = new Map(slugs.map((r) => [r.email, r.child_slug]));
+      for (const row of out.perAccount) row.childId = byEmail.get(row.account) || null;
+    } catch (_) { /* users table variants — column stays null */ }
+
     // ElevenLabs voice spend — the same per-account attribution (the logged
     // user id when known, else the board owner), merged into the image rows so
     // one table shows a family's full AI cost.

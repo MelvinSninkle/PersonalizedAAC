@@ -19,7 +19,7 @@
 // (verified here via iap-verify); the web buys ONLY through Stripe. Credits are
 // one wallet spendable on either surface. Spending credits on renders is not a
 // purchase and needs no IAP.
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
@@ -87,6 +87,7 @@ export default async function handler(req, res) {
       case 'retry':          return retryTile(req, res, db, auth, uid, body);
       case 'rebuild':        return rebuild(req, res, db, auth, uid, body);
       case 'iap-verify':     return iapVerify(req, res, db, uid, body);
+      case 'play-verify':    return playVerify(req, res, db, uid, body);
       case 'stripe-checkout': return stripeCheckout(req, res, db, auth, uid, body);
       case 'stripe-portal':  return stripePortal(req, res, db, auth, uid);
       case 'sub-override':   return subOverride(req, res, db, auth, uid, body);
@@ -127,7 +128,7 @@ async function catalog(req, res, db, auth, uid) {
     ok: true,
     balance: uid ? await creditBalance(db, uid) : 0,
     creditCents: CREDIT_CENTS,
-    packs: PACKS.map(({ sku, credits, cents, label, appleProductId }) => ({ sku, credits, cents, label, appleProductId })),
+    packs: PACKS.map(({ sku, credits, cents, label, appleProductId, googleProductId }) => ({ sku, credits, cents, label, appleProductId, googleProductId })),
     subscription: SUBSCRIPTION,           // legacy field (= Plus)
     subscriptions: SUBSCRIPTIONS,
     entitlement: {
@@ -560,6 +561,94 @@ async function iapVerify(req, res, db, uid, body) {
   });
   res.status(200).json({
     ok: true, credited: r.granted ? grant.credits : 0, duplicate: r.duplicate,
+    kind: grant.kind, balance: await creditBalance(db, uid),
+  });
+}
+
+// ── Google Play (Android) ────────────────────────────────────────────────────
+// Verifies a purchase token with the Play Developer API using a service
+// account (env GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = the key file's JSON;
+// PLAY_PACKAGE_NAME defaults to io.andrewpeterson.myworld). Credits are
+// granted only after Google confirms — the client consumes/acknowledges only
+// after this returns 200, so the server stays the source of truth.
+
+async function playAccessToken() {
+  const rawSa = process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON;
+  if (!rawSa) return null;
+  let sa;
+  try { sa = JSON.parse(rawSa); } catch (_) { return null; }
+  const now = Math.floor(Date.now() / 1000);
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const unsigned = b64({ alg: 'RS256', typ: 'JWT' }) + '.' + b64({
+    iss: sa.client_email,
+    scope: 'https://www.googleapis.com/auth/androidpublisher',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now, exp: now + 3600,
+  });
+  const signer = createSign('RSA-SHA256');
+  signer.update(unsigned);
+  const jwt = unsigned + '.' + signer.sign(sa.private_key).toString('base64url');
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt,
+    }).toString(),
+  });
+  const d = await r.json();
+  return r.ok ? d.access_token : null;
+}
+
+async function playVerify(req, res, db, uid, body) {
+  if (!uid) { res.status(400).json({ error: 'no account' }); return; }
+  const productId = String(body.productId || '');
+  const purchaseToken = String(body.purchaseToken || '');
+  if (!productId || !purchaseToken) {
+    res.status(400).json({ error: 'productId and purchaseToken required' }); return;
+  }
+  const grant = productCredits(productId);
+  if (!grant) { res.status(400).json({ error: 'unknown product', productId }); return; }
+
+  const token = await playAccessToken();
+  if (!token) {
+    res.status(501).json({ error: 'play_not_configured',
+      detail: 'Set GOOGLE_PLAY_SERVICE_ACCOUNT_JSON (+ PLAY_PACKAGE_NAME) to verify Android purchases.' });
+    return;
+  }
+  const pkg = process.env.PLAY_PACKAGE_NAME || 'io.andrewpeterson.myworld';
+  const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(pkg)}`;
+
+  let verified = false, orderId = null, raw = null;
+  if (grant.kind === 'subscription') {
+    const r = await fetch(`${base}/purchases/subscriptionsv2/tokens/${encodeURIComponent(purchaseToken)}`,
+      { headers: { Authorization: 'Bearer ' + token } });
+    raw = await r.json();
+    const state = String(raw.subscriptionState || '');
+    verified = r.ok && (state === 'SUBSCRIPTION_STATE_ACTIVE' || state === 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD');
+    // Renewals keep the token but bump latestOrderId (…-0, …-1, …), so each
+    // cycle grants exactly once and client re-posts are idempotent dupes.
+    orderId = raw.latestOrderId || null;
+  } else {
+    const r = await fetch(`${base}/purchases/products/${encodeURIComponent(productId)}/tokens/${encodeURIComponent(purchaseToken)}`,
+      { headers: { Authorization: 'Bearer ' + token } });
+    raw = await r.json();
+    verified = r.ok && Number(raw.purchaseState) === 0;   // 0 purchased · 1 canceled · 2 pending
+    orderId = raw.orderId || null;
+  }
+  if (!verified) {
+    res.status(400).json({ error: 'not_verified',
+      detail: String((raw && (raw.error?.message || raw.subscriptionState || raw.purchaseState)) ?? 'unknown') });
+    return;
+  }
+
+  const externalId = 'google:' + (orderId || purchaseToken.slice(0, 120));
+  // Record the canonical sku for subscriptions so activeSubscription matches.
+  const r2 = await recordPurchase(db, {
+    userId: uid, platform: 'google', productId: grant.sku || productId,
+    credits: grant.credits, amountCents: null, externalId, raw,
+  });
+  res.status(200).json({
+    ok: true, credited: r2.granted ? grant.credits : 0, duplicate: r2.duplicate,
     kind: grant.kind, balance: await creditBalance(db, uid),
   });
 }

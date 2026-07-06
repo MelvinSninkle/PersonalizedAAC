@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose owns all chrome; window background avoids a white flash. -->
+    <style name="Theme.MyWorldNative" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FDF2F8</item>
+        <item name="android:statusBarColor">#FF1493</item>
+    </style>
+</resources>

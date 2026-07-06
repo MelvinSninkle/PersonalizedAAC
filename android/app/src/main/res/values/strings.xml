@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">My World</string>
+    <string name="offline_title">🌍 My World</string>
+    <string name="offline_body">Connecting… please make sure this device is online, then tap Retry.</string>
+    <string name="offline_retry">Retry</string>
+</resources>
