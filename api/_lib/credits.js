@@ -128,6 +128,9 @@ export async function ensureCredits(db) {
   // Time-bound comps: an expired override behaves as if it were never set
   // (entitlementFor lazily clears it). NULL = no expiry (forever).
   await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_override_expires TIMESTAMPTZ`;
+  // Which private-preview invite code this account signed up through —
+  // beta attribution, and the anchor for the code's signup perks.
+  await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_code TEXT`;
   // Stripe customer id (saved by the checkout webhook) → powers the billing
   // portal so web subscribers can upgrade/downgrade/cancel themselves.
   await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`;

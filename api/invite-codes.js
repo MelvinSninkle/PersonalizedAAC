@@ -7,6 +7,7 @@
 import { randomBytes } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
+import { subscriptionBySku } from './_lib/credits.js';
 
 async function ensureTable(db) {
   await db`
@@ -19,6 +20,13 @@ async function ensureTable(db) {
       last_used_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
+  // Beta-onboarding perks: an account CREATED after entering this code gets
+  // these automatically — a comped tier (sub_override, so features + seed
+  // renders work) and a credit grant, so the family never stalls on their
+  // first image generation. NULL/0 = plain gate code, no perks.
+  await db`ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS grant_credits INT NOT NULL DEFAULT 0`;
+  await db`ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS grant_tier TEXT`;
+  await db`ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS grant_tier_days INT`;
 }
 
 // No ambiguous characters (no I, L, O, 0, 1) so codes are easy to read aloud.
@@ -40,7 +48,9 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const codes = await db`SELECT id, code, label, active, uses, last_used_at, created_at FROM invite_codes ORDER BY created_at DESC`;
+      const codes = await db`SELECT id, code, label, active, uses, last_used_at, created_at,
+                                    grant_credits, grant_tier, grant_tier_days
+                             FROM invite_codes ORDER BY created_at DESC`;
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ codes });
       return;
@@ -51,10 +61,19 @@ export default async function handler(req, res) {
       let code = (typeof b.code === 'string' ? b.code.trim() : '') || randomCode();
       code = code.slice(0, 64);
       const label = typeof b.label === 'string' && b.label.trim() ? b.label.trim().slice(0, 120) : null;
+      // Perks: credits clamp 0..100000; tier must be a real subscription sku
+      // (the UI sends starter/plus/pro.monthly); days NULL = comp forever.
+      const grantCredits = Math.max(0, Math.min(100000, parseInt(b.grantCredits, 10) || 0));
+      const rawTier = String(b.grantTier || '').trim().toLowerCase();
+      const grantTier = rawTier && subscriptionBySku(rawTier) ? subscriptionBySku(rawTier).sku : null;
+      const grantTierDays = grantTier && Number.isFinite(parseInt(b.grantTierDays, 10)) && parseInt(b.grantTierDays, 10) > 0
+        ? parseInt(b.grantTierDays, 10) : null;
       const rows = await db`
-        INSERT INTO invite_codes (code, label) VALUES (${code}, ${label})
+        INSERT INTO invite_codes (code, label, grant_credits, grant_tier, grant_tier_days)
+        VALUES (${code}, ${label}, ${grantCredits}, ${grantTier}, ${grantTierDays})
         ON CONFLICT (code) DO NOTHING
-        RETURNING id, code, label, active, uses, last_used_at, created_at`;
+        RETURNING id, code, label, active, uses, last_used_at, created_at,
+                  grant_credits, grant_tier, grant_tier_days`;
       if (!rows.length) { res.status(409).json({ error: 'That code already exists' }); return; }
       res.status(200).json({ ok: true, code: rows[0] });
       return;
