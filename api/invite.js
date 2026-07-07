@@ -40,7 +40,11 @@ export default async function handler(req, res) {
       RETURNING id`;
     if (!rows.length) { res.status(401).json({ error: 'Invalid invite code' }); return; }
 
-    const token = await signSession({ inv: true, exp: Date.now() + SESSION_MAX_AGE * 1000 }, secret);
+    // Carry WHICH code opened the gate inside the signed payload — signup
+    // reads it to apply the code's perks (comped tier + credit grant) to the
+    // brand-new account. The middleware still only checks `inv`.
+    const token = await signSession(
+      { inv: true, code: code.toLowerCase(), exp: Date.now() + SESSION_MAX_AGE * 1000 }, secret);
     const cookie = [
       `${INVITE_COOKIE}=${token}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Secure',
       `Max-Age=${SESSION_MAX_AGE}`,

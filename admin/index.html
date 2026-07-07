@@ -156,9 +156,18 @@
     <div class="tool">
       <h3>Private-preview invite codes</h3>
       <p>Anyone without an account must enter one of these codes at <code>/welcome</code> before they can see the site. Logged-in users skip the gate. Leave the code blank to generate a random one.</p>
-      <div class="row" style="gap:8px;flex-wrap:wrap;">
+      <p style="font-size:13px;color:var(--muted);margin-top:-6px;">Optional <strong>signup perks</strong>: every NEW account created after entering the code automatically gets the tier (as a comp — revocable from the Usage tab's tier dropdown) and the credits, so a beta family never stalls at their first image generation. Existing accounts logging in get nothing.</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;">
         <input id="inv-code" placeholder="Code (blank = random)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:190px;">
         <input id="inv-label" placeholder="Label (e.g. Smith family)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:210px;">
+        <select id="inv-tier" title="Comp this membership tier on signup" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;">
+          <option value="">No tier</option>
+          <option value="starter.monthly">Starter</option>
+          <option value="plus.monthly">Plus</option>
+          <option value="pro.monthly">Pro</option>
+        </select>
+        <input id="inv-credits" type="number" min="0" placeholder="⭐ credits" title="Credits granted on signup" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:100px;">
+        <input id="inv-days" type="number" min="1" placeholder="Tier days (blank = ∞)" title="How long the comped tier lasts; blank = until you change it" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:160px;">
         <button class="btn" id="inv-add">+ Add code</button>
         <span class="status" id="inv-status"></span>
       </div>
@@ -326,11 +335,19 @@
     try {
       const d = await api('/api/invite-codes');
       const codes = d.codes || [];
+      const tierName = (sku) => sku ? (sku.split('.')[0].charAt(0).toUpperCase() + sku.split('.')[0].slice(1)) : '';
+      const perks = (c) => {
+        const bits = [];
+        if (c.grant_tier) bits.push(tierName(c.grant_tier) + (c.grant_tier_days ? ` (${c.grant_tier_days}d)` : ''));
+        if (c.grant_credits > 0) bits.push('⭐' + c.grant_credits);
+        return bits.length ? bits.join(' + ') : '—';
+      };
       $('inv-list').innerHTML = codes.length
-        ? `<table><thead><tr><th>Code</th><th>Label</th><th>Status</th><th>Uses</th><th>Created</th><th></th></tr></thead><tbody>` +
+        ? `<table><thead><tr><th>Code</th><th>Label</th><th>Signup perks</th><th>Status</th><th>Uses</th><th>Created</th><th></th></tr></thead><tbody>` +
           codes.map(c => `<tr>
             <td><strong>${esc(c.code)}</strong></td>
             <td>${esc(c.label || '')}</td>
+            <td>${esc(perks(c))}</td>
             <td>${c.active ? 'Active' : 'Disabled'}</td>
             <td>${c.uses}</td>
             <td>${esc(new Date(c.created_at).toLocaleDateString())}</td>
@@ -347,8 +364,13 @@
     try {
       const code = $('inv-code').value.trim();
       const label = $('inv-label').value.trim();
-      const d = await api('/api/invite-codes', { method: 'POST', body: JSON.stringify({ code, label }) });
+      const grantTier = $('inv-tier').value;
+      const grantCredits = parseInt($('inv-credits').value, 10) || 0;
+      const grantTierDays = parseInt($('inv-days').value, 10) || 0;
+      const d = await api('/api/invite-codes', { method: 'POST',
+        body: JSON.stringify({ code, label, grantTier, grantCredits, grantTierDays }) });
       $('inv-code').value = ''; $('inv-label').value = '';
+      $('inv-tier').value = ''; $('inv-credits').value = ''; $('inv-days').value = '';
       status.textContent = 'Added ' + (d.code ? d.code.code : '');
       loadInvites();
     } catch (err) { status.textContent = err.message; status.className = 'status err'; }
