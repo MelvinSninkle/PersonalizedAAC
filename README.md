@@ -1,6 +1,6 @@
 # Personalized AAC — "My World"
 
-A communication and learning app built for non-verbal children who may be gestalt language processors. The product is a **web app** (the `app.html` kid board + `parent.html` dashboard + therapist and admin surfaces) backed by one Vercel API, deployed at `aac.andrewpeterson.io`. A native **SwiftUI** build of the child board + parent app also lives in `kid-ios/`, and a Capacitor shell wraps the web views; all three clients share the same API.
+A communication and learning app built for non-verbal children who may be gestalt language processors. The product is a **web app** (the `app.html` kid board + `parent.html` dashboard + therapist and admin surfaces) backed by one Vercel API, deployed at `aac.andrewpeterson.io`. A native **SwiftUI** build of the child board + parent app lives in `kid-ios/`, a full native **Android** build (Kotlin + Jetpack Compose, incl. Kindle Fire) lives in `android-native/`, and a Capacitor shell wraps the web views; all four clients share the same API.
 
 > The app started as a single-file HTML AAC board for one specific child. It has since grown into a full system covering personalized AI tile art, structured games, spaced-repetition auto-teaching, scheduling, remote facilitation, holiday celebrations, and image memorabilia. This README documents the current shape — see git history for the journey.
 
@@ -40,6 +40,31 @@ The recent feature waves, in the rough order they shipped:
 - **Square-except-TV tiles** — every tile renders square (crop-to-fill); the one exception is a folder named **TV / Movies / Shows / Posters**, whose tiles keep their natural rectangular shape for movie posters. Driven by the folder, not a per-tile flag. Settings → "Make all tiles square" normalizes the stored `keep_aspect` (fixes the web/data) to the same rule.
 - **Pre-generation review** — a single capture now pauses on a "hold on — here's more info" sheet before the (slow, costly) generation: override the name and add an optional detail hint ("the red cup, not the blue one") that steers the art.
 
+### Latest wave — membership, credits & the store
+
+- **A credits economy** — every AI generation (tile art, personalization, added family) draws from a per-account credit ledger (`credit_ledger`, balance = SUM). Purchasable packs (⭐50–⭐1000) via Stripe on the web, StoreKit on iOS, Google Play Billing on Android — all landing in the same ledger. Word Shop tiles, coupons (`redeem`), and admin grants ride the same rails. See *Credits, membership tiers & entitlements* below.
+- **Three membership tiers** — `starter.monthly` / `plus.monthly` / `pro.monthly` with monthly credit allowances + ElevenLabs **voice-character budgets** (100k / 300k / 750k chars/mo, metered in `/api/tts`). Entitlement resolves server-side (`entitlementFor`): admin comp override → admin role → active purchase → free.
+- **Styling is the member feature** — free accounts get the full board with **default art + device TTS**; style-matched personal art (the child's own style guide + likeness) gates on membership (`requireStyling` / `memberOr402` → HTTP 402 with an upsell payload). Free-tier CTAs on every gated surface deep-link to the store; raw-photo tiles stay free on all tiers.
+- **The store** (`store.html`, native StoreView, Android StoreScreen) — packs, tiers, manage-billing (Stripe portal / App Store / Play), purchase history, and the **Word Shop** (browse the taxonomy library and buy styled tiles onto the board one at a time).
+- **Never downgrade the image model** — a failed render fails-and-retries-later on the same model instead of silently falling back to a cheaper engine, so a child's board never mixes qualities.
+- **Legal + consent baseline** — `/terms` + `/privacy` pages, signup consent capture (web + native Apple/email paths), in-app account deletion (wipes the child's board + media), disclosure copy at every data-collecting touchpoint.
+
+### Latest wave — native Android (Kotlin + Compose, M1–M15)
+
+- **A complete second native client** in `android-native/` — the same one-binary / role-picker design as iOS: kid board (uniform square tiles, tap-to-speak, guillotine crop), display settings + parent unlock gate, the full game engine (matching / clue / auditory / expressive / slideshows / confetti / auto-teach), listening mode (on-device `SpeechRecognizer` + the same greedy-longest tokenizer), live channel + facilitator console + message overlay, edit mode with long-press drag reorder and drag-to-chip folder moves, and durable tile authoring.
+- **Full parent app** — stats hub, album, schedules, family & people, word shop, auto-teach controls, message-the-board, onboarding flow, store with **Google Play Billing** (`play-verify` server-side via a service-account JWT — no SDK).
+- **Kindle Fire ready** — capability detection (`DeviceCapabilities`), speech-unavailable fallbacks, kid-proofing (no text-selection, no zoom, no back-gesture escape). Build + distribution + capability matrix in `docs/android.md`; milestone-by-milestone QA in the android-native docs.
+
+### Latest wave (2026-07) — beta onboarding & admin ops
+
+- **Invite codes with signup perks** — an invite code (e.g. `fuzzypickles`) can carry `grant_tier` + `grant_credits` (+ optional `grant_tier_days`); the `/welcome` gate stores the code in the signed `mw_invite` cookie and account creation applies the perks automatically (comped tier via `sub_override`, credits via the ledger, `users.invite_code` attribution). A beta family never stalls at their first image generation.
+- **Admin comp-tier control** — set any account's tier from the Usage & cost table (7/30/90 days or forever, via `sub_override_expires`; expiry is lazily cleared). Plus per-account **🔑 password reset** (admin receives the reset URL directly — no email dependency) and a Child column.
+- **Rescue assurance** — the taxonomy "Build board" rescue now polls live seed-job status every 5s (place/render/voice/chip counts + failures) and the response says **why** renders were skipped (e.g. free-tier voice-only downgrade), instead of silently doing less than asked.
+- **Families onboarding-health report** (admin Tools) — per-family signup / payment / balance / tier / onboarding step / image + seed counts, with 🚩 flags for "paid or credited but zero images", and per-row Rebuild / Defaults actions.
+- **Onboarding hardening (all three platforms)** — field-specific validation messages on every step; honest "1–5 minutes" generation messaging with a live elapsed timer; a **favorite color** question that becomes the child's board banner (WCAG-luminance text contrast, editable later in the parent dashboard).
+- **Style everywhere, cheaply** — per-image styled tracking (`items.styled_style_id` / `styled_at`) makes personalization idempotent: *Personalize all* and the per-folder **✨ Style** batch skip already-styled art (and re-eligibility after a style change is staleness-aware), folder chips render in the child's style, and every tile editor has a one-tap **✨ Match my child's style**.
+- **System defaults coverage** — `admin/defaults.html` gallery with a *Push from reference* backfill so a brand-new board always has complete default headers, chips, and tile art before any personalization spend.
+
 ---
 
 ## The views
@@ -51,10 +76,12 @@ The recent feature waves, in the rough order they shipped:
 | `/parent/<slug>` | Parents | Dashboard: analytics, mode launcher, organizer, schedule editor, reward cheers, scheduled prompts, family & people, JSON + ZIP backup, account |
 | `/therapist` | SLP / facilitator (multi-child) | Roster home — a grid of child profile portraits for every child the therapist has access to; click one to enter that child's `/therapist/<slug>` |
 | `/therapist/<slug>` | SLP / facilitator (one child) | Live facilitator console (drives a game on the iPad), plus the shared schedule editor and progress view |
-| `/admin/taxonomy.html` | Admin | The canonical word/tile library workbench (curated word list shared across all children) |
+| `/store.html?child=<slug>` | Parents | The store — credit packs, the three membership tiers, manage billing (Stripe portal), purchase history, Word Shop |
+| `/admin/taxonomy.html` | Admin | The canonical word/tile library workbench (curated word list shared across all children) + the "Build board" rescue with live seed progress |
 | `/admin/lab.html` | Admin | The tile-art studio — style guides, model routes, generate / review / push tile candidates live, and a multi-subject scene composer |
 | `/admin/portrait-lab.html` | Admin | Bench for the onboarding portrait/keystone generation (runs the exact production pipeline) + the live keystone-model picker |
-| `/admin/index.html` | Admin | Hub: content tree, usage/cost, invite codes, DB migrations, and links to every admin tool |
+| `/admin/defaults.html` | Admin | Default-art gallery (system headers / chips / tiles) + *Push from reference* backfill |
+| `/admin/index.html` | Admin | Hub: content tree, usage & cost (per-account tier comps + password reset), invite codes (with signup perks), Tools (Families onboarding-health report), DB migrations, links to every admin tool |
 
 All views sit behind a session cookie; an invite-gate (`/welcome`) sits in front of anonymous traffic. After login, **no automatic redirect by role** — you land on a launchpad with the surfaces relevant to your role, so you can deliberately go to (e.g.) onboarding or the admin taxonomy instead of being yanked into a specific child's view. The kid iPad still opens its `/u/<slug>` URL directly.
 
@@ -231,6 +258,23 @@ The Capacitor shell below stays in the repo as the parent/therapist surface and 
 
 ---
 
+## Native Android app (Kotlin + Compose) — `android-native/`
+
+The Android build brings the same one-binary / role-picker design to Android tablets and **Kindle Fire**. It was built in fifteen milestones and mirrors the iOS app surface-for-surface, calling the same `/api/*` endpoints with cookie auth:
+
+- **Kid board** — uniform square tiles with the same guillotine crop, tap-to-speak through the shared media/speech disk caches, display settings, and the parent unlock gate.
+- **Games** — the full engine: matching, clue, auditory comprehension, expressive naming, learn/exposure slideshows, confetti celebration, auto-teach runner.
+- **Listening mode** — on-device `SpeechRecognizer` feeding the same greedy-longest tokenizer and rolling caption strip as iOS/web.
+- **Live + facilitator** — `/api/live` polling, facilitator console, message-to-board overlay, remote game launch.
+- **Edit mode + tile authoring** — long-press drag reorder, drag-onto-chip folder moves, the add-tile magic flow through the durable `tile-jobs` queue, and the one-tap "✨ Match my child's style".
+- **Parent app** — stats hub, album, schedules, family & people, word shop, auto-teach controls, onboarding flow (validation + progress timers + favorite color, same as web/iOS).
+- **Billing** — Google Play Billing via `BillingClientManager`; the server verifies purchases in `/api/store` `play-verify` using a service-account JWT (env `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` + `PLAY_PACKAGE_NAME`) — no Google SDK dependency.
+- **Fire hardening + kid-proofing** — `DeviceCapabilities` detection with graceful speech fallbacks, no text-selection smear, no pinch zoom, no back-gesture escape.
+
+Build, distribution (Play + Amazon Appstore), and the device capability matrix live in `docs/android.md`. An earlier WebView shell (full web-board parity) remains as the low-effort Kindle path.
+
+---
+
 ## Personalization + the `persons` data model
 
 The system distinguishes between **tiles** (board buttons) and **persons** (structured identities — relationship, side, given name, pronoun, birth_date, likeness anchor, voice key). A People-section tile is one rendering of a person; the person row is the canonical identity that backs it.
@@ -281,6 +325,31 @@ The pipeline uses a deliberate **two-model split**. **Keystone images** — the 
 **Reference intelligence.** What gets attached to a generation is chosen per tile, by role: the **style guide** image (the house style) is attached to *every* tile with "copy its art style only, not its content"; a **subject anchor** (the child's `reference_key` for child-subject tiles, a specific person for People tiles, the source photo for objects) carries likeness; the child photo is *never* used as a blanket "style." This is what makes a board consistent — the shared exemplar, not the text style word. All tile art targets **square 1:1** (`gemini.js` passes `imageConfig.aspectRatio` with a fallback that retries without it if the model rejects the field), and the inanimate-object "no cartoon faces" rule is applied to everything except People.
 
 Every code path that overwrites `items.image_key` (parent edit, AI regenerate, Lab publish, onboarding re-photograph) calls `_lib/image-history.archivePriorImage` *first*, which snapshots the OLD key + label + section + source + who-archived-it into `item_image_history`. The Blob is never deleted — it's just invisible to the live board — so the parent's album view can scroll back through every face every tile has ever had. `ON DELETE SET NULL` on `item_id` so history outlives the tile it once belonged to.
+
+## Credits, membership tiers & entitlements
+
+`api/_lib/credits.js` is the money layer. Everything an AI generation costs is expressed in **credits**, spent from an append-only `credit_ledger` (balance = SUM of a user's rows; every grant/spend is one insert with a `reason`, so the history is the audit log).
+
+**Catalog** (all in `credits.js`): five one-time packs (`credits50` ⭐50/$4.99 … `credits1000` ⭐1000/$99.99) and three monthly tiers — `starter.monthly` ($4.99, ⭐10/mo, 100k voice chars), `plus.monthly` ($9.99, ⭐50/mo, 300k), `pro.monthly` ($19.99, ⭐150/mo, 750k). Apple/Google product ids reuse the sku verbatim; `subscriptionBySku()` matches any of the three id forms.
+
+**Entitlement resolution** — `entitlementFor(db, userId)` resolves in strict order:
+
+1. `users.sub_override` — an **admin comp** (with optional `sub_override_expires`; an expired comp is lazily NULLed on read). Set from the admin Usage table or granted by an invite code at signup.
+2. `role = 'admin'` — admins are always fully entitled (admin-triggered regenerations are free).
+3. An **active purchase** — a subscription row in the last 35 days (Stripe webhook, `iap-verify`, or `play-verify`).
+4. Otherwise **free**.
+
+**What the tiers actually gate**: style-matched personal art. `requireStyling` / `memberOr402` guard every styled-render path (tile-jobs, generate-image, onboard-subject, store personalization); a non-member gets **HTTP 402 + an upsell payload** the clients turn into a store CTA. The check runs against the *caller* when signed in, else the board owner. Free accounts still get the full default board, raw-photo tiles, and device TTS. Free-tier board seeding downgrades render jobs to voice-only — and the build-board response says so explicitly (`ownerTier` + a gate note) instead of failing silently.
+
+**Voice metering**: member TTS uses ElevenLabs against the tier's `voiceCharsPerMonth`; `/api/tts` enforces the cap and clients fall back to device speech.
+
+**One store endpoint** — `POST /api/store` dispatches by `action`: `catalog` · `browse` / `checkout` (Word Shop) · `history` · `free-board` · `personalize-all` / `personalize-category` (quote → confirm batch styling with per-image dedup) · `impact` / `adopt-image` / `regen-with` / `retry` / `rebuild` · `iap-verify` (Apple) / `play-verify` (Google) / `stripe-checkout` / `stripe-portal` / `stripe-webhook` · `redeem` (coupons) · admin: `sub-override`, `grant`, `grant-all`, `coupons`, `coupon-create`, `coupon-update`.
+
+**Invite-code perks** — `invite_codes` rows can carry `grant_credits` / `grant_tier` / `grant_tier_days`. The `/welcome` gate embeds the redeemed code in the signed `mw_invite` cookie; self-signup in `api/auth/register.js` reads it, records `users.invite_code`, grants the credits (`reason: invite:<code>`), and sets the comp tier (+expiry). Creation-time only, best-effort — a perk failure never blocks a signup.
+
+## Building a new board — the seed pipeline
+
+`api/_lib/seed-board.js` turns the taxonomy into a real child board through a durable `seed_jobs` queue with four job kinds — **place** (create the category/item rows), **render** (styled tile art), **voice** (TTS), **chip** (styled folder icons). Jobs are enqueued by onboarding's seed step (or an admin rescue), drained by the same one-minute cron as tile jobs (`/api/cron/run-tile-jobs`), and retried up to 3 attempts before being marked dead. `seedStatus` aggregates live per-kind counts (`{active, render/voice/place/chip: {total, done, dead}}`), which powers both the kid board's build-progress banner and the admin taxonomy's post-rescue polling. Renders stamp `items.styled_style_id`/`styled_at` so later personalization passes know what's already done. Generic tiles reuse `taxonomy.default_image_key` system art instead of paying for a render; free-tier owners get voice-only seeding (see entitlements above).
 
 ## TTS caching (two-tier)
 
@@ -566,12 +635,15 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `GET/POST /api/therapist/boards` | List my custom-board templates + create new ones |
 | `GET /api/therapist/board?id=` | Fetch one board's categories + items (for the editor) |
 | `GET/POST/DELETE /api/therapist/board-share?categoryId=&childId=` | Share / unshare a template; parent "remove from view" goes through DELETE too |
-| `POST /api/auth/{login,logout,register,reset,reset-request,change-password,delete-account,apple}` + `GET /api/auth/me` | Account flow: `register` accepts `selfSignup` (web signup) or an `inviteToken` (team self-signup); `apple` = Sign in with Apple (RS256 JWT vs Apple JWKS); `delete-account` wipes the child's board + all media |
-| `POST /api/init` | One-time schema bootstrap (idempotent) |
+| `POST /api/auth/{login,logout,register,reset,reset-request,change-password,delete-account,apple}` + `GET /api/auth/me` | Account flow: `register` accepts `selfSignup` (web signup, applies invite-code perks) or an `inviteToken` (team self-signup); `apple` = Sign in with Apple (RS256 JWT vs Apple JWKS); `delete-account` wipes the child's board + all media |
+| `POST /api/store?action=<name>` | The whole store: `catalog` · `browse`/`checkout` (Word Shop) · `history` · `personalize-all`/`personalize-category` · `retry`/`regen-with`/`rebuild` · `iap-verify`/`play-verify`/`stripe-checkout`/`stripe-portal`/`stripe-webhook` · `redeem` · admin `sub-override`/`grant`/`coupon-*` |
+| `POST /api/invite` | Redeem an invite code at the `/welcome` gate → signed `mw_invite` cookie (carries the code so signup can apply its perks) |
+| `GET/POST/PUT/DELETE /api/invite-codes` | Admin CRUD for invite codes, incl. signup perks (`grantCredits`, `grantTier`, `grantTierDays`) |
+| `POST /api/init` | One-time schema bootstrap (idempotent) — run once after any deploy that adds columns |
 | **Admin-only** | |
 | `GET/POST/PUT/DELETE /api/admin/taxonomy` | Canonical taxonomy **row CRUD** (the dispatcher's default; bare URL or `?fn=crud`) |
 | `/api/admin/taxonomy?fn=<name>` | Taxonomy workbench **dispatcher** (one function, to stay under Vercel's 100-route limit). `fn=` one of: `bulk` (snapshot-first import), `bulkop` (bulk set status/phase/core/archived/delete), `import-board&childId=` (seed drafts from a child's board), `snapshots` (+`?action=restore\|diff`), `audit` (filterable log), `export-csv` (stream the seed-core-v1.csv shape), `prompt-versions` (per-tile prompt history + restore) |
-| `/api/admin/lab?action=<name>` | Lab **dispatcher** (one function). `action=` one of: `generate` (one styled candidate for a row), `generate-scene` (multi-image: one style + ordered subjects), `batch-generate`, `category-generate` / `category-upload` (chip icons via `_lib/category-icons.js`), `categories` / `board-state` (walker context for a child), `upload-image` / `port-image` (attach/pull a candidate), `publish-tile` (copy the ★ best to a child's board), `settings` (GET/PUT master prompt + size + model defaults) |
+| `/api/admin/lab?action=<name>` | Lab **dispatcher** (one function). `action=` one of: `generate` (one styled candidate for a row), `generate-scene` (multi-image: one style + ordered subjects), `batch-generate`, `category-generate` / `category-upload` (chip icons via `_lib/category-icons.js`), `categories` / `board-state` (walker context for a child), `upload-image` / `port-image` (attach/pull a candidate), `publish-tile` (copy the ★ best to a child's board), `settings` (GET/PUT master prompt + size + model defaults), `tile-lab` / `index-objects` (Add-Tile Lab), `defaults-view` / `seed-defaults` / `publish-default` (system default art), `build-board` (rescue-seed a child's board by slug), `seed-status` (live seed-job counts + recent failures), `onboarding-report` (per-family health, 🚩 flags) |
 | `POST /api/admin/portrait-lab` | Bench for the onboarding people-portrait generation — runs the exact production `buildPortraitPrompt()` + keystone pipeline, so what you see is what a parent gets |
 | `GET/PUT /api/admin/keystone-model` | List this account's live `gpt-image-*` models; save the production keystone model into `lab_settings.model_defaults.keystone` |
 | `GET/POST/PATCH/DELETE /api/admin/style-guides` | Register / toggle / reorder / remove style-reference images |
@@ -610,6 +682,10 @@ Wire-level, the endpoint builds an ordered `image[]` (style first, then each sub
 | `GEMINI_PRO_IMAGE_MODEL` | Optional override for the Gemini Pro model (keystone fallback when no OpenAI key; default `gemini-3-pro-image-preview`) |
 | `IMAGE_GEN_DAILY_LIMIT` | Optional per-account daily image-generation cap (default 150; admins exempt) |
 | `CRON_SECRET` | Optional bearer token Vercel sends to the cron handlers (`/api/cron/*`); when unset the idempotent handlers accept any call |
+| `STRIPE_SECRET_KEY` | Stripe secret key — web credit-pack + subscription checkout and the billing portal |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret for `/api/store?action=stripe-webhook` (grants credits / records subscriptions on payment) |
+| `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | Full service-account JSON for Google Play purchase verification (`play-verify`) |
+| `PLAY_PACKAGE_NAME` | The Android app's package name for Play verification |
 
 After deploying with the env vars set, hit `POST /api/init` once with the `ADMIN_TOKEN` to create the tables. The `tile_jobs` table (durable add-a-tile queue) self-creates on first use via `ensureTileJobs`; two crons are registered in `vercel.json` — **`run-tile-jobs`** (every minute) and **`refresh-insights`** (daily 08:00) — confirm they appear under Project → Settings → Cron Jobs after deploy.
 
@@ -646,6 +722,7 @@ Child Apple IDs require **Ask to Buy** approval to install TestFlight itself. Af
 ```
 app.html              Kid board — the AAC grid + game/slideshow runtime
 parent.html           Parent dashboard
+store.html            The store — credit packs, membership tiers, Word Shop, billing
 therapist.html        Therapist (facilitator) console for one child
 therapist-home.html   Therapist roster — grid of child portraits
 login.html            Sign-in + post-login launchpad
@@ -666,16 +743,24 @@ api/                  Vercel Serverless Functions (see table above)
   _lib/relationships.js  Relationship taxonomy + familyPhrase deterministic phrasing
   _lib/image-history.js  archivePriorImage helper — every regeneration call goes through this
   _lib/auto-teach.js  Shared core: settings, gates, tile picker, mastery roll-up
+  _lib/credits.js     Credit ledger + PACKS/SUBSCRIPTIONS catalog + entitlementFor/styling gates
+  _lib/seed-board.js  Board-seeding job queue (place/render/voice/chip) + needsStyling
+  store.js            One-endpoint store (packs, tiers, Word Shop, personalization, billing)
+  invite.js, invite-codes.js  /welcome gate redemption + admin code CRUD (signup perks)
   my-children.js      Roster endpoint for the therapist home
   auto-teach/state.js, next.js   Auto-teach orchestrator endpoints
   admin/taxonomy*.js  Taxonomy workbench backend (CRUD, bulk, snapshots, audit, board-import)
 admin/taxonomy.html   Taxonomy workbench (Tabulator-based editor)
+admin/defaults.html   System default-art gallery + Push-from-reference backfill
+docs/android.md       Android build, distribution, capability matrix
+docs/legal/           Terms + privacy source
 taxonomy/             Canonical word list — README, build-seed.mjs, seed-core-v1.csv
   fill-acquisition-age.mjs      Developmental band per row from CDI/Banajee/Brown's
   fill-events.mjs               14 holiday + per-child birthday Event rows
   fill-persona-symbols.mjs      Persona personalization + conventional symbol layer
   fill-descriptions.mjs         Hand-authored teaching descriptions (function words sheet)
   content/                      Hand-authored content sheets (.md) read by fill-descriptions
+android-native/       Native Android app (Kotlin + Jetpack Compose) — same one-binary design
 kid-ios/              Native SwiftUI app — one binary, child board AND parent app
   MyWorld/MyWorldApp.swift      App root, environment wiring
   MyWorld/ContentView.swift     Role gate → BoardView | ParentHomeView | RolePicker
@@ -717,9 +802,9 @@ All photos / audio of real people live in Vercel Blob behind authenticated `/api
 - **XSS escaped in parent/therapist dashboards.** Category names and person display_names were rendered via `innerHTML` and could fire cross-user; wrapped in `schEsc`.
 
 ### In-flight
-- **App onboarding flow** — the next focus area; the existing `onboard.html` captures the child's photo + birth date + family, but the flow needs a polish pass and a per-app entry-point for the SwiftUI parent app's first run.
+- **Beta onboarding is the live focus.** Onboarding itself is hardened (validation, progress timers, favorite-color banner, style-match tooling — shipped on web, iOS, and Android); beta families join via **invite codes with signup perks** (comped tier + starting credits) and are monitored through the admin **Families report**. Remember to hit `POST /api/init` once after each deploy that adds columns (recent ones: `invite_codes.grant_*`, `users.invite_code`, `users.sub_override_expires`, `items.styled_style_id`/`styled_at` — all also lazy-create defensively).
 - **Parent ↔ therapist invite/request UI.** Schema and helpers exist; therapist-facing accept/decline UI is next.
-- **Therapist "Build a Custom Board" editor.** Ownership column shipped; the editor lands after onboarding polish.
+- **Therapist "Build a Custom Board" editor.** Ownership column shipped; the editor lands after the beta wave.
 
 ### Open / deferred
 - **Pre-naming a bulk import.** A parent's name / pronunciation supersedes the AI in the *review* step, not before the AI runs; a per-photo "name these first" grid is a possible add. Pronunciation is consumed by TTS at save time, not stored as its own column, so re-recording a voice means re-typing the pronunciation.
