@@ -807,7 +807,10 @@
     <h3 class="fred" id="family-modal-title">Add family member</h3>
     <p class="sub">A photo makes a tile for them; the details power name + relationship features.</p>
     <div class="thumb" id="family-thumb" style="cursor:pointer;width:96px;height:96px;display:grid;place-items:center;border:1px dashed #e6c9d6;border-radius:12px;color:#999;font-size:12px;text-align:center;margin-bottom:12px;">Tap to add / change photo</div>
-    <input type="file" id="family-photo" accept="image/*" capture="user" style="display:none;">
+    <!-- No `capture` attr: mobile browsers then offer Take Photo OR Photo Library
+         instead of forcing the camera. Off-screen 1×1 (not display:none) keeps the
+         synthetic .click() reliable on iOS Safari — same fix as app.html. -->
+    <input type="file" id="family-photo" accept="image/*" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
     <div id="family-picker"></div>
     <div class="foot">
       <button class="btn" id="family-delete" style="color:#dc2626;margin-right:auto;display:none;">Remove</button>

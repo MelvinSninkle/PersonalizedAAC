@@ -146,8 +146,11 @@
         </div>
       </div>
     </div>
-    <input type="file" id="child-input" accept="image/*" capture="user" style="display:none;">
-    <input type="file" id="parent-input" accept="image/*" capture="user" style="display:none;">
+    <!-- No `capture` attr: mobile browsers then offer Take Photo OR Photo Library
+         instead of forcing the camera. Off-screen 1×1 (not display:none) keeps the
+         synthetic .click() reliable on iOS Safari — same fix as app.html. -->
+    <input type="file" id="child-input" accept="image/*" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
+    <input type="file" id="parent-input" accept="image/*" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
     <label style="margin-top:6px;">Is something off? Tell us what to fix</label>
     <input id="fix-guidance" type="text" placeholder="e.g. add white to his eyes, lighten the hair, bigger smile">
     <p class="note" style="margin:4px 0 0;">Type a fix, then tap <strong>Try again</strong> on that photo.</p>
@@ -158,7 +161,7 @@
       <div id="famx-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
       <div id="famx-form" style="display:none;border:1px solid #f0d9e2;border-radius:12px;padding:12px;margin-bottom:10px;">
         <div class="thumb" id="famx-thumb" style="aspect-ratio:auto;height:auto;padding:14px;cursor:pointer;">Tap to add a photo</div>
-        <input type="file" id="famx-input" accept="image/*" capture="user" style="display:none;">
+        <input type="file" id="famx-input" accept="image/*" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
         <div id="famx-picker" style="margin-top:10px;"></div>
         <div style="display:flex;gap:8px;margin-top:12px;">
           <button class="btn tiny" id="famx-save">Add this person</button>
