@@ -268,9 +268,9 @@
   /* Color-code sections so Fletcher's eye learns each band by hue.
      Defaults below are overridable from the Display Settings panel
      (parent picks color → CSS vars set on :root override these). */
-  .aac-section[data-section="people"] { background: var(--bg-people, #fce4ec); }
-  .aac-section[data-section="verbs"]  { background: var(--bg-verbs,  #fce4ec); }
-  .aac-section[data-section="nouns"]  { background: var(--bg-nouns,  #fff59d); }
+  .aac-section[data-section="people"] { background: var(--bg-people, #ffffff); }
+  .aac-section[data-section="verbs"]  { background: var(--bg-verbs,  #ffffff); }
+  .aac-section[data-section="nouns"]  { background: var(--bg-nouns,  #ffffff); }
   .aac-section h2 {
     margin: 0;
     padding: 8px 14px;
@@ -1614,12 +1614,14 @@
     hideLabels: false,
     sectionVisible: { people: true, nouns: true, verbs: true, needs: true },
     // 'needs' has no own tilesAcross — it's computed as the sum of the visible main sections.
-    tilesAcross: { people: 2, nouns: 4, verbs: 3 },
+    tilesAcross: { people: 2, nouns: 5, verbs: 2 },
     // Per-section background colors — overridable from the Display panel.
+    // Columns start WHITE so the family picks their own palette (the header
+    // color is chosen at signup); only the needs strip keeps a color.
     sectionColors: {
-      people: '#fce4ec',
-      nouns:  '#fff59d',
-      verbs:  '#fce4ec',
+      people: '#ffffff',
+      nouns:  '#ffffff',
+      verbs:  '#ffffff',
       needs:  '#ffd400',
     },
     headerColors: { bg: '#ff1493', text: '#ffffff' },

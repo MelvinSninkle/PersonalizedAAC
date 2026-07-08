@@ -19,9 +19,11 @@ data class DisplayPrefsData(
     val hideLabels: Boolean = false,
     val showPeople: Boolean = true, val showNouns: Boolean = true,
     val showVerbs: Boolean = true, val showNeeds: Boolean = true,
-    val acrossPeople: Int = 2, val acrossNouns: Int = 4, val acrossVerbs: Int = 2,
-    val colorPeople: String = "#fde7ef", val colorNouns: String = "#fff4cc",
-    val colorVerbs: String = "#dcefe2", val colorNeeds: String = "#fff7e6",
+    // Columns start WHITE so the family picks their own palette (the header
+    // color is chosen at signup); only the needs strip keeps a tint.
+    val acrossPeople: Int = 2, val acrossNouns: Int = 5, val acrossVerbs: Int = 2,
+    val colorPeople: String = "#ffffff", val colorNouns: String = "#ffffff",
+    val colorVerbs: String = "#ffffff", val colorNeeds: String = "#fff7e6",
     val colorHeaderBg: String = "#ff1493", val colorHeaderText: String = "#ffffff",
 )
 
