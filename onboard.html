@@ -49,7 +49,9 @@
   .subjects { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:14px 0; }
   .subj { text-align:center; }
   .subj .thumb { width:100%; aspect-ratio:1; border-radius:14px; border:2px dashed #f3c6dd; background:#fff7fb center/cover no-repeat; display:grid; place-items:center; color:var(--faint); font-size:13px; padding:10px; cursor:pointer; overflow:hidden; }
-  .subj .thumb img { width:100%; height:100%; object-fit:cover; }
+  /* :not(.gen-load) — the full-bleed rule must not swallow the little pulsing
+     loader, or it fills the square and clips the elapsed-time caption. */
+  .subj .thumb img:not(.gen-load) { width:100%; height:100%; object-fit:cover; }
   .subj.done .thumb { border-style:solid; border-color:var(--good); }
   .subj .row { display:flex; gap:8px; margin-top:8px; }
   .subj .row .btn { flex:1; }
@@ -61,7 +63,7 @@
   .gen-wrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
   .gen-load { width:72px; height:72px; opacity:.5; animation:genpulse 1.5s ease-in-out infinite; }
   @keyframes genpulse { 0%,100% { opacity:.3; transform:scale(.9); } 50% { opacity:.7; transform:scale(1.05); } }
-  .gen-cap { font-size:12px; color:var(--muted); }
+  .gen-cap { font-size:12px; color:var(--muted); text-align:center; line-height:1.4; padding:0 8px; }
   .style-ref { display:none; align-items:center; gap:12px; margin:0 0 14px; }
   .style-ref img { width:88px; height:88px; border-radius:12px; object-fit:cover; border:2px solid var(--line); cursor:zoom-in; }
   /* Tap-to-enlarge the style reference. */
@@ -160,7 +162,9 @@
     <div style="border-top:1px solid var(--line); margin-top:10px; padding-top:12px;">
       <div id="famx-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
       <div id="famx-form" style="display:none;border:1px solid #f0d9e2;border-radius:12px;padding:12px;margin-bottom:10px;">
-        <div class="thumb" id="famx-thumb" style="aspect-ratio:auto;height:auto;padding:14px;cursor:pointer;">Tap to add a photo</div>
+        <!-- Not inside .subj, so it gets none of the dashed-thumb styling —
+             style it as an obvious button here or it reads as bare text. -->
+        <div class="thumb" id="famx-thumb" style="aspect-ratio:auto;height:auto;padding:14px;cursor:pointer;border:2px dashed #f3c6dd;border-radius:14px;background:#fce4ef;color:var(--pink-deep);font-weight:700;font-size:14px;text-align:center;">📷 Tap to add a photo</div>
         <input type="file" id="famx-input" accept="image/*" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
         <div id="famx-picker" style="margin-top:10px;"></div>
         <div style="display:flex;gap:8px;margin-top:12px;">
@@ -353,14 +357,18 @@
   // One timer at a time; callers stop it on success AND failure so it can
   // never run forever over a dead request.
   let genTimerId = null;
-  function startGenTimer(msgEl, verb) {
+  // `compact` = the short form for tight spots (inside a generating thumb);
+  // the full reassurance line only fits below a big picture.
+  function startGenTimer(msgEl, verb, compact) {
     stopGenTimer();
     const t0 = Date.now();
     const tick = () => {
       const s = Math.floor((Date.now() - t0) / 1000);
       const mm = Math.floor(s / 60), ss = s % 60;
-      msgEl.textContent = verb + ' — ' + (mm ? mm + 'm ' : '') + ss + 's. '
-        + 'This may take anywhere from 1 to 5 minutes — don’t be alarmed.';
+      const t = (mm ? mm + 'm ' : '') + ss + 's';
+      msgEl.textContent = compact
+        ? verb + ' ' + t + ' — can take up to 5 minutes.'
+        : verb + ' — ' + t + '. This may take anywhere from 1 to 5 minutes — don’t be alarmed.';
     };
     tick();
     genTimerId = setInterval(tick, 5000);
@@ -636,7 +644,11 @@
     const thumb = $(role + '-thumb');
     const actions = $(role + '-actions');
     thumb.innerHTML = GEN_LOADER; actions.style.display = 'none';
-    startGenTimer($('people-msg'), 'Drawing in your style…');
+    // Tick the elapsed time INSIDE the generating thumb (the loader's own
+    // caption slot) — down in #people-msg it sat below the fix-guidance field
+    // where a nervous parent never saw it.
+    startGenTimer(thumb.querySelector('.gen-cap'), 'Drawing in your style…', true);
+    $('people-msg').textContent = '';
     try {
       const blob = await downscale(file);
       const attempt = role === 'child' ? childAttempt : parentAttempt;
@@ -702,7 +714,7 @@
   });
   $('famx-cancel').addEventListener('click', () => {
     $('famx-form').style.display = 'none'; $('famx-add').style.display = '';
-    famxFile = null; $('famx-thumb').textContent = 'Tap to add a photo'; $('famx-msg').textContent = '';
+    famxFile = null; $('famx-thumb').textContent = '📷 Tap to add a photo'; $('famx-msg').textContent = '';
     if (famxPicker) famxPicker.reset();
   });
   $('famx-thumb').addEventListener('click', () => $('famx-input').click());
