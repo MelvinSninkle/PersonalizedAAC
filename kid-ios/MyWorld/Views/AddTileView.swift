@@ -10,7 +10,11 @@ import UIKit
 /// She can keep shooting the whole time, or close the sheet and let the tiles
 /// finish landing on their own.
 ///
-///   ┌─ Adding to: [Needs|People|Nouns|Verbs]  Folder ▾  Style ▾ ─┐
+///   ┌─ These tiles go to ────────────────────────────────────────┐
+///   │  ◉ Bottom Row · Core words        ○ Left Column · People    │
+///   │  ○ Middle Column · Gestalts…      ○ Right Column · Verbs    │
+///   │  Which folder?  [🖼 Food] [🖼 Toys] …  (required for columns)│
+///   │  Look: ◉ Board art style   ○ My exact photo                 │
 ///   │  [ 📷 Take a photo ]   [ 🖼 Choose from Photos ]            │
 ///   │  ── In progress ──                                          │
 ///   │  [photo] Banana          🔊 Making the voice…       ◔       │
@@ -24,23 +28,32 @@ struct AddTileView: View {
     @Environment(AddTileQueue.self) private var queue
 
     // Batch destination — seeded from where the "+ Add tile" cell was tapped,
-    // then applied to every photo until changed. These MUST be seeded in init
-    // (not .task): assigning `section` after the view exists trips the
-    // onChange(of: section) handler below, which clears `categoryId` — that's
-    // what was resetting the pre-selected folder back to "Top level".
+    // then applied to every photo until changed. The board only ever RENDERS a
+    // tile that lives inside a leaf folder (a category with no sub-folders) —
+    // the flat Bottom Row is the one exception — so the picker walks
+    // Section → Folder → Sub-folder and the camera stays locked until the
+    // destination is somewhere the tile will actually show up.
     @State private var section: BoardSection
-    @State private var categoryId: Int?
-    // Style + model are no longer user choices here: every tile renders in the
-    // BOARD's saved art style (server-resolved style guide) and the model is
-    // auto-routed server-side (people → GPT keystone, things → nano banana,
-    // taxonomy overrides win). The chip below just explains + links out.
+    @State private var rootId: Int?
+    @State private var subId: Int?
+    /// The folder the "+ Add tile" tap came from. Resolved into rootId/subId in
+    /// .task — init can't reach the BoardStore Environment to walk the tree.
+    private let seedCategoryId: Int?
+    /// True = skip the AI restyle and put the photo on the board exactly as
+    /// taken (the pipeline's `raw` flag — free on every tier).
+    @State private var exactPhoto = false
+    // Style + model are no longer user choices here: every styled tile renders
+    // in the BOARD's saved art style (server-resolved style guide) and the
+    // model is auto-routed server-side (people → GPT keystone, things → nano
+    // banana, taxonomy overrides win). The look choice below is only
+    // board-style vs the untouched photo.
     @State private var showStyleChange = false
     @State private var magic: MagicCandidate?
 
     init(defaultSection: BoardSection = .needs, defaultCategoryId: Int? = nil, onDone: @escaping () -> Void) {
         self.onDone = onDone
         _section = State(initialValue: defaultSection)
-        _categoryId = State(initialValue: defaultCategoryId)
+        self.seedCategoryId = defaultCategoryId
     }
 
     // Picker presentation. One library picker handles both single and multi —
@@ -81,6 +94,7 @@ struct AddTileView: View {
                             photoJPEG: pending.data,
                             destination: destinationName(),
                             stylingAllowed: board.stylingAllowed,
+                            initialUseAsIs: exactPhoto,
                             onGenerate: { name, detail, raw in
                                 pendingCapture = nil
                                 enqueue(pending.data, name: name, detail: detail, raw: raw)
@@ -113,10 +127,20 @@ struct AddTileView: View {
                 Task { await importPicked(picked) }
             }
             .task {
-                // Destination is seeded in init now (see above). Drop finished
-                // cards, then pull any jobs still rendering SERVER-SIDE so they
-                // reappear in the tray even after an app restart (they're durable
-                // now — the work continues without this device).
+                // Resolve the seeded folder into the two-level picker: a
+                // sub-folder seed selects its parent too.
+                if let seed = seedCategoryId,
+                   let cat = board.categories.first(where: { $0.id == seed }) {
+                    if let parent = cat.parentId { rootId = parent; subId = cat.id }
+                    else { rootId = cat.id }
+                }
+                // Free tier: styling is a membership perk, so the exact photo
+                // (free) is the only available look.
+                if !board.stylingAllowed { exactPhoto = true }
+                // Drop finished cards, then pull any jobs still rendering
+                // SERVER-SIDE so they reappear in the tray even after an app
+                // restart (they're durable now — the work continues without
+                // this device).
                 queue.pruneFinished()
                 await queue.restore(childId: auth.childSlug, board: board)
                 advanceMagic()
@@ -154,45 +178,87 @@ struct AddTileView: View {
 
     // MARK: -- Destination
 
+    private var sectionRoots: [Category] { board.roots(in: section) }
+    private var selectedRoot: Category? {
+        guard let rootId else { return nil }
+        return sectionRoots.first { $0.id == rootId }
+    }
+    private var subOptions: [Category] { selectedRoot.map { board.children(of: $0) } ?? [] }
+    private var selectedSub: Category? {
+        guard let subId else { return nil }
+        return subOptions.first { $0.id == subId }
+    }
+    /// The folder new tiles are filed under. The Bottom Row is flat — every
+    /// Needs tile renders in the strip — so it takes no folder.
+    private var destinationCategoryId: Int? {
+        section == .needs ? nil : (subOptions.isEmpty ? rootId : subId)
+    }
+    /// True only when tiles added right now will actually RENDER on the board:
+    /// the Bottom Row always does; a column tile must sit in a leaf folder.
+    private var destinationReady: Bool {
+        if section == .needs { return true }
+        guard selectedRoot != nil else { return false }
+        return subOptions.isEmpty || selectedSub != nil
+    }
+
     private var destinationCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("THESE TILES GO TO")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(Color(hex: "#999"))
 
-            Picker("Section", selection: $section) {
+            VStack(spacing: 8) {
                 ForEach([BoardSection.needs, .people, .nouns, .verbs]) { s in
-                    Text(sectionLabel(s)).tag(s)
+                    sectionRow(s)
                 }
             }
-            .pickerStyle(.segmented)
-            .onChange(of: section) { _, _ in categoryId = nil }
+            .onChange(of: section) { _, _ in rootId = nil; subId = nil }
 
-            // Horizontal scroll so the chips (folder / style / model — the model
-            // label is long) never overflow or get clipped on a narrow sheet.
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    let folders = folderOptions(section)
-                    if !folders.isEmpty {
-                        Menu {
-                            Button("Top level") { categoryId = nil }
-                            ForEach(folders) { f in
-                                Button(f.depth > 0 ? "— " + f.label : f.label) { categoryId = f.id }
-                            }
-                        } label: {
-                            menuChip(icon: "folder", text: folderName())
-                        }
-                    }
-                    Menu {
-                        Text("New tiles match your board's art style")
-                        Divider()
-                        Button { showStyleChange = true } label: {
-                            Label("Change style…", systemImage: "paintpalette")
-                        }
-                    } label: {
-                        menuChip(icon: "paintpalette", text: "Board style ✓")
+            if section != .needs {
+                if sectionRoots.isEmpty {
+                    Text("This column has no folders yet — unlock the board and add one there first. Tiles only show up inside a folder.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: "#b45309"))
+                } else {
+                    Text("WHICH FOLDER?")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color(hex: "#999"))
+                    folderRow(sectionRoots, selectedId: rootId) { rootId = $0; subId = nil }
+                    if let root = selectedRoot, !subOptions.isEmpty {
+                        Text("WHICH FOLDER INSIDE \(root.label.uppercased())?")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color(hex: "#999"))
+                        folderRow(subOptions, selectedId: subId) { subId = $0 }
                     }
                 }
+            }
+
+            if destinationReady {
+                Text("New tiles land in the last spot of \(destinationName()).")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: "#999"))
+            }
+
+            Text("HOW SHOULD THE PICTURES LOOK?")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Color(hex: "#999"))
+            HStack(spacing: 10) {
+                lookChoice(title: "Board art style",
+                           subtitle: board.stylingAllowed ? "Drawn to match the board" : "A membership perk",
+                           selected: !exactPhoto,
+                           disabled: !board.stylingAllowed) { exactPhoto = false }
+                lookChoice(title: "My exact photo",
+                           subtitle: "As taken, no restyle — free",
+                           selected: exactPhoto) { exactPhoto = true }
+            }
+            if !exactPhoto && board.stylingAllowed {
+                Button { showStyleChange = true } label: {
+                    Text("Change the board's art style…")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#ad1457"))
+                        .underline()
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(14)
@@ -201,38 +267,112 @@ struct AddTileView: View {
         .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
     }
 
-    private func menuChip(icon: String, text: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-            Text(text).lineLimit(1)
-            Image(systemName: "chevron.down").font(.system(size: 10))
+    /// One selectable row per board region, named by where it LIVES on the
+    /// board (parents don't know the sections' internal names).
+    private func sectionRow(_ s: BoardSection) -> some View {
+        let selected = section == s
+        return Button { section = s } label: {
+            HStack(spacing: 10) {
+                Image(systemName: sectionGlyph(s))
+                    .font(.system(size: 18))
+                    .foregroundStyle(Color(hex: "#ad1457"))
+                    .frame(width: 26)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(sectionTitle(s))
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Color(hex: "#333"))
+                    Text(sectionSubtitle(s))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20))
+                    .foregroundStyle(selected ? Color(hex: "#ff1493") : Color(hex: "#e0c3d2"))
+            }
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(Color(hex: s.bandHex).opacity(selected ? 1 : 0.35))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12)
+                .stroke(selected ? Color(hex: "#ff1493") : .clear, lineWidth: 2))
         }
-        .font(.system(size: 14, weight: .semibold))
-        .foregroundStyle(Color(hex: "#ad1457"))
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(Color(hex: "#fce4ef"))
-        .clipShape(Capsule())
+        .buttonStyle(.plain)
+    }
+
+    /// A horizontal, ordered rail of folder chips — the same order the child
+    /// sees on the board — each wearing the folder's own tile art.
+    private func folderRow(_ folders: [Category], selectedId: Int?, pick: @escaping (Int) -> Void) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(folders) { f in
+                    FolderChip(category: f, selected: f.id == selectedId) { pick(f.id) }
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func lookChoice(title: String, subtitle: String, selected: Bool,
+                            disabled: Bool = false, pick: @escaping () -> Void) -> some View {
+        Button(action: pick) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(selected ? Color(hex: "#ff1493") : Color(hex: "#e0c3d2"))
+                    Text(title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Color(hex: "#333"))
+                }
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(selected ? Color(hex: "#fce4ef") : Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12)
+                .stroke(selected ? Color(hex: "#ff1493") : Color(hex: "#f3c6dd"), lineWidth: selected ? 2 : 1.5))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.45 : 1)
     }
 
     // MARK: -- Capture
 
     private var captureButtons: some View {
-        HStack(spacing: 12) {
-            Button { showCamera = true } label: {
-                captureLabel(icon: "camera.fill", text: "Take a photo", filled: true)
-            }
-            .buttonStyle(.plain)
-            .disabled(importing)
+        // Locked until the destination is a spot that actually renders — a tile
+        // added "nowhere" (no folder, or a folder that only holds sub-folders)
+        // would be invisible on the board.
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                Button { showCamera = true } label: {
+                    captureLabel(icon: "camera.fill", text: "Take a photo", filled: true)
+                }
+                .buttonStyle(.plain)
+                .disabled(importing || !destinationReady)
 
-            // One button for the library: pick a single photo or many. One photo
-            // → a single tile; several → a reviewable batch.
-            Button { showLibrary = true } label: {
-                captureLabel(icon: importing ? nil : "photo.on.rectangle",
-                             text: importing ? "Loading…" : "Choose photo(s)",
-                             filled: false, busy: importing)
+                // One button for the library: pick a single photo or many. One photo
+                // → a single tile; several → a reviewable batch.
+                Button { showLibrary = true } label: {
+                    captureLabel(icon: importing ? nil : "photo.on.rectangle",
+                                 text: importing ? "Loading…" : "Choose photo(s)",
+                                 filled: false, busy: importing)
+                }
+                .buttonStyle(.plain)
+                .disabled(importing || !destinationReady)
             }
-            .buttonStyle(.plain)
-            .disabled(importing)
+            .opacity(destinationReady ? 1 : 0.45)
+
+            if !destinationReady {
+                Text(rootId == nil
+                     ? "Pick a folder above first — tiles only show up on the board inside a folder."
+                     : "\(selectedRoot?.label ?? "That folder") holds sub-folders — pick one, so the tile has a spot the board can show.")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#b45309"))
+                    .multilineTextAlignment(.center)
+            }
         }
     }
 
@@ -296,7 +436,7 @@ struct AddTileView: View {
     private func enqueue(_ data: Data, name: String = "", detail: String = "", raw: Bool = false) {
         queue.enqueue(photoJPEG: data,
                       section: section,
-                      categoryId: categoryId,
+                      categoryId: destinationCategoryId,
                       style: .soft,
                       model: "",
                       bg: "",
@@ -327,53 +467,97 @@ struct AddTileView: View {
         } else {
             queue.enqueueBatch(photos: photos,
                                section: section,
-                               categoryId: categoryId,
+                               categoryId: destinationCategoryId,
                                style: .soft,
                                model: "",
                                bg: "",
                                emotion: "default",
+                               raw: exactPhoto,
                                childId: auth.childSlug,
                                board: board)
         }
     }
 
-    private struct FolderOption: Identifiable { let id: Int; let label: String; let depth: Int }
-
-    /// Top-level categories plus their subcategories (indented). Lets a "+ Add
-    /// tile" tap from inside a subcategory pre-select the right folder, and lets
-    /// the parent retarget anywhere in the section.
-    private func folderOptions(_ section: BoardSection) -> [FolderOption] {
-        var out: [FolderOption] = []
-        for root in board.roots(in: section) {
-            out.append(FolderOption(id: root.id, label: root.label, depth: 0))
-            for sub in board.children(of: root) {
-                out.append(FolderOption(id: sub.id, label: sub.label, depth: 1))
-            }
-        }
-        return out
-    }
-
-    private func folderName() -> String {
-        guard let id = categoryId,
-              let f = folderOptions(section).first(where: { $0.id == id }) else { return "Top level" }
-        return f.label
-    }
-
-    /// Human-readable "Needs › Snacks" destination for the pre-gen sheet header,
-    /// so the parent confirms placement before the tile generates.
+    /// Human-readable "Middle Column › Food › Snacks" destination for the
+    /// pre-gen sheet header, so the parent confirms placement before the tile
+    /// generates.
     private func destinationName() -> String {
-        let sec = sectionLabel(section)
-        guard let id = categoryId,
-              let f = folderOptions(section).first(where: { $0.id == id }) else { return sec }
-        return "\(sec) › \(f.label)"
+        var parts = [sectionTitle(section)]
+        if let root = selectedRoot { parts.append(root.label) }
+        if let sub = selectedSub { parts.append(sub.label) }
+        return parts.joined(separator: " › ")
     }
 
-    private func sectionLabel(_ s: BoardSection) -> String {
+    /// Board-position names — parents think in "where on the board", not in the
+    /// sections' internal vocabulary.
+    private func sectionTitle(_ s: BoardSection) -> String {
         switch s {
-        case .needs:  return "Needs"
+        case .needs:  return "Bottom Row"
+        case .people: return "Left Column"
+        case .nouns:  return "Middle Column"
+        case .verbs:  return "Right Column"
+        }
+    }
+
+    private func sectionSubtitle(_ s: BoardSection) -> String {
+        switch s {
+        case .needs:  return "Core words — always visible along the bottom"
         case .people: return "People"
-        case .nouns:  return "Nouns"
+        case .nouns:  return "Gestalts, nouns & adjectives"
         case .verbs:  return "Verbs"
+        }
+    }
+
+    private func sectionGlyph(_ s: BoardSection) -> String {
+        switch s {
+        case .needs:  return "rectangle.bottomthird.inset.filled"
+        case .people: return "rectangle.lefthalf.inset.filled"
+        case .nouns:  return "rectangle.center.inset.filled"
+        case .verbs:  return "rectangle.righthalf.inset.filled"
+        }
+    }
+}
+
+/// One folder in the destination rail: the folder's own tile art (async via
+/// MediaCache) over its name, with a pink ring when selected.
+private struct FolderChip: View {
+    let category: Category
+    let selected: Bool
+    let action: () -> Void
+    @State private var icon: UIImage?
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Group {
+                    if let icon {
+                        Image(uiImage: icon).resizable().aspectRatio(contentMode: .fill)
+                    } else {
+                        ZStack {
+                            Color(hex: "#fdf2f8")
+                            Image(systemName: "folder.fill")
+                                .font(.system(size: 20))
+                                .foregroundStyle(Color(hex: "#e0a3c2"))
+                        }
+                    }
+                }
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12)
+                    .stroke(selected ? Color(hex: "#ff1493") : Color(hex: "#f3c6dd"),
+                            lineWidth: selected ? 3 : 1.5))
+                Text(category.label)
+                    .font(.system(size: 12, weight: selected ? .bold : .semibold))
+                    .foregroundStyle(selected ? Color(hex: "#ad1457") : Color(hex: "#666"))
+                    .lineLimit(1)
+            }
+            .frame(width: 72)
+        }
+        .buttonStyle(.plain)
+        .task(id: category.imageKey) {
+            if let key = category.imageKey {
+                icon = await MediaCache.shared.image(for: key)
+            }
         }
     }
 }
@@ -512,6 +696,9 @@ private struct PreGenerateSheet: View {
     /// False on the free tier: styling is a membership perk, so the sheet
     /// locks to "use my photo as-is" (free on every plan) with a join note.
     var stylingAllowed: Bool = true
+    /// Seeds the as-is toggle from the destination card's look choice, so a
+    /// parent who already said "my exact photo" doesn't have to say it twice.
+    var initialUseAsIs: Bool = false
     let onGenerate: (_ name: String, _ detail: String, _ raw: Bool) -> Void
     let onCancel: () -> Void
 
@@ -603,6 +790,7 @@ private struct PreGenerateSheet: View {
                 }
             }
             .task {
+                useAsIs = initialUseAsIs
                 if !stylingAllowed { useAsIs = true }   // free tier: as-is is the (locked) default
                 // Tiny delay so the keyboard doesn't fight the sheet animation.
                 try? await Task.sleep(nanoseconds: 350_000_000)

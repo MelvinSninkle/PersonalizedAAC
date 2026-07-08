@@ -221,12 +221,13 @@ final class AddTileQueue {
                       model: String,
                       bg: String = "pink",
                       emotion: String,
+                      raw: Bool = false,
                       childId: String,
                       board: BoardStore) {
         let batchId = UUID()
         for photo in photos {
             _ = enqueue(photoJPEG: photo, section: section, categoryId: categoryId,
-                        style: style, model: model, bg: bg, emotion: emotion,
+                        style: style, model: model, bg: bg, emotion: emotion, raw: raw,
                         prefilledLabel: "", childId: childId, board: board,
                         batchId: batchId, needsReview: true)
         }
