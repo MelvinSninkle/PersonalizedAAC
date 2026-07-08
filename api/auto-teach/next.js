@@ -11,8 +11,8 @@
 import { checkAuth } from '../_lib/auth.js';
 import { canAccessChild } from '../_lib/access.js';
 import { sql } from '../_lib/db.js';
-import { loadSettings, saveTimezone, localParts, scheduleReady, CADENCE, TIER_CAPS,
-         inBlackout, recentlyActive, lastTriggerAt, todaysBudgetUsed, pickNextBatch } from '../_lib/auto-teach.js';
+import { loadSettings, saveTimezone, localParts, startOfLocalDay, scheduleReady, CADENCE, TIER_CAPS,
+         inBlackout, recentlyActive, lastTriggerAt, todaysBudgetUsed, gameRanToday, pickNextBatch } from '../_lib/auto-teach.js';
 import { entitlementFor, boardOwnerId } from '../_lib/credits.js';
 
 const VALID_MODES = new Set(['exposure', 'game']);
@@ -68,27 +68,49 @@ export default async function handler(req, res) {
 
     const cadence = CADENCE[settings.cadence] || CADENCE.conservative;
     const tier    = TIER_CAPS[settings.tier]   || TIER_CAPS.under3;
-    const budgetCapMin = cadence.dailyBudgetMin[settings.tier] || cadence.dailyBudgetMin.under3;
-    const events = await todaysBudgetUsed(db, childId);
-    const budgetUsedMin = Math.round(events * tier.microSec / 60);
-    if (budgetUsedMin >= budgetCapMin) {
-      res.status(200).json({ ok: false, reason: 'budget_exhausted', budgetUsedMin, budgetCapMin }); return;
-    }
-    // Game-mode minimum spacing: only run a game session once per day, at the
-    // parent's chosen time (±15 min) — in the family's timezone.
+    // Day-scoped state (budget, one-game-per-day) counts from local midnight
+    // in the FAMILY's timezone — a UTC boundary resets "today" around dinner.
+    const dayStart = startOfLocalDay(now, tz);
+    const { minutes: nowMin } = localParts(now, tz);
+    const [gh, gm] = String(settings.dailyGameAt || '15:30').split(':').map(Number);
+    const gameTargetMin = (gh || 0) * 60 + (gm || 0);
+
     if (mode === 'game') {
-      const [hh, mm] = String(settings.dailyGameAt || '15:30').split(':').map(Number);
-      const targetMin = (hh || 0) * 60 + (mm || 0);
-      const { minutes: nowMin } = localParts(now, tz);
-      if (Math.abs(nowMin - targetMin) > 15) {
+      // The daily game runs once per day, at the parent's chosen time (±15
+      // min), in the family's timezone. It is deliberately EXEMPT from the
+      // micro-exposure budget: it's the guaranteed lane (already capped by
+      // sessionMaxMin), and a morning of slideshows must not starve it.
+      if (Math.abs(nowMin - gameTargetMin) > 15) {
         res.status(200).json({ ok: false, reason: 'not_game_window' }); return;
       }
-      const gameToday = await db`
-        SELECT 1 FROM exposure_events
-        WHERE source = 'auto_game' AND occurred_at >= date_trunc('day', NOW())
-          AND protocol_id IN (SELECT id FROM exposure_protocols WHERE child_id = ${childId})
-        LIMIT 1`;
-      if (gameToday.length) { res.status(200).json({ ok: false, reason: 'game_already_today' }); return; }
+      if (await gameRanToday(db, childId, dayStart)) {
+        res.status(200).json({ ok: false, reason: 'game_already_today' }); return;
+      }
+    } else {
+      // Hold the slideshow lane out of the daily game's RUNWAY — from
+      // cooldownMin before the window opens through its close — while the
+      // game hasn't run yet. The runner tries exposure first on every tick,
+      // and every gate that refuses a slideshow also refuses a game, so
+      // without this hold the slideshow either wins the window itself or its
+      // cooldown swallows it: the once-a-day game could never fire.
+      const runwayStart = gameTargetMin - 15 - settings.cooldownMin;
+      if (nowMin >= runwayStart && nowMin <= gameTargetMin + 15
+          && !(await gameRanToday(db, childId, dayStart))) {
+        res.status(200).json({ ok: false, reason: 'game_window' }); return;
+      }
+      // The cadence's slideshow rhythm, actually enforced: conservative = one
+      // micro-exposure per hour at most. cooldownMin (above) stays the floor
+      // between ANY two auto activities; this spaces the slideshow lane.
+      const lastShow = await lastTriggerAt(db, childId, ['auto_slideshow']);
+      if (lastShow && now.getTime() - lastShow.getTime() < cadence.minutesBetween * 60000) {
+        res.status(200).json({ ok: false, reason: 'slideshow_spacing' }); return;
+      }
+      const budgetCapMin = cadence.dailyBudgetMin[settings.tier] || cadence.dailyBudgetMin.under3;
+      const events = await todaysBudgetUsed(db, childId, dayStart);
+      const budgetUsedMin = Math.round(events * tier.microSec / 60);
+      if (budgetUsedMin >= budgetCapMin) {
+        res.status(200).json({ ok: false, reason: 'budget_exhausted', budgetUsedMin, budgetCapMin }); return;
+      }
     }
 
     const batchSize = mode === 'game' ? 6 : settings.batchSize;

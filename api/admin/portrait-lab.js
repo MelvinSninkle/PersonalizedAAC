@@ -26,6 +26,8 @@ export default async function handler(req, res) {
   const styleGuideId = Number.isFinite(Number(b.styleGuideId)) && Number(b.styleGuideId) > 0 ? Number(b.styleGuideId) : null;
   const guidance = typeof b.guidance === 'string' ? b.guidance.slice(0, 300) : '';
   const attempt = Number.isFinite(Number(b.attempt)) ? Math.min(5, Math.max(0, Math.floor(Number(b.attempt)))) : 0;
+  // Bench the age treatment: 'adult' | 'child' | omitted (apparent-age fallback).
+  const ageGroup = (b.ageGroup === 'adult' || b.ageGroup === 'child') ? b.ageGroup : null;
 
   try {
     const oaKey = process.env.OPENAI_API_KEY;
@@ -44,7 +46,7 @@ export default async function handler(req, res) {
     }
     images.push({ buffer: Buffer.from(photoB64, 'base64'), contentType: photoType });
 
-    const prompt = buildPortraitPrompt({ styleGuide, attempt, guidance });
+    const prompt = buildPortraitPrompt({ styleGuide, attempt, guidance, ageGroup });
     // Mirror production keystone routing: OpenAI gpt-image when configured, else
     // Gemini Pro. A per-run `model` override lets you preview a model before
     // saving it as the production keystone model (PUT /api/admin/keystone-model).

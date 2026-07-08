@@ -13,11 +13,11 @@
     } catch (_) { /* fall through to the offline default */ }
     cache = {
       relationships: [
-        { value: 'mother', label: 'Mother' }, { value: 'father', label: 'Father' },
-        { value: 'sister', label: 'Sister', sibling: true }, { value: 'brother', label: 'Brother', sibling: true },
-        { value: 'grandmother', label: 'Grandmother', side: true }, { value: 'grandfather', label: 'Grandfather', side: true },
-        { value: 'aunt', label: 'Aunt', side: true }, { value: 'uncle', label: 'Uncle', side: true }, { value: 'cousin', label: 'Cousin', side: true },
-        { value: 'family_friend', label: 'Family friend' }, { value: 'caregiver', label: 'Caregiver' }, { value: 'pet', label: 'Pet' }, { value: 'other', label: 'Other' },
+        { value: 'mother', label: 'Mother', age: 'adult' }, { value: 'father', label: 'Father', age: 'adult' },
+        { value: 'sister', label: 'Sister', sibling: true, ageDefault: 'child' }, { value: 'brother', label: 'Brother', sibling: true, ageDefault: 'child' },
+        { value: 'grandmother', label: 'Grandmother', side: true, age: 'adult' }, { value: 'grandfather', label: 'Grandfather', side: true, age: 'adult' },
+        { value: 'aunt', label: 'Aunt', side: true, age: 'adult' }, { value: 'uncle', label: 'Uncle', side: true, age: 'adult' }, { value: 'cousin', label: 'Cousin', side: true, ageDefault: 'child' },
+        { value: 'family_friend', label: 'Family friend', ageDefault: 'adult' }, { value: 'caregiver', label: 'Caregiver', age: 'adult' }, { value: 'pet', label: 'Pet' }, { value: 'other', label: 'Other', ageDefault: 'adult' },
       ],
       sides: ['maternal', 'paternal'], pronouns: ['she', 'he', 'they'],
     };
@@ -48,6 +48,11 @@
         <label class="pp-birth-wrap" style="display:none;">Birth order <span style="color:#9ca3af;font-weight:400;">(1 = oldest)</span>
           <input type="number" min="1" step="1" class="pp-birth" placeholder="1" style="width:100%;margin-top:4px;padding:8px;border:1px solid #e6c9d6;border-radius:8px;font-size:14px;">
         </label>
+        <label class="pp-age-wrap" style="display:none;">Kid or grown-up? <span style="color:#9ca3af;font-weight:400;">(so we draw them right)</span>
+          <select class="pp-age" style="width:100%;margin-top:4px;padding:8px;border:1px solid #e6c9d6;border-radius:8px;font-size:14px;">
+            <option value="child">Kid</option><option value="adult">Grown-up</option>
+          </select>
+        </label>
         <label>Their real name <span style="color:#9ca3af;font-weight:400;">(optional)</span>
           <input type="text" class="pp-given" placeholder="e.g. Gary" style="width:100%;margin-top:4px;padding:8px;border:1px solid #e6c9d6;border-radius:8px;font-size:14px;">
         </label>
@@ -57,10 +62,17 @@
       </div>`;
     const q = s => el.querySelector(s);
     const rel = q('.pp-rel'), sideWrap = q('.pp-side-wrap'), birthWrap = q('.pp-birth-wrap');
+    const ageWrap = q('.pp-age-wrap'), ageSel = q('.pp-age');
     function sync() {
       const r = byVal[rel.value] || {};
       sideWrap.style.display = r.side ? '' : 'none';
       birthWrap.style.display = r.sibling ? '' : 'none';
+      // Kid/grown-up shows ONLY when the relationship doesn't settle it (a
+      // sister can be 4 or 34); the portrait prompt adapts the art style by
+      // age so adults don't get the style's big-eyed child proportions.
+      // Pets have neither flag — age treatment doesn't apply to them.
+      ageWrap.style.display = (!r.age && r.ageDefault) ? '' : 'none';
+      if (!r.age && r.ageDefault) ageSel.value = r.ageDefault;
     }
     rel.addEventListener('change', sync); sync();
 
@@ -74,6 +86,9 @@
           birthOrder: r.sibling ? (parseInt(q('.pp-birth').value, 10) || null) : null,
           givenName: q('.pp-given').value.trim() || null,
           pronoun: q('.pp-pron').value || null,
+          // 'adult' | 'child' | null. Unambiguous relationships answer for
+          // themselves; the visible toggle answers for the rest.
+          ageGroup: r.age || ((!r.age && r.ageDefault) ? ageSel.value : null),
         };
       },
       setValues(v) {
@@ -84,6 +99,8 @@
         q('.pp-birth').value = v.birthOrder || v.birth_order || '';
         q('.pp-given').value = v.givenName || v.given_name || '';
         q('.pp-pron').value = v.pronoun || '';
+        const ag = v.ageGroup || v.age_group;
+        if (ag === 'adult' || ag === 'child') ageSel.value = ag;
       },
       reset() { el.querySelectorAll('input').forEach(i => (i.value = '')); rel.selectedIndex = 0; sync(); },
     };

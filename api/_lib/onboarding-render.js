@@ -102,13 +102,37 @@ export const PORTRAIT_NO_STYLE_BASE =
 // the lab faithfully mirrors production. `styleGuide` is the loadStyleGuide()
 // result (with `.image` + `.description`); when it has an image the prompt copies
 // that style, otherwise it falls back to the warm-storybook base.
-export function buildPortraitPrompt({ styleGuide, attempt = 0, guidance = '' } = {}) {
+export function buildPortraitPrompt({ styleGuide, attempt = 0, guidance = '', ageGroup = null } = {}) {
   const variant = attempt > 0
     ? ` Vary the framing and expression slightly from any previous attempt (attempt ${attempt + 1}).`
     : '';
   const fix = guidance ? ` Important correction from the parent — apply this exactly: ${guidance}.` : '';
   const styleDesc = (styleGuide && styleGuide.description) ? String(styleGuide.description).trim() : '';
   const hasStyleImg = !!(styleGuide && styleGuide.image && styleGuide.image.buffer);
+  // AGE ADAPTATION. The style reference (IMAGE 1) shows CHILDREN, and the
+  // eye-treatment instruction below is emphatic — without this paragraph the
+  // model gives adults the same saucer eyes as the kids. The guidance is
+  // deliberately STYLE-RELATIVE, not prescriptive: most animation styles give
+  // adults more natural proportions, but some (anime, say) keep stylized eyes
+  // for everyone — the style's own adult convention wins, whatever it is.
+  // `ageGroup` comes from the relationship (mother → adult) or the capture
+  // UI's kid/grown-up choice; when unknown, fall back to "each at their
+  // apparent age" so group photos still behave.
+  const agePara =
+    ageGroup === 'adult'
+      ? "\nAGE: the person in IMAGE 2 is an ADULT. IMAGE 1 shows how this art style draws CHILDREN — do not copy " +
+        "those child proportions onto this person. Instead, stay consistent with the art style and draw them the " +
+        "way THIS STYLE draws its ADULT characters: if cartoons or images in this art style give adults more " +
+        "natural proportions — for example more naturally sized eyes, longer faces, adult builds — follow that " +
+        "convention faithfully. The result must be unmistakably the same art style AND unmistakably an adult, as " +
+        "if this grown-up stepped out of the same film as IMAGE 1's kids."
+      : ageGroup === 'child'
+      ? "\nAGE: the person in IMAGE 2 is a CHILD. IMAGE 1's treatment is exactly how this style draws children — " +
+        "apply its proportions and eye style as shown."
+      : "\nAGE: draw every person at their APPARENT AGE, staying consistent with the art style: give children the " +
+        "treatment IMAGE 1 shows, and draw adults the way THIS STYLE draws its adult characters — if this art " +
+        "style gives adults more natural proportions, follow that convention. Never carry the child proportions " +
+        "onto an adult.";
   let prompt;
   if (hasStyleImg) {
     prompt =
@@ -123,15 +147,19 @@ export function buildPortraitPrompt({ styleGuide, attempt = 0, guidance = '' } =
       "anyone; the count of people in your picture must equal the count in the photo. Keep EACH person's IDENTITY " +
       "unmistakable — same skin tone, hair color and hairstyle, face shape, eyebrows, apparent age and sex, and any " +
       "glasses, freckles, or distinctive features — but DRAW every one of those features in IMAGE 1's art style " +
-      "(do not render them realistically or in a different cartoon style).\n" +
-      "WHY: this is a tile for a young child's AAC communication device; the child has a developmental disability and " +
+      "(do not render them realistically or in a different cartoon style)." +
+      agePara +
+      "\nWHY: this is a tile for a young child's AAC communication device; the child has a developmental disability and " +
       "must instantly recognize BOTH these exact people AND the shared art style that helps them focus — so a faithful " +
       "style match and faithful likenesses matter equally.\n" +
       "FRAMING: one person → a centered head-and-shoulders portrait. A group → frame everyone together from the " +
       "waist up, close and warm, each face clearly visible and large enough to recognize. Bright friendly colors, " +
       "no text or letters." + variant;
   } else {
-    prompt = PORTRAIT_NO_STYLE_BASE + variant;
+    prompt = PORTRAIT_NO_STYLE_BASE +
+      (ageGroup === 'adult'
+        ? ' The person is an adult — draw them the way the chosen storybook style draws its adult characters, never with child-like proportions.'
+        : '') + variant;
   }
   return prompt + fix + SQUARE_RULE;
 }

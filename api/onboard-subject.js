@@ -8,7 +8,7 @@ import { checkAuth } from './_lib/auth.js';
 import { archivePriorImage } from './_lib/image-history.js';
 import { sql } from './_lib/db.js';
 import { canAccessChild } from './_lib/access.js';
-import { isValidRelationship, relationshipNeedsSide } from './_lib/relationships.js';
+import { isValidRelationship, relationshipNeedsSide, relationshipAgeGroup } from './_lib/relationships.js';
 import { geminiKey, geminiProModel, geminiGenerateImage } from './_lib/gemini.js';
 import { openaiEditImage, openaiKeystoneModel } from './_lib/openai-image.js';
 import { loadStyleGuide, loadChildStyleGuideId, loadChildVoiceId, synthesizeVoice, buildPortraitPrompt } from './_lib/onboarding-render.js';
@@ -34,6 +34,12 @@ export default async function handler(req, res) {
   // People model (docs/people-data-model.md): structured identity for this person.
   const relationship = String(q.relationship || '').slice(0, 40).trim().toLowerCase();
   const side = (q.side === 'maternal' || q.side === 'paternal') ? q.side : null;
+  // Kid or grown-up, for the portrait's age treatment (the style sample shows
+  // kids; adults must not inherit its child proportions). Derived from the
+  // relationship when unambiguous (mother → adult); the explicit query param —
+  // the picker's kid/grown-up toggle — decides siblings, cousins, friends.
+  const ageGroupParam = (q.ageGroup === 'adult' || q.ageGroup === 'child') ? q.ageGroup : null;
+  const ageGroup = role === 'child' ? 'child' : (relationshipAgeGroup(relationship) || ageGroupParam);
   const givenName = String(q.given || '').slice(0, 120).trim();
   const pronoun = (q.pronoun === 'she' || q.pronoun === 'he' || q.pronoun === 'they') ? q.pronoun : null;
   const birthOrder = (Number.isFinite(+q.birthOrder) && +q.birthOrder > 0) ? Math.floor(+q.birthOrder) : null;
@@ -96,7 +102,7 @@ export default async function handler(req, res) {
         images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
       }
       images.push({ buffer, contentType });
-      const prompt = buildPortraitPrompt({ styleGuide });
+      const prompt = buildPortraitPrompt({ styleGuide, ageGroup });
       // Keystone tier only — no cross-engine fallback (below 1.5 the portraits
       // don't hold up). Retry the same engine once on a transient error; on a
       // real failure, refund the credits so "try again" never double-charges.
@@ -187,6 +193,7 @@ export default async function handler(req, res) {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )`;
       await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS person_id BIGINT REFERENCES persons(id)`;
+      await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS age_group TEXT`;
       const isSelf = role === 'child' || relationship === 'self';
       const rel = isValidRelationship(relationship) ? relationship : (isSelf ? 'self' : 'other');
       const relSide = relationshipNeedsSide(rel) ? side : null;
@@ -201,14 +208,15 @@ export default async function handler(req, res) {
             is_self = ${isSelf}, reference_key = ${key}, voice_key = COALESCE(${soundKey}, voice_key),
             pronunciation = COALESCE(NULLIF(${pronunciation}, ''), pronunciation),
             birth_date = COALESCE(${birthDate}, birth_date),
+            age_group = COALESCE(${ageGroup}, age_group),
             updated_at = NOW()
           WHERE id = ${personId}`;
       } else {
         const pr = await db`
           INSERT INTO persons
-            (child_id, display_name, given_name, relationship, side, pronoun, birth_order, is_self, reference_key, voice_key, pronunciation, birth_date)
+            (child_id, display_name, given_name, relationship, side, pronoun, birth_order, is_self, age_group, reference_key, voice_key, pronunciation, birth_date)
           VALUES
-            (${childId}, ${name}, ${givenName || null}, ${rel}, ${relSide}, ${pronoun}, ${birthOrder}, ${isSelf}, ${key}, ${soundKey}, ${pronunciation || null}, ${birthDate})
+            (${childId}, ${name}, ${givenName || null}, ${rel}, ${relSide}, ${pronoun}, ${birthOrder}, ${isSelf}, ${ageGroup}, ${key}, ${soundKey}, ${pronunciation || null}, ${birthDate})
           RETURNING id`;
         personId = pr[0].id;
       }

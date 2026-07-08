@@ -13,7 +13,8 @@ import { checkAuth } from '../_lib/auth.js';
 import { canAccessChild } from '../_lib/access.js';
 import { sql } from '../_lib/db.js';
 import { loadSettings, scheduleReady, CADENCE, TIER_CAPS, inBlackout, recentlyActive,
-         lastTriggerAt, todaysBudgetUsed, masteryByCategory } from '../_lib/auto-teach.js';
+         lastTriggerAt, todaysBudgetUsed, gameRanToday, masteryByCategory,
+         localParts, startOfLocalDay } from '../_lib/auto-teach.js';
 import { entitlementFor, boardOwnerId } from '../_lib/credits.js';
 
 export default async function handler(req, res) {
@@ -45,10 +46,25 @@ export default async function handler(req, res) {
     const sinceLastMs = last ? now.getTime() - last.getTime() : Infinity;
     const cooldownLeftMin = sinceLastMs >= cooldownMs ? 0 : Math.ceil((cooldownMs - sinceLastMs) / 60000);
 
-    const budgetUsedEvents = await todaysBudgetUsed(db, childId);
+    // Day-scoped state counts from local midnight in the FAMILY's timezone
+    // (same boundary the /next gates use).
+    const dayStart = startOfLocalDay(now, settings.tz);
+    const budgetUsedEvents = await todaysBudgetUsed(db, childId, dayStart);
     const budgetUsedMin = Math.round(budgetUsedEvents * tier.microSec / 60);
     const budgetCapMin = cadence.dailyBudgetMin[settings.tier] || cadence.dailyBudgetMin.under3;
     const budgetExhausted = budgetUsedMin >= budgetCapMin;
+
+    // Slideshow-lane rhythm + daily-game lane, mirrored from /next so the
+    // parent panel (and a testing parent) can see exactly why nothing fires.
+    const lastShow = await lastTriggerAt(db, childId, ['auto_slideshow']);
+    const sinceShowMs = lastShow ? now.getTime() - lastShow.getTime() : Infinity;
+    const spacingMs = cadence.minutesBetween * 60000;
+    const slideshowSpacingLeftMin = sinceShowMs >= spacingMs ? 0 : Math.ceil((spacingMs - sinceShowMs) / 60000);
+    const { minutes: nowMin } = localParts(now, settings.tz);
+    const [gh, gm] = String(settings.dailyGameAt || '15:30').split(':').map(Number);
+    const gameTargetMin = (gh || 0) * 60 + (gm || 0);
+    const inGameWindow = Math.abs(nowMin - gameTargetMin) <= 15;
+    const gameDoneToday = await gameRanToday(db, childId, dayStart);
 
     const mastery = await masteryByCategory(db, childId);
 
@@ -75,6 +91,9 @@ export default async function handler(req, res) {
         budgetUsedMin,
         budgetCapMin,
         budgetExhausted,
+        slideshowSpacingLeftMin,
+        inGameWindow,
+        gameRanToday: gameDoneToday,
       },
       schedule,                       // quiet-hours blob for the parent editor
       mastery,

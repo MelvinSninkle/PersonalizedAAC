@@ -41,9 +41,11 @@ final class DisplayPrefs {
 
     // MARK: -- Defaults
 
-    static let defaultPeople     = "#fde7ef"
-    static let defaultNouns      = "#fff4cc"
-    static let defaultVerbs      = "#dcefe2"
+    // Columns start WHITE so the family picks their own palette (the header
+    // color is chosen at signup); only the needs strip keeps a tint.
+    static let defaultPeople     = "#ffffff"
+    static let defaultNouns      = "#ffffff"
+    static let defaultVerbs      = "#ffffff"
     static let defaultNeeds      = "#fff7e6"
     static let defaultHeaderBg   = "#ff1493"
     static let defaultHeaderText = "#ffffff"
@@ -57,7 +59,7 @@ final class DisplayPrefs {
         self.showVerbs     = d.object(forKey: "pref.showVerbs")  as? Bool ?? true
         self.showNeeds     = d.object(forKey: "pref.showNeeds")  as? Bool ?? true
         self.acrossPeople  = d.object(forKey: "pref.acrossPeople") as? Int ?? 2
-        self.acrossNouns   = d.object(forKey: "pref.acrossNouns")  as? Int ?? 4
+        self.acrossNouns   = d.object(forKey: "pref.acrossNouns")  as? Int ?? 5
         self.acrossVerbs   = d.object(forKey: "pref.acrossVerbs")  as? Int ?? 2
         self.colorPeople   = d.string(forKey: "pref.colorPeople") ?? Self.defaultPeople
         self.colorNouns    = d.string(forKey: "pref.colorNouns")  ?? Self.defaultNouns
@@ -70,7 +72,7 @@ final class DisplayPrefs {
     func resetToDefaults() {
         hideLabels = false
         showPeople = true; showNouns = true; showVerbs = true; showNeeds = true
-        acrossPeople = 2; acrossNouns = 4; acrossVerbs = 2
+        acrossPeople = 2; acrossNouns = 5; acrossVerbs = 2
         colorPeople = Self.defaultPeople
         colorNouns  = Self.defaultNouns
         colorVerbs  = Self.defaultVerbs

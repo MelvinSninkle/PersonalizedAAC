@@ -268,9 +268,9 @@
   /* Color-code sections so Fletcher's eye learns each band by hue.
      Defaults below are overridable from the Display Settings panel
      (parent picks color → CSS vars set on :root override these). */
-  .aac-section[data-section="people"] { background: var(--bg-people, #fce4ec); }
-  .aac-section[data-section="verbs"]  { background: var(--bg-verbs,  #fce4ec); }
-  .aac-section[data-section="nouns"]  { background: var(--bg-nouns,  #fff59d); }
+  .aac-section[data-section="people"] { background: var(--bg-people, #ffffff); }
+  .aac-section[data-section="verbs"]  { background: var(--bg-verbs,  #ffffff); }
+  .aac-section[data-section="nouns"]  { background: var(--bg-nouns,  #ffffff); }
   .aac-section h2 {
     margin: 0;
     padding: 8px 14px;
@@ -820,7 +820,14 @@
   .modal .button-row > button.danger:hover { background: #b3404e; }
   .modal .error { color: #c94f5f; font-size: 14px; margin-top: 8px; min-height: 18px; }
 
-  @media (max-width: 900px) {
+  /* TABLET-PORTRAIT ONLY (701–900px AND portrait): stack the sections into one
+     tall scrolling column. The lower bound + orientation guard matter: this
+     rule used to be a bare (max-width: 900px), so it ALSO matched every phone
+     and — being later in the stylesheet — overrode PHONE MODE's side-by-side
+     columns above. That was the "phone board stacks and tiles sprawl" bug.
+     Phones (≤700px) and landscape phones now fall through to the base
+     whole-board grid. */
+  @media (min-width: 701px) and (max-width: 900px) and (orientation: portrait) {
     html, body {
       height: auto;
       overflow: auto;
@@ -843,6 +850,10 @@
        children separately. */
     .items-grid > * { max-width: 200px; width: 100%; }
     .needs-section .items-grid > * { max-width: 130px; }
+  }
+  /* Small-screen cosmetics (tablet AND phone): denser chrome only — no layout
+     changes here, so the phone keeps the whole-board grid. */
+  @media (max-width: 900px) {
     .tab-strip { gap: 6px; padding: 8px; max-height: none; }
     .tile-label { font-size: 13px; }
     .tile-add { min-height: 56px; }
@@ -860,6 +871,9 @@
      iOS. Switch to a plain flex column with wrapping toolbar so the toolbar
      stays inside the painted header no matter how cramped it gets. */
   @media (max-width: 700px) {
+    /* Phone tiles are ~35-50px — the 13px small-screen label above wraps words
+       ("Mom" → "Mo/m"). Must live BELOW that rule in the cascade to win. */
+    .tile-label { font-size: 10px; }
     body.edit-mode header {
       display: flex !important;
       flex-direction: column !important;
@@ -890,10 +904,9 @@
        it on phone so the toolbar has room. */
     body.edit-mode header .status { display: none !important; }
   }
-  @media (max-width: 480px) {
-    main { padding: 6px; gap: 6px; }
-    .aac-section h2 { font-size: 15px; padding: 8px 12px; }
-  }
+  /* (No separate ≤480px block: it predated PHONE MODE and, sitting later in
+     the stylesheet, overrode the phone rules with LARGER padding/headings on
+     the smallest screens. The ≤700px block above governs all phones.) */
 
   /* ---- Organize view (Miller columns, edit-mode only, desktop-first) ---- */
   .organize-overlay {
@@ -1601,12 +1614,14 @@
     hideLabels: false,
     sectionVisible: { people: true, nouns: true, verbs: true, needs: true },
     // 'needs' has no own tilesAcross — it's computed as the sum of the visible main sections.
-    tilesAcross: { people: 2, nouns: 4, verbs: 3 },
+    tilesAcross: { people: 2, nouns: 5, verbs: 2 },
     // Per-section background colors — overridable from the Display panel.
+    // Columns start WHITE so the family picks their own palette (the header
+    // color is chosen at signup); only the needs strip keeps a color.
     sectionColors: {
-      people: '#fce4ec',
-      nouns:  '#fff59d',
-      verbs:  '#fce4ec',
+      people: '#ffffff',
+      nouns:  '#ffffff',
+      verbs:  '#ffffff',
       needs:  '#ffd400',
     },
     headerColors: { bg: '#ff1493', text: '#ffffff' },
@@ -1671,10 +1686,12 @@
     return Math.min(ACROSS_MAX, Math.max(ACROSS_MIN, n));
   }
   // Total columns in the needs strip = sum of the visible main sections.
+  // Uses the EFFECTIVE per-section count (acrossFor — phone defaults on a
+  // phone) so the strip's tile size matches the columns above it.
   function needsColCount() {
     const n = MAIN_SECTIONS
       .filter(s => display.sectionVisible[s])
-      .reduce((sum, s) => sum + (display.tilesAcross[s] || 0), 0);
+      .reduce((sum, s) => sum + (acrossFor(s) || 0), 0);
     return Math.max(1, n);
   }
   // Applies the chrome-level bits (label hiding, section visibility, column counts, colors).
@@ -1692,9 +1709,14 @@
     // screen — matching the iOS layout. minmax(0, …) (not bare Nfr) lets a track
     // shrink below its content so the category chip strip scrolls instead of forcing
     // the section wider. Nouns is widest because it has the most tiles — by design.
+    // The fr-weights MUST be the same effective counts --items-cols uses below
+    // (acrossFor — phone substitutes PHONE_ACROSS). Weighting by the raw
+    // display.tilesAcross while the grids used the phone counts skewed the
+    // widths on a phone: People got 2fr-of-9 (~29px tiles) while Verbs got
+    // 3fr for only 2 columns (~55px tiles) — visibly mismatched tile sizes.
     const visibleMains = MAIN_SECTIONS.filter(s => display.sectionVisible[s]);
     document.querySelector('main').style.setProperty('--main-cols',
-      visibleMains.map(s => `minmax(0, ${display.tilesAcross[s] || 1}fr)`).join(' ') || 'minmax(0, 1fr)');
+      visibleMains.map(s => `minmax(0, ${clampAcross(acrossFor(s) ?? 1)}fr)`).join(' ') || 'minmax(0, 1fr)');
     // Section background colors via CSS custom properties on :root.
     for (const s of SECTIONS) {
       document.documentElement.style.setProperty(`--bg-${s}`, display.sectionColors[s]);

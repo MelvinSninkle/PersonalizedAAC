@@ -1058,7 +1058,10 @@ private struct OnboardingPhotoView: View {
         busy = true; errorText = nil
         defer { busy = false; genStartedAt = nil }
         do {
-            let key = try await api.onboardingPhotoDraft(jpeg: jpeg, styleGuideId: coord.styleGuideId)
+            // The style sample shows kids — tell the server which portrait this
+            // is so grown-ups get adult proportions, not the child eye treatment.
+            let key = try await api.onboardingPhotoDraft(jpeg: jpeg, styleGuideId: coord.styleGuideId,
+                                                         subject: role == .child ? "child" : "adult")
             await loadPreview(key: key)
         } catch {
             errorText = "Couldn't render the portrait: \(error.localizedDescription)"
@@ -1073,7 +1076,8 @@ private struct OnboardingPhotoView: View {
         defer { busy = false; genStartedAt = nil }
         attempt += 1
         do {
-            let next = try await api.onboardingPhotoRetry(draftKey: key, attempt: attempt, styleGuideId: coord.styleGuideId)
+            let next = try await api.onboardingPhotoRetry(draftKey: key, attempt: attempt, styleGuideId: coord.styleGuideId,
+                                                          subject: role == .child ? "child" : "adult")
             await loadPreview(key: next)
         } catch {
             errorText = "Retry failed: \(error.localizedDescription)"

@@ -40,15 +40,18 @@ struct ParentHomeView: View {
 
                         navCard(icon: "text.bubble.fill", tint: "#3b82f6",
                                 title: "Message the board",
-                                subtitle: "Type it — or turn on listening") { MessageBoardView() }
+                                subtitle: "Your words play as the child's tiles") { MessageBoardView() }
 
                         homeCard(icon: "square.grid.3x3.fill", tint: "#14b8a6",
                                  title: "Quick board",
                                  subtitle: "The child can talk on this device") { showQuickBoard = true }
 
-                        navCard(icon: "person.2.crop.square.stack.fill", tint: "#a855f7",
-                                title: "Family & people",
-                                subtitle: "Faces that anchor their tiles") { PeopleManagerView() }
+                        // (The "Family & people" card is gone — everything it did
+                        // is reachable from Add a tile's People flow. Its screen
+                        // still backs the header's "Add your child" fallback.)
+                        navCard(icon: "waveform.circle.fill", tint: "#ef4444",
+                                title: "Listening mode",
+                                subtitle: "Speech near the tablet becomes tiles") { ListeningModeView() }
 
                         navCard(icon: "gamecontroller.fill", tint: "#8b5cf6",
                                 title: "Start a game",

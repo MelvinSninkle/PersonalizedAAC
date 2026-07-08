@@ -74,7 +74,9 @@ fun ParentHomeView() {
         Triple("addtile", "📷", "Add a tile"),
         Triple("message", "💬", "Message the board"),
         Triple("quickboard", "🗂", "Quick board"),
-        Triple("people", "🧑‍🤝‍🧑", "Family & people"),
+        // ("Family & people" is gone — everything it did is reachable from
+        // Add a tile's People flow. Listening mode is its own card again.)
+        Triple("listening", "🎙", "Listening mode"),
         Triple("game", "🎯", "Start a game"),
         Triple("stats", "📊", "Stats"),
         Triple("schedules", "⏰", "Schedules"),
@@ -134,7 +136,7 @@ fun ParentHomeView() {
         "store" -> StoreView { open = null }
         "album" -> AlbumView { open = null }
         "schedules" -> SchedulesView { open = null }
-        "people" -> PeopleManagerView { open = null }
+        "listening" -> ListeningModeView { open = null }
         "autoteach" -> AutoTeachView { open = null }
         "addtile" -> io.andrewpeterson.myworld.ui.board.AddTileView(
             defaultSection = io.andrewpeterson.myworld.model.BoardSection.NOUNS,

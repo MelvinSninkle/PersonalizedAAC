@@ -49,7 +49,9 @@
   .subjects { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:14px 0; }
   .subj { text-align:center; }
   .subj .thumb { width:100%; aspect-ratio:1; border-radius:14px; border:2px dashed #f3c6dd; background:#fff7fb center/cover no-repeat; display:grid; place-items:center; color:var(--faint); font-size:13px; padding:10px; cursor:pointer; overflow:hidden; }
-  .subj .thumb img { width:100%; height:100%; object-fit:cover; }
+  /* :not(.gen-load) — the full-bleed rule must not swallow the little pulsing
+     loader, or it fills the square and clips the elapsed-time caption. */
+  .subj .thumb img:not(.gen-load) { width:100%; height:100%; object-fit:cover; }
   .subj.done .thumb { border-style:solid; border-color:var(--good); }
   .subj .row { display:flex; gap:8px; margin-top:8px; }
   .subj .row .btn { flex:1; }
@@ -61,7 +63,7 @@
   .gen-wrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
   .gen-load { width:72px; height:72px; opacity:.5; animation:genpulse 1.5s ease-in-out infinite; }
   @keyframes genpulse { 0%,100% { opacity:.3; transform:scale(.9); } 50% { opacity:.7; transform:scale(1.05); } }
-  .gen-cap { font-size:12px; color:var(--muted); }
+  .gen-cap { font-size:12px; color:var(--muted); text-align:center; line-height:1.4; padding:0 8px; }
   .style-ref { display:none; align-items:center; gap:12px; margin:0 0 14px; }
   .style-ref img { width:88px; height:88px; border-radius:12px; object-fit:cover; border:2px solid var(--line); cursor:zoom-in; }
   /* Tap-to-enlarge the style reference. */
@@ -160,7 +162,9 @@
     <div style="border-top:1px solid var(--line); margin-top:10px; padding-top:12px;">
       <div id="famx-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
       <div id="famx-form" style="display:none;border:1px solid #f0d9e2;border-radius:12px;padding:12px;margin-bottom:10px;">
-        <div class="thumb" id="famx-thumb" style="aspect-ratio:auto;height:auto;padding:14px;cursor:pointer;">Tap to add a photo</div>
+        <!-- Not inside .subj, so it gets none of the dashed-thumb styling —
+             style it as an obvious button here or it reads as bare text. -->
+        <div class="thumb" id="famx-thumb" style="aspect-ratio:auto;height:auto;padding:14px;cursor:pointer;border:2px dashed #f3c6dd;border-radius:14px;background:#fce4ef;color:var(--pink-deep);font-weight:700;font-size:14px;text-align:center;">📷 Tap to add a photo</div>
         <input type="file" id="famx-input" accept="image/*" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
         <div id="famx-picker" style="margin-top:10px;"></div>
         <div style="display:flex;gap:8px;margin-top:12px;">
@@ -204,6 +208,92 @@
       <div style="font-size:40px;">🎉</div>
       <p class="fred" style="font-size:18px;color:var(--pink-deep);" id="board-done-msg">The board is ready!</p>
       <a class="btn" href="/app.html" id="open-board-link">Open the board</a>
+    </div>
+
+    <!-- While the tiles render the parent has a few captive minutes — use them:
+         set up Auto-Teach (quiet hours + preferences, saved to child-settings
+         so /api/auto-teach can fire) and show how to lock the tablet into the
+         app. Skipping is fine; the parent app's Auto-teach panel does the same
+         later. -->
+    <div id="at-setup" style="border-top:1px solid var(--line);margin-top:18px;padding-top:16px;text-align:left;">
+
+      <div class="at-step" id="at-step-intro">
+        <h3 class="fred" style="font-size:17px;">While you wait — set up Auto-Teach</h3>
+        <p class="note">My World Tap to Talk offers an <strong>Auto-Teach</strong> mode that exposes your child to language naturally throughout the day and helps them learn how to use their new device. Answer a few quick questions and we'll automatically trigger short slideshows and matching games for <strong id="at-child-name">your child</strong> to master their new board.</p>
+        <div class="row">
+          <button class="btn" id="at-start">Set it up now</button>
+          <button class="btn ghost" id="at-skip">Maybe later</button>
+        </div>
+      </div>
+
+      <div class="at-step" id="at-step-sched" style="display:none;">
+        <h3 class="fred" style="font-size:16px;">First: when should it NEVER run?</h3>
+        <p class="note">Auto-Teach stays quiet while your child is asleep or at school/therapy. It needs these before it can turn on.</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <label style="flex:1;min-width:130px;">Wake time
+            <input type="time" id="at-wake" value="07:00" style="width:100%;margin-top:4px;"></label>
+          <label style="flex:1;min-width:130px;">Bedtime
+            <input type="time" id="at-bed" value="19:30" style="width:100%;margin-top:4px;"></label>
+        </div>
+        <div id="at-locs" style="margin-top:12px;"></div>
+        <button class="btn ghost tiny" id="at-loc-add" style="margin-top:4px;">＋ Add a school or therapy time</button>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;">
+          <input type="checkbox" id="at-nocare" style="width:auto;">
+          No school, daycare, or therapy right now (summer break counts)
+        </label>
+        <div class="msg" id="at-sched-msg"></div>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn" id="at-sched-next">Continue →</button>
+          <button class="btn ghost tiny" id="at-back-intro">← Back</button>
+        </div>
+      </div>
+
+      <div class="at-step" id="at-step-prefs" style="display:none;">
+        <h3 class="fred" style="font-size:16px;">How much, and when?</h3>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <label>How gently should it start?
+            <select id="at-cadence" style="width:100%;margin-top:4px;">
+              <option value="conservative" selected>Gentle — about one short slideshow an hour</option>
+              <option value="standard">Standard — a bit more practice each day</option>
+              <option value="intensive">Intensive — for kids who love screen learning</option>
+            </select></label>
+          <label>Attention span
+            <select id="at-tier" style="width:100%;margin-top:4px;">
+              <option value="under3">Short (under 3 years old)</option>
+              <option value="3to5" selected>Medium (about 3–5)</option>
+              <option value="5plus">Longer (5 and up)</option>
+            </select></label>
+          <label>Daily matching game — pick a calm time of day
+            <input type="time" id="at-game" value="15:30" style="width:100%;margin-top:4px;"></label>
+        </div>
+        <div class="msg" id="at-prefs-msg"></div>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn ok" id="at-save">Turn on Auto-Teach ✓</button>
+          <button class="btn ghost tiny" id="at-back-sched">← Back</button>
+        </div>
+      </div>
+
+      <div class="at-step" id="at-step-device" style="display:none;">
+        <p class="note" id="at-saved-note" style="display:none;color:#047857;font-weight:600;">Auto-Teach is on ✓ — slideshows and the daily game will start on the board tomorrow morning (or the next quiet moment today). Change anything later in the parent app under <strong>Auto-teach</strong>.</p>
+        <p class="note" id="at-later-note" style="display:none;">No problem — you can set up Auto-Teach anytime in the <strong>My World parent app</strong> under <strong>Auto-teach</strong>. It walks you through the same questions.</p>
+        <h3 class="fred" style="font-size:16px;">One more tip: lock the tablet into My World</h3>
+        <p class="note">For younger kids we recommend setting up the child's tablet so the board is always ready and can't be left — the screen stays on, the child can't wander into other apps, and the tablet stays a talker, not a toy.</p>
+        <p class="note"><strong>iPad</strong> — Guided Access:</p>
+        <ol class="note" style="margin:0 0 10px;padding-left:20px;">
+          <li>Settings → Accessibility → <strong>Guided Access</strong> → turn on, set a passcode.</li>
+          <li>Open My World, then <strong>triple-click the side (or home) button</strong> and tap Start.</li>
+          <li>Settings → Display &amp; Brightness → <strong>Auto-Lock → Never</strong> so the board stays awake.</li>
+        </ol>
+        <p class="note"><strong>Android tablet</strong> — App pinning:</p>
+        <ol class="note" style="margin:0 0 10px;padding-left:20px;">
+          <li>Settings → Security &amp; privacy → <strong>App pinning</strong> (sometimes under "More security settings") → turn on.</li>
+          <li>Open My World, open Recents, tap the app's icon → <strong>Pin</strong>.</li>
+          <li>Settings → Display → <strong>Screen timeout</strong> → the longest setting.</li>
+        </ol>
+        <button class="btn" id="at-done">Got it</button>
+      </div>
+
+      <p class="note" id="at-finished" style="display:none;">✓ Auto-Teach setup finished — manage it anytime in the parent app under <strong>Auto-teach</strong>.</p>
     </div>
   </div>
 
@@ -267,14 +357,18 @@
   // One timer at a time; callers stop it on success AND failure so it can
   // never run forever over a dead request.
   let genTimerId = null;
-  function startGenTimer(msgEl, verb) {
+  // `compact` = the short form for tight spots (inside a generating thumb);
+  // the full reassurance line only fits below a big picture.
+  function startGenTimer(msgEl, verb, compact) {
     stopGenTimer();
     const t0 = Date.now();
     const tick = () => {
       const s = Math.floor((Date.now() - t0) / 1000);
       const mm = Math.floor(s / 60), ss = s % 60;
-      msgEl.textContent = verb + ' — ' + (mm ? mm + 'm ' : '') + ss + 's. '
-        + 'This may take anywhere from 1 to 5 minutes — don’t be alarmed.';
+      const t = (mm ? mm + 'm ' : '') + ss + 's';
+      msgEl.textContent = compact
+        ? verb + ' ' + t + ' — can take up to 5 minutes.'
+        : verb + ' — ' + t + '. This may take anywhere from 1 to 5 minutes — don’t be alarmed.';
     };
     tick();
     genTimerId = setInterval(tick, 5000);
@@ -337,6 +431,7 @@
     const n = CHILD_NAME || ($('in-name').value || '').trim();
     $('hdr-name').textContent = n ? (n + "'s") : 'the';
     $('ppl-child-name').textContent = n || 'the child';
+    $('at-child-name').textContent = n || 'your child';
   }
   $('in-name').addEventListener('input', applyName);
 
@@ -549,13 +644,20 @@
     const thumb = $(role + '-thumb');
     const actions = $(role + '-actions');
     thumb.innerHTML = GEN_LOADER; actions.style.display = 'none';
-    startGenTimer($('people-msg'), 'Drawing in your style…');
+    // Tick the elapsed time INSIDE the generating thumb (the loader's own
+    // caption slot) — down in #people-msg it sat below the fix-guidance field
+    // where a nervous parent never saw it.
+    startGenTimer(thumb.querySelector('.gen-cap'), 'Drawing in your style…', true);
+    $('people-msg').textContent = '';
     try {
       const blob = await downscale(file);
       const attempt = role === 'child' ? childAttempt : parentAttempt;
       const guidance = ($('fix-guidance').value || '').trim().slice(0, 300);
       const qs = '/api/onboarding/family?action=draft&styleGuideId=' + selectedStyle.id
         + '&attempt=' + attempt
+        // The style sample shows kids — tell the server which portrait this is
+        // so the grown-up gets adult proportions, not the child eye treatment.
+        + '&subject=' + (role === 'child' ? 'child' : 'adult')
         + (guidance ? '&guidance=' + encodeURIComponent(guidance) : '');
       const { draftKey } = await postBytes(qs, blob);
       if (role === 'child') childDraftKey = draftKey; else parentDraftKey = draftKey;
@@ -612,7 +714,7 @@
   });
   $('famx-cancel').addEventListener('click', () => {
     $('famx-form').style.display = 'none'; $('famx-add').style.display = '';
-    famxFile = null; $('famx-thumb').textContent = 'Tap to add a photo'; $('famx-msg').textContent = '';
+    famxFile = null; $('famx-thumb').textContent = '📷 Tap to add a photo'; $('famx-msg').textContent = '';
     if (famxPicker) famxPicker.reset();
   });
   $('famx-thumb').addEventListener('click', () => $('famx-input').click());
@@ -630,7 +732,8 @@
       const qs = '?childId=' + encodeURIComponent(CHILD_ID) + '&role=parent&name=' + encodeURIComponent(v.displayName) +
         '&relationship=' + encodeURIComponent(v.relationship) + (v.side ? '&side=' + encodeURIComponent(v.side) : '') +
         (v.givenName ? '&given=' + encodeURIComponent(v.givenName) : '') + (v.pronoun ? '&pronoun=' + encodeURIComponent(v.pronoun) : '') +
-        (v.birthOrder ? '&birthOrder=' + encodeURIComponent(v.birthOrder) : '');
+        (v.birthOrder ? '&birthOrder=' + encodeURIComponent(v.birthOrder) : '') +
+        (v.ageGroup ? '&ageGroup=' + encodeURIComponent(v.ageGroup) : '');
       const { key } = await postBytes('/api/onboard-subject' + qs, blob);
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:14px;';
@@ -720,6 +823,140 @@
       $('board-msg').textContent = 'Something went wrong building the board: ' + (err.message || err) + ' — refresh to retry.';
     }
   }
+
+  // ---- Auto-Teach walkthrough (fills the board-build wait) ----
+  // Saves schedule quiet-hours + autoTeach prefs into child-settings — the
+  // exact shape /api/auto-teach's gates read (scheduleReady needs wake +
+  // bedtime + school/therapy windows OR noOutsideCare=true).
+  (function () {
+    const AT_STEPS = ['at-step-intro', 'at-step-sched', 'at-step-prefs', 'at-step-device'];
+    const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    function atShow(id) { AT_STEPS.forEach(s => { $(s).style.display = (s === id) ? '' : 'none'; }); }
+    let atSettings = null;   // the FULL child-settings blob — POST replaces, so merge
+    let atLocs = [];         // [{type, start, end, days:[0-6]}] being edited
+
+    async function atLoadSettings() {
+      if (atSettings) return atSettings;
+      try {
+        const r = await fetch('/api/child-settings?childId=' + encodeURIComponent(CHILD_ID), { credentials: 'same-origin' });
+        atSettings = r.ok ? ((await r.json()).settings || {}) : {};
+      } catch (_) { atSettings = {}; }
+      return atSettings;
+    }
+
+    function atRenderLocs() {
+      const box = $('at-locs');
+      box.innerHTML = '';
+      atLocs.forEach((loc, i) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'border:1px solid #f0d9e2;border-radius:12px;padding:10px;margin-bottom:8px;';
+        row.innerHTML =
+          '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+          '<select data-at-type="' + i + '" style="flex:0 0 auto;">' +
+          '<option value="school"' + (loc.type === 'school' ? ' selected' : '') + '>School / daycare</option>' +
+          '<option value="therapy"' + (loc.type === 'therapy' ? ' selected' : '') + '>Therapy</option></select>' +
+          '<input type="time" data-at-start="' + i + '" value="' + (loc.start || '') + '" style="width:auto;">' +
+          '<span>–</span>' +
+          '<input type="time" data-at-end="' + i + '" value="' + (loc.end || '') + '" style="width:auto;">' +
+          '<button type="button" data-at-del="' + i + '" style="margin-left:auto;border:none;background:none;color:#9ca3af;font-size:16px;cursor:pointer;">✕</button>' +
+          '</div><div style="display:flex;gap:6px;margin-top:8px;">' +
+          DOW.map((d, day) =>
+            '<button type="button" data-at-day="' + i + ':' + day + '" style="width:34px;height:32px;border-radius:9px;font-weight:700;cursor:pointer;border:1px solid #f3c6da;' +
+            (loc.days.includes(day) ? 'background:var(--pink);color:#fff;' : 'background:#fff;color:#6b7280;') + '">' + d + '</button>').join('') +
+          '</div>';
+        box.appendChild(row);
+      });
+      box.querySelectorAll('[data-at-type]').forEach(el => el.addEventListener('change', e => { atLocs[+e.target.dataset.atType].type = e.target.value; }));
+      box.querySelectorAll('[data-at-start]').forEach(el => el.addEventListener('change', e => { atLocs[+e.target.dataset.atStart].start = e.target.value; }));
+      box.querySelectorAll('[data-at-end]').forEach(el => el.addEventListener('change', e => { atLocs[+e.target.dataset.atEnd].end = e.target.value; }));
+      box.querySelectorAll('[data-at-del]').forEach(el => el.addEventListener('click', e => { atLocs.splice(+e.target.dataset.atDel, 1); atRenderLocs(); }));
+      box.querySelectorAll('[data-at-day]').forEach(el => el.addEventListener('click', e => {
+        const [i, day] = e.target.dataset.atDay.split(':').map(Number);
+        const days = atLocs[i].days;
+        const at = days.indexOf(day);
+        if (at >= 0) days.splice(at, 1); else days.push(day);
+        atRenderLocs();
+      }));
+    }
+
+    function atGoodLocs() {
+      return atLocs.filter(l => l.start && l.end && l.start < l.end && l.days.length)
+        .map(l => ({ type: l.type, start: l.start, end: l.end, days: l.days.slice().sort() }));
+    }
+
+    $('at-start').addEventListener('click', async () => {
+      $('at-child-name').textContent = CHILD_NAME || 'your child';
+      const s = await atLoadSettings();
+      const sched = s.schedule || {};
+      if (sched.wake) $('at-wake').value = sched.wake;
+      if (sched.bedtime) $('at-bed').value = sched.bedtime;
+      $('at-nocare').checked = sched.noOutsideCare === true;
+      atLocs = (sched.locations || [])
+        .filter(l => l && (l.type === 'school' || l.type === 'therapy'))
+        .map(l => ({ type: l.type, start: l.start || '', end: l.end || '', days: Array.isArray(l.days) ? l.days.slice() : [] }));
+      atRenderLocs();
+      atShow('at-step-sched');
+    });
+    $('at-skip').addEventListener('click', () => { $('at-later-note').style.display = ''; atShow('at-step-device'); });
+    $('at-back-intro').addEventListener('click', () => atShow('at-step-intro'));
+    $('at-back-sched').addEventListener('click', () => atShow('at-step-sched'));
+    $('at-loc-add').addEventListener('click', () => { atLocs.push({ type: 'school', start: '', end: '', days: [] }); atRenderLocs(); });
+
+    $('at-sched-next').addEventListener('click', () => {
+      if (!$('at-wake').value || !$('at-bed').value) { $('at-sched-msg').textContent = 'Add a wake time and a bedtime first.'; return; }
+      if (!$('at-nocare').checked && !atGoodLocs().length) {
+        $('at-sched-msg').textContent = 'Add at least one school/therapy time (with days), or check the box below if there isn’t any right now.';
+        return;
+      }
+      $('at-sched-msg').textContent = '';
+      // Suggest the attention tier from the birth date the parent already gave.
+      const bd = $('in-birth') && $('in-birth').value;
+      if (bd) {
+        const years = (Date.now() - new Date(bd + 'T00:00:00').getTime()) / 31557600000;
+        $('at-tier').value = years < 3 ? 'under3' : (years < 5.5 ? '3to5' : '5plus');
+      }
+      atShow('at-step-prefs');
+    });
+
+    $('at-save').addEventListener('click', async () => {
+      const btn = $('at-save');
+      btn.disabled = true; $('at-prefs-msg').textContent = 'Saving…';
+      try {
+        const s = await atLoadSettings();
+        const sched = Object.assign({}, s.schedule || {});
+        sched.wake = $('at-wake').value;
+        sched.bedtime = $('at-bed').value;
+        sched.noOutsideCare = $('at-nocare').checked;
+        // Replace only the school/therapy windows; keep any other locations
+        // (home, relatives…) the schedule already tracks.
+        const others = (sched.locations || []).filter(l => !(l && (l.type === 'school' || l.type === 'therapy')));
+        sched.locations = others.concat(atGoodLocs());
+        s.schedule = sched;
+        s.autoTeach = Object.assign({}, s.autoTeach || {}, {
+          enabled: true,
+          cadence: $('at-cadence').value,
+          tier: $('at-tier').value,
+          dailyGameAt: $('at-game').value || '15:30',
+          cooldownMin: (s.autoTeach && s.autoTeach.cooldownMin) || 30,
+        });
+        const r = await fetch('/api/child-settings?childId=' + encodeURIComponent(CHILD_ID), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+          body: JSON.stringify({ settings: s }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        $('at-prefs-msg').textContent = '';
+        $('at-saved-note').style.display = '';
+        atShow('at-step-device');
+      } catch (err) {
+        $('at-prefs-msg').textContent = 'Could not save: ' + (err.message || err) + ' — try again.';
+      } finally { btn.disabled = false; }
+    });
+
+    $('at-done').addEventListener('click', () => {
+      AT_STEPS.forEach(s => { $(s).style.display = 'none'; });
+      $('at-finished').style.display = '';
+    });
+  })();
 })();
 </script>
 </body>

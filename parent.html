@@ -2455,12 +2455,13 @@
             (v.side ? '&side=' + encodeURIComponent(v.side) : '') +
             (v.givenName ? '&given=' + encodeURIComponent(v.givenName) : '') +
             (v.pronoun ? '&pronoun=' + encodeURIComponent(v.pronoun) : '') +
-            (v.birthOrder ? '&birthOrder=' + encodeURIComponent(v.birthOrder) : '');
+            (v.birthOrder ? '&birthOrder=' + encodeURIComponent(v.birthOrder) : '') +
+            (v.ageGroup ? '&ageGroup=' + encodeURIComponent(v.ageGroup) : '');
           const r = await fetch('/api/onboard-subject' + qs, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob, credentials: 'same-origin' });
           if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
         } else {
           // Details only → upsert the person record (no photo change).
-          const body = { childId: slug, displayName: v.displayName, relationship: v.relationship, side: v.side, pronoun: v.pronoun, birthOrder: v.birthOrder, givenName: v.givenName };
+          const body = { childId: slug, displayName: v.displayName, relationship: v.relationship, side: v.side, pronoun: v.pronoun, birthOrder: v.birthOrder, givenName: v.givenName, ageGroup: v.ageGroup };
           if (editing) body.id = editing.id;
           const r = await fetch('/api/persons', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body) });
           if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
