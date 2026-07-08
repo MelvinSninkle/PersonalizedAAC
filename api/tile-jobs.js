@@ -126,10 +126,14 @@ export default async function handler(req, res) {
     const sourceKey = `tile-jobs/${childId}/source/${randomUUID()}.${ext}`;
     await put(sourceKey, buffer, { access: 'private', contentType, addRandomSuffix: false });
 
+    // 'adult' | 'child' — the capture UI's kid/grown-up choice for
+    // age-ambiguous relationships (the relationship itself wins when it can).
+    const ageGroupQ = qs(req, 'ageGroup');
+    const ageGroup = (ageGroupQ === 'adult' || ageGroupQ === 'child') ? ageGroupQ : null;
     const rows = await db`
       INSERT INTO tile_jobs
         (child_id, actor_email, status, source_key, source_content_type, label, detail, section,
-         category_id, style, style_guide_id, model, bg, keep_aspect, needs_review, emotion, relationship, raw)
+         category_id, style, style_guide_id, model, bg, keep_aspect, needs_review, emotion, relationship, raw, age_group)
       VALUES
         (${childId}, ${auth.user.email || null}, 'queued', ${sourceKey}, ${contentType},
          ${qs(req, 'label').slice(0, 80) || null}, ${qs(req, 'detail').slice(0, 200) || null},
@@ -137,7 +141,7 @@ export default async function handler(req, res) {
          ${qs(req, 'style').slice(0, 80) || null}, ${qint(req, 'styleGuideId')},
          ${qs(req, 'model').slice(0, 60) || null}, ${qs(req, 'bg').slice(0, 16) || null},
          ${qbool(req, 'keepAspect')}, ${qbool(req, 'needsReview')}, ${qs(req, 'emotion') || 'default'},
-         ${qs(req, 'relationship').slice(0, 40) || null}, ${qbool(req, 'raw')})
+         ${qs(req, 'relationship').slice(0, 40) || null}, ${qbool(req, 'raw')}, ${ageGroup})
       RETURNING id`;
     id = Number(rows[0].id);
   } catch (err) {

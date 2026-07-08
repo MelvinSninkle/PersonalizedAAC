@@ -10,7 +10,7 @@
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
 import { canAccessChild, isParentOf } from './_lib/access.js';
-import { isValidRelationship, relationshipNeedsSide } from './_lib/relationships.js';
+import { isValidRelationship, relationshipNeedsSide, relationshipAgeGroup } from './_lib/relationships.js';
 
 export default async function handler(req, res) {
   const auth = await checkAuth(req);
@@ -24,7 +24,7 @@ export default async function handler(req, res) {
       if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
       const persons = await db`
         SELECT p.id, p.child_id, p.display_name, p.given_name, p.relationship, p.side, p.pronoun,
-               p.birth_order, p.birth_date, p.is_self, p.reference_key, p.pronunciation,
+               p.birth_order, p.birth_date, p.is_self, p.age_group, p.reference_key, p.pronunciation,
                (SELECT i.id FROM items i WHERE i.person_id = p.id LIMIT 1) AS item_id
         FROM persons p
         WHERE p.child_id = ${childId}
@@ -50,11 +50,18 @@ export default async function handler(req, res) {
       // the board's age filter), but we accept it on any row so parents can
       // record sibling birth dates too.
       const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(String(b.birthDate || '')) ? String(b.birthDate) : null;
+      // Kid or grown-up, for the portrait prompt's age treatment. The
+      // relationship decides when it can (mother → adult); the client's
+      // explicit choice covers the ambiguous rest (siblings, cousins…).
+      const ageGroup = isSelf ? 'child'
+        : (relationshipAgeGroup(relationship)
+           || ((b.ageGroup === 'adult' || b.ageGroup === 'child') ? b.ageGroup : null));
 
       let personId = b.id ? Number(b.id) : null;
       if (personId) {
         await db`UPDATE persons SET display_name=${displayName}, given_name=${givenName}, relationship=${relationship},
           side=${side}, pronoun=${pronoun}, birth_order=${birthOrder}, is_self=${isSelf},
+          age_group = COALESCE(${ageGroup}, age_group),
           birth_date = COALESCE(${birthDate}, birth_date), updated_at=NOW()
           WHERE id=${personId} AND child_id=${childId}`;
       } else {
@@ -63,10 +70,11 @@ export default async function handler(req, res) {
           personId = ex[0].id;
           await db`UPDATE persons SET given_name=${givenName}, relationship=${relationship}, side=${side},
             pronoun=${pronoun}, birth_order=${birthOrder}, is_self=${isSelf},
+            age_group = COALESCE(${ageGroup}, age_group),
             birth_date = COALESCE(${birthDate}, birth_date), updated_at=NOW() WHERE id=${personId}`;
         } else {
-          const p = await db`INSERT INTO persons (child_id, display_name, given_name, relationship, side, pronoun, birth_order, is_self, birth_date)
-            VALUES (${childId}, ${displayName}, ${givenName}, ${relationship}, ${side}, ${pronoun}, ${birthOrder}, ${isSelf}, ${birthDate}) RETURNING id`;
+          const p = await db`INSERT INTO persons (child_id, display_name, given_name, relationship, side, pronoun, birth_order, is_self, age_group, birth_date)
+            VALUES (${childId}, ${displayName}, ${givenName}, ${relationship}, ${side}, ${pronoun}, ${birthOrder}, ${isSelf}, ${ageGroup}, ${birthDate}) RETURNING id`;
           personId = p[0].id;
         }
       }

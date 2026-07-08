@@ -102,13 +102,33 @@ export const PORTRAIT_NO_STYLE_BASE =
 // the lab faithfully mirrors production. `styleGuide` is the loadStyleGuide()
 // result (with `.image` + `.description`); when it has an image the prompt copies
 // that style, otherwise it falls back to the warm-storybook base.
-export function buildPortraitPrompt({ styleGuide, attempt = 0, guidance = '' } = {}) {
+export function buildPortraitPrompt({ styleGuide, attempt = 0, guidance = '', ageGroup = null } = {}) {
   const variant = attempt > 0
     ? ` Vary the framing and expression slightly from any previous attempt (attempt ${attempt + 1}).`
     : '';
   const fix = guidance ? ` Important correction from the parent — apply this exactly: ${guidance}.` : '';
   const styleDesc = (styleGuide && styleGuide.description) ? String(styleGuide.description).trim() : '';
   const hasStyleImg = !!(styleGuide && styleGuide.image && styleGuide.image.buffer);
+  // AGE ADAPTATION. The style reference (IMAGE 1) shows CHILDREN, and the
+  // eye-treatment instruction below is emphatic — without this paragraph the
+  // model gives adults the same saucer eyes as the kids. Real animation styles
+  // draw adults and children differently WITHIN the style; say so explicitly.
+  // `ageGroup` comes from the relationship (mother → adult) or the capture
+  // UI's kid/grown-up choice; when unknown, fall back to "each at their
+  // apparent age" so group photos still behave.
+  const agePara =
+    ageGroup === 'adult'
+      ? "\nAGE: the person in IMAGE 2 is an ADULT. Apply IMAGE 1's art style the way that same style would draw a " +
+        "GROWN-UP character: adult facial proportions and features — noticeably smaller, more naturally " +
+        "proportioned eyes, an adult face shape, adult body proportions — NOT the exaggerated big-eyed child " +
+        "proportions IMAGE 1 uses for its kids. The result must still be unmistakably the same art style, and the " +
+        "person must clearly read as an adult."
+      : ageGroup === 'child'
+      ? "\nAGE: the person in IMAGE 2 is a CHILD. Use IMAGE 1's child treatment exactly as shown — its proportions " +
+        "and eye style are calibrated for kids and apply here as-is."
+      : "\nAGE: draw every person at their APPARENT AGE, the way IMAGE 1's style itself would: adults get adult " +
+        "proportions (smaller, naturally proportioned eyes, adult face shapes), children get the style's " +
+        "exaggerated child treatment. Never give an adult the child proportions.";
   let prompt;
   if (hasStyleImg) {
     prompt =
@@ -123,15 +143,19 @@ export function buildPortraitPrompt({ styleGuide, attempt = 0, guidance = '' } =
       "anyone; the count of people in your picture must equal the count in the photo. Keep EACH person's IDENTITY " +
       "unmistakable — same skin tone, hair color and hairstyle, face shape, eyebrows, apparent age and sex, and any " +
       "glasses, freckles, or distinctive features — but DRAW every one of those features in IMAGE 1's art style " +
-      "(do not render them realistically or in a different cartoon style).\n" +
-      "WHY: this is a tile for a young child's AAC communication device; the child has a developmental disability and " +
+      "(do not render them realistically or in a different cartoon style)." +
+      agePara +
+      "\nWHY: this is a tile for a young child's AAC communication device; the child has a developmental disability and " +
       "must instantly recognize BOTH these exact people AND the shared art style that helps them focus — so a faithful " +
       "style match and faithful likenesses matter equally.\n" +
       "FRAMING: one person → a centered head-and-shoulders portrait. A group → frame everyone together from the " +
       "waist up, close and warm, each face clearly visible and large enough to recognize. Bright friendly colors, " +
       "no text or letters." + variant;
   } else {
-    prompt = PORTRAIT_NO_STYLE_BASE + variant;
+    prompt = PORTRAIT_NO_STYLE_BASE +
+      (ageGroup === 'adult'
+        ? ' The person is an adult — keep adult facial proportions and features (naturally proportioned eyes, an adult face shape), never child-like proportions.'
+        : '') + variant;
   }
   return prompt + fix + SQUARE_RULE;
 }

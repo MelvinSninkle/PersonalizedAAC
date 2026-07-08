@@ -556,6 +556,9 @@
       const guidance = ($('fix-guidance').value || '').trim().slice(0, 300);
       const qs = '/api/onboarding/family?action=draft&styleGuideId=' + selectedStyle.id
         + '&attempt=' + attempt
+        // The style sample shows kids — tell the server which portrait this is
+        // so the grown-up gets adult proportions, not the child eye treatment.
+        + '&subject=' + (role === 'child' ? 'child' : 'adult')
         + (guidance ? '&guidance=' + encodeURIComponent(guidance) : '');
       const { draftKey } = await postBytes(qs, blob);
       if (role === 'child') childDraftKey = draftKey; else parentDraftKey = draftKey;
@@ -630,7 +633,8 @@
       const qs = '?childId=' + encodeURIComponent(CHILD_ID) + '&role=parent&name=' + encodeURIComponent(v.displayName) +
         '&relationship=' + encodeURIComponent(v.relationship) + (v.side ? '&side=' + encodeURIComponent(v.side) : '') +
         (v.givenName ? '&given=' + encodeURIComponent(v.givenName) : '') + (v.pronoun ? '&pronoun=' + encodeURIComponent(v.pronoun) : '') +
-        (v.birthOrder ? '&birthOrder=' + encodeURIComponent(v.birthOrder) : '');
+        (v.birthOrder ? '&birthOrder=' + encodeURIComponent(v.birthOrder) : '') +
+        (v.ageGroup ? '&ageGroup=' + encodeURIComponent(v.ageGroup) : '');
       const { key } = await postBytes('/api/onboard-subject' + qs, blob);
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:14px;';

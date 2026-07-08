@@ -52,7 +52,7 @@ async function readBlobBytes(key) {
   return Buffer.concat(chunks);
 }
 
-async function stylize({ db, childId, sourceBytes, contentType, actorEmail, attempt, styleGuide, guidance }) {
+async function stylize({ db, childId, sourceBytes, contentType, actorEmail, attempt, styleGuide, guidance, ageGroup }) {
   const oaKey = process.env.OPENAI_API_KEY;
   const gKey = geminiKey();
   if (!oaKey && !gKey) throw new Error('No image API key configured (OPENAI_API_KEY or GEMINI_API_KEY)');
@@ -64,7 +64,7 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
     images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
   }
   images.push({ buffer: sourceBytes, contentType: contentType || 'image/jpeg' });
-  const prompt = buildPortraitPrompt({ styleGuide, attempt, guidance });
+  const prompt = buildPortraitPrompt({ styleGuide, attempt, guidance, ageGroup });
 
   // KEYSTONE: portraits anchor every later render and require faithful STYLE
   // transfer, which OpenAI's gpt-image handles better than Gemini. Use OpenAI
@@ -159,8 +159,12 @@ export default async function handler(req, res) {
       const styleGuide = await loadStyleGuide(db, styleGuideId);
       const attempt = q.attempt ? Math.min(5, Math.max(0, parseInt(q.attempt, 10) || 0)) : 0;
       const guidance = typeof q.guidance === 'string' ? q.guidance.slice(0, 300) : '';
+      // The two onboarding slots are explicitly "the child" and "one grown-up",
+      // so the client tells us which portrait this is — the style sample shows
+      // kids, and adults must NOT inherit its child proportions.
+      const ageGroup = q.subject === 'adult' ? 'adult' : q.subject === 'child' ? 'child' : null;
       const draftKey = await stylize({ db, childId, sourceBytes: bytes, contentType,
-                                       actorEmail: auth.user.email, attempt, styleGuide, guidance });
+                                       actorEmail: auth.user.email, attempt, styleGuide, guidance, ageGroup });
       res.status(200).json({ ok: true, draftKey });
       return;
     }
@@ -175,9 +179,10 @@ export default async function handler(req, res) {
       const styleGuideId = b.styleGuideId ? parseInt(b.styleGuideId, 10) : (progress.data && progress.data.styleGuideId) || null;
       const styleGuide = await loadStyleGuide(db, styleGuideId);
       const guidance = typeof b.guidance === 'string' ? b.guidance.slice(0, 300) : '';
+      const ageGroup = b.subject === 'adult' ? 'adult' : b.subject === 'child' ? 'child' : null;
       const draftKey = await stylize({ db, childId, sourceBytes: bytes,
                                        contentType: 'image/jpeg',
-                                       actorEmail: auth.user.email, attempt, styleGuide, guidance });
+                                       actorEmail: auth.user.email, attempt, styleGuide, guidance, ageGroup });
       res.status(200).json({ ok: true, draftKey });
       return;
     }
@@ -193,8 +198,12 @@ export default async function handler(req, res) {
       const relationship = isValidRelationship(b.relationship) ? b.relationship : (role === 'child' ? 'self' : 'other');
       const side = relationshipNeedsSide(relationship) && (b.side === 'maternal' || b.side === 'paternal') ? b.side : null;
       const isSelf = role === 'child' || relationship === 'self';
+      // The onboarding slots are definitionally the child + one grown-up;
+      // remember it so later re-renders keep the right age treatment.
+      const ageGroup = isSelf ? 'child' : 'adult';
 
       // Upsert the persons row with the committed draft as reference_key.
+      await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS age_group TEXT`;
       const ex = await db`SELECT id FROM persons
                           WHERE child_id = ${childId} AND lower(display_name) = lower(${name}) LIMIT 1`;
       let personId;
@@ -202,12 +211,13 @@ export default async function handler(req, res) {
         personId = ex[0].id;
         await db`UPDATE persons
                     SET relationship = ${relationship}, side = ${side}, is_self = ${isSelf},
+                        age_group = ${ageGroup},
                         reference_key = ${draftKey}, updated_at = NOW()
                   WHERE id = ${personId}`;
       } else {
         const inserted = await db`
-          INSERT INTO persons (child_id, display_name, given_name, relationship, side, is_self, reference_key)
-          VALUES (${childId}, ${name}, ${name}, ${relationship}, ${side}, ${isSelf}, ${draftKey})
+          INSERT INTO persons (child_id, display_name, given_name, relationship, side, is_self, age_group, reference_key)
+          VALUES (${childId}, ${name}, ${name}, ${relationship}, ${side}, ${isSelf}, ${ageGroup}, ${draftKey})
           RETURNING id`;
         personId = inserted[0].id;
       }

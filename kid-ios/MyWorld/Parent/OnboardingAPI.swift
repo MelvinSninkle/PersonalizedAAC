@@ -125,9 +125,13 @@ extension APIClient {
     struct OnboardingDraftResult: Codable { let ok: Bool; let draftKey: String? }
     /// Stylize a raw JPEG and return a DRAFT blob key. Doesn't commit. The
     /// chosen style guide (image) is rendered alongside the real photo.
-    func onboardingPhotoDraft(jpeg: Data, styleGuideId: Int? = nil) async throws -> String {
+    /// `subject` is "child" or "adult" — the style sample shows kids, and the
+    /// server adapts the prompt so grown-ups get adult proportions instead of
+    /// the sample's exaggerated child eye treatment.
+    func onboardingPhotoDraft(jpeg: Data, styleGuideId: Int? = nil, subject: String? = nil) async throws -> String {
         var path = "/api/onboarding/family?action=draft"
         if let styleGuideId { path += "&styleGuideId=\(styleGuideId)" }
+        if let subject { path += "&subject=\(subject)" }
         let (data, _) = try await request(method: "POST", path: path,
                                           body: jpeg, contentType: "image/jpeg",
                                           timeout: 320)
@@ -136,9 +140,10 @@ extension APIClient {
         return k
     }
     /// Re-stylize from the cached source bytes — same photo, different roll.
-    func onboardingPhotoRetry(draftKey: String, attempt: Int, styleGuideId: Int? = nil) async throws -> String {
+    func onboardingPhotoRetry(draftKey: String, attempt: Int, styleGuideId: Int? = nil, subject: String? = nil) async throws -> String {
         var payload: [String: Any] = ["draftKey": draftKey, "attempt": attempt]
         if let styleGuideId { payload["styleGuideId"] = styleGuideId }
+        if let subject { payload["subject"] = subject }
         let body = try JSONSerialization.data(withJSONObject: payload)
         let (data, _) = try await request(method: "POST",
                                           path: "/api/onboarding/family?action=retry",

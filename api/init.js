@@ -865,6 +865,10 @@ Size: {size}.',
       )
     `;
     await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS birth_date DATE`;
+    // 'adult' | 'child' | NULL — drives the portrait prompt's age treatment
+    // (adult proportions vs the style's exaggerated child treatment). Derived
+    // from the relationship when unambiguous; else the capture UI's choice.
+    await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS age_group TEXT`;
     // Parent-set or auto-mastery-set unlock: 'show me at least this far up the
     // age-band ladder, even if the child's birth date suggests younger.' Only
     // meaningful on the is_self row; resolved alongside birth_date in age-band.

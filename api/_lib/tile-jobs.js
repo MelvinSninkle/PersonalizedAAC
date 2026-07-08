@@ -17,6 +17,7 @@ import { openaiEditImage, openaiKeystoneModel, openaiCostCents } from './openai-
 import { describePhotoLabel } from './vision.js';
 import { grantCredits, COST } from './credits.js';
 import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, buildPortraitPrompt, SQUARE_RULE } from './onboarding-render.js';
+import { relationshipAgeGroup } from './relationships.js';
 
 // 5 attempts with a growing gap between them (see claimRunnableJobs) rides out
 // a ~15-minute provider outage before the save-first raw photo lands — there is
@@ -56,6 +57,11 @@ export async function ensureTileJobs(db) {
   await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS relationship TEXT`;
   // raw = TRUE → use the photo AS-IS as the tile (no AI restyle, no charge).
   await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS raw BOOLEAN NOT NULL DEFAULT FALSE`;
+  // 'adult' | 'child' | NULL — the portrait prompt's age treatment for People
+  // photos (adult proportions vs the style's big-eyed child treatment). Set
+  // explicitly by the capture UI for age-ambiguous relationships; the
+  // relationship itself decides when it can (mother → adult).
+  await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS age_group TEXT`;
   // §9 styled tracking on items (also ensured by seed-board's ensureSeedJobs;
   // duplicated here because this pipeline writes the columns independently).
   await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS styled_style_id INT`;
@@ -79,7 +85,7 @@ async function describeLabel(buffer, contentType) {
 // { ok, b64, prompt, costCents } or { ok:false, detail }.
 // (`bg` is still accepted from old app builds but no longer shapes the prompt —
 // the photo's real setting, translated into the style, is the background now.)
-export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, section }) {
+export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, section, ageGroup = null }) {
   const subject = label ? `"${label}"` : 'the main subject';
   const isPerson = String(section || '').toLowerCase() === 'people';
 
@@ -102,7 +108,7 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
       images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
     }
     images.push({ buffer: photo, contentType: contentType || 'image/jpeg' });
-    const prompt = buildPortraitPrompt({ styleGuide, guidance: detail || '' });
+    const prompt = buildPortraitPrompt({ styleGuide, guidance: detail || '', ageGroup });
     const callOpenAI = async () =>
       openaiEditImage({ apiKey: oaKey0, model: await openaiKeystoneModel(db), prompt, images, size: '1024x1024' });
     const callGemini = async () =>
@@ -218,6 +224,9 @@ export async function processTileJob(db, jobId) {
       db, photo: src.buffer, contentType: ct, label, detail: job.detail,
       style: job.style, styleGuide, model: job.model, bg: job.bg,
       section: job.section,
+      // Relationship decides the age treatment when it can; the job's explicit
+      // age_group (the capture UI's kid/grown-up choice) covers the rest.
+      ageGroup: relationshipAgeGroup(job.relationship) || job.age_group || null,
     });
     if (r.ok) {
       imageBytes = Buffer.from(r.b64, 'base64'); imageExt = 'png'; imageCT = 'image/png';
@@ -302,15 +311,17 @@ export async function processTileJob(db, jobId) {
     // name (e.g. the new doctor), exactly like the onboarding family members.
     if (section === 'people' && label && !artFailed) {
       const rel = job.relationship || 'other';
+      const ageGroup = relationshipAgeGroup(job.relationship) || job.age_group || null;
       try {
         const ex = await db`SELECT id FROM persons WHERE child_id = ${job.child_id} AND lower(display_name) = lower(${label}) LIMIT 1`;
         if (ex.length) {
           await db`UPDATE persons SET reference_key = ${imageKey},
-                     relationship = COALESCE(${job.relationship}, relationship), updated_at = NOW()
+                     relationship = COALESCE(${job.relationship}, relationship),
+                     age_group = COALESCE(${ageGroup}, age_group), updated_at = NOW()
                    WHERE id = ${ex[0].id}`;
         } else {
-          await db`INSERT INTO persons (child_id, display_name, given_name, relationship, is_self, reference_key)
-                   VALUES (${job.child_id}, ${label}, ${label}, ${rel}, FALSE, ${imageKey})`;
+          await db`INSERT INTO persons (child_id, display_name, given_name, relationship, is_self, age_group, reference_key)
+                   VALUES (${job.child_id}, ${label}, ${label}, ${rel}, FALSE, ${ageGroup}, ${imageKey})`;
         }
       } catch (_) { /* persons registration is best-effort */ }
     }
