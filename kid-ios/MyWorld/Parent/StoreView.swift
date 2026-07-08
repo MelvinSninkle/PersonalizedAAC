@@ -52,8 +52,21 @@ struct StoreView: View {
 
                 if products.isEmpty {
                     if loadFailed {
-                        Text("The store couldn't load products. Check your connection and try again — or shop on the web dashboard.")
-                            .font(.system(size: 14)).foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("The store couldn't load products right now. This can happen on a weak connection, or while the App Store catalog is updating.")
+                                .font(.system(size: 14)).foregroundStyle(.secondary)
+                            Button {
+                                Task { await load() }
+                            } label: {
+                                Text("Try again")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .padding(.horizontal, 16).padding(.vertical, 9)
+                                    .background(Color(hex: "#ff1493"))
+                                    .foregroundStyle(.white)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     } else {
                         ProgressView().frame(maxWidth: .infinity)
                     }
@@ -260,10 +273,23 @@ struct StoreView: View {
     // MARK: -- StoreKit
 
     private func load() async {
-        do {
-            products = try await Product.products(for: Self.productIDs)
-                .sorted { $0.price < $1.price }
-        } catch { loadFailed = true }
+        loadFailed = false
+        // Product.products(for:) does NOT throw for ids it can't resolve — it
+        // silently drops them, and an all-unresolved list comes back as an
+        // EMPTY array. Without this guard the view stays on the spinner
+        // forever (empty products + no error). StoreKit is also flaky right
+        // after launch, so retry briefly before declaring failure.
+        for attempt in 0..<3 {
+            do {
+                let fetched = try await Product.products(for: Self.productIDs)
+                if !fetched.isEmpty {
+                    products = fetched.sorted { $0.price < $1.price }
+                    break
+                }
+            } catch {}
+            if attempt < 2 { try? await Task.sleep(for: .seconds(attempt + 1)) }
+        }
+        if products.isEmpty { loadFailed = true }
         // Silently re-post current entitlements so subscription RENEWALS land
         // server-side (idempotent per transaction id) — this is what keeps the
         // membership "active" month after month without the parent doing
