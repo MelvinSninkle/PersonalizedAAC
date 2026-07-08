@@ -111,24 +111,28 @@ export function buildPortraitPrompt({ styleGuide, attempt = 0, guidance = '', ag
   const hasStyleImg = !!(styleGuide && styleGuide.image && styleGuide.image.buffer);
   // AGE ADAPTATION. The style reference (IMAGE 1) shows CHILDREN, and the
   // eye-treatment instruction below is emphatic — without this paragraph the
-  // model gives adults the same saucer eyes as the kids. Real animation styles
-  // draw adults and children differently WITHIN the style; say so explicitly.
+  // model gives adults the same saucer eyes as the kids. The guidance is
+  // deliberately STYLE-RELATIVE, not prescriptive: most animation styles give
+  // adults more natural proportions, but some (anime, say) keep stylized eyes
+  // for everyone — the style's own adult convention wins, whatever it is.
   // `ageGroup` comes from the relationship (mother → adult) or the capture
   // UI's kid/grown-up choice; when unknown, fall back to "each at their
   // apparent age" so group photos still behave.
   const agePara =
     ageGroup === 'adult'
-      ? "\nAGE: the person in IMAGE 2 is an ADULT. Apply IMAGE 1's art style the way that same style would draw a " +
-        "GROWN-UP character: adult facial proportions and features — noticeably smaller, more naturally " +
-        "proportioned eyes, an adult face shape, adult body proportions — NOT the exaggerated big-eyed child " +
-        "proportions IMAGE 1 uses for its kids. The result must still be unmistakably the same art style, and the " +
-        "person must clearly read as an adult."
+      ? "\nAGE: the person in IMAGE 2 is an ADULT. IMAGE 1 shows how this art style draws CHILDREN — do not copy " +
+        "those child proportions onto this person. Instead, stay consistent with the art style and draw them the " +
+        "way THIS STYLE draws its ADULT characters: if cartoons or images in this art style give adults more " +
+        "natural proportions — for example more naturally sized eyes, longer faces, adult builds — follow that " +
+        "convention faithfully. The result must be unmistakably the same art style AND unmistakably an adult, as " +
+        "if this grown-up stepped out of the same film as IMAGE 1's kids."
       : ageGroup === 'child'
-      ? "\nAGE: the person in IMAGE 2 is a CHILD. Use IMAGE 1's child treatment exactly as shown — its proportions " +
-        "and eye style are calibrated for kids and apply here as-is."
-      : "\nAGE: draw every person at their APPARENT AGE, the way IMAGE 1's style itself would: adults get adult " +
-        "proportions (smaller, naturally proportioned eyes, adult face shapes), children get the style's " +
-        "exaggerated child treatment. Never give an adult the child proportions.";
+      ? "\nAGE: the person in IMAGE 2 is a CHILD. IMAGE 1's treatment is exactly how this style draws children — " +
+        "apply its proportions and eye style as shown."
+      : "\nAGE: draw every person at their APPARENT AGE, staying consistent with the art style: give children the " +
+        "treatment IMAGE 1 shows, and draw adults the way THIS STYLE draws its adult characters — if this art " +
+        "style gives adults more natural proportions, follow that convention. Never carry the child proportions " +
+        "onto an adult.";
   let prompt;
   if (hasStyleImg) {
     prompt =
@@ -154,7 +158,7 @@ export function buildPortraitPrompt({ styleGuide, attempt = 0, guidance = '', ag
   } else {
     prompt = PORTRAIT_NO_STYLE_BASE +
       (ageGroup === 'adult'
-        ? ' The person is an adult — keep adult facial proportions and features (naturally proportioned eyes, an adult face shape), never child-like proportions.'
+        ? ' The person is an adult — draw them the way the chosen storybook style draws its adult characters, never with child-like proportions.'
         : '') + variant;
   }
   return prompt + fix + SQUARE_RULE;
