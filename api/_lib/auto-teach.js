@@ -6,10 +6,16 @@
 //
 // Design (the parent-facing summary lives in CLAUDE-CODE.md):
 //
-//   • Two channels, different rhythms — micro-exposure slideshows every N
-//     minutes (default 90), one full game session per day at a parent-chosen
-//     time. Honors the existing child_settings.schedule (sleep, school,
-//     meals) AND a hard 30-minute cooldown between auto-triggered activities.
+//   • Two channels, different rhythms — micro-exposure slideshows every
+//     CADENCE.minutesBetween minutes, one full game session per day at a
+//     parent-chosen time (±15 min, family timezone). Honors the existing
+//     child_settings.schedule (sleep, school, meals) AND a hard cooldown
+//     (settings.cooldownMin, default 30) between auto-triggered activities.
+//     The game lane is exempt from the slideshow budget and the slideshow
+//     lane stands down during the game's runway (window + one cooldown of
+//     lead-in) — the runner always asks exposure-first, so without the hold
+//     the once-a-day game could never win a tick. All day-scoped state
+//     (budget, one-game-per-day) counts from FAMILY-timezone midnight.
 //   • Mastery = clinical 80/90 (acquired @ 80% across last 3 attempts;
 //     mastered @ 90% across last 3 AND ≥ 5 days since acquisition). Mastered
 //     words drop into MAINTENANCE — biweekly check-in instead of removal,
@@ -95,6 +101,18 @@ export function localParts(now = new Date(), tz = null) {
            dow: now.getDay(), minutes: now.getHours() * 60 + now.getMinutes() };
 }
 
+/// The UTC instant of local midnight in the FAMILY's timezone. Day-scoped
+/// queries (daily budget, one-game-per-day) must use this, not
+/// date_trunc('day', NOW()) — the server runs UTC, so a UTC day boundary lands
+/// mid-evening for US families and "today" quietly reset around dinner time.
+export function startOfLocalDay(now = new Date(), tz = null) {
+  const { minutes } = localParts(now, tz);
+  return new Date(now.getTime()
+                  - minutes * 60000
+                  - now.getUTCSeconds() * 1000
+                  - now.getUTCMilliseconds());
+}
+
 // ---- Schedule + cooldown gates ----------------------------------------
 
 /// Is `now` within any blackout window the parent has declared?
@@ -154,28 +172,42 @@ export async function recentlyActive(db, childId, withinMinutes = 5) {
   return rows.length > 0;
 }
 
-// Last auto-teach trigger time (cooldown gate).
-export async function lastTriggerAt(db, childId) {
+// Last auto-teach trigger time (cooldown gate). Pass a narrower `sources`
+// list to ask about one lane only (e.g. ['auto_slideshow'] for the cadence's
+// slideshow spacing).
+export async function lastTriggerAt(db, childId, sources = ['auto_slideshow', 'auto_game']) {
   const rows = await db`
     SELECT max(occurred_at) AS t
     FROM exposure_events
-    WHERE source IN ('auto_slideshow','auto_game')
+    WHERE source = ANY(${sources})
       AND protocol_id IN (SELECT id FROM exposure_protocols WHERE child_id = ${childId})`;
   return rows[0] && rows[0].t ? new Date(rows[0].t) : null;
 }
 
-// Today's auto-teach minutes used (against the daily budget).
-export async function todaysBudgetUsed(db, childId) {
+// Today's auto-teach minutes used (against the daily budget). `since` is the
+// start of TODAY in the family's timezone (startOfLocalDay) — a UTC day
+// boundary would reset the budget around dinner time for US families.
+export async function todaysBudgetUsed(db, childId, since) {
   const rows = await db`
     SELECT count(*)::int AS n
     FROM exposure_events
     WHERE source IN ('auto_slideshow','auto_game')
       AND protocol_id IN (SELECT id FROM exposure_protocols WHERE child_id = ${childId})
-      AND occurred_at >= date_trunc('day', NOW())`;
+      AND occurred_at >= ${since}`;
   // Best-effort: each exposure_event is one tile shown; convert to minutes
   // by assuming the tier's microSec value. The runner could log a duration
   // someday but this is the right approximation today.
   return Number((rows[0] && rows[0].n) || 0);
+}
+
+// Has the once-a-day auto game already run today (family-timezone day)?
+export async function gameRanToday(db, childId, since) {
+  const rows = await db`
+    SELECT 1 FROM exposure_events
+    WHERE source = 'auto_game' AND occurred_at >= ${since}
+      AND protocol_id IN (SELECT id FROM exposure_protocols WHERE child_id = ${childId})
+    LIMIT 1`;
+  return rows.length > 0;
 }
 
 // ---- Tile picking ------------------------------------------------------
