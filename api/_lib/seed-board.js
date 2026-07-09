@@ -95,6 +95,37 @@ export async function enqueueRenderJob(db, childId, taxonomyId, { force = false,
                          force = ${force}, ref_key = ${refKey}, guidance = ${guidance}, updated_at = NOW()`;
 }
 
+// Best-effort inline drain of one child's queued render jobs — the same
+// save-first pattern the add-tile queue uses (tile-jobs.js responds, then
+// processes in the background; the cron only guarantees completion). Store
+// flows (regen-with, retry, rebuild) MUST kick this after enqueueing: they
+// have no browser-driven loop like onboarding does, so on a deployment whose
+// minute-cron isn't firing (Hobby-plan crons run daily; a CRON_SECRET
+// mismatch 401s silently) their jobs sat 'queued' forever — the parent paid,
+// saw "re-rendering ✨", and nothing ever landed or archived.
+export async function drainRenderJobs(db, childId, limit = 3) {
+  const jobs = await db`
+    UPDATE seed_jobs SET status = 'processing', updated_at = NOW()
+    WHERE id IN (
+      SELECT id FROM seed_jobs
+      WHERE child_id = ${childId} AND kind = 'render' AND (
+        status = 'queued'
+        OR (status = 'failed' AND attempts < ${MAX_SEED_ATTEMPTS})
+      )
+      ORDER BY id
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id, child_id, kind, taxonomy_id, attempts, force, ref_key, guidance`;
+  const getCtx = makeSeedContext(db);
+  let ok = 0;
+  for (const j of jobs) {
+    const r = await processSeedJob(db, j, getCtx);
+    if (r.ok) ok++;
+  }
+  return { claimed: jobs.length, ok };
+}
+
 // ── Scope ────────────────────────────────────────────────────────────────────
 
 // Personal-render scope: which placed words get re-generated per child.

@@ -25,7 +25,7 @@ import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
 import { isDefaultableTile, loadChildStyleGuideId } from './_lib/onboarding-render.js';
 import { archivePriorImage } from './_lib/image-history.js';
-import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus, needsStyling } from './_lib/seed-board.js';
+import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus, needsStyling, drainRenderJobs } from './_lib/seed-board.js';
 import { ensureCredits, ensureStarter, creditBalance, spendCredits, grantCredits,
          recordPurchase, productCredits, rebuildQuote,
          ensureCoupons, redeemCoupon, randomCouponCode,
@@ -48,7 +48,10 @@ async function memberOr402(res, db, auth, childId) {
   return true;
 }
 
-export const config = { api: { bodyParser: false }, maxDuration: 60 };
+// maxDuration 300: after responding, the enqueue flows below drain a few
+// render jobs in the background (20-40s each) — same save-first pattern as
+// tile-jobs; the cron remains the completion guarantee.
+export const config = { api: { bodyParser: false }, maxDuration: 300 };
 
 async function readRawBody(req) {
   const chunks = [];
@@ -299,6 +302,7 @@ async function checkout(req, res, db, auth, uid, body) {
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${queued} word${queued === 1 ? '' : 's'} queued — they render in your child's style over the next few minutes.`,
   });
+  drainRenderJobs(db, childId, 3).catch(() => {});
 }
 
 // ── Free common-use boards: place/remove a whole category with DEFAULT art ──
@@ -410,6 +414,7 @@ async function personalizeAll(req, res, db, auth, uid, body) {
   res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length + chips.length,
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${remaining.length} tiles + ${chips.length} folder icons queued — the whole board personalizes over the next while.` });
+  drainRenderJobs(db, childId, 3).catch(() => {});
 }
 
 // §9: batch "match all images in THIS FOLDER to my child's style".
@@ -451,6 +456,7 @@ async function personalizeCategory(req, res, db, auth, uid, body) {
   res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length,
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${remaining.length} picture${remaining.length === 1 ? '' : 's'} queued — they land over the next few minutes.` });
+  drainRenderJobs(db, childId, 3).catch(() => {});
 }
 
 // ── Contextual magic: "your new fork appears in these pictures" ─────────────
@@ -558,6 +564,10 @@ async function regenWith(req, res, db, auth, uid, body) {
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${ids.length} picture${ids.length === 1 ? '' : 's'} re-rendering with your new tile in the scene. Replaced art is archived.`,
   });
+  // Best-effort immediate render (the response is already out). Seed jobs are
+  // ONLY drained by the minute-cron otherwise — on a deployment where that
+  // cron doesn't fire, these paid re-renders sat queued forever.
+  drainRenderJobs(db, childId, 3).catch(() => {});
 }
 
 // One FREE retry per tile, then 1 credit.
@@ -592,6 +602,7 @@ async function retryTile(req, res, db, auth, uid, body) {
   await enqueueRenderJob(db, childId, item.taxonomy_slug, { force: true, refKey: priorKey, guidance: guidance || null });
   res.status(200).json({ ok: true, charged, freeRetry: charged === 0 && !isAdmin,
                          balance: uid ? await creditBalance(db, uid) : null });
+  drainRenderJobs(db, childId, 1).catch(() => {});
 }
 
 // Whole-board rebuild at the quoted discount (see rebuildQuote).
@@ -620,6 +631,7 @@ async function rebuild(req, res, db, auth, uid, body) {
     balance: uid ? await creditBalance(db, uid) : null,
     note: `Rebuilding ${words.length} words in your child's style. Every replaced image is archived — you keep them all.`,
   });
+  drainRenderJobs(db, childId, 3).catch(() => {});
 }
 
 // ── Apple IAP (StoreKit 2) ───────────────────────────────────────────────────
