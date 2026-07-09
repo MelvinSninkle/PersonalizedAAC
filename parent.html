@@ -218,7 +218,7 @@
   <div class="brand fred">Fletcher's World <small>Parent dashboard</small></div>
   <div class="right">
     <span class="device-pill" id="device-pill" style="display:none;"><span class="dot" id="device-dot"></span> <span id="device-label">Tablet</span></span>
-    <span class="role-switch"><a href="#" id="store-link" style="font-weight:700;">🛍️ Word Store <span id="store-balance"></span></a> · <span id="therapist-switch" style="display:none;">View as <a href="#" id="to-therapist">Therapist</a> · </span><a href="#" id="device-default">Change device default</a><a href="/admin/taxonomy.html" id="admin-taxonomy" style="display:none;"> · 🧬 Taxonomy</a></span>
+    <span class="role-switch"><a href="#" id="store-link" style="font-weight:700;">🛍️ Word Store <span id="store-balance"></span></a> · <span id="therapist-switch" style="display:none;">View as <a href="#" id="to-therapist">Therapist</a> · </span><a href="#" id="device-default">Change device default</a><a href="/admin/taxonomy.html" id="admin-taxonomy" style="display:none;"> · 🧬 Taxonomy</a> · <a href="#" id="signout-link" style="color:#b91c1c;">Sign out</a></span>
   </div>
 </header>
 
@@ -885,15 +885,14 @@
     <div class="field"><label>Label</label><input id="tile-label" type="text" maxlength="60" placeholder="e.g. Mom"></div>
     <div style="border:1px solid #f3c6dd;background:#fff5fa;border-radius:12px;padding:12px;margin-bottom:14px;">
       <div style="font-weight:700;color:var(--pink-deep);margin-bottom:4px;">✨ Make from a photo</div>
-      <p class="hint" style="margin:0 0 8px;">Type a label, pick a style, then choose a photo — we'll create the artwork.</p>
-      <div class="field" style="margin-bottom:8px;"><label>Art style</label>
-        <select id="tile-style">
-          <option value="Pixar-style 3D animated render">3D Animated</option>
-          <option value="flat picture-book illustration">Picture Book</option>
-          <option value="soft watercolor illustration">Watercolor</option>
-          <option value="gentle soft storybook illustration">Soft Storybook</option>
-          <option value="needle-felted wool craft">Felted</option>
-        </select>
+      <p class="hint" style="margin:0 0 8px;">Choose a photo — we'll name it, draw it to match the board's art style, add the voice, and put it on the board automatically. Naming it above first is optional.</p>
+      <!-- Per-tile art-style choice is gone on purpose (matches the apps):
+           every styled tile renders in the BOARD's saved house style. -->
+      <div style="display:flex;gap:8px;margin:0 0 8px;">
+        <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
+          <input type="radio" name="tile-look" id="tile-look-style" checked style="width:auto;margin:0;">Board art style</label>
+        <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
+          <input type="radio" name="tile-look" id="tile-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
       </div>
       <!-- No `capture`: lets iOS offer Take Photo OR Photo Library (camera-only
            forced too narrow a flow). Native app needs NSCameraUsageDescription +
@@ -1103,6 +1102,16 @@
     try { localStorage.removeItem('aacDeviceRole'); } catch (_) {}
     try { sessionStorage.removeItem('aacStayBoard'); } catch (_) {}
     window.location.href = '/u/' + encodeURIComponent(slug);
+  });
+  // Sign out on this device: clear the server cookie + the bearer token the
+  // legacy endpoints still read, then land on the login page.
+  const signoutLink = document.getElementById('signout-link');
+  if (signoutLink) signoutLink.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!confirm('Sign out on this device? Everything stays saved — sign back in anytime.')) return;
+    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
+    try { localStorage.removeItem('aacToken'); } catch (_) {}
+    window.location.href = '/login';
   });
 
   // ---- Progress charts now live in /charts.js (shared with the other dashboard) ----
@@ -1945,7 +1954,7 @@
       : 'No sound yet';
     document.getElementById('tile-delete').style.display = existing ? 'inline-flex' : 'none';
     tileSetErr('');
-    try { const st = localStorage.getItem('aacStyle'); if (st) document.getElementById('tile-style').value = st; } catch (_) {}
+    document.getElementById('tile-look-style').checked = true;
     tileScrim.classList.add('open');
   }
   function closeTileAdder() { tileScrim.classList.remove('open'); }
@@ -1959,74 +1968,64 @@
     const prev = document.getElementById('tile-preview'); const u = URL.createObjectURL(blob);
     prev.src = u; prev.style.display = 'block'; prev.addEventListener('load', () => URL.revokeObjectURL(u), { once: true });
   }
-  document.getElementById('tile-style').addEventListener('change', (e) => { try { localStorage.setItem('aacStyle', e.target.value); } catch (_) {} });
-  // Photo-first add-tile flow. Tap → photo picker. Once a photo lands, we run
-  // describe-image (auto-name + phonetic), then generate-image (styled art),
-  // then tts (voice). No "type a label first" gate — busy parents who can't
-  // pause to type get the whole tile from one tap. Each step's failure stops
-  // the chain with a clear inline error; the user can fix what's wrong (e.g.
-  // tweak the label) and re-tap Save without re-shooting.
+  // Photo-first add-tile flow — the durable /api/tile-jobs queue (matches the
+  // native apps). The server names the photo, renders it in the BOARD's saved
+  // house style (or keeps the exact photo — free), voices it, and lands it on
+  // the board on its own; we poll for a friendly status line. The photo is
+  // safe server-side the moment the POST returns.
   document.getElementById('tile-magic').addEventListener('click', () => {
     tileSetErr('');
     document.getElementById('tile-photo').click();
   });
   document.getElementById('tile-photo').addEventListener('change', async (e) => {
     const file = e.target.files[0]; e.target.value = ''; if (!file) return;
-    const style = document.getElementById('tile-style').value;
     const emotion = document.getElementById('tile-emotion').value;
     const statusEl = document.getElementById('tile-magic-status');
     const btn = document.getElementById('tile-magic'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Working…';
     tileSetErr('');
     try {
-      // 1) Downscale once; reuse the same bytes for describe + generate.
       const photo = await downscale(file, 1024, 0.85);
-
-      // 2) Auto-name + phonetic spelling. Best-effort: if vision fails (e.g.
-      // org not verified), fall back to whatever the parent has typed in the
-      // label field — the rest of the flow can still run.
-      statusEl.textContent = '🔍 Looking at the photo…';
-      let label = document.getElementById('tile-label').value.trim();
-      let phrase = (document.getElementById('tile-phrase').value || '').trim();
-      try {
-        const dr = await fetch('/api/describe-image', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
-        if (dr.ok) {
-          const d = await dr.json();
-          if (d.label && !label)            { label = d.label;            document.getElementById('tile-label').value = label; }
-          if (d.pronunciation && !phrase)   { phrase = d.pronunciation;   document.getElementById('tile-phrase').value = phrase; }
+      const raw = document.getElementById('tile-look-raw').checked;
+      const label = document.getElementById('tile-label').value.trim();
+      statusEl.textContent = '📤 Saving the photo…';
+      const qs = '/api/tile-jobs?childId=' + encodeURIComponent(slug)
+        + '&section=' + encodeURIComponent(tileTarget.section)
+        + '&emotion=' + encodeURIComponent(emotion)
+        + (tileTarget.catId ? '&categoryId=' + tileTarget.catId : '')
+        + (label ? '&label=' + encodeURIComponent(label) : '')
+        + (raw ? '&raw=1' : '');
+      const jr = await fetch(qs, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
+      if (!jr.ok) {
+        const d = await jr.text();
+        if (jr.status === 402 && /needs_subscription/.test(d)) {
+          throw new Error('Styled tiles are a membership feature — pick “My exact photo” (free) and tap again, or join in Credits & Store.');
         }
-      } catch (_) { /* vision is best-effort */ }
-
-      // If we *still* don't have a label, we can't generate art (model needs a
-      // subject hint). Surface that as a clear, actionable message.
-      if (!label) {
-        statusEl.textContent = '—';
-        tileSetErr("Couldn't name the photo automatically — type a label and tap the button again.");
-        document.getElementById('tile-label').focus();
-        return;
+        throw new Error(d.slice(0, 200));
       }
-
-      // 3) Stylized art via gpt-image-1.
-      statusEl.textContent = '🎨 Creating the artwork… (~20–40s)';
-      const ir = await fetch('/api/generate-image?label=' + encodeURIComponent(label) + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(slug), { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
-      if (!ir.ok) {
-        const d = await ir.text();
-        // Common: OpenAI org isn't identity-verified → 403 on /v1/images/edits.
-        // Make that obvious instead of buried in a 500-char dump.
-        const hint = /must be verified/i.test(d)
-          ? "OpenAI organization isn't verified for image generation. Open platform.openai.com → Settings → Organization → Verify, then try again."
-          : d.slice(0, 160);
-        throw new Error('Image — ' + hint);
+      const { id: jobId } = await jr.json();
+      statusEl.textContent = raw
+        ? '📥 Adding the photo to the board…'
+        : '🎨 Drawing it to match the board… (1–3 min). You can close this — it lands on its own.';
+      const t0 = Date.now();
+      while (Date.now() - t0 < 5 * 60000) {
+        await new Promise((r) => setTimeout(r, 4000));
+        let job = null;
+        try {
+          const sr = await fetch('/api/tile-jobs?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+          if (sr.ok) job = ((await sr.json()).jobs || []).find((j) => j.id === jobId);
+        } catch (_) { continue; }
+        if (!job) continue;
+        if (job.status === 'done') {
+          statusEl.textContent = '✅ ' + (job.label || label || 'The tile') + ' is on the board!';
+          try { await loadOrg(); } catch (_) {}
+          setTimeout(() => { if (!tileTarget.existing) closeTileAdder(); }, 1500);
+          return;
+        }
+        if (job.status === 'failed' && job.attempts >= 5) {
+          throw new Error(job.error || 'the picture engine gave up — try again in a bit');
+        }
       }
-      tilePendingImage = await ir.blob(); tileShowPreview(tilePendingImage);
-
-      // 4) Voice via ElevenLabs (phrase wins; otherwise speak the label).
-      statusEl.textContent = '🔊 Making the voice…';
-      const speakText = phrase || label;
-      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: speakText, emotion }) });
-      if (tr.ok) { tilePendingSound = await tr.blob(); document.getElementById('tile-sound-status').textContent = 'AI voice ready ✓'; }
-      else { /* voice is best-effort; user can still hit "Generate audio" again */ }
-
-      statusEl.textContent = '✅ Ready — review the name, then tap Save tile.';
+      statusEl.textContent = '⏳ Still rendering — it will appear on the board when it finishes.';
     } catch (err) { statusEl.textContent = '—'; tileSetErr('Could not make the tile: ' + (err.message || err)); }
     finally { btn.disabled = false; btn.textContent = pv; }
   });
@@ -2043,7 +2042,7 @@
     const st = document.getElementById('tile-sound-status'); const btn = document.getElementById('tile-gen-audio');
     btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Generating…'; st.textContent = 'Generating audio…'; tileSetErr('');
     try {
-      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: phrase, emotion }) });
+      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: phrase, emotion, childId: slug }) });
       if (!tr.ok) { const d = await tr.text(); throw new Error(d.slice(0, 160)); }
       tilePendingSound = await tr.blob(); st.textContent = 'Voice ready ✓';
       try { const a = new Audio(URL.createObjectURL(tilePendingSound)); a.play().catch(() => {}); } catch (_) {}
@@ -2279,7 +2278,7 @@
   async function reviewTTS(text, emotion) {
     const r = await fetch('/api/tts', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-      body: JSON.stringify({ text, emotion: emotion || 'default' }),
+      body: JSON.stringify({ text, emotion: emotion || 'default', childId: slug }),
     });
     if (!r.ok) throw new Error('voice ' + r.status);
     return await r.blob();

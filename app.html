@@ -1189,18 +1189,19 @@
     <label for="item-label">Label</label>
     <input type="text" id="item-label" autocomplete="off" placeholder="e.g. Mom">
 
-    <!-- AI tile: snap a photo, auto-generate the stylized artwork + the voice. -->
+    <!-- AI tile: snap a photo → the durable /api/tile-jobs queue renders it in
+         the BOARD's saved house style (server-resolved, like the native apps —
+         per-tile art-style choice is gone on purpose: mixed styles broke the
+         board's visual consistency) and lands it on the board by itself. -->
     <div id="magic-box" style="border:1px solid #f3c6dd;background:#fff5fa;border-radius:10px;padding:12px;margin:12px 0;">
       <div style="font-weight:700;color:#ad1457;margin-bottom:4px;">✨ Make a tile from a photo</div>
-      <div style="font-size:12px;color:#666;margin-bottom:8px;">Type a label above, pick a style, then snap a photo — we'll create the artwork and the voice automatically.</div>
-      <label for="item-style" style="margin-top:0;">Art style</label>
-      <select id="item-style" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
-        <option value="Pixar-style 3D animated render">3D Animated</option>
-        <option value="flat picture-book illustration">Picture Book</option>
-        <option value="soft watercolor illustration">Watercolor</option>
-        <option value="gentle soft storybook illustration">Soft Storybook</option>
-        <option value="needle-felted wool craft">Felted</option>
-      </select>
+      <div style="font-size:12px;color:#666;margin-bottom:8px;">Snap a photo — we'll name it, draw it to match the board, add the voice, and put it on the board automatically. Naming it above first is optional.</div>
+      <div style="display:flex;gap:8px;margin:6px 0 2px;">
+        <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
+          <input type="radio" name="item-look" id="item-look-style" checked style="width:auto;margin:0;">Board art style</label>
+        <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
+          <input type="radio" name="item-look" id="item-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
+      </div>
       <!-- No `capture` attr: iOS then offers Take Photo OR Photo Library, which is
            more flexible and avoids the forced-rear-camera failures we hit. The
            NATIVE app still needs NSCameraUsageDescription + NSPhotoLibraryUsageDescription
@@ -1355,6 +1356,10 @@
   <div class="modal">
     <h3>Display Settings</h3>
     <div style="font-size:13px;color:#666;margin-bottom:8px;">These are saved on this device only.</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #eee;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+      <span style="font-size:13px;color:#666;">Signed in on this device</span>
+      <button type="button" class="secondary" id="display-signout" style="padding:8px 14px;border-radius:8px;border:none;background:#fee2e2;color:#b91c1c;font-weight:700;cursor:pointer;">Sign out</button>
+    </div>
     <div class="checkbox-row">
       <input type="checkbox" id="disp-hide-labels">
       <label for="disp-hide-labels">Hide all labels — tiles, categories &amp; the People/Nouns/Verbs headers</label>
@@ -3159,10 +3164,8 @@
     document.getElementById('item-redraw-row').style.display = (item && item.taxonomySlug) ? 'block' : 'none';
     document.getElementById('item-redraw-note').textContent = '';
 
-    // AI-tile section: restore the last-used style, clear status/preview.
-    const styleSel = document.getElementById('item-style');
-    const savedStyle = localStorage.getItem('aacStyle');
-    if (savedStyle) { for (const o of styleSel.options) { if (o.value === savedStyle) { styleSel.value = savedStyle; break; } } }
+    // AI-tile section: clear status/preview (the look defaults to board style).
+    document.getElementById('item-look-style').checked = true;
     document.getElementById('item-magic-status').textContent = '—';
     const mp = document.getElementById('item-magic-preview');
     mp.style.display = 'none'; mp.removeAttribute('src');
@@ -3203,10 +3206,12 @@
     status.className = 'file-status';
     try {
       const emotion = document.getElementById('item-emotion').value;
+      // childId → the server speaks in the BOARD's chosen voice; without it
+      // /api/tts falls back to the deployment's env default voice.
       const r = await apiFetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: phrase, emotion }),
+        body: JSON.stringify({ text: phrase, emotion, childId: CHILD_ID }),
       });
       if (!r.ok) {
         const detail = await r.text();
@@ -3231,13 +3236,11 @@
     }
   });
 
-  // ---- AI tile: photo → stylized artwork + voice, in one tap ----
-  document.getElementById('item-style').addEventListener('change', (e) => {
-    try { localStorage.setItem('aacStyle', e.target.value); } catch (_) {}
-  });
-  // Photo-first flow (matches /parent dashboard). Tap → photo picker. Once a
-  // photo lands we run describe-image (auto-name + phonetic), then
-  // generate-image, then tts. No "type a label first" gate.
+  // ---- AI tile: photo → the durable tile-jobs queue (matches the native
+  // apps). The server names the photo, renders it in the BOARD's saved house
+  // style (or keeps the exact photo — free), voices it, and lands it on the
+  // board on its own; we just poll the job for a friendly status line. The
+  // photo is safe server-side the moment the POST returns.
   document.getElementById('item-magic').addEventListener('click', () => {
     document.getElementById('item-error').textContent = '';
     document.getElementById('item-photo-capture').click();
@@ -3246,77 +3249,60 @@
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
-    const style = document.getElementById('item-style').value;
     const errEl = document.getElementById('item-error');
     const statusEl = document.getElementById('item-magic-status');
     const btn = document.getElementById('item-magic');
-    const preview = document.getElementById('item-magic-preview');
     errEl.textContent = '';
     btn.disabled = true;
     const prevText = btn.textContent;
     btn.textContent = 'Working…';
     try {
       const photo = await compressImage(file);
-
-      // 1) Auto-name + phonetic. Best-effort; falls back to whatever the
-      // parent typed in the label field if vision fails or org isn't verified.
-      statusEl.textContent = '🔍 Looking at the photo…';
-      let label  = document.getElementById('item-label').value.trim();
-      let phrase = document.getElementById('item-phrase').value.trim();
-      try {
-        const dr = await apiFetch('/api/describe-image', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
-        if (dr.ok) {
-          const d = await dr.json();
-          if (d.label && !label)            { label  = d.label;          document.getElementById('item-label').value  = label; }
-          if (d.pronunciation && !phrase)   { phrase = d.pronunciation;  document.getElementById('item-phrase').value = phrase; }
-        }
-      } catch (_) { /* vision is best-effort */ }
-
-      if (!label) {
-        statusEl.textContent = '—';
-        errEl.textContent = "Couldn't name the photo automatically — type a label and tap the button again.";
-        document.getElementById('item-label').focus();
-        return;
-      }
-
-      // 2) Stylize the photo into the chosen art style.
-      statusEl.textContent = '🎨 Creating the artwork… (~20–40s)';
-      const ir = await apiFetch('/api/generate-image?label=' + encodeURIComponent(label) + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(CHILD_ID), {
-        method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo,
-      });
-      if (!ir.ok) {
-        const d = await ir.text();
-        if (ir.status === 402 && /needs_subscription/.test(d)) {
+      const raw = document.getElementById('item-look-raw').checked;
+      const label = document.getElementById('item-label').value.trim();
+      statusEl.textContent = '📤 Saving the photo…';
+      let qs = '/api/tile-jobs?childId=' + encodeURIComponent(CHILD_ID)
+        + '&section=' + encodeURIComponent(editingItemSection)
+        + '&emotion=' + encodeURIComponent(document.getElementById('item-emotion').value)
+        + (editingItemCategoryId ? '&categoryId=' + editingItemCategoryId : '')
+        + (label ? '&label=' + encodeURIComponent(label) : '')
+        + (raw ? '&raw=1' : '');
+      const jr = await apiFetch(qs, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
+      if (!jr.ok) {
+        const d = await jr.text();
+        if (jr.status === 402 && /needs_subscription/.test(d)) {
           showMembershipUpsell('Styled tiles are a membership feature',
-            'Making pictures in ' + (window.CHILD_NAME || 'your child') + '’s own art style is part of every My World membership, from $4.99/month. You can still add the photo as-is for free — and everything already made stays yours forever.');
-          throw new Error('Styling needs a membership — you can still upload the photo as-is.');
+            'Making pictures in ' + (window.CHILD_NAME || 'your child') + '’s own art style is part of every My World membership, from $4.99/month. You can still add the photo as-is for free — pick “My exact photo” and tap again.');
+          throw new Error('Styling needs a membership — pick “My exact photo” (free) and tap again.');
         }
-        const hint = /must be verified/i.test(d)
-          ? "OpenAI organization isn't verified for image generation. Open platform.openai.com → Settings → Organization → Verify, then try again."
-          : d.slice(0, 200);
-        throw new Error('Image — ' + hint);
+        throw new Error(d.slice(0, 200));
       }
-      pendingImage = await ir.blob();
-      const purl = URL.createObjectURL(pendingImage);
-      preview.src = purl; preview.style.display = 'block';
-      preview.addEventListener('load', () => URL.revokeObjectURL(purl), { once: true });
-      const ist = document.getElementById('item-image-status');
-      ist.textContent = 'AI image ready'; ist.className = 'file-status has-file';
-
-      // 3) Voice (phrase wins; otherwise speak the label).
-      statusEl.textContent = '🔊 Recording the voice…';
-      const speakText = phrase || label;
-      const tr = await apiFetch('/api/tts', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: speakText, emotion: document.getElementById('item-emotion').value }),
-      });
-      if (tr.ok) {
-        pendingSound = await tr.blob();
-        const sst = document.getElementById('item-sound-status');
-        sst.textContent = 'AI voice ready'; sst.className = 'file-status has-file';
-      } /* else: voice is best-effort; user can still hit "Generate audio" */
-
-      statusEl.textContent = '✅ Ready — review the name, then tap Save.';
+      const { id: jobId } = await jr.json();
+      statusEl.textContent = raw
+        ? '📥 Adding the photo to the board…'
+        : '🎨 Drawing it to match the board… (1–3 min). You can close this — it lands on its own.';
+      // Poll until the job lands (or needs a hand). If the modal is closed the
+      // poll keeps going harmlessly; the resync loop shows the tile anyway.
+      const t0 = Date.now();
+      while (Date.now() - t0 < 5 * 60000) {
+        await new Promise((r) => setTimeout(r, 4000));
+        let job = null;
+        try {
+          const sr = await apiFetch('/api/tile-jobs?childId=' + encodeURIComponent(CHILD_ID));
+          if (sr.ok) job = ((await sr.json()).jobs || []).find((j) => j.id === jobId);
+        } catch (_) { continue; }
+        if (!job) continue;
+        if (job.status === 'done') {
+          statusEl.textContent = '✅ ' + (job.label || label || 'The tile') + ' is on the board!';
+          try { await resyncIfChanged(); } catch (_) {}
+          setTimeout(() => { if (itemModal.classList.contains('show') && !editingItem) itemModal.classList.remove('show'); }, 1500);
+          return;
+        }
+        if (job.status === 'failed' && job.attempts >= 5) {
+          throw new Error(job.error || 'the picture engine gave up — try again in a bit');
+        }
+      }
+      statusEl.textContent = '⏳ Still rendering — it will appear on the board when it finishes.';
     } catch (err) {
       statusEl.textContent = '—';
       errEl.textContent = 'Could not make the tile: ' + (err.message || err);
@@ -3800,7 +3786,7 @@
           const r = await apiFetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: (it.pronunciation && it.pronunciation.trim()) || it.label.trim(), emotion }),
+            body: JSON.stringify({ text: (it.pronunciation && it.pronunciation.trim()) || it.label.trim(), emotion, childId: CHILD_ID }),
           });
           if (!r.ok) {
             const detail = await r.text();
@@ -4207,6 +4193,12 @@
     });
   }
   document.getElementById('display-done').addEventListener('click', () => displayModal.classList.remove('show'));
+  document.getElementById('display-signout').addEventListener('click', async () => {
+    if (!confirm('Sign out on this device? The board stays saved — sign back in anytime.')) return;
+    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
+    try { localStorage.removeItem(TOKEN_KEY); } catch (_) {}
+    location.href = '/login';
+  });
   document.getElementById('display-reset').addEventListener('click', () => {
     display = structuredClone(DISPLAY_DEFAULTS);
     commitDisplay();
@@ -4978,7 +4970,7 @@
     try { blob = await reqPromise(tx(BLOBS).get(key)); } catch (_) {}
     if (!blob) {
       try {
-        const r = await apiFetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, emotion: 'excited' }) });
+        const r = await apiFetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, emotion: 'excited', childId: CHILD_ID }) });
         if (r.ok) { blob = await r.blob(); cacheBlob(key, blob); }
       } catch (_) {}
     }
