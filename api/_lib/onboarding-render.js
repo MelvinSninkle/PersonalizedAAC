@@ -5,7 +5,8 @@
 // People portraits AND the Core starter tiles the same way the Lab does, without
 // the admin gate. Keeping it here means both the portrait step and the seed step
 // share one prompt-composition path.
-import { get as blobGet } from '@vercel/blob';
+import { get as blobGet, put as blobPut } from '@vercel/blob';
+import { createHash } from 'node:crypto';
 import { geminiKey, geminiDefaultModel, geminiGenerateImage, geminiCostCents } from './gemini.js';
 
 // Read a private Blob fully into memory as { buffer, contentType }.
@@ -325,6 +326,23 @@ export async function synthesizeVoice({ text, voiceId, db = null, childId = null
   const vid = voiceId || process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
   const mid = process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
   const body = String(text).slice(0, 300);
+  // Shared render cache — the SAME key scheme /api/tts uses (default emotion),
+  // so tile clips and runtime speech share one ElevenLabs generation per
+  // (voice, phrase) across EVERY family. Without this, each new board build
+  // re-generated the same stock words per account. Callers still copy the
+  // bytes into the child's own blob, so account deletion (which wipes a
+  // child's media) never touches the shared file another family relies on.
+  const cacheKey = 'tts/' + createHash('sha256')
+    .update(`${mid}|${vid}|default|${body}`).digest('hex').slice(0, 40) + '.mp3';
+  try {
+    const cached = await blobGet(cacheKey, { access: 'private' });
+    if (cached && cached.statusCode === 200 && cached.stream) {
+      const reader = cached.stream.getReader();
+      const chunks = [];
+      while (true) { const { value, done } = await reader.read(); if (done) break; chunks.push(Buffer.from(value)); }
+      if (chunks.length) return Buffer.concat(chunks);   // hit: no spend, no metering
+    }
+  } catch (_) { /* miss → generate */ }
   try {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(vid)}`, {
       method: 'POST',
@@ -340,6 +358,8 @@ export async function synthesizeVoice({ text, voiceId, db = null, childId = null
         await logVoiceGeneration(db, { userId: uid, childId, chars: body.length, kind, voiceId: vid, text: body });
       } catch (_) { /* metering is best-effort */ }
     }
-    return Buffer.from(await r.arrayBuffer());
+    const buf = Buffer.from(await r.arrayBuffer());
+    try { await blobPut(cacheKey, buf, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false }); } catch (_) {}
+    return buf;
   } catch (_) { return null; }
 }
