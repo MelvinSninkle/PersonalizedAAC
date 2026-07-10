@@ -36,6 +36,7 @@ import styleDefaults from './_lab-style-defaults.js';
 import layout from './_lab-layout.js';
 import voices from './_lab-voices.js';
 import publish from './_lab-publish.js';
+import boards from './_lab-boards.js';
 
 export const config = { maxDuration: 300 };
 
@@ -63,6 +64,7 @@ const HANDLERS = {
   'layout': layout,
   'voices': voices,
   'publish': publish,
+  'boards': boards,
 };
 
 export default async function handler(req, res) {

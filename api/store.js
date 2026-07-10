@@ -231,6 +231,13 @@ async function browse(req, res, db, auth) {
        WHERE child_id = ${childId} AND taxonomy_slug IS NOT NULL`,
     loadChildStyleGuideId(db, childId),
   ]);
+  // Boards the Lab priced in credits: their categories are hidden from the
+  // clients' FREE common-use-boards section (words still buyable one by one).
+  let paidBoards = new Set();
+  try {
+    const bc = await db`SELECT section, label_norm FROM board_catalog WHERE pricing = 'credits'`;
+    paidBoards = new Set(bc.map((r) => `${r.section}|${r.label_norm}`));
+  } catch (_) { /* catalog table may not exist yet */ }
   const mine = new Map(items.map((i) => [i.taxonomy_slug, i]));
   const tiles = rows.map((t) => {
     const it = mine.get(t.id);
@@ -246,6 +253,7 @@ async function browse(req, res, db, auth) {
       itemId: it ? Number(it.id) : null,
       freeRetryUsed: it ? !!it.free_retry_used : false,
       credits: COST.nano,
+      freeBoard: !paidBoards.has(`${String(t.column_name || '').toLowerCase()}|${String(t.category || '').trim().toLowerCase()}`),
     };
   });
   res.setHeader('Cache-Control', 'no-store');
@@ -319,6 +327,20 @@ async function freeBoard(req, res, db, auth, body) {
   const on = body.on !== false;
   if (!childId || !column || !category) { res.status(400).json({ error: 'childId, column, category required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  // A board the Lab priced in credits is not free-addable — its words go
+  // through checkout like any other purchase.
+  if (on) {
+    try {
+      const bc = (await db`SELECT pricing FROM board_catalog
+                           WHERE section = ${column} AND label_norm = ${category.trim().toLowerCase()} LIMIT 1`)[0];
+      if (bc && bc.pricing === 'credits') {
+        res.status(402).json({ error: 'premium_board',
+          note: 'This board requires credits — add its words from the shop.' });
+        return;
+      }
+    } catch (_) { /* catalog table may not exist yet */ }
+  }
 
   const all = await shoppableRows(db);
   const group = all.filter((t) => String(t.column_name || '').toLowerCase() === column

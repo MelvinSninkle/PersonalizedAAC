@@ -26,6 +26,9 @@ data class ShopTile(
     val itemId: Int? = null,
     val freeRetryUsed: Boolean = false,
     val credits: Int = 1,
+    // false = store-only board priced in credits: hide from the FREE
+    // common-use-boards section. Defaults true so older servers stay free.
+    val freeBoard: Boolean = true,
 )
 
 @Serializable

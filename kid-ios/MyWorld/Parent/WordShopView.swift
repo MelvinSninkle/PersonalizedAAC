@@ -243,6 +243,7 @@ struct WordShopView: View {
         var agg: [String: (col: String, cat: String, total: Int, on: Int)] = [:]
         for t in tiles {
             guard let cat = t.category, !cat.isEmpty else { continue }
+            if t.freeBoard == false { continue }   // credits-priced board: not free-addable
             let key = t.column + "|" + cat
             if agg[key] == nil { order.append(key); agg[key] = (t.column, cat, 0, 0) }
             agg[key]!.total += 1

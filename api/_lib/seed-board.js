@@ -168,6 +168,16 @@ export async function placementRows(db) {
   }
   const catOrder = await categoryOrderMap(db);
   const norm = (v) => String(v || '').trim().toLowerCase();
+  // Store-only boards (Lab board catalog) never seed onto new boards — the
+  // family adds them from the Word Shop instead (free or with credits, per
+  // the board's pricing flag).
+  try {
+    const so = await db`SELECT section, label_norm FROM board_catalog WHERE store_only = TRUE`;
+    if (so.length) {
+      const skip = new Set(so.map(r => `${r.section}|${r.label_norm}`));
+      rows = rows.filter(r => !skip.has(`${norm(r.column_name)}|${norm(r.category)}`));
+    }
+  } catch (_) { /* catalog table may not exist yet */ }
   const ord = (section, label, parent) => {
     const v = catOrder.get(`${norm(section)}|${norm(label)}|${norm(parent)}`);
     return v == null ? 1e9 : v;

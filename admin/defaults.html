@@ -106,6 +106,34 @@
     animation:spin .8s linear infinite;
   }
   @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* Board catalog controls (store-only / pricing per category) */
+  .cat-title { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  select.board-flag {
+    font-size:11px; font-weight:600; padding:2px 6px; border-radius:999px;
+    border:1px solid var(--line); background:#fff; color:#6b7280; cursor:pointer;
+  }
+  select.board-flag.store { border-color:#c4b5fd; background:#f5f3ff; color:#6d28d9; }
+  select.board-flag.paid { border-color:#fbbf24; background:#fffbeb; color:#b45309; }
+  #nb-overlay {
+    position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center;
+    background:rgba(31,41,55,.45);
+  }
+  #nb-overlay.open { display:flex; }
+  #nb-card {
+    background:#fff; border-radius:14px; padding:18px 20px; width:min(440px, 92vw);
+    box-shadow:0 24px 70px rgba(0,0,0,.3); display:flex; flex-direction:column; gap:10px;
+  }
+  #nb-card h3 { margin:0 0 2px; font-size:16px; color:var(--pink); }
+  #nb-card label { font-size:12px; font-weight:600; color:#374151; display:flex; flex-direction:column; gap:4px; }
+  #nb-card input[type=text], #nb-card select, #nb-card textarea {
+    font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px;
+  }
+  #nb-card textarea { min-height:110px; resize:vertical; }
+  #nb-card .radios { display:flex; gap:14px; font-weight:400; }
+  #nb-card .radios label { flex-direction:row; align-items:center; gap:5px; font-weight:400; }
+  #nb-msg { font-size:12px; color:#6b7280; min-height:16px; }
+  #nb-msg.err { color:#b91c1c; }
 </style>
 </head>
 <body>
@@ -125,6 +153,7 @@
     <option value="defaultable">Default-able only</option>
   </select>
   <button id="refresh">↻ Refresh</button>
+  <button id="new-board" title="Create a new board (category + words) in the taxonomy — optionally store-only, free or credits.">➕ New board</button>
   <button id="push-defaults" title="Copy the reference board's (Fletcher's) tile art AND folder icons into the shared defaults every new board inherits. Only missing entries are copied — safe to re-run.">⬆️ Push from reference</button>
   <button id="gen-tiles" class="primary" hidden title="Generate style-matched art for every tile that doesn't have one yet.">🎨 Generate missing tiles</button>
   <button id="gen-chips" class="primary" hidden title="Generate style-matched folder icons for every category/subcategory chip that doesn't have one yet.">🎨 Generate missing chips</button>
@@ -142,6 +171,38 @@
   </div>
   <div id="board"><div class="empty">Loading the default board…</div></div>
 </main>
+
+<div id="nb-overlay">
+  <div id="nb-card">
+    <h3>➕ New board</h3>
+    <label>Column
+      <select id="nb-section">
+        <option value="nouns">Middle Column (Gestalts/Nouns/Adjectives)</option>
+        <option value="people">Left Column (People)</option>
+        <option value="verbs">Right Column (Verbs)</option>
+        <option value="needs">Bottom Row (Core Words)</option>
+      </select>
+    </label>
+    <label>Board name (the category families see)
+      <input type="text" id="nb-label" placeholder="e.g. Dinosaurs" maxlength="80">
+    </label>
+    <label style="flex-direction:row;align-items:center;gap:8px;">
+      <input type="checkbox" id="nb-store" checked style="margin:0;"> Store only (never on new boards — families add it from the Word Shop)
+    </label>
+    <div class="radios" id="nb-pricing-row">
+      <label><input type="radio" name="nb-pricing" value="free" checked> Free to add</label>
+      <label><input type="radio" name="nb-pricing" value="credits"> ⭐ Requires credits</label>
+    </div>
+    <label>Words — one per line
+      <textarea id="nb-words" placeholder="t-rex&#10;triceratops&#10;stegosaurus"></textarea>
+    </label>
+    <div id="nb-msg"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button id="nb-cancel">Cancel</button>
+      <button id="nb-create" class="primary">Create board</button>
+    </div>
+  </div>
+</div>
 
 <script>
   // Same admin auth as the other tools: session cookie (preferred) or the legacy
@@ -179,6 +240,7 @@
   let TILES = [];                // unified: {id,label,column,category,subcategory,defaultable,imageKey,status,error}
   let CHIPS = [];                // unified: {section,label,parent,imageKey,status,error} (parent=null in generic mode)
   let BUSY = false;              // a bulk loop is running
+  let BOARDS = new Map();        // 'section|category_norm' → {storeOnly, pricing} (Lab board catalog)
 
   function styleGuideId() { return parseInt(document.getElementById('style-picker').value, 10) || 0; }
 
@@ -263,6 +325,19 @@
       '<div class="word">' + esc(c.label) + '</div></div>';
   }
 
+  // Board-catalog tag on each category: where the board lives + its price.
+  function boardFlagHTML(section, cat) {
+    const f = BOARDS.get(section + '|' + norm(cat)) || { storeOnly: false, pricing: 'free' };
+    const v = !f.storeOnly ? 'default' : (f.pricing === 'credits' ? 'credits' : 'free');
+    const cls = v === 'default' ? '' : (v === 'credits' ? ' paid' : ' store');
+    return '<select class="board-flag' + cls + '" data-sec="' + esc(section) + '" data-cat="' + esc(cat) + '"' +
+      ' title="Where this board lives: on every new board, or store-only (free / credits)">' +
+      '<option value="default"' + (v === 'default' ? ' selected' : '') + '>on new boards</option>' +
+      '<option value="free"' + (v === 'free' ? ' selected' : '') + '>store only · free</option>' +
+      '<option value="credits"' + (v === 'credits' ? ' selected' : '') + '>store only · ⭐ credits</option>' +
+      '</select>';
+  }
+
   // ── Render: column sections → category groups → subcategory sub-groups ─
   function render() {
     const mode = document.getElementById('filter').value;
@@ -319,7 +394,7 @@
         }
         if (!catHTML) continue;
         colHTML += '<div class="cat-group">' +
-          (cat ? '<div class="cat-title">' + esc(cat) + '</div>' : '') + catHTML + '</div>';
+          (cat ? '<div class="cat-title">' + esc(cat) + boardFlagHTML(colKey, cat) + '</div>' : '') + catHTML + '</div>';
       }
       if (!colHTML) continue;
       html += '<section class="col-section"><div class="col-head"><h2>' + esc(colKey) + '</h2>' +
@@ -381,6 +456,11 @@
     const id = styleGuideId();
     MODE = id ? 'style' : 'generic';
     try {
+      // Board catalog rides along in both modes (it's style-independent).
+      try {
+        const bd = await api('/api/admin/lab?action=boards');
+        BOARDS = new Map((bd.boards || []).map((b) => [b.section + '|' + norm(b.label), b]));
+      } catch (_) { BOARDS = new Map(); }
       if (id) {
         const d = await api('/api/admin/lab?action=style-defaults&styleGuideId=' + id);
         STYLE_INFO = d.style || null;
@@ -504,6 +584,63 @@
   });
 
   // ── Wiring ────────────────────────────────────────────────────────────
+  // ── Board catalog: flag changes + the New-board modal ─────────────────
+  document.getElementById('board').addEventListener('change', async (ev) => {
+    const sel = ev.target.closest('.board-flag');
+    if (!sel) return;
+    const v = sel.value;
+    sel.disabled = true;
+    try {
+      await apiPost('/api/admin/lab?action=boards', {
+        op: 'flags', section: sel.dataset.sec, label: sel.dataset.cat,
+        storeOnly: v !== 'default', pricing: v === 'credits' ? 'credits' : 'free',
+      });
+      BOARDS.set(sel.dataset.sec + '|' + norm(sel.dataset.cat),
+                 { storeOnly: v !== 'default', pricing: v === 'credits' ? 'credits' : 'free' });
+      sel.className = 'board-flag' + (v === 'default' ? '' : (v === 'credits' ? ' paid' : ' store'));
+    } catch (e) {
+      alert('Could not save: ' + (e.message || e));
+      render();
+    }
+    sel.disabled = false;
+  });
+
+  const nbOverlay = document.getElementById('nb-overlay');
+  document.getElementById('new-board').addEventListener('click', () => {
+    document.getElementById('nb-msg').textContent = '';
+    nbOverlay.classList.add('open');
+    document.getElementById('nb-label').focus();
+  });
+  document.getElementById('nb-cancel').addEventListener('click', () => nbOverlay.classList.remove('open'));
+  nbOverlay.addEventListener('click', (ev) => { if (ev.target === nbOverlay) nbOverlay.classList.remove('open'); });
+  document.getElementById('nb-create').addEventListener('click', async () => {
+    const msg = document.getElementById('nb-msg');
+    const label = document.getElementById('nb-label').value.trim();
+    const words = document.getElementById('nb-words').value.split('\n').map((w) => w.trim()).filter(Boolean);
+    if (!label) { msg.textContent = 'Give the board a name.'; msg.className = 'err'; return; }
+    if (!words.length) { msg.textContent = 'Add at least one word (one per line).'; msg.className = 'err'; return; }
+    msg.className = ''; msg.textContent = 'Creating…';
+    const btn = document.getElementById('nb-create');
+    btn.disabled = true;
+    try {
+      const d = await apiPost('/api/admin/lab?action=boards', {
+        op: 'create',
+        section: document.getElementById('nb-section').value,
+        label,
+        storeOnly: document.getElementById('nb-store').checked,
+        pricing: document.querySelector('input[name=nb-pricing]:checked').value,
+        words,
+      });
+      msg.textContent = d.created + ' words created' + (d.skipped ? ', ' + d.skipped + ' already existed' : '') +
+        (d.errors && d.errors.length ? ', ' + d.errors.length + ' failed' : '') + ' — loading…';
+      nbOverlay.classList.remove('open');
+      document.getElementById('nb-label').value = '';
+      document.getElementById('nb-words').value = '';
+      await load();   // the new words come straight from the taxonomy — generate images with the 🎨 buttons
+    } catch (e) { msg.textContent = 'Failed: ' + (e.message || e); msg.className = 'err'; }
+    btn.disabled = false;
+  });
+
   document.getElementById('style-picker').addEventListener('change', () => {
     const id = styleGuideId();
     const url = new URL(location.href);

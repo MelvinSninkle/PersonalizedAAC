@@ -917,6 +917,19 @@ Size: {size}.',
         sort_order  INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (section, label_norm, parent_norm)
       )`;
+    // Board catalog (Lab defaults view): which top-level categories are
+    // store-only (never seeded onto new boards) and whether adding them from
+    // the Word Shop is free or requires credits. No row = default behavior:
+    // seeded on every new board, free in the shop's free section.
+    await db`
+      CREATE TABLE IF NOT EXISTS board_catalog (
+        section    TEXT NOT NULL,
+        label_norm TEXT NOT NULL,
+        store_only BOOLEAN NOT NULL DEFAULT TRUE,
+        pricing    TEXT NOT NULL DEFAULT 'free',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (section, label_norm)
+      )`;
     // Offered TTS voices — data, not code: the Lab adds an ElevenLabs id +
     // label + accent and the onboarding picker updates itself. Seeded from
     // the legacy hardcoded list on first read (see _lib/voices.js).

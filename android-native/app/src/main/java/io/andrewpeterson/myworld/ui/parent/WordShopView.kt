@@ -232,6 +232,7 @@ fun WordShopView(onDismiss: () -> Unit) {
                                 val meta = mutableMapOf<String, Pair<String, String>>()
                                 for (t in tiles) {
                                     val cat = t.category?.takeIf { it.isNotEmpty() } ?: continue
+                                    if (!t.freeBoard) continue   // credits-priced board: not free-addable
                                     val key = "${t.column}|$cat"
                                     if (key !in agg) { order.add(key); agg[key] = intArrayOf(0, 0); meta[key] = t.column to cat }
                                     agg[key]!![0]++
