@@ -103,11 +103,37 @@
       <select id="voice-sel"></select>
       <button id="preview-btn">▶ Preview voice</button>
       <input type="search" id="wq" placeholder="Filter words…" style="width:160px;">
+      <button class="primary" id="review-btn">🎧 Listen &amp; confirm</button>
       <button id="playall-btn">▶ Play all (top 20 visible)</button>
       <button id="stop-btn" disabled>⏹ Stop</button>
       <span id="bench-msg" class="errmsg"></span>
     </div>
     <div id="words"><div class="empty">Loading the standard library…</div></div>
+  </div>
+
+  <!-- Listen & confirm: auto-playing clip-by-clip review. ✓ saves a QC mark
+       (server-side, resumes anywhere), ↻ re-renders (optionally with a
+       phonetic override that ALL boards will speak from then on). -->
+  <div id="review-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:60;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.3);padding:26px 30px;width:min(480px,92vw);text-align:center;">
+      <div id="rv-progress" style="font-size:12px;font-weight:700;letter-spacing:.04em;color:#94a3b8;text-transform:uppercase;">—</div>
+      <div id="rv-word" style="font-size:40px;font-weight:800;color:#0f172a;margin:10px 0 2px;">—</div>
+      <div id="rv-group" style="font-size:13px;color:#94a3b8;margin-bottom:12px;">—</div>
+      <input id="rv-pron" type="text" placeholder="Phonetic override (optional, e.g. Cheery-ohs)"
+             style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font:inherit;text-align:center;">
+      <div id="rv-pron-note" style="font-size:11.5px;color:#94a3b8;margin:6px 0 14px;">Type how it should SOUND, then ↻ — boards speak the override; the label keeps the real spelling.</div>
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <button id="rv-approve" style="flex:1;padding:14px;border:none;border-radius:12px;background:#16a34a;color:#fff;font-weight:800;font-size:17px;cursor:pointer;">✓ Sounds right</button>
+        <button id="rv-retry" style="flex:1;padding:14px;border:none;border-radius:12px;background:#f59e0b;color:#fff;font-weight:800;font-size:17px;cursor:pointer;">↻ Retry</button>
+      </div>
+      <div style="display:flex;gap:14px;justify-content:center;margin-top:12px;font-size:13px;">
+        <button id="rv-replay" style="border:none;background:none;color:#64748b;cursor:pointer;">▶ Replay (space)</button>
+        <button id="rv-skip" style="border:none;background:none;color:#64748b;cursor:pointer;">Skip →</button>
+        <button id="rv-close" style="border:none;background:none;color:#dc2626;cursor:pointer;">✕ Close (esc)</button>
+      </div>
+      <div id="rv-msg" style="font-size:12px;color:#dc2626;min-height:16px;margin-top:8px;"></div>
+      <div style="font-size:11px;color:#cbd5e1;margin-top:2px;">Enter = sounds right · R = retry · → = skip</div>
+    </div>
   </div>
 
 </main>
@@ -153,6 +179,20 @@
   let VOICES = [];        // full catalog, incl. inactive, in sortOrder
   let WORDS = [];         // [{label, group}] unique standard-library labels
   const CLIPS = new Map(); // client-side blob cache: "voiceId|text" → Blob
+  // Listen-and-confirm state for the SELECTED voice: server-persisted ✓ marks
+  // (resume anywhere) + the global phonetic overrides (taxonomy.pronunciation).
+  const QC = { approved: new Set(), pron: {} };
+  function speakText(w) { return (w.taxId && QC.pron[w.taxId]) || w.label; }
+  async function loadQC() {
+    const id = document.getElementById('voice-sel').value;
+    QC.approved = new Set(); QC.pron = {};
+    if (!id) return;
+    try {
+      const r = await api('/api/admin/lab?action=voices&qc=1&voiceId=' + encodeURIComponent(id));
+      QC.approved = new Set(r.approved || []);
+      QC.pron = r.pronunciations || {};
+    } catch (_) {}
+  }
 
   // ------------------------------------------------------------------ player
   // One <audio> for the whole page: starting any clip stops the previous one.
@@ -342,8 +382,8 @@
     for (const [g, list] of groups) {
       html += `<div class="group-title">${esc(g)} <span style="font-weight:400;color:#94a3b8;">(${list.length})</span></div>`;
       html += '<div class="wgrid">' + list.map((x) =>
-        `<div class="wrow" data-i="${x.i}">
-          <span class="wlabel" title="${esc(x.w.label)}">${esc(x.w.label)}</span>
+        `<div class="wrow${QC.approved.has(x.w.label.toLowerCase()) ? ' ok' : ''}" data-i="${x.i}">
+          <span class="wlabel" title="${esc(x.w.label)}">${QC.approved.has(x.w.label.toLowerCase()) ? '✓ ' : ''}${esc(x.w.label)}</span>
           <button data-act="play" title="Play the cached clip (what every board plays)">▶</button>
           <button data-act="regen" title="Re-render with ElevenLabs and overwrite the shared cache">↻</button>
         </div>`).join('') + '</div>';
@@ -363,7 +403,7 @@
     stopPlayAll();
     try {
       const nocache = btn.dataset.act === 'regen';
-      const blob = await withSpinner(btn, () => getClip(w.label, voice.id, nocache));
+      const blob = await withSpinner(btn, () => getClip(speakText(w), voice.id, nocache));
       document.querySelectorAll('.wrow.playing').forEach((el) => el.classList.remove('playing'));
       row.classList.add('playing');
       playBlob(blob, false);
@@ -411,7 +451,7 @@
         row.classList.add('playing');
         row.scrollIntoView({ block: 'nearest' });
         let blob;
-        try { blob = await getClip(w.label, voice.id, false); }
+        try { blob = await getClip(speakText(w), voice.id, false); }
         catch (e) { msg.textContent = e.message || String(e); break; }
         if (playAllStop) break;
         await playBlob(blob, true);
@@ -424,7 +464,126 @@
   });
 
   document.getElementById('wq').addEventListener('input', () => { stopPlayAll(); renderWords(); });
-  document.getElementById('voice-sel').addEventListener('change', stopPlayAll);
+  document.getElementById('voice-sel').addEventListener('change', async () => {
+    stopPlayAll();
+    await loadQC();
+    renderWords();
+  });
+
+  // ------------------------------------------------- listen & confirm mode
+  // Auto-plays clip after clip; ✓ approves (server-side mark, auto-advances,
+  // auto-plays the next), ↻ re-renders — with an optional phonetic override
+  // that boards will speak from then on. Resumes at the first unapproved word.
+  const rv = (id) => document.getElementById(id);
+  let rvIdx = -1, rvOpen = false;
+
+  function rvQueue() { return WORDS; }
+  function rvFirstUnapproved(from) {
+    const q = rvQueue();
+    for (let i = Math.max(0, from); i < q.length; i++) {
+      if (!QC.approved.has(q[i].label.toLowerCase())) return i;
+    }
+    return -1;
+  }
+  function rvShow() {
+    const q = rvQueue();
+    const w = q[rvIdx];
+    if (!w) { rvClose(); return; }
+    const approvedCount = q.filter((x) => QC.approved.has(x.label.toLowerCase())).length;
+    rv('rv-progress').textContent = `word ${rvIdx + 1} of ${q.length} · ${approvedCount} approved`;
+    rv('rv-word').textContent = w.label;
+    rv('rv-group').textContent = w.group;
+    rv('rv-pron').value = (w.taxId && QC.pron[w.taxId]) || '';
+    rv('rv-msg').textContent = '';
+  }
+  async function rvPlay(nocache) {
+    const voice = currentVoice();
+    const w = rvQueue()[rvIdx];
+    if (!voice || !w) return;
+    try {
+      const blob = await getClip(speakText(w), voice.id, !!nocache);
+      playBlob(blob, false);
+    } catch (e) { rv('rv-msg').textContent = e.message || String(e); }
+  }
+  function rvAdvance() {
+    const next = rvFirstUnapproved(rvIdx + 1);
+    if (next < 0) {
+      rv('rv-msg').textContent = '';
+      rv('rv-word').textContent = '🎉 All approved!';
+      rv('rv-progress').textContent = `${rvQueue().length} of ${rvQueue().length} · every word approved for this voice`;
+      rv('rv-group').textContent = 'Close this, or pick another voice.';
+      rvIdx = -1;
+      return;
+    }
+    rvIdx = next;
+    rvShow();
+    rvPlay(false);
+  }
+  async function rvApprove() {
+    const voice = currentVoice();
+    const w = rvQueue()[rvIdx];
+    if (!voice || !w) return;
+    QC.approved.add(w.label.toLowerCase());
+    api('/api/admin/lab?action=voices', { method: 'POST', body: { op: 'qc', voiceId: voice.id, label: w.label, approved: true } })
+      .catch((e) => { rv('rv-msg').textContent = 'Mark not saved: ' + (e.message || e); });
+    rvAdvance();
+  }
+  async function rvRetry() {
+    const voice = currentVoice();
+    const w = rvQueue()[rvIdx];
+    if (!voice || !w) return;
+    const typed = rv('rv-pron').value.trim();
+    const stored = (w.taxId && QC.pron[w.taxId]) || '';
+    try {
+      if (w.taxId && typed !== stored) {
+        // Save the override first — boards speak it from now on; approvals for
+        // this word reset across voices (everyone re-listens to the new say).
+        await api('/api/admin/lab?action=voices', { method: 'POST', body: { op: 'pronounce', taxonomyId: w.taxId, pronunciation: typed } });
+        if (typed) QC.pron[w.taxId] = typed; else delete QC.pron[w.taxId];
+        QC.approved.delete(w.label.toLowerCase());
+        rvShow();
+      }
+      const btn = rv('rv-retry');
+      await withSpinner(btn, async () => {
+        const blob = await getClip(speakText(w), voice.id, true);
+        playBlob(blob, false);
+      });
+    } catch (e) { rv('rv-msg').textContent = e.message || String(e); }
+  }
+  function rvClose() {
+    rvOpen = false;
+    stopAudio();
+    rv('review-overlay').style.display = 'none';
+    renderWords();   // reflect fresh ✓ marks in the list
+  }
+  rv('review-btn') && rv('review-btn').addEventListener('click', async () => {
+    const voice = currentVoice();
+    const msg = document.getElementById('bench-msg');
+    if (!voice) { msg.textContent = 'No active voice selected.'; return; }
+    stopPlayAll();
+    await loadQC();
+    const start = rvFirstUnapproved(0);
+    rvOpen = true;
+    rv('review-overlay').style.display = 'flex';
+    if (start < 0) { rvIdx = -1; rvAdvance(); return; }
+    rvIdx = start;
+    rvShow();
+    rvPlay(false);
+  });
+  rv('rv-approve').addEventListener('click', rvApprove);
+  rv('rv-retry').addEventListener('click', rvRetry);
+  rv('rv-replay').addEventListener('click', () => rvPlay(false));
+  rv('rv-skip').addEventListener('click', () => { rvIdx++; const q = rvQueue(); if (rvIdx >= q.length) rvIdx = q.length - 1; rvShow(); rvPlay(false); });
+  rv('rv-close').addEventListener('click', rvClose);
+  document.addEventListener('keydown', (ev) => {
+    if (!rvOpen) return;
+    if (ev.target === rv('rv-pron') && ev.key !== 'Escape' && ev.key !== 'Enter') return;  // let typing happen
+    if (ev.key === 'Enter') { ev.preventDefault(); if (rvIdx >= 0) rvApprove(); }
+    else if (ev.key === ' ') { ev.preventDefault(); rvPlay(false); }
+    else if (ev.key === 'r' || ev.key === 'R') { ev.preventDefault(); rvRetry(); }
+    else if (ev.key === 'ArrowRight') { ev.preventDefault(); rv('rv-skip').click(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); rvClose(); }
+  });
 
   // ------------------------------------------------------------------ load
   async function load() {
@@ -446,9 +605,10 @@
         const k = label.toLowerCase();
         if (seen.has(k)) continue;
         seen.add(k);
-        WORDS.push({ label: label, group: (t.column || 'Other') + (t.category ? ' › ' + t.category : '') });
+        WORDS.push({ label: label, taxId: t.id, group: (t.column || 'Other') + (t.category ? ' › ' + t.category : '') });
       }
       renderCatalog();
+      await loadQC();
       renderWords();
     } catch (e) {
       document.getElementById('stat').textContent = 'Error';

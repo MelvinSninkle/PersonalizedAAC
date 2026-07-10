@@ -397,7 +397,7 @@ export async function processSeedJob(db, job, getCtx) {
       return { ok: true, imageKey: r.imageKey };
     }
 
-    const tax = (await db`SELECT id, id AS slug, column_name, category, subcategory, label,
+    const tax = (await db`SELECT id, id AS slug, column_name, category, subcategory, label, pronunciation,
                                  prompt_template, subject_mode, related_images, default_image_key
                           FROM taxonomy WHERE id = ${job.taxonomy_id} LIMIT 1`)[0];
     if (!tax) { await jobDone(db, job.id); return { ok: true, skipped: 'taxonomy row gone' }; }
@@ -452,7 +452,7 @@ export async function processSeedJob(db, job, getCtx) {
         } catch (_) {}
       }
       if (!item.sound_key) {
-        const mp3 = await synthesizeVoice({ text: tax.label, voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
+        const mp3 = await synthesizeVoice({ text: tax.pronunciation || tax.label, voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
         if (mp3) {
           const soundKey = `onboarding/${job.child_id}/voice/${randomUUID()}.mp3`;
           await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });
@@ -466,7 +466,7 @@ export async function processSeedJob(db, job, getCtx) {
 
     if (job.kind === 'voice') {
       if (!item.sound_key) {
-        const mp3 = await synthesizeVoice({ text: tax.label, voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
+        const mp3 = await synthesizeVoice({ text: tax.pronunciation || tax.label, voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
         if (mp3) {
           const soundKey = `onboarding/${job.child_id}/voice/${randomUUID()}.mp3`;
           await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });

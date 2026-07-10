@@ -44,9 +44,64 @@ export default async function handler(req, res) {
   if (!gate.ok) return;
   const db = sql();
   await ensureVoicesTable(db);
+  // Listen-and-confirm QC marks: one ✓ per (voice, word). Persisted server-side
+  // so a review session resumes exactly where it stopped, on any machine.
+  await db`
+    CREATE TABLE IF NOT EXISTS voice_qc (
+      voice_id TEXT NOT NULL,
+      label_norm TEXT NOT NULL,
+      approved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (voice_id, label_norm)
+    )`;
   const b = (typeof req.body === 'object' && req.body) || {};
 
   try {
+    // QC state for one voice: approved words + the phonetic overrides
+    // (taxonomy.pronunciation — global per word; boards speak these too).
+    if (req.method === 'GET' && String((req.query && req.query.qc) || '') === '1') {
+      const voiceId = String((req.query && req.query.voiceId) || '').trim();
+      const approved = voiceId
+        ? (await db`SELECT label_norm FROM voice_qc WHERE voice_id = ${voiceId}`).map(r => r.label_norm)
+        : [];
+      let pronunciations = {};
+      try {
+        const rows = await db`SELECT id, pronunciation FROM taxonomy WHERE pronunciation IS NOT NULL AND pronunciation <> ''`;
+        pronunciations = Object.fromEntries(rows.map(r => [r.id, r.pronunciation]));
+      } catch (_) {}
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json({ ok: true, approved, pronunciations });
+      return;
+    }
+
+    if (req.method === 'POST' && b.op === 'qc') {
+      const voiceId = String(b.voiceId || '').trim();
+      const labelNorm = String(b.label || '').trim().toLowerCase();
+      if (!voiceId || !labelNorm) { res.status(400).json({ error: 'voiceId and label required' }); return; }
+      if (b.approved === false) {
+        await db`DELETE FROM voice_qc WHERE voice_id = ${voiceId} AND label_norm = ${labelNorm}`;
+      } else {
+        await db`INSERT INTO voice_qc (voice_id, label_norm) VALUES (${voiceId}, ${labelNorm})
+                 ON CONFLICT (voice_id, label_norm) DO UPDATE SET approved_at = NOW()`;
+      }
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    if (req.method === 'POST' && b.op === 'pronounce') {
+      // Phonetic override on the taxonomy row — what BOARDS speak for this
+      // word from now on (seed voices use pronunciation || label). Clearing
+      // the field removes the override. Approvals for the word reset across
+      // all voices: a new pronunciation means everyone re-listens.
+      const taxonomyId = String(b.taxonomyId || '').trim();
+      if (!taxonomyId) { res.status(400).json({ error: 'taxonomyId required' }); return; }
+      const text = String(b.pronunciation || '').trim().slice(0, 200) || null;
+      const row = (await db`UPDATE taxonomy SET pronunciation = ${text} WHERE id = ${taxonomyId} RETURNING id, label`)[0];
+      if (!row) { res.status(404).json({ error: 'taxonomy row not found' }); return; }
+      try { await db`DELETE FROM voice_qc WHERE label_norm = ${String(row.label).trim().toLowerCase()}`; } catch (_) {}
+      res.status(200).json({ ok: true, taxonomyId, pronunciation: text });
+      return;
+    }
+
     if (req.method === 'GET') {
       const voices = await listVoices(db, { includeInactive: true });
       res.setHeader('Cache-Control', 'no-store');
