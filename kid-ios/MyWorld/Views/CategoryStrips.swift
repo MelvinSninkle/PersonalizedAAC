@@ -114,7 +114,7 @@ struct CategoryChip: View {
         }
         .task(id: category.imageKey) {
             guard let key = category.imageKey, !key.isEmpty else { return }
-            if let img = await MediaCache.shared.image(for: key) {
+            if let img = await MediaCache.shared.image(for: key, maxPixel: 320) {
                 let display = img.trimmingFlatBorders()
                 await MainActor.run { self.image = display }
             }

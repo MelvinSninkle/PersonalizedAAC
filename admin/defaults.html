@@ -21,69 +21,188 @@
     font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink);
   }
   button { cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
   button.primary { background:var(--pink); color:#fff; border-color:var(--pink); font-weight:600; }
+  button.danger { background:#fff; color:#b91c1c; border-color:#fecaca; }
   a.back { color:var(--pink); text-decoration:none; font-size:13px; }
+  .chip-warn {
+    font-size:12px; background:#fffbeb; color:#92400e; border:1px solid #fcd34d;
+    border-radius:999px; padding:4px 10px;
+  }
+  #progress { font-size:12px; color:var(--pink); font-weight:600; min-height:1em; width:100%; }
 
   main { padding:16px 18px 60px; }
-  .group-title {
-    margin:22px 0 10px; font-size:14px; font-weight:700; color:var(--pink);
-    text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--line); padding-bottom:6px;
-  }
-  .grid {
-    display:grid; grid-template-columns:repeat(auto-fill, minmax(118px, 1fr)); gap:12px;
-  }
-  .tile {
-    position:relative; aspect-ratio:1/1; border-radius:14px; overflow:hidden;
-    display:flex; align-items:center; justify-content:center; text-align:center;
-    background:#fff; border:1px solid var(--line);
-  }
-  .tile img { width:100%; height:100%; object-fit:cover; display:block; }
-  /* Personalized → empty tile with just the word. */
-  .tile.personal { border:2px dashed #cbd5e1; background:#f8fafc; }
-  .tile.personal .word { font-size:15px; font-weight:700; color:#334155; padding:6px; }
-  .tile.personal .who { position:absolute; bottom:5px; left:0; right:0; font-size:9px; color:#94a3b8; text-transform:uppercase; letter-spacing:.05em; }
-  /* Default-able but no image yet → flag it. */
-  .tile.missing { border:2px dashed #f59e0b; background:#fffbeb; }
-  .tile.missing .word { font-size:15px; font-weight:700; color:#92400e; padding:6px; }
-  .tile.missing .who { position:absolute; bottom:5px; left:0; right:0; font-size:9px; color:#b45309; text-transform:uppercase; letter-spacing:.05em; }
-  .tile .cap { position:absolute; bottom:0; left:0; right:0; font-size:10px; color:#64748b; background:rgba(255,255,255,.85); padding:2px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .tile .badge { position:absolute; top:5px; right:5px; font-size:14px; }
-  /* Folder icons — their own lavender family so chips read separately from tiles. */
-  .tile.folder { border-color:#c4b5fd; background:#f5f3ff; }
-  .tile.folder.missing { border:2px dashed #8b5cf6; background:#f5f3ff; }
-  .tile.folder.missing .word { color:#5b21b6; }
-  .tile.folder.missing .who { color:#7c3aed; }
-  .empty { color:var(--muted); padding:40px; text-align:center; }
   .legend { display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:4px; }
   .legend span { display:inline-flex; align-items:center; gap:6px; }
   .swatch { width:14px; height:14px; border-radius:4px; display:inline-block; }
+  .empty { color:var(--muted); padding:40px; text-align:center; }
+
+  /* ── Board-like layout: column → category → subcategory ───────────── */
+  .col-section { margin:28px 0 12px; }
+  .col-head {
+    display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+    border-bottom:3px solid var(--pink); padding-bottom:8px; margin-bottom:14px;
+  }
+  .col-head h2 { margin:0; font-size:24px; color:var(--pink); text-transform:capitalize; letter-spacing:.02em; }
+  .col-head .counts { font-size:13px; color:var(--muted); }
+  .col-head .counts b { color:var(--ink); }
+  .cat-group { margin:18px 0 8px; }
+  .cat-title {
+    font-size:16px; font-weight:800; color:#4c1d95; margin:14px 0 8px;
+    text-transform:uppercase; letter-spacing:.05em;
+  }
+  .sub-group {
+    margin:14px 0 10px 26px; padding-left:16px; border-left:3px solid #ddd6fe;
+  }
+  .sub-title { font-size:14px; font-weight:700; color:#6d28d9; margin:8px 0 8px; }
+  .grid {
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:16px;
+  }
+
+  /* Cards: LARGE image with the word in big clear text under it (spell-check view). */
+  .card {
+    position:relative; border-radius:16px; overflow:hidden; background:#fff;
+    border:1px solid var(--line); display:flex; flex-direction:column;
+  }
+  .card .imgwrap {
+    position:relative; aspect-ratio:1/1; background:#f8fafc;
+    display:flex; align-items:center; justify-content:center; text-align:center;
+  }
+  .card .imgwrap img { width:100%; height:100%; object-fit:cover; display:block; }
+  .card .word {
+    padding:8px 8px 10px; font-size:20px; line-height:1.15; font-weight:800;
+    text-align:center; color:var(--ink); word-break:break-word;
+  }
+  .card.chip { border-color:#c4b5fd; background:#f5f3ff; }
+  .card.chip .word { color:#4c1d95; font-size:18px; }
+  .card.chip .word::before { content:'📁 '; font-weight:400; }
+  /* Missing image → amber. Failed → red. Personalized (generic mode) → gray dashed. */
+  .card.missing { border:2px dashed #f59e0b; }
+  .card.missing .imgwrap { background:#fffbeb; }
+  .card.failed { border:2px solid #ef4444; }
+  .card.failed .imgwrap { background:#fef2f2; }
+  .card.personal { border:2px dashed #cbd5e1; }
+  .card.personal .imgwrap { background:#f8fafc; }
+  .card .placeholder { font-size:15px; font-weight:700; color:#94a3b8; padding:10px; }
+  .card.missing .placeholder { color:#92400e; }
+  .card.failed .placeholder { color:#b91c1c; }
+  .badge {
+    position:absolute; top:8px; left:8px; font-size:11px; font-weight:800;
+    border-radius:999px; padding:3px 9px; text-transform:uppercase; letter-spacing:.04em;
+  }
+  .badge.missing { background:#fef3c7; color:#92400e; border:1px solid #f59e0b; }
+  .badge.failed { background:#fee2e2; color:#b91c1c; border:1px solid #ef4444; }
+  .regen {
+    position:absolute; bottom:8px; right:8px; padding:4px 8px; font-size:14px;
+    border-radius:9px; background:rgba(255,255,255,.92); border:1px solid var(--line);
+  }
+  .card.busy .regen { pointer-events:none; }
+  .card.busy .imgwrap::after {
+    content:''; position:absolute; inset:0; background:rgba(255,255,255,.6);
+  }
+  .card.busy .imgwrap::before {
+    content:''; position:absolute; z-index:1; width:34px; height:34px; top:calc(50% - 17px); left:calc(50% - 17px);
+    border:4px solid #f3c1d8; border-top-color:var(--pink); border-radius:50%;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* Board catalog controls (store-only / pricing per category) */
+  .cat-title { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  select.board-flag {
+    font-size:11px; font-weight:600; padding:2px 6px; border-radius:999px;
+    border:1px solid var(--line); background:#fff; color:#6b7280; cursor:pointer;
+  }
+  select.board-flag.store { border-color:#c4b5fd; background:#f5f3ff; color:#6d28d9; }
+  select.board-flag.paid { border-color:#fbbf24; background:#fffbeb; color:#b45309; }
+  #nb-overlay {
+    position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center;
+    background:rgba(31,41,55,.45);
+  }
+  #nb-overlay.open { display:flex; }
+  #nb-card {
+    background:#fff; border-radius:14px; padding:18px 20px; width:min(440px, 92vw);
+    box-shadow:0 24px 70px rgba(0,0,0,.3); display:flex; flex-direction:column; gap:10px;
+  }
+  #nb-card h3 { margin:0 0 2px; font-size:16px; color:var(--pink); }
+  #nb-card label { font-size:12px; font-weight:600; color:#374151; display:flex; flex-direction:column; gap:4px; }
+  #nb-card input[type=text], #nb-card select, #nb-card textarea {
+    font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px;
+  }
+  #nb-card textarea { min-height:110px; resize:vertical; }
+  #nb-card .radios { display:flex; gap:14px; font-weight:400; }
+  #nb-card .radios label { flex-direction:row; align-items:center; gap:5px; font-weight:400; }
+  #nb-msg { font-size:12px; color:#6b7280; min-height:16px; }
+  #nb-msg.err { color:#b91c1c; }
 </style>
 </head>
 <body>
 <header>
   <h1>🖼️ Default board</h1>
+  <select id="style-picker" title="Which style's default set to review">
+    <option value="">Generic (unstyled)</option>
+  </select>
+  <span class="chip-warn" id="ref-warn" hidden>⚠️ upload 👤/🧸 refs on the Lab style card for best results</span>
   <span class="stat" id="stat">Loading…</span>
   <div class="spacer"></div>
   <input type="search" id="q" placeholder="Search word…" style="width:150px;">
   <select id="filter">
-    <option value="all">All tiles</option>
+    <option value="all">All</option>
+    <option value="missing">Missing</option>
+    <option value="failed">Failed</option>
     <option value="defaultable">Default-able only</option>
-    <option value="missing">Missing default</option>
-    <option value="personal">Personalized only</option>
-    <option value="folders">Folder icons only</option>
   </select>
   <button id="refresh">↻ Refresh</button>
+  <button id="new-board" title="Create a new board (category + words) in the taxonomy — optionally store-only, free or credits.">➕ New board</button>
   <button id="push-defaults" title="Copy the reference board's (Fletcher's) tile art AND folder icons into the shared defaults every new board inherits. Only missing entries are copied — safe to re-run.">⬆️ Push from reference</button>
+  <button id="gen-tiles" class="primary" hidden title="Generate style-matched art for every tile that doesn't have one yet.">🎨 Generate missing tiles</button>
+  <button id="gen-chips" class="primary" hidden title="Generate style-matched folder icons for every category/subcategory chip that doesn't have one yet.">🎨 Generate missing chips</button>
+  <button id="regen-all" class="danger" hidden title="Re-render EVERY tile and chip for this style, replacing existing art.">♻️ Regenerate ALL</button>
   <a class="back" href="/admin/taxonomy.html">← Taxonomy</a>
+  <div id="progress"></div>
 </header>
 <main>
   <div class="legend">
-    <span><i class="swatch" style="background:#fff;border:1px solid #e5e7eb;"></i> default image</span>
-    <span><i class="swatch" style="background:#fffbeb;border:2px dashed #f59e0b;"></i> default-able, no image yet</span>
-    <span><i class="swatch" style="background:#f8fafc;border:2px dashed #cbd5e1;"></i> personalized (per-child)</span>
+    <span><i class="swatch" style="background:#fff;border:1px solid #e5e7eb;"></i> has image</span>
+    <span><i class="swatch" style="background:#fffbeb;border:2px dashed #f59e0b;"></i> missing</span>
+    <span><i class="swatch" style="background:#fef2f2;border:2px solid #ef4444;"></i> failed (hover for error)</span>
+    <span><i class="swatch" style="background:#f8fafc;border:2px dashed #cbd5e1;"></i> personalized (per-child, generic mode)</span>
+    <span><i class="swatch" style="background:#f5f3ff;border:1px solid #c4b5fd;"></i> folder chip</span>
   </div>
   <div id="board"><div class="empty">Loading the default board…</div></div>
 </main>
+
+<div id="nb-overlay">
+  <div id="nb-card">
+    <h3>➕ New board</h3>
+    <label>Column
+      <select id="nb-section">
+        <option value="nouns">Middle Column (Gestalts/Nouns/Adjectives)</option>
+        <option value="people">Left Column (People)</option>
+        <option value="verbs">Right Column (Verbs)</option>
+        <option value="needs">Bottom Row (Core Words)</option>
+      </select>
+    </label>
+    <label>Board name (the category families see)
+      <input type="text" id="nb-label" placeholder="e.g. Dinosaurs" maxlength="80">
+    </label>
+    <label style="flex-direction:row;align-items:center;gap:8px;">
+      <input type="checkbox" id="nb-store" checked style="margin:0;"> Store only (never on new boards — families add it from the Word Shop)
+    </label>
+    <div class="radios" id="nb-pricing-row">
+      <label><input type="radio" name="nb-pricing" value="free" checked> Free to add</label>
+      <label><input type="radio" name="nb-pricing" value="credits"> ⭐ Requires credits</label>
+    </div>
+    <label>Words — one per line
+      <textarea id="nb-words" placeholder="t-rex&#10;triceratops&#10;stegosaurus"></textarea>
+    </label>
+    <div id="nb-msg"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button id="nb-cancel">Cancel</button>
+      <button id="nb-create" class="primary">Create board</button>
+    </div>
+  </div>
+</div>
 
 <script>
   // Same admin auth as the other tools: session cookie (preferred) or the legacy
@@ -97,118 +216,281 @@
     if (!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0, 160));
     return r.json();
   }
+  async function apiPost(path, body) {
+    const headers = {};
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const opts = { method: 'POST', headers, credentials: 'same-origin' };
+    if (body !== undefined) { headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+    const r = await fetch(path, opts);
+    if (r.status === 401 || r.status === 403) throw new Error('Sign in as an admin first (open /login), then return here.');
+    if (!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0, 160));
+    return r.json();
+  }
 
-  let TILES = [], FOLDERS = [];
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const norm = (s) => String(s == null ? '' : s).trim().toLowerCase();
+  const mediaSrc = (key) => '/api/media?key=' + encodeURIComponent(key);
 
-  function passesFilter(t, mode) {
-    if (mode === 'defaultable') return t.defaultable;
-    if (mode === 'missing') return t.defaultable && !t.imageKey;
-    if (mode === 'personal') return !t.defaultable;
+  // Board column order — same as the kid app renders them.
+  const COLUMN_ORDER = ['needs', 'people', 'nouns', 'verbs'];
+
+  let MODE = 'generic';          // 'generic' | 'style'
+  let STYLES = [];               // from /api/admin/style-guides
+  let STYLE_INFO = null;         // {id,label,personRefKey,stuffRefKey} in style mode
+  let TILES = [];                // unified: {id,label,column,category,subcategory,defaultable,imageKey,status,error}
+  let CHIPS = [];                // unified: {section,label,parent,imageKey,status,error} (parent=null in generic mode)
+  let BUSY = false;              // a bulk loop is running
+  let BOARDS = new Map();        // 'section|category_norm' → {storeOnly, pricing} (Lab board catalog)
+
+  function styleGuideId() { return parseInt(document.getElementById('style-picker').value, 10) || 0; }
+
+  // ── Tile / chip state ─────────────────────────────────────────────────
+  function tileState(t) {
+    if (t.status === 'failed') return 'failed';
+    if (t.imageKey) return 'done';
+    // Style mode covers person-y tiles too (rendered with the style's person
+    // reference), so everything without art counts as missing there.
+    if (MODE === 'style') return 'missing';
+    return t.defaultable ? 'missing' : 'personal';
+  }
+  function chipState(c) {
+    if (c.status === 'failed') return 'failed';
+    return c.imageKey ? 'done' : 'missing';
+  }
+  function tileVisible(t, mode, q) {
+    if (q && !norm(t.label).includes(q)) return false;
+    const st = tileState(t);
+    if (mode === 'missing') return st === 'missing';
+    if (mode === 'failed') return st === 'failed';
+    if (mode === 'defaultable') return !!t.defaultable;
+    return true;
+  }
+  function chipVisible(c, mode, q) {
+    if (mode === 'defaultable') return false;
+    if (q && !norm(c.label).includes(q)) return false;
+    const st = chipState(c);
+    if (mode === 'missing') return st === 'missing';
+    if (mode === 'failed') return st === 'failed';
     return true;
   }
 
-  function tileHTML(t) {
-    const cap = esc(t.label);
-    if (t.defaultable && t.imageKey) {
-      return `<div class="tile" title="${cap} — default image">
-        <img loading="lazy" src="/api/media?key=${encodeURIComponent(t.imageKey)}" alt="${cap}">
-      </div>`;
+  // Chip lookup. Style mode has exact {section,label,parent}; generic folders
+  // carry no parent, so fall back to section+label.
+  function chipMaps() {
+    const full = new Map(), byLabel = new Map();
+    for (const c of CHIPS) {
+      full.set(c.section + '|' + norm(c.label) + '|' + norm(c.parent), c);
+      const lk = c.section + '|' + norm(c.label);
+      if (!byLabel.has(lk)) byLabel.set(lk, c);
     }
-    if (t.defaultable && !t.imageKey) {
-      return `<div class="tile missing" title="${cap} — default-able but no default image yet">
-        <span class="word">${cap}</span><span class="who">no default</span><span class="badge">⚠️</span>
-      </div>`;
-    }
-    return `<div class="tile personal" title="${cap} — personalized per child">
-      <span class="word">${cap}</span><span class="who">personalized</span>
-    </div>`;
+    return { full, byLabel };
+  }
+  function findChip(maps, section, label, parent) {
+    return maps.full.get(section + '|' + norm(label) + '|' + norm(parent)) ||
+           maps.byLabel.get(section + '|' + norm(label)) || null;
   }
 
-  function folderHTML(f) {
-    const cap = esc(f.section + ' › ' + f.label);
-    if (f.imageKey) {
-      return `<div class="tile folder" title="${cap} — folder icon">
-        <img loading="lazy" src="/api/media?key=${encodeURIComponent(f.imageKey)}" alt="${esc(f.label)}">
-        <div class="cap">${esc(f.label)}</div>
-      </div>`;
-    }
-    return `<div class="tile folder missing" title="${cap} — no shared icon yet">
-      <span class="word">${esc(f.label)}</span><span class="who">no icon</span><span class="badge">⚠️</span>
-    </div>`;
+  // ── Card HTML (large image + big word under it, for spell-checking) ──
+  function badgeHTML(state, error) {
+    if (state === 'missing') return '<span class="badge missing">missing</span>';
+    if (state === 'failed') return '<span class="badge failed" title="' + esc(error || 'generation failed') + '">failed</span>';
+    return '';
+  }
+  function regenBtnHTML(data) {
+    if (MODE !== 'style') return '';
+    return '<button class="regen" title="Regenerate this image in the selected style" ' + data + '>🎨</button>';
+  }
+  function tileCardHTML(t) {
+    const state = tileState(t);
+    const cls = state === 'done' ? '' : ' ' + state;
+    const title = state === 'failed' ? esc(t.error || 'generation failed') : esc(t.label);
+    const img = t.imageKey
+      ? '<img loading="lazy" src="' + mediaSrc(t.imageKey) + '" alt="' + esc(t.label) + '">'
+      : '<span class="placeholder">' + (state === 'personal' ? 'personalized per child' : 'no image yet') + '</span>';
+    return '<div class="card' + cls + '" data-card="t:' + esc(t.id) + '" title="' + title + '">' +
+      '<div class="imgwrap">' + img + badgeHTML(state, t.error) +
+      regenBtnHTML('data-kind="tile" data-id="' + esc(t.id) + '"') + '</div>' +
+      '<div class="word">' + esc(t.label) + '</div></div>';
+  }
+  function chipCardHTML(c) {
+    const state = chipState(c);
+    const cls = state === 'done' ? '' : ' ' + state;
+    const title = state === 'failed' ? esc(c.error || 'generation failed') : esc(c.section + ' › ' + c.label);
+    const img = c.imageKey
+      ? '<img loading="lazy" src="' + mediaSrc(c.imageKey) + '" alt="' + esc(c.label) + '">'
+      : '<span class="placeholder">no icon yet</span>';
+    const data = 'data-kind="chip" data-sec="' + esc(c.section) + '" data-lbl="' + esc(c.label) + '" data-par="' + esc(c.parent || '') + '"';
+    return '<div class="card chip' + cls + '" data-card="c:' + esc(c.section + '|' + norm(c.label) + '|' + norm(c.parent)) + '" title="' + title + '">' +
+      '<div class="imgwrap">' + img + badgeHTML(state, c.error) + regenBtnHTML(data) + '</div>' +
+      '<div class="word">' + esc(c.label) + '</div></div>';
   }
 
+  // Board-catalog tag on each category: where the board lives + its price.
+  function boardFlagHTML(section, cat) {
+    const f = BOARDS.get(section + '|' + norm(cat)) || { storeOnly: false, pricing: 'free' };
+    const v = !f.storeOnly ? 'default' : (f.pricing === 'credits' ? 'credits' : 'free');
+    const cls = v === 'default' ? '' : (v === 'credits' ? ' paid' : ' store');
+    return '<select class="board-flag' + cls + '" data-sec="' + esc(section) + '" data-cat="' + esc(cat) + '"' +
+      ' title="Where this board lives: on every new board, or store-only (free / credits)">' +
+      '<option value="default"' + (v === 'default' ? ' selected' : '') + '>on new boards</option>' +
+      '<option value="free"' + (v === 'free' ? ' selected' : '') + '>store only · free</option>' +
+      '<option value="credits"' + (v === 'credits' ? ' selected' : '') + '>store only · ⭐ credits</option>' +
+      '</select>';
+  }
+
+  // ── Render: column sections → category groups → subcategory sub-groups ─
   function render() {
     const mode = document.getElementById('filter').value;
-    const q = document.getElementById('q').value.trim().toLowerCase();
+    const q = norm(document.getElementById('q').value);
     const board = document.getElementById('board');
-    const shown = TILES.filter((t) => passesFilter(t, mode) && (!q || String(t.label).toLowerCase().includes(q)));
-    // Folder icons: their own lavender block up top (or exclusively via the
-    // "Folder icons only" filter) — grouped by section, sorted server-side.
-    let folderBlock = '';
-    if (mode === 'all' || mode === 'folders') {
-      const shownF = FOLDERS.filter((f) => !q || f.label.toLowerCase().includes(q));
-      const bySec = new Map();
-      for (const f of shownF) { if (!bySec.has(f.section)) bySec.set(f.section, []); bySec.get(f.section).push(f); }
-      for (const [sec, list] of bySec) {
-        folderBlock += `<div class="group-title" style="color:#6d28d9;">📁 ${esc(sec)} folders (${list.length})</div>`;
-        folderBlock += '<div class="grid">' + list.map(folderHTML).join('') + '</div>';
+    const maps = chipMaps();
+
+    // Group tiles by column → category → subcategory, preserving server order.
+    const cols = new Map();
+    for (const t of TILES) {
+      const colKey = norm(t.column) || 'other';
+      if (!cols.has(colKey)) cols.set(colKey, new Map());
+      const cats = cols.get(colKey);
+      const cat = String(t.category || '').trim();
+      if (!cats.has(cat)) cats.set(cat, { direct: [], subs: new Map() });
+      const g = cats.get(cat);
+      const sub = String(t.subcategory || '').trim();
+      if (!sub) g.direct.push(t);
+      else {
+        if (!g.subs.has(sub)) g.subs.set(sub, []);
+        g.subs.get(sub).push(t);
       }
     }
-    if (mode === 'folders') { board.innerHTML = folderBlock || '<div class="empty">No folders match.</div>'; return; }
-    if (!shown.length && !folderBlock) { board.innerHTML = '<div class="empty">No tiles match.</div>'; return; }
 
-    // Group by column, then category, preserving the server's order.
-    const groups = new Map();
-    for (const t of shown) {
-      const key = (t.column || 'Other') + (t.category ? ' › ' + t.category : '');
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(t);
-    }
+    const order = COLUMN_ORDER.concat([...cols.keys()].filter((c) => !COLUMN_ORDER.includes(c)).sort());
     let html = '';
-    for (const [key, list] of groups) {
-      html += `<div class="group-title">${esc(key)} <span style="font-weight:400;color:#94a3b8;">(${list.length})</span></div>`;
-      html += '<div class="grid">' + list.map(tileHTML).join('') + '</div>';
+    for (const colKey of order) {
+      const cats = cols.get(colKey);
+      if (!cats) continue;
+      let colHTML = '';
+      let colMissing = 0, colFailed = 0, colTotal = 0;
+      for (const [cat, g] of cats) {
+        const allCatTiles = g.direct.concat(...g.subs.values());
+        colTotal += allCatTiles.length;
+        for (const t of allCatTiles) {
+          const st = tileState(t);
+          if (st === 'missing') colMissing++;
+          if (st === 'failed') colFailed++;
+        }
+        // Category chip card first, then the category's direct tiles.
+        const catChip = cat ? findChip(maps, colKey, cat, '') : null;
+        const showCatChip = catChip && chipVisible(catChip, mode, q);
+        const direct = g.direct.filter((t) => tileVisible(t, mode, q));
+        let catCards = (showCatChip ? chipCardHTML(catChip) : '') + direct.map(tileCardHTML).join('');
+        let catHTML = catCards ? '<div class="grid">' + catCards + '</div>' : '';
+        // Then each subcategory as an indented sub-group: its chip + its tiles.
+        for (const [sub, list] of g.subs) {
+          const subChip = findChip(maps, colKey, sub, cat);
+          const showSubChip = subChip && chipVisible(subChip, mode, q);
+          const subTiles = list.filter((t) => tileVisible(t, mode, q));
+          if (!showSubChip && !subTiles.length) continue;
+          catHTML += '<div class="sub-group"><div class="sub-title">' + esc(sub) + ' <span style="font-weight:400;color:#94a3b8;">(' + list.length + ')</span></div>' +
+            '<div class="grid">' + (showSubChip ? chipCardHTML(subChip) : '') + subTiles.map(tileCardHTML).join('') + '</div></div>';
+        }
+        if (!catHTML) continue;
+        colHTML += '<div class="cat-group">' +
+          (cat ? '<div class="cat-title">' + esc(cat) + boardFlagHTML(colKey, cat) + '</div>' : '') + catHTML + '</div>';
+      }
+      if (!colHTML) continue;
+      html += '<section class="col-section"><div class="col-head"><h2>' + esc(colKey) + '</h2>' +
+        '<span class="counts"><b>' + colTotal + '</b> tiles' +
+        (colMissing ? ' · <b style="color:#b45309;">' + colMissing + '</b> missing' : '') +
+        (colFailed ? ' · <b style="color:#b91c1c;">' + colFailed + '</b> failed' : '') +
+        '</span></div>' + colHTML + '</section>';
     }
-    board.innerHTML = folderBlock + html;
+    board.innerHTML = html || '<div class="empty">Nothing matches.</div>';
+  }
+
+  function updateStat() {
+    const el = document.getElementById('stat');
+    const tMiss = TILES.filter((t) => tileState(t) === 'missing').length;
+    const tFail = TILES.filter((t) => tileState(t) === 'failed').length;
+    const tDone = TILES.filter((t) => !!t.imageKey).length;
+    const cDone = CHIPS.filter((c) => !!c.imageKey).length;
+    if (MODE === 'style') {
+      el.innerHTML = '<b>' + esc(STYLE_INFO ? STYLE_INFO.label : '') + '</b> — tiles <b>' + tDone + '</b>/' + TILES.length +
+        (tMiss ? ' <span class="warn">(' + tMiss + ' missing)</span>' : '') +
+        (tFail ? ' <span class="warn">(' + tFail + ' failed)</span>' : '') +
+        ' · chips <b>' + cDone + '</b>/' + CHIPS.length +
+        (CHIPS.length - cDone ? ' <span class="warn">(' + (CHIPS.length - cDone) + ' to go)</span>' : '');
+    } else {
+      const personal = TILES.filter((t) => !t.defaultable).length;
+      el.innerHTML = '<b>' + TILES.length + '</b> tiles · <b>' + tDone + '</b> default images · ' +
+        '<span class="warn"><b>' + tMiss + '</b> missing</span> · <b>' + personal + '</b> personalized · ' +
+        '📁 <b>' + cDone + '</b>/' + CHIPS.length + ' folder icons' +
+        (CHIPS.length - cDone ? ' <span class="warn">(' + (CHIPS.length - cDone) + ' missing)</span>' : '');
+    }
+  }
+
+  function updateModeUI() {
+    const style = MODE === 'style';
+    document.getElementById('push-defaults').hidden = style;
+    document.getElementById('gen-tiles').hidden = !style;
+    document.getElementById('gen-chips').hidden = !style;
+    document.getElementById('regen-all').hidden = !style;
+    const warn = document.getElementById('ref-warn');
+    warn.hidden = !(style && STYLE_INFO && (!STYLE_INFO.personRefKey || !STYLE_INFO.stuffRefKey));
+  }
+
+  // ── Load ──────────────────────────────────────────────────────────────
+  async function loadStyles() {
+    try {
+      const d = await api('/api/admin/style-guides');
+      STYLES = d.styleGuides || [];
+    } catch (_) { STYLES = []; }
+    const sel = document.getElementById('style-picker');
+    const want = new URLSearchParams(location.search).get('styleGuideId') || '';
+    sel.innerHTML = '<option value="">Generic (unstyled)</option>' +
+      STYLES.map((s) => '<option value="' + s.id + '">' + esc(s.label) + (s.active ? '' : ' (inactive)') + '</option>').join('');
+    if (want && STYLES.some((s) => String(s.id) === String(want))) sel.value = want;
   }
 
   async function load() {
     const board = document.getElementById('board');
     board.innerHTML = '<div class="empty">Loading the default board…</div>';
+    const id = styleGuideId();
+    MODE = id ? 'style' : 'generic';
     try {
-      const d = await api('/api/admin/lab?action=defaults-view');
-      TILES = d.tiles || [];
-      FOLDERS = d.folders || [];
-      const fHave = d.foldersWithIcon || 0, fMiss = FOLDERS.length - fHave;
-      document.getElementById('stat').innerHTML =
-        `<b>${d.total}</b> tiles · <b>${d.withImage}</b> default images · ` +
-        `<span class="warn"><b>${d.missing}</b> missing</span> · <b>${d.personalized}</b> personalized · ` +
-        `📁 <b>${fHave}</b>/${FOLDERS.length} folder icons` + (fMiss ? ` <span class="warn">(${fMiss} missing)</span>` : '');
+      // Board catalog rides along in both modes (it's style-independent).
+      try {
+        const bd = await api('/api/admin/lab?action=boards');
+        BOARDS = new Map((bd.boards || []).map((b) => [b.section + '|' + norm(b.label), b]));
+      } catch (_) { BOARDS = new Map(); }
+      if (id) {
+        const d = await api('/api/admin/lab?action=style-defaults&styleGuideId=' + id);
+        STYLE_INFO = d.style || null;
+        TILES = d.tiles || [];
+        CHIPS = (d.chips || []).map((c) => ({ ...c, parent: c.parent || '' }));
+      } else {
+        const d = await api('/api/admin/lab?action=defaults-view');
+        STYLE_INFO = null;
+        TILES = (d.tiles || []).map((t) => ({ ...t, status: null, error: null }));
+        // Generic folders have no parent info — chip lookup falls back to
+        // section+label, matching the old flat folder list.
+        CHIPS = (d.folders || []).map((f) => ({ section: f.section, label: f.label, parent: null, imageKey: f.imageKey || null, status: null, error: null }));
+      }
+      updateModeUI();
+      updateStat();
       render();
     } catch (e) {
       board.innerHTML = '<div class="empty">' + esc(e.message || e) + '</div>';
       document.getElementById('stat').textContent = 'Error';
+      updateModeUI();
     }
   }
 
-  // ⬆️ Push defaults: run the same chunked seed-defaults loops the taxonomy
-  // page uses (populate = tile art, cats = folder icons) so the default-board
-  // panel itself can push headers/subheaders — then reload the audit.
-  async function apiPost(path) {
-    const headers = {};
-    if (token) headers.Authorization = 'Bearer ' + token;
-    const r = await fetch(path, { method: 'POST', headers, credentials: 'same-origin' });
-    if (r.status === 401 || r.status === 403) throw new Error('Sign in as an admin first (open /login), then return here.');
-    if (!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0, 160));
-    return r.json();
-  }
+  // ── Generic mode: the existing chunked seed-defaults Push loop ────────
   async function pushLoop(mode) {
     let offset = 0, processed = 0, total = 0;
     for (let i = 0; i < 200; i++) {
-      const r = await apiPost(`/api/admin/lab?action=seed-defaults&mode=${mode}&offset=${offset}`);
+      const r = await apiPost('/api/admin/lab?action=seed-defaults&mode=' + mode + '&offset=' + offset);
       total = r.total || 0; processed += r.processed || 0;
-      document.getElementById('stat').textContent = `Pushing ${mode}: ${r.nextOffset}/${total}…`;
+      document.getElementById('stat').textContent = 'Pushing ' + mode + ': ' + r.nextOffset + '/' + total + '…';
       if (r.done || r.nextOffset <= offset) break;
       offset = r.nextOffset;
     }
@@ -221,17 +503,157 @@
     try {
       const t = await pushLoop('populate');
       const f = await pushLoop('cats');
-      alert(`Pushed ${t.processed} of ${t.total} tile defaults + ${f.processed} of ${f.total} folder icons.`);
+      alert('Pushed ' + t.processed + ' of ' + t.total + ' tile defaults + ' + f.processed + ' of ' + f.total + ' folder icons.');
       await load();
     } catch (e) {
       alert('Push failed: ' + (e.message || e));
     } finally { btn.disabled = false; }
   });
 
+  // ── Style mode: chunked bulk generation ───────────────────────────────
+  function setBusy(b) {
+    BUSY = b;
+    for (const id of ['gen-tiles', 'gen-chips', 'regen-all', 'refresh', 'push-defaults', 'style-picker']) {
+      document.getElementById(id).disabled = b;
+    }
+  }
+  async function bulkLoop(kind, force) {
+    const id = styleGuideId();
+    const progress = document.getElementById('progress');
+    let offset = 0, generated = 0, skipped = 0, failed = 0, total = 0;
+    for (let i = 0; i < 5000; i++) {
+      const r = await apiPost('/api/admin/lab?action=style-defaults',
+        { styleGuideId: id, op: 'generate', kind, offset, limit: 3, force: !!force });
+      total = r.total || 0; generated += r.generated || 0; skipped += r.skipped || 0; failed += r.failed || 0;
+      progress.textContent = '🎨 ' + kind + ': ' + r.next + ' of ' + total +
+        ' — ' + generated + ' generated, ' + skipped + ' skipped' + (failed ? ', ' + failed + ' failed' : '');
+      if (r.done || r.next <= offset) break;
+      offset = r.next;
+    }
+    return { generated, skipped, failed, total };
+  }
+  async function runBulk(kinds, force) {
+    if (BUSY) return;
+    setBusy(true);
+    const progress = document.getElementById('progress');
+    try {
+      const parts = [];
+      for (const kind of kinds) {
+        const r = await bulkLoop(kind, force);
+        parts.push(kind + ': ' + r.generated + ' generated, ' + r.skipped + ' skipped' + (r.failed ? ', ' + r.failed + ' FAILED' : '') + ' of ' + r.total);
+      }
+      progress.textContent = '✓ Done — ' + parts.join(' · ');
+      await load();
+    } catch (e) {
+      progress.textContent = '✗ ' + (e.message || e);
+    } finally { setBusy(false); }
+  }
+  document.getElementById('gen-tiles').addEventListener('click', () => runBulk(['tiles'], false));
+  document.getElementById('gen-chips').addEventListener('click', () => runBulk(['chips'], false));
+  document.getElementById('regen-all').addEventListener('click', () => {
+    if (!confirm('Regenerate EVERY tile and chip for this style?\n\nThis re-renders the whole set (existing art is replaced) and costs a generation per image. It can take a long while — leave this tab open.')) return;
+    runBulk(['tiles', 'chips'], true);
+  });
+
+  // ── Per-image regenerate (style mode) ─────────────────────────────────
+  document.getElementById('board').addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('.regen');
+    if (!btn || MODE !== 'style') return;
+    const card = btn.closest('.card');
+    if (!card || card.classList.contains('busy')) return;
+    card.classList.add('busy');
+    const id = styleGuideId();
+    try {
+      let r;
+      if (btn.dataset.kind === 'tile') {
+        r = await apiPost('/api/admin/lab?action=style-defaults', { styleGuideId: id, op: 'regen', taxonomyId: btn.dataset.id });
+        const t = TILES.find((x) => String(x.id) === String(btn.dataset.id));
+        if (t) { t.imageKey = r.imageKey; t.status = 'done'; t.error = null; }
+      } else {
+        const chip = { section: btn.dataset.sec, label: btn.dataset.lbl, parent: btn.dataset.par || '' };
+        r = await apiPost('/api/admin/lab?action=style-defaults', { styleGuideId: id, op: 'regen', chip });
+        const c = CHIPS.find((x) => x.section === chip.section && norm(x.label) === norm(chip.label) && norm(x.parent) === norm(chip.parent));
+        if (c) { c.imageKey = r.imageKey; c.status = 'done'; c.error = null; }
+      }
+      updateStat();
+      render(); // swap in the new imageKey
+    } catch (e) {
+      card.classList.remove('busy');
+      alert('Regenerate failed: ' + (e.message || e));
+    }
+  });
+
+  // ── Wiring ────────────────────────────────────────────────────────────
+  // ── Board catalog: flag changes + the New-board modal ─────────────────
+  document.getElementById('board').addEventListener('change', async (ev) => {
+    const sel = ev.target.closest('.board-flag');
+    if (!sel) return;
+    const v = sel.value;
+    sel.disabled = true;
+    try {
+      await apiPost('/api/admin/lab?action=boards', {
+        op: 'flags', section: sel.dataset.sec, label: sel.dataset.cat,
+        storeOnly: v !== 'default', pricing: v === 'credits' ? 'credits' : 'free',
+      });
+      BOARDS.set(sel.dataset.sec + '|' + norm(sel.dataset.cat),
+                 { storeOnly: v !== 'default', pricing: v === 'credits' ? 'credits' : 'free' });
+      sel.className = 'board-flag' + (v === 'default' ? '' : (v === 'credits' ? ' paid' : ' store'));
+    } catch (e) {
+      alert('Could not save: ' + (e.message || e));
+      render();
+    }
+    sel.disabled = false;
+  });
+
+  const nbOverlay = document.getElementById('nb-overlay');
+  document.getElementById('new-board').addEventListener('click', () => {
+    document.getElementById('nb-msg').textContent = '';
+    nbOverlay.classList.add('open');
+    document.getElementById('nb-label').focus();
+  });
+  document.getElementById('nb-cancel').addEventListener('click', () => nbOverlay.classList.remove('open'));
+  nbOverlay.addEventListener('click', (ev) => { if (ev.target === nbOverlay) nbOverlay.classList.remove('open'); });
+  document.getElementById('nb-create').addEventListener('click', async () => {
+    const msg = document.getElementById('nb-msg');
+    const label = document.getElementById('nb-label').value.trim();
+    const words = document.getElementById('nb-words').value.split('\n').map((w) => w.trim()).filter(Boolean);
+    if (!label) { msg.textContent = 'Give the board a name.'; msg.className = 'err'; return; }
+    if (!words.length) { msg.textContent = 'Add at least one word (one per line).'; msg.className = 'err'; return; }
+    msg.className = ''; msg.textContent = 'Creating…';
+    const btn = document.getElementById('nb-create');
+    btn.disabled = true;
+    try {
+      const d = await apiPost('/api/admin/lab?action=boards', {
+        op: 'create',
+        section: document.getElementById('nb-section').value,
+        label,
+        storeOnly: document.getElementById('nb-store').checked,
+        pricing: document.querySelector('input[name=nb-pricing]:checked').value,
+        words,
+      });
+      msg.textContent = d.created + ' words created' + (d.skipped ? ', ' + d.skipped + ' already existed' : '') +
+        (d.errors && d.errors.length ? ', ' + d.errors.length + ' failed' : '') + ' — loading…';
+      nbOverlay.classList.remove('open');
+      document.getElementById('nb-label').value = '';
+      document.getElementById('nb-words').value = '';
+      await load();   // the new words come straight from the taxonomy — generate images with the 🎨 buttons
+    } catch (e) { msg.textContent = 'Failed: ' + (e.message || e); msg.className = 'err'; }
+    btn.disabled = false;
+  });
+
+  document.getElementById('style-picker').addEventListener('change', () => {
+    const id = styleGuideId();
+    const url = new URL(location.href);
+    if (id) url.searchParams.set('styleGuideId', String(id));
+    else url.searchParams.delete('styleGuideId');
+    history.replaceState(null, '', url);
+    load();
+  });
   document.getElementById('filter').addEventListener('change', render);
   document.getElementById('q').addEventListener('input', render);
   document.getElementById('refresh').addEventListener('click', load);
-  load();
+
+  (async () => { await loadStyles(); await load(); })();
 </script>
 </body>
 </html>

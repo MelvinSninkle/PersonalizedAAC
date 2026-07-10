@@ -76,7 +76,7 @@ fun TileView(
     val image by produceState<Bitmap?>(initialValue = null, tile.imageKey, posterMode) {
         val key = tile.imageKey
         value = if (key.isNullOrEmpty()) null else withContext(Dispatchers.Default) {
-            val bmp = c.media.bitmap(key)
+            val bmp = c.media.bitmap(key, maxDim = 640)
             if (bmp == null || posterMode) bmp else bmp.trimmingFlatBorders()
         }
     }

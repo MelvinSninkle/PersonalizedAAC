@@ -95,6 +95,37 @@ export async function enqueueRenderJob(db, childId, taxonomyId, { force = false,
                          force = ${force}, ref_key = ${refKey}, guidance = ${guidance}, updated_at = NOW()`;
 }
 
+// Best-effort inline drain of one child's queued render jobs — the same
+// save-first pattern the add-tile queue uses (tile-jobs.js responds, then
+// processes in the background; the cron only guarantees completion). Store
+// flows (regen-with, retry, rebuild) MUST kick this after enqueueing: they
+// have no browser-driven loop like onboarding does, so on a deployment whose
+// minute-cron isn't firing (Hobby-plan crons run daily; a CRON_SECRET
+// mismatch 401s silently) their jobs sat 'queued' forever — the parent paid,
+// saw "re-rendering ✨", and nothing ever landed or archived.
+export async function drainRenderJobs(db, childId, limit = 3) {
+  const jobs = await db`
+    UPDATE seed_jobs SET status = 'processing', updated_at = NOW()
+    WHERE id IN (
+      SELECT id FROM seed_jobs
+      WHERE child_id = ${childId} AND kind = 'render' AND (
+        status = 'queued'
+        OR (status = 'failed' AND attempts < ${MAX_SEED_ATTEMPTS})
+      )
+      ORDER BY id
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id, child_id, kind, taxonomy_id, attempts, force, ref_key, guidance`;
+  const getCtx = makeSeedContext(db);
+  let ok = 0;
+  for (const j of jobs) {
+    const r = await processSeedJob(db, j, getCtx);
+    if (r.ok) ok++;
+  }
+  return { claimed: jobs.length, ok };
+}
+
 // ── Scope ────────────────────────────────────────────────────────────────────
 
 // Personal-render scope: which placed words get re-generated per child.
@@ -108,28 +139,83 @@ export function isRenderScope(t) {
 // default — or a word-tile until one exists). Person-referencing words place only
 // when they're in the render scope, so nothing sits as a permanent word-tile.
 export async function placementRows(db) {
-  const rows = await db`
-    SELECT id, id AS slug, column_name, category, subcategory, label, prompt_template,
-           subject_mode, related_images, default_image_key
-    FROM taxonomy
-    WHERE COALESCE(archived, FALSE) = FALSE
-      AND COALESCE(is_event, FALSE) = FALSE
-      AND COALESCE(is_gestalt, FALSE) = FALSE
-      AND COALESCE(authoring_kind, 'canonical') = 'canonical'
-      AND COALESCE(audience, 'universal') = 'universal'
-    ORDER BY column_name, category NULLS LAST, subcategory NULLS LAST, label, id`;
+  // sort_order (tiles) + default_category_order (chips) carry the Lab layout
+  // screen's curated order; both are optional (NULL/absent = alphabetical).
+  let rows;
+  try {
+    rows = await db`
+      SELECT id, id AS slug, column_name, category, subcategory, label, prompt_template,
+             subject_mode, related_images, default_image_key, sort_order
+      FROM taxonomy
+      WHERE COALESCE(archived, FALSE) = FALSE
+        AND COALESCE(is_event, FALSE) = FALSE
+        AND COALESCE(is_gestalt, FALSE) = FALSE
+        AND COALESCE(authoring_kind, 'canonical') = 'canonical'
+        AND COALESCE(audience, 'universal') = 'universal'
+      ORDER BY column_name, category NULLS LAST, subcategory NULLS LAST,
+               sort_order NULLS LAST, label, id`;
+  } catch (_) {
+    rows = await db`
+      SELECT id, id AS slug, column_name, category, subcategory, label, prompt_template,
+             subject_mode, related_images, default_image_key
+      FROM taxonomy
+      WHERE COALESCE(archived, FALSE) = FALSE
+        AND COALESCE(is_event, FALSE) = FALSE
+        AND COALESCE(is_gestalt, FALSE) = FALSE
+        AND COALESCE(authoring_kind, 'canonical') = 'canonical'
+        AND COALESCE(audience, 'universal') = 'universal'
+      ORDER BY column_name, category NULLS LAST, subcategory NULLS LAST, label, id`;
+  }
+  const catOrder = await categoryOrderMap(db);
+  const norm = (v) => String(v || '').trim().toLowerCase();
+  // Store-only boards (Lab board catalog) never seed onto new boards — the
+  // family adds them from the Word Shop instead (free or with credits, per
+  // the board's pricing flag).
+  try {
+    const so = await db`SELECT section, label_norm FROM board_catalog WHERE store_only = TRUE`;
+    if (so.length) {
+      const skip = new Set(so.map(r => `${r.section}|${r.label_norm}`));
+      rows = rows.filter(r => !skip.has(`${norm(r.column_name)}|${norm(r.category)}`));
+    }
+  } catch (_) { /* catalog table may not exist yet */ }
+  const ord = (section, label, parent) => {
+    const v = catOrder.get(`${norm(section)}|${norm(label)}|${norm(parent)}`);
+    return v == null ? 1e9 : v;
+  };
+  rows.sort((a, b) =>
+    String(a.column_name).localeCompare(String(b.column_name))
+    || (ord(a.column_name, a.category, '') - ord(b.column_name, b.category, ''))
+    || String(a.category || '').localeCompare(String(b.category || ''))
+    || (ord(a.column_name, a.subcategory, a.category) - ord(b.column_name, b.subcategory, b.category))
+    || String(a.subcategory || '').localeCompare(String(b.subcategory || ''))
+    || (((a.sort_order ?? 1e9)) - ((b.sort_order ?? 1e9)))
+    || String(a.label).localeCompare(String(b.label)));
   return rows.filter((t) => isDefaultableTile(t) || isRenderScope(t));
+}
+
+/// The Lab layout screen's curated category order — empty map when unset.
+export async function categoryOrderMap(db) {
+  try {
+    const rows = await db`SELECT section, label_norm, parent_norm, sort_order FROM default_category_order`;
+    return new Map(rows.map(r => [`${r.section}|${r.label_norm}|${r.parent_norm}`, Number(r.sort_order)]));
+  } catch (_) { return new Map(); }
 }
 
 // ── Categories (same rules as the board editor: items are only visible inside
 //    a chip, so chips must exist; Needs is the flat strip) ───────────────────
 
-export async function ensureCategory(db, childId, cache, section, category, subcategory) {
+export async function ensureCategory(db, childId, cache, section, category, subcategory, catOrder = null) {
   const cat = String(category || '').trim();
   if (!cat) return null;
   const sub = String(subcategory || '').trim();
   const key = `${section}|${cat.toLowerCase()}|${sub.toLowerCase()}`;
   if (cache.has(key)) return cache.get(key);
+
+  // Curated Lab order when set; else creation-time order (legacy behavior).
+  const ord = (label, parent) => {
+    const v = catOrder && catOrder.get(`${String(section).toLowerCase()}|${label.toLowerCase()}|${String(parent || '').toLowerCase()}`);
+    return v == null ? Date.now() : v;
+  };
 
   const topKey = `${section}|${cat.toLowerCase()}|`;
   let topId = cache.get(topKey);
@@ -139,7 +225,7 @@ export async function ensureCategory(db, childId, cache, section, category, subc
     if (ex.length) topId = ex[0].id;
     else {
       const ins = await db`INSERT INTO categories (section, label, parent_id, display_order, child_id, updated_at)
-                           VALUES (${section}, ${cat}, NULL, ${Date.now()}, ${childId}, NOW()) RETURNING id`;
+                           VALUES (${section}, ${cat}, NULL, ${ord(cat, '')}, ${childId}, NOW()) RETURNING id`;
       topId = ins[0].id;
     }
     cache.set(topKey, topId);
@@ -151,7 +237,7 @@ export async function ensureCategory(db, childId, cache, section, category, subc
     if (sx.length) outId = sx[0].id;
     else {
       const ins = await db`INSERT INTO categories (section, label, parent_id, display_order, child_id, updated_at)
-                           VALUES (${section}, ${sub}, ${topId}, ${Date.now()}, ${childId}, NOW()) RETURNING id`;
+                           VALUES (${section}, ${sub}, ${topId}, ${ord(sub, cat)}, ${childId}, NOW()) RETURNING id`;
       outId = ins[0].id;
     }
   }
@@ -165,15 +251,16 @@ export async function ensureCategory(db, childId, cache, section, category, subc
 // generation, no TTS — just categories + items, so a full board places in
 // seconds. Upsert by taxonomy_slug; re-runs never move a tile a parent
 // re-organized (COALESCE on category) and never touch an existing image.
-export async function placeChunk({ db, childId, rows, catCache }) {
+export async function placeChunk({ db, childId, rows, catCache, catOrder = null }) {
   let placed = 0, failed = 0;
+  if (catOrder === null) catOrder = await categoryOrderMap(db);
   const base = Date.now();
   for (let idx = 0; idx < rows.length; idx++) {
     const tax = rows[idx];
     try {
       const section = String(tax.column_name || 'needs').toLowerCase();
       const catId = section === 'needs' ? null
-        : await ensureCategory(db, childId, catCache, section, tax.category, tax.subcategory);
+        : await ensureCategory(db, childId, catCache, section, tax.category, tax.subcategory, catOrder);
       const existing = await db`SELECT id FROM items WHERE child_id = ${childId} AND taxonomy_slug = ${tax.id} LIMIT 1`;
       if (existing.length) {
         await db`UPDATE items SET label = ${tax.label}, section = ${section},
@@ -320,7 +407,7 @@ export async function processSeedJob(db, job, getCtx) {
       return { ok: true, imageKey: r.imageKey };
     }
 
-    const tax = (await db`SELECT id, id AS slug, column_name, category, subcategory, label,
+    const tax = (await db`SELECT id, id AS slug, column_name, category, subcategory, label, pronunciation,
                                  prompt_template, subject_mode, related_images, default_image_key
                           FROM taxonomy WHERE id = ${job.taxonomy_id} LIMIT 1`)[0];
     if (!tax) { await jobDone(db, job.id); return { ok: true, skipped: 'taxonomy row gone' }; }
@@ -375,7 +462,7 @@ export async function processSeedJob(db, job, getCtx) {
         } catch (_) {}
       }
       if (!item.sound_key) {
-        const mp3 = await synthesizeVoice({ text: tax.label, voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
+        const mp3 = await synthesizeVoice({ text: tax.pronunciation || tax.label, voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
         if (mp3) {
           const soundKey = `onboarding/${job.child_id}/voice/${randomUUID()}.mp3`;
           await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });
@@ -389,7 +476,7 @@ export async function processSeedJob(db, job, getCtx) {
 
     if (job.kind === 'voice') {
       if (!item.sound_key) {
-        const mp3 = await synthesizeVoice({ text: tax.label, voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
+        const mp3 = await synthesizeVoice({ text: tax.pronunciation || tax.label, voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
         if (mp3) {
           const soundKey = `onboarding/${job.child_id}/voice/${randomUUID()}.mp3`;
           await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });

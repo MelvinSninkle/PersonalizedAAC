@@ -50,6 +50,16 @@
     <input type="text" id="style-id" placeholder="e.g. 42" inputmode="numeric">
     <div class="thumb" id="style-thumb" style="margin-top:8px;height:140px;aspect-ratio:auto;">Style preview</div>
 
+    <label>Subject age</label>
+    <!-- Production derives this from the relationship (mother → adult) or the
+         capture UI's kid/grown-up toggle; the prompt adapts the style's own
+         adult vs child treatment (the saucer-eyed-Dad fix). -->
+    <select id="age-group">
+      <option value="">Auto — draw at apparent age</option>
+      <option value="adult">Adult — the style's grown-up treatment</option>
+      <option value="child">Child — the style's kid treatment</option>
+    </select>
+
     <label>Correction / guidance (optional)</label>
     <textarea id="guidance" placeholder="e.g. add white to the eyes, lighten the hair, flatter shading"></textarea>
 
@@ -166,7 +176,8 @@
     // mirror the style ref into the output pane
     $('style-out').innerHTML = styleGuideId ? '<img src="/api/onboarding/styles?image=' + encodeURIComponent(styleGuideId) + '" alt="">' : 'No style';
     try {
-      const d = await api('/api/admin/portrait-lab', { photoB64, photoType: 'image/jpeg', styleGuideId, guidance, attempt, model: $('model-select').value || undefined });
+      const d = await api('/api/admin/portrait-lab', { photoB64, photoType: 'image/jpeg', styleGuideId, guidance, attempt,
+        ageGroup: $('age-group').value || undefined, model: $('model-select').value || undefined });
       $('result').innerHTML = '<img src="data:image/png;base64,' + d.b64 + '" alt="">';
       $('prompt').textContent = d.prompt || '—';
       const pill = d.styleImageAttached ? '<span class="pill ok">style image ATTACHED</span>' : '<span class="pill no">no style image</span>';

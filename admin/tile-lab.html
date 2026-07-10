@@ -54,6 +54,17 @@
       <button id="seg-person">Person (keystone)</button>
     </div>
 
+    <!-- People branch only: production derives this from the relationship
+         (mother → adult) or the capture UI's kid/grown-up toggle. -->
+    <div id="age-row" style="display:none;">
+      <label>Subject age (people)</label>
+      <select id="age-group">
+        <option value="">Auto — draw at apparent age</option>
+        <option value="adult">Adult — the style's grown-up treatment</option>
+        <option value="child">Child — the style's kid treatment</option>
+      </select>
+    </div>
+
     <div class="row2">
       <div>
         <label>Name / label</label>
@@ -114,8 +125,8 @@
   }
   function msg(t, err) { const m = $('msg'); m.textContent = t || ''; m.className = 'msg' + (err ? ' err' : ''); }
 
-  $('seg-thing').addEventListener('click', () => { section = 'nouns'; $('seg-thing').classList.add('on'); $('seg-person').classList.remove('on'); });
-  $('seg-person').addEventListener('click', () => { section = 'people'; $('seg-person').classList.add('on'); $('seg-thing').classList.remove('on'); });
+  $('seg-thing').addEventListener('click', () => { section = 'nouns'; $('seg-thing').classList.add('on'); $('seg-person').classList.remove('on'); $('age-row').style.display = 'none'; });
+  $('seg-person').addEventListener('click', () => { section = 'people'; $('seg-person').classList.add('on'); $('seg-thing').classList.remove('on'); $('age-row').style.display = ''; });
 
   $('photo').addEventListener('change', async (e) => {
     const f = e.target.files[0]; if (!f) return;
@@ -173,6 +184,7 @@
         label: ($('label').value || '').trim(),
         detail: usePrior ? guidance : (($('detail').value || '').trim()),
         section,
+        ageGroup: (section === 'people' && $('age-group').value) ? $('age-group').value : undefined,
         styleGuideId: $('no-style').checked ? undefined : ($('style-select').value || undefined),
         noStyle: $('no-style').checked,
       });

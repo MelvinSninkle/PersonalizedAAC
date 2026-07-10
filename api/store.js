@@ -25,7 +25,7 @@ import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
 import { isDefaultableTile, loadChildStyleGuideId } from './_lib/onboarding-render.js';
 import { archivePriorImage } from './_lib/image-history.js';
-import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus, needsStyling } from './_lib/seed-board.js';
+import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus, needsStyling, drainRenderJobs } from './_lib/seed-board.js';
 import { ensureCredits, ensureStarter, creditBalance, spendCredits, grantCredits,
          recordPurchase, productCredits, rebuildQuote,
          ensureCoupons, redeemCoupon, randomCouponCode,
@@ -48,7 +48,10 @@ async function memberOr402(res, db, auth, childId) {
   return true;
 }
 
-export const config = { api: { bodyParser: false }, maxDuration: 60 };
+// maxDuration 300: after responding, the enqueue flows below drain a few
+// render jobs in the background (20-40s each) — same save-first pattern as
+// tile-jobs; the cron remains the completion guarantee.
+export const config = { api: { bodyParser: false }, maxDuration: 300 };
 
 async function readRawBody(req) {
   const chunks = [];
@@ -228,6 +231,13 @@ async function browse(req, res, db, auth) {
        WHERE child_id = ${childId} AND taxonomy_slug IS NOT NULL`,
     loadChildStyleGuideId(db, childId),
   ]);
+  // Boards the Lab priced in credits: their categories are hidden from the
+  // clients' FREE common-use-boards section (words still buyable one by one).
+  let paidBoards = new Set();
+  try {
+    const bc = await db`SELECT section, label_norm FROM board_catalog WHERE pricing = 'credits'`;
+    paidBoards = new Set(bc.map((r) => `${r.section}|${r.label_norm}`));
+  } catch (_) { /* catalog table may not exist yet */ }
   const mine = new Map(items.map((i) => [i.taxonomy_slug, i]));
   const tiles = rows.map((t) => {
     const it = mine.get(t.id);
@@ -243,6 +253,7 @@ async function browse(req, res, db, auth) {
       itemId: it ? Number(it.id) : null,
       freeRetryUsed: it ? !!it.free_retry_used : false,
       credits: COST.nano,
+      freeBoard: !paidBoards.has(`${String(t.column_name || '').toLowerCase()}|${String(t.category || '').trim().toLowerCase()}`),
     };
   });
   res.setHeader('Cache-Control', 'no-store');
@@ -299,6 +310,7 @@ async function checkout(req, res, db, auth, uid, body) {
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${queued} word${queued === 1 ? '' : 's'} queued — they render in your child's style over the next few minutes.`,
   });
+  drainRenderJobs(db, childId, 3).catch(() => {});
 }
 
 // ── Free common-use boards: place/remove a whole category with DEFAULT art ──
@@ -315,6 +327,20 @@ async function freeBoard(req, res, db, auth, body) {
   const on = body.on !== false;
   if (!childId || !column || !category) { res.status(400).json({ error: 'childId, column, category required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  // A board the Lab priced in credits is not free-addable — its words go
+  // through checkout like any other purchase.
+  if (on) {
+    try {
+      const bc = (await db`SELECT pricing FROM board_catalog
+                           WHERE section = ${column} AND label_norm = ${category.trim().toLowerCase()} LIMIT 1`)[0];
+      if (bc && bc.pricing === 'credits') {
+        res.status(402).json({ error: 'premium_board',
+          note: 'This board requires credits — add its words from the shop.' });
+        return;
+      }
+    } catch (_) { /* catalog table may not exist yet */ }
+  }
 
   const all = await shoppableRows(db);
   const group = all.filter((t) => String(t.column_name || '').toLowerCase() === column
@@ -410,6 +436,7 @@ async function personalizeAll(req, res, db, auth, uid, body) {
   res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length + chips.length,
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${remaining.length} tiles + ${chips.length} folder icons queued — the whole board personalizes over the next while.` });
+  drainRenderJobs(db, childId, 3).catch(() => {});
 }
 
 // §9: batch "match all images in THIS FOLDER to my child's style".
@@ -451,6 +478,7 @@ async function personalizeCategory(req, res, db, auth, uid, body) {
   res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length,
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${remaining.length} picture${remaining.length === 1 ? '' : 's'} queued — they land over the next few minutes.` });
+  drainRenderJobs(db, childId, 3).catch(() => {});
 }
 
 // ── Contextual magic: "your new fork appears in these pictures" ─────────────
@@ -558,6 +586,10 @@ async function regenWith(req, res, db, auth, uid, body) {
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${ids.length} picture${ids.length === 1 ? '' : 's'} re-rendering with your new tile in the scene. Replaced art is archived.`,
   });
+  // Best-effort immediate render (the response is already out). Seed jobs are
+  // ONLY drained by the minute-cron otherwise — on a deployment where that
+  // cron doesn't fire, these paid re-renders sat queued forever.
+  drainRenderJobs(db, childId, 3).catch(() => {});
 }
 
 // One FREE retry per tile, then 1 credit.
@@ -592,6 +624,7 @@ async function retryTile(req, res, db, auth, uid, body) {
   await enqueueRenderJob(db, childId, item.taxonomy_slug, { force: true, refKey: priorKey, guidance: guidance || null });
   res.status(200).json({ ok: true, charged, freeRetry: charged === 0 && !isAdmin,
                          balance: uid ? await creditBalance(db, uid) : null });
+  drainRenderJobs(db, childId, 1).catch(() => {});
 }
 
 // Whole-board rebuild at the quoted discount (see rebuildQuote).
@@ -620,6 +653,7 @@ async function rebuild(req, res, db, auth, uid, body) {
     balance: uid ? await creditBalance(db, uid) : null,
     note: `Rebuilding ${words.length} words in your child's style. Every replaced image is archived — you keep them all.`,
   });
+  drainRenderJobs(db, childId, 3).catch(() => {});
 }
 
 // ── Apple IAP (StoreKit 2) ───────────────────────────────────────────────────

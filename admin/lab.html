@@ -406,6 +406,11 @@ function renderStyleGuides() {
         <button data-act="toggle">${s.active ? 'Active' : 'Inactive'}</button>
         <button data-act="preview" title="Polished marketing image shown on the public home page (falls back to this anchor if unset)">${s.previewBlobKey ? '🖼 Preview ✓' : '🖼 Preview'}</button>
         <button data-act="delete">✕</button>
+      </div>
+      <div class="row">
+        <button data-act="personref" title="A generic CHILD drawn in this style — anchors person-y tiles on this style's pre-built default board">${s.personRefKey ? '👤 Person ✓' : '👤 Person'}</button>
+        <button data-act="stuffref" title="A 'stuff' scene in this style (objects/materials) — rides along on every default-board render for this style">${s.stuffRefKey ? '🧸 Stuff ✓' : '🧸 Stuff'}</button>
+        <button data-act="defaults" title="Open this style's pre-built default board (review / bulk generate)">🧩 Defaults</button>
       </div>`;
     card.querySelector('[data-act="toggle"]').addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -442,6 +447,39 @@ function renderStyleGuides() {
       await api('DELETE', `/api/admin/style-guides?id=${s.id}`);
       await loadStyleGuides();
       renderTiles();
+    });
+    // Per-style world references (the default-board CMS): 👤 a generic child in
+    // this style; 🧸 an objects/materials scene. Same upload-then-PATCH dance
+    // as the marketing preview.
+    const refUpload = (act, field, icon) => {
+      card.querySelector(`[data-act="${act}"]`).addEventListener('click', (e) => {
+        e.stopPropagation();
+        const inp = document.createElement('input');
+        inp.type = 'file'; inp.accept = 'image/*';
+        inp.addEventListener('change', async () => {
+          const file = inp.files[0]; if (!file) return;
+          const btn = card.querySelector(`[data-act="${act}"]`);
+          btn.disabled = true; btn.textContent = 'Uploading…';
+          try {
+            const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+            const up = await fetch(`/api/upload?kind=style&ext=${ext}`, {
+              method: 'POST', headers: { 'Content-Type': file.type || 'image/jpeg' }, body: file,
+            });
+            if (!up.ok) throw new Error(`upload failed: ${up.status}`);
+            const { key } = await up.json();
+            await api('PATCH', `/api/admin/style-guides?id=${s.id}`, { [field]: key });
+            await loadStyleGuides();
+            renderTiles();
+          } catch (err) { alert('Upload failed: ' + err.message); btn.disabled = false; btn.textContent = icon; }
+        });
+        inp.click();
+      });
+    };
+    refUpload('personref', 'personRefKey', '👤 Person');
+    refUpload('stuffref', 'stuffRefKey', '🧸 Stuff');
+    card.querySelector('[data-act="defaults"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.open('/admin/defaults.html?styleGuideId=' + s.id, '_blank');
     });
     grid.appendChild(card);
   }

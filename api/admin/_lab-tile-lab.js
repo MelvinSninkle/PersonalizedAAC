@@ -31,6 +31,9 @@ export default async function handler(req, res) {
   const label = typeof b.label === 'string' ? b.label.slice(0, 80) : '';
   const detail = typeof b.detail === 'string' ? b.detail.slice(0, 400) : '';
   const section = b.section === 'people' ? 'people' : 'nouns';
+  // Bench the People branch's age treatment: 'adult' | 'child' | omitted
+  // (apparent-age fallback) — mirrors relationship-derived production values.
+  const ageGroup = (b.ageGroup === 'adult' || b.ageGroup === 'child') ? b.ageGroup : null;
   const model = typeof b.model === 'string' && b.model ? b.model.slice(0, 60) : null;
   const noStyle = b.noStyle === true;
   const styleGuideId = Number.isFinite(Number(b.styleGuideId)) && Number(b.styleGuideId) > 0 ? Number(b.styleGuideId) : null;
@@ -51,7 +54,7 @@ export default async function handler(req, res) {
     const r = await renderStyledPhoto({
       db, photo, contentType: priorB64 ? 'image/png' : photoType,
       label, detail, style: 'soft, friendly children\'s illustration',
-      styleGuide, model, bg: '', section,
+      styleGuide, model, bg: '', section, ageGroup,
     });
     if (!r.ok) { res.status(502).json({ error: 'generation failed', detail: r.detail || '' }); return; }
 

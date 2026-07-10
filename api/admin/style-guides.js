@@ -14,6 +14,11 @@ export default async function handler(req, res) {
   if (!gate.ok) return;
   try {
     const db = sql();
+    // Defensive migration: the per-style world references (default-board CMS).
+    try {
+      await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS person_ref_key TEXT`;
+      await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS stuff_ref_key TEXT`;
+    } catch (_) {}
     if (req.method === 'GET')    return await list(req, res, db);
     if (req.method === 'POST')   return await add(req, res, db, gate.email);
     if (req.method === 'PATCH')  return await patch(req, res, db);
@@ -33,6 +38,10 @@ function rowOut(r) {
     blobKey: r.blob_key,
     previewBlobKey: r.preview_blob_key || null,
     previewUrl: (r.preview_blob_key || r.blob_key) ? `/api/style-guides/public?image=${r.id}` : null,
+    // Per-style world references for the pre-built default boards: a generic
+    // person drawn in this style + a "stuff" scene. Lab-managed.
+    personRefKey: r.person_ref_key || null,
+    stuffRefKey: r.stuff_ref_key || null,
     active: !!r.active,
     sortOrder: r.sort_order,
     createdBy: r.created_by,
@@ -44,7 +53,8 @@ async function list(req, res, db) {
   // PUBLIC guides only (child_id IS NULL). Parents' private uploads are
   // child-scoped and managed from the parent view, not the Lab.
   const rows = await db`
-    SELECT id, label, description, blob_url, blob_key, preview_blob_key, active, sort_order, created_by, created_at
+    SELECT id, label, description, blob_url, blob_key, preview_blob_key, person_ref_key, stuff_ref_key,
+           active, sort_order, created_by, created_at
     FROM style_guides
     WHERE child_id IS NULL
     ORDER BY sort_order ASC, created_at ASC
@@ -85,6 +95,8 @@ async function patch(req, res, db) {
   if (typeof b.active === 'boolean') { sets.push('active'); vals.active = b.active; }
   if (Number.isInteger(b.sortOrder)) { sets.push('sort_order'); vals.sort_order = b.sortOrder; }
   if (typeof b.previewBlobKey === 'string' || b.previewBlobKey === null) { sets.push('preview'); vals.preview = b.previewBlobKey ? String(b.previewBlobKey).trim() : null; }
+  if (typeof b.personRefKey === 'string' || b.personRefKey === null) { sets.push('personRef'); vals.personRef = b.personRefKey ? String(b.personRefKey).trim() : null; }
+  if (typeof b.stuffRefKey === 'string' || b.stuffRefKey === null) { sets.push('stuffRef'); vals.stuffRef = b.stuffRefKey ? String(b.stuffRefKey).trim() : null; }
   if (!sets.length) { res.status(400).json({ error: 'no fields to update' }); return; }
   // Build the update with a small switch — keeps neon-tagged-template safety.
   const r = await db`
@@ -93,9 +105,11 @@ async function patch(req, res, db) {
       description = CASE WHEN ${'description' in vals} THEN ${vals.description ?? null} ELSE description END,
       active      = COALESCE(${vals.active      ?? null}, active),
       sort_order  = COALESCE(${vals.sort_order  ?? null}, sort_order),
-      preview_blob_key = CASE WHEN ${'preview' in vals} THEN ${vals.preview ?? null} ELSE preview_blob_key END
+      preview_blob_key = CASE WHEN ${'preview' in vals} THEN ${vals.preview ?? null} ELSE preview_blob_key END,
+      person_ref_key = CASE WHEN ${'personRef' in vals} THEN ${vals.personRef ?? null} ELSE person_ref_key END,
+      stuff_ref_key  = CASE WHEN ${'stuffRef' in vals} THEN ${vals.stuffRef ?? null} ELSE stuff_ref_key END
     WHERE id = ${id}
-    RETURNING id, label, description, blob_url, blob_key, preview_blob_key, active, sort_order, created_by, created_at
+    RETURNING id, label, description, blob_url, blob_key, preview_blob_key, person_ref_key, stuff_ref_key, active, sort_order, created_by, created_at
   `;
   if (!r.length) { res.status(404).json({ error: 'not found' }); return; }
   res.status(200).json({ ok: true, styleGuide: rowOut(r[0]) });

@@ -43,6 +43,7 @@
   .style-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:12px; margin:12px 0; }
   .style-card { border:2px solid var(--line); border-radius:14px; padding:8px; cursor:pointer; text-align:center; background:#fff; transition:border-color .15s; min-width:0; }
   .style-card.sel { border-color:var(--pink); box-shadow:0 0 0 3px #ffd6ec; }
+  .pron-opt.sel { background:var(--pink); color:#fff; border-color:var(--pink); }
   .style-card .pic { width:100%; aspect-ratio:1; border-radius:10px; background:#fff7fb center/cover no-repeat; display:grid; place-items:center; color:var(--faint); font-size:26px; overflow:hidden; }
   .style-card .pic img { width:100%; height:100%; object-fit:cover; }
   .style-card .lbl { font-size:12px; font-weight:700; margin-top:6px; color:var(--ink); }
@@ -95,6 +96,15 @@
     <label for="in-birth">Birth date</label>
     <input id="in-birth" type="date">
     <div style="font-size:11px;color:#666;margin-top:4px;line-height:1.3;">Used to start with vocabulary at the right level — older words stay hidden until they're ready. Never shown publicly.</div>
+
+    <label style="margin-top:16px;">Is your child a boy or a girl?</label>
+    <p class="note" style="margin:0 0 8px;">Used so the board speaks about your child correctly.
+      If your family has specific needs beyond this — or you're ever having a hard time getting an
+      image of your child that looks right — <a id="support-link" href="#" style="color:var(--pink-deep);font-weight:600;">contact us</a> and we'll help personally.</p>
+    <div id="in-pron" style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" class="btn ghost tiny pron-opt" data-pron="he">Boy</button>
+      <button type="button" class="btn ghost tiny pron-opt" data-pron="she">Girl</button>
+    </div>
 
     <label style="margin-top:16px;">What is your child's favorite color?</label>
     <p class="note" style="margin:0 0 8px;">It becomes their banner color across the whole app — one more thing on the device that's personally THEIRS. You can change it later.</p>
@@ -514,6 +524,21 @@
       refreshContinue();
     } catch (err) { $('style-msg').textContent = 'Upload failed: ' + (err.message || err); }
   });
+  // Launch support contact — swap for a real support@ alias when one exists.
+  const SUPPORT_EMAIL = 'peterson.andrew.a@gmail.com';
+  const supportLink = document.getElementById('support-link');
+  if (supportLink) supportLink.href = 'mailto:' + SUPPORT_EMAIL + '?subject=' + encodeURIComponent('My World — help with our board');
+
+  // Child boy/girl picker: tap to select, tap again to clear.
+  let selectedPronoun = null;
+  document.querySelectorAll('#in-pron .pron-opt').forEach((btn) => btn.addEventListener('click', () => {
+    const p = btn.dataset.pron;
+    const already = selectedPronoun === p;
+    document.querySelectorAll('#in-pron .pron-opt').forEach((b) => b.classList.remove('sel'));
+    selectedPronoun = already ? null : p;
+    if (!already) btn.classList.add('sel');
+  }));
+
   $('style-continue').addEventListener('click', async () => {
     const name = $('in-name').value.trim();
     const birthDate = $('in-birth').value;
@@ -525,7 +550,7 @@
     if (!birthDate) { msg.textContent = 'Please enter your child’s birthday.'; $('in-birth').focus(); return; }
     $('style-continue').disabled = true; $('style-msg').textContent = 'Saving…';
     try {
-      await apiJSON('/api/onboarding/child', { name, birthDate, tier: 'under3', styleGuideId: selectedStyle.id, voiceId: selectedVoiceId, favoriteColor });
+      await apiJSON('/api/onboarding/child', { name, birthDate, tier: 'under3', styleGuideId: selectedStyle.id, voiceId: selectedVoiceId, favoriteColor, pronoun: selectedPronoun });
       CHILD_NAME = name; applyName();
       await loadRelOptions();
       showPhase('people');

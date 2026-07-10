@@ -243,6 +243,7 @@ struct WordShopView: View {
         var agg: [String: (col: String, cat: String, total: Int, on: Int)] = [:]
         for t in tiles {
             guard let cat = t.category, !cat.isEmpty else { continue }
+            if t.freeBoard == false { continue }   // credits-priced board: not free-addable
             let key = t.column + "|" + cat
             if agg[key] == nil { order.append(key); agg[key] = (t.column, cat, 0, 0) }
             agg[key]!.total += 1
@@ -518,7 +519,9 @@ private struct ShopThumb: View {
             }
         }
         .task(id: blobKey) {
-            if let img = await MediaCache.shared.image(for: blobKey) {
+            // 86pt thumbnails: decode small. A search opens every folder, and
+            // full-res decodes across hundreds of matches would jetsam the app.
+            if let img = await MediaCache.shared.image(for: blobKey, maxPixel: 256) {
                 image = img
             }
         }

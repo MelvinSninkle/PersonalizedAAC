@@ -5,7 +5,8 @@
 // People portraits AND the Core starter tiles the same way the Lab does, without
 // the admin gate. Keeping it here means both the portrait step and the seed step
 // share one prompt-composition path.
-import { get as blobGet } from '@vercel/blob';
+import { get as blobGet, put as blobPut } from '@vercel/blob';
+import { createHash } from 'node:crypto';
 import { geminiKey, geminiDefaultModel, geminiGenerateImage, geminiCostCents } from './gemini.js';
 
 // Read a private Blob fully into memory as { buffer, contentType }.
@@ -21,9 +22,15 @@ export async function readBlobBytes(key) {
 // Pick the style guide the parent chose (explicit id) or the first active one.
 // Returns { id, label, blob_key } | null, with the bytes loaded into `.image`.
 export async function loadStyleGuide(db, styleGuideId) {
+  // person_ref_key / stuff_ref_key are the per-style world references the Lab
+  // uploads for pre-built default boards; fall back to the legacy column set
+  // when the migration hasn't run so onboarding never breaks on SELECT.
+  const cols = async (q) => { try { return await q(true); } catch (_) { return await q(false); } };
   let row = null;
   if (styleGuideId) {
-    row = (await db`SELECT id, label, description, blob_key FROM style_guides WHERE id = ${styleGuideId} AND active = TRUE LIMIT 1`)[0] || null;
+    row = (await cols((ext) => ext
+      ? db`SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key FROM style_guides WHERE id = ${styleGuideId} AND active = TRUE LIMIT 1`
+      : db`SELECT id, label, description, blob_key FROM style_guides WHERE id = ${styleGuideId} AND active = TRUE LIMIT 1`))[0] || null;
     // A SPECIFIC style was requested but isn't there (deleted / inactive / wrong
     // id). Parents want THEIR exact style — never substitute or go generic. Fail
     // loud so the caller surfaces it and the parent re-picks / re-uploads.
@@ -34,12 +41,15 @@ export async function loadStyleGuide(db, styleGuideId) {
     }
   } else {
     // No style chosen → fall back to the first active global template.
-    row = (await db`SELECT id, label, description, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`)[0] || null;
+    row = (await cols((ext) => ext
+      ? db`SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`
+      : db`SELECT id, label, description, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`))[0] || null;
   }
   if (!row) return null;
   let image = null;
   if (row.blob_key) { try { image = await readBlobBytes(row.blob_key); } catch (_) { /* missing blob → text-only style */ } }
-  return { id: Number(row.id), label: row.label, description: row.description || '', blob_key: row.blob_key, image };
+  return { id: Number(row.id), label: row.label, description: row.description || '', blob_key: row.blob_key,
+           person_ref_key: row.person_ref_key || null, stuff_ref_key: row.stuff_ref_key || null, image };
 }
 
 // Load the child's committed self-portrait as the subject anchor for any tile
@@ -193,7 +203,7 @@ function noFaceRule(category) {
 // Render one taxonomy tile. `styleGuide` is the loaded { image, label } (or null),
 // `childAnchor` the loaded { buffer, contentType, name } (or null), `settings`
 // the lab_settings row. Returns { ok, b64?, contentType?, prompt?, costCents?, model?, detail? }.
-export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], guidance = '', priorKey = null, model = null }) {
+export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], worldRefKeys = [], guidance = '', priorKey = null, model = null }) {
   const section = String(tax.column_name || '').toLowerCase();
   let content = tax.prompt_template || `A friendly illustration of ${tax.label}.`;
   const mentionsRef = /\{reference\}/i.test(content);
@@ -238,6 +248,16 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
   if (subject && subject.buffer) {
     images.push({ buffer: subject.buffer, contentType: subject.contentType });
     legend.push(`Image ${images.length} shows ${subject.name} — keep this person's face and likeness clearly recognizable.`);
+  }
+  // Per-style WORLD references (the Lab's "stuff" scene for an offered style):
+  // more of the same art style, so materials/objects render consistently —
+  // unlike related-tile refs below, these must NOT force scene matching.
+  for (const key of (worldRefKeys || [])) {
+    try {
+      const bytes = await readBlobBytes(key);
+      images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
+      legend.push(`Image ${images.length} is ANOTHER STYLE reference from the same world — match how it renders objects, materials, and backgrounds; do not copy its content.`);
+    } catch (_) { /* a missing reference never blocks generation */ }
   }
   // Related already-generated tiles (paired concepts like open/close, big/little):
   // attach them so this tile reuses the same setup/composition for a legible pair.
@@ -325,6 +345,23 @@ export async function synthesizeVoice({ text, voiceId, db = null, childId = null
   const vid = voiceId || process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
   const mid = process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
   const body = String(text).slice(0, 300);
+  // Shared render cache — the SAME key scheme /api/tts uses (default emotion),
+  // so tile clips and runtime speech share one ElevenLabs generation per
+  // (voice, phrase) across EVERY family. Without this, each new board build
+  // re-generated the same stock words per account. Callers still copy the
+  // bytes into the child's own blob, so account deletion (which wipes a
+  // child's media) never touches the shared file another family relies on.
+  const cacheKey = 'tts/' + createHash('sha256')
+    .update(`${mid}|${vid}|default|${body}`).digest('hex').slice(0, 40) + '.mp3';
+  try {
+    const cached = await blobGet(cacheKey, { access: 'private' });
+    if (cached && cached.statusCode === 200 && cached.stream) {
+      const reader = cached.stream.getReader();
+      const chunks = [];
+      while (true) { const { value, done } = await reader.read(); if (done) break; chunks.push(Buffer.from(value)); }
+      if (chunks.length) return Buffer.concat(chunks);   // hit: no spend, no metering
+    }
+  } catch (_) { /* miss → generate */ }
   try {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(vid)}`, {
       method: 'POST',
@@ -340,6 +377,8 @@ export async function synthesizeVoice({ text, voiceId, db = null, childId = null
         await logVoiceGeneration(db, { userId: uid, childId, chars: body.length, kind, voiceId: vid, text: body });
       } catch (_) { /* metering is best-effort */ }
     }
-    return Buffer.from(await r.arrayBuffer());
+    const buf = Buffer.from(await r.arrayBuffer());
+    try { await blobPut(cacheKey, buf, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false }); } catch (_) {}
+    return buf;
   } catch (_) { return null; }
 }

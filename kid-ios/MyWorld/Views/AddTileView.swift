@@ -556,7 +556,7 @@ private struct FolderChip: View {
         .buttonStyle(.plain)
         .task(id: category.imageKey) {
             if let key = category.imageKey {
-                icon = await MediaCache.shared.image(for: key)
+                icon = await MediaCache.shared.image(for: key, maxPixel: 256)
             }
         }
     }
@@ -620,7 +620,7 @@ private struct JobCard: View {
             // Once the server finishes, swap the captured photo for the tile art.
             .task(id: job.generatedImageKey) {
                 guard let key = job.generatedImageKey else { return }
-                finishedArt = await MediaCache.shared.image(for: key)
+                finishedArt = await MediaCache.shared.image(for: key, maxPixel: 320)
             }
     }
 
@@ -1047,7 +1047,7 @@ private struct MagicThumb: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#f3c6dd"), lineWidth: 2))
         .task(id: blobKey) {
-            if let key = blobKey { image = await MediaCache.shared.image(for: key) }
+            if let key = blobKey { image = await MediaCache.shared.image(for: key, maxPixel: 320) }
         }
     }
 }

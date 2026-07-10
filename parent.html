@@ -201,6 +201,28 @@
   .org-check { width:17px; height:17px; flex:0 0 auto; cursor:pointer; accent-color:var(--pink); margin:0; }
   .org-drag-row.org-sel { background:#fff0f6; outline:1px solid var(--pink); outline-offset:-1px; }
   #org-selbar { align-items:center; gap:8px; font-size:13px; color:var(--pink-deep); font-weight:600; }
+
+  /* Dashboard tab bar (groups the long scroll into 5 panes) */
+  .ptabs {
+    position: sticky; top: 0; z-index: 20; display: flex; gap: 4px; flex-wrap: wrap;
+    background: rgba(253,242,248,.94); backdrop-filter: blur(6px);
+    padding: 8px 0 10px; margin: 6px 0 18px; border-bottom: 1px solid var(--line);
+  }
+  .ptab {
+    border: 1px solid transparent; background: transparent; color: var(--muted);
+    font: inherit; font-weight: 600; font-size: 14px; padding: 8px 14px; border-radius: 999px;
+    cursor: pointer; white-space: nowrap; transition: background .12s, color .12s;
+  }
+  .ptab:hover { color: var(--pink-deep); background: #fff0f6; }
+  .ptab.active { background: var(--pink); color: #fff; box-shadow: 0 2px 8px rgba(255,20,147,.28); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; animation: paneIn .18s ease; }
+  @keyframes paneIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .tab-pane > .section-label:first-child { margin-top: 4px; }
+  @media (max-width: 560px) {
+    .ptabs { gap: 2px; padding: 6px 0 8px; }
+    .ptab { padding: 7px 11px; font-size: 13px; }
+  }
   .saved-row { display:flex; flex-wrap:wrap; margin-bottom:6px; }
   .saved-chip { display:inline-flex; align-items:center; background:#fff; border:1px solid var(--line); border-radius:999px; margin:0 8px 8px 0; overflow:hidden; }
   .saved-go { border:none; background:var(--pink); color:#fff; font:inherit; font-weight:600; padding:8px 14px; cursor:pointer; }
@@ -218,36 +240,16 @@
   <div class="brand fred">Fletcher's World <small>Parent dashboard</small></div>
   <div class="right">
     <span class="device-pill" id="device-pill" style="display:none;"><span class="dot" id="device-dot"></span> <span id="device-label">Tablet</span></span>
-    <span class="role-switch"><a href="#" id="store-link" style="font-weight:700;">🛍️ Word Store <span id="store-balance"></span></a> · <span id="therapist-switch" style="display:none;">View as <a href="#" id="to-therapist">Therapist</a> · </span><a href="#" id="device-default">Change device default</a><a href="/admin/taxonomy.html" id="admin-taxonomy" style="display:none;"> · 🧬 Taxonomy</a></span>
+    <span class="role-switch"><a href="#" id="store-link" style="font-weight:700;">🛍️ Word Store <span id="store-balance"></span></a> · <span id="therapist-switch" style="display:none;">View as <a href="#" id="to-therapist">Therapist</a> · </span><a href="#" id="device-default">Change device default</a><a href="/admin/taxonomy.html" id="admin-taxonomy" style="display:none;"> · 🧬 Taxonomy</a> · <a href="#" id="signout-link" style="color:#b91c1c;">Sign out</a></span>
   </div>
 </header>
 
 <div class="wrap">
 
   <!-- PROGRESS CHARTS — pinned at top, tabbed, dismissable (reloads each visit) -->
-  <section class="insights" id="insights">
-    <div class="ins-head">
-      <span class="ins-title fred">📈 Fletcher's progress</span>
-      <div class="ins-tabs" role="tablist">
-        <button class="ins-tab active" data-tab="use">Use</button>
-        <button class="ins-tab" data-tab="games">Games</button>
-      </div>
-      <button class="ins-x" id="ins-x" title="Hide charts" aria-label="Hide charts">×</button>
-    </div>
-    <p class="ins-sub" id="ins-sub"></p>
-    <div class="ins-gran" id="ins-gran">
-      <button data-gran="day">Day</button>
-      <button data-gran="week">Week</button>
-      <button data-gran="month">Month</button>
-    </div>
-    <div class="ins-chart"><svg id="ins-svg" viewBox="0 0 340 200" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Progress over time by category"></svg></div>
-    <div class="ins-legend" id="ins-legend"></div>
-    <div class="ins-stars" id="ins-stars"></div>
-  </section>
-  <button class="ins-restore" id="ins-restore">📈 Show progress charts</button>
 
-  <h1 class="page-title fred" style="margin-top:24px;">Hi Andrew 👋</h1>
-  <p class="page-sub">Here's how <strong id="child-name">Fletcher</strong> is doing. Start a learning mode below, or review progress. <em>Fletcher never sees this screen.</em></p>
+  <h1 class="page-title fred" id="parent-greeting" style="margin-top:24px;">Hi there 👋</h1>
+  <p class="page-sub">Everything for <strong id="child-name">Fletcher</strong>'s board, grouped into the tabs below. <em>Fletcher never sees this screen.</em></p>
 
   <!-- STARTER-WORDS CTA — shown when the board has no core/needs vocabulary yet.
        Auto-generates the core + needs starter set (reuses the onboarding seed
@@ -293,6 +295,19 @@
     </div>
   </div>
 
+
+  <!-- ───────── Tab bar: the dashboard grouped like-by-like. Alert banners
+       (review queue, board build, play request) stay above it so they are
+       seen no matter which tab is open. Deep-linkable via #tab-<name>. ── -->
+  <nav class="ptabs" id="ptabs" role="tablist">
+    <button class="ptab active" data-pane="home" role="tab">🏠 Home</button>
+    <button class="ptab" data-pane="progress" role="tab">📈 Progress</button>
+    <button class="ptab" data-pane="board" role="tab">🧩 Board</button>
+    <button class="ptab" data-pane="routines" role="tab">⏰ Routines</button>
+    <button class="ptab" data-pane="account" role="tab">👤 Account</button>
+  </nav>
+
+  <div class="tab-pane active" id="tab-home">
   <!-- OVERVIEW -->
   <div class="section-label">This week</div>
   <div class="stats">
@@ -412,6 +427,28 @@
   <div id="saved-launch" style="margin-top:6px;"></div>
 
   <!-- CURRENT MASTERY -->
+  </div>
+  <div class="tab-pane" id="tab-progress">
+  <section class="insights" id="insights">
+    <div class="ins-head">
+      <span class="ins-title fred">📈 Fletcher's progress</span>
+      <div class="ins-tabs" role="tablist">
+        <button class="ins-tab active" data-tab="use">Use</button>
+        <button class="ins-tab" data-tab="games">Games</button>
+      </div>
+      <button class="ins-x" id="ins-x" title="Hide charts" aria-label="Hide charts">×</button>
+    </div>
+    <p class="ins-sub" id="ins-sub"></p>
+    <div class="ins-gran" id="ins-gran">
+      <button data-gran="day">Day</button>
+      <button data-gran="week">Week</button>
+      <button data-gran="month">Month</button>
+    </div>
+    <div class="ins-chart"><svg id="ins-svg" viewBox="0 0 340 200" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Progress over time by category"></svg></div>
+    <div class="ins-legend" id="ins-legend"></div>
+    <div class="ins-stars" id="ins-stars"></div>
+  </section>
+  <button class="ins-restore" id="ins-restore">📈 Show progress charts</button>
   <div class="section-label">Current mastery</div>
   <div class="panel">
     <h2>Accuracy by category · last 30 days</h2>
@@ -459,23 +496,150 @@
   </div>
 
   <!-- CELEBRATIONS -->
-  <div class="section-label">Your voice · celebrations</div>
+  <!-- RECENT ANSWERS -->
+  <div class="section-label">Recent answers</div>
   <div class="panel">
-    <h2>Reward cheers &amp; game music</h2>
-    <p class="hint">Spoken in your child's voice during and after a game. Edit these and they apply to games on this device.</p>
-    <label for="cheer-phrases" style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin:6px 0;">Cheer phrases (one per line)</label>
-    <textarea id="cheer-phrases" rows="5" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;"></textarea>
-    <label for="cheer-music" style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin:12px 0 6px;">Background music during games</label>
-    <select id="cheer-music" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;">
-      <option value="/audio/color-tap-learn.mp3">Color Tap (playful)</option>
-      <option value="/audio/clockwork-kaleidoscope.mp3">Clockwork Kaleidoscope (calm)</option>
-      <option value="">No music</option>
-    </select>
-    <div class="actions" style="display:flex; gap:8px; margin-top:14px; align-items:center;">
-      <button class="btn primary" id="cheer-save">Save rewards</button>
-      <span id="cheer-msg" style="font-size:13px;color:var(--muted);"></span>
+    <h2>What your child answered</h2>
+    <p class="hint">Responses to questions like the bathroom and hunger checks. Live push alerts to your phone are coming next.</p>
+    <div id="answers-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <button class="btn ghost" id="answers-reload" style="margin-top:10px;">↻ Refresh</button>
+  </div>
+
+  </div>
+  <div class="tab-pane" id="tab-board">
+  <!-- AGE BAND -->
+  <div class="section-label">What's on the board</div>
+  <div class="panel" id="age-panel">
+    <h2>Vocabulary level <span id="age-current-band" style="font-weight:400;color:#6b7280;font-size:14px;"></span></h2>
+    <p class="hint">An early-intervention board hides words that aren't age-appropriate yet, so the board starts focused and grows with your child. Words you've added on your own are never filtered.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;">
+      <label style="display:flex;flex-direction:column;gap:4px;">
+        <span style="font-size:13px;font-weight:600;color:var(--ink);"><span class="cn">Your child</span>'s birth date</span>
+        <input id="age-birth" type="date" style="padding:8px;border:1px solid var(--line);border-radius:10px;font:inherit;">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink);">
+        <input id="age-show-all" type="checkbox">
+        Show every band (skip the age filter)
+      </label>
+      <button class="btn" id="age-save">Save</button>
+      <span id="age-msg" style="color:#6b7280;font-size:13px;"></span>
     </div>
-    <div class="note">Default animation: <strong>yellow flowers bursting</strong> 🌼 across the screen. Celebrations are the only place audio + animation reward Fletcher directly — no mode ever shows a wrong-answer cue.</div>
+    <div id="age-mastery-card" style="margin-top:16px;padding:14px;border-radius:14px;background:#fdf4ff;border:1px solid #f3c6da;display:none;">
+      <div style="font-weight:700;color:#9d174d;font-size:16px;margin-bottom:4px;" id="age-mastery-title">Ready to unlock the next words</div>
+      <div style="font-size:13px;color:#6b21a8;" id="age-mastery-body"></div>
+      <div style="display:flex;gap:10px;margin-top:10px;align-items:center;">
+        <button class="btn" id="age-advance">Unlock <span id="age-next-name">next band</span></button>
+        <span id="age-advance-msg" style="color:#6b7280;font-size:13px;"></span>
+      </div>
+    </div>
+    <div id="age-readiness-note" style="margin-top:10px;font-size:13px;color:#6b7280;"></div>
+  </div>
+
+  <!-- ART STYLE -->
+  <div class="section-label">Art style</div>
+  <div class="panel" id="style-panel" style="display:none;">
+    <h2><span class="cn">Your child</span>'s board art style</h2>
+    <p class="hint">Every tile is drawn in this style, with <span class="cn">your child</span> as the recognizable anchor. This is the look the whole board is generated from.</p>
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+      <img id="style-panel-img" alt="" style="width:160px;height:160px;object-fit:cover;border-radius:16px;border:2px solid var(--line);background:#fff7fb;">
+      <div>
+        <div id="style-panel-label" style="font-weight:700;font-size:16px;color:var(--ink);"></div>
+        <div id="style-panel-desc" style="font-size:13px;color:#6b7280;margin-top:4px;max-width:360px;"></div>
+        <div id="style-panel-source" style="font-size:12px;color:#9ca3af;margin-top:8px;"></div>
+        <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="btn ghost" id="style-regen-btn">↻ Regenerate style</button>
+          <span id="style-regen-msg" style="font-size:13px;color:#6b7280;"></span>
+        </div>
+      </div>
+    </div>
+    <!-- Draft preview (approve before it replaces the anchor) -->
+    <div id="style-draft" style="display:none;margin-top:16px;padding:14px;border-radius:14px;background:#fdf4ff;border:1px solid #f3c6da;">
+      <div style="font-weight:700;color:#9d174d;margin-bottom:8px;">New take — keep it?</div>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+        <img id="style-draft-img" alt="" style="width:160px;height:160px;object-fit:cover;border-radius:16px;border:2px solid #f3c6da;background:#fff;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn" id="style-draft-use">Use this style</button>
+          <button class="btn ghost" id="style-draft-again">Try another</button>
+          <button class="btn ghost" id="style-draft-cancel">Keep current</button>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:8px;">This becomes the look every new tile is generated from. Existing tiles keep their current pictures.</p>
+    </div>
+  </div>
+
+  <!-- BOARD VOICE (change = coming soon) -->
+  <div class="section-label">Voice</div>
+  <div class="panel" id="voice-panel">
+    <h2>Board voice</h2>
+    <p class="hint"><span class="cn">Your child</span>'s board speaks every tile in this voice. Preview one, then save — new tiles use it immediately; existing tiles refresh their audio over the next little while.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <select id="voice-pick" style="flex:1;min-width:200px;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;">
+        <option value="">Loading voices…</option>
+      </select>
+      <button class="btn ghost" id="voice-preview">▶ Preview</button>
+      <button class="btn primary" id="voice-save">Save voice</button>
+    </div>
+    <span id="voice-msg" style="font-size:13px;color:var(--muted);display:inline-block;margin-top:8px;"></span>
+    <audio id="voice-audio" preload="none" style="display:none;"></audio>
+  </div>
+
+  <!-- ALBUM -->
+  <div class="section-label">Picture album</div>
+  <div class="panel" id="album-panel">
+    <h2>Pictures your board has held <span id="album-count" style="font-weight:400;color:#6b7280;font-size:14px;"></span></h2>
+    <p class="hint">Every time a tile gets a new picture, the old one is saved here. Tap a tile to see its history; scroll the timeline for a chronological view of <span class="cn">your child</span>'s board memorabilia.</p>
+    <div style="display:flex;gap:8px;margin:8px 0 12px;">
+      <button class="btn" id="album-mode-tiles" data-mode="by-tile">By tile</button>
+      <button class="btn ghost" id="album-mode-time" data-mode="timeline">Timeline</button>
+      <button class="btn ghost" id="album-reload" style="margin-left:auto;">↻ Refresh</button>
+    </div>
+    <div id="album-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;"></div>
+    <div id="album-empty" class="hint" style="display:none;padding:20px 0;text-align:center;">No pictures yet. As tiles get regenerated, the old versions will appear here.</div>
+  </div>
+
+  <!-- ORGANIZE -->
+  <div class="section-label">Organize the board</div>
+  <div class="panel">
+    <h2>Categories &amp; tiles</h2>
+    <p class="hint">Drag tiles and categories to rearrange your child's board — like moving files between folders. Opens as a full-screen workspace.</p>
+    <button class="btn primary" id="org-open">⤢ Open the organizer</button>
+  </div>
+
+  <!-- ORGANIZE — full-screen workspace -->
+  <div id="org-page">
+    <div class="org-page-head">
+      <strong>Organize the board</strong>
+      <span id="org-status" style="font-size:13px;color:var(--muted);"></span>
+      <span id="org-selbar" style="display:none;"><span class="n">0</span>&nbsp;tiles selected · drag any one to move them together <button class="btn ghost" id="org-selclear">Clear</button></span>
+      <span style="margin-left:auto;display:flex;gap:8px;">
+        <button class="btn ghost" id="org-collapse-all">⊟ Collapse all</button>
+        <button class="btn ghost" id="org-reload">↻ Reload</button>
+        <button class="btn" id="org-close">✕ Close</button>
+      </span>
+    </div>
+    <div id="org-scroll" class="org-page-body">
+      <p class="hint" style="margin:0 0 12px;">Grab the <strong>⠿</strong> handle to move a tile or category. Drop onto a category to file a tile inside it, or between rows to reorder. Tap a category's <strong>▾</strong> to collapse it. Tick several tiles to select them, then drag any one to move them together.</p>
+      <div id="org-tree"></div>
+    </div>
+  </div>
+
+  <!-- THERAPY TEAM (day-two; admin only for now) -->
+  <!-- FAMILY / PEOPLE — name vs. relationship (docs/people-data-model.md) -->
+  <div class="section-label">Family &amp; people</div>
+  <div class="panel">
+    <h2>Family on <span id="family-child-name">your child</span>'s board</h2>
+    <p class="hint">Who each person is to your child — their name and relationship. We use this to call people by name in slideshows and to describe relationships. Add grandparents, brothers and sisters, anyone.</p>
+    <div id="family-list" style="display:flex;flex-direction:column;gap:8px;margin:12px 0;"></div>
+    <button class="btn primary" id="family-add">＋ Add family member</button>
+    <span id="family-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
+  </div>
+
+  <!-- THERAPIST-SHARED BOARDS (parent override; day-two, admin only for now) -->
+  <div class="section-label therapist-only" style="display:none;">Therapist boards on the tablet</div>
+  <div class="panel therapist-only" style="display:none;">
+    <h2>Custom boards a therapist has shared</h2>
+    <p class="hint">Anything your therapists make for <span id="shared-child-name">your child</span> appears here. By default they show on the tablet right away. Tap "Remove from view" if you don't want one on the board — the therapist's content is unchanged; it just stops showing for your child.</p>
+    <div id="shared-list" style="display:flex;flex-direction:column;gap:8px;margin-top:14px;"></div>
   </div>
 
   <!-- BANNER COLOR (§1 — the child's favorite color) -->
@@ -490,6 +654,8 @@
     </div>
   </div>
 
+  </div>
+  <div class="tab-pane" id="tab-routines">
   <!-- DAILY SCHEDULE -->
   <div class="section-label">Daily schedule</div>
   <div class="panel">
@@ -582,124 +748,27 @@
     </div>
   </div>
 
-  <!-- RECENT ANSWERS -->
-  <div class="section-label">Recent answers</div>
+  <div class="section-label">Your voice · celebrations</div>
   <div class="panel">
-    <h2>What your child answered</h2>
-    <p class="hint">Responses to questions like the bathroom and hunger checks. Live push alerts to your phone are coming next.</p>
-    <div id="answers-list" style="display:flex;flex-direction:column;gap:8px;"></div>
-    <button class="btn ghost" id="answers-reload" style="margin-top:10px;">↻ Refresh</button>
+    <h2>Reward cheers &amp; game music</h2>
+    <p class="hint">Spoken in your child's voice during and after a game. Edit these and they apply to games on this device.</p>
+    <label for="cheer-phrases" style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin:6px 0;">Cheer phrases (one per line)</label>
+    <textarea id="cheer-phrases" rows="5" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;"></textarea>
+    <label for="cheer-music" style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin:12px 0 6px;">Background music during games</label>
+    <select id="cheer-music" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;">
+      <option value="/audio/color-tap-learn.mp3">Color Tap (playful)</option>
+      <option value="/audio/clockwork-kaleidoscope.mp3">Clockwork Kaleidoscope (calm)</option>
+      <option value="">No music</option>
+    </select>
+    <div class="actions" style="display:flex; gap:8px; margin-top:14px; align-items:center;">
+      <button class="btn primary" id="cheer-save">Save rewards</button>
+      <span id="cheer-msg" style="font-size:13px;color:var(--muted);"></span>
+    </div>
+    <div class="note">Default animation: <strong>yellow flowers bursting</strong> 🌼 across the screen. Celebrations are the only place audio + animation reward Fletcher directly — no mode ever shows a wrong-answer cue.</div>
   </div>
 
-  <!-- AGE BAND -->
-  <div class="section-label">What's on the board</div>
-  <div class="panel" id="age-panel">
-    <h2>Vocabulary level <span id="age-current-band" style="font-weight:400;color:#6b7280;font-size:14px;"></span></h2>
-    <p class="hint">An early-intervention board hides words that aren't age-appropriate yet, so the board starts focused and grows with your child. Words you've added on your own are never filtered.</p>
-    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;">
-      <label style="display:flex;flex-direction:column;gap:4px;">
-        <span style="font-size:13px;font-weight:600;color:var(--ink);"><span class="cn">Your child</span>'s birth date</span>
-        <input id="age-birth" type="date" style="padding:8px;border:1px solid var(--line);border-radius:10px;font:inherit;">
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink);">
-        <input id="age-show-all" type="checkbox">
-        Show every band (skip the age filter)
-      </label>
-      <button class="btn" id="age-save">Save</button>
-      <span id="age-msg" style="color:#6b7280;font-size:13px;"></span>
-    </div>
-    <div id="age-mastery-card" style="margin-top:16px;padding:14px;border-radius:14px;background:#fdf4ff;border:1px solid #f3c6da;display:none;">
-      <div style="font-weight:700;color:#9d174d;font-size:16px;margin-bottom:4px;" id="age-mastery-title">Ready to unlock the next words</div>
-      <div style="font-size:13px;color:#6b21a8;" id="age-mastery-body"></div>
-      <div style="display:flex;gap:10px;margin-top:10px;align-items:center;">
-        <button class="btn" id="age-advance">Unlock <span id="age-next-name">next band</span></button>
-        <span id="age-advance-msg" style="color:#6b7280;font-size:13px;"></span>
-      </div>
-    </div>
-    <div id="age-readiness-note" style="margin-top:10px;font-size:13px;color:#6b7280;"></div>
   </div>
-
-  <!-- ART STYLE -->
-  <div class="section-label">Art style</div>
-  <div class="panel" id="style-panel" style="display:none;">
-    <h2><span class="cn">Your child</span>'s board art style</h2>
-    <p class="hint">Every tile is drawn in this style, with <span class="cn">your child</span> as the recognizable anchor. This is the look the whole board is generated from.</p>
-    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-      <img id="style-panel-img" alt="" style="width:160px;height:160px;object-fit:cover;border-radius:16px;border:2px solid var(--line);background:#fff7fb;">
-      <div>
-        <div id="style-panel-label" style="font-weight:700;font-size:16px;color:var(--ink);"></div>
-        <div id="style-panel-desc" style="font-size:13px;color:#6b7280;margin-top:4px;max-width:360px;"></div>
-        <div id="style-panel-source" style="font-size:12px;color:#9ca3af;margin-top:8px;"></div>
-        <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <button class="btn ghost" id="style-regen-btn">↻ Regenerate style</button>
-          <span id="style-regen-msg" style="font-size:13px;color:#6b7280;"></span>
-        </div>
-      </div>
-    </div>
-    <!-- Draft preview (approve before it replaces the anchor) -->
-    <div id="style-draft" style="display:none;margin-top:16px;padding:14px;border-radius:14px;background:#fdf4ff;border:1px solid #f3c6da;">
-      <div style="font-weight:700;color:#9d174d;margin-bottom:8px;">New take — keep it?</div>
-      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-        <img id="style-draft-img" alt="" style="width:160px;height:160px;object-fit:cover;border-radius:16px;border:2px solid #f3c6da;background:#fff;">
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button class="btn" id="style-draft-use">Use this style</button>
-          <button class="btn ghost" id="style-draft-again">Try another</button>
-          <button class="btn ghost" id="style-draft-cancel">Keep current</button>
-        </div>
-      </div>
-      <p class="hint" style="margin-top:8px;">This becomes the look every new tile is generated from. Existing tiles keep their current pictures.</p>
-    </div>
-  </div>
-
-  <!-- BOARD VOICE (change = coming soon) -->
-  <div class="section-label">Voice</div>
-  <div class="panel">
-    <h2>Board voice <span style="font-weight:400;color:#9ca3af;font-size:13px;">· coming soon</span></h2>
-    <p class="hint"><span class="cn">Your child</span>'s board speaks in the voice you chose during setup. Changing the voice from here is coming soon.</p>
-    <button class="btn" disabled style="opacity:.55;cursor:default;">Change voice (coming soon)</button>
-  </div>
-
-  <!-- ALBUM -->
-  <div class="section-label">Picture album</div>
-  <div class="panel" id="album-panel">
-    <h2>Pictures your board has held <span id="album-count" style="font-weight:400;color:#6b7280;font-size:14px;"></span></h2>
-    <p class="hint">Every time a tile gets a new picture, the old one is saved here. Tap a tile to see its history; scroll the timeline for a chronological view of <span class="cn">your child</span>'s board memorabilia.</p>
-    <div style="display:flex;gap:8px;margin:8px 0 12px;">
-      <button class="btn" id="album-mode-tiles" data-mode="by-tile">By tile</button>
-      <button class="btn ghost" id="album-mode-time" data-mode="timeline">Timeline</button>
-      <button class="btn ghost" id="album-reload" style="margin-left:auto;">↻ Refresh</button>
-    </div>
-    <div id="album-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;"></div>
-    <div id="album-empty" class="hint" style="display:none;padding:20px 0;text-align:center;">No pictures yet. As tiles get regenerated, the old versions will appear here.</div>
-  </div>
-
-  <!-- ORGANIZE -->
-  <div class="section-label">Organize the board</div>
-  <div class="panel">
-    <h2>Categories &amp; tiles</h2>
-    <p class="hint">Drag tiles and categories to rearrange your child's board — like moving files between folders. Opens as a full-screen workspace.</p>
-    <button class="btn primary" id="org-open">⤢ Open the organizer</button>
-  </div>
-
-  <!-- ORGANIZE — full-screen workspace -->
-  <div id="org-page">
-    <div class="org-page-head">
-      <strong>Organize the board</strong>
-      <span id="org-status" style="font-size:13px;color:var(--muted);"></span>
-      <span id="org-selbar" style="display:none;"><span class="n">0</span>&nbsp;tiles selected · drag any one to move them together <button class="btn ghost" id="org-selclear">Clear</button></span>
-      <span style="margin-left:auto;display:flex;gap:8px;">
-        <button class="btn ghost" id="org-collapse-all">⊟ Collapse all</button>
-        <button class="btn ghost" id="org-reload">↻ Reload</button>
-        <button class="btn" id="org-close">✕ Close</button>
-      </span>
-    </div>
-    <div id="org-scroll" class="org-page-body">
-      <p class="hint" style="margin:0 0 12px;">Grab the <strong>⠿</strong> handle to move a tile or category. Drop onto a category to file a tile inside it, or between rows to reorder. Tap a category's <strong>▾</strong> to collapse it. Tick several tiles to select them, then drag any one to move them together.</p>
-      <div id="org-tree"></div>
-    </div>
-  </div>
-
-  <!-- THERAPY TEAM (day-two; admin only for now) -->
+  <div class="tab-pane" id="tab-account">
   <div class="section-label therapist-only" style="display:none;">Care team</div>
   <div class="panel therapist-only" style="display:none;">
     <h2>Who has access to <span id="team-child-name">your child</span></h2>
@@ -707,14 +776,6 @@
     <div id="team-list" style="display:flex;flex-direction:column;gap:8px;margin:14px 0;"></div>
     <button class="btn primary" id="team-invite">＋ Invite a team member</button>
     <span id="team-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
-  </div>
-
-  <!-- THERAPIST-SHARED BOARDS (parent override; day-two, admin only for now) -->
-  <div class="section-label therapist-only" style="display:none;">Therapist boards on the tablet</div>
-  <div class="panel therapist-only" style="display:none;">
-    <h2>Custom boards a therapist has shared</h2>
-    <p class="hint">Anything your therapists make for <span id="shared-child-name">your child</span> appears here. By default they show on the tablet right away. Tap "Remove from view" if you don't want one on the board — the therapist's content is unchanged; it just stops showing for your child.</p>
-    <div id="shared-list" style="display:flex;flex-direction:column;gap:8px;margin-top:14px;"></div>
   </div>
 
   <!-- BACKUP -->
@@ -749,6 +810,20 @@
         <button class="btn ghost" id="acct-forgot">Email me a reset link</button>
       </div>
       <span id="acct-msg" style="font-size:13px;color:var(--muted);"></span>
+
+      <div style="margin-top:16px;border-top:1px solid #fde2ec;padding-top:14px;display:flex;flex-direction:column;gap:10px;">
+        <h2 style="margin:0;">Change email</h2>
+        <label style="font-size:12px;font-weight:700;color:var(--muted);">New email address
+          <input id="email-new" type="email" autocomplete="email" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;">
+        </label>
+        <label style="font-size:12px;font-weight:700;color:var(--muted);">Current password
+          <input id="email-pw" type="password" autocomplete="current-password" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;">
+        </label>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="btn primary" id="email-change">Change email</button>
+          <span id="email-msg" style="font-size:13px;color:var(--muted);"></span>
+        </div>
+      </div>
     </div>
 
     <div style="margin-top:22px;border-top:1px solid #fde2ec;padding-top:16px;">
@@ -770,16 +845,7 @@
     </div>
   </div>
 
-  <!-- FAMILY / PEOPLE — name vs. relationship (docs/people-data-model.md) -->
-  <div class="section-label">Family &amp; people</div>
-  <div class="panel">
-    <h2>Family on <span id="family-child-name">your child</span>'s board</h2>
-    <p class="hint">Who each person is to your child — their name and relationship. We use this to call people by name in slideshows and to describe relationships. Add grandparents, brothers and sisters, anyone.</p>
-    <div id="family-list" style="display:flex;flex-direction:column;gap:8px;margin:12px 0;"></div>
-    <button class="btn primary" id="family-add">＋ Add family member</button>
-    <span id="family-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
   </div>
-
   <!-- (Removed) "Style & subject references" — superseded by the Art style panel
        above (style_guides) for art style, and by Family/onboarding (persons) for
        the child's likeness. api/generate-image.js no longer reads reference_images. -->
@@ -885,15 +951,14 @@
     <div class="field"><label>Label</label><input id="tile-label" type="text" maxlength="60" placeholder="e.g. Mom"></div>
     <div style="border:1px solid #f3c6dd;background:#fff5fa;border-radius:12px;padding:12px;margin-bottom:14px;">
       <div style="font-weight:700;color:var(--pink-deep);margin-bottom:4px;">✨ Make from a photo</div>
-      <p class="hint" style="margin:0 0 8px;">Type a label, pick a style, then choose a photo — we'll create the artwork.</p>
-      <div class="field" style="margin-bottom:8px;"><label>Art style</label>
-        <select id="tile-style">
-          <option value="Pixar-style 3D animated render">3D Animated</option>
-          <option value="flat picture-book illustration">Picture Book</option>
-          <option value="soft watercolor illustration">Watercolor</option>
-          <option value="gentle soft storybook illustration">Soft Storybook</option>
-          <option value="needle-felted wool craft">Felted</option>
-        </select>
+      <p class="hint" style="margin:0 0 8px;">Choose a photo — we'll name it, draw it to match the board's art style, add the voice, and put it on the board automatically. Naming it above first is optional.</p>
+      <!-- Per-tile art-style choice is gone on purpose (matches the apps):
+           every styled tile renders in the BOARD's saved house style. -->
+      <div style="display:flex;gap:8px;margin:0 0 8px;">
+        <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
+          <input type="radio" name="tile-look" id="tile-look-style" checked style="width:auto;margin:0;">Board art style</label>
+        <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
+          <input type="radio" name="tile-look" id="tile-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
       </div>
       <!-- No `capture`: lets iOS offer Take Photo OR Photo Library (camera-only
            forced too narrow a flow). Native app needs NSCameraUsageDescription +
@@ -1104,6 +1169,16 @@
     try { sessionStorage.removeItem('aacStayBoard'); } catch (_) {}
     window.location.href = '/u/' + encodeURIComponent(slug);
   });
+  // Sign out on this device: clear the server cookie + the bearer token the
+  // legacy endpoints still read, then land on the login page.
+  const signoutLink = document.getElementById('signout-link');
+  if (signoutLink) signoutLink.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!confirm('Sign out on this device? Everything stays saved — sign back in anytime.')) return;
+    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
+    try { localStorage.removeItem('aacToken'); } catch (_) {}
+    window.location.href = '/login';
+  });
 
   // ---- Progress charts now live in /charts.js (shared with the other dashboard) ----
   Insights.init({ childName: pretty });
@@ -1123,6 +1198,28 @@
   const insights = document.getElementById('insights'), restore = document.getElementById('ins-restore');
   document.getElementById('ins-x').addEventListener('click', () => { insights.style.display = 'none'; restore.classList.add('show'); });
   restore.addEventListener('click', () => { insights.style.display = ''; restore.classList.remove('show'); });
+
+  // ---- Dashboard tabs: five panes, deep-linkable via #tab-<name> ----
+  (function initTabs() {
+    const tabs = [...document.querySelectorAll('.ptab')];
+    const panes = [...document.querySelectorAll('.tab-pane')];
+    if (!tabs.length) return;
+    function show(name, push) {
+      const id = 'tab-' + name;
+      if (!panes.some(p => p.id === id)) name = 'home';
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.pane === name));
+      panes.forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+      if (push && location.hash !== '#' + 'tab-' + name) history.replaceState(null, '', '#tab-' + name);
+      window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+    }
+    tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.pane, true)));
+    window.addEventListener('hashchange', () => {
+      const m = (location.hash || '').match(/^#tab-([a-z]+)$/);
+      if (m) show(m[1], false);
+    });
+    const m0 = (location.hash || '').match(/^#tab-([a-z]+)$/);
+    show(m0 ? m0[1] : 'home', false);
+  })();
 
   renderMastery([]);
 
@@ -1497,6 +1594,24 @@
         await fetch('/api/auth/reset-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: myEmail }) });
         acctMsg('Sent — check ' + myEmail + ' for the reset link.');
       } catch (err) { acctMsg('Could not send: ' + (err.message || err), true); } finally { forgotBtn.disabled = false; }
+    });
+
+    const emailBtn = document.getElementById('email-change');
+    if (emailBtn) emailBtn.addEventListener('click', async () => {
+      const nw = document.getElementById('email-new').value.trim();
+      const pw = document.getElementById('email-pw').value;
+      const emsg = (t, bad) => { const el = document.getElementById('email-msg'); el.textContent = t; el.style.color = bad ? '#b91c1c' : 'var(--muted)'; };
+      if (!nw.includes('@')) { emsg('Enter the new email address first.', true); return; }
+      if (!pw) { emsg('Enter your current password to confirm.', true); return; }
+      emailBtn.disabled = true; emsg('Saving…');
+      try {
+        const r = await fetch('/api/auth/change-password', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword: pw, newEmail: nw }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        myEmail = d.email || nw;
+        document.getElementById('email-new').value = ''; document.getElementById('email-pw').value = '';
+        emsg('Email changed to ' + myEmail + '. Use it next time you sign in.');
+      } catch (err) { emsg(err.message || String(err), true); } finally { emailBtn.disabled = false; }
     });
 
     // ---- Delete account (with backup offer + typed confirmation) ----
@@ -1945,7 +2060,7 @@
       : 'No sound yet';
     document.getElementById('tile-delete').style.display = existing ? 'inline-flex' : 'none';
     tileSetErr('');
-    try { const st = localStorage.getItem('aacStyle'); if (st) document.getElementById('tile-style').value = st; } catch (_) {}
+    document.getElementById('tile-look-style').checked = true;
     tileScrim.classList.add('open');
   }
   function closeTileAdder() { tileScrim.classList.remove('open'); }
@@ -1959,74 +2074,64 @@
     const prev = document.getElementById('tile-preview'); const u = URL.createObjectURL(blob);
     prev.src = u; prev.style.display = 'block'; prev.addEventListener('load', () => URL.revokeObjectURL(u), { once: true });
   }
-  document.getElementById('tile-style').addEventListener('change', (e) => { try { localStorage.setItem('aacStyle', e.target.value); } catch (_) {} });
-  // Photo-first add-tile flow. Tap → photo picker. Once a photo lands, we run
-  // describe-image (auto-name + phonetic), then generate-image (styled art),
-  // then tts (voice). No "type a label first" gate — busy parents who can't
-  // pause to type get the whole tile from one tap. Each step's failure stops
-  // the chain with a clear inline error; the user can fix what's wrong (e.g.
-  // tweak the label) and re-tap Save without re-shooting.
+  // Photo-first add-tile flow — the durable /api/tile-jobs queue (matches the
+  // native apps). The server names the photo, renders it in the BOARD's saved
+  // house style (or keeps the exact photo — free), voices it, and lands it on
+  // the board on its own; we poll for a friendly status line. The photo is
+  // safe server-side the moment the POST returns.
   document.getElementById('tile-magic').addEventListener('click', () => {
     tileSetErr('');
     document.getElementById('tile-photo').click();
   });
   document.getElementById('tile-photo').addEventListener('change', async (e) => {
     const file = e.target.files[0]; e.target.value = ''; if (!file) return;
-    const style = document.getElementById('tile-style').value;
     const emotion = document.getElementById('tile-emotion').value;
     const statusEl = document.getElementById('tile-magic-status');
     const btn = document.getElementById('tile-magic'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Working…';
     tileSetErr('');
     try {
-      // 1) Downscale once; reuse the same bytes for describe + generate.
       const photo = await downscale(file, 1024, 0.85);
-
-      // 2) Auto-name + phonetic spelling. Best-effort: if vision fails (e.g.
-      // org not verified), fall back to whatever the parent has typed in the
-      // label field — the rest of the flow can still run.
-      statusEl.textContent = '🔍 Looking at the photo…';
-      let label = document.getElementById('tile-label').value.trim();
-      let phrase = (document.getElementById('tile-phrase').value || '').trim();
-      try {
-        const dr = await fetch('/api/describe-image', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
-        if (dr.ok) {
-          const d = await dr.json();
-          if (d.label && !label)            { label = d.label;            document.getElementById('tile-label').value = label; }
-          if (d.pronunciation && !phrase)   { phrase = d.pronunciation;   document.getElementById('tile-phrase').value = phrase; }
+      const raw = document.getElementById('tile-look-raw').checked;
+      const label = document.getElementById('tile-label').value.trim();
+      statusEl.textContent = '📤 Saving the photo…';
+      const qs = '/api/tile-jobs?childId=' + encodeURIComponent(slug)
+        + '&section=' + encodeURIComponent(tileTarget.section)
+        + '&emotion=' + encodeURIComponent(emotion)
+        + (tileTarget.catId ? '&categoryId=' + tileTarget.catId : '')
+        + (label ? '&label=' + encodeURIComponent(label) : '')
+        + (raw ? '&raw=1' : '');
+      const jr = await fetch(qs, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
+      if (!jr.ok) {
+        const d = await jr.text();
+        if (jr.status === 402 && /needs_subscription/.test(d)) {
+          throw new Error('Styled tiles are a membership feature — pick “My exact photo” (free) and tap again, or join in Credits & Store.');
         }
-      } catch (_) { /* vision is best-effort */ }
-
-      // If we *still* don't have a label, we can't generate art (model needs a
-      // subject hint). Surface that as a clear, actionable message.
-      if (!label) {
-        statusEl.textContent = '—';
-        tileSetErr("Couldn't name the photo automatically — type a label and tap the button again.");
-        document.getElementById('tile-label').focus();
-        return;
+        throw new Error(d.slice(0, 200));
       }
-
-      // 3) Stylized art via gpt-image-1.
-      statusEl.textContent = '🎨 Creating the artwork… (~20–40s)';
-      const ir = await fetch('/api/generate-image?label=' + encodeURIComponent(label) + '&style=' + encodeURIComponent(style) + '&childId=' + encodeURIComponent(slug), { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
-      if (!ir.ok) {
-        const d = await ir.text();
-        // Common: OpenAI org isn't identity-verified → 403 on /v1/images/edits.
-        // Make that obvious instead of buried in a 500-char dump.
-        const hint = /must be verified/i.test(d)
-          ? "OpenAI organization isn't verified for image generation. Open platform.openai.com → Settings → Organization → Verify, then try again."
-          : d.slice(0, 160);
-        throw new Error('Image — ' + hint);
+      const { id: jobId } = await jr.json();
+      statusEl.textContent = raw
+        ? '📥 Adding the photo to the board…'
+        : '🎨 Drawing it to match the board… (1–3 min). You can close this — it lands on its own.';
+      const t0 = Date.now();
+      while (Date.now() - t0 < 5 * 60000) {
+        await new Promise((r) => setTimeout(r, 4000));
+        let job = null;
+        try {
+          const sr = await fetch('/api/tile-jobs?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+          if (sr.ok) job = ((await sr.json()).jobs || []).find((j) => j.id === jobId);
+        } catch (_) { continue; }
+        if (!job) continue;
+        if (job.status === 'done') {
+          statusEl.textContent = '✅ ' + (job.label || label || 'The tile') + ' is on the board!';
+          try { await loadOrg(); } catch (_) {}
+          setTimeout(() => { if (!tileTarget.existing) closeTileAdder(); }, 1500);
+          return;
+        }
+        if (job.status === 'failed' && job.attempts >= 5) {
+          throw new Error(job.error || 'the picture engine gave up — try again in a bit');
+        }
       }
-      tilePendingImage = await ir.blob(); tileShowPreview(tilePendingImage);
-
-      // 4) Voice via ElevenLabs (phrase wins; otherwise speak the label).
-      statusEl.textContent = '🔊 Making the voice…';
-      const speakText = phrase || label;
-      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: speakText, emotion }) });
-      if (tr.ok) { tilePendingSound = await tr.blob(); document.getElementById('tile-sound-status').textContent = 'AI voice ready ✓'; }
-      else { /* voice is best-effort; user can still hit "Generate audio" again */ }
-
-      statusEl.textContent = '✅ Ready — review the name, then tap Save tile.';
+      statusEl.textContent = '⏳ Still rendering — it will appear on the board when it finishes.';
     } catch (err) { statusEl.textContent = '—'; tileSetErr('Could not make the tile: ' + (err.message || err)); }
     finally { btn.disabled = false; btn.textContent = pv; }
   });
@@ -2043,7 +2148,7 @@
     const st = document.getElementById('tile-sound-status'); const btn = document.getElementById('tile-gen-audio');
     btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Generating…'; st.textContent = 'Generating audio…'; tileSetErr('');
     try {
-      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: phrase, emotion }) });
+      const tr = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ text: phrase, emotion, childId: slug }) });
       if (!tr.ok) { const d = await tr.text(); throw new Error(d.slice(0, 160)); }
       tilePendingSound = await tr.blob(); st.textContent = 'Voice ready ✓';
       try { const a = new Audio(URL.createObjectURL(tilePendingSound)); a.play().catch(() => {}); } catch (_) {}
@@ -2279,7 +2384,7 @@
   async function reviewTTS(text, emotion) {
     const r = await fetch('/api/tts', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-      body: JSON.stringify({ text, emotion: emotion || 'default' }),
+      body: JSON.stringify({ text, emotion: emotion || 'default', childId: slug }),
     });
     if (!r.ok) throw new Error('voice ' + r.status);
     return await r.blob();
@@ -2532,6 +2637,49 @@
   const bannerColorEl = document.getElementById('banner-color');
   if (bannerColorEl) {
     bannerColorEl.addEventListener('input', bannerPreview);
+    // ---- Board voice picker (childSettings.voiceId → TTS + every new tile) ----
+    (async function initVoicePicker() {
+      const sel = document.getElementById('voice-pick');
+      const msg = document.getElementById('voice-msg');
+      const audio = document.getElementById('voice-audio');
+      if (!sel) return;
+      let sampleText = 'Hi! This is how I sound.';
+      try {
+        const d = await fetch('/api/onboarding/voices', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null);
+        const voices = (d && d.voices) || [];
+        sampleText = (d && d.sampleText) || sampleText;
+        if (!voices.length) { sel.innerHTML = '<option value="">No voices available</option>'; return; }
+        const cur = childSettings.voiceId || '';
+        sel.innerHTML = voices.map(v => {
+          const label = [v.name, v.accent, v.gender].filter(Boolean).join(' · ');
+          return '<option value="' + v.id + '"' + (v.id === cur ? ' selected' : '') + '>' + label + '</option>';
+        }).join('');
+      } catch (_) { sel.innerHTML = '<option value="">Could not load voices</option>'; return; }
+
+      document.getElementById('voice-preview').addEventListener('click', async () => {
+        const vid = sel.value;
+        if (!vid) return;
+        msg.textContent = 'Loading preview…';
+        try {
+          const r = await fetch('/api/tts', { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: sampleText, voiceId: vid }) });
+          if (!r.ok) throw new Error('tts ' + r.status);
+          const url = URL.createObjectURL(await r.blob());
+          audio.src = url; audio.play().catch(() => {});
+          audio.onended = () => URL.revokeObjectURL(url);
+          msg.textContent = '';
+        } catch (_) { msg.textContent = 'Could not play a preview right now.'; }
+      });
+
+      document.getElementById('voice-save').addEventListener('click', () => {
+        const vid = sel.value;
+        if (!vid) { msg.textContent = 'Pick a voice first.'; return; }
+        childSettings = { ...childSettings, voiceId: vid };
+        saveSettingsToServer('Voice saved ✓ — new tiles use it right away', 'voice-msg');
+      });
+    })();
+
     document.getElementById('banner-save').addEventListener('click', () => {
       const hex = bannerColorEl.value;
       childSettings = { ...childSettings, kidDisplay: { ...(childSettings.kidDisplay || {}),

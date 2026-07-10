@@ -374,3 +374,17 @@ suspend fun ApiClient.saveQuietHours(
 suspend fun ApiClient.deleteAccount() {
     raw("POST", "/api/auth/delete-account", "{\"confirm\":\"DELETE\"}".encodeToByteArray())
 }
+
+// ── Password self-service (twin of the web account panel) ──────────────────
+
+suspend fun ApiClient.resetRequest(email: String) {
+    val body = org.json.JSONObject().put("email", email)
+    raw("POST", "/api/auth/reset-request", body.toString().encodeToByteArray())
+}
+
+suspend fun ApiClient.changePassword(current: String, new_: String) {
+    val body = org.json.JSONObject()
+        .put("currentPassword", current)
+        .put("newPassword", new_)
+    raw("POST", "/api/auth/change-password", body.toString().encodeToByteArray())
+}

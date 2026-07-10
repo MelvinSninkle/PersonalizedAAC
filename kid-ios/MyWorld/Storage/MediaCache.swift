@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import UIKit
 
 /// On-disk cache for tile images + audio clips. Keys are the same blob keys
@@ -60,13 +61,35 @@ actor MediaCache {
 
     /// Convenience: load + decode a UIImage. Returns nil if the bytes don't
     /// decode (corrupt cache entry → caller can re-fetch by deleting + retrying).
-    func image(for key: String) async -> UIImage? {
+    ///
+    /// `maxPixel` bounds the DECODED size, not the file: a grid of tiles that
+    /// decodes every source at full resolution (~4 MB of RAM per 1024² image)
+    /// is what jetsams the app when a search opens hundreds of thumbnails.
+    /// ImageIO's thumbnailing decodes straight to the target size, so memory
+    /// scales with what's on screen. Pass nil for full resolution (slideshow).
+    func image(for key: String, maxPixel: Int? = nil) async -> UIImage? {
         do {
             let data = try await data(for: key)
+            if let maxPixel, let small = MediaCache.downsampled(data, maxPixel: maxPixel) {
+                return small
+            }
             return UIImage(data: data)
         } catch {
             return nil
         }
+    }
+
+    private nonisolated static func downsampled(_ data: Data, maxPixel: Int) -> UIImage? {
+        let srcOpts = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let src = CGImageSourceCreateWithData(data as CFData, srcOpts) else { return nil }
+        let opts = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+        ] as CFDictionary
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts) else { return nil }
+        return UIImage(cgImage: cg)
     }
 
     /// File URL that AVAudioPlayer can play directly.

@@ -19,6 +19,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.andrewpeterson.myworld.LocalAppContainer
+import io.andrewpeterson.myworld.net.resetRequest
 import io.andrewpeterson.myworld.ui.theme.Brand
 import io.andrewpeterson.myworld.ui.theme.hexColor
 import kotlinx.coroutines.launch
@@ -114,6 +116,30 @@ fun LoginView() {
         ) {
             Text(if (submitting) "Signing in…" else "Sign in",
                 fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        }
+
+        // Same reset flow as the web login: enter your email, get a link.
+        Spacer(Modifier.height(10.dp))
+        var resetMsg by remember { mutableStateOf<String?>(null) }
+        var resetBusy by remember { mutableStateOf(false) }
+        TextButton(onClick = {
+            val addr = email.trim()
+            if (!addr.contains("@")) { resetMsg = "Enter your account email above first, then tap again."; return@TextButton }
+            scope.launch {
+                resetBusy = true
+                resetMsg = try {
+                    c.api.resetRequest(addr)
+                    "If that email has an account, a reset link is on its way. Check your inbox."
+                } catch (_: Exception) { "Couldn't send the link — check your connection and try again." }
+                resetBusy = false
+            }
+        }, enabled = !resetBusy) {
+            Text(if (resetBusy) "Sending…" else "Forgot password?",
+                fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Brand.pinkDeep)
+        }
+        resetMsg?.let {
+            Text(it, fontSize = 13.sp, color = Color(0xFF047857), textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 420.dp))
         }
     }
 }

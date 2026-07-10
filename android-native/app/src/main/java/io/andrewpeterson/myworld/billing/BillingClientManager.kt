@@ -122,6 +122,13 @@ class BillingClientManager(
         }
     }
 
+    /** Visible "Restore purchases" affordance (Play parity with iOS's
+     *  AppStore.sync button) — re-sweeps owned purchases and re-verifies. */
+    fun restorePurchases() {
+        if (_available.value) repostUnfinished() else start()
+        _note.value = "Checking your Google Play purchases…"
+    }
+
     private fun repostUnfinished() {
         fun sweep(type: String) {
             client.queryPurchasesAsync(

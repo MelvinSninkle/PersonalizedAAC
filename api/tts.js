@@ -77,20 +77,47 @@ export default async function handler(req, res) {
   }
 
   // Per-child voice: an explicit voiceId wins; else resolve the child's saved
-  // voice (child_settings.voiceId); else the env default above. The cache key
+  // voice (child_settings.voiceId); else a catalog default. The cache key
   // includes the voice, so each voice's renditions cache independently.
+  //
+  // Non-admin callers are restricted to the OFFERED voice catalog: the env
+  // default is a personal cloned voice and the ElevenLabs account can hold
+  // other private voices — none of those are for families to synthesize with.
+  const isAdmin = String((auth.user && auth.user.role) || '') === 'admin';
+  let voiceResolved = false;
   const explicitVoice = String((typeof body.voiceId === 'string' && body.voiceId) || (req.query && req.query.voiceId) || '');
   if (/^[A-Za-z0-9]{8,40}$/.test(explicitVoice)) {
-    voiceId = explicitVoice;
-  } else {
+    if (isAdmin) { voiceId = explicitVoice; voiceResolved = true; }
+    else {
+      try {
+        const { voiceSelectable } = await import('./_lib/voices.js');
+        if (await voiceSelectable(sql(), explicitVoice, { isAdmin: false })) { voiceId = explicitVoice; voiceResolved = true; }
+      } catch (_) { /* fall through to the child's saved voice */ }
+    }
+  }
+  if (!voiceResolved) {
     const childId = String((typeof body.childId === 'string' && body.childId) || (req.query && req.query.childId) || '').slice(0, 64);
     if (childId) {
       try {
-        const row = (await sql()`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
-        const v = row && row.settings && row.settings.voiceId;
-        if (typeof v === 'string' && /^[A-Za-z0-9]{8,40}$/.test(v)) voiceId = v;
+        // Access-checked: a board's saved voice can be a private clone, so
+        // only callers on that child's roster may speak with it.
+        const { canAccessChild } = await import('./_lib/access.js');
+        if (await canAccessChild(auth.user, childId)) {
+          const row = (await sql()`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+          const v = row && row.settings && row.settings.voiceId;
+          if (typeof v === 'string' && /^[A-Za-z0-9]{8,40}$/.test(v)) { voiceId = v; voiceResolved = true; }
+        }
       } catch (_) { /* fall back to default voice */ }
     }
+  }
+  if (!voiceResolved && !isAdmin) {
+    // No usable voice named: families get the first offered catalog voice,
+    // never the env default (which is a personal clone).
+    try {
+      const { listVoices } = await import('./_lib/voices.js');
+      const vs = await listVoices(sql());
+      if (vs.length) voiceId = vs[0].id;
+    } catch (_) { /* keep env default as the last resort */ }
   }
 
   const emotionKey = typeof body.emotion === 'string' ? body.emotion.toLowerCase() : 'default';

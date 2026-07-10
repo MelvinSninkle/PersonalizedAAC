@@ -869,6 +869,88 @@ Size: {size}.',
     // (adult proportions vs the style's exaggerated child treatment). Derived
     // from the relationship when unambiguous; else the capture UI's choice.
     await db`ALTER TABLE persons ADD COLUMN IF NOT EXISTS age_group TEXT`;
+
+    // ---- Lab CMS: per-style default boards -------------------------------
+    // Every OFFERED style carries two style-world references the Lab uploads
+    // once: a generic person drawn in the style (anchors people-ish default
+    // art) and a "stuff" scene (anchors objects/materials). Custom parent
+    // uploads never get these — they keep the generic default board.
+    await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS person_ref_key TEXT`;
+    await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS stuff_ref_key TEXT`;
+    // Pre-generated, style-matched default art: one image per (taxonomy row ×
+    // offered style). /api/sync resolves a child's default-able tiles against
+    // their chosen style's set first, then the generic default_image_key.
+    await db`
+      CREATE TABLE IF NOT EXISTS taxonomy_style_defaults (
+        taxonomy_id    TEXT NOT NULL,
+        style_guide_id BIGINT NOT NULL,
+        image_key      TEXT,
+        status         TEXT NOT NULL DEFAULT 'queued',
+        error          TEXT,
+        updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (taxonomy_id, style_guide_id)
+      )`;
+    await db`CREATE INDEX IF NOT EXISTS tax_style_defaults_style_idx
+             ON taxonomy_style_defaults(style_guide_id, status)`;
+    // Same idea for category/subcategory chips (parent_norm '' = top level).
+    await db`
+      CREATE TABLE IF NOT EXISTS category_style_defaults (
+        style_guide_id BIGINT NOT NULL,
+        section        TEXT NOT NULL,
+        label_norm     TEXT NOT NULL,
+        parent_norm    TEXT NOT NULL DEFAULT '',
+        image_key      TEXT,
+        status         TEXT NOT NULL DEFAULT 'queued',
+        error          TEXT,
+        updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (style_guide_id, section, label_norm, parent_norm)
+      )`;
+    // Curated default-board ordering (the Lab layout screen). Categories +
+    // subcategories order per column; tiles order via taxonomy.sort_order.
+    // NULL/absent = the legacy alphabetical order.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS sort_order INTEGER`;
+    await db`
+      CREATE TABLE IF NOT EXISTS default_category_order (
+        section     TEXT NOT NULL,
+        label_norm  TEXT NOT NULL,
+        parent_norm TEXT NOT NULL DEFAULT '',
+        sort_order  INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (section, label_norm, parent_norm)
+      )`;
+    // Board heartbeat: the last time each board pulled /api/sync (admin
+    // reports' "is this device in sync" signal). One row per board.
+    await db`
+      CREATE TABLE IF NOT EXISTS board_pings (
+        child_id     TEXT PRIMARY KEY,
+        last_sync_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        user_agent   TEXT
+      )`;
+    // Board catalog (Lab defaults view): which top-level categories are
+    // store-only (never seeded onto new boards) and whether adding them from
+    // the Word Shop is free or requires credits. No row = default behavior:
+    // seeded on every new board, free in the shop's free section.
+    await db`
+      CREATE TABLE IF NOT EXISTS board_catalog (
+        section    TEXT NOT NULL,
+        label_norm TEXT NOT NULL,
+        store_only BOOLEAN NOT NULL DEFAULT TRUE,
+        pricing    TEXT NOT NULL DEFAULT 'free',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (section, label_norm)
+      )`;
+    // Offered TTS voices — data, not code: the Lab adds an ElevenLabs id +
+    // label + accent and the onboarding picker updates itself. Seeded from
+    // the legacy hardcoded list on first read (see _lib/voices.js).
+    await db`
+      CREATE TABLE IF NOT EXISTS voices (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        gender     TEXT,
+        accent     TEXT,
+        active     BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
     // Parent-set or auto-mastery-set unlock: 'show me at least this far up the
     // age-band ladder, even if the child's birth date suggests younger.' Only
     // meaningful on the is_self row; resolved alongside birth_date in age-band.

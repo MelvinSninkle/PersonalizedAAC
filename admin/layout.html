@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Board layout — admin</title>
+<style>
+  :root { --pink:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#faf7f9; }
+  header {
+    position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--line);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; padding:12px 18px;
+  }
+  header h1 { font-size:18px; margin:0; margin-right:6px; }
+  .stat { font-size:13px; color:var(--muted); }
+  .stat b { color:var(--ink); }
+  .stat .ok { color:#15803d; }
+  .spacer { flex:1; }
+  button {
+    font:inherit; padding:7px 12px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink); cursor:pointer;
+  }
+  button.primary { background:var(--pink); color:#fff; border-color:var(--pink); font-weight:600; }
+  button.primary.attn { box-shadow:0 0 0 3px rgba(173,20,87,.25); animation:pulse 1.6s ease-in-out infinite; }
+  button:disabled { opacity:.55; cursor:default; }
+  @keyframes pulse { 0%,100% { box-shadow:0 0 0 3px rgba(173,20,87,.22); } 50% { box-shadow:0 0 0 6px rgba(173,20,87,.10); } }
+  a.back { color:var(--pink); text-decoration:none; font-size:13px; }
+
+  main { padding:16px 18px 80px; }
+  .note {
+    background:#fdf2f7; border:1px solid #f3cfe0; color:#831843; border-radius:10px;
+    padding:10px 14px; font-size:13px; margin-bottom:16px; line-height:1.45;
+  }
+
+  .columns { display:grid; grid-template-columns:repeat(auto-fit, minmax(270px, 1fr)); gap:14px; align-items:start; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .panel h2 {
+    margin:0; padding:10px 12px; font-size:13px; font-weight:700; color:var(--pink);
+    text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--line); background:#fdf7fa;
+  }
+  .panel .body { padding:8px; }
+
+  /* Draggable rows */
+  .row {
+    display:flex; align-items:center; gap:8px; padding:7px 8px; border:1px solid transparent;
+    border-radius:8px; font-size:14px; user-select:none; background:#fff;
+  }
+  .row:hover { background:#faf7f9; border-color:var(--line); }
+  .row .handle { color:#b8b0b5; cursor:grab; font-size:13px; flex:none; touch-action:none; }
+  .row .handle:active { cursor:grabbing; }
+  .row .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .count { flex:none; font-size:11px; color:var(--muted); background:#f3f4f6; border-radius:999px; padding:1px 8px; }
+  .row .chev { flex:none; font-size:11px; color:#b8b0b5; width:12px; text-align:center; }
+  .row.cat { font-weight:600; cursor:pointer; }
+  .row.sub { font-weight:600; font-size:13px; cursor:pointer; }
+  .row.word { font-size:13px; color:#374151; }
+  .row.dragging { opacity:.4; }
+
+  .expand { margin:2px 0 8px 18px; padding-left:8px; border-left:2px solid #f3cfe0; }
+  .expand .grouplabel { font-size:10px; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:.06em; margin:6px 4px 2px; }
+  .drop-line { height:0; border-top:2px solid var(--pink); border-radius:2px; margin:1px 4px; pointer-events:none; }
+  .empty { color:var(--muted); padding:40px; text-align:center; }
+  .hint { font-size:12px; color:var(--muted); margin:4px 4px 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>↕️ Board layout</h1>
+  <span class="stat" id="stat">Loading…</span>
+  <div class="spacer"></div>
+  <span class="stat" id="msg"></span>
+  <button id="undo" title="Throw away unsaved drags and reload the saved order.">↩ Undo all</button>
+  <button id="save" class="primary" title="Write the current order for every category, subcategory, and word.">Save order</button>
+  <a class="back" href="/admin/publish.html">Publish to boards →</a>
+  <a class="back" href="/admin/defaults.html">← Default board</a>
+</header>
+<main>
+  <div class="note">
+    This sets the order for every NEW board build (and the Lab default board). Boards families already have keep their own arrangement.
+    <br><span style="color:#9d4d75;">Drag the ☰ rows to reorder. Click a category or subcategory to open it and reorder the words inside.</span>
+  </div>
+  <div id="board" class="columns"><div class="empty">Loading the layout…</div></div>
+</main>
+
+<script>
+  // Same admin auth as the other tools: session cookie (preferred) or the legacy
+  // bearer token in localStorage.
+  const token = localStorage.getItem('aacToken') || '';
+  async function api(path, body) {
+    const headers = {};
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const opts = { headers, credentials: 'same-origin' };
+    if (body !== undefined) {
+      opts.method = 'POST';
+      headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    const r = await fetch(path, opts);
+    if (r.status === 401 || r.status === 403) throw new Error('Sign in as an admin first (open /login), then return here.');
+    if (!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0, 160));
+    return r.json();
+  }
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // Owner-facing column titles, in display order. Any unexpected extra section
+  // from the API is appended after these with its raw name.
+  const SECTIONS = [
+    ['needs', 'Bottom Row (Core Words)'],
+    ['people', 'Left Column (People)'],
+    ['nouns', 'Middle Column (Gestalts/Nouns/Adjectives)'],
+    ['verbs', 'Right Column (Verbs)'],
+  ];
+
+  let COLUMNS = [];               // server data, mutated in place as things are dragged
+  let LISTS = new Map();          // listId → the array that list renders (rebuilt each render)
+  const EXPANDED = new Set();     // keys of open categories/subcategories
+  let dirty = false;
+  let DRAG = null;                // { listId, index } while a row is being dragged
+
+  function setDirty(v) {
+    dirty = v;
+    document.getElementById('save').classList.toggle('attn', v);
+    document.getElementById('msg').textContent = v ? 'Unsaved changes' : '';
+  }
+
+  function wordCount(cat) {
+    return cat.words.length + cat.subs.reduce((n, s) => n + s.words.length, 0);
+  }
+
+  function wordRow(w, listId, i) {
+    return `<div class="row word" draggable="true" data-list="${esc(listId)}" data-index="${i}">
+      <span class="handle" title="Drag to reorder">☰</span><span class="name">${esc(w.label)}</span>
+    </div>`;
+  }
+
+  function wordListHTML(words, listId) {
+    if (!words.length) return '<div class="hint">No words here.</div>';
+    return `<div class="dnd" data-list="${esc(listId)}">` + words.map((w, i) => wordRow(w, listId, i)).join('') + '</div>';
+  }
+
+  function subBlock(sub, section, catLabel, listId, i) {
+    const key = 's:' + section + '|' + catLabel + '|' + sub.label;
+    const open = EXPANDED.has(key);
+    let inner = '';
+    if (open) {
+      inner = `<div class="expand">${wordListHTML(sub.words, 'words:' + section + '|' + catLabel + '|' + sub.label)}</div>`;
+    }
+    return `<div class="block">
+      <div class="row sub" draggable="true" data-list="${esc(listId)}" data-index="${i}" data-key="${esc(key)}">
+        <span class="handle" title="Drag to reorder">☰</span>
+        <span class="chev">${open ? '▾' : '▸'}</span>
+        <span class="name">${esc(sub.label)}</span>
+        <span class="count">${sub.words.length}</span>
+      </div>${inner}
+    </div>`;
+  }
+
+  function catBlock(cat, section, listId, i) {
+    const key = 'c:' + section + '|' + cat.label;
+    const open = EXPANDED.has(key);
+    let inner = '';
+    if (open) {
+      let parts = '';
+      if (cat.subs.length) {
+        const subList = 'subs:' + section + '|' + cat.label;
+        parts += '<div class="grouplabel">Subcategories</div>';
+        parts += `<div class="dnd" data-list="${esc(subList)}">` + cat.subs.map((s, j) => subBlock(s, section, cat.label, subList, j)).join('') + '</div>';
+      }
+      if (cat.words.length || !cat.subs.length) {
+        if (cat.subs.length) parts += '<div class="grouplabel">Words</div>';
+        parts += wordListHTML(cat.words, 'words:' + section + '|' + cat.label);
+      }
+      inner = `<div class="expand">${parts}</div>`;
+    }
+    return `<div class="block">
+      <div class="row cat" draggable="true" data-list="${esc(listId)}" data-index="${i}" data-key="${esc(key)}">
+        <span class="handle" title="Drag to reorder">☰</span>
+        <span class="chev">${open ? '▾' : '▸'}</span>
+        <span class="name">${esc(cat.label)}</span>
+        <span class="count">${wordCount(cat)}</span>
+      </div>${inner}
+    </div>`;
+  }
+
+  function render() {
+    LISTS = new Map();
+    const bySection = new Map(COLUMNS.map((c) => [String(c.section || '').toLowerCase(), c]));
+    const ordered = [];
+    for (const [sec, title] of SECTIONS) {
+      if (bySection.has(sec)) { ordered.push([bySection.get(sec), title]); bySection.delete(sec); }
+    }
+    for (const col of bySection.values()) ordered.push([col, col.section]);
+
+    let html = '';
+    for (const [col, title] of ordered) {
+      const sec = String(col.section || '').toLowerCase();
+      const listId = 'cats:' + sec;
+      LISTS.set(listId, col.categories);
+      for (const cat of col.categories) {
+        LISTS.set('subs:' + sec + '|' + cat.label, cat.subs);
+        LISTS.set('words:' + sec + '|' + cat.label, cat.words);
+        for (const sub of cat.subs) {
+          LISTS.set('words:' + sec + '|' + cat.label + '|' + sub.label, sub.words);
+        }
+      }
+      html += `<section class="panel">
+        <h2>${esc(title)}</h2>
+        <div class="body"><div class="dnd" data-list="${esc(listId)}">` +
+        col.categories.map((c, i) => catBlock(c, sec, listId, i)).join('') +
+        '</div></div></section>';
+    }
+    document.getElementById('board').innerHTML = html || '<div class="empty">Nothing to lay out yet.</div>';
+    const nCats = COLUMNS.reduce((n, c) => n + c.categories.length, 0);
+    const nWords = COLUMNS.reduce((n, c) => n + c.categories.reduce((m, cat) => m + wordCount(cat), 0), 0);
+    document.getElementById('stat').innerHTML = `<b>${nCats}</b> categories · <b>${nWords}</b> words`;
+  }
+
+  // ── Expansion (click a category/subcategory row, but not while grabbing ☰) ──
+  document.getElementById('board').addEventListener('click', (e) => {
+    if (e.target.closest('.handle')) return;
+    const row = e.target.closest('.row.cat, .row.sub');
+    if (!row || !row.dataset.key) return;
+    if (EXPANDED.has(row.dataset.key)) EXPANDED.delete(row.dataset.key); else EXPANDED.add(row.dataset.key);
+    render();
+  });
+
+  // ── Plain HTML5 drag & drop: reorder within one list only ──
+  const dropLine = document.createElement('div');
+  dropLine.className = 'drop-line';
+
+  // Walk up nested .dnd containers to the one whose list matches the drag.
+  function matchingList(target) {
+    let el = target && target.closest ? target.closest('.dnd') : null;
+    while (el && el.dataset.list !== DRAG.listId) {
+      el = el.parentElement ? el.parentElement.closest('.dnd') : null;
+    }
+    return el;
+  }
+
+  function listItems(listEl) {
+    return [...listEl.children].filter((c) => c !== dropLine);
+  }
+
+  // Which slot (0..n) the pointer is over, by row midpoints.
+  function insertionIndex(listEl, y) {
+    const items = listItems(listEl);
+    for (let i = 0; i < items.length; i++) {
+      const r = items[i].getBoundingClientRect();
+      if (y < r.top + r.height / 2) return i;
+    }
+    return items.length;
+  }
+
+  document.getElementById('board').addEventListener('dragstart', (e) => {
+    const row = e.target.closest('.row');
+    if (!row) return;
+    DRAG = { listId: row.dataset.list, index: Number(row.dataset.index) };
+    row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', row.dataset.list + ':' + row.dataset.index); } catch (_) {}
+  });
+
+  document.getElementById('board').addEventListener('dragover', (e) => {
+    if (!DRAG) return;
+    const listEl = matchingList(e.target);
+    if (!listEl) { dropLine.remove(); return; }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const idx = insertionIndex(listEl, e.clientY);
+    const items = listItems(listEl);
+    if (idx >= items.length) listEl.appendChild(dropLine);
+    else listEl.insertBefore(dropLine, items[idx]);
+  });
+
+  document.getElementById('board').addEventListener('drop', (e) => {
+    if (!DRAG) return;
+    const listEl = matchingList(e.target);
+    if (!listEl) return;
+    e.preventDefault();
+    let to = insertionIndex(listEl, e.clientY);
+    const arr = LISTS.get(DRAG.listId);
+    dropLine.remove();
+    if (!arr) return;
+    const from = DRAG.index;
+    if (to > from) to -= 1;            // removing the item shifts later slots down
+    if (to !== from) {
+      const [item] = arr.splice(from, 1);
+      arr.splice(to, 0, item);
+      setDirty(true);
+    }
+    DRAG = null;
+    render();
+  });
+
+  document.getElementById('board').addEventListener('dragend', () => {
+    DRAG = null;
+    dropLine.remove();
+    for (const el of document.querySelectorAll('.row.dragging')) el.classList.remove('dragging');
+  });
+
+  // ── Save / undo ──
+  function buildPayload() {
+    const categories = [], tiles = [];
+    for (const col of COLUMNS) {
+      const section = String(col.section || '').toLowerCase();
+      col.categories.forEach((cat, i) => {
+        categories.push({ section, label: cat.label, parent: '', sort: i * 10 });
+        cat.subs.forEach((sub, j) => {
+          categories.push({ section, label: sub.label, parent: cat.label, sort: j * 10 });
+          sub.words.forEach((w, k) => tiles.push({ id: w.id, sort: k * 10 }));
+        });
+        cat.words.forEach((w, k) => tiles.push({ id: w.id, sort: k * 10 }));
+      });
+    }
+    return { categories, tiles };
+  }
+
+  document.getElementById('save').addEventListener('click', async () => {
+    const btn = document.getElementById('save');
+    const msg = document.getElementById('msg');
+    btn.disabled = true;
+    msg.textContent = 'Saving…';
+    try {
+      await api('/api/admin/lab?action=layout', buildPayload());
+      setDirty(false);
+      msg.innerHTML = '<span class="ok">Saved ✓ — new boards will build in this order.</span>';
+    } catch (e) {
+      msg.textContent = 'Save failed: ' + (e.message || e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('undo').addEventListener('click', () => {
+    if (dirty && !confirm('Throw away your unsaved drags and reload the saved order?')) return;
+    load();
+  });
+
+  async function load() {
+    const board = document.getElementById('board');
+    board.innerHTML = '<div class="empty">Loading the layout…</div>';
+    try {
+      const d = await api('/api/admin/lab?action=layout');
+      COLUMNS = d.columns || [];
+      setDirty(false);
+      render();
+    } catch (e) {
+      board.innerHTML = '<div class="empty">' + esc(e.message || e) + '</div>';
+      document.getElementById('stat').textContent = 'Error';
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

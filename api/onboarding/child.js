@@ -8,7 +8,7 @@ import { checkAuth } from '../_lib/auth.js';
 import { isParentOf } from '../_lib/access.js';
 import { sql } from '../_lib/db.js';
 import { ensureProgress, nextStep, setStep, TIER_LABELS, LANGUAGE_LABELS } from '../_lib/onboarding.js';
-import { isSelectableVoice } from '../_lib/voices.js';
+import { voiceSelectable } from '../_lib/voices.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
   // to the curated catalog — only an admin may assign the reserved default voice.
   const rawVoice = typeof b.voiceId === 'string' && /^[A-Za-z0-9]{8,40}$/.test(b.voiceId.trim())
     ? b.voiceId.trim() : null;
-  const voiceId = (rawVoice && isSelectableVoice(rawVoice, { isAdmin: auth.user.role === 'admin' })) ? rawVoice : null;
+  const voiceId = (rawVoice && await voiceSelectable(sql(), rawVoice, { isAdmin: auth.user.role === 'admin' })) ? rawVoice : null;
   // The chosen art style (a style_guides id) becomes the child's HOUSE STYLE —
   // every tile generated later attaches this exemplar so the board stays
   // visually consistent.
@@ -36,6 +36,10 @@ export default async function handler(req, res) {
   // arbitrary picks stay readable (dark banner → white text, light → ink).
   const favoriteColor = /^#[0-9a-fA-F]{6}$/.test(String(b.favoriteColor || '').trim())
     ? String(b.favoriteColor).trim().toLowerCase() : null;
+  // Optional: boy/girl → pronoun. The child step captures exactly these two;
+  // families with other specific needs are directed to contact support (a
+  // deliberate product decision for this audience).
+  const pronoun = (b.pronoun === 'she' || b.pronoun === 'he') ? b.pronoun : null;
   if (!name) { res.status(400).json({ error: 'name required' }); return; }
   if (!birthDate) { res.status(400).json({ error: 'birthDate (YYYY-MM-DD) required' }); return; }
 
@@ -62,12 +66,13 @@ export default async function handler(req, res) {
            SET display_name = ${name},
                given_name = COALESCE(NULLIF(${name}, ''), given_name),
                birth_date = ${birthDate},
+               pronoun = COALESCE(${pronoun}, pronoun),
                updated_at = NOW()
          WHERE id = ${personId}`;
     } else {
       const inserted = await db`
-        INSERT INTO persons (child_id, display_name, given_name, relationship, is_self, birth_date)
-        VALUES (${childId}, ${name}, ${name}, 'self', TRUE, ${birthDate})
+        INSERT INTO persons (child_id, display_name, given_name, relationship, is_self, birth_date, pronoun)
+        VALUES (${childId}, ${name}, ${name}, 'self', TRUE, ${birthDate}, ${pronoun})
         RETURNING id`;
       personId = inserted[0].id;
     }

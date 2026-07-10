@@ -226,6 +226,11 @@ fun StoreView(onDismiss: () -> Unit) {
                 }) { Text("Redeem", fontWeight = FontWeight.Bold, color = Brand.pinkDeep) }
             }
             couponNote?.let { Text(it, fontSize = 12.sp, color = Brand.muted) }
+            if (billingAvailable) {
+                TextButton(onClick = { c.billing.restorePurchases() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Restore purchases", fontSize = 13.sp, color = Brand.pinkDeep)
+                }
+            }
             Text(
                 if (billingAvailable)
                     "Prices are billed through Google Play. Purchases made on the web appear here right away too — one wallet everywhere."
@@ -234,6 +239,14 @@ fun StoreView(onDismiss: () -> Unit) {
                 fontSize = 11.sp, color = Brand.muted,
                 modifier = Modifier.padding(top = 8.dp),
             )
+            Row {
+                TextButton(onClick = {
+                    try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("${ApiClient.ORIGIN}/terms"))) } catch (_: Exception) {}
+                }) { Text("Terms of Service", fontSize = 11.sp, color = Brand.muted) }
+                TextButton(onClick = {
+                    try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("${ApiClient.ORIGIN}/privacy"))) } catch (_: Exception) {}
+                }) { Text("Privacy Policy", fontSize = 11.sp, color = Brand.muted) }
+            }
             TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
                 Text("Close", color = Brand.muted)
             }

@@ -77,11 +77,11 @@ private enum class AlbumFolder(val title: String, val emoji: String) {
 
 /** Small blob-key → bitmap image, shared by the parent screens. */
 @Composable
-fun BlobImage(blobKey: String?, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
+fun BlobImage(blobKey: String?, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop, maxDim: Int = 640) {
     val c = LocalAppContainer.current
     val bmp by produceState<Bitmap?>(initialValue = null, blobKey) {
         value = if (blobKey.isNullOrEmpty()) null
-        else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { c.media.bitmap(blobKey) }
+        else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { c.media.bitmap(blobKey, maxDim) }
     }
     val b = bmp
     if (b != null) {
@@ -159,7 +159,7 @@ fun AlbumView(onDismiss: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 BlobImage(e.blobKey, Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(20.dp)),
-                    contentScale = ContentScale.Fit)
+                    contentScale = ContentScale.Fit, maxDim = 1024)
                 Spacer(Modifier.height(10.dp))
                 Text(openTile?.label ?: "", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
                 Text(albumDate(e.whenAt), fontSize = 13.sp, color = Brand.muted)
@@ -186,7 +186,7 @@ private fun FolderList(tiles: List<AlbumTile>, onOpen: (AlbumFolder) -> Unit) {
                 // Cover: the newest tile's art (the iOS fan collapses to one here).
                 val cover = inFolder.firstOrNull()?.let { it.current?.blobKey ?: it.history.firstOrNull()?.blobKey }
                 if (cover != null) {
-                    BlobImage(cover, Modifier.size(60.dp).clip(RoundedCornerShape(10.dp)))
+                    BlobImage(cover, Modifier.size(60.dp).clip(RoundedCornerShape(10.dp)), maxDim = 256)
                 } else {
                     Box(Modifier.size(60.dp).background(hexColor("#fce4ec"), RoundedCornerShape(10.dp)),
                         contentAlignment = Alignment.Center) { Text(folder.emoji, fontSize = 24.sp) }
@@ -218,7 +218,7 @@ private fun FolderTileList(tiles: List<AlbumTile>, onOpen: (AlbumTile) -> Unit) 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val key = tile.current?.blobKey ?: tile.history.firstOrNull()?.blobKey
-                BlobImage(key, Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
+                BlobImage(key, Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)), maxDim = 256)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(tile.label ?: "Untitled", fontSize = 16.sp,
@@ -246,7 +246,7 @@ private fun TileVersionsGrid(tile: AlbumTile, onZoom: (AlbumEntry) -> Unit) {
         items(entries, key = { it.first.blobKey + (it.first.whenAt ?: "") }) { (e, isCurrent) ->
             Column(Modifier.padding(4.dp).clickable { onZoom(e) }) {
                 Box {
-                    BlobImage(e.blobKey, Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)))
+                    BlobImage(e.blobKey, Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)), maxDim = 384)
                     if (isCurrent) {
                         Text("Current", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White,
                             modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)

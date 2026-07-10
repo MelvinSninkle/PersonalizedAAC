@@ -7,7 +7,8 @@
 // reserved for the admin's own child. Previews are played via /api/tts with the
 // shared sampleText so each voice says the same lines.
 import { checkAuth } from '../_lib/auth.js';
-import { ONBOARDING_VOICES, VOICE_SAMPLE_TEXT } from '../_lib/voices.js';
+import { sql } from '../_lib/db.js';
+import { listVoices, VOICE_SAMPLE_TEXT } from '../_lib/voices.js';
 
 export const config = { maxDuration: 15 };
 
@@ -16,7 +17,8 @@ export default async function handler(req, res) {
   const auth = await checkAuth(req);
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
 
-  const voices = ONBOARDING_VOICES.map(v => ({ ...v }));
+  // Lab-managed catalog (voices table, seeded from the legacy hardcoded list).
+  const voices = (await listVoices(sql())).map(v => ({ id: v.id, name: v.name, gender: v.gender, accent: v.accent }));
   if (auth.user.role === 'admin' && process.env.ELEVENLABS_VOICE_ID) {
     voices.unshift({ id: process.env.ELEVENLABS_VOICE_ID, name: 'My voice', gender: '', accent: 'Admin default', adminOnly: true });
   }
