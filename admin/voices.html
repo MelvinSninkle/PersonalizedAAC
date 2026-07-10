@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice library — admin</title>
+<style>
+  :root { --pink:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#faf7f9; }
+  header {
+    position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--line);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; padding:12px 18px;
+  }
+  header h1 { font-size:18px; margin:0; margin-right:6px; }
+  .stat { font-size:13px; color:var(--muted); }
+  .stat b { color:var(--ink); }
+  .spacer { flex:1; }
+  select, input, button {
+    font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink);
+  }
+  button { cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  button.primary { background:var(--pink); color:#fff; border-color:var(--pink); font-weight:600; }
+  a.back { color:var(--pink); text-decoration:none; font-size:13px; }
+
+  main { padding:16px 18px 60px; max-width:1100px; margin:0 auto; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin-top:18px; }
+  .panel h2 { margin:0 0 4px; font-size:15px; color:var(--pink); text-transform:uppercase; letter-spacing:.04em; }
+  .panel .sub { font-size:12.5px; color:var(--muted); margin:0 0 12px; }
+
+  /* Voice catalog table */
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding:6px 8px; border-bottom:1px solid var(--line); }
+  td { padding:6px 8px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+  tr.inactive td { opacity:.55; }
+  td input[type=text] { width:100%; padding:5px 8px; border-radius:7px; }
+  td input[type=text].dirty { border-color:#f59e0b; }
+  .vid { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:var(--muted); word-break:break-all; }
+  .ordbtns { white-space:nowrap; }
+  .ordbtns button, button.del, .wrow button { padding:2px 7px; border-radius:7px; font-size:13px; line-height:1.4; }
+  button.del { color:#b91c1c; border-color:#fecaca; }
+  .addrow { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:14px; }
+  .addrow input { padding:7px 9px; }
+  #add-id { width:250px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px; }
+  .note { font-size:12px; color:var(--muted); margin-top:8px; }
+  .okmsg { font-size:13px; color:#047857; }
+  .errmsg { font-size:13px; color:#b91c1c; }
+
+  /* Sound check */
+  .bench-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:6px; }
+  .group-title {
+    margin:20px 0 8px; font-size:13px; font-weight:700; color:var(--pink);
+    text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--line); padding-bottom:5px;
+  }
+  .wgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(215px, 1fr)); gap:6px 10px; }
+  .wrow { display:flex; align-items:center; gap:6px; padding:3px 6px; border-radius:8px; border:1px solid transparent; }
+  .wrow.playing { background:#fdf2f8; border-color:#f9a8d4; }
+  .wrow .wlabel { flex:1; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .wrow button { min-width:30px; }
+  .spin {
+    display:inline-block; width:11px; height:11px; border:2px solid var(--line);
+    border-top-color:var(--pink); border-radius:50%; animation:spin .7s linear infinite; vertical-align:-1px;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .empty { color:var(--muted); padding:40px; text-align:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎙️ Voice library</h1>
+  <span class="stat" id="stat">Loading…</span>
+  <div class="spacer"></div>
+  <button id="refresh">↻ Refresh</button>
+  <a class="back" href="/admin/defaults.html">← Default board</a>
+</header>
+<main>
+
+  <div class="panel" id="catalog-panel">
+    <h2>Voice catalog</h2>
+    <p class="sub">The voices offered app-wide. Rows are the onboarding picker's order — reorder with ▲▼. Edits to name / accent / gender save on change.</p>
+    <table>
+      <thead>
+        <tr><th style="width:70px;">Order</th><th>Name</th><th>Accent</th><th>Gender</th><th>ElevenLabs id</th><th style="width:60px;">Active</th><th style="width:36px;"></th></tr>
+      </thead>
+      <tbody id="vrows"><tr><td colspan="7" class="empty">Loading voices…</td></tr></tbody>
+    </table>
+    <div class="addrow">
+      <input type="text" id="add-id" placeholder="ElevenLabs voice id (required)">
+      <input type="text" id="add-name" placeholder="Name (auto)" style="width:130px;">
+      <input type="text" id="add-accent" placeholder="Accent (auto)" style="width:130px;">
+      <input type="text" id="add-gender" placeholder="Gender (auto)" style="width:110px;">
+      <button class="primary" id="add-btn">Add voice</button>
+      <span id="add-msg"></span>
+    </div>
+    <div class="note">Paste an id from the ElevenLabs voice library — name, accent and gender are looked up automatically if left blank. Active voices appear in the onboarding picker immediately.</div>
+  </div>
+
+  <div class="panel" id="bench-panel">
+    <h2>Sound check</h2>
+    <p class="sub">Listen to every standard-library word in each active voice. ▶ plays the exact cached clip every board plays; ↻ re-renders it (overwriting the shared cache) and plays the fresh take. Standard library only — personalized words render per child.</p>
+    <div class="bench-controls">
+      <select id="voice-sel"></select>
+      <button id="preview-btn">▶ Preview voice</button>
+      <input type="search" id="wq" placeholder="Filter words…" style="width:160px;">
+      <button id="playall-btn">▶ Play all (top 20 visible)</button>
+      <button id="stop-btn" disabled>⏹ Stop</button>
+      <span id="bench-msg" class="errmsg"></span>
+    </div>
+    <div id="words"><div class="empty">Loading the standard library…</div></div>
+  </div>
+
+</main>
+
+<script>
+  // Same admin auth as the other tools: session cookie (preferred) or the
+  // legacy bearer token in localStorage.
+  const token = localStorage.getItem('aacToken') || '';
+  function authHeaders(extra) {
+    const h = Object.assign({}, extra || {});
+    if (token) h.Authorization = 'Bearer ' + token;
+    return h;
+  }
+  async function api(path, opts) {
+    opts = opts || {};
+    const r = await fetch(path, {
+      method: opts.method || 'GET',
+      headers: authHeaders(opts.body ? { 'Content-Type': 'application/json' } : {}),
+      credentials: 'same-origin',
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    if (r.status === 401 || r.status === 403) throw new Error('Sign in as an admin first (open /login), then return here.');
+    if (!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0, 160));
+    return r.json();
+  }
+  // POST /api/tts → audio blob. The server caches by (model|voice|emotion|text)
+  // — that cache is exactly what every board plays, so ?nocache=1 re-renders
+  // and overwrites the shared entry for everyone.
+  async function ttsBlob(text, voiceId, nocache) {
+    const r = await fetch('/api/tts' + (nocache ? '?nocache=1' : ''), {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'same-origin',
+      body: JSON.stringify({ text: text, voiceId: voiceId }),
+    });
+    if (r.status === 401 || r.status === 403) throw new Error('Sign in as an admin first (open /login), then return here.');
+    if (!r.ok) throw new Error('TTS ' + r.status + ': ' + (await r.text()).slice(0, 160));
+    return r.blob();
+  }
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  let VOICES = [];        // full catalog, incl. inactive, in sortOrder
+  let WORDS = [];         // [{label, group}] unique standard-library labels
+  const CLIPS = new Map(); // client-side blob cache: "voiceId|text" → Blob
+
+  // ------------------------------------------------------------------ player
+  // One <audio> for the whole page: starting any clip stops the previous one.
+  const player = new Audio();
+  let currentUrl = null;
+  let endResolve = null;   // resolves the awaited playback (play-all / preview)
+  function stopAudio() {
+    try { player.pause(); } catch (_) {}
+    if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+    if (endResolve) { const r = endResolve; endResolve = null; r(); }
+    document.querySelectorAll('.wrow.playing').forEach((el) => el.classList.remove('playing'));
+  }
+  function playBlob(blob, awaitEnd) {
+    stopAudio();
+    currentUrl = URL.createObjectURL(blob);
+    player.src = currentUrl;
+    if (!awaitEnd) { player.play().catch(() => {}); return Promise.resolve(); }
+    return new Promise((resolve) => {
+      endResolve = resolve;
+      player.onended = () => { if (endResolve) { const r = endResolve; endResolve = null; r(); } };
+      player.onerror = player.onended;
+      player.play().catch(() => { if (endResolve) { const r = endResolve; endResolve = null; r(); } });
+    });
+  }
+
+  async function getClip(text, voiceId, nocache) {
+    const key = voiceId + '|' + text;
+    if (!nocache && CLIPS.has(key)) return CLIPS.get(key);
+    const blob = await ttsBlob(text, voiceId, nocache);
+    CLIPS.set(key, blob);
+    return blob;
+  }
+
+  // Wrap a button in a spinner while an async job runs.
+  async function withSpinner(btn, job) {
+    const old = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>';
+    try { return await job(); }
+    finally { btn.disabled = false; btn.innerHTML = old; }
+  }
+
+  // --------------------------------------------------------------- catalog
+  function voiceRowHTML(v, i) {
+    return `<tr class="${v.active ? '' : 'inactive'}" data-id="${esc(v.id)}">
+      <td class="ordbtns">
+        <button data-act="up" title="Move up" ${i === 0 ? 'disabled' : ''}>▲</button>
+        <button data-act="down" title="Move down" ${i === VOICES.length - 1 ? 'disabled' : ''}>▼</button>
+      </td>
+      <td><input type="text" data-field="name" value="${esc(v.name)}"></td>
+      <td><input type="text" data-field="accent" value="${esc(v.accent)}" placeholder="—"></td>
+      <td><input type="text" data-field="gender" value="${esc(v.gender)}" placeholder="—"></td>
+      <td class="vid">${esc(v.id)}</td>
+      <td style="text-align:center;"><input type="checkbox" data-act="active" ${v.active ? 'checked' : ''} title="Active voices appear in the onboarding picker"></td>
+      <td><button class="del" data-act="del" title="Remove from the catalog (children already using it keep it)">✕</button></td>
+    </tr>`;
+  }
+
+  function renderCatalog() {
+    const tb = document.getElementById('vrows');
+    tb.innerHTML = VOICES.length
+      ? VOICES.map(voiceRowHTML).join('')
+      : '<tr><td colspan="7" class="empty">No voices yet — add one below.</td></tr>';
+    renderVoiceSelect();
+    renderStat();
+  }
+
+  function renderStat() {
+    const active = VOICES.filter((v) => v.active).length;
+    document.getElementById('stat').innerHTML =
+      `<b>${VOICES.length}</b> voices · <b>${active}</b> active · <b>${WORDS.length}</b> standard-library words`;
+  }
+
+  function renderVoiceSelect() {
+    const sel = document.getElementById('voice-sel');
+    const prev = sel.value;
+    const active = VOICES.filter((v) => v.active);
+    sel.innerHTML = active.length
+      ? active.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}${v.accent ? ' · ' + esc(v.accent) : ''}${v.gender ? ' · ' + esc(v.gender) : ''}</option>`).join('')
+      : '<option value="">(no active voices)</option>';
+    if (prev && active.some((v) => v.id === prev)) sel.value = prev;
+  }
+
+  async function persistOrder() {
+    // Normalize sortOrder to the row index; PATCH only the rows that moved.
+    const jobs = [];
+    VOICES.forEach((v, idx) => {
+      if (v.sortOrder !== idx) {
+        v.sortOrder = idx;
+        jobs.push(api('/api/admin/lab?action=voices&id=' + encodeURIComponent(v.id), { method: 'PATCH', body: { sortOrder: idx } }));
+      }
+    });
+    await Promise.all(jobs);
+  }
+
+  document.getElementById('vrows').addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('button');
+    if (!btn) return;
+    const tr = btn.closest('tr'); if (!tr) return;
+    const id = tr.dataset.id;
+    const i = VOICES.findIndex((v) => v.id === id);
+    if (i < 0) return;
+    try {
+      if (btn.dataset.act === 'up' || btn.dataset.act === 'down') {
+        const j = i + (btn.dataset.act === 'up' ? -1 : 1);
+        if (j < 0 || j >= VOICES.length) return;
+        const tmp = VOICES[i]; VOICES[i] = VOICES[j]; VOICES[j] = tmp;
+        renderCatalog();
+        await persistOrder();
+      } else if (btn.dataset.act === 'del') {
+        const v = VOICES[i];
+        if (!confirm(`Remove "${v.name}" (${v.id}) from the catalog?\n\nIt disappears from the onboarding picker. Children already using it keep it (their setting is a copy) and their cached clips keep playing.`)) return;
+        await api('/api/admin/lab?action=voices&id=' + encodeURIComponent(id), { method: 'DELETE' });
+        VOICES.splice(i, 1);
+        renderCatalog();
+      }
+    } catch (e) { alert(e.message || e); }
+  });
+
+  document.getElementById('vrows').addEventListener('change', async (ev) => {
+    const el = ev.target;
+    const tr = el.closest('tr'); if (!tr) return;
+    const id = tr.dataset.id;
+    const v = VOICES.find((x) => x.id === id);
+    if (!v) return;
+    try {
+      if (el.dataset.act === 'active') {
+        v.active = el.checked;
+        await api('/api/admin/lab?action=voices&id=' + encodeURIComponent(id), { method: 'PATCH', body: { active: el.checked } });
+        renderCatalog();
+      } else if (el.dataset.field) {
+        const field = el.dataset.field;
+        const val = el.value.trim();
+        if (field === 'name' && !val) { el.value = v.name; return; } // name can't be blank
+        el.classList.add('dirty');
+        const body = {}; body[field] = val || null;
+        await api('/api/admin/lab?action=voices&id=' + encodeURIComponent(id), { method: 'PATCH', body: body });
+        v[field] = val || null;
+        el.classList.remove('dirty');
+        renderVoiceSelect();
+      }
+    } catch (e) { alert(e.message || e); }
+  });
+
+  document.getElementById('add-btn').addEventListener('click', async () => {
+    const msg = document.getElementById('add-msg');
+    const id = document.getElementById('add-id').value.trim();
+    msg.className = 'errmsg'; msg.textContent = '';
+    if (!/^[A-Za-z0-9]{8,40}$/.test(id)) { msg.textContent = 'Paste an ElevenLabs voice id (8-40 letters/digits).'; return; }
+    const body = { id: id };
+    const name = document.getElementById('add-name').value.trim();
+    const accent = document.getElementById('add-accent').value.trim();
+    const gender = document.getElementById('add-gender').value.trim();
+    if (name) body.name = name;
+    if (accent) body.accent = accent;
+    if (gender) body.gender = gender;
+    const btn = document.getElementById('add-btn');
+    try {
+      const r = await withSpinner(btn, () => api('/api/admin/lab?action=voices', { method: 'POST', body: body }));
+      msg.className = 'okmsg';
+      msg.textContent = `Added "${r.voice.name}"` + (r.lookedUp ? ' — looked up from ElevenLabs ✓' : '');
+      ['add-id', 'add-name', 'add-accent', 'add-gender'].forEach((x) => { document.getElementById(x).value = ''; });
+      const existing = VOICES.findIndex((v) => v.id === r.voice.id);
+      if (existing >= 0) VOICES[existing] = r.voice; else VOICES.push(r.voice);
+      renderCatalog();
+    } catch (e) { msg.className = 'errmsg'; msg.textContent = e.message || String(e); }
+  });
+  document.getElementById('add-id').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') document.getElementById('add-btn').click(); });
+
+  // ------------------------------------------------------------ sound check
+  function currentVoice() {
+    const id = document.getElementById('voice-sel').value;
+    return VOICES.find((v) => v.id === id) || null;
+  }
+
+  function renderWords() {
+    const box = document.getElementById('words');
+    const q = document.getElementById('wq').value.trim().toLowerCase();
+    const shown = WORDS.map((w, i) => ({ w: w, i: i })).filter((x) => !q || x.w.label.toLowerCase().includes(q));
+    if (!shown.length) { box.innerHTML = '<div class="empty">No words match.</div>'; return; }
+    const groups = new Map();
+    for (const x of shown) {
+      if (!groups.has(x.w.group)) groups.set(x.w.group, []);
+      groups.get(x.w.group).push(x);
+    }
+    let html = '';
+    for (const [g, list] of groups) {
+      html += `<div class="group-title">${esc(g)} <span style="font-weight:400;color:#94a3b8;">(${list.length})</span></div>`;
+      html += '<div class="wgrid">' + list.map((x) =>
+        `<div class="wrow" data-i="${x.i}">
+          <span class="wlabel" title="${esc(x.w.label)}">${esc(x.w.label)}</span>
+          <button data-act="play" title="Play the cached clip (what every board plays)">▶</button>
+          <button data-act="regen" title="Re-render with ElevenLabs and overwrite the shared cache">↻</button>
+        </div>`).join('') + '</div>';
+    }
+    box.innerHTML = html;
+  }
+
+  document.getElementById('words').addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('button');
+    if (!btn || btn.disabled) return;
+    const row = btn.closest('.wrow'); if (!row) return;
+    const w = WORDS[Number(row.dataset.i)]; if (!w) return;
+    const voice = currentVoice();
+    const msg = document.getElementById('bench-msg');
+    msg.textContent = '';
+    if (!voice) { msg.textContent = 'No active voice selected.'; return; }
+    stopPlayAll();
+    try {
+      const nocache = btn.dataset.act === 'regen';
+      const blob = await withSpinner(btn, () => getClip(w.label, voice.id, nocache));
+      document.querySelectorAll('.wrow.playing').forEach((el) => el.classList.remove('playing'));
+      row.classList.add('playing');
+      playBlob(blob, false);
+      player.onended = () => row.classList.remove('playing');
+    } catch (e) { msg.textContent = e.message || String(e); }
+  });
+
+  document.getElementById('preview-btn').addEventListener('click', async () => {
+    const voice = currentVoice();
+    const msg = document.getElementById('bench-msg');
+    msg.textContent = '';
+    if (!voice) { msg.textContent = 'No active voice selected.'; return; }
+    stopPlayAll();
+    try {
+      const sample = `Hi! I'm ${voice.name}. I want to go outside and play, please. Thank you!`;
+      const blob = await withSpinner(document.getElementById('preview-btn'), () => getClip(sample, voice.id, false));
+      playBlob(blob, false);
+    } catch (e) { msg.textContent = e.message || String(e); }
+  });
+
+  // ▶ Play all: the first 20 rows currently visible (after the filter), in
+  // order, one after another. ⏹ stops between (or during) clips.
+  let playAllStop = true;
+  function stopPlayAll() { playAllStop = true; stopAudio(); setPlayAllUI(false); }
+  function setPlayAllUI(running) {
+    document.getElementById('playall-btn').disabled = running;
+    document.getElementById('stop-btn').disabled = !running;
+  }
+  document.getElementById('stop-btn').addEventListener('click', stopPlayAll);
+  document.getElementById('playall-btn').addEventListener('click', async () => {
+    const voice = currentVoice();
+    const msg = document.getElementById('bench-msg');
+    msg.textContent = '';
+    if (!voice) { msg.textContent = 'No active voice selected.'; return; }
+    const rows = Array.from(document.querySelectorAll('#words .wrow')).slice(0, 20);
+    if (!rows.length) { msg.textContent = 'No words visible.'; return; }
+    playAllStop = false;
+    setPlayAllUI(true);
+    try {
+      for (const row of rows) {
+        if (playAllStop) break;
+        const w = WORDS[Number(row.dataset.i)];
+        if (!w) continue;
+        document.querySelectorAll('.wrow.playing').forEach((el) => el.classList.remove('playing'));
+        row.classList.add('playing');
+        row.scrollIntoView({ block: 'nearest' });
+        let blob;
+        try { blob = await getClip(w.label, voice.id, false); }
+        catch (e) { msg.textContent = e.message || String(e); break; }
+        if (playAllStop) break;
+        await playBlob(blob, true);
+      }
+    } finally {
+      playAllStop = true;
+      setPlayAllUI(false);
+      document.querySelectorAll('.wrow.playing').forEach((el) => el.classList.remove('playing'));
+    }
+  });
+
+  document.getElementById('wq').addEventListener('input', () => { stopPlayAll(); renderWords(); });
+  document.getElementById('voice-sel').addEventListener('change', stopPlayAll);
+
+  // ------------------------------------------------------------------ load
+  async function load() {
+    stopPlayAll();
+    document.getElementById('stat').textContent = 'Loading…';
+    try {
+      const [vr, dr] = await Promise.all([
+        api('/api/admin/lab?action=voices'),
+        api('/api/admin/lab?action=defaults-view'),
+      ]);
+      VOICES = (vr.voices || []).slice().sort((a, b) => (a.sortOrder - b.sortOrder) || String(a.name).localeCompare(String(b.name)));
+      // Standard-library QC list: every unique tile label, grouped by
+      // column › category in the board's own order.
+      const seen = new Set();
+      WORDS = [];
+      for (const t of (dr.tiles || [])) {
+        const label = String(t.label || '').trim();
+        if (!label) continue;
+        const k = label.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        WORDS.push({ label: label, group: (t.column || 'Other') + (t.category ? ' › ' + t.category : '') });
+      }
+      renderCatalog();
+      renderWords();
+    } catch (e) {
+      document.getElementById('stat').textContent = 'Error';
+      document.getElementById('vrows').innerHTML = '<tr><td colspan="7" class="empty">' + esc(e.message || e) + '</td></tr>';
+      document.getElementById('words').innerHTML = '<div class="empty">' + esc(e.message || e) + '</div>';
+    }
+  }
+
+  document.getElementById('refresh').addEventListener('click', load);
+  load();
+</script>
+</body>
+</html>
