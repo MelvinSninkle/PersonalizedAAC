@@ -38,6 +38,8 @@ export default async function handler(req, res) {
         UNION ALL SELECT child_id FROM persons WHERE reference_key = ${key} OR voice_key = ${key}
         UNION ALL SELECT child_id FROM reference_images WHERE blob_key = ${key}
         UNION ALL SELECT child_id FROM pending_tiles WHERE source_key = ${key} OR image_key = ${key} OR sound_key = ${key}
+        UNION ALL SELECT child_id FROM item_image_history WHERE blob_key = ${key}
+        UNION ALL SELECT child_id FROM tile_jobs WHERE source_key = ${key} OR image_key = ${key} OR sound_key = ${key}
       ) t WHERE child_id IS NOT NULL LIMIT 20`;
     if (owners.length) {
       let allowed = false;
