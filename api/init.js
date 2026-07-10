@@ -917,6 +917,14 @@ Size: {size}.',
         sort_order  INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (section, label_norm, parent_norm)
       )`;
+    // Board heartbeat: the last time each board pulled /api/sync (admin
+    // reports' "is this device in sync" signal). One row per board.
+    await db`
+      CREATE TABLE IF NOT EXISTS board_pings (
+        child_id     TEXT PRIMARY KEY,
+        last_sync_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        user_agent   TEXT
+      )`;
     // Board catalog (Lab defaults view): which top-level categories are
     // store-only (never seeded onto new boards) and whether adding them from
     // the Word Shop is free or requires credits. No row = default behavior:

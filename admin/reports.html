@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reports — admin</title>
+<style>
+  :root { --pink:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#faf7f9; }
+  header {
+    position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--line);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; padding:12px 18px;
+  }
+  header h1 { font-size:18px; margin:0; margin-right:6px; }
+  .spacer { flex:1; }
+  a.back { color:var(--pink); text-decoration:none; font-size:13px; }
+  select, button { font:inherit; padding:7px 11px; border:1px solid var(--line); border-radius:9px; background:#fff; cursor:pointer; }
+  main { padding:16px 18px 80px; max-width:1180px; margin:0 auto; }
+
+  .chips { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; }
+  .chip { background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 14px; font-size:12px; color:var(--muted); }
+  .chip b { display:block; font-size:19px; color:var(--ink); margin-bottom:1px; }
+  .chip.warn b { color:#b45309; }
+  .chip.bad b { color:#b91c1c; }
+
+  .panel { background:#fff; border:1px solid var(--line); border-radius:12px; margin-bottom:16px; overflow:hidden; }
+  .panel .head {
+    display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); background:#fdf7fa;
+  }
+  .panel h2 { margin:0; font-size:13px; font-weight:700; color:var(--pink); text-transform:uppercase; letter-spacing:.04em; }
+  .panel .sub { font-size:12px; color:var(--muted); }
+  .panel .csv { margin-left:auto; font-size:12px; padding:4px 10px; }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { text-align:left; padding:7px 12px; border-bottom:1px solid #f3f4f6; white-space:nowrap; }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); background:#fbfbfc; position:sticky; top:0; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .age-ok { color:#15803d; } .age-warn { color:#b45309; font-weight:600; } .age-bad { color:#b91c1c; font-weight:700; }
+  .tag { font-size:11px; font-weight:700; border-radius:999px; padding:2px 9px; }
+  .tag.ok { background:#ecfdf5; color:#047857; }
+  .tag.check { background:#eff6ff; color:#1d4ed8; }
+  .tag.stuck { background:#fffbeb; color:#b45309; }
+  .tag.failed { background:#fef2f2; color:#b91c1c; }
+  .empty { color:var(--muted); text-align:center; padding:26px; font-size:13px; }
+  .note { font-size:12px; color:var(--muted); padding:8px 14px; border-top:1px solid #f3f4f6; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📈 Reports</h1>
+  <select id="days" title="Window for purchases, fulfillment, and activity counts">
+    <option value="7">Last 7 days</option>
+    <option value="30" selected>Last 30 days</option>
+    <option value="90">Last 90 days</option>
+  </select>
+  <button id="refresh">↻ Refresh</button>
+  <div class="spacer"></div>
+  <a class="back" href="/admin/publish.html">Publish</a>
+  <a class="back" href="/admin/">← Lab home</a>
+</header>
+<main>
+  <div class="chips" id="chips"></div>
+
+  <div class="panel">
+    <div class="head"><h2>Boards &amp; sync</h2>
+      <span class="sub">heartbeat = last /api/sync pull; a healthy board synced recently and has an empty render queue</span>
+      <button class="csv" data-csv="boards">⬇ CSV</button></div>
+    <div class="tablewrap"><table id="t-boards"></table></div>
+    <div class="note" id="boards-note"></div>
+  </div>
+
+  <div class="panel">
+    <div class="head"><h2>Accounts &amp; logins</h2>
+      <span class="sub">last login is stamped on every login path (email, Apple, signup)</span>
+      <button class="csv" data-csv="logins">⬇ CSV</button></div>
+    <div class="tablewrap"><table id="t-logins"></table></div>
+  </div>
+
+  <div class="panel">
+    <div class="head"><h2>Purchases</h2><span class="sub" id="purch-sub"></span>
+      <button class="csv" data-csv="purchases">⬇ CSV</button></div>
+    <div class="tablewrap"><table id="t-purchases"></table></div>
+  </div>
+
+  <div class="panel">
+    <div class="head"><h2>Purchases vs fulfillment</h2>
+      <span class="sub">credits in vs credits spent vs renders delivered — anything not OK is a customer waiting</span>
+      <button class="csv" data-csv="fulfillment">⬇ CSV</button></div>
+    <div class="tablewrap"><table id="t-fulfillment"></table></div>
+    <div class="note">OK = spends have matching completed renders (or no spends). CHECK = spent credits but no renders finished in the window (may pre-date it). STUCK = renders still queued. FAILED = renders failed — fix and re-kick from the store/Lab.</div>
+  </div>
+</main>
+
+<script>
+  // Same admin auth as the other tools: session cookie (preferred) or the legacy
+  // bearer token in localStorage.
+  const token = localStorage.getItem('aacToken') || '';
+  async function api(path) {
+    const headers = {};
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const r = await fetch(path, { headers, credentials: 'same-origin' });
+    if (r.status === 401 || r.status === 403) throw new Error('Sign in as an admin first (open /login), then return here.');
+    if (!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0, 160));
+    return r.json();
+  }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const $ = (id) => document.getElementById(id);
+
+  let DATA = null;
+
+  function ago(iso) {
+    if (!iso) return null;
+    const mins = Math.floor((Date.now() - new Date(iso)) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    const h = Math.floor(mins / 60);
+    if (h < 48) return h + 'h ago';
+    return Math.floor(h / 24) + 'd ago';
+  }
+  // Freshness color: green under warnH hours, amber under badH, red past that.
+  function ageCell(iso, warnH, badH, missing) {
+    if (!iso) return '<td class="age-bad">' + esc(missing || 'never') + '</td>';
+    const h = (Date.now() - new Date(iso)) / 36e5;
+    const cls = h < warnH ? 'age-ok' : h < badH ? 'age-warn' : 'age-bad';
+    return '<td class="' + cls + '" title="' + esc(new Date(iso).toLocaleString()) + '">' + ago(iso) + '</td>';
+  }
+  const money = (c) => c ? '$' + (c / 100).toFixed(2) : '—';
+  const when = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+    ' ' + new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '—';
+
+  function render() {
+    const d = DATA;
+    const s = d.summary;
+    $('chips').innerHTML =
+      '<div class="chip"><b>' + s.boards + '</b>boards</div>' +
+      '<div class="chip"><b>' + s.boardsSynced24h + '</b>synced in 24h</div>' +
+      (s.boardsNeverSynced ? '<div class="chip warn"><b>' + s.boardsNeverSynced + '</b>no heartbeat yet</div>' : '') +
+      (s.jobsQueued ? '<div class="chip warn"><b>' + s.jobsQueued + '</b>renders queued</div>' : '') +
+      (s.jobsFailed ? '<div class="chip bad"><b>' + s.jobsFailed + '</b>renders failed</div>' : '') +
+      '<div class="chip"><b>' + s.accounts + '</b>accounts</div>' +
+      '<div class="chip"><b>' + s.signupsInWindow + '</b>signups in ' + s.days + 'd</div>' +
+      '<div class="chip"><b>' + s.activeInWindow + '</b>logged in within ' + s.days + 'd</div>' +
+      '<div class="chip"><b>' + s.purchases + '</b>purchases · ⭐' + s.purchasedCredits + ' · ' + money(s.purchasedCents) + '</div>' +
+      (s.fulfillmentAttention ? '<div class="chip bad"><b>' + s.fulfillmentAttention + '</b>fulfillment attention</div>' : '<div class="chip"><b>0</b>fulfillment attention</div>');
+
+    $('t-boards').innerHTML = '<tr><th>Board</th><th>Owner</th><th>Tiles</th><th>Last sync</th><th>Last child tap</th><th>Queued</th><th>Failed</th><th>Device</th></tr>' +
+      (d.boards.map((b) => '<tr><td>' + esc(b.childId) + '</td><td>' + esc(b.owner || '—') + '</td>' +
+        '<td class="num">' + b.items + '</td>' +
+        ageCell(b.lastSyncAt, 8, 48, 'no heartbeat') +
+        ageCell(b.lastTapAt, 48, 24 * 7, '—') +
+        '<td class="num' + (b.jobsQueued ? ' age-warn' : '') + '">' + (b.jobsQueued || '') + '</td>' +
+        '<td class="num' + (b.jobsFailed ? ' age-bad' : '') + '">' + (b.jobsFailed || '') + '</td>' +
+        '<td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;" title="' + esc(b.userAgent || '') + '">' + esc((b.userAgent || '').slice(0, 44)) + '</td></tr>').join('')
+        || '<tr><td colspan="8" class="empty">No boards yet.</td></tr>');
+    $('boards-note').textContent = 'Heartbeats start recording after this deploy — a board shows "no heartbeat" until its device syncs once.';
+
+    $('t-logins').innerHTML = '<tr><th>Account</th><th>Role</th><th>Board</th><th>Signed up</th><th>Last login</th></tr>' +
+      (d.logins.map((l) => '<tr><td>' + esc(l.email) + '</td><td>' + esc(l.role) + '</td><td>' + esc(l.childId || '—') + '</td>' +
+        '<td>' + when(l.signedUpAt) + '</td>' + ageCell(l.lastLoginAt, 24 * 7, 24 * 21, 'never') + '</tr>').join('')
+        || '<tr><td colspan="5" class="empty">No accounts.</td></tr>');
+
+    $('purch-sub').textContent = d.purchaseTotals.count + ' in the last ' + s.days + ' days · ⭐' +
+      d.purchaseTotals.credits + ' · ' + money(d.purchaseTotals.cents);
+    $('t-purchases').innerHTML = '<tr><th>When</th><th>Account</th><th>Platform</th><th>Product</th><th>Credits</th><th>Amount</th></tr>' +
+      (d.purchases.map((p) => '<tr><td>' + when(p.at) + '</td><td>' + esc(p.email) + '</td><td>' + esc(p.platform) + '</td>' +
+        '<td>' + esc(p.product) + '</td><td class="num">⭐' + p.credits + '</td><td class="num">' + money(p.cents) + '</td></tr>').join('')
+        || '<tr><td colspan="6" class="empty">No purchases in this window.</td></tr>');
+
+    $('t-fulfillment').innerHTML = '<tr><th>Status</th><th>Account</th><th>Board</th><th>Bought</th><th>Spent</th><th>Renders done</th><th>Queued</th><th>Failed</th></tr>' +
+      (d.fulfillment.map((f) => '<tr><td><span class="tag ' + f.status + '">' + f.status.toUpperCase() + '</span></td>' +
+        '<td>' + esc(f.email) + '</td><td>' + esc(f.childId || '—') + '</td>' +
+        '<td class="num">' + (f.boughtCredits ? '⭐' + f.boughtCredits + ' · ' + money(f.boughtCents) : '—') + '</td>' +
+        '<td class="num">' + (f.spentCredits ? '⭐' + f.spentCredits : '—') + '</td>' +
+        '<td class="num">' + f.rendersDone + '</td>' +
+        '<td class="num' + (f.rendersQueued ? ' age-warn' : '') + '">' + (f.rendersQueued || '') + '</td>' +
+        '<td class="num' + (f.rendersFailed ? ' age-bad' : '') + '">' + (f.rendersFailed || '') + '</td></tr>').join('')
+        || '<tr><td colspan="8" class="empty">No wallet or render activity in this window.</td></tr>');
+  }
+
+  // CSV export straight from the loaded JSON — records you can keep.
+  const CSV_COLS = {
+    boards: ['childId', 'owner', 'items', 'lastSyncAt', 'lastTapAt', 'jobsQueued', 'jobsFailed', 'userAgent'],
+    logins: ['email', 'role', 'childId', 'signedUpAt', 'lastLoginAt'],
+    purchases: ['at', 'email', 'platform', 'product', 'credits', 'cents'],
+    fulfillment: ['status', 'email', 'childId', 'boughtCredits', 'boughtCents', 'spentCredits', 'rendersDone', 'rendersQueued', 'rendersFailed'],
+  };
+  document.querySelectorAll('.csv').forEach((btn) => btn.addEventListener('click', () => {
+    if (!DATA) return;
+    const key = btn.dataset.csv;
+    const cols = CSV_COLS[key];
+    const rows = DATA[key] || [];
+    const cell = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const csv = [cols.join(',')].concat(rows.map((r) => cols.map((c) => cell(r[c])).join(','))).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'myworld-' + key + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }));
+
+  async function load() {
+    $('chips').innerHTML = '<div class="chip"><b>…</b>loading</div>';
+    try {
+      DATA = await api('/api/admin/lab?action=reports&days=' + $('days').value);
+      render();
+    } catch (e) {
+      $('chips').innerHTML = '<div class="chip bad"><b>!</b>' + esc(e.message || e) + '</div>';
+    }
+  }
+  $('days').addEventListener('change', load);
+  $('refresh').addEventListener('click', load);
+  load();
+</script>
+</body>
+</html>

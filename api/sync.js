@@ -30,6 +30,25 @@ export default async function handler(req, res) {
   try {
     const db = sql();
     if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+    // Board heartbeat for the admin sync report — throttled to ~1/min and
+    // fire-and-forget, so it never slows a sync down or fails one.
+    (async () => {
+      const ua = String(req.headers['user-agent'] || '').slice(0, 140);
+      const ping = () => db`
+        INSERT INTO board_pings (child_id, last_sync_at, user_agent)
+        VALUES (${childId}, NOW(), ${ua})
+        ON CONFLICT (child_id) DO UPDATE SET last_sync_at = NOW(), user_agent = ${ua}
+        WHERE board_pings.last_sync_at < NOW() - INTERVAL '1 minute'`;
+      try { await ping(); } catch (_) {
+        try {
+          await db`CREATE TABLE IF NOT EXISTS board_pings (
+            child_id TEXT PRIMARY KEY,
+            last_sync_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            user_agent TEXT)`;
+          await ping();
+        } catch (_) { /* reporting is best-effort */ }
+      }
+    })();
     // The shared-template subtree, computed once and joined twice.
     //   - seeds: template roots in category_shares for this child (status=active)
     //   - descendants: every category whose parent is in the subtree (child_id IS NULL)
