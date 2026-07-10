@@ -35,6 +35,7 @@ import tileLab from './_lab-tile-lab.js';
 import styleDefaults from './_lab-style-defaults.js';
 import layout from './_lab-layout.js';
 import voices from './_lab-voices.js';
+import publish from './_lab-publish.js';
 
 export const config = { maxDuration: 300 };
 
@@ -61,6 +62,7 @@ const HANDLERS = {
   'style-defaults': styleDefaults,
   'layout': layout,
   'voices': voices,
+  'publish': publish,
 };
 
 export default async function handler(req, res) {

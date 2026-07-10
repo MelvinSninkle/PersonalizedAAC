@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Publish to boards — admin</title>
+<style>
+  :root { --pink:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#faf7f9; }
+  header {
+    position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--line);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; padding:12px 18px;
+  }
+  header h1 { font-size:18px; margin:0; margin-right:6px; }
+  .spacer { flex:1; }
+  a.back { color:var(--pink); text-decoration:none; font-size:13px; }
+  main { max-width:760px; margin:0 auto; padding:16px 18px 80px; }
+  .note {
+    background:#fdf2f7; border:1px solid #f3cfe0; color:#831843; border-radius:10px;
+    padding:10px 14px; font-size:13px; margin-bottom:16px; line-height:1.5;
+  }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:12px; margin-bottom:14px; }
+  .panel h2 {
+    margin:0; padding:10px 14px; font-size:13px; font-weight:700; color:var(--pink);
+    text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--line); background:#fdf7fa;
+  }
+  .panel .body { padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
+  label.opt { display:flex; gap:10px; align-items:flex-start; font-size:14px; cursor:pointer; }
+  label.opt input { margin-top:3px; }
+  label.opt .sub { display:block; font-size:12px; color:var(--muted); margin-top:2px; line-height:1.45; }
+  select, input[type=text] { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; max-width:340px; }
+  .indent { margin-left:26px; }
+  button {
+    font:inherit; padding:8px 14px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink); cursor:pointer;
+  }
+  button.primary { background:var(--pink); color:#fff; border-color:var(--pink); font-weight:600; }
+  button:disabled { opacity:.55; cursor:default; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  #preview { font-size:13px; color:var(--muted); line-height:1.5; }
+  #preview b { color:var(--ink); }
+  .bar { height:10px; border-radius:999px; background:#f3e4ec; overflow:hidden; display:none; }
+  .bar i { display:block; height:100%; width:0; background:var(--pink); transition:width .3s; }
+  #log { font:12px/1.6 ui-monospace,Menlo,monospace; color:#374151; background:#fbfbfc; border:1px solid var(--line); border-radius:10px; padding:10px 12px; max-height:320px; overflow:auto; display:none; white-space:pre-wrap; }
+  .err { color:#9b1c1c; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📣 Publish to boards</h1>
+  <div class="spacer"></div>
+  <a class="back" href="/admin/layout.html">Board layout</a>
+  <a class="back" href="/admin/voices.html">Voice library</a>
+  <a class="back" href="/admin/">← Lab home</a>
+</header>
+<main>
+  <div class="note">
+    Pushes the Lab's curated content out to boards that already exist.
+    <b>Tile &amp; folder art never needs a push</b> — boards pick up regenerated
+    style/default images automatically on their next sync. What a push delivers is the
+    two things that get baked into a board when it's built: the curated <b>layout order</b>
+    and each tile's <b>voice clip</b> (so pronunciation fixes from the voice library reach
+    every board). Personalized images, parent recordings, and custom words are never touched.
+  </div>
+
+  <div class="panel">
+    <h2>Who gets it</h2>
+    <div class="body">
+      <label class="opt"><input type="radio" name="scope" value="all" checked>
+        <span><b>All boards, all users</b><span class="sub">Every board with content, whatever style it uses.</span></span></label>
+      <label class="opt"><input type="radio" name="scope" value="style">
+        <span><b>Boards on one style</b><span class="sub">Only boards whose house style is the one you pick.</span></span></label>
+      <div class="indent"><select id="style-pick" disabled><option>Loading styles…</option></select></div>
+      <label class="opt"><input type="radio" name="scope" value="child">
+        <span><b>One specific user</b><span class="sub">Their account email or their board's slug.</span></span></label>
+      <div class="indent"><input type="text" id="child-pick" placeholder="parent@example.com or board-slug" disabled></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>What to push</h2>
+    <div class="body">
+      <label class="opt"><input type="checkbox" id="w-layout" checked>
+        <span><b>Board layout order</b><span class="sub">Applies the drag-to-reorder screen's category and word order.
+        Curated words take the curated order; a family's own additions keep their relative order after them.</span></span></label>
+      <label class="opt"><input type="checkbox" id="w-sounds">
+        <span><b>Voice clips (current pronunciations)</b><span class="sub">Re-points every standard tile at audio for the
+        current pronunciation in the board's own voice — the same clips you QC'd in the voice library, so cached words cost
+        nothing to push. Slower: budget a couple of seconds per board, more on the first pass.</span></span></label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Go</h2>
+    <div class="body">
+      <div class="row">
+        <button id="preview-btn">Preview targets</button>
+        <button id="push-btn" class="primary" disabled>Publish</button>
+      </div>
+      <div id="preview">Preview first — it shows how many boards the push will reach.</div>
+      <div class="bar" id="bar"><i></i></div>
+      <div id="log"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+  // Same admin auth as the other tools: session cookie (preferred) or the legacy
+  // bearer token in localStorage.
+  const token = localStorage.getItem('aacToken') || '';
+  async function api(path, body) {
+    const headers = {};
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const opts = { headers, credentials: 'same-origin' };
+    if (body !== undefined) {
+      opts.method = 'POST';
+      headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    const r = await fetch(path, opts);
+    if (r.status === 401 || r.status === 403) throw new Error('Sign in as an admin first (open /login), then return here.');
+    if (!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0, 160));
+    return r.json();
+  }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const $ = (id) => document.getElementById(id);
+
+  // Scope controls enable/disable with the radios.
+  function scope() { return document.querySelector('input[name=scope]:checked').value; }
+  document.querySelectorAll('input[name=scope]').forEach((r) => r.addEventListener('change', () => {
+    $('style-pick').disabled = scope() !== 'style';
+    $('child-pick').disabled = scope() !== 'child';
+    $('push-btn').disabled = true;
+    $('preview').textContent = 'Preview first — it shows how many boards the push will reach.';
+  }));
+
+  (async () => {
+    try {
+      const d = await api('/api/admin/style-guides');
+      const list = (d.styleGuides || []).filter((s) => !s.childId);
+      $('style-pick').innerHTML = list.length
+        ? list.map((s) => `<option value="${s.id}">${esc(s.label)}${s.active ? '' : ' (inactive)'}</option>`).join('')
+        : '<option value="">No offered styles yet</option>';
+      if (scope() !== 'style') $('style-pick').disabled = true;
+    } catch (e) { $('style-pick').innerHTML = '<option value="">' + esc(e.message) + '</option>'; }
+  })();
+
+  function target() {
+    const s = scope();
+    return { scope: s,
+             styleGuideId: s === 'style' ? Number($('style-pick').value) || 0 : undefined,
+             child: s === 'child' ? $('child-pick').value.trim() : undefined };
+  }
+
+  $('preview-btn').addEventListener('click', async () => {
+    const t = target();
+    if (t.scope === 'child' && !t.child) { $('preview').innerHTML = '<span class="err">Enter an email or board slug first.</span>'; return; }
+    if (t.scope === 'style' && !t.styleGuideId) { $('preview').innerHTML = '<span class="err">Pick a style first.</span>'; return; }
+    $('preview').textContent = 'Counting…';
+    try {
+      const qs = new URLSearchParams({ action: 'publish', scope: t.scope });
+      if (t.styleGuideId) qs.set('styleGuideId', t.styleGuideId);
+      if (t.child) qs.set('child', t.child);
+      const d = await api('/api/admin/lab?' + qs);
+      if (!d.total) {
+        $('preview').innerHTML = '<span class="err">No boards match that target.</span>';
+        $('push-btn').disabled = true;
+        return;
+      }
+      const sample = d.children.slice(0, 8).map(esc).join(', ');
+      $('preview').innerHTML = `Will push to <b>${d.total} board${d.total === 1 ? '' : 's'}</b>` +
+        (d.total > 1 ? ` — e.g. ${sample}${d.total > 8 ? ', …' : ''}` : ` — ${sample}`);
+      $('push-btn').disabled = false;
+    } catch (e) { $('preview').innerHTML = '<span class="err">' + esc(e.message) + '</span>'; }
+  });
+
+  let running = false;
+  $('push-btn').addEventListener('click', async () => {
+    if (running) return;
+    const t = target();
+    const what = { layout: $('w-layout').checked, sounds: $('w-sounds').checked };
+    if (!what.layout && !what.sounds) { $('preview').innerHTML = '<span class="err">Tick at least one thing to push.</span>'; return; }
+    const label = [what.layout && 'layout order', what.sounds && 'voice clips'].filter(Boolean).join(' + ');
+    if (!confirm(`Push ${label} to the previewed boards now?\n\nThis rewrites those boards' ordering${what.sounds ? ' and standard voice clips' : ''}. Personalized art, parent recordings, and custom words are untouched.`)) return;
+
+    running = true;
+    $('push-btn').disabled = true; $('preview-btn').disabled = true;
+    const log = $('log'), bar = $('bar');
+    log.style.display = 'block'; bar.style.display = 'block';
+    log.textContent = '';
+    const say = (line, cls) => { log.innerHTML += (cls ? `<span class="${cls}">` + esc(line) + '</span>' : esc(line)) + '\n'; log.scrollTop = log.scrollHeight; };
+
+    let offset = 0, total = null, stalls = 0;
+    try {
+      while (true) {
+        const d = await api('/api/admin/lab?action=publish', { ...t, what, offset });
+        total = d.total;
+        for (const r of d.results || []) {
+          const bits = [];
+          if (r.layout) bits.push(`layout: ${r.layout.cats} folders, ${r.layout.tiles} tiles reordered`);
+          if (r.sounds) bits.push(`sounds: ${r.sounds.updated} updated, ${r.sounds.already} current` +
+            (r.sounds.failed ? `, ${r.sounds.failed} FAILED` : '') + (r.sounds.partial ? ' (continuing…)' : ''));
+          say(`✓ ${r.childId} — ${bits.join(' · ')}`);
+        }
+        bar.querySelector('i').style.width = total ? Math.round(100 * Math.min(d.nextOffset, total) / total) + '%' : '0';
+        if (d.done) { say(`Done — ${total} board${total === 1 ? '' : 's'} published.`); break; }
+        // Stall guard: a board whose sound push only fails would loop forever
+        // (e.g. the TTS key is missing) — give it 3 rounds, then stop.
+        const progressed = d.nextOffset > offset ||
+          (d.results || []).some((r) => (r.sounds && (r.sounds.updated || r.sounds.already)) || (r.layout && (r.layout.cats || r.layout.tiles)));
+        stalls = progressed ? 0 : stalls + 1;
+        if (stalls >= 3) { say('Stopped: no progress after 3 rounds — check the TTS key / server logs, then run again (already-pushed boards are skipped fast).', 'err'); break; }
+        offset = d.nextOffset;
+      }
+    } catch (e) {
+      say('Failed: ' + e.message + ' — safe to run again; completed boards are skipped fast.', 'err');
+    }
+    running = false;
+    $('push-btn').disabled = false; $('preview-btn').disabled = false;
+  });
+</script>
+</body>
+</html>
