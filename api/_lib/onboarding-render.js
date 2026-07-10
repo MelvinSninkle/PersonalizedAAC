@@ -22,9 +22,15 @@ export async function readBlobBytes(key) {
 // Pick the style guide the parent chose (explicit id) or the first active one.
 // Returns { id, label, blob_key } | null, with the bytes loaded into `.image`.
 export async function loadStyleGuide(db, styleGuideId) {
+  // person_ref_key / stuff_ref_key are the per-style world references the Lab
+  // uploads for pre-built default boards; fall back to the legacy column set
+  // when the migration hasn't run so onboarding never breaks on SELECT.
+  const cols = async (q) => { try { return await q(true); } catch (_) { return await q(false); } };
   let row = null;
   if (styleGuideId) {
-    row = (await db`SELECT id, label, description, blob_key FROM style_guides WHERE id = ${styleGuideId} AND active = TRUE LIMIT 1`)[0] || null;
+    row = (await cols((ext) => ext
+      ? db`SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key FROM style_guides WHERE id = ${styleGuideId} AND active = TRUE LIMIT 1`
+      : db`SELECT id, label, description, blob_key FROM style_guides WHERE id = ${styleGuideId} AND active = TRUE LIMIT 1`))[0] || null;
     // A SPECIFIC style was requested but isn't there (deleted / inactive / wrong
     // id). Parents want THEIR exact style — never substitute or go generic. Fail
     // loud so the caller surfaces it and the parent re-picks / re-uploads.
@@ -35,12 +41,15 @@ export async function loadStyleGuide(db, styleGuideId) {
     }
   } else {
     // No style chosen → fall back to the first active global template.
-    row = (await db`SELECT id, label, description, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`)[0] || null;
+    row = (await cols((ext) => ext
+      ? db`SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`
+      : db`SELECT id, label, description, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`))[0] || null;
   }
   if (!row) return null;
   let image = null;
   if (row.blob_key) { try { image = await readBlobBytes(row.blob_key); } catch (_) { /* missing blob → text-only style */ } }
-  return { id: Number(row.id), label: row.label, description: row.description || '', blob_key: row.blob_key, image };
+  return { id: Number(row.id), label: row.label, description: row.description || '', blob_key: row.blob_key,
+           person_ref_key: row.person_ref_key || null, stuff_ref_key: row.stuff_ref_key || null, image };
 }
 
 // Load the child's committed self-portrait as the subject anchor for any tile
@@ -194,7 +203,7 @@ function noFaceRule(category) {
 // Render one taxonomy tile. `styleGuide` is the loaded { image, label } (or null),
 // `childAnchor` the loaded { buffer, contentType, name } (or null), `settings`
 // the lab_settings row. Returns { ok, b64?, contentType?, prompt?, costCents?, model?, detail? }.
-export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], guidance = '', priorKey = null, model = null }) {
+export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], worldRefKeys = [], guidance = '', priorKey = null, model = null }) {
   const section = String(tax.column_name || '').toLowerCase();
   let content = tax.prompt_template || `A friendly illustration of ${tax.label}.`;
   const mentionsRef = /\{reference\}/i.test(content);
@@ -239,6 +248,16 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
   if (subject && subject.buffer) {
     images.push({ buffer: subject.buffer, contentType: subject.contentType });
     legend.push(`Image ${images.length} shows ${subject.name} — keep this person's face and likeness clearly recognizable.`);
+  }
+  // Per-style WORLD references (the Lab's "stuff" scene for an offered style):
+  // more of the same art style, so materials/objects render consistently —
+  // unlike related-tile refs below, these must NOT force scene matching.
+  for (const key of (worldRefKeys || [])) {
+    try {
+      const bytes = await readBlobBytes(key);
+      images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
+      legend.push(`Image ${images.length} is ANOTHER STYLE reference from the same world — match how it renders objects, materials, and backgrounds; do not copy its content.`);
+    } catch (_) { /* a missing reference never blocks generation */ }
   }
   // Related already-generated tiles (paired concepts like open/close, big/little):
   // attach them so this tile reuses the same setup/composition for a legible pair.

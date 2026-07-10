@@ -8,7 +8,7 @@ import { checkAuth } from '../_lib/auth.js';
 import { isParentOf } from '../_lib/access.js';
 import { sql } from '../_lib/db.js';
 import { ensureProgress, nextStep, setStep, TIER_LABELS, LANGUAGE_LABELS } from '../_lib/onboarding.js';
-import { isSelectableVoice } from '../_lib/voices.js';
+import { voiceSelectable } from '../_lib/voices.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
   // to the curated catalog — only an admin may assign the reserved default voice.
   const rawVoice = typeof b.voiceId === 'string' && /^[A-Za-z0-9]{8,40}$/.test(b.voiceId.trim())
     ? b.voiceId.trim() : null;
-  const voiceId = (rawVoice && isSelectableVoice(rawVoice, { isAdmin: auth.user.role === 'admin' })) ? rawVoice : null;
+  const voiceId = (rawVoice && await voiceSelectable(sql(), rawVoice, { isAdmin: auth.user.role === 'admin' })) ? rawVoice : null;
   // The chosen art style (a style_guides id) becomes the child's HOUSE STYLE —
   // every tile generated later attaches this exemplar so the board stays
   // visually consistent.

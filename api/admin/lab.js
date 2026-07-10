@@ -32,6 +32,9 @@ import onboardingReport from './_lab-onboarding-report.js';
 import settings from './_lab-settings.js';
 import uploadImage from './_lab-upload-image.js';
 import tileLab from './_lab-tile-lab.js';
+import styleDefaults from './_lab-style-defaults.js';
+import layout from './_lab-layout.js';
+import voices from './_lab-voices.js';
 
 export const config = { maxDuration: 300 };
 
@@ -55,6 +58,9 @@ const HANDLERS = {
   'settings': settings,
   'tile-lab': tileLab,
   'upload-image': uploadImage,
+  'style-defaults': styleDefaults,
+  'layout': layout,
+  'voices': voices,
 };
 
 export default async function handler(req, res) {

@@ -62,21 +62,45 @@ export default async function handler(req, res) {
       SELECT i.* FROM items i
       WHERE i.child_id IS NULL AND i.category_id IN (SELECT id FROM shared_tree)
       ORDER BY display_order, id`;
-    // Folder-icon read-through: a chip with no custom icon (or one already on
-    // a shared default key) shows the shared category_defaults icon for its
-    // section + label. Custom icons always win; a chip the parent re-imaged
-    // keeps their image. This is what fills the blank chips on boards built
-    // before folder icons existed — live, no per-child copy.
+    // The child's chosen OFFERED style's pre-built default sets (Lab CMS).
+    // Style-matched art wins over the generic defaults in both read-throughs
+    // below; parents' custom uploads have no set and fall through to generic.
+    const normLbl = (v) => String(v || '').trim().toLowerCase();
+    let styleTileDefs = new Map(), styleChipDefs = new Map();
     try {
-      const needIcon = cats.filter((c) => !c.image_key || String(c.image_key).startsWith('category-defaults/'));
+      const csRow = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+      const sgId = Number(csRow && csRow.settings && csRow.settings.styleGuideId) || 0;
+      if (sgId > 0) {
+        const [sd, cd] = await Promise.all([
+          db`SELECT taxonomy_id, image_key FROM taxonomy_style_defaults
+             WHERE style_guide_id = ${sgId} AND image_key IS NOT NULL`,
+          db`SELECT section, label_norm, parent_norm, image_key FROM category_style_defaults
+             WHERE style_guide_id = ${sgId} AND image_key IS NOT NULL`,
+        ]);
+        styleTileDefs = new Map(sd.map(r => [r.taxonomy_id, r.image_key]));
+        styleChipDefs = new Map(cd.map(r => [`${r.section}|${r.label_norm}|${r.parent_norm}`, r.image_key]));
+      }
+    } catch (_) { /* style-default tables may not exist yet */ }
+
+    // Folder-icon read-through: a chip with no custom icon (or one already on
+    // a shared default key) shows the child's STYLE-MATCHED chip icon when the
+    // Lab has one, else the shared category_defaults icon for its section +
+    // label. Custom icons always win; a chip the parent re-imaged keeps their
+    // image. This is what fills the blank chips on boards built before folder
+    // icons existed — live, no per-child copy.
+    try {
+      const isSharedIcon = (k) => !k || String(k).startsWith('category-defaults/') || String(k).startsWith('style-defaults/');
+      const needIcon = cats.filter((c) => isSharedIcon(c.image_key));
       if (needIcon.length) {
+        const byId = new Map(cats.map((c) => [c.id, c]));
         const defs = await db`SELECT section, label_norm, image_key FROM category_defaults`;
-        if (defs.length) {
-          const dmap = new Map(defs.map((d) => [d.section + '|' + d.label_norm, d.image_key]));
-          for (const c of needIcon) {
-            const k = dmap.get(c.section + '|' + String(c.label || '').trim().toLowerCase());
-            if (k) c.image_key = k;
-          }
+        const dmap = new Map(defs.map((d) => [d.section + '|' + d.label_norm, d.image_key]));
+        for (const c of needIcon) {
+          const parent = c.parent_id ? byId.get(c.parent_id) : null;
+          const styled = styleChipDefs.get(`${c.section}|${normLbl(c.label)}|${parent ? normLbl(parent.label) : ''}`);
+          if (styled) { c.image_key = styled; continue; }
+          const k = dmap.get(c.section + '|' + normLbl(c.label));
+          if (k) c.image_key = k;
         }
       }
     } catch (_) { /* defaults table may not exist yet — chips just stay plain */ }
@@ -112,9 +136,16 @@ export default async function handler(req, res) {
     // subject renders, parent photo swaps) is never clobbered by the generic art.
     for (const i of items) {
       const tax = i.taxonomy_slug ? taxBySlug.get(i.taxonomy_slug) : null;
-      if (!tax || !tax.default_image_key || !isDefaultableTile(tax)) continue;
+      if (!tax) continue;
       const cur = i.image_key || '';
-      if (!cur || cur.startsWith('taxonomy-defaults/')) i.image_key = tax.default_image_key;
+      const replaceable = !cur || cur.startsWith('taxonomy-defaults/') || cur.startsWith('style-defaults/');
+      if (!replaceable) continue;
+      // Style-matched default first (applies to person-y tiles too — a generic
+      // styled child beats a bare word-tile until the per-child render lands),
+      // then the generic default for default-able tiles.
+      const styled = styleTileDefs.get(i.taxonomy_slug);
+      if (styled) { i.image_key = styled; continue; }
+      if (tax.default_image_key && isDefaultableTile(tax)) i.image_key = tax.default_image_key;
     }
 
     // Age-band filter: when the child has a birth date AND the parent hasn't

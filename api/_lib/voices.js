@@ -19,7 +19,57 @@ export const VOICE_SAMPLE_TEXT =
 
 // May `id` be assigned as a child's voice by this caller? The six catalog voices
 // are open to everyone; the admin default (and any other voice) is admin-only.
+// (Sync legacy check — prefer voiceSelectable(db, …) which reads the table.)
 export function isSelectableVoice(id, { isAdmin = false } = {}) {
   if (ONBOARDING_VOICES.some(v => v.id === id)) return true;
   return !!isAdmin;
+}
+
+// ---- DB-backed voice catalog (Lab-managed; voices are DATA, not code) ------
+
+export async function ensureVoicesTable(db) {
+  await db`
+    CREATE TABLE IF NOT EXISTS voices (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      gender     TEXT,
+      accent     TEXT,
+      active     BOOLEAN NOT NULL DEFAULT TRUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`;
+  // One-time seed from the legacy hardcoded list so existing deployments keep
+  // their catalog (and existing children's voiceIds stay selectable).
+  const n = await db`SELECT count(*)::int AS n FROM voices`;
+  if (!Number(n[0].n)) {
+    for (let i = 0; i < ONBOARDING_VOICES.length; i++) {
+      const v = ONBOARDING_VOICES[i];
+      await db`INSERT INTO voices (id, name, gender, accent, active, sort_order)
+               VALUES (${v.id}, ${v.name}, ${v.gender}, ${v.accent}, TRUE, ${i})
+               ON CONFLICT (id) DO NOTHING`;
+    }
+  }
+}
+
+/// Active catalog voices in picker order. Falls back to the hardcoded list if
+/// the table is unreachable, so onboarding never loses its voice step.
+export async function listVoices(db, { includeInactive = false } = {}) {
+  try {
+    await ensureVoicesTable(db);
+    const rows = includeInactive
+      ? await db`SELECT id, name, gender, accent, active, sort_order FROM voices ORDER BY sort_order, created_at`
+      : await db`SELECT id, name, gender, accent, active, sort_order FROM voices WHERE active = TRUE ORDER BY sort_order, created_at`;
+    if (rows.length || includeInactive) return rows.map(r => ({ ...r, active: !!r.active }));
+  } catch (_) { /* fall through */ }
+  return ONBOARDING_VOICES.map((v, i) => ({ ...v, active: true, sort_order: i }));
+}
+
+/// Async, table-aware selectability: any ACTIVE catalog voice is open to
+/// everyone; anything else (incl. the env admin voice) is admin-only.
+export async function voiceSelectable(db, id, { isAdmin = false } = {}) {
+  if (isAdmin) return true;
+  try {
+    const list = await listVoices(db);
+    return list.some(v => v.id === id);
+  } catch (_) { return isSelectableVoice(id, { isAdmin }); }
 }
