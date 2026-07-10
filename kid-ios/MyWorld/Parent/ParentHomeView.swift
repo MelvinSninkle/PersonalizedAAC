@@ -254,6 +254,10 @@ struct ParentSettingsView: View {
     @State private var deleteText = ""
     @State private var deleting = false
     @State private var deleteError: String?
+    @State private var showChangePw = false
+    @State private var curPw = ""
+    @State private var newPw = ""
+    @State private var pwMsg: String?
 
     private let api = APIClient()
 
@@ -320,6 +324,13 @@ struct ParentSettingsView: View {
                 }
                 Section("Account") {
                     if let u = auth.user { LabeledContent("Email", value: u.email) }
+                    // The password doubles as the board's edit-unlock gate, so
+                    // changing it in-app matters — no detour to the website.
+                    Button("Change password…") { pwMsg = nil; showChangePw = true }
+                    if let m = pwMsg {
+                        Text(m).font(.footnote)
+                            .foregroundStyle(m.hasPrefix("Password updated") ? Color(hex: "#047857") : .red)
+                    }
                     Button("Sign out", role: .destructive) {
                         Task { await auth.signOut(); dismiss() }
                     }
@@ -342,6 +353,14 @@ struct ParentSettingsView: View {
             .navigationTitle("Settings")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
             .task { band = try? await api.bandStatus(childId: auth.childSlug) }
+            .alert("Change password", isPresented: $showChangePw) {
+                SecureField("Current password", text: $curPw)
+                SecureField("New password (8+ characters)", text: $newPw)
+                Button("Cancel", role: .cancel) { curPw = ""; newPw = "" }
+                Button("Save") { Task { await changePassword() } }
+            } message: {
+                Text("This password also unlocks board editing on the child's device.")
+            }
             .alert("Delete this account?", isPresented: $showDeleteConfirm) {
                 TextField("Type DELETE to confirm", text: $deleteText)
                     .autocorrectionDisabled()
@@ -353,6 +372,23 @@ struct ParentSettingsView: View {
             } message: {
                 Text("Permanently deletes this account and everything on the board — every tile, photo, generated image, recording, and all history. This cannot be undone.")
             }
+        }
+    }
+
+    private func changePassword() async {
+        let cur = curPw, next = newPw
+        curPw = ""; newPw = ""
+        guard next.count >= 8 else { pwMsg = "New password must be at least 8 characters."; return }
+        do {
+            let body = try JSONSerialization.data(withJSONObject: ["currentPassword": cur, "newPassword": next])
+            _ = try await api.request(method: "POST", path: "/api/auth/change-password",
+                                      body: body, contentType: "application/json")
+            pwMsg = "Password updated."
+        } catch let APIError.badStatus(_, bodyStr) {
+            pwMsg = bodyStr.contains("incorrect") ? "Current password is incorrect."
+                  : "Couldn't change it: \(String(bodyStr.prefix(100)))"
+        } catch {
+            pwMsg = "Couldn't change it: \(error.localizedDescription)"
         }
     }
 

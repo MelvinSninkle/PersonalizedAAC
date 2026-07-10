@@ -39,6 +39,7 @@ import io.andrewpeterson.myworld.LocalAppContainer
 import io.andrewpeterson.myworld.model.prettyChildName
 import io.andrewpeterson.myworld.net.advanceBand
 import io.andrewpeterson.myworld.net.bandStatus
+import io.andrewpeterson.myworld.net.changePassword
 import io.andrewpeterson.myworld.net.deleteAccount
 import io.andrewpeterson.myworld.ui.theme.Brand
 import io.andrewpeterson.myworld.ui.theme.hexColor
@@ -202,6 +203,10 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var deleteText by remember { mutableStateOf("") }
     var deleteError by remember { mutableStateOf<String?>(null) }
+    var showChangePw by remember { mutableStateOf(false) }
+    var curPw by remember { mutableStateOf("") }
+    var newPw by remember { mutableStateOf("") }
+    var pwMsg by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         band = try { c.api.bandStatus(c.auth.childSlug) } catch (_: Exception) { null }
@@ -288,6 +293,16 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
 
             Spacer(Modifier.height(14.dp))
             Text("ACCOUNT", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
+            // The password doubles as the board's edit-unlock gate, so
+            // changing it in-app matters — no detour to the website.
+            androidx.compose.material3.TextButton(onClick = { pwMsg = null; showChangePw = true },
+                modifier = Modifier.fillMaxWidth()) {
+                Text("Change password…", color = Brand.pinkDeep)
+            }
+            pwMsg?.let {
+                Text(it, fontSize = 12.sp,
+                    color = if (it.startsWith("Password updated")) Color(0xFF047857) else Color(0xFFDC2626))
+            }
             androidx.compose.material3.TextButton(onClick = {
                 scope.launch { c.auth.signOut() }; onDismiss()
             }, modifier = Modifier.fillMaxWidth()) {
@@ -312,6 +327,54 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
                 Text("Done", color = Brand.pinkDeep, fontWeight = FontWeight.Bold)
             }
         }
+    }
+
+    if (showChangePw) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showChangePw = false; curPw = ""; newPw = "" },
+            title = { androidx.compose.material3.Text("Change password") },
+            text = {
+                Column {
+                    androidx.compose.material3.Text(
+                        "This password also unlocks board editing on the child's device.")
+                    Spacer(Modifier.height(10.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = curPw, onValueChange = { curPw = it },
+                        label = { androidx.compose.material3.Text("Current password") },
+                        singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = newPw, onValueChange = { newPw = it },
+                        label = { androidx.compose.material3.Text("New password (8+ characters)") },
+                        singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    val cur = curPw; val next = newPw
+                    curPw = ""; newPw = ""; showChangePw = false
+                    if (next.length < 8) { pwMsg = "New password must be at least 8 characters."; return@TextButton }
+                    scope.launch {
+                        pwMsg = try {
+                            c.api.changePassword(cur, next)
+                            "Password updated."
+                        } catch (e: Exception) {
+                            if ((e.message ?: "").contains("incorrect")) "Current password is incorrect."
+                            else "Couldn't change it: ${e.message}"
+                        }
+                    }
+                }) { androidx.compose.material3.Text("Save") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showChangePw = false; curPw = ""; newPw = "" }) {
+                    androidx.compose.material3.Text("Cancel")
+                }
+            },
+        )
     }
 
     if (showDeleteConfirm) {

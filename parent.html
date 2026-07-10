@@ -749,6 +749,20 @@
         <button class="btn ghost" id="acct-forgot">Email me a reset link</button>
       </div>
       <span id="acct-msg" style="font-size:13px;color:var(--muted);"></span>
+
+      <div style="margin-top:16px;border-top:1px solid #fde2ec;padding-top:14px;display:flex;flex-direction:column;gap:10px;">
+        <h2 style="margin:0;">Change email</h2>
+        <label style="font-size:12px;font-weight:700;color:var(--muted);">New email address
+          <input id="email-new" type="email" autocomplete="email" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;">
+        </label>
+        <label style="font-size:12px;font-weight:700;color:var(--muted);">Current password
+          <input id="email-pw" type="password" autocomplete="current-password" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;">
+        </label>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="btn primary" id="email-change">Change email</button>
+          <span id="email-msg" style="font-size:13px;color:var(--muted);"></span>
+        </div>
+      </div>
     </div>
 
     <div style="margin-top:22px;border-top:1px solid #fde2ec;padding-top:16px;">
@@ -1506,6 +1520,24 @@
         await fetch('/api/auth/reset-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: myEmail }) });
         acctMsg('Sent — check ' + myEmail + ' for the reset link.');
       } catch (err) { acctMsg('Could not send: ' + (err.message || err), true); } finally { forgotBtn.disabled = false; }
+    });
+
+    const emailBtn = document.getElementById('email-change');
+    if (emailBtn) emailBtn.addEventListener('click', async () => {
+      const nw = document.getElementById('email-new').value.trim();
+      const pw = document.getElementById('email-pw').value;
+      const emsg = (t, bad) => { const el = document.getElementById('email-msg'); el.textContent = t; el.style.color = bad ? '#b91c1c' : 'var(--muted)'; };
+      if (!nw.includes('@')) { emsg('Enter the new email address first.', true); return; }
+      if (!pw) { emsg('Enter your current password to confirm.', true); return; }
+      emailBtn.disabled = true; emsg('Saving…');
+      try {
+        const r = await fetch('/api/auth/change-password', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword: pw, newEmail: nw }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        myEmail = d.email || nw;
+        document.getElementById('email-new').value = ''; document.getElementById('email-pw').value = '';
+        emsg('Email changed to ' + myEmail + '. Use it next time you sign in.');
+      } catch (err) { emsg(err.message || String(err), true); } finally { emailBtn.disabled = false; }
     });
 
     // ---- Delete account (with backup offer + typed confirmation) ----

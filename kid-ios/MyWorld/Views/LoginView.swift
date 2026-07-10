@@ -6,6 +6,8 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var submitting = false
+    @State private var resetMsg: String?
+    @State private var resetBusy = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -72,10 +74,45 @@ struct LoginView: View {
                     .clipShape(Capsule())
             }
             .disabled(submitting || email.isEmpty || password.isEmpty)
+
+            // Same reset flow as the web login: enter your email, get a link.
+            Button {
+                Task { await requestReset() }
+            } label: {
+                Text(resetBusy ? "Sending…" : "Forgot password?")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color(hex: "#ad1457"))
+            }
+            .disabled(resetBusy)
+            if let m = resetMsg {
+                Text(m)
+                    .font(.footnote)
+                    .foregroundStyle(Color(hex: "#047857"))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
             Spacer()
             Spacer()
         }
         .padding()
         .background(Color(hex: "#fff7fb"))
+    }
+
+    private func requestReset() async {
+        let addr = email.trimmingCharacters(in: .whitespaces)
+        guard addr.contains("@") else {
+            resetMsg = "Enter your account email above first, then tap again."
+            return
+        }
+        resetBusy = true
+        defer { resetBusy = false }
+        do {
+            let body = try JSONSerialization.data(withJSONObject: ["email": addr])
+            _ = try await APIClient().request(method: "POST", path: "/api/auth/reset-request",
+                                              body: body, contentType: "application/json")
+            resetMsg = "If that email has an account, a reset link is on its way. Check your inbox."
+        } catch {
+            resetMsg = "Couldn't send the link — check your connection and try again."
+        }
     }
 }

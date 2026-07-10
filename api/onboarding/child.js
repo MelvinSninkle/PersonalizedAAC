@@ -36,9 +36,10 @@ export default async function handler(req, res) {
   // arbitrary picks stay readable (dark banner → white text, light → ink).
   const favoriteColor = /^#[0-9a-fA-F]{6}$/.test(String(b.favoriteColor || '').trim())
     ? String(b.favoriteColor).trim().toLowerCase() : null;
-  // Optional: the child's pronoun (family members already collect this; the
-  // child self-step did not, which left boards referring to a child as "he").
-  const pronoun = (b.pronoun === 'she' || b.pronoun === 'he' || b.pronoun === 'they') ? b.pronoun : null;
+  // Optional: boy/girl → pronoun. The child step captures exactly these two;
+  // families with other specific needs are directed to contact support (a
+  // deliberate product decision for this audience).
+  const pronoun = (b.pronoun === 'she' || b.pronoun === 'he') ? b.pronoun : null;
   if (!name) { res.status(400).json({ error: 'name required' }); return; }
   if (!birthDate) { res.status(400).json({ error: 'birthDate (YYYY-MM-DD) required' }); return; }
 

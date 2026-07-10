@@ -97,12 +97,13 @@
     <input id="in-birth" type="date">
     <div style="font-size:11px;color:#666;margin-top:4px;line-height:1.3;">Used to start with vocabulary at the right level — older words stay hidden until they're ready. Never shown publicly.</div>
 
-    <label style="margin-top:16px;">Their pronoun</label>
-    <p class="note" style="margin:0 0 8px;">So the board and progress notes refer to your child correctly. Optional.</p>
+    <label style="margin-top:16px;">Is your child a boy or a girl?</label>
+    <p class="note" style="margin:0 0 8px;">Used so the board speaks about your child correctly.
+      If your family has specific needs beyond this — or you're ever having a hard time getting an
+      image of your child that looks right — <a id="support-link" href="#" style="color:var(--pink-deep);font-weight:600;">contact us</a> and we'll help personally.</p>
     <div id="in-pron" style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button type="button" class="btn ghost tiny pron-opt" data-pron="she">She/her</button>
-      <button type="button" class="btn ghost tiny pron-opt" data-pron="he">He/him</button>
-      <button type="button" class="btn ghost tiny pron-opt" data-pron="they">They/them</button>
+      <button type="button" class="btn ghost tiny pron-opt" data-pron="he">Boy</button>
+      <button type="button" class="btn ghost tiny pron-opt" data-pron="she">Girl</button>
     </div>
 
     <label style="margin-top:16px;">What is your child's favorite color?</label>
@@ -523,7 +524,12 @@
       refreshContinue();
     } catch (err) { $('style-msg').textContent = 'Upload failed: ' + (err.message || err); }
   });
-  // Child pronoun picker (optional): tap to select, tap again to clear.
+  // Launch support contact — swap for a real support@ alias when one exists.
+  const SUPPORT_EMAIL = 'peterson.andrew.a@gmail.com';
+  const supportLink = document.getElementById('support-link');
+  if (supportLink) supportLink.href = 'mailto:' + SUPPORT_EMAIL + '?subject=' + encodeURIComponent('My World — help with our board');
+
+  // Child boy/girl picker: tap to select, tap again to clear.
   let selectedPronoun = null;
   document.querySelectorAll('#in-pron .pron-opt').forEach((btn) => btn.addEventListener('click', () => {
     const p = btn.dataset.pron;
