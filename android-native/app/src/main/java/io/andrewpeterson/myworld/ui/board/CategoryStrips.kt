@@ -100,7 +100,7 @@ fun CategoryChip(
     val image by produceState<Bitmap?>(initialValue = null, category.imageKey) {
         val key = category.imageKey
         value = if (key.isNullOrEmpty()) null else withContext(Dispatchers.Default) {
-            c.media.bitmap(key)?.trimmingFlatBorders()
+            c.media.bitmap(key, maxDim = 320)?.trimmingFlatBorders()
         }
     }
 

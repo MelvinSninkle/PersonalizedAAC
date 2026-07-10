@@ -99,7 +99,7 @@ struct TileView: View {
 
     private func loadImage() async {
         guard let key = tile.imageKey, !key.isEmpty else { return }
-        if let img = await MediaCache.shared.image(for: key) {
+        if let img = await MediaCache.shared.image(for: key, maxPixel: 640) {
             // GUILLOTINE RULE: trim baked-in margins, then the view center-
             // crops to fill the square. Sole exception: the TV folder keeps
             // its posters untouched.

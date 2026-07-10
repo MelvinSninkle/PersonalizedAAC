@@ -518,7 +518,9 @@ private struct ShopThumb: View {
             }
         }
         .task(id: blobKey) {
-            if let img = await MediaCache.shared.image(for: blobKey) {
+            // 86pt thumbnails: decode small. A search opens every folder, and
+            // full-res decodes across hundreds of matches would jetsam the app.
+            if let img = await MediaCache.shared.image(for: blobKey, maxPixel: 256) {
                 image = img
             }
         }

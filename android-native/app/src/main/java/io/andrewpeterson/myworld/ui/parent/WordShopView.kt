@@ -417,7 +417,7 @@ private fun ShopTileGrid(tiles: List<ShopTile>, cart: Set<String>, onToggle: (St
                                     RoundedCornerShape(12.dp)),
                         ) {
                             if (!t.previewKey.isNullOrEmpty()) {
-                                BlobImage(t.previewKey, Modifier.fillMaxSize())
+                                BlobImage(t.previewKey, Modifier.fillMaxSize(), maxDim = 256)
                             } else {
                                 Text(t.label, fontSize = 13.sp, fontWeight = FontWeight.Black,
                                     color = hexColor("#9d2463"),

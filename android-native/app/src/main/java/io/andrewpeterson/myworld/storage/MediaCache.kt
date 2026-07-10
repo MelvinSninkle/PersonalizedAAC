@@ -62,9 +62,22 @@ class MediaCache(context: Context, private val api: ApiClient) {
         return out
     }
 
-    suspend fun bitmap(key: String): Bitmap? {
+    /**
+     * Decode bounded by [maxDim] (long edge), via inSampleSize. Full-res
+     * decodes are ~4 MB of heap per 1024² image — a screen that composes a
+     * grid of them (word shop search, album) OOMs the app. Thumbnail-sized
+     * callers pass 256–512; only truly full-screen views should go higher.
+     */
+    suspend fun bitmap(key: String, maxDim: Int = 1024): Bitmap? {
         val f = file(key) ?: return null
-        return try { BitmapFactory.decodeFile(f.path) } catch (_: Exception) { null }
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(f.path, bounds)
+            var sample = 1
+            val longEdge = maxOf(bounds.outWidth, bounds.outHeight)
+            while (longEdge / (sample * 2) >= maxDim) sample *= 2
+            BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inSampleSize = sample })
+        } catch (_: Exception) { null }
     }
 
     /** File URL for AVAudioPlayer-style playback (MediaPlayer/ExoPlayer). */

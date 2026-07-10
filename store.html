@@ -208,6 +208,14 @@
 
   function groupKey(t) { return t.column + (t.category ? ' › ' + t.category : ''); }
 
+  // Folders start CLOSED — the library is hundreds of words, and rendering
+  // every tile at once made one giant page that crawled (or crashed) on
+  // phones. A search opens the folders it matches; everything else opens on
+  // tap. Same behavior as the iPhone app's Word Shop. MAX_RENDERED is the
+  // hard page cap: past it we show a "keep typing to narrow" note instead.
+  const OPEN = new Set();
+  const MAX_RENDERED = 300;
+
   function renderShop() {
     const col = document.getElementById('f-col').value;
     const cat = document.getElementById('f-cat').value;
@@ -219,13 +227,22 @@
     if (!shown.length) { el.innerHTML = '<div class="empty">No words match.</div>'; return; }
     const groups = new Map();
     for (const t of shown) { const k = groupKey(t); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
+    const allOpen = !!q || !!cat;
+    let rendered = 0, hidden = 0;
     let html = '';
     for (const [k, list] of groups) {
-      html += `<div class="group-title">${esc(k)} (${list.length})</div><div class="grid">`;
+      const isOpen = allOpen || OPEN.has(k);
+      const inCart = list.reduce((n, t) => n + (CART.has(t.id) ? 1 : 0), 0);
+      html += `<div class="group-title folder" data-key="${esc(k)}" style="cursor:pointer;user-select:none;">
+        ${isOpen ? '▾' : '▸'} ${esc(k)} (${list.length})${inCart ? ` <span style="background:var(--pink);color:#fff;border-radius:999px;padding:1px 8px;font-size:10px;">${inCart} in cart</span>` : ''}</div>`;
+      if (!isOpen) continue;
+      html += '<div class="grid">';
       for (const t of list) {
+        if (rendered >= MAX_RENDERED) { hidden++; continue; }
+        rendered++;
         const sel = CART.has(t.id) ? ' selected' : '';
         const img = t.previewKey
-          ? `<img loading="lazy" src="/api/media?key=${encodeURIComponent(t.previewKey)}" alt="">`
+          ? `<img loading="lazy" decoding="async" src="/api/media?key=${encodeURIComponent(t.previewKey)}" alt="">`
           : `<div class="word">${esc(t.label)}</div>`;
         const flag = t.personalized ? '<span class="flag">on board · yours</span>'
                    : t.onBoard ? '<span class="flag default">on board · classic art</span>' : '';
@@ -237,7 +254,13 @@
       }
       html += '</div>';
     }
+    if (hidden) html += `<div class="empty">…and ${hidden} more — keep typing to narrow the search.</div>`;
     el.innerHTML = html;
+    el.querySelectorAll('.folder').forEach((n) => n.addEventListener('click', () => {
+      const k = n.dataset.key;
+      if (OPEN.has(k)) OPEN.delete(k); else OPEN.add(k);
+      renderShop();
+    }));
     el.querySelectorAll('.tile').forEach((n) => n.addEventListener('click', () => {
       const id = n.dataset.id;
       if (CART.has(id)) CART.delete(id); else CART.add(id);

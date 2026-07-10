@@ -117,7 +117,7 @@ private fun MessageTokenCell(tok: MessageToken, active: Boolean) {
     val scale by animateFloatAsState(if (active) 1.12f else 1f, spring(), label = "msgPulse")
     val image by produceState<Bitmap?>(initialValue = null, tok.imageKey) {
         val key = tok.imageKey
-        value = if (key.isNullOrEmpty()) null else c.media.bitmap(key)
+        value = if (key.isNullOrEmpty()) null else c.media.bitmap(key, maxDim = 320)
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.scale(scale)) {

@@ -193,7 +193,7 @@ private struct ReviewRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
         .task {
-            if let key = row.imageKey { image = await MediaCache.shared.image(for: key) }
+            if let key = row.imageKey { image = await MediaCache.shared.image(for: key, maxPixel: 640) }
         }
     }
 

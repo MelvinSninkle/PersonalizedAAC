@@ -60,7 +60,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
-    const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
     try {
       const rows = await db`
         SELECT id, kind, prompt, response, created_at FROM interaction_log

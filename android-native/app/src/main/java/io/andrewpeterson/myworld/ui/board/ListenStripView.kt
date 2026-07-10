@@ -106,7 +106,7 @@ private fun ListenTileChip(tile: Tile) {
     val c = LocalAppContainer.current
     val image by produceState<Bitmap?>(initialValue = null, tile.imageKey) {
         val key = tile.imageKey
-        value = if (key.isNullOrEmpty()) null else c.media.bitmap(key)
+        value = if (key.isNullOrEmpty()) null else c.media.bitmap(key, maxDim = 320)
     }
     Box(
         Modifier

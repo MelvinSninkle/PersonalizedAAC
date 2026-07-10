@@ -43,7 +43,7 @@ export default async function handler(req, res) {
              count(*)::int AS count, coalesce(sum(g.cost_cents), 0)::float AS cost
       FROM image_generations g
       LEFT JOIN users u ON u.child_slug = g.child_id
-      GROUP BY 1 ORDER BY cost DESC`;
+      GROUP BY 1 ORDER BY cost DESC LIMIT 2000`;
     out.perAccount = pa.map((r) => ({ account: r.account, count: r.count, costCents: r.cost,
                                       voiceChars: 0, voiceCostCents: 0 }));
 
@@ -52,9 +52,9 @@ export default async function handler(req, res) {
     try {
       let users;
       try {
-        users = await db`SELECT id, email, child_slug, sub_override, sub_override_expires FROM users`;
+        users = await db`SELECT id, email, child_slug, sub_override, sub_override_expires FROM users LIMIT 5000`;
       } catch (_) {
-        users = await db`SELECT id, email, child_slug, sub_override, NULL AS sub_override_expires FROM users`;
+        users = await db`SELECT id, email, child_slug, sub_override, NULL AS sub_override_expires FROM users LIMIT 5000`;
       }
       // Active subscription per user: newest sub-sku purchase in the same
       // 35-day window activeSubscription() uses.
@@ -101,7 +101,7 @@ export default async function handler(req, res) {
         FROM voice_generations v
         LEFT JOIN users u1 ON u1.id = v.user_id
         LEFT JOIN users u2 ON u2.child_slug = v.child_id
-        GROUP BY 1`;
+        GROUP BY 1 ORDER BY cost DESC LIMIT 2000`;
       const byAccount = new Map(out.perAccount.map((a) => [a.account, a]));
       for (const r of vpa) {
         const row = byAccount.get(r.account);
