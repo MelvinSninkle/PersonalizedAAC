@@ -48,6 +48,9 @@ data class Tile(
     /** Board-language translation from /api/sync (null on English boards).
      *  `label` stays the canonical English identity; render [display]. */
     val displayLabel: String? = null,
+    /** Pre-expanded listening-mode variants from /api/sync (loves/loving/
+     *  loved…). Server-computed — never generate morphology on-device. */
+    val matchTerms: List<String>? = null,
     val imageKey: String? = null,
     val imageUrl: String? = null,
     val soundKey: String? = null,

@@ -909,6 +909,10 @@ Size: {size}.',
     // subcategories order per column; tiles order via taxonomy.sort_order.
     // NULL/absent = the legacy alphabetical order.
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS sort_order INTEGER`;
+    // Curated listening-mode match terms (irregulars, synonyms, regionalisms)
+    // — merged with generated inflections by api/_lib/word-match.js and
+    // shipped pre-expanded on /api/sync as each tile's matchTerms.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS match_terms TEXT[]`;
     await db`
       CREATE TABLE IF NOT EXISTS default_category_order (
         section     TEXT NOT NULL,

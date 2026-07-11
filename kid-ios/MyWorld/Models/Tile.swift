@@ -10,6 +10,9 @@ struct Tile: Codable, Identifiable, Hashable {
     /// Board-language translation from /api/sync (nil on English boards).
     /// `label` stays the canonical English identity; render `display`.
     let displayLabel: String?
+    /// Pre-expanded listening-mode variants from /api/sync (loves/loving/
+    /// loved…). Server-computed — never generate morphology on-device.
+    let matchTerms: [String]?
     let imageKey: String?
     let imageUrl: String?
     let soundKey: String?

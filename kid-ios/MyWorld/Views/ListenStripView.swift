@@ -36,9 +36,17 @@ enum ListenTokenizer {
 
     static func lexicon(from tiles: [Tile]) -> [String: Tile] {
         var map: [String: Tile] = [:]
+        // Labels first — a real "loves" tile beats "love"'s variant — then the
+        // server-expanded matchTerms (inflections + curated synonyms).
         for t in tiles {
             let key = normalize(t.label)
             if !key.isEmpty, map[key] == nil { map[key] = t }
+        }
+        for t in tiles {
+            for v in t.matchTerms ?? [] {
+                let key = normalize(v)
+                if !key.isEmpty, map[key] == nil { map[key] = t }
+            }
         }
         return map
     }

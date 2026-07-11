@@ -37,9 +37,17 @@ object ListenTokenizer {
 
     fun lexicon(tiles: List<Tile>): Map<String, Tile> {
         val map = mutableMapOf<String, Tile>()
+        // Labels first — a real "loves" tile beats "love"'s variant — then the
+        // server-expanded matchTerms (inflections + curated synonyms).
         for (t in tiles) {
             val key = normalize(t.label)
             if (key.isNotEmpty() && key !in map) map[key] = t
+        }
+        for (t in tiles) {
+            for (v in t.matchTerms.orEmpty()) {
+                val key = normalize(v)
+                if (key.isNotEmpty() && key !in map) map[key] = t
+            }
         }
         return map
     }

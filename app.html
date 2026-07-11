@@ -2893,6 +2893,7 @@
         itemsStore.put({
           id: it.id, section: it.section, categoryId: it.categoryId, label: it.label,
           displayLabel: it.displayLabel || null,
+          matchTerms: Array.isArray(it.matchTerms) ? it.matchTerms : null,
           order: it.order, pinned: !!it.pinned,
           imageKey: it.imageKey, soundKey: it.soundKey, keepAspect: !!it.keepAspect,
           description: it.description || null,                    // PRD §5 auditory-comp prompt
@@ -5523,11 +5524,19 @@
   }
   async function buildListenLexicon() {
     const map = new Map();
+    const all = [];
     for (const s of ['people', 'nouns', 'verbs', 'needs']) {
-      let items = [];
-      try { items = await getAllItems(s); } catch (_) {}
-      for (const it of items) {
-        const key = normalizeListenWord(it.label);
+      try { all.push(...await getAllItems(s)); } catch (_) {}
+    }
+    // Labels first — a real "loves" tile beats "love"'s variant — then the
+    // server-expanded matchTerms (inflections + curated synonyms) from sync.
+    for (const it of all) {
+      const key = normalizeListenWord(it.label);
+      if (key && !map.has(key)) map.set(key, it);
+    }
+    for (const it of all) {
+      for (const v of (it.matchTerms || [])) {
+        const key = normalizeListenWord(v);
         if (key && !map.has(key)) map.set(key, it);
       }
     }

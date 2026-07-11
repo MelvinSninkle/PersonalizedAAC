@@ -53,6 +53,7 @@ export function rowToItem(r) {
     categoryId: r.category_id == null ? null : Number(r.category_id),
     label: r.label,
     displayLabel: r.display_label || null,
+    matchTerms: Array.isArray(r.match_terms_out) ? r.match_terms_out : undefined,
     imageUrl: r.image_url,
     imageKey: r.image_key,
     soundUrl: r.sound_url,

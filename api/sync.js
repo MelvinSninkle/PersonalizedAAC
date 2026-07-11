@@ -133,10 +133,28 @@ export default async function handler(req, res) {
     const slugs = [...new Set(items.map(i => i.taxonomy_slug).filter(Boolean))];
     const taxBySlug = new Map();
     if (slugs.length) {
-      const rows = await db`SELECT id, acquisition_age, default_image_key, column_name, subject_mode, prompt_template, descriptive_clues
-                            FROM taxonomy WHERE id = ANY(${slugs})`;
+      let rows;
+      try {
+        rows = await db`SELECT id, acquisition_age, default_image_key, column_name, subject_mode, prompt_template, descriptive_clues, match_terms
+                        FROM taxonomy WHERE id = ANY(${slugs})`;
+      } catch (_) {
+        rows = await db`SELECT id, acquisition_age, default_image_key, column_name, subject_mode, prompt_template, descriptive_clues
+                        FROM taxonomy WHERE id = ANY(${slugs})`;
+      }
       for (const r of rows) taxBySlug.set(r.id, r);
     }
+
+    // Listening-mode match terms: curated taxonomy.match_terms + generated
+    // English inflections, expanded ONCE here so every client's tokenizer
+    // just indexes strings (the morphology never gets ported to devices).
+    try {
+      const { expandMatchTerms } = await import('./_lib/word-match.js');
+      for (const i of items) {
+        const tax = i.taxonomy_slug ? taxBySlug.get(i.taxonomy_slug) : null;
+        const terms = expandMatchTerms(i.label, (tax && tax.match_terms) || []);
+        if (terms.length) i.match_terms_out = terms;
+      }
+    } catch (_) { /* matching enrichment is best-effort */ }
 
     // Teaching clues ride along on each linked tile (taxonomy.descriptive_clues)
     // so the boards' "Teach me" slideshow can speak the word + all its clues
