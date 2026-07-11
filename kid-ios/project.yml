@@ -13,7 +13,9 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "1"
+    # Bump for every TestFlight upload — Apple requires a unique
+    # version+build combo per upload (a duplicate fails with "Upload failed").
+    CURRENT_PROJECT_VERSION: "2"
     DEVELOPMENT_TEAM: ""               # set this in Xcode the first time
     CODE_SIGN_STYLE: Automatic
     ENABLE_PREVIEWS: YES
