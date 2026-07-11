@@ -1,463 +1,6027 @@
 {
-  "lang": "es",
-  "name": "Español (Latinoamérica) / Spanish",
-  "note": "Latin-American caregiver register for a 2-4 year old (pipí, ya está, besito), not dictionary glosses. Keys match taxonomy/category labels case-insensitively; section/category narrow homonyms; pron overrides TTS. status starts 'machine' — a native reviewer flips rows to 'reviewed' via the Lab CSV round-trip.",
-  "entries": [
-    { "en": "yes", "t": "sí" },
-    { "en": "no", "t": "no" },
-    { "en": "I want", "t": "quiero" },
-    { "en": "I like", "t": "me gusta" },
-    { "en": "I LIKE", "t": "me gusta" },
-    { "en": "I don't like", "t": "no me gusta" },
-    { "en": "more", "t": "más" },
-    { "en": "all done", "t": "ya está" },
-    { "en": "again", "t": "otra vez" },
-    { "en": "help", "section": "needs", "t": "ayúdame" },
-    { "en": "help", "section": "verbs", "t": "ayudar" },
-    { "en": "stop", "t": "alto" },
-    { "en": "go", "t": "vamos" },
-    { "en": "wait", "t": "espera" },
-    { "en": "mine", "t": "mío" },
-    { "en": "please", "t": "por favor" },
-    { "en": "thank you", "t": "gracias" },
-    { "en": "hi", "t": "hola" },
-    { "en": "hello", "t": "hola" },
-    { "en": "bye", "t": "adiós" },
-    { "en": "goodbye", "t": "adiós" },
-    { "en": "potty", "t": "pipí" },
-    { "en": "bathroom", "t": "al baño" },
-    { "en": "eat", "t": "comer" },
-    { "en": "drink", "section": "needs", "t": "tomar" },
-    { "en": "drink", "section": "verbs", "t": "tomar" },
-    { "en": "drink", "section": "nouns", "t": "bebida" },
-    { "en": "hungry", "t": "tengo hambre" },
-    { "en": "thirsty", "t": "tengo sed" },
-    { "en": "tired", "t": "cansado" },
-    { "en": "sleepy", "t": "tengo sueño" },
-    { "en": "hurt", "t": "me duele" },
-    { "en": "sick", "t": "enfermo" },
-    { "en": "hot", "t": "calor" },
-    { "en": "cold", "t": "frío" },
-    { "en": "hug", "t": "abrazo" },
-    { "en": "kiss", "t": "besito" },
-    { "en": "give", "section": "needs", "t": "dame" },
-    { "en": "give", "section": "verbs", "t": "dar" },
-    { "en": "open", "t": "abrir" },
-    { "en": "close", "t": "cerrar" },
-    { "en": "up", "t": "arriba" },
-    { "en": "down", "t": "abajo" },
-    { "en": "in", "t": "adentro" },
-    { "en": "out", "t": "afuera" },
-    { "en": "on", "t": "encima" },
-    { "en": "off", "t": "quitar" },
-    { "en": "big", "t": "grande" },
-    { "en": "little", "t": "pequeño" },
-    { "en": "small", "t": "pequeño" },
-    { "en": "fast", "t": "rápido" },
-    { "en": "slow", "t": "despacio" },
-    { "en": "loud", "t": "fuerte" },
-    { "en": "quiet", "t": "silencio" },
-    { "en": "dirty", "t": "sucio" },
-    { "en": "clean", "section": "verbs", "t": "limpiar" },
-    { "en": "clean", "t": "limpio" },
-    { "en": "wet", "t": "mojado" },
-    { "en": "dry", "t": "seco" },
-    { "en": "good", "t": "bien" },
-    { "en": "bad", "t": "mal" },
-    { "en": "happy", "t": "contento" },
-    { "en": "sad", "t": "triste" },
-    { "en": "angry", "t": "enojado" },
-    { "en": "mad", "t": "enojado" },
-    { "en": "scared", "t": "asustado" },
-    { "en": "surprised", "t": "sorprendido" },
-    { "en": "silly", "t": "chistoso" },
-    { "en": "excited", "t": "emocionado" },
-    { "en": "bored", "t": "aburrido" },
-    { "en": "shy", "t": "tímido" },
-
-    { "en": "family", "t": "familia" },
-    { "en": "friends", "t": "amigos" },
-    { "en": "friend", "t": "amigo" },
-    { "en": "mom", "t": "mamá" },
-    { "en": "mommy", "t": "mamá" },
-    { "en": "mother", "t": "mamá" },
-    { "en": "dad", "t": "papá" },
-    { "en": "daddy", "t": "papá" },
-    { "en": "father", "t": "papá" },
-    { "en": "baby", "t": "bebé" },
-    { "en": "brother", "t": "hermano" },
-    { "en": "big brother", "t": "hermano mayor" },
-    { "en": "little brother", "t": "hermanito" },
-    { "en": "sister", "t": "hermana" },
-    { "en": "big sister", "t": "hermana mayor" },
-    { "en": "little sister", "t": "hermanita" },
-    { "en": "grandma", "t": "abuela" },
-    { "en": "grandmother", "t": "abuela" },
-    { "en": "gran", "t": "abuela" },
-    { "en": "granny", "t": "abuelita" },
-    { "en": "grandpa", "t": "abuelo" },
-    { "en": "grandfather", "t": "abuelo" },
-    { "en": "aunt", "t": "tía" },
-    { "en": "aunty", "t": "tía" },
-    { "en": "auntie", "t": "tía" },
-    { "en": "uncle", "t": "tío" },
-    { "en": "cousin", "t": "primo" },
-    { "en": "teacher", "t": "maestra" },
-    { "en": "doctor", "t": "doctor" },
-    { "en": "nurse", "t": "enfermera" },
-    { "en": "me", "t": "yo" },
-    { "en": "you", "t": "tú" },
-    { "en": "pet", "t": "mascota" },
-    { "en": "pets", "t": "mascotas" },
-
-    { "en": "body", "t": "cuerpo" },
-    { "en": "arm", "t": "brazo" },
-    { "en": "back", "section": "nouns", "t": "espalda" },
-    { "en": "cheek", "t": "mejilla" },
-    { "en": "chest", "t": "pecho" },
-    { "en": "chin", "t": "barbilla" },
-    { "en": "ear", "t": "oreja" },
-    { "en": "ears", "t": "orejas" },
-    { "en": "eye", "t": "ojo" },
-    { "en": "eyes", "t": "ojos" },
-    { "en": "face", "t": "cara" },
-    { "en": "faces", "t": "caras" },
-    { "en": "finger", "t": "dedo" },
-    { "en": "fingers", "t": "dedos" },
-    { "en": "foot", "t": "pie" },
-    { "en": "feet", "t": "pies" },
-    { "en": "hair", "t": "pelo" },
-    { "en": "hand", "t": "mano" },
-    { "en": "hands", "t": "manos" },
-    { "en": "head", "t": "cabeza" },
-    { "en": "knee", "t": "rodilla" },
-    { "en": "leg", "t": "pierna" },
-    { "en": "legs", "t": "piernas" },
-    { "en": "mouth", "t": "boca" },
-    { "en": "neck", "t": "cuello" },
-    { "en": "nose", "t": "nariz" },
-    { "en": "shoulder", "t": "hombro" },
-    { "en": "tummy", "t": "pancita" },
-    { "en": "stomach", "t": "pancita" },
-    { "en": "belly", "t": "pancita" },
-    { "en": "teeth", "t": "dientes" },
-    { "en": "tooth", "t": "diente" },
-    { "en": "toe", "t": "dedo del pie" },
-    { "en": "toes", "t": "dedos del pie" },
-    { "en": "tongue", "t": "lengua" },
-    { "en": "elbow", "t": "codo" },
-    { "en": "wrist", "t": "muñeca" },
-    { "en": "ankle", "t": "tobillo" },
-    { "en": "joints", "t": "articulaciones" },
-
-    { "en": "food", "t": "comida" },
-    { "en": "snacks", "t": "meriendas" },
-    { "en": "snack", "t": "merienda" },
-    { "en": "meals", "t": "comidas" },
-    { "en": "meal", "t": "comida" },
-    { "en": "breakfast", "t": "desayuno" },
-    { "en": "lunch", "t": "almuerzo" },
-    { "en": "dinner", "t": "cena" },
-    { "en": "fruits", "t": "frutas" },
-    { "en": "fruit", "t": "fruta" },
-    { "en": "vegetables", "t": "verduras" },
-    { "en": "vegetable", "t": "verdura" },
-    { "en": "drinks", "t": "bebidas" },
-    { "en": "apple", "t": "manzana" },
-    { "en": "banana", "t": "plátano" },
-    { "en": "orange", "category": "colors", "t": "anaranjado" },
-    { "en": "orange", "t": "naranja" },
-    { "en": "grapes", "t": "uvas" },
-    { "en": "grape", "t": "uva" },
-    { "en": "strawberry", "t": "fresa" },
-    { "en": "watermelon", "t": "sandía" },
-    { "en": "pear", "t": "pera" },
-    { "en": "peach", "t": "durazno" },
-    { "en": "mango", "t": "mango" },
-    { "en": "blueberry", "t": "arándano" },
-    { "en": "blueberries", "t": "arándanos" },
-    { "en": "cookie", "t": "galleta" },
-    { "en": "cookies", "t": "galletas" },
-    { "en": "crackers", "t": "galletas saladas" },
-    { "en": "cracker", "t": "galleta salada" },
-    { "en": "yogurt", "t": "yogur" },
-    { "en": "cheese", "t": "queso" },
-    { "en": "milk", "t": "leche" },
-    { "en": "water", "t": "agua" },
-    { "en": "juice", "t": "jugo" },
-    { "en": "bread", "t": "pan" },
-    { "en": "rice", "t": "arroz" },
-    { "en": "noodles", "t": "fideos" },
-    { "en": "pasta", "t": "pasta" },
-    { "en": "pizza", "t": "pizza" },
-    { "en": "soup", "t": "sopa" },
-    { "en": "egg", "t": "huevo" },
-    { "en": "eggs", "t": "huevos" },
-    { "en": "chicken", "category": "food", "t": "pollo" },
-    { "en": "chicken", "t": "pollito" },
-    { "en": "fish", "category": "food", "t": "pescado" },
-    { "en": "fish", "t": "pez" },
-    { "en": "meat", "t": "carne" },
-    { "en": "carrot", "t": "zanahoria" },
-    { "en": "carrots", "t": "zanahorias" },
-    { "en": "broccoli", "t": "brócoli" },
-    { "en": "corn", "t": "maíz" },
-    { "en": "potato", "t": "papa" },
-    { "en": "tomato", "t": "tomate" },
-    { "en": "cucumber", "t": "pepino" },
-    { "en": "cereal", "t": "cereal" },
-    { "en": "pancake", "t": "panqueque" },
-    { "en": "pancakes", "t": "panqueques" },
-    { "en": "sandwich", "t": "sándwich" },
-    { "en": "ice cream", "t": "helado" },
-    { "en": "cake", "t": "pastel" },
-    { "en": "candy", "t": "dulces" },
-    { "en": "chips", "t": "papitas" },
-    { "en": "popcorn", "t": "palomitas" },
-    { "en": "tacos", "t": "tacos" },
-    { "en": "taco", "t": "taco" },
-    { "en": "dumpling", "t": "empanadita" },
-    { "en": "dumplings", "t": "empanaditas" },
-
-    { "en": "animals", "t": "animales" },
-    { "en": "animal", "t": "animal" },
-    { "en": "farm", "t": "granja" },
-    { "en": "zoo", "t": "zoológico" },
-    { "en": "dog", "t": "perrito" },
-    { "en": "puppy", "t": "perrito" },
-    { "en": "cat", "t": "gatito" },
-    { "en": "kitten", "t": "gatito" },
-    { "en": "cow", "t": "vaca" },
-    { "en": "horse", "t": "caballo" },
-    { "en": "pig", "t": "cerdito" },
-    { "en": "sheep", "t": "oveja" },
-    { "en": "goat", "t": "cabra" },
-    { "en": "duck", "t": "pato" },
-    { "en": "rabbit", "t": "conejo" },
-    { "en": "bunny", "t": "conejito" },
-    { "en": "bird", "t": "pajarito" },
-    { "en": "mouse", "t": "ratón" },
-    { "en": "lion", "t": "león" },
-    { "en": "tiger", "t": "tigre" },
-    { "en": "bear", "t": "oso" },
-    { "en": "elephant", "t": "elefante" },
-    { "en": "monkey", "t": "mono" },
-    { "en": "giraffe", "t": "jirafa" },
-    { "en": "zebra", "t": "cebra" },
-    { "en": "panda", "t": "panda" },
-    { "en": "penguin", "t": "pingüino" },
-    { "en": "frog", "t": "rana" },
-    { "en": "turtle", "t": "tortuga" },
-    { "en": "snake", "t": "serpiente" },
-    { "en": "butterfly", "t": "mariposa" },
-    { "en": "bee", "t": "abeja" },
-    { "en": "spider", "t": "araña" },
-    { "en": "ant", "t": "hormiga" },
-    { "en": "dinosaur", "t": "dinosaurio" },
-
-    { "en": "clothes", "t": "ropa" },
-    { "en": "shirt", "t": "camisa" },
-    { "en": "t-shirt", "t": "camiseta" },
-    { "en": "pants", "t": "pantalones" },
-    { "en": "shorts", "t": "shorts" },
-    { "en": "dress", "t": "vestido" },
-    { "en": "skirt", "t": "falda" },
-    { "en": "socks", "t": "calcetines" },
-    { "en": "sock", "t": "calcetín" },
-    { "en": "shoes", "t": "zapatos" },
-    { "en": "shoe", "t": "zapato" },
-    { "en": "boots", "t": "botas" },
-    { "en": "coat", "t": "abrigo" },
-    { "en": "jacket", "t": "chamarra" },
-    { "en": "hat", "t": "gorro" },
-    { "en": "gloves", "t": "guantes" },
-    { "en": "mittens", "t": "manoplas" },
-    { "en": "scarf", "t": "bufanda" },
-    { "en": "pajamas", "t": "pijama" },
-    { "en": "diaper", "t": "pañal" },
-    { "en": "underwear", "t": "calzoncitos" },
-    { "en": "sweater", "t": "suéter" },
-
-    { "en": "home", "t": "casa" },
-    { "en": "house", "t": "casa" },
-    { "en": "bedroom", "t": "cuarto" },
-    { "en": "bathroom", "category": "home", "t": "baño" },
-    { "en": "kitchen", "t": "cocina" },
-    { "en": "living room", "t": "sala" },
-    { "en": "bed", "t": "cama" },
-    { "en": "chair", "t": "silla" },
-    { "en": "table", "t": "mesa" },
-    { "en": "sofa", "t": "sofá" },
-    { "en": "couch", "t": "sofá" },
-    { "en": "door", "t": "puerta" },
-    { "en": "window", "t": "ventana" },
-    { "en": "light", "t": "luz" },
-    { "en": "bathtub", "t": "tina" },
-    { "en": "bath", "t": "bañarse" },
-    { "en": "shower", "t": "ducha" },
-    { "en": "toilet", "t": "inodoro" },
-    { "en": "sink", "t": "lavabo" },
-    { "en": "towel", "t": "toalla" },
-    { "en": "soap", "t": "jabón" },
-    { "en": "toothbrush", "t": "cepillo de dientes" },
-    { "en": "toothpaste", "t": "pasta de dientes" },
-    { "en": "blanket", "t": "cobija" },
-    { "en": "pillow", "t": "almohada" },
-    { "en": "cup", "t": "vaso" },
-    { "en": "bowl", "t": "tazón" },
-    { "en": "plate", "t": "plato" },
-    { "en": "spoon", "t": "cuchara" },
-    { "en": "fork", "t": "tenedor" },
-    { "en": "chopsticks", "t": "palillos" },
-    { "en": "bottle", "t": "botella" },
-    { "en": "phone", "t": "teléfono" },
-    { "en": "tv", "t": "tele" },
-    { "en": "television", "t": "tele" },
-
-    { "en": "toys", "t": "juguetes" },
-    { "en": "toy", "t": "juguete" },
-    { "en": "ball", "t": "pelota" },
-    { "en": "blocks", "t": "bloques" },
-    { "en": "block", "t": "bloque" },
-    { "en": "car", "t": "carrito" },
-    { "en": "cars", "t": "carritos" },
-    { "en": "train", "t": "tren" },
-    { "en": "truck", "t": "camión" },
-    { "en": "bus", "t": "autobús" },
-    { "en": "airplane", "t": "avión" },
-    { "en": "plane", "t": "avión" },
-    { "en": "boat", "t": "barco" },
-    { "en": "bike", "t": "bicicleta" },
-    { "en": "bicycle", "t": "bicicleta" },
-    { "en": "doll", "t": "muñeca" },
-    { "en": "puzzle", "t": "rompecabezas" },
-    { "en": "book", "t": "libro" },
-    { "en": "books", "t": "libros" },
-    { "en": "crayon", "t": "crayón" },
-    { "en": "crayons", "t": "crayones" },
-    { "en": "bubbles", "t": "burbujas" },
-    { "en": "balloon", "t": "globo" },
-    { "en": "swing", "t": "columpio" },
-    { "en": "slide", "t": "resbaladilla" },
-    { "en": "teddy bear", "t": "osito" },
-    { "en": "stuffed animal", "t": "peluche" },
-
-    { "en": "outside", "t": "afuera" },
-    { "en": "park", "t": "parque" },
-    { "en": "playground", "t": "juegos" },
-    { "en": "school", "t": "escuela" },
-    { "en": "store", "t": "tienda" },
-    { "en": "sun", "t": "sol" },
-    { "en": "moon", "t": "luna" },
-    { "en": "star", "t": "estrella" },
-    { "en": "stars", "t": "estrellas" },
-    { "en": "sky", "t": "cielo" },
-    { "en": "cloud", "t": "nube" },
-    { "en": "rain", "t": "lluvia" },
-    { "en": "snow", "t": "nieve" },
-    { "en": "tree", "t": "árbol" },
-    { "en": "flower", "t": "flor" },
-    { "en": "flowers", "t": "flores" },
-    { "en": "grass", "t": "pasto" },
-    { "en": "rock", "t": "piedra" },
-
-    { "en": "colors", "t": "colores" },
-    { "en": "color", "section": "verbs", "t": "colorear" },
-    { "en": "color", "t": "color" },
-    { "en": "red", "t": "rojo" },
-    { "en": "blue", "t": "azul" },
-    { "en": "yellow", "t": "amarillo" },
-    { "en": "green", "t": "verde" },
-    { "en": "purple", "t": "morado" },
-    { "en": "pink", "t": "rosa" },
-    { "en": "black", "t": "negro" },
-    { "en": "white", "t": "blanco" },
-    { "en": "brown", "t": "café" },
-
-    { "en": "numbers", "t": "números" },
-    { "en": "one", "t": "uno" },
-    { "en": "two", "t": "dos" },
-    { "en": "three", "t": "tres" },
-    { "en": "four", "t": "cuatro" },
-    { "en": "five", "t": "cinco" },
-    { "en": "six", "t": "seis" },
-    { "en": "seven", "t": "siete" },
-    { "en": "eight", "t": "ocho" },
-    { "en": "nine", "t": "nueve" },
-    { "en": "ten", "t": "diez" },
-
-    { "en": "actions", "t": "acciones" },
-    { "en": "run", "t": "correr" },
-    { "en": "jump", "t": "saltar" },
-    { "en": "walk", "t": "caminar" },
-    { "en": "sit", "t": "sentarse" },
-    { "en": "stand", "t": "pararse" },
-    { "en": "sleep", "t": "dormir" },
-    { "en": "wake up", "t": "despertar" },
-    { "en": "play", "t": "jugar" },
-    { "en": "wash", "t": "lavar" },
-    { "en": "wash hands", "t": "lavarse las manos" },
-    { "en": "brush teeth", "t": "cepillarse los dientes" },
-    { "en": "read", "t": "leer" },
-    { "en": "sing", "t": "cantar" },
-    { "en": "dance", "t": "bailar" },
-    { "en": "throw", "t": "lanzar" },
-    { "en": "catch", "t": "atrapar" },
-    { "en": "kick", "t": "patear" },
-    { "en": "climb", "t": "trepar" },
-    { "en": "swim", "t": "nadar" },
-    { "en": "ride", "t": "montar" },
-    { "en": "draw", "t": "dibujar" },
-    { "en": "build", "t": "construir" },
-    { "en": "push", "t": "empujar" },
-    { "en": "pull", "t": "jalar" },
-    { "en": "take", "t": "tomar" },
-    { "en": "look", "t": "mirar" },
-    { "en": "watch", "section": "verbs", "t": "ver" },
-    { "en": "watch", "t": "reloj" },
-    { "en": "listen", "t": "escuchar" },
-    { "en": "share", "t": "compartir" },
-    { "en": "cry", "t": "llorar" },
-    { "en": "laugh", "t": "reír" },
-    { "en": "smile", "t": "sonreír" },
-    { "en": "talk", "t": "hablar" },
-    { "en": "say", "t": "decir" },
-    { "en": "tell", "t": "contar" },
-    { "en": "ask", "t": "preguntar" },
-    { "en": "answer", "t": "responder" },
-    { "en": "tickle", "t": "cosquillas" },
-    { "en": "blow", "t": "soplar" },
-    { "en": "clap", "t": "aplaudir" },
-    { "en": "wave", "t": "saludar" },
-    { "en": "point", "t": "señalar" },
-    { "en": "hold", "t": "cargar" },
-    { "en": "carry", "t": "cargar" },
-    { "en": "put", "t": "poner" },
-    { "en": "put away", "t": "guardar" },
-    { "en": "clean up", "t": "recoger" },
-    { "en": "turn on", "t": "prender" },
-    { "en": "turn off", "t": "apagar" },
-    { "en": "come", "t": "ven" },
-    { "en": "come here", "t": "ven acá" },
-    { "en": "sit down", "t": "siéntate" },
-    { "en": "get up", "t": "levántate" },
-    { "en": "fall down", "t": "se cayó" },
-    { "en": "expressions", "t": "expresiones" },
-
-    { "en": "health", "t": "salud" },
-    { "en": "medicine", "t": "medicina" },
-    { "en": "band-aid", "t": "curita" },
-    { "en": "bandaid", "t": "curita" },
-    { "en": "holidays", "t": "fiestas" },
-    { "en": "birthday", "t": "cumpleaños" },
-    { "en": "party", "t": "fiesta" },
-    { "en": "present", "t": "regalo" },
-    { "en": "gift", "t": "regalo" },
-    { "en": "learning", "t": "aprender" },
-    { "en": "decorating", "t": "decorar" },
-    { "en": "music", "t": "música" },
-    { "en": "song", "t": "canción" },
-    { "en": "core", "t": "palabras clave" },
-    { "en": "core words", "t": "palabras clave" }
-  ]
+ "lang": "es",
+ "name": "Español (Latinoamérica) / Spanish",
+ "note": "Latin-American caregiver register for a 2-4 year old (pipí, ya está, besito), not dictionary glosses. Keys match taxonomy/category labels case-insensitively; section/category narrow homonyms; pron overrides TTS. status starts 'machine' — a native reviewer flips rows to 'reviewed' via the Lab CSV round-trip.",
+ "entries": [
+  {
+   "en": "yes",
+   "t": "sí"
+  },
+  {
+   "en": "no",
+   "t": "no"
+  },
+  {
+   "en": "I want",
+   "t": "quiero"
+  },
+  {
+   "en": "I like",
+   "t": "me gusta"
+  },
+  {
+   "en": "I LIKE",
+   "t": "me gusta"
+  },
+  {
+   "en": "I don't like",
+   "t": "no me gusta"
+  },
+  {
+   "en": "more",
+   "t": "más"
+  },
+  {
+   "en": "all done",
+   "t": "ya está"
+  },
+  {
+   "en": "again",
+   "t": "otra vez"
+  },
+  {
+   "en": "help",
+   "section": "needs",
+   "t": "ayúdame"
+  },
+  {
+   "en": "help",
+   "section": "verbs",
+   "t": "ayudar"
+  },
+  {
+   "en": "stop",
+   "t": "alto"
+  },
+  {
+   "en": "go",
+   "t": "vamos"
+  },
+  {
+   "en": "wait",
+   "t": "espera"
+  },
+  {
+   "en": "mine",
+   "t": "mío"
+  },
+  {
+   "en": "please",
+   "t": "por favor"
+  },
+  {
+   "en": "thank you",
+   "t": "gracias"
+  },
+  {
+   "en": "hi",
+   "t": "hola"
+  },
+  {
+   "en": "hello",
+   "t": "hola"
+  },
+  {
+   "en": "bye",
+   "t": "adiós"
+  },
+  {
+   "en": "goodbye",
+   "t": "adiós"
+  },
+  {
+   "en": "potty",
+   "t": "pipí"
+  },
+  {
+   "en": "bathroom",
+   "t": "al baño"
+  },
+  {
+   "en": "eat",
+   "t": "comer"
+  },
+  {
+   "en": "drink",
+   "section": "needs",
+   "t": "tomar"
+  },
+  {
+   "en": "drink",
+   "section": "verbs",
+   "t": "tomar"
+  },
+  {
+   "en": "drink",
+   "section": "nouns",
+   "t": "bebida"
+  },
+  {
+   "en": "hungry",
+   "t": "tengo hambre"
+  },
+  {
+   "en": "thirsty",
+   "t": "tengo sed"
+  },
+  {
+   "en": "tired",
+   "t": "cansado"
+  },
+  {
+   "en": "sleepy",
+   "t": "tengo sueño"
+  },
+  {
+   "en": "hurt",
+   "t": "me duele"
+  },
+  {
+   "en": "sick",
+   "t": "enfermo"
+  },
+  {
+   "en": "hot",
+   "t": "calor"
+  },
+  {
+   "en": "cold",
+   "t": "frío"
+  },
+  {
+   "en": "hug",
+   "t": "abrazo"
+  },
+  {
+   "en": "kiss",
+   "t": "besito"
+  },
+  {
+   "en": "give",
+   "section": "needs",
+   "t": "dame"
+  },
+  {
+   "en": "give",
+   "section": "verbs",
+   "t": "dar"
+  },
+  {
+   "en": "open",
+   "t": "abrir"
+  },
+  {
+   "en": "close",
+   "t": "cerrar"
+  },
+  {
+   "en": "up",
+   "t": "arriba"
+  },
+  {
+   "en": "down",
+   "t": "abajo"
+  },
+  {
+   "en": "in",
+   "t": "adentro"
+  },
+  {
+   "en": "out",
+   "t": "afuera"
+  },
+  {
+   "en": "on",
+   "t": "encima"
+  },
+  {
+   "en": "off",
+   "t": "quitar"
+  },
+  {
+   "en": "big",
+   "t": "grande"
+  },
+  {
+   "en": "little",
+   "t": "pequeño"
+  },
+  {
+   "en": "small",
+   "t": "pequeño"
+  },
+  {
+   "en": "fast",
+   "t": "rápido"
+  },
+  {
+   "en": "slow",
+   "t": "despacio"
+  },
+  {
+   "en": "loud",
+   "t": "fuerte"
+  },
+  {
+   "en": "quiet",
+   "t": "silencio"
+  },
+  {
+   "en": "dirty",
+   "t": "sucio"
+  },
+  {
+   "en": "clean",
+   "section": "verbs",
+   "t": "limpiar"
+  },
+  {
+   "en": "clean",
+   "t": "limpio"
+  },
+  {
+   "en": "wet",
+   "t": "mojado"
+  },
+  {
+   "en": "dry",
+   "t": "seco"
+  },
+  {
+   "en": "good",
+   "t": "bien"
+  },
+  {
+   "en": "bad",
+   "t": "mal"
+  },
+  {
+   "en": "happy",
+   "t": "contento"
+  },
+  {
+   "en": "sad",
+   "t": "triste"
+  },
+  {
+   "en": "angry",
+   "t": "enojado"
+  },
+  {
+   "en": "mad",
+   "t": "enojado"
+  },
+  {
+   "en": "scared",
+   "t": "asustado"
+  },
+  {
+   "en": "surprised",
+   "t": "sorprendido"
+  },
+  {
+   "en": "silly",
+   "t": "chistoso"
+  },
+  {
+   "en": "excited",
+   "t": "emocionado"
+  },
+  {
+   "en": "bored",
+   "t": "aburrido"
+  },
+  {
+   "en": "shy",
+   "t": "tímido"
+  },
+  {
+   "en": "family",
+   "t": "familia"
+  },
+  {
+   "en": "friends",
+   "t": "amigos"
+  },
+  {
+   "en": "friend",
+   "t": "amigo"
+  },
+  {
+   "en": "mom",
+   "t": "mamá"
+  },
+  {
+   "en": "mommy",
+   "t": "mamá"
+  },
+  {
+   "en": "mother",
+   "t": "mamá"
+  },
+  {
+   "en": "dad",
+   "t": "papá"
+  },
+  {
+   "en": "daddy",
+   "t": "papá"
+  },
+  {
+   "en": "father",
+   "t": "papá"
+  },
+  {
+   "en": "baby",
+   "t": "bebé"
+  },
+  {
+   "en": "brother",
+   "t": "hermano"
+  },
+  {
+   "en": "big brother",
+   "t": "hermano mayor"
+  },
+  {
+   "en": "little brother",
+   "t": "hermanito"
+  },
+  {
+   "en": "sister",
+   "t": "hermana"
+  },
+  {
+   "en": "big sister",
+   "t": "hermana mayor"
+  },
+  {
+   "en": "little sister",
+   "t": "hermanita"
+  },
+  {
+   "en": "grandma",
+   "t": "abuela"
+  },
+  {
+   "en": "grandmother",
+   "t": "abuela"
+  },
+  {
+   "en": "gran",
+   "t": "abuela"
+  },
+  {
+   "en": "granny",
+   "t": "abuelita"
+  },
+  {
+   "en": "grandpa",
+   "t": "abuelo"
+  },
+  {
+   "en": "grandfather",
+   "t": "abuelo"
+  },
+  {
+   "en": "aunt",
+   "t": "tía"
+  },
+  {
+   "en": "aunty",
+   "t": "tía"
+  },
+  {
+   "en": "auntie",
+   "t": "tía"
+  },
+  {
+   "en": "uncle",
+   "t": "tío"
+  },
+  {
+   "en": "cousin",
+   "t": "primo"
+  },
+  {
+   "en": "teacher",
+   "t": "maestra"
+  },
+  {
+   "en": "doctor",
+   "t": "doctor"
+  },
+  {
+   "en": "nurse",
+   "t": "enfermera"
+  },
+  {
+   "en": "me",
+   "t": "yo"
+  },
+  {
+   "en": "you",
+   "t": "tú"
+  },
+  {
+   "en": "pet",
+   "t": "mascota"
+  },
+  {
+   "en": "pets",
+   "t": "mascotas"
+  },
+  {
+   "en": "body",
+   "t": "cuerpo"
+  },
+  {
+   "en": "arm",
+   "t": "brazo"
+  },
+  {
+   "en": "back",
+   "section": "nouns",
+   "t": "espalda"
+  },
+  {
+   "en": "cheek",
+   "t": "mejilla"
+  },
+  {
+   "en": "chest",
+   "t": "pecho"
+  },
+  {
+   "en": "chin",
+   "t": "barbilla"
+  },
+  {
+   "en": "ear",
+   "t": "oreja"
+  },
+  {
+   "en": "ears",
+   "t": "orejas"
+  },
+  {
+   "en": "eye",
+   "t": "ojo"
+  },
+  {
+   "en": "eyes",
+   "t": "ojos"
+  },
+  {
+   "en": "face",
+   "t": "cara"
+  },
+  {
+   "en": "faces",
+   "t": "caras"
+  },
+  {
+   "en": "finger",
+   "t": "dedo"
+  },
+  {
+   "en": "fingers",
+   "t": "dedos"
+  },
+  {
+   "en": "foot",
+   "t": "pie"
+  },
+  {
+   "en": "feet",
+   "t": "pies"
+  },
+  {
+   "en": "hair",
+   "t": "pelo"
+  },
+  {
+   "en": "hand",
+   "t": "mano"
+  },
+  {
+   "en": "hands",
+   "t": "manos"
+  },
+  {
+   "en": "head",
+   "t": "cabeza"
+  },
+  {
+   "en": "knee",
+   "t": "rodilla"
+  },
+  {
+   "en": "leg",
+   "t": "pierna"
+  },
+  {
+   "en": "legs",
+   "t": "piernas"
+  },
+  {
+   "en": "mouth",
+   "t": "boca"
+  },
+  {
+   "en": "neck",
+   "t": "cuello"
+  },
+  {
+   "en": "nose",
+   "t": "nariz"
+  },
+  {
+   "en": "shoulder",
+   "t": "hombro"
+  },
+  {
+   "en": "tummy",
+   "t": "pancita"
+  },
+  {
+   "en": "stomach",
+   "t": "pancita"
+  },
+  {
+   "en": "belly",
+   "t": "pancita"
+  },
+  {
+   "en": "teeth",
+   "t": "dientes"
+  },
+  {
+   "en": "tooth",
+   "t": "diente"
+  },
+  {
+   "en": "toe",
+   "t": "dedo del pie"
+  },
+  {
+   "en": "toes",
+   "t": "dedos del pie"
+  },
+  {
+   "en": "tongue",
+   "t": "lengua"
+  },
+  {
+   "en": "elbow",
+   "t": "codo"
+  },
+  {
+   "en": "wrist",
+   "t": "muñeca"
+  },
+  {
+   "en": "ankle",
+   "t": "tobillo"
+  },
+  {
+   "en": "joints",
+   "t": "articulaciones"
+  },
+  {
+   "en": "food",
+   "t": "comida"
+  },
+  {
+   "en": "snacks",
+   "t": "meriendas"
+  },
+  {
+   "en": "snack",
+   "t": "merienda"
+  },
+  {
+   "en": "meals",
+   "t": "comidas"
+  },
+  {
+   "en": "meal",
+   "t": "comida"
+  },
+  {
+   "en": "breakfast",
+   "t": "desayuno"
+  },
+  {
+   "en": "lunch",
+   "t": "almuerzo"
+  },
+  {
+   "en": "dinner",
+   "t": "cena"
+  },
+  {
+   "en": "fruits",
+   "t": "frutas"
+  },
+  {
+   "en": "fruit",
+   "t": "fruta"
+  },
+  {
+   "en": "vegetables",
+   "t": "verduras"
+  },
+  {
+   "en": "vegetable",
+   "t": "verdura"
+  },
+  {
+   "en": "drinks",
+   "t": "bebidas"
+  },
+  {
+   "en": "apple",
+   "t": "manzana"
+  },
+  {
+   "en": "banana",
+   "t": "plátano"
+  },
+  {
+   "en": "orange",
+   "category": "colors",
+   "t": "anaranjado"
+  },
+  {
+   "en": "orange",
+   "t": "naranja"
+  },
+  {
+   "en": "grapes",
+   "t": "uvas"
+  },
+  {
+   "en": "grape",
+   "t": "uva"
+  },
+  {
+   "en": "strawberry",
+   "t": "fresa"
+  },
+  {
+   "en": "watermelon",
+   "t": "sandía"
+  },
+  {
+   "en": "pear",
+   "t": "pera"
+  },
+  {
+   "en": "peach",
+   "t": "durazno"
+  },
+  {
+   "en": "mango",
+   "t": "mango"
+  },
+  {
+   "en": "blueberry",
+   "t": "arándano"
+  },
+  {
+   "en": "blueberries",
+   "t": "arándanos"
+  },
+  {
+   "en": "cookie",
+   "t": "galleta"
+  },
+  {
+   "en": "cookies",
+   "t": "galletas"
+  },
+  {
+   "en": "crackers",
+   "t": "galletas saladas"
+  },
+  {
+   "en": "cracker",
+   "t": "galleta salada"
+  },
+  {
+   "en": "yogurt",
+   "t": "yogur"
+  },
+  {
+   "en": "cheese",
+   "t": "queso"
+  },
+  {
+   "en": "milk",
+   "t": "leche"
+  },
+  {
+   "en": "water",
+   "t": "agua"
+  },
+  {
+   "en": "juice",
+   "t": "jugo"
+  },
+  {
+   "en": "bread",
+   "t": "pan"
+  },
+  {
+   "en": "rice",
+   "t": "arroz"
+  },
+  {
+   "en": "noodles",
+   "t": "fideos"
+  },
+  {
+   "en": "pasta",
+   "t": "pasta"
+  },
+  {
+   "en": "pizza",
+   "t": "pizza"
+  },
+  {
+   "en": "soup",
+   "t": "sopa"
+  },
+  {
+   "en": "egg",
+   "t": "huevo"
+  },
+  {
+   "en": "eggs",
+   "t": "huevos"
+  },
+  {
+   "en": "chicken",
+   "category": "food",
+   "t": "pollo"
+  },
+  {
+   "en": "chicken",
+   "t": "pollito"
+  },
+  {
+   "en": "fish",
+   "category": "food",
+   "t": "pescado"
+  },
+  {
+   "en": "fish",
+   "t": "pez"
+  },
+  {
+   "en": "meat",
+   "t": "carne"
+  },
+  {
+   "en": "carrot",
+   "t": "zanahoria"
+  },
+  {
+   "en": "carrots",
+   "t": "zanahorias"
+  },
+  {
+   "en": "broccoli",
+   "t": "brócoli"
+  },
+  {
+   "en": "corn",
+   "t": "maíz"
+  },
+  {
+   "en": "potato",
+   "t": "papa"
+  },
+  {
+   "en": "tomato",
+   "t": "tomate"
+  },
+  {
+   "en": "cucumber",
+   "t": "pepino"
+  },
+  {
+   "en": "cereal",
+   "t": "cereal"
+  },
+  {
+   "en": "pancake",
+   "t": "panqueque"
+  },
+  {
+   "en": "pancakes",
+   "t": "panqueques"
+  },
+  {
+   "en": "sandwich",
+   "t": "sándwich"
+  },
+  {
+   "en": "ice cream",
+   "t": "helado"
+  },
+  {
+   "en": "cake",
+   "t": "pastel"
+  },
+  {
+   "en": "candy",
+   "t": "dulces"
+  },
+  {
+   "en": "chips",
+   "t": "papitas"
+  },
+  {
+   "en": "popcorn",
+   "t": "palomitas"
+  },
+  {
+   "en": "tacos",
+   "t": "tacos"
+  },
+  {
+   "en": "taco",
+   "t": "taco"
+  },
+  {
+   "en": "dumpling",
+   "t": "empanadita"
+  },
+  {
+   "en": "dumplings",
+   "t": "empanaditas"
+  },
+  {
+   "en": "animals",
+   "t": "animales"
+  },
+  {
+   "en": "animal",
+   "t": "animal"
+  },
+  {
+   "en": "farm",
+   "t": "granja"
+  },
+  {
+   "en": "zoo",
+   "t": "zoológico"
+  },
+  {
+   "en": "dog",
+   "t": "perrito"
+  },
+  {
+   "en": "puppy",
+   "t": "perrito"
+  },
+  {
+   "en": "cat",
+   "t": "gatito"
+  },
+  {
+   "en": "kitten",
+   "t": "gatito"
+  },
+  {
+   "en": "cow",
+   "t": "vaca"
+  },
+  {
+   "en": "horse",
+   "t": "caballo"
+  },
+  {
+   "en": "pig",
+   "t": "cerdito"
+  },
+  {
+   "en": "sheep",
+   "t": "oveja"
+  },
+  {
+   "en": "goat",
+   "t": "cabra"
+  },
+  {
+   "en": "duck",
+   "t": "pato"
+  },
+  {
+   "en": "rabbit",
+   "t": "conejo"
+  },
+  {
+   "en": "bunny",
+   "t": "conejito"
+  },
+  {
+   "en": "bird",
+   "t": "pajarito"
+  },
+  {
+   "en": "mouse",
+   "t": "ratón"
+  },
+  {
+   "en": "lion",
+   "t": "león"
+  },
+  {
+   "en": "tiger",
+   "t": "tigre"
+  },
+  {
+   "en": "bear",
+   "t": "oso"
+  },
+  {
+   "en": "elephant",
+   "t": "elefante"
+  },
+  {
+   "en": "monkey",
+   "t": "mono"
+  },
+  {
+   "en": "giraffe",
+   "t": "jirafa"
+  },
+  {
+   "en": "zebra",
+   "t": "cebra"
+  },
+  {
+   "en": "panda",
+   "t": "panda"
+  },
+  {
+   "en": "penguin",
+   "t": "pingüino"
+  },
+  {
+   "en": "frog",
+   "t": "rana"
+  },
+  {
+   "en": "turtle",
+   "t": "tortuga"
+  },
+  {
+   "en": "snake",
+   "t": "serpiente"
+  },
+  {
+   "en": "butterfly",
+   "t": "mariposa"
+  },
+  {
+   "en": "bee",
+   "t": "abeja"
+  },
+  {
+   "en": "spider",
+   "t": "araña"
+  },
+  {
+   "en": "ant",
+   "t": "hormiga"
+  },
+  {
+   "en": "dinosaur",
+   "t": "dinosaurio"
+  },
+  {
+   "en": "clothes",
+   "t": "ropa"
+  },
+  {
+   "en": "shirt",
+   "t": "camisa"
+  },
+  {
+   "en": "t-shirt",
+   "t": "camiseta"
+  },
+  {
+   "en": "pants",
+   "t": "pantalones"
+  },
+  {
+   "en": "shorts",
+   "t": "shorts"
+  },
+  {
+   "en": "dress",
+   "t": "vestido"
+  },
+  {
+   "en": "skirt",
+   "t": "falda"
+  },
+  {
+   "en": "socks",
+   "t": "calcetines"
+  },
+  {
+   "en": "sock",
+   "t": "calcetín"
+  },
+  {
+   "en": "shoes",
+   "t": "zapatos"
+  },
+  {
+   "en": "shoe",
+   "t": "zapato"
+  },
+  {
+   "en": "boots",
+   "t": "botas"
+  },
+  {
+   "en": "coat",
+   "t": "abrigo"
+  },
+  {
+   "en": "jacket",
+   "t": "chamarra"
+  },
+  {
+   "en": "hat",
+   "t": "gorro"
+  },
+  {
+   "en": "gloves",
+   "t": "guantes"
+  },
+  {
+   "en": "mittens",
+   "t": "manoplas"
+  },
+  {
+   "en": "scarf",
+   "t": "bufanda"
+  },
+  {
+   "en": "pajamas",
+   "t": "pijama"
+  },
+  {
+   "en": "diaper",
+   "t": "pañal"
+  },
+  {
+   "en": "underwear",
+   "t": "calzoncitos"
+  },
+  {
+   "en": "sweater",
+   "t": "suéter"
+  },
+  {
+   "en": "home",
+   "t": "casa"
+  },
+  {
+   "en": "house",
+   "t": "casa"
+  },
+  {
+   "en": "bedroom",
+   "t": "cuarto"
+  },
+  {
+   "en": "bathroom",
+   "category": "home",
+   "t": "baño"
+  },
+  {
+   "en": "kitchen",
+   "t": "cocina"
+  },
+  {
+   "en": "living room",
+   "t": "sala"
+  },
+  {
+   "en": "bed",
+   "t": "cama"
+  },
+  {
+   "en": "chair",
+   "t": "silla"
+  },
+  {
+   "en": "table",
+   "t": "mesa"
+  },
+  {
+   "en": "sofa",
+   "t": "sofá"
+  },
+  {
+   "en": "couch",
+   "t": "sofá"
+  },
+  {
+   "en": "door",
+   "t": "puerta"
+  },
+  {
+   "en": "window",
+   "t": "ventana"
+  },
+  {
+   "en": "light",
+   "t": "luz"
+  },
+  {
+   "en": "bathtub",
+   "t": "tina"
+  },
+  {
+   "en": "bath",
+   "t": "bañarse"
+  },
+  {
+   "en": "shower",
+   "t": "ducha"
+  },
+  {
+   "en": "toilet",
+   "t": "inodoro"
+  },
+  {
+   "en": "sink",
+   "t": "lavabo"
+  },
+  {
+   "en": "towel",
+   "t": "toalla"
+  },
+  {
+   "en": "soap",
+   "t": "jabón"
+  },
+  {
+   "en": "toothbrush",
+   "t": "cepillo de dientes"
+  },
+  {
+   "en": "toothpaste",
+   "t": "pasta de dientes"
+  },
+  {
+   "en": "blanket",
+   "t": "cobija"
+  },
+  {
+   "en": "pillow",
+   "t": "almohada"
+  },
+  {
+   "en": "cup",
+   "t": "vaso"
+  },
+  {
+   "en": "bowl",
+   "t": "tazón"
+  },
+  {
+   "en": "plate",
+   "t": "plato"
+  },
+  {
+   "en": "spoon",
+   "t": "cuchara"
+  },
+  {
+   "en": "fork",
+   "t": "tenedor"
+  },
+  {
+   "en": "chopsticks",
+   "t": "palillos"
+  },
+  {
+   "en": "bottle",
+   "t": "botella"
+  },
+  {
+   "en": "phone",
+   "t": "teléfono"
+  },
+  {
+   "en": "tv",
+   "t": "tele"
+  },
+  {
+   "en": "television",
+   "t": "tele"
+  },
+  {
+   "en": "toys",
+   "t": "juguetes"
+  },
+  {
+   "en": "toy",
+   "t": "juguete"
+  },
+  {
+   "en": "ball",
+   "t": "pelota"
+  },
+  {
+   "en": "blocks",
+   "t": "bloques"
+  },
+  {
+   "en": "block",
+   "t": "bloque"
+  },
+  {
+   "en": "car",
+   "t": "carrito"
+  },
+  {
+   "en": "cars",
+   "t": "carritos"
+  },
+  {
+   "en": "train",
+   "t": "tren"
+  },
+  {
+   "en": "truck",
+   "t": "camión"
+  },
+  {
+   "en": "bus",
+   "t": "autobús"
+  },
+  {
+   "en": "airplane",
+   "t": "avión"
+  },
+  {
+   "en": "plane",
+   "t": "avión"
+  },
+  {
+   "en": "boat",
+   "t": "barco"
+  },
+  {
+   "en": "bike",
+   "t": "bicicleta"
+  },
+  {
+   "en": "bicycle",
+   "t": "bicicleta"
+  },
+  {
+   "en": "doll",
+   "t": "muñeca"
+  },
+  {
+   "en": "puzzle",
+   "t": "rompecabezas"
+  },
+  {
+   "en": "book",
+   "t": "libro"
+  },
+  {
+   "en": "books",
+   "t": "libros"
+  },
+  {
+   "en": "crayon",
+   "t": "crayón"
+  },
+  {
+   "en": "crayons",
+   "t": "crayones"
+  },
+  {
+   "en": "bubbles",
+   "t": "burbujas"
+  },
+  {
+   "en": "balloon",
+   "t": "globo"
+  },
+  {
+   "en": "swing",
+   "t": "columpio"
+  },
+  {
+   "en": "slide",
+   "t": "resbaladilla"
+  },
+  {
+   "en": "teddy bear",
+   "t": "osito"
+  },
+  {
+   "en": "stuffed animal",
+   "t": "peluche"
+  },
+  {
+   "en": "outside",
+   "t": "afuera"
+  },
+  {
+   "en": "park",
+   "t": "parque"
+  },
+  {
+   "en": "playground",
+   "t": "juegos"
+  },
+  {
+   "en": "school",
+   "t": "escuela"
+  },
+  {
+   "en": "store",
+   "t": "tienda"
+  },
+  {
+   "en": "sun",
+   "t": "sol"
+  },
+  {
+   "en": "moon",
+   "t": "luna"
+  },
+  {
+   "en": "star",
+   "t": "estrella"
+  },
+  {
+   "en": "stars",
+   "t": "estrellas"
+  },
+  {
+   "en": "sky",
+   "t": "cielo"
+  },
+  {
+   "en": "cloud",
+   "t": "nube"
+  },
+  {
+   "en": "rain",
+   "t": "lluvia"
+  },
+  {
+   "en": "snow",
+   "t": "nieve"
+  },
+  {
+   "en": "tree",
+   "t": "árbol"
+  },
+  {
+   "en": "flower",
+   "t": "flor"
+  },
+  {
+   "en": "flowers",
+   "t": "flores"
+  },
+  {
+   "en": "grass",
+   "t": "pasto"
+  },
+  {
+   "en": "rock",
+   "t": "piedra"
+  },
+  {
+   "en": "colors",
+   "t": "colores"
+  },
+  {
+   "en": "color",
+   "section": "verbs",
+   "t": "colorear"
+  },
+  {
+   "en": "color",
+   "t": "color"
+  },
+  {
+   "en": "red",
+   "t": "rojo"
+  },
+  {
+   "en": "blue",
+   "t": "azul"
+  },
+  {
+   "en": "yellow",
+   "t": "amarillo"
+  },
+  {
+   "en": "green",
+   "t": "verde"
+  },
+  {
+   "en": "purple",
+   "t": "morado"
+  },
+  {
+   "en": "pink",
+   "t": "rosa"
+  },
+  {
+   "en": "black",
+   "t": "negro"
+  },
+  {
+   "en": "white",
+   "t": "blanco"
+  },
+  {
+   "en": "brown",
+   "t": "café"
+  },
+  {
+   "en": "numbers",
+   "t": "números"
+  },
+  {
+   "en": "one",
+   "t": "uno"
+  },
+  {
+   "en": "two",
+   "t": "dos"
+  },
+  {
+   "en": "three",
+   "t": "tres"
+  },
+  {
+   "en": "four",
+   "t": "cuatro"
+  },
+  {
+   "en": "five",
+   "t": "cinco"
+  },
+  {
+   "en": "six",
+   "t": "seis"
+  },
+  {
+   "en": "seven",
+   "t": "siete"
+  },
+  {
+   "en": "eight",
+   "t": "ocho"
+  },
+  {
+   "en": "nine",
+   "t": "nueve"
+  },
+  {
+   "en": "ten",
+   "t": "diez"
+  },
+  {
+   "en": "actions",
+   "t": "acciones"
+  },
+  {
+   "en": "run",
+   "t": "correr"
+  },
+  {
+   "en": "jump",
+   "t": "saltar"
+  },
+  {
+   "en": "walk",
+   "t": "caminar"
+  },
+  {
+   "en": "sit",
+   "t": "sentarse"
+  },
+  {
+   "en": "stand",
+   "t": "pararse"
+  },
+  {
+   "en": "sleep",
+   "t": "dormir"
+  },
+  {
+   "en": "wake up",
+   "t": "despertar"
+  },
+  {
+   "en": "play",
+   "t": "jugar"
+  },
+  {
+   "en": "wash",
+   "t": "lavar"
+  },
+  {
+   "en": "wash hands",
+   "t": "lavarse las manos"
+  },
+  {
+   "en": "brush teeth",
+   "t": "cepillarse los dientes"
+  },
+  {
+   "en": "read",
+   "t": "leer"
+  },
+  {
+   "en": "sing",
+   "t": "cantar"
+  },
+  {
+   "en": "dance",
+   "t": "bailar"
+  },
+  {
+   "en": "throw",
+   "t": "lanzar"
+  },
+  {
+   "en": "catch",
+   "t": "atrapar"
+  },
+  {
+   "en": "kick",
+   "t": "patear"
+  },
+  {
+   "en": "climb",
+   "t": "trepar"
+  },
+  {
+   "en": "swim",
+   "t": "nadar"
+  },
+  {
+   "en": "ride",
+   "t": "montar"
+  },
+  {
+   "en": "draw",
+   "t": "dibujar"
+  },
+  {
+   "en": "build",
+   "t": "construir"
+  },
+  {
+   "en": "push",
+   "t": "empujar"
+  },
+  {
+   "en": "pull",
+   "t": "jalar"
+  },
+  {
+   "en": "take",
+   "t": "tomar"
+  },
+  {
+   "en": "look",
+   "t": "mirar"
+  },
+  {
+   "en": "watch",
+   "section": "verbs",
+   "t": "ver"
+  },
+  {
+   "en": "watch",
+   "t": "reloj"
+  },
+  {
+   "en": "listen",
+   "t": "escuchar"
+  },
+  {
+   "en": "share",
+   "t": "compartir"
+  },
+  {
+   "en": "cry",
+   "t": "llorar"
+  },
+  {
+   "en": "laugh",
+   "t": "reír"
+  },
+  {
+   "en": "smile",
+   "t": "sonreír"
+  },
+  {
+   "en": "talk",
+   "t": "hablar"
+  },
+  {
+   "en": "say",
+   "t": "decir"
+  },
+  {
+   "en": "tell",
+   "t": "contar"
+  },
+  {
+   "en": "ask",
+   "t": "preguntar"
+  },
+  {
+   "en": "answer",
+   "t": "responder"
+  },
+  {
+   "en": "tickle",
+   "t": "cosquillas"
+  },
+  {
+   "en": "blow",
+   "t": "soplar"
+  },
+  {
+   "en": "clap",
+   "t": "aplaudir"
+  },
+  {
+   "en": "wave",
+   "t": "saludar"
+  },
+  {
+   "en": "point",
+   "t": "señalar"
+  },
+  {
+   "en": "hold",
+   "t": "cargar"
+  },
+  {
+   "en": "carry",
+   "t": "cargar"
+  },
+  {
+   "en": "put",
+   "t": "poner"
+  },
+  {
+   "en": "put away",
+   "t": "guardar"
+  },
+  {
+   "en": "clean up",
+   "t": "recoger"
+  },
+  {
+   "en": "turn on",
+   "t": "prender"
+  },
+  {
+   "en": "turn off",
+   "t": "apagar"
+  },
+  {
+   "en": "come",
+   "t": "ven"
+  },
+  {
+   "en": "come here",
+   "t": "ven acá"
+  },
+  {
+   "en": "sit down",
+   "t": "siéntate"
+  },
+  {
+   "en": "get up",
+   "t": "levántate"
+  },
+  {
+   "en": "fall down",
+   "t": "se cayó"
+  },
+  {
+   "en": "expressions",
+   "t": "expresiones"
+  },
+  {
+   "en": "health",
+   "t": "salud"
+  },
+  {
+   "en": "medicine",
+   "t": "medicina"
+  },
+  {
+   "en": "band-aid",
+   "t": "curita"
+  },
+  {
+   "en": "bandaid",
+   "t": "curita"
+  },
+  {
+   "en": "holidays",
+   "t": "fiestas"
+  },
+  {
+   "en": "birthday",
+   "t": "cumpleaños"
+  },
+  {
+   "en": "party",
+   "t": "fiesta"
+  },
+  {
+   "en": "present",
+   "t": "regalo"
+  },
+  {
+   "en": "gift",
+   "t": "regalo"
+  },
+  {
+   "en": "learning",
+   "t": "aprender"
+  },
+  {
+   "en": "decorating",
+   "t": "decorar"
+  },
+  {
+   "en": "music",
+   "t": "música"
+  },
+  {
+   "en": "song",
+   "t": "canción"
+  },
+  {
+   "en": "core",
+   "t": "palabras clave"
+  },
+  {
+   "en": "core words",
+   "t": "palabras clave"
+  },
+  {
+   "en": "1",
+   "t": "1",
+   "pron": "uno"
+  },
+  {
+   "en": "2",
+   "t": "2",
+   "pron": "dos"
+  },
+  {
+   "en": "3",
+   "t": "3",
+   "pron": "tres"
+  },
+  {
+   "en": "4",
+   "t": "4",
+   "pron": "cuatro"
+  },
+  {
+   "en": "5",
+   "t": "5",
+   "pron": "cinco"
+  },
+  {
+   "en": "6",
+   "t": "6",
+   "pron": "seis"
+  },
+  {
+   "en": "7",
+   "t": "7",
+   "pron": "siete"
+  },
+  {
+   "en": "8",
+   "t": "8",
+   "pron": "ocho"
+  },
+  {
+   "en": "9",
+   "t": "9",
+   "pron": "nueve"
+  },
+  {
+   "en": "10",
+   "t": "10",
+   "pron": "diez"
+  },
+  {
+   "en": "11",
+   "t": "11",
+   "pron": "once"
+  },
+  {
+   "en": "12",
+   "t": "12",
+   "pron": "doce"
+  },
+  {
+   "en": "13",
+   "t": "13",
+   "pron": "trece"
+  },
+  {
+   "en": "14",
+   "t": "14",
+   "pron": "catorce"
+  },
+  {
+   "en": "15",
+   "t": "15",
+   "pron": "quince"
+  },
+  {
+   "en": "16",
+   "t": "16",
+   "pron": "dieciséis"
+  },
+  {
+   "en": "17",
+   "t": "17",
+   "pron": "diecisiete"
+  },
+  {
+   "en": "18",
+   "t": "18",
+   "pron": "dieciocho"
+  },
+  {
+   "en": "19",
+   "t": "19",
+   "pron": "diecinueve"
+  },
+  {
+   "en": "20",
+   "t": "20",
+   "pron": "veinte"
+  },
+  {
+   "en": "21",
+   "t": "21",
+   "pron": "veintiuno"
+  },
+  {
+   "en": "22",
+   "t": "22",
+   "pron": "veintidós"
+  },
+  {
+   "en": "23",
+   "t": "23",
+   "pron": "veintitrés"
+  },
+  {
+   "en": "24",
+   "t": "24",
+   "pron": "veinticuatro"
+  },
+  {
+   "en": "25",
+   "t": "25",
+   "pron": "veinticinco"
+  },
+  {
+   "en": "26",
+   "t": "26",
+   "pron": "veintiséis"
+  },
+  {
+   "en": "27",
+   "t": "27",
+   "pron": "veintisiete"
+  },
+  {
+   "en": "28",
+   "t": "28",
+   "pron": "veintiocho"
+  },
+  {
+   "en": "29",
+   "t": "29",
+   "pron": "veintinueve"
+  },
+  {
+   "en": "30",
+   "t": "30",
+   "pron": "treinta"
+  },
+  {
+   "en": "31",
+   "t": "31",
+   "pron": "treinta y uno"
+  },
+  {
+   "en": "32",
+   "t": "32",
+   "pron": "treinta y dos"
+  },
+  {
+   "en": "33",
+   "t": "33",
+   "pron": "treinta y tres"
+  },
+  {
+   "en": "34",
+   "t": "34",
+   "pron": "treinta y cuatro"
+  },
+  {
+   "en": "35",
+   "t": "35",
+   "pron": "treinta y cinco"
+  },
+  {
+   "en": "36",
+   "t": "36",
+   "pron": "treinta y seis"
+  },
+  {
+   "en": "37",
+   "t": "37",
+   "pron": "treinta y siete"
+  },
+  {
+   "en": "38",
+   "t": "38",
+   "pron": "treinta y ocho"
+  },
+  {
+   "en": "39",
+   "t": "39",
+   "pron": "treinta y nueve"
+  },
+  {
+   "en": "40",
+   "t": "40",
+   "pron": "cuarenta"
+  },
+  {
+   "en": "41",
+   "t": "41",
+   "pron": "cuarenta y uno"
+  },
+  {
+   "en": "42",
+   "t": "42",
+   "pron": "cuarenta y dos"
+  },
+  {
+   "en": "43",
+   "t": "43",
+   "pron": "cuarenta y tres"
+  },
+  {
+   "en": "44",
+   "t": "44",
+   "pron": "cuarenta y cuatro"
+  },
+  {
+   "en": "45",
+   "t": "45",
+   "pron": "cuarenta y cinco"
+  },
+  {
+   "en": "46",
+   "t": "46",
+   "pron": "cuarenta y seis"
+  },
+  {
+   "en": "47",
+   "t": "47",
+   "pron": "cuarenta y siete"
+  },
+  {
+   "en": "48",
+   "t": "48",
+   "pron": "cuarenta y ocho"
+  },
+  {
+   "en": "49",
+   "t": "49",
+   "pron": "cuarenta y nueve"
+  },
+  {
+   "en": "50",
+   "t": "50",
+   "pron": "cincuenta"
+  },
+  {
+   "en": "51",
+   "t": "51",
+   "pron": "cincuenta y uno"
+  },
+  {
+   "en": "52",
+   "t": "52",
+   "pron": "cincuenta y dos"
+  },
+  {
+   "en": "53",
+   "t": "53",
+   "pron": "cincuenta y tres"
+  },
+  {
+   "en": "54",
+   "t": "54",
+   "pron": "cincuenta y cuatro"
+  },
+  {
+   "en": "55",
+   "t": "55",
+   "pron": "cincuenta y cinco"
+  },
+  {
+   "en": "56",
+   "t": "56",
+   "pron": "cincuenta y seis"
+  },
+  {
+   "en": "57",
+   "t": "57",
+   "pron": "cincuenta y siete"
+  },
+  {
+   "en": "58",
+   "t": "58",
+   "pron": "cincuenta y ocho"
+  },
+  {
+   "en": "59",
+   "t": "59",
+   "pron": "cincuenta y nueve"
+  },
+  {
+   "en": "60",
+   "t": "60",
+   "pron": "sesenta"
+  },
+  {
+   "en": "61",
+   "t": "61",
+   "pron": "sesenta y uno"
+  },
+  {
+   "en": "62",
+   "t": "62",
+   "pron": "sesenta y dos"
+  },
+  {
+   "en": "63",
+   "t": "63",
+   "pron": "sesenta y tres"
+  },
+  {
+   "en": "64",
+   "t": "64",
+   "pron": "sesenta y cuatro"
+  },
+  {
+   "en": "65",
+   "t": "65",
+   "pron": "sesenta y cinco"
+  },
+  {
+   "en": "66",
+   "t": "66",
+   "pron": "sesenta y seis"
+  },
+  {
+   "en": "67",
+   "t": "67",
+   "pron": "sesenta y siete"
+  },
+  {
+   "en": "68",
+   "t": "68",
+   "pron": "sesenta y ocho"
+  },
+  {
+   "en": "69",
+   "t": "69",
+   "pron": "sesenta y nueve"
+  },
+  {
+   "en": "70",
+   "t": "70",
+   "pron": "setenta"
+  },
+  {
+   "en": "71",
+   "t": "71",
+   "pron": "setenta y uno"
+  },
+  {
+   "en": "72",
+   "t": "72",
+   "pron": "setenta y dos"
+  },
+  {
+   "en": "73",
+   "t": "73",
+   "pron": "setenta y tres"
+  },
+  {
+   "en": "74",
+   "t": "74",
+   "pron": "setenta y cuatro"
+  },
+  {
+   "en": "75",
+   "t": "75",
+   "pron": "setenta y cinco"
+  },
+  {
+   "en": "76",
+   "t": "76",
+   "pron": "setenta y seis"
+  },
+  {
+   "en": "77",
+   "t": "77",
+   "pron": "setenta y siete"
+  },
+  {
+   "en": "78",
+   "t": "78",
+   "pron": "setenta y ocho"
+  },
+  {
+   "en": "79",
+   "t": "79",
+   "pron": "setenta y nueve"
+  },
+  {
+   "en": "80",
+   "t": "80",
+   "pron": "ochenta"
+  },
+  {
+   "en": "81",
+   "t": "81",
+   "pron": "ochenta y uno"
+  },
+  {
+   "en": "82",
+   "t": "82",
+   "pron": "ochenta y dos"
+  },
+  {
+   "en": "83",
+   "t": "83",
+   "pron": "ochenta y tres"
+  },
+  {
+   "en": "84",
+   "t": "84",
+   "pron": "ochenta y cuatro"
+  },
+  {
+   "en": "85",
+   "t": "85",
+   "pron": "ochenta y cinco"
+  },
+  {
+   "en": "86",
+   "t": "86",
+   "pron": "ochenta y seis"
+  },
+  {
+   "en": "87",
+   "t": "87",
+   "pron": "ochenta y siete"
+  },
+  {
+   "en": "88",
+   "t": "88",
+   "pron": "ochenta y ocho"
+  },
+  {
+   "en": "89",
+   "t": "89",
+   "pron": "ochenta y nueve"
+  },
+  {
+   "en": "90",
+   "t": "90",
+   "pron": "noventa"
+  },
+  {
+   "en": "91",
+   "t": "91",
+   "pron": "noventa y uno"
+  },
+  {
+   "en": "92",
+   "t": "92",
+   "pron": "noventa y dos"
+  },
+  {
+   "en": "93",
+   "t": "93",
+   "pron": "noventa y tres"
+  },
+  {
+   "en": "94",
+   "t": "94",
+   "pron": "noventa y cuatro"
+  },
+  {
+   "en": "95",
+   "t": "95",
+   "pron": "noventa y cinco"
+  },
+  {
+   "en": "96",
+   "t": "96",
+   "pron": "noventa y seis"
+  },
+  {
+   "en": "97",
+   "t": "97",
+   "pron": "noventa y siete"
+  },
+  {
+   "en": "98",
+   "t": "98",
+   "pron": "noventa y ocho"
+  },
+  {
+   "en": "99",
+   "t": "99",
+   "pron": "noventa y nueve"
+  },
+  {
+   "en": "100",
+   "t": "100",
+   "pron": "cien"
+  },
+  {
+   "en": "A",
+   "category": "abc",
+   "t": "A",
+   "pron": "a"
+  },
+  {
+   "en": "A",
+   "category": "letters",
+   "t": "A",
+   "pron": "a"
+  },
+  {
+   "en": "A",
+   "category": "learning",
+   "t": "A",
+   "pron": "a"
+  },
+  {
+   "en": "B",
+   "category": "abc",
+   "t": "B",
+   "pron": "be"
+  },
+  {
+   "en": "B",
+   "category": "letters",
+   "t": "B",
+   "pron": "be"
+  },
+  {
+   "en": "B",
+   "category": "learning",
+   "t": "B",
+   "pron": "be"
+  },
+  {
+   "en": "C",
+   "category": "abc",
+   "t": "C",
+   "pron": "ce"
+  },
+  {
+   "en": "C",
+   "category": "letters",
+   "t": "C",
+   "pron": "ce"
+  },
+  {
+   "en": "C",
+   "category": "learning",
+   "t": "C",
+   "pron": "ce"
+  },
+  {
+   "en": "D",
+   "category": "abc",
+   "t": "D",
+   "pron": "de"
+  },
+  {
+   "en": "D",
+   "category": "letters",
+   "t": "D",
+   "pron": "de"
+  },
+  {
+   "en": "D",
+   "category": "learning",
+   "t": "D",
+   "pron": "de"
+  },
+  {
+   "en": "E",
+   "category": "abc",
+   "t": "E",
+   "pron": "e"
+  },
+  {
+   "en": "E",
+   "category": "letters",
+   "t": "E",
+   "pron": "e"
+  },
+  {
+   "en": "E",
+   "category": "learning",
+   "t": "E",
+   "pron": "e"
+  },
+  {
+   "en": "F",
+   "category": "abc",
+   "t": "F",
+   "pron": "efe"
+  },
+  {
+   "en": "F",
+   "category": "letters",
+   "t": "F",
+   "pron": "efe"
+  },
+  {
+   "en": "F",
+   "category": "learning",
+   "t": "F",
+   "pron": "efe"
+  },
+  {
+   "en": "G",
+   "category": "abc",
+   "t": "G",
+   "pron": "ge"
+  },
+  {
+   "en": "G",
+   "category": "letters",
+   "t": "G",
+   "pron": "ge"
+  },
+  {
+   "en": "G",
+   "category": "learning",
+   "t": "G",
+   "pron": "ge"
+  },
+  {
+   "en": "H",
+   "category": "abc",
+   "t": "H",
+   "pron": "hache"
+  },
+  {
+   "en": "H",
+   "category": "letters",
+   "t": "H",
+   "pron": "hache"
+  },
+  {
+   "en": "H",
+   "category": "learning",
+   "t": "H",
+   "pron": "hache"
+  },
+  {
+   "en": "I",
+   "category": "abc",
+   "t": "I",
+   "pron": "i"
+  },
+  {
+   "en": "I",
+   "category": "letters",
+   "t": "I",
+   "pron": "i"
+  },
+  {
+   "en": "I",
+   "category": "learning",
+   "t": "I",
+   "pron": "i"
+  },
+  {
+   "en": "J",
+   "category": "abc",
+   "t": "J",
+   "pron": "jota"
+  },
+  {
+   "en": "J",
+   "category": "letters",
+   "t": "J",
+   "pron": "jota"
+  },
+  {
+   "en": "J",
+   "category": "learning",
+   "t": "J",
+   "pron": "jota"
+  },
+  {
+   "en": "K",
+   "category": "abc",
+   "t": "K",
+   "pron": "ka"
+  },
+  {
+   "en": "K",
+   "category": "letters",
+   "t": "K",
+   "pron": "ka"
+  },
+  {
+   "en": "K",
+   "category": "learning",
+   "t": "K",
+   "pron": "ka"
+  },
+  {
+   "en": "L",
+   "category": "abc",
+   "t": "L",
+   "pron": "ele"
+  },
+  {
+   "en": "L",
+   "category": "letters",
+   "t": "L",
+   "pron": "ele"
+  },
+  {
+   "en": "L",
+   "category": "learning",
+   "t": "L",
+   "pron": "ele"
+  },
+  {
+   "en": "M",
+   "category": "abc",
+   "t": "M",
+   "pron": "eme"
+  },
+  {
+   "en": "M",
+   "category": "letters",
+   "t": "M",
+   "pron": "eme"
+  },
+  {
+   "en": "M",
+   "category": "learning",
+   "t": "M",
+   "pron": "eme"
+  },
+  {
+   "en": "N",
+   "category": "abc",
+   "t": "N",
+   "pron": "ene"
+  },
+  {
+   "en": "N",
+   "category": "letters",
+   "t": "N",
+   "pron": "ene"
+  },
+  {
+   "en": "N",
+   "category": "learning",
+   "t": "N",
+   "pron": "ene"
+  },
+  {
+   "en": "O",
+   "category": "abc",
+   "t": "O",
+   "pron": "o"
+  },
+  {
+   "en": "O",
+   "category": "letters",
+   "t": "O",
+   "pron": "o"
+  },
+  {
+   "en": "O",
+   "category": "learning",
+   "t": "O",
+   "pron": "o"
+  },
+  {
+   "en": "P",
+   "category": "abc",
+   "t": "P",
+   "pron": "pe"
+  },
+  {
+   "en": "P",
+   "category": "letters",
+   "t": "P",
+   "pron": "pe"
+  },
+  {
+   "en": "P",
+   "category": "learning",
+   "t": "P",
+   "pron": "pe"
+  },
+  {
+   "en": "Q",
+   "category": "abc",
+   "t": "Q",
+   "pron": "cu"
+  },
+  {
+   "en": "Q",
+   "category": "letters",
+   "t": "Q",
+   "pron": "cu"
+  },
+  {
+   "en": "Q",
+   "category": "learning",
+   "t": "Q",
+   "pron": "cu"
+  },
+  {
+   "en": "R",
+   "category": "abc",
+   "t": "R",
+   "pron": "erre"
+  },
+  {
+   "en": "R",
+   "category": "letters",
+   "t": "R",
+   "pron": "erre"
+  },
+  {
+   "en": "R",
+   "category": "learning",
+   "t": "R",
+   "pron": "erre"
+  },
+  {
+   "en": "S",
+   "category": "abc",
+   "t": "S",
+   "pron": "ese"
+  },
+  {
+   "en": "S",
+   "category": "letters",
+   "t": "S",
+   "pron": "ese"
+  },
+  {
+   "en": "S",
+   "category": "learning",
+   "t": "S",
+   "pron": "ese"
+  },
+  {
+   "en": "T",
+   "category": "abc",
+   "t": "T",
+   "pron": "te"
+  },
+  {
+   "en": "T",
+   "category": "letters",
+   "t": "T",
+   "pron": "te"
+  },
+  {
+   "en": "T",
+   "category": "learning",
+   "t": "T",
+   "pron": "te"
+  },
+  {
+   "en": "U",
+   "category": "abc",
+   "t": "U",
+   "pron": "u"
+  },
+  {
+   "en": "U",
+   "category": "letters",
+   "t": "U",
+   "pron": "u"
+  },
+  {
+   "en": "U",
+   "category": "learning",
+   "t": "U",
+   "pron": "u"
+  },
+  {
+   "en": "V",
+   "category": "abc",
+   "t": "V",
+   "pron": "ve"
+  },
+  {
+   "en": "V",
+   "category": "letters",
+   "t": "V",
+   "pron": "ve"
+  },
+  {
+   "en": "V",
+   "category": "learning",
+   "t": "V",
+   "pron": "ve"
+  },
+  {
+   "en": "W",
+   "category": "abc",
+   "t": "W",
+   "pron": "doble ve"
+  },
+  {
+   "en": "W",
+   "category": "letters",
+   "t": "W",
+   "pron": "doble ve"
+  },
+  {
+   "en": "W",
+   "category": "learning",
+   "t": "W",
+   "pron": "doble ve"
+  },
+  {
+   "en": "X",
+   "category": "abc",
+   "t": "X",
+   "pron": "equis"
+  },
+  {
+   "en": "X",
+   "category": "letters",
+   "t": "X",
+   "pron": "equis"
+  },
+  {
+   "en": "X",
+   "category": "learning",
+   "t": "X",
+   "pron": "equis"
+  },
+  {
+   "en": "Y",
+   "category": "abc",
+   "t": "Y",
+   "pron": "ye"
+  },
+  {
+   "en": "Y",
+   "category": "letters",
+   "t": "Y",
+   "pron": "ye"
+  },
+  {
+   "en": "Y",
+   "category": "learning",
+   "t": "Y",
+   "pron": "ye"
+  },
+  {
+   "en": "Z",
+   "category": "abc",
+   "t": "Z",
+   "pron": "zeta"
+  },
+  {
+   "en": "Z",
+   "category": "letters",
+   "t": "Z",
+   "pron": "zeta"
+  },
+  {
+   "en": "Z",
+   "category": "learning",
+   "t": "Z",
+   "pron": "zeta"
+  },
+  {
+   "en": "1 o'clock",
+   "t": "la una"
+  },
+  {
+   "en": "2 o'clock",
+   "t": "las dos"
+  },
+  {
+   "en": "3 o'clock",
+   "t": "las tres"
+  },
+  {
+   "en": "4 o'clock",
+   "t": "las cuatro"
+  },
+  {
+   "en": "5 o'clock",
+   "t": "las cinco"
+  },
+  {
+   "en": "6 o'clock",
+   "t": "las seis"
+  },
+  {
+   "en": "7 o'clock",
+   "t": "las siete"
+  },
+  {
+   "en": "8 o'clock",
+   "t": "las ocho"
+  },
+  {
+   "en": "9 o'clock",
+   "t": "las nueve"
+  },
+  {
+   "en": "10 o'clock",
+   "t": "las diez"
+  },
+  {
+   "en": "11 o'clock",
+   "t": "las once"
+  },
+  {
+   "en": "12 o'clock",
+   "t": "las doce"
+  },
+  {
+   "en": "o'clock",
+   "t": "en punto"
+  },
+  {
+   "en": "april fools day",
+   "t": "Día de las Bromas"
+  },
+  {
+   "en": "christmas eve",
+   "t": "Nochebuena"
+  },
+  {
+   "en": "happy new year",
+   "t": "Feliz Año Nuevo"
+  },
+  {
+   "en": "independence day",
+   "t": "Día de la Independencia"
+  },
+  {
+   "en": "memorial day",
+   "t": "Día de los Caídos"
+  },
+  {
+   "en": "merry christmas",
+   "t": "Feliz Navidad"
+  },
+  {
+   "en": "new year's eve",
+   "t": "Nochevieja"
+  },
+  {
+   "en": "st. patrick's day",
+   "t": "Día de San Patricio"
+  },
+  {
+   "en": "christmas",
+   "t": "Navidad"
+  },
+  {
+   "en": "easter",
+   "t": "Pascua"
+  },
+  {
+   "en": "father's day",
+   "t": "Día del Padre"
+  },
+  {
+   "en": "fourth of july",
+   "t": "Cuatro de Julio"
+  },
+  {
+   "en": "halloween",
+   "t": "Halloween"
+  },
+  {
+   "en": "hanukkah",
+   "t": "Janucá"
+  },
+  {
+   "en": "mother's day",
+   "t": "Día de la Madre"
+  },
+  {
+   "en": "new year",
+   "t": "Año Nuevo"
+  },
+  {
+   "en": "thanksgiving",
+   "t": "Día de Acción de Gracias"
+  },
+  {
+   "en": "valentine's day",
+   "t": "Día de San Valentín"
+  },
+  {
+   "en": "my turn",
+   "t": "me toca"
+  },
+  {
+   "en": "almost",
+   "t": "casi"
+  },
+  {
+   "en": "always",
+   "t": "siempre"
+  },
+  {
+   "en": "carefully",
+   "t": "con cuidado"
+  },
+  {
+   "en": "gently",
+   "t": "suavemente"
+  },
+  {
+   "en": "loudly",
+   "t": "fuerte"
+  },
+  {
+   "en": "never",
+   "t": "nunca"
+  },
+  {
+   "en": "quickly",
+   "t": "rápido"
+  },
+  {
+   "en": "quietly",
+   "t": "bajito"
+  },
+  {
+   "en": "slowly",
+   "t": "despacio"
+  },
+  {
+   "en": "sometimes",
+   "t": "a veces"
+  },
+  {
+   "en": "beetle",
+   "t": "escarabajo"
+  },
+  {
+   "en": "centipede",
+   "t": "ciempiés"
+  },
+  {
+   "en": "daddy long legs",
+   "t": "araña patona"
+  },
+  {
+   "en": "firefly",
+   "t": "luciérnaga"
+  },
+  {
+   "en": "grasshopper",
+   "t": "saltamontes"
+  },
+  {
+   "en": "mosquito",
+   "t": "mosquito"
+  },
+  {
+   "en": "moth",
+   "t": "polilla"
+  },
+  {
+   "en": "pill bug",
+   "t": "cochinilla"
+  },
+  {
+   "en": "praying mantis",
+   "t": "mantis religiosa"
+  },
+  {
+   "en": "worm",
+   "t": "gusano"
+  },
+  {
+   "en": "caterpillar",
+   "t": "oruga"
+  },
+  {
+   "en": "dragonfly",
+   "t": "libélula"
+  },
+  {
+   "en": "ladybug",
+   "t": "mariquita"
+  },
+  {
+   "en": "snail",
+   "t": "caracol"
+  },
+  {
+   "en": "allosaurus",
+   "t": "alosaurio"
+  },
+  {
+   "en": "ankylosaurus",
+   "t": "anquilosaurio"
+  },
+  {
+   "en": "brachiosaurus",
+   "t": "braquiosaurio"
+  },
+  {
+   "en": "carnotaurus",
+   "t": "carnotauro"
+  },
+  {
+   "en": "corythosaurus",
+   "t": "coritosaurio"
+  },
+  {
+   "en": "deinonychus",
+   "t": "deinonico"
+  },
+  {
+   "en": "dilophosaurus",
+   "t": "dilofosaurio"
+  },
+  {
+   "en": "giganotosaurus",
+   "t": "giganotosaurio"
+  },
+  {
+   "en": "iguanodon",
+   "t": "iguanodonte"
+  },
+  {
+   "en": "kentrosaurus",
+   "t": "kentrosaurio"
+  },
+  {
+   "en": "pachycephalosaurus",
+   "t": "paquicefalosaurio"
+  },
+  {
+   "en": "parasaurolophus",
+   "t": "parasaurolofus"
+  },
+  {
+   "en": "spinosaurus",
+   "t": "espinosaurio"
+  },
+  {
+   "en": "styracosaurus",
+   "t": "estiracosaurio"
+  },
+  {
+   "en": "t-rex",
+   "t": "T-rex"
+  },
+  {
+   "en": "therizinosaurus",
+   "t": "terizinosaurio"
+  },
+  {
+   "en": "brontosaurus",
+   "t": "brontosaurio"
+  },
+  {
+   "en": "pterodactyl",
+   "t": "pterodáctilo"
+  },
+  {
+   "en": "stegosaurus",
+   "t": "estegosaurio"
+  },
+  {
+   "en": "triceratops",
+   "t": "triceratops"
+  },
+  {
+   "en": "velociraptor",
+   "t": "velociraptor"
+  },
+  {
+   "en": "chick",
+   "t": "pollito"
+  },
+  {
+   "en": "goose",
+   "t": "ganso"
+  },
+  {
+   "en": "peacock",
+   "t": "pavorreal"
+  },
+  {
+   "en": "pony",
+   "t": "poni"
+  },
+  {
+   "en": "alpaca",
+   "t": "alpaca"
+  },
+  {
+   "en": "donkey",
+   "t": "burro"
+  },
+  {
+   "en": "llama",
+   "t": "llama"
+  },
+  {
+   "en": "rooster",
+   "t": "gallo"
+  },
+  {
+   "en": "turkey",
+   "t": "pavo"
+  },
+  {
+   "en": "angelfish",
+   "t": "pez ángel"
+  },
+  {
+   "en": "catfish",
+   "t": "bagre"
+  },
+  {
+   "en": "clownfish",
+   "t": "pez payaso"
+  },
+  {
+   "en": "goldfish",
+   "t": "pez dorado"
+  },
+  {
+   "en": "guppy",
+   "t": "gupi"
+  },
+  {
+   "en": "marlin",
+   "t": "marlín"
+  },
+  {
+   "en": "pufferfish",
+   "t": "pez globo"
+  },
+  {
+   "en": "salmon",
+   "t": "salmón"
+  },
+  {
+   "en": "scallop",
+   "t": "vieira"
+  },
+  {
+   "en": "sea urchin",
+   "t": "erizo de mar"
+  },
+  {
+   "en": "seahorse",
+   "t": "caballito de mar"
+  },
+  {
+   "en": "shrimp",
+   "t": "camarón"
+  },
+  {
+   "en": "squid",
+   "t": "calamar"
+  },
+  {
+   "en": "stingray",
+   "t": "mantarraya"
+  },
+  {
+   "en": "eel",
+   "t": "anguila"
+  },
+  {
+   "en": "manatee",
+   "t": "manatí"
+  },
+  {
+   "en": "sea lion",
+   "t": "lobo marino"
+  },
+  {
+   "en": "sea turtle",
+   "t": "tortuga marina"
+  },
+  {
+   "en": "crab",
+   "t": "cangrejo"
+  },
+  {
+   "en": "dolphin",
+   "t": "delfín"
+  },
+  {
+   "en": "jellyfish",
+   "t": "medusa"
+  },
+  {
+   "en": "lobster",
+   "t": "langosta"
+  },
+  {
+   "en": "octopus",
+   "t": "pulpo"
+  },
+  {
+   "en": "seal",
+   "t": "foca"
+  },
+  {
+   "en": "shark",
+   "t": "tiburón"
+  },
+  {
+   "en": "starfish",
+   "t": "estrella de mar"
+  },
+  {
+   "en": "walrus",
+   "t": "morsa"
+  },
+  {
+   "en": "whale",
+   "t": "ballena"
+  },
+  {
+   "en": "crow",
+   "t": "cuervo"
+  },
+  {
+   "en": "moose",
+   "t": "alce"
+  },
+  {
+   "en": "woodpecker",
+   "t": "pájaro carpintero"
+  },
+  {
+   "en": "deer",
+   "t": "venado"
+  },
+  {
+   "en": "fox",
+   "t": "zorro"
+  },
+  {
+   "en": "owl",
+   "t": "búho"
+  },
+  {
+   "en": "raccoon",
+   "t": "mapache"
+  },
+  {
+   "en": "squirrel",
+   "t": "ardilla"
+  },
+  {
+   "en": "wolf",
+   "t": "lobo"
+  },
+  {
+   "en": "chimpanzee",
+   "t": "chimpancé"
+  },
+  {
+   "en": "toucan",
+   "t": "tucán"
+  },
+  {
+   "en": "gorilla",
+   "t": "gorila"
+  },
+  {
+   "en": "hippo",
+   "t": "hipopótamo"
+  },
+  {
+   "en": "kangaroo",
+   "t": "canguro"
+  },
+  {
+   "en": "koala",
+   "t": "koala"
+  },
+  {
+   "en": "bat",
+   "t": "murciélago"
+  },
+  {
+   "en": "beaver",
+   "t": "castor"
+  },
+  {
+   "en": "cheetah",
+   "t": "guepardo"
+  },
+  {
+   "en": "chipmunk",
+   "t": "ardilla listada"
+  },
+  {
+   "en": "hedgehog",
+   "t": "erizo"
+  },
+  {
+   "en": "jaguar",
+   "t": "jaguar"
+  },
+  {
+   "en": "leopard",
+   "t": "leopardo"
+  },
+  {
+   "en": "opossum",
+   "t": "zarigüeya"
+  },
+  {
+   "en": "otter",
+   "t": "nutria"
+  },
+  {
+   "en": "skunk",
+   "t": "zorrillo"
+  },
+  {
+   "en": "sloth",
+   "t": "perezoso"
+  },
+  {
+   "en": "ferret",
+   "t": "hurón"
+  },
+  {
+   "en": "gerbil",
+   "t": "jerbo"
+  },
+  {
+   "en": "guinea pig",
+   "t": "conejillo de indias"
+  },
+  {
+   "en": "hamster",
+   "t": "hámster"
+  },
+  {
+   "en": "lizard",
+   "t": "lagartija"
+  },
+  {
+   "en": "parrot",
+   "t": "loro"
+  },
+  {
+   "en": "arctic hare",
+   "t": "liebre ártica"
+  },
+  {
+   "en": "arctic fox",
+   "t": "zorro ártico"
+  },
+  {
+   "en": "narwhal",
+   "t": "narval"
+  },
+  {
+   "en": "polar bear",
+   "t": "oso polar"
+  },
+  {
+   "en": "puffin",
+   "t": "frailecillo"
+  },
+  {
+   "en": "alligator",
+   "t": "caimán"
+  },
+  {
+   "en": "chameleon",
+   "t": "camaleón"
+  },
+  {
+   "en": "crocodile",
+   "t": "cocodrilo"
+  },
+  {
+   "en": "gecko",
+   "t": "geco"
+  },
+  {
+   "en": "toad",
+   "t": "sapo"
+  },
+  {
+   "en": "how",
+   "t": "cómo"
+  },
+  {
+   "en": "what",
+   "t": "qué"
+  },
+  {
+   "en": "when",
+   "t": "cuándo"
+  },
+  {
+   "en": "where",
+   "t": "dónde"
+  },
+  {
+   "en": "who",
+   "t": "quién"
+  },
+  {
+   "en": "why",
+   "t": "por qué"
+  },
+  {
+   "en": "lip",
+   "t": "labio"
+  },
+  {
+   "en": "beard",
+   "t": "barba"
+  },
+  {
+   "en": "dimple",
+   "t": "hoyuelo"
+  },
+  {
+   "en": "eyebrow",
+   "t": "ceja"
+  },
+  {
+   "en": "eyelash",
+   "t": "pestaña"
+  },
+  {
+   "en": "freckle",
+   "t": "peca"
+  },
+  {
+   "en": "hip",
+   "t": "cadera"
+  },
+  {
+   "en": "knuckle",
+   "t": "nudillo"
+  },
+  {
+   "en": "waist",
+   "t": "cintura"
+  },
+  {
+   "en": "baseball cap",
+   "t": "gorra"
+  },
+  {
+   "en": "beanie",
+   "t": "gorrito"
+  },
+  {
+   "en": "jeans",
+   "t": "jeans"
+  },
+  {
+   "en": "rain boots",
+   "t": "botas de lluvia"
+  },
+  {
+   "en": "sneakers",
+   "t": "tenis"
+  },
+  {
+   "en": "hoodie",
+   "t": "sudadera con capucha"
+  },
+  {
+   "en": "robe",
+   "t": "bata"
+  },
+  {
+   "en": "sandals",
+   "t": "sandalias"
+  },
+  {
+   "en": "slippers",
+   "t": "pantuflas"
+  },
+  {
+   "en": "swimsuit",
+   "t": "traje de baño"
+  },
+  {
+   "en": "cloudy",
+   "t": "nublado"
+  },
+  {
+   "en": "cool",
+   "t": "fresco"
+  },
+  {
+   "en": "foggy",
+   "t": "con niebla"
+  },
+  {
+   "en": "funny",
+   "t": "divertido"
+  },
+  {
+   "en": "hard",
+   "t": "duro"
+  },
+  {
+   "en": "lightning",
+   "t": "relámpago"
+  },
+  {
+   "en": "new",
+   "t": "nuevo"
+  },
+  {
+   "en": "pretty",
+   "t": "bonito"
+  },
+  {
+   "en": "rainbow",
+   "t": "arcoíris"
+  },
+  {
+   "en": "rainy",
+   "t": "lluvioso"
+  },
+  {
+   "en": "scary",
+   "t": "da miedo"
+  },
+  {
+   "en": "short",
+   "t": "bajito"
+  },
+  {
+   "en": "snowy",
+   "t": "nevado"
+  },
+  {
+   "en": "soft",
+   "t": "suave"
+  },
+  {
+   "en": "sticky",
+   "t": "pegajoso"
+  },
+  {
+   "en": "stormy",
+   "t": "tormentoso"
+  },
+  {
+   "en": "sunny",
+   "t": "soleado"
+  },
+  {
+   "en": "sweet",
+   "t": "dulce"
+  },
+  {
+   "en": "tall",
+   "t": "alto"
+  },
+  {
+   "en": "tornado",
+   "t": "tornado"
+  },
+  {
+   "en": "warm",
+   "t": "calientito"
+  },
+  {
+   "en": "windy",
+   "t": "ventoso"
+  },
+  {
+   "en": "busy",
+   "t": "ocupado"
+  },
+  {
+   "en": "careful",
+   "t": "cuidadoso"
+  },
+  {
+   "en": "fancy",
+   "t": "elegante"
+  },
+  {
+   "en": "friendly",
+   "t": "amistoso"
+  },
+  {
+   "en": "gentle",
+   "t": "delicado"
+  },
+  {
+   "en": "goofy",
+   "t": "bobo"
+  },
+  {
+   "en": "helpful",
+   "t": "servicial"
+  },
+  {
+   "en": "kind",
+   "t": "amable"
+  },
+  {
+   "en": "lazy",
+   "t": "flojo"
+  },
+  {
+   "en": "mean",
+   "t": "antipático"
+  },
+  {
+   "en": "polite",
+   "t": "educado"
+  },
+  {
+   "en": "smart",
+   "t": "listo"
+  },
+  {
+   "en": "broken",
+   "t": "roto"
+  },
+  {
+   "en": "different",
+   "t": "diferente"
+  },
+  {
+   "en": "easy",
+   "t": "fácil"
+  },
+  {
+   "en": "empty",
+   "t": "vacío"
+  },
+  {
+   "en": "full",
+   "t": "lleno"
+  },
+  {
+   "en": "heavy",
+   "t": "pesado"
+  },
+  {
+   "en": "light_wt",
+   "t": "ligero"
+  },
+  {
+   "en": "same",
+   "t": "igual"
+  },
+  {
+   "en": "asleep",
+   "t": "dormido"
+  },
+  {
+   "en": "awake",
+   "t": "despierto"
+  },
+  {
+   "en": "bright",
+   "t": "brillante"
+  },
+  {
+   "en": "closed",
+   "t": "cerrado"
+  },
+  {
+   "en": "dark",
+   "t": "oscuro"
+  },
+  {
+   "en": "deep",
+   "t": "profundo"
+  },
+  {
+   "en": "dull",
+   "t": "opaco"
+  },
+  {
+   "en": "early",
+   "t": "temprano"
+  },
+  {
+   "en": "equal",
+   "t": "igualito"
+  },
+  {
+   "en": "everywhere",
+   "t": "en todas partes"
+  },
+  {
+   "en": "first",
+   "t": "primero"
+  },
+  {
+   "en": "last",
+   "t": "último"
+  },
+  {
+   "en": "late",
+   "t": "tarde"
+  },
+  {
+   "en": "less",
+   "t": "menos"
+  },
+  {
+   "en": "longer",
+   "t": "más largo"
+  },
+  {
+   "en": "noisy",
+   "t": "ruidoso"
+  },
+  {
+   "en": "nowhere",
+   "t": "en ninguna parte"
+  },
+  {
+   "en": "old",
+   "t": "viejo"
+  },
+  {
+   "en": "right (correct)",
+   "t": "correcto"
+  },
+  {
+   "en": "rough",
+   "t": "áspero"
+  },
+  {
+   "en": "safe",
+   "t": "seguro"
+  },
+  {
+   "en": "shallow",
+   "t": "poco profundo"
+  },
+  {
+   "en": "shiny",
+   "t": "reluciente"
+  },
+  {
+   "en": "shorter",
+   "t": "más corto"
+  },
+  {
+   "en": "smooth",
+   "t": "liso"
+  },
+  {
+   "en": "sour",
+   "t": "agrio"
+  },
+  {
+   "en": "strong",
+   "t": "fuerte"
+  },
+  {
+   "en": "there",
+   "t": "allí"
+  },
+  {
+   "en": "thick",
+   "t": "grueso"
+  },
+  {
+   "en": "thin",
+   "t": "delgado"
+  },
+  {
+   "en": "weak",
+   "t": "débil"
+  },
+  {
+   "en": "wrong",
+   "t": "incorrecto"
+  },
+  {
+   "en": "young",
+   "t": "joven"
+  },
+  {
+   "en": "calm",
+   "t": "tranquilo"
+  },
+  {
+   "en": "confused",
+   "t": "confundido"
+  },
+  {
+   "en": "embarrassed",
+   "t": "avergonzado"
+  },
+  {
+   "en": "frustrated",
+   "t": "frustrado"
+  },
+  {
+   "en": "lonely",
+   "t": "solito"
+  },
+  {
+   "en": "nervous",
+   "t": "nervioso"
+  },
+  {
+   "en": "proud",
+   "t": "orgulloso"
+  },
+  {
+   "en": "worried",
+   "t": "preocupado"
+  },
+  {
+   "en": "brave",
+   "t": "valiente"
+  },
+  {
+   "en": "curious",
+   "t": "curioso"
+  },
+  {
+   "en": "disappointed",
+   "t": "decepcionado"
+  },
+  {
+   "en": "grateful",
+   "t": "agradecido"
+  },
+  {
+   "en": "hopeful",
+   "t": "esperanzado"
+  },
+  {
+   "en": "jealous",
+   "t": "celoso"
+  },
+  {
+   "en": "bagel",
+   "t": "bagel"
+  },
+  {
+   "en": "muffin",
+   "t": "muffin"
+  },
+  {
+   "en": "oatmeal",
+   "t": "avena"
+  },
+  {
+   "en": "waffle",
+   "t": "waffle"
+  },
+  {
+   "en": "butter",
+   "t": "mantequilla"
+  },
+  {
+   "en": "jam",
+   "t": "mermelada"
+  },
+  {
+   "en": "ketchup",
+   "t": "ketchup"
+  },
+  {
+   "en": "salt",
+   "t": "sal"
+  },
+  {
+   "en": "syrup",
+   "t": "miel de maple"
+  },
+  {
+   "en": "smoothie",
+   "t": "licuado"
+  },
+  {
+   "en": "cherry",
+   "t": "cereza"
+  },
+  {
+   "en": "kiwi",
+   "t": "kiwi"
+  },
+  {
+   "en": "pineapple",
+   "t": "piña"
+  },
+  {
+   "en": "avocado",
+   "t": "aguacate"
+  },
+  {
+   "en": "coconut",
+   "t": "coco"
+  },
+  {
+   "en": "lemon",
+   "t": "limón"
+  },
+  {
+   "en": "plum",
+   "t": "ciruela"
+  },
+  {
+   "en": "pomegranate",
+   "t": "granada"
+  },
+  {
+   "en": "burrito",
+   "t": "burrito"
+  },
+  {
+   "en": "fries",
+   "t": "papas fritas"
+  },
+  {
+   "en": "hamburger",
+   "t": "hamburguesa"
+  },
+  {
+   "en": "hot dog",
+   "t": "hot dog"
+  },
+  {
+   "en": "salad",
+   "t": "ensalada"
+  },
+  {
+   "en": "sushi",
+   "t": "sushi"
+  },
+  {
+   "en": "pretzel",
+   "t": "pretzel"
+  },
+  {
+   "en": "chocolate",
+   "t": "chocolate"
+  },
+  {
+   "en": "donut",
+   "t": "dona"
+  },
+  {
+   "en": "lollipop",
+   "t": "paleta"
+  },
+  {
+   "en": "asparagus",
+   "t": "espárragos"
+  },
+  {
+   "en": "cauliflower",
+   "t": "coliflor"
+  },
+  {
+   "en": "eggplant",
+   "t": "berenjena"
+  },
+  {
+   "en": "spinach",
+   "t": "espinacas"
+  },
+  {
+   "en": "squash",
+   "t": "calabaza"
+  },
+  {
+   "en": "zucchini",
+   "t": "calabacín"
+  },
+  {
+   "en": "celery",
+   "t": "apio"
+  },
+  {
+   "en": "lettuce",
+   "t": "lechuga"
+  },
+  {
+   "en": "mushroom",
+   "t": "champiñón"
+  },
+  {
+   "en": "onion",
+   "t": "cebolla"
+  },
+  {
+   "en": "peas",
+   "t": "chícharos"
+  },
+  {
+   "en": "pepper",
+   "t": "pimiento"
+  },
+  {
+   "en": "cough",
+   "t": "tos"
+  },
+  {
+   "en": "dizzy",
+   "t": "mareado"
+  },
+  {
+   "en": "itchy",
+   "t": "me pica"
+  },
+  {
+   "en": "sneeze",
+   "t": "estornudo"
+  },
+  {
+   "en": "sore",
+   "t": "adolorido"
+  },
+  {
+   "en": "comb",
+   "t": "peine"
+  },
+  {
+   "en": "faucet",
+   "t": "llave del agua"
+  },
+  {
+   "en": "hairbrush",
+   "t": "cepillo de pelo"
+  },
+  {
+   "en": "mirror",
+   "t": "espejo"
+  },
+  {
+   "en": "shampoo",
+   "t": "champú"
+  },
+  {
+   "en": "blender",
+   "t": "licuadora"
+  },
+  {
+   "en": "dishwasher",
+   "t": "lavavajillas"
+  },
+  {
+   "en": "knife",
+   "t": "cuchillo"
+  },
+  {
+   "en": "microwave",
+   "t": "microondas"
+  },
+  {
+   "en": "oven",
+   "t": "horno"
+  },
+  {
+   "en": "pan",
+   "t": "sartén"
+  },
+  {
+   "en": "pot",
+   "t": "olla"
+  },
+  {
+   "en": "refrigerator",
+   "t": "refrigerador"
+  },
+  {
+   "en": "stove",
+   "t": "estufa"
+  },
+  {
+   "en": "toaster",
+   "t": "tostador"
+  },
+  {
+   "en": "bib",
+   "t": "babero"
+  },
+  {
+   "en": "lunchbox",
+   "t": "lonchera"
+  },
+  {
+   "en": "mug",
+   "t": "taza"
+  },
+  {
+   "en": "napkin",
+   "t": "servilleta"
+  },
+  {
+   "en": "pitcher",
+   "t": "jarra"
+  },
+  {
+   "en": "placemat",
+   "t": "mantel individual"
+  },
+  {
+   "en": "sippy cup",
+   "t": "vaso entrenador"
+  },
+  {
+   "en": "straw",
+   "t": "pajita"
+  },
+  {
+   "en": "thermos",
+   "t": "termo"
+  },
+  {
+   "en": "tray",
+   "t": "bandeja"
+  },
+  {
+   "en": "water bottle",
+   "t": "botella de agua"
+  },
+  {
+   "en": "button",
+   "t": "botón"
+  },
+  {
+   "en": "camera",
+   "t": "cámara"
+  },
+  {
+   "en": "charger",
+   "t": "cargador"
+  },
+  {
+   "en": "headphones",
+   "t": "audífonos"
+  },
+  {
+   "en": "laptop",
+   "t": "computadora"
+  },
+  {
+   "en": "remote",
+   "t": "control remoto"
+  },
+  {
+   "en": "screen",
+   "t": "pantalla"
+  },
+  {
+   "en": "speaker",
+   "t": "bocina"
+  },
+  {
+   "en": "tablet",
+   "t": "tableta"
+  },
+  {
+   "en": "gold",
+   "t": "dorado"
+  },
+  {
+   "en": "gray",
+   "t": "gris"
+  },
+  {
+   "en": "navy",
+   "t": "azul marino"
+  },
+  {
+   "en": "silver",
+   "t": "plateado"
+  },
+  {
+   "en": "tan",
+   "t": "beige"
+  },
+  {
+   "en": "teal",
+   "t": "verde azulado"
+  },
+  {
+   "en": "arrow",
+   "t": "flecha"
+  },
+  {
+   "en": "circle",
+   "t": "círculo"
+  },
+  {
+   "en": "crescent",
+   "t": "media luna"
+  },
+  {
+   "en": "cross",
+   "t": "cruz"
+  },
+  {
+   "en": "diamond",
+   "t": "rombo"
+  },
+  {
+   "en": "heart",
+   "t": "corazón"
+  },
+  {
+   "en": "hexagon",
+   "t": "hexágono"
+  },
+  {
+   "en": "octagon",
+   "t": "octágono"
+  },
+  {
+   "en": "oval",
+   "t": "óvalo"
+  },
+  {
+   "en": "pentagon",
+   "t": "pentágono"
+  },
+  {
+   "en": "rectangle",
+   "t": "rectángulo"
+  },
+  {
+   "en": "square",
+   "t": "cuadrado"
+  },
+  {
+   "en": "triangle",
+   "t": "triángulo"
+  },
+  {
+   "en": "and",
+   "t": "y"
+  },
+  {
+   "en": "because",
+   "t": "porque"
+  },
+  {
+   "en": "but",
+   "t": "pero"
+  },
+  {
+   "en": "can",
+   "t": "puedo"
+  },
+  {
+   "en": "for",
+   "t": "para"
+  },
+  {
+   "en": "is",
+   "t": "es"
+  },
+  {
+   "en": "it",
+   "t": "eso"
+  },
+  {
+   "en": "that",
+   "t": "ese"
+  },
+  {
+   "en": "the",
+   "t": "el"
+  },
+  {
+   "en": "this",
+   "t": "este"
+  },
+  {
+   "en": "to",
+   "t": "a"
+  },
+  {
+   "en": "will",
+   "t": "voy a"
+  },
+  {
+   "en": "with",
+   "t": "con"
+  },
+  {
+   "en": "if",
+   "t": "si"
+  },
+  {
+   "en": "or",
+   "t": "o"
+  },
+  {
+   "en": "so",
+   "t": "entonces"
+  },
+  {
+   "en": "am",
+   "t": "soy"
+  },
+  {
+   "en": "are",
+   "t": "eres"
+  },
+  {
+   "en": "could",
+   "t": "podría"
+  },
+  {
+   "en": "had",
+   "t": "tenía"
+  },
+  {
+   "en": "has",
+   "t": "tiene"
+  },
+  {
+   "en": "have",
+   "t": "tengo"
+  },
+  {
+   "en": "was",
+   "t": "era"
+  },
+  {
+   "en": "would",
+   "t": "querría"
+  },
+  {
+   "en": "don't",
+   "t": "no"
+  },
+  {
+   "en": "not",
+   "t": "no"
+  },
+  {
+   "en": "a",
+   "t": "un"
+  },
+  {
+   "en": "i",
+   "t": "yo"
+  },
+  {
+   "en": "cart",
+   "t": "carrito de compras"
+  },
+  {
+   "en": "change",
+   "t": "cambio"
+  },
+  {
+   "en": "coin",
+   "t": "moneda"
+  },
+  {
+   "en": "dollar",
+   "t": "dólar"
+  },
+  {
+   "en": "list",
+   "t": "lista"
+  },
+  {
+   "en": "money",
+   "t": "dinero"
+  },
+  {
+   "en": "receipt",
+   "t": "recibo"
+  },
+  {
+   "en": "wallet",
+   "t": "cartera"
+  },
+  {
+   "en": "drum",
+   "t": "tambor"
+  },
+  {
+   "en": "flute",
+   "t": "flauta"
+  },
+  {
+   "en": "guitar",
+   "t": "guitarra"
+  },
+  {
+   "en": "harmonica",
+   "t": "armónica"
+  },
+  {
+   "en": "maracas",
+   "t": "maracas"
+  },
+  {
+   "en": "piano",
+   "t": "piano"
+  },
+  {
+   "en": "tambourine",
+   "t": "pandereta"
+  },
+  {
+   "en": "trumpet",
+   "t": "trompeta"
+  },
+  {
+   "en": "violin",
+   "t": "violín"
+  },
+  {
+   "en": "xylophone",
+   "t": "xilófono"
+  },
+  {
+   "en": "aloe vera",
+   "t": "sábila"
+  },
+  {
+   "en": "bamboo",
+   "t": "bambú"
+  },
+  {
+   "en": "bush",
+   "t": "arbusto"
+  },
+  {
+   "en": "coral",
+   "t": "coral"
+  },
+  {
+   "en": "dandelion",
+   "t": "diente de león"
+  },
+  {
+   "en": "four leaf clover",
+   "t": "trébol de cuatro hojas"
+  },
+  {
+   "en": "ivy",
+   "t": "hiedra"
+  },
+  {
+   "en": "lavender",
+   "t": "lavanda"
+  },
+  {
+   "en": "lily",
+   "t": "lirio"
+  },
+  {
+   "en": "mangrove",
+   "t": "manglar"
+  },
+  {
+   "en": "mint",
+   "t": "menta"
+  },
+  {
+   "en": "orchid",
+   "t": "orquídea"
+  },
+  {
+   "en": "palm tree",
+   "t": "palmera"
+  },
+  {
+   "en": "pine tree",
+   "t": "pino"
+  },
+  {
+   "en": "sargassum",
+   "t": "sargazo"
+  },
+  {
+   "en": "sea fan",
+   "t": "abanico de mar"
+  },
+  {
+   "en": "sea lettuce",
+   "t": "lechuga de mar"
+  },
+  {
+   "en": "seaweed",
+   "t": "algas"
+  },
+  {
+   "en": "cactus",
+   "t": "cactus"
+  },
+  {
+   "en": "daisy",
+   "t": "margarita"
+  },
+  {
+   "en": "fern",
+   "t": "helecho"
+  },
+  {
+   "en": "leaf",
+   "t": "hoja"
+  },
+  {
+   "en": "rose",
+   "t": "rosa"
+  },
+  {
+   "en": "sunflower",
+   "t": "girasol"
+  },
+  {
+   "en": "tulip",
+   "t": "tulipán"
+  },
+  {
+   "en": "astronaut",
+   "t": "astronauta"
+  },
+  {
+   "en": "comet",
+   "t": "cometa"
+  },
+  {
+   "en": "galaxy",
+   "t": "galaxia"
+  },
+  {
+   "en": "planet",
+   "t": "planeta"
+  },
+  {
+   "en": "bath time",
+   "t": "hora del baño"
+  },
+  {
+   "en": "bedtime",
+   "t": "hora de dormir"
+  },
+  {
+   "en": "favorite book",
+   "t": "libro favorito"
+  },
+  {
+   "en": "grandma's house",
+   "t": "casa de la abuela"
+  },
+  {
+   "en": "grandpa's house",
+   "t": "casa del abuelo"
+  },
+  {
+   "en": "my lovey",
+   "t": "mi peluchito"
+  },
+  {
+   "en": "our car",
+   "t": "nuestro carro"
+  },
+  {
+   "en": "our park",
+   "t": "nuestro parque"
+  },
+  {
+   "en": "our pet",
+   "t": "nuestra mascota"
+  },
+  {
+   "en": "special snack",
+   "t": "merienda especial"
+  },
+  {
+   "en": "my app",
+   "t": "mi aplicación"
+  },
+  {
+   "en": "my character",
+   "t": "mi personaje"
+  },
+  {
+   "en": "my movie",
+   "t": "mi película"
+  },
+  {
+   "en": "my show",
+   "t": "mi programa"
+  },
+  {
+   "en": "my song",
+   "t": "mi canción"
+  },
+  {
+   "en": "beach",
+   "t": "playa"
+  },
+  {
+   "en": "city",
+   "t": "ciudad"
+  },
+  {
+   "en": "country",
+   "t": "país"
+  },
+  {
+   "en": "flag",
+   "t": "bandera"
+  },
+  {
+   "en": "forest",
+   "t": "bosque"
+  },
+  {
+   "en": "lake",
+   "t": "lago"
+  },
+  {
+   "en": "map",
+   "t": "mapa"
+  },
+  {
+   "en": "mountain",
+   "t": "montaña"
+  },
+  {
+   "en": "ocean",
+   "t": "océano"
+  },
+  {
+   "en": "river",
+   "t": "río"
+  },
+  {
+   "en": "street",
+   "t": "calle"
+  },
+  {
+   "en": "town",
+   "t": "pueblo"
+  },
+  {
+   "en": "driveway",
+   "t": "entrada de coches"
+  },
+  {
+   "en": "hose",
+   "t": "manguera"
+  },
+  {
+   "en": "mailbox",
+   "t": "buzón"
+  },
+  {
+   "en": "sandbox",
+   "t": "arenero"
+  },
+  {
+   "en": "sidewalk",
+   "t": "acera"
+  },
+  {
+   "en": "sprinkler",
+   "t": "aspersor"
+  },
+  {
+   "en": "behind",
+   "t": "detrás"
+  },
+  {
+   "en": "between",
+   "t": "entre"
+  },
+  {
+   "en": "here",
+   "t": "aquí"
+  },
+  {
+   "en": "next to",
+   "t": "al lado"
+  },
+  {
+   "en": "over",
+   "t": "encima"
+  },
+  {
+   "en": "under",
+   "t": "debajo"
+  },
+  {
+   "en": "bottom",
+   "t": "abajo"
+  },
+  {
+   "en": "front",
+   "t": "delante"
+  },
+  {
+   "en": "left",
+   "t": "izquierda"
+  },
+  {
+   "en": "middle",
+   "t": "en medio"
+  },
+  {
+   "en": "right",
+   "t": "derecha"
+  },
+  {
+   "en": "side",
+   "t": "lado"
+  },
+  {
+   "en": "top",
+   "t": "arriba"
+  },
+  {
+   "en": "around",
+   "t": "alrededor"
+  },
+  {
+   "en": "at",
+   "t": "en"
+  },
+  {
+   "en": "from",
+   "t": "de"
+  },
+  {
+   "en": "inside",
+   "t": "adentro"
+  },
+  {
+   "en": "of",
+   "t": "de"
+  },
+  {
+   "en": "through",
+   "t": "a través"
+  },
+  {
+   "en": "all",
+   "t": "todo"
+  },
+  {
+   "en": "any",
+   "t": "cualquiera"
+  },
+  {
+   "en": "every",
+   "t": "cada"
+  },
+  {
+   "en": "few",
+   "t": "pocos"
+  },
+  {
+   "en": "many",
+   "t": "muchos"
+  },
+  {
+   "en": "much",
+   "t": "mucho"
+  },
+  {
+   "en": "none",
+   "t": "ninguno"
+  },
+  {
+   "en": "some",
+   "t": "algunos"
+  },
+  {
+   "en": "backpack",
+   "t": "mochila"
+  },
+  {
+   "en": "bookshelf",
+   "t": "librero"
+  },
+  {
+   "en": "classroom",
+   "t": "salón"
+  },
+  {
+   "en": "desk",
+   "t": "escritorio"
+  },
+  {
+   "en": "eraser",
+   "t": "borrador"
+  },
+  {
+   "en": "glue",
+   "t": "pegamento"
+  },
+  {
+   "en": "marker",
+   "t": "marcador"
+  },
+  {
+   "en": "notebook",
+   "t": "cuaderno"
+  },
+  {
+   "en": "paper",
+   "t": "papel"
+  },
+  {
+   "en": "pencil",
+   "t": "lápiz"
+  },
+  {
+   "en": "recess",
+   "t": "recreo"
+  },
+  {
+   "en": "ruler",
+   "t": "regla"
+  },
+  {
+   "en": "scissors",
+   "t": "tijeras"
+  },
+  {
+   "en": "whiteboard",
+   "t": "pizarrón"
+  },
+  {
+   "en": "arrival",
+   "t": "llegada"
+  },
+  {
+   "en": "art",
+   "t": "arte"
+  },
+  {
+   "en": "calm corner",
+   "t": "rincón de calma"
+  },
+  {
+   "en": "centers",
+   "t": "centros"
+  },
+  {
+   "en": "class pet",
+   "t": "mascota de la clase"
+  },
+  {
+   "en": "dismissal",
+   "t": "salida"
+  },
+  {
+   "en": "field trip",
+   "t": "excursión"
+  },
+  {
+   "en": "fire drill",
+   "t": "simulacro de incendio"
+  },
+  {
+   "en": "library day",
+   "t": "día de biblioteca"
+  },
+  {
+   "en": "line up",
+   "t": "formarse"
+  },
+  {
+   "en": "lockdown drill",
+   "t": "simulacro de encierro"
+  },
+  {
+   "en": "lunchroom",
+   "t": "comedor"
+  },
+  {
+   "en": "my aide",
+   "t": "mi asistente"
+  },
+  {
+   "en": "my class job",
+   "t": "mi tarea de clase"
+  },
+  {
+   "en": "my teacher",
+   "t": "mi maestra"
+  },
+  {
+   "en": "pe",
+   "t": "educación física"
+  },
+  {
+   "en": "picture day",
+   "t": "día de fotos"
+  },
+  {
+   "en": "quiet time",
+   "t": "tiempo tranquilo"
+  },
+  {
+   "en": "show and tell",
+   "t": "mostrar y contar"
+  },
+  {
+   "en": "i love you",
+   "t": "te quiero"
+  },
+  {
+   "en": "sorry",
+   "t": "perdón"
+  },
+  {
+   "en": "circle time",
+   "t": "círculo"
+  },
+  {
+   "en": "line leader",
+   "t": "líder de la fila"
+  },
+  {
+   "en": "may i",
+   "t": "¿puedo?"
+  },
+  {
+   "en": "quiet please",
+   "t": "silencio por favor"
+  },
+  {
+   "en": "raise my hand",
+   "t": "levantar la mano"
+  },
+  {
+   "en": "sharing time",
+   "t": "hora de compartir"
+  },
+  {
+   "en": "i did it",
+   "t": "¡lo logré!"
+  },
+  {
+   "en": "i need a break",
+   "t": "necesito un descanso"
+  },
+  {
+   "en": "i'm hungry",
+   "t": "tengo hambre"
+  },
+  {
+   "en": "i'm thirsty",
+   "t": "tengo sed"
+  },
+  {
+   "en": "good job",
+   "t": "¡muy bien!"
+  },
+  {
+   "en": "my turn now",
+   "t": "ahora me toca"
+  },
+  {
+   "en": "try again",
+   "t": "intenta otra vez"
+  },
+  {
+   "en": "your turn",
+   "t": "te toca"
+  },
+  {
+   "en": "yucky",
+   "t": "guácala"
+  },
+  {
+   "en": "yummy",
+   "t": "rico"
+  },
+  {
+   "en": "cuddle",
+   "t": "acurrucarse"
+  },
+  {
+   "en": "family hug",
+   "t": "abrazo familiar"
+  },
+  {
+   "en": "goodnight kiss",
+   "t": "beso de buenas noches"
+  },
+  {
+   "en": "piggyback",
+   "t": "caballito"
+  },
+  {
+   "en": "snuggle",
+   "t": "apapacho"
+  },
+  {
+   "en": "carry me",
+   "t": "cárgame"
+  },
+  {
+   "en": "hold me",
+   "t": "abrázame"
+  },
+  {
+   "en": "one more book",
+   "t": "un libro más"
+  },
+  {
+   "en": "read to me",
+   "t": "léeme"
+  },
+  {
+   "en": "snuggle with me",
+   "t": "acurrúcate conmigo"
+  },
+  {
+   "en": "tuck me in",
+   "t": "arrópame"
+  },
+  {
+   "en": "i miss you",
+   "t": "te extraño"
+  },
+  {
+   "en": "i need help",
+   "t": "necesito ayuda"
+  },
+  {
+   "en": "i see you",
+   "t": "te veo"
+  },
+  {
+   "en": "i want that",
+   "t": "quiero eso"
+  },
+  {
+   "en": "all done eating",
+   "t": "terminé de comer"
+  },
+  {
+   "en": "excuse me",
+   "t": "disculpa"
+  },
+  {
+   "en": "good morning",
+   "t": "buenos días"
+  },
+  {
+   "en": "good night",
+   "t": "buenas noches"
+  },
+  {
+   "en": "happy birthday",
+   "t": "feliz cumpleaños"
+  },
+  {
+   "en": "have a good day",
+   "t": "que tengas buen día"
+  },
+  {
+   "en": "let's go",
+   "t": "vamos"
+  },
+  {
+   "en": "more please",
+   "t": "más por favor"
+  },
+  {
+   "en": "no thank you",
+   "t": "no gracias"
+  },
+  {
+   "en": "ready to play",
+   "t": "listo para jugar"
+  },
+  {
+   "en": "see you later",
+   "t": "hasta luego"
+  },
+  {
+   "en": "sorry about that",
+   "t": "perdón por eso"
+  },
+  {
+   "en": "time to",
+   "t": "es hora de"
+  },
+  {
+   "en": "wait a minute",
+   "t": "espera un momento"
+  },
+  {
+   "en": "what's that",
+   "t": "¿qué es eso?"
+  },
+  {
+   "en": "where are you",
+   "t": "¿dónde estás?"
+  },
+  {
+   "en": "yes please",
+   "t": "sí por favor"
+  },
+  {
+   "en": "baseball",
+   "t": "béisbol"
+  },
+  {
+   "en": "basketball",
+   "t": "básquetbol"
+  },
+  {
+   "en": "bowling",
+   "t": "boliche"
+  },
+  {
+   "en": "dancing",
+   "t": "baile"
+  },
+  {
+   "en": "football",
+   "t": "fútbol americano"
+  },
+  {
+   "en": "golf",
+   "t": "golf"
+  },
+  {
+   "en": "gymnastics",
+   "t": "gimnasia"
+  },
+  {
+   "en": "hockey",
+   "t": "hockey"
+  },
+  {
+   "en": "skating",
+   "t": "patinaje"
+  },
+  {
+   "en": "soccer",
+   "t": "fútbol"
+  },
+  {
+   "en": "swimming",
+   "t": "natación"
+  },
+  {
+   "en": "tennis",
+   "t": "tenis"
+  },
+  {
+   "en": "co-treat partner",
+   "t": "compañero de terapia"
+  },
+  {
+   "en": "favorite toy here",
+   "t": "mi juguete favorito aquí"
+  },
+  {
+   "en": "my reinforcer",
+   "t": "mi premio"
+  },
+  {
+   "en": "quiet space",
+   "t": "espacio tranquilo"
+  },
+  {
+   "en": "sensory bin",
+   "t": "caja sensorial"
+  },
+  {
+   "en": "session end",
+   "t": "fin de la sesión"
+  },
+  {
+   "en": "session start",
+   "t": "inicio de la sesión"
+  },
+  {
+   "en": "target word",
+   "t": "palabra objetivo"
+  },
+  {
+   "en": "therapy room",
+   "t": "sala de terapia"
+  },
+  {
+   "en": "visual schedule",
+   "t": "horario visual"
+  },
+  {
+   "en": "therapist",
+   "t": "terapeuta"
+  },
+  {
+   "en": "after",
+   "t": "después"
+  },
+  {
+   "en": "afternoon",
+   "t": "tarde"
+  },
+  {
+   "en": "before",
+   "t": "antes"
+  },
+  {
+   "en": "later",
+   "t": "más tarde"
+  },
+  {
+   "en": "morning",
+   "t": "mañana"
+  },
+  {
+   "en": "night",
+   "t": "noche"
+  },
+  {
+   "en": "now",
+   "t": "ahora"
+  },
+  {
+   "en": "soon",
+   "t": "pronto"
+  },
+  {
+   "en": "today",
+   "t": "hoy"
+  },
+  {
+   "en": "tomorrow",
+   "t": "mañana"
+  },
+  {
+   "en": "yesterday",
+   "t": "ayer"
+  },
+  {
+   "en": "half past",
+   "t": "y media"
+  },
+  {
+   "en": "hour",
+   "t": "hora"
+  },
+  {
+   "en": "midnight",
+   "t": "medianoche"
+  },
+  {
+   "en": "minute",
+   "t": "minuto"
+  },
+  {
+   "en": "noon",
+   "t": "mediodía"
+  },
+  {
+   "en": "quarter",
+   "t": "cuarto"
+  },
+  {
+   "en": "january",
+   "t": "enero"
+  },
+  {
+   "en": "february",
+   "t": "febrero"
+  },
+  {
+   "en": "march",
+   "t": "marzo"
+  },
+  {
+   "en": "april",
+   "t": "abril"
+  },
+  {
+   "en": "may",
+   "t": "mayo"
+  },
+  {
+   "en": "june",
+   "t": "junio"
+  },
+  {
+   "en": "july",
+   "t": "julio"
+  },
+  {
+   "en": "august",
+   "t": "agosto"
+  },
+  {
+   "en": "september",
+   "t": "septiembre"
+  },
+  {
+   "en": "october",
+   "t": "octubre"
+  },
+  {
+   "en": "november",
+   "t": "noviembre"
+  },
+  {
+   "en": "december",
+   "t": "diciembre"
+  },
+  {
+   "en": "fall",
+   "t": "otoño"
+  },
+  {
+   "en": "spring",
+   "t": "primavera"
+  },
+  {
+   "en": "summer",
+   "t": "verano"
+  },
+  {
+   "en": "winter",
+   "t": "invierno"
+  },
+  {
+   "en": "second",
+   "t": "segundo"
+  },
+  {
+   "en": "tonight",
+   "t": "esta noche"
+  },
+  {
+   "en": "week",
+   "t": "semana"
+  },
+  {
+   "en": "weekday",
+   "t": "día de semana"
+  },
+  {
+   "en": "weekend",
+   "t": "fin de semana"
+  },
+  {
+   "en": "year",
+   "t": "año"
+  },
+  {
+   "en": "drill",
+   "t": "taladro"
+  },
+  {
+   "en": "hammer",
+   "t": "martillo"
+  },
+  {
+   "en": "paintbrush",
+   "t": "brocha"
+  },
+  {
+   "en": "saw",
+   "t": "serrucho"
+  },
+  {
+   "en": "screwdriver",
+   "t": "destornillador"
+  },
+  {
+   "en": "toolbox",
+   "t": "caja de herramientas"
+  },
+  {
+   "en": "wrench",
+   "t": "llave inglesa"
+  },
+  {
+   "en": "action figure",
+   "t": "muñeco de acción"
+  },
+  {
+   "en": "building bricks",
+   "t": "piezas de construcción"
+  },
+  {
+   "en": "dollhouse",
+   "t": "casa de muñecas"
+  },
+  {
+   "en": "hula hoop",
+   "t": "aro"
+  },
+  {
+   "en": "jump rope",
+   "t": "cuerda de saltar"
+  },
+  {
+   "en": "kite",
+   "t": "cometa"
+  },
+  {
+   "en": "marble",
+   "t": "canica"
+  },
+  {
+   "en": "play dough",
+   "t": "plastilina"
+  },
+  {
+   "en": "robot",
+   "t": "robot"
+  },
+  {
+   "en": "slinky",
+   "t": "resorte mágico"
+  },
+  {
+   "en": "stickers",
+   "t": "calcomanías"
+  },
+  {
+   "en": "stroller",
+   "t": "cochecito"
+  },
+  {
+   "en": "hot air balloon",
+   "t": "globo aerostático"
+  },
+  {
+   "en": "rocket",
+   "t": "cohete"
+  },
+  {
+   "en": "sailboat",
+   "t": "velero"
+  },
+  {
+   "en": "ship",
+   "t": "buque"
+  },
+  {
+   "en": "submarine",
+   "t": "submarino"
+  },
+  {
+   "en": "ambulance",
+   "t": "ambulancia"
+  },
+  {
+   "en": "fire truck",
+   "t": "camión de bomberos"
+  },
+  {
+   "en": "helicopter",
+   "t": "helicóptero"
+  },
+  {
+   "en": "police car",
+   "t": "patrulla"
+  },
+  {
+   "en": "rv",
+   "t": "casa rodante"
+  },
+  {
+   "en": "motorcycle",
+   "t": "moto"
+  },
+  {
+   "en": "race car",
+   "t": "carro de carreras"
+  },
+  {
+   "en": "scooter",
+   "t": "patín del diablo"
+  },
+  {
+   "en": "skateboard",
+   "t": "patineta"
+  },
+  {
+   "en": "taxi",
+   "t": "taxi"
+  },
+  {
+   "en": "bulldozer",
+   "t": "buldócer"
+  },
+  {
+   "en": "cement mixer",
+   "t": "mezcladora de cemento"
+  },
+  {
+   "en": "crane",
+   "t": "grúa"
+  },
+  {
+   "en": "dump truck",
+   "t": "camión de volteo"
+  },
+  {
+   "en": "garbage truck",
+   "t": "camión de basura"
+  },
+  {
+   "en": "tractor",
+   "t": "tractor"
+  },
+  {
+   "en": "chef",
+   "t": "chef"
+  },
+  {
+   "en": "dentist",
+   "t": "dentista"
+  },
+  {
+   "en": "farmer",
+   "t": "granjero"
+  },
+  {
+   "en": "firefighter",
+   "t": "bombero"
+  },
+  {
+   "en": "librarian",
+   "t": "bibliotecaria"
+  },
+  {
+   "en": "mail carrier",
+   "t": "cartero"
+  },
+  {
+   "en": "mechanic",
+   "t": "mecánico"
+  },
+  {
+   "en": "plumber",
+   "t": "plomero"
+  },
+  {
+   "en": "police officer",
+   "t": "policía"
+  },
+  {
+   "en": "vet",
+   "t": "veterinario"
+  },
+  {
+   "en": "he",
+   "t": "él"
+  },
+  {
+   "en": "my",
+   "t": "mi"
+  },
+  {
+   "en": "she",
+   "t": "ella"
+  },
+  {
+   "en": "they",
+   "t": "ellos"
+  },
+  {
+   "en": "we",
+   "t": "nosotros"
+  },
+  {
+   "en": "your",
+   "t": "tu"
+  },
+  {
+   "en": "her",
+   "t": "su"
+  },
+  {
+   "en": "hers",
+   "t": "suya"
+  },
+  {
+   "en": "him",
+   "t": "él"
+  },
+  {
+   "en": "his",
+   "t": "su"
+  },
+  {
+   "en": "these",
+   "t": "estos"
+  },
+  {
+   "en": "those",
+   "t": "esos"
+  },
+  {
+   "en": "cook",
+   "t": "cocinar"
+  },
+  {
+   "en": "do",
+   "t": "hacer"
+  },
+  {
+   "en": "drive",
+   "t": "manejar"
+  },
+  {
+   "en": "feel",
+   "t": "sentir"
+  },
+  {
+   "en": "find",
+   "t": "encontrar"
+  },
+  {
+   "en": "fix",
+   "t": "arreglar"
+  },
+  {
+   "en": "get",
+   "t": "agarrar"
+  },
+  {
+   "en": "hear",
+   "t": "oír"
+  },
+  {
+   "en": "know",
+   "t": "saber"
+  },
+  {
+   "en": "make",
+   "t": "hacer"
+  },
+  {
+   "en": "remember",
+   "t": "recordar"
+  },
+  {
+   "en": "see",
+   "t": "ver"
+  },
+  {
+   "en": "think",
+   "t": "pensar"
+  },
+  {
+   "en": "try",
+   "t": "intentar"
+  },
+  {
+   "en": "bounce",
+   "t": "rebotar"
+  },
+  {
+   "en": "frown",
+   "t": "fruncir el ceño"
+  },
+  {
+   "en": "pinch",
+   "t": "pellizcar"
+  },
+  {
+   "en": "roll",
+   "t": "rodar"
+  },
+  {
+   "en": "shout",
+   "t": "gritar"
+  },
+  {
+   "en": "squeeze",
+   "t": "apretar"
+  },
+  {
+   "en": "whisper",
+   "t": "susurrar"
+  },
+  {
+   "en": "cut",
+   "t": "cortar"
+  },
+  {
+   "en": "dig",
+   "t": "escarbar"
+  },
+  {
+   "en": "fall_v",
+   "t": "caerse"
+  },
+  {
+   "en": "fly",
+   "t": "mosca"
+  },
+  {
+   "en": "hop",
+   "t": "dar brinquitos"
+  },
+  {
+   "en": "paint",
+   "t": "pintar"
+  },
+  {
+   "en": "pour",
+   "t": "servir"
+  },
+  {
+   "en": "skip",
+   "t": "saltitos"
+  },
+  {
+   "en": "splash",
+   "t": "salpicar"
+  },
+  {
+   "en": "stir",
+   "t": "revolver"
+  },
+  {
+   "en": "adverbs",
+   "t": "adverbios"
+  },
+  {
+   "en": "asking",
+   "t": "preguntas"
+  },
+  {
+   "en": "community",
+   "t": "comunidad"
+  },
+  {
+   "en": "describing",
+   "t": "descripciones"
+  },
+  {
+   "en": "events",
+   "t": "eventos"
+  },
+  {
+   "en": "feelings",
+   "t": "sentimientos"
+  },
+  {
+   "en": "linking",
+   "t": "palabras de enlace"
+  },
+  {
+   "en": "nature",
+   "t": "naturaleza"
+  },
+  {
+   "en": "personalize",
+   "t": "personalizado"
+  },
+  {
+   "en": "places",
+   "t": "lugares"
+  },
+  {
+   "en": "position",
+   "t": "posiciones"
+  },
+  {
+   "en": "pronouns",
+   "t": "pronombres"
+  },
+  {
+   "en": "quantifiers",
+   "t": "cantidades"
+  },
+  {
+   "en": "social",
+   "t": "social"
+  },
+  {
+   "en": "sports",
+   "t": "deportes"
+  },
+  {
+   "en": "therapy",
+   "t": "terapia"
+  },
+  {
+   "en": "therapy team",
+   "t": "equipo de terapia"
+  },
+  {
+   "en": "time",
+   "t": "tiempo"
+  },
+  {
+   "en": "tools",
+   "t": "herramientas"
+  },
+  {
+   "en": "vehicles",
+   "t": "vehículos"
+  },
+  {
+   "en": "air & sea",
+   "t": "aire y mar"
+  },
+  {
+   "en": "bugs",
+   "t": "bichos"
+  },
+  {
+   "en": "character",
+   "t": "carácter"
+  },
+  {
+   "en": "clock",
+   "t": "reloj"
+  },
+  {
+   "en": "condiments",
+   "t": "condimentos"
+  },
+  {
+   "en": "conjunctions",
+   "t": "conjunciones"
+  },
+  {
+   "en": "core descriptors",
+   "t": "descriptores básicos"
+  },
+  {
+   "en": "daily gestalts",
+   "t": "frases diarias"
+  },
+  {
+   "en": "dinosaurs",
+   "t": "dinosaurios"
+  },
+  {
+   "en": "direction",
+   "t": "direcciones"
+  },
+  {
+   "en": "emergency",
+   "t": "emergencia"
+  },
+  {
+   "en": "expressive",
+   "t": "expresivo"
+  },
+  {
+   "en": "extended",
+   "t": "más"
+  },
+  {
+   "en": "family gestalts",
+   "t": "frases de familia"
+  },
+  {
+   "en": "family-authored",
+   "t": "creado por la familia"
+  },
+  {
+   "en": "fruit more",
+   "t": "más frutas"
+  },
+  {
+   "en": "geography",
+   "t": "geografía"
+  },
+  {
+   "en": "gestalts",
+   "t": "frases hechas"
+  },
+  {
+   "en": "helping verbs",
+   "t": "verbos auxiliares"
+  },
+  {
+   "en": "hours",
+   "t": "horas"
+  },
+  {
+   "en": "jungle",
+   "t": "selva"
+  },
+  {
+   "en": "letters",
+   "t": "letras"
+  },
+  {
+   "en": "meals more",
+   "t": "más comidas"
+  },
+  {
+   "en": "mealtime",
+   "t": "hora de comer"
+  },
+  {
+   "en": "media (family-authored)",
+   "t": "medios de la familia"
+  },
+  {
+   "en": "months",
+   "t": "meses"
+  },
+  {
+   "en": "more mammals",
+   "t": "más mamíferos"
+  },
+  {
+   "en": "negation",
+   "t": "negación"
+  },
+  {
+   "en": "opposites",
+   "t": "opuestos"
+  },
+  {
+   "en": "outdoor",
+   "t": "al aire libre"
+  },
+  {
+   "en": "personal",
+   "t": "personal"
+  },
+  {
+   "en": "plants",
+   "t": "plantas"
+  },
+  {
+   "en": "polar",
+   "t": "polar"
+  },
+  {
+   "en": "prepositions",
+   "t": "preposiciones"
+  },
+  {
+   "en": "reptiles & amphibians",
+   "t": "reptiles y anfibios"
+  },
+  {
+   "en": "school (teacher authoring)",
+   "t": "escuela (maestros)"
+  },
+  {
+   "en": "sea",
+   "t": "mar"
+  },
+  {
+   "en": "seasons",
+   "t": "estaciones"
+  },
+  {
+   "en": "shapes",
+   "t": "formas"
+  },
+  {
+   "en": "tech",
+   "t": "tecnología"
+  },
+  {
+   "en": "therapy (clinician authoring)",
+   "t": "terapia (clínicos)"
+  },
+  {
+   "en": "treats",
+   "t": "golosinas"
+  },
+  {
+   "en": "units",
+   "t": "unidades"
+  },
+  {
+   "en": "veg more",
+   "t": "más verduras"
+  },
+  {
+   "en": "work",
+   "t": "de trabajo"
+  },
+  {
+   "en": "workers",
+   "t": "trabajadores"
+  },
+  {
+   "en": "lime",
+   "t": "lima"
+  },
+  {
+   "en": "glue",
+   "section": "verbs",
+   "t": "pegar"
+  },
+  {
+   "en": "fly",
+   "section": "verbs",
+   "t": "volar"
+  },
+  {
+   "en": "pepper",
+   "category": "condiments",
+   "t": "pimienta"
+  },
+  {
+   "en": "lime",
+   "category": "colors",
+   "t": "verde lima"
+  },
+  {
+   "en": "lime",
+   "category": "learning",
+   "t": "verde lima"
+  }
+ ]
 }
