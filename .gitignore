@@ -10,6 +10,8 @@ Sounds/
 !vercel.json
 !capacitor.config.json
 !taxonomy/*.json
+# Bundled board-language dictionaries are source, not build output.
+!api/_lib/i18n/*.json
 # Xcode asset catalogs store image metadata in files named Contents.json — the
 # blanket *.json above was silently dropping them, so new imagesets shipped
 # without their metadata and rendered blank. Always keep these.

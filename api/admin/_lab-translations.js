@@ -26,7 +26,7 @@ const norm = (s) => String(s || '').trim().toLowerCase();
 const LANG_RE = /^[a-z]{2}(-[a-z0-9]{2,8})?$/i;
 
 async function upsert(db, lang, e, status) {
-  const zh = String(e.zh || e.label || '').trim().slice(0, 120);
+  const zh = String(e.t || e.zh || e.translation || e.label || '').trim().slice(0, 120);
   const en = norm(e.en);
   const section = norm(e.section);
   const category = norm(e.category);

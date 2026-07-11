@@ -19,6 +19,10 @@ import { readFileSync } from 'node:fs';
 export const BOARD_LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'zh', label: '中文（简体）· Simplified Chinese' },
+  { code: 'es', label: 'Español · Spanish' },
+  { code: 'fr', label: 'Français · French' },
+  { code: 'pt', label: 'Português (Brasil) · Portuguese' },
+  { code: 'de', label: 'Deutsch · German' },
 ];
 
 const norm = (s) => String(s || '').trim().toLowerCase();

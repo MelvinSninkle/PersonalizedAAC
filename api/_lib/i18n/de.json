@@ -1,0 +1,1798 @@
+{
+ "lang": "de",
+ "name": "Deutsch",
+ "note": "German, toddler caregiver register (Pipi, nochmal, fertig, kuscheln); nouns capitalized. Machine seed for native-speaker review — export the CSV from Lab → Translations.",
+ "entries": [
+  {
+   "en": "yes",
+   "t": "ja"
+  },
+  {
+   "en": "no",
+   "t": "nein"
+  },
+  {
+   "en": "I want",
+   "t": "ich will"
+  },
+  {
+   "en": "I like",
+   "t": "ich mag"
+  },
+  {
+   "en": "I LIKE",
+   "t": "ich mag"
+  },
+  {
+   "en": "I don't like",
+   "t": "ich mag nicht"
+  },
+  {
+   "en": "more",
+   "t": "mehr"
+  },
+  {
+   "en": "all done",
+   "t": "fertig"
+  },
+  {
+   "en": "again",
+   "t": "nochmal"
+  },
+  {
+   "en": "help",
+   "section": "needs",
+   "t": "hilf mir"
+  },
+  {
+   "en": "help",
+   "section": "verbs",
+   "t": "helfen"
+  },
+  {
+   "en": "stop",
+   "t": "stopp"
+  },
+  {
+   "en": "go",
+   "t": "los"
+  },
+  {
+   "en": "wait",
+   "t": "warte"
+  },
+  {
+   "en": "mine",
+   "t": "meins"
+  },
+  {
+   "en": "please",
+   "t": "bitte"
+  },
+  {
+   "en": "thank you",
+   "t": "danke"
+  },
+  {
+   "en": "hi",
+   "t": "hallo"
+  },
+  {
+   "en": "hello",
+   "t": "hallo"
+  },
+  {
+   "en": "bye",
+   "t": "tschüss"
+  },
+  {
+   "en": "goodbye",
+   "t": "tschüss"
+  },
+  {
+   "en": "potty",
+   "t": "Pipi"
+  },
+  {
+   "en": "bathroom",
+   "t": "aufs Klo"
+  },
+  {
+   "en": "eat",
+   "t": "essen"
+  },
+  {
+   "en": "drink",
+   "section": "needs",
+   "t": "trinken"
+  },
+  {
+   "en": "drink",
+   "section": "verbs",
+   "t": "trinken"
+  },
+  {
+   "en": "drink",
+   "section": "nouns",
+   "t": "Getränk"
+  },
+  {
+   "en": "hungry",
+   "t": "ich habe Hunger"
+  },
+  {
+   "en": "thirsty",
+   "t": "ich habe Durst"
+  },
+  {
+   "en": "tired",
+   "t": "müde"
+  },
+  {
+   "en": "sleepy",
+   "t": "schläfrig"
+  },
+  {
+   "en": "hurt",
+   "t": "tut weh"
+  },
+  {
+   "en": "sick",
+   "t": "krank"
+  },
+  {
+   "en": "hot",
+   "t": "heiß"
+  },
+  {
+   "en": "cold",
+   "t": "kalt"
+  },
+  {
+   "en": "hug",
+   "t": "kuscheln"
+  },
+  {
+   "en": "kiss",
+   "t": "Küsschen"
+  },
+  {
+   "en": "give",
+   "section": "needs",
+   "t": "gib mir"
+  },
+  {
+   "en": "give",
+   "section": "verbs",
+   "t": "geben"
+  },
+  {
+   "en": "open",
+   "t": "aufmachen"
+  },
+  {
+   "en": "close",
+   "t": "zumachen"
+  },
+  {
+   "en": "up",
+   "t": "hoch"
+  },
+  {
+   "en": "down",
+   "t": "runter"
+  },
+  {
+   "en": "in",
+   "t": "rein"
+  },
+  {
+   "en": "out",
+   "t": "raus"
+  },
+  {
+   "en": "on",
+   "t": "an"
+  },
+  {
+   "en": "off",
+   "t": "aus"
+  },
+  {
+   "en": "big",
+   "t": "groß"
+  },
+  {
+   "en": "little",
+   "t": "klein"
+  },
+  {
+   "en": "small",
+   "t": "klein"
+  },
+  {
+   "en": "fast",
+   "t": "schnell"
+  },
+  {
+   "en": "slow",
+   "t": "langsam"
+  },
+  {
+   "en": "loud",
+   "t": "laut"
+  },
+  {
+   "en": "quiet",
+   "t": "leise"
+  },
+  {
+   "en": "dirty",
+   "t": "schmutzig"
+  },
+  {
+   "en": "clean",
+   "section": "verbs",
+   "t": "putzen"
+  },
+  {
+   "en": "clean",
+   "t": "sauber"
+  },
+  {
+   "en": "wet",
+   "t": "nass"
+  },
+  {
+   "en": "dry",
+   "t": "trocken"
+  },
+  {
+   "en": "good",
+   "t": "gut"
+  },
+  {
+   "en": "bad",
+   "t": "schlecht"
+  },
+  {
+   "en": "happy",
+   "t": "fröhlich"
+  },
+  {
+   "en": "sad",
+   "t": "traurig"
+  },
+  {
+   "en": "angry",
+   "t": "wütend"
+  },
+  {
+   "en": "mad",
+   "t": "wütend"
+  },
+  {
+   "en": "scared",
+   "t": "ängstlich"
+  },
+  {
+   "en": "surprised",
+   "t": "überrascht"
+  },
+  {
+   "en": "silly",
+   "t": "albern"
+  },
+  {
+   "en": "excited",
+   "t": "aufgeregt"
+  },
+  {
+   "en": "bored",
+   "t": "gelangweilt"
+  },
+  {
+   "en": "shy",
+   "t": "schüchtern"
+  },
+  {
+   "en": "family",
+   "t": "Familie"
+  },
+  {
+   "en": "friends",
+   "t": "Freunde"
+  },
+  {
+   "en": "friend",
+   "t": "Freund"
+  },
+  {
+   "en": "mom",
+   "t": "Mama"
+  },
+  {
+   "en": "mommy",
+   "t": "Mami"
+  },
+  {
+   "en": "mother",
+   "t": "Mama"
+  },
+  {
+   "en": "dad",
+   "t": "Papa"
+  },
+  {
+   "en": "daddy",
+   "t": "Papi"
+  },
+  {
+   "en": "father",
+   "t": "Papa"
+  },
+  {
+   "en": "baby",
+   "t": "Baby"
+  },
+  {
+   "en": "brother",
+   "t": "Bruder"
+  },
+  {
+   "en": "big brother",
+   "t": "großer Bruder"
+  },
+  {
+   "en": "little brother",
+   "t": "kleiner Bruder"
+  },
+  {
+   "en": "sister",
+   "t": "Schwester"
+  },
+  {
+   "en": "big sister",
+   "t": "große Schwester"
+  },
+  {
+   "en": "little sister",
+   "t": "kleine Schwester"
+  },
+  {
+   "en": "grandma",
+   "t": "Oma"
+  },
+  {
+   "en": "grandmother",
+   "t": "Oma"
+  },
+  {
+   "en": "gran",
+   "t": "Oma"
+  },
+  {
+   "en": "granny",
+   "t": "Omi"
+  },
+  {
+   "en": "grandpa",
+   "t": "Opa"
+  },
+  {
+   "en": "grandfather",
+   "t": "Opa"
+  },
+  {
+   "en": "aunt",
+   "t": "Tante"
+  },
+  {
+   "en": "aunty",
+   "t": "Tante"
+  },
+  {
+   "en": "auntie",
+   "t": "Tante"
+  },
+  {
+   "en": "uncle",
+   "t": "Onkel"
+  },
+  {
+   "en": "cousin",
+   "t": "Cousin"
+  },
+  {
+   "en": "teacher",
+   "t": "Lehrerin"
+  },
+  {
+   "en": "doctor",
+   "t": "Arzt"
+  },
+  {
+   "en": "nurse",
+   "t": "Krankenschwester"
+  },
+  {
+   "en": "me",
+   "t": "ich"
+  },
+  {
+   "en": "you",
+   "t": "du"
+  },
+  {
+   "en": "pet",
+   "t": "Haustier"
+  },
+  {
+   "en": "pets",
+   "t": "Haustiere"
+  },
+  {
+   "en": "body",
+   "t": "Körper"
+  },
+  {
+   "en": "arm",
+   "t": "Arm"
+  },
+  {
+   "en": "back",
+   "section": "nouns",
+   "t": "Rücken"
+  },
+  {
+   "en": "cheek",
+   "t": "Wange"
+  },
+  {
+   "en": "chest",
+   "t": "Brust"
+  },
+  {
+   "en": "chin",
+   "t": "Kinn"
+  },
+  {
+   "en": "ear",
+   "t": "Ohr"
+  },
+  {
+   "en": "ears",
+   "t": "Ohren"
+  },
+  {
+   "en": "eye",
+   "t": "Auge"
+  },
+  {
+   "en": "eyes",
+   "t": "Augen"
+  },
+  {
+   "en": "face",
+   "t": "Gesicht"
+  },
+  {
+   "en": "faces",
+   "t": "Gesichter"
+  },
+  {
+   "en": "finger",
+   "t": "Finger"
+  },
+  {
+   "en": "fingers",
+   "t": "Finger"
+  },
+  {
+   "en": "foot",
+   "t": "Fuß"
+  },
+  {
+   "en": "feet",
+   "t": "Füße"
+  },
+  {
+   "en": "hair",
+   "t": "Haare"
+  },
+  {
+   "en": "hand",
+   "t": "Hand"
+  },
+  {
+   "en": "hands",
+   "t": "Hände"
+  },
+  {
+   "en": "head",
+   "t": "Kopf"
+  },
+  {
+   "en": "knee",
+   "t": "Knie"
+  },
+  {
+   "en": "leg",
+   "t": "Bein"
+  },
+  {
+   "en": "legs",
+   "t": "Beine"
+  },
+  {
+   "en": "mouth",
+   "t": "Mund"
+  },
+  {
+   "en": "neck",
+   "t": "Hals"
+  },
+  {
+   "en": "nose",
+   "t": "Nase"
+  },
+  {
+   "en": "shoulder",
+   "t": "Schulter"
+  },
+  {
+   "en": "tummy",
+   "t": "Bauch"
+  },
+  {
+   "en": "stomach",
+   "t": "Bauch"
+  },
+  {
+   "en": "belly",
+   "t": "Bauch"
+  },
+  {
+   "en": "teeth",
+   "t": "Zähne"
+  },
+  {
+   "en": "tooth",
+   "t": "Zahn"
+  },
+  {
+   "en": "toe",
+   "t": "Zeh"
+  },
+  {
+   "en": "toes",
+   "t": "Zehen"
+  },
+  {
+   "en": "tongue",
+   "t": "Zunge"
+  },
+  {
+   "en": "elbow",
+   "t": "Ellbogen"
+  },
+  {
+   "en": "wrist",
+   "t": "Handgelenk"
+  },
+  {
+   "en": "ankle",
+   "t": "Knöchel"
+  },
+  {
+   "en": "joints",
+   "t": "Gelenke"
+  },
+  {
+   "en": "food",
+   "t": "Essen"
+  },
+  {
+   "en": "snacks",
+   "t": "Snacks"
+  },
+  {
+   "en": "snack",
+   "t": "Snack"
+  },
+  {
+   "en": "meals",
+   "t": "Mahlzeiten"
+  },
+  {
+   "en": "meal",
+   "t": "Mahlzeit"
+  },
+  {
+   "en": "breakfast",
+   "t": "Frühstück"
+  },
+  {
+   "en": "lunch",
+   "t": "Mittagessen"
+  },
+  {
+   "en": "dinner",
+   "t": "Abendessen"
+  },
+  {
+   "en": "fruits",
+   "t": "Obst"
+  },
+  {
+   "en": "fruit",
+   "t": "Obst"
+  },
+  {
+   "en": "vegetables",
+   "t": "Gemüse"
+  },
+  {
+   "en": "vegetable",
+   "t": "Gemüse"
+  },
+  {
+   "en": "drinks",
+   "t": "Getränke"
+  },
+  {
+   "en": "apple",
+   "t": "Apfel"
+  },
+  {
+   "en": "banana",
+   "t": "Banane"
+  },
+  {
+   "en": "orange",
+   "category": "colors",
+   "t": "orange"
+  },
+  {
+   "en": "orange",
+   "t": "Orange"
+  },
+  {
+   "en": "grapes",
+   "t": "Trauben"
+  },
+  {
+   "en": "grape",
+   "t": "Traube"
+  },
+  {
+   "en": "strawberry",
+   "t": "Erdbeere"
+  },
+  {
+   "en": "watermelon",
+   "t": "Wassermelone"
+  },
+  {
+   "en": "pear",
+   "t": "Birne"
+  },
+  {
+   "en": "peach",
+   "t": "Pfirsich"
+  },
+  {
+   "en": "mango",
+   "t": "Mango"
+  },
+  {
+   "en": "blueberry",
+   "t": "Blaubeere"
+  },
+  {
+   "en": "blueberries",
+   "t": "Blaubeeren"
+  },
+  {
+   "en": "cookie",
+   "t": "Keks"
+  },
+  {
+   "en": "cookies",
+   "t": "Kekse"
+  },
+  {
+   "en": "crackers",
+   "t": "Cracker"
+  },
+  {
+   "en": "cracker",
+   "t": "Cracker"
+  },
+  {
+   "en": "yogurt",
+   "t": "Joghurt"
+  },
+  {
+   "en": "cheese",
+   "t": "Käse"
+  },
+  {
+   "en": "milk",
+   "t": "Milch"
+  },
+  {
+   "en": "water",
+   "t": "Wasser"
+  },
+  {
+   "en": "juice",
+   "t": "Saft"
+  },
+  {
+   "en": "bread",
+   "t": "Brot"
+  },
+  {
+   "en": "rice",
+   "t": "Reis"
+  },
+  {
+   "en": "noodles",
+   "t": "Nudeln"
+  },
+  {
+   "en": "pasta",
+   "t": "Nudeln"
+  },
+  {
+   "en": "pizza",
+   "t": "Pizza"
+  },
+  {
+   "en": "soup",
+   "t": "Suppe"
+  },
+  {
+   "en": "egg",
+   "t": "Ei"
+  },
+  {
+   "en": "eggs",
+   "t": "Eier"
+  },
+  {
+   "en": "chicken",
+   "category": "food",
+   "t": "Hähnchen"
+  },
+  {
+   "en": "chicken",
+   "t": "Küken"
+  },
+  {
+   "en": "fish",
+   "category": "food",
+   "t": "Fisch"
+  },
+  {
+   "en": "fish",
+   "t": "Fisch"
+  },
+  {
+   "en": "meat",
+   "t": "Fleisch"
+  },
+  {
+   "en": "carrot",
+   "t": "Karotte"
+  },
+  {
+   "en": "carrots",
+   "t": "Karotten"
+  },
+  {
+   "en": "broccoli",
+   "t": "Brokkoli"
+  },
+  {
+   "en": "corn",
+   "t": "Mais"
+  },
+  {
+   "en": "potato",
+   "t": "Kartoffel"
+  },
+  {
+   "en": "tomato",
+   "t": "Tomate"
+  },
+  {
+   "en": "cucumber",
+   "t": "Gurke"
+  },
+  {
+   "en": "cereal",
+   "t": "Müsli"
+  },
+  {
+   "en": "pancake",
+   "t": "Pfannkuchen"
+  },
+  {
+   "en": "pancakes",
+   "t": "Pfannkuchen"
+  },
+  {
+   "en": "sandwich",
+   "t": "Sandwich"
+  },
+  {
+   "en": "ice cream",
+   "t": "Eis"
+  },
+  {
+   "en": "cake",
+   "t": "Kuchen"
+  },
+  {
+   "en": "candy",
+   "t": "Süßigkeiten"
+  },
+  {
+   "en": "chips",
+   "t": "Chips"
+  },
+  {
+   "en": "popcorn",
+   "t": "Popcorn"
+  },
+  {
+   "en": "tacos",
+   "t": "Tacos"
+  },
+  {
+   "en": "taco",
+   "t": "Taco"
+  },
+  {
+   "en": "dumpling",
+   "t": "Knödel"
+  },
+  {
+   "en": "dumplings",
+   "t": "Knödel"
+  },
+  {
+   "en": "animals",
+   "t": "Tiere"
+  },
+  {
+   "en": "animal",
+   "t": "Tier"
+  },
+  {
+   "en": "farm",
+   "t": "Bauernhof"
+  },
+  {
+   "en": "zoo",
+   "t": "Zoo"
+  },
+  {
+   "en": "dog",
+   "t": "Hund"
+  },
+  {
+   "en": "puppy",
+   "t": "Welpe"
+  },
+  {
+   "en": "cat",
+   "t": "Katze"
+  },
+  {
+   "en": "kitten",
+   "t": "Kätzchen"
+  },
+  {
+   "en": "cow",
+   "t": "Kuh"
+  },
+  {
+   "en": "horse",
+   "t": "Pferd"
+  },
+  {
+   "en": "pig",
+   "t": "Schwein"
+  },
+  {
+   "en": "sheep",
+   "t": "Schaf"
+  },
+  {
+   "en": "goat",
+   "t": "Ziege"
+  },
+  {
+   "en": "duck",
+   "t": "Ente"
+  },
+  {
+   "en": "rabbit",
+   "t": "Hase"
+  },
+  {
+   "en": "bunny",
+   "t": "Häschen"
+  },
+  {
+   "en": "bird",
+   "t": "Vogel"
+  },
+  {
+   "en": "mouse",
+   "t": "Maus"
+  },
+  {
+   "en": "lion",
+   "t": "Löwe"
+  },
+  {
+   "en": "tiger",
+   "t": "Tiger"
+  },
+  {
+   "en": "bear",
+   "t": "Bär"
+  },
+  {
+   "en": "elephant",
+   "t": "Elefant"
+  },
+  {
+   "en": "monkey",
+   "t": "Affe"
+  },
+  {
+   "en": "giraffe",
+   "t": "Giraffe"
+  },
+  {
+   "en": "zebra",
+   "t": "Zebra"
+  },
+  {
+   "en": "panda",
+   "t": "Panda"
+  },
+  {
+   "en": "penguin",
+   "t": "Pinguin"
+  },
+  {
+   "en": "frog",
+   "t": "Frosch"
+  },
+  {
+   "en": "turtle",
+   "t": "Schildkröte"
+  },
+  {
+   "en": "snake",
+   "t": "Schlange"
+  },
+  {
+   "en": "butterfly",
+   "t": "Schmetterling"
+  },
+  {
+   "en": "bee",
+   "t": "Biene"
+  },
+  {
+   "en": "spider",
+   "t": "Spinne"
+  },
+  {
+   "en": "ant",
+   "t": "Ameise"
+  },
+  {
+   "en": "dinosaur",
+   "t": "Dino"
+  },
+  {
+   "en": "clothes",
+   "t": "Kleidung"
+  },
+  {
+   "en": "shirt",
+   "t": "Hemd"
+  },
+  {
+   "en": "t-shirt",
+   "t": "T-Shirt"
+  },
+  {
+   "en": "pants",
+   "t": "Hose"
+  },
+  {
+   "en": "shorts",
+   "t": "kurze Hose"
+  },
+  {
+   "en": "dress",
+   "t": "Kleid"
+  },
+  {
+   "en": "skirt",
+   "t": "Rock"
+  },
+  {
+   "en": "socks",
+   "t": "Socken"
+  },
+  {
+   "en": "sock",
+   "t": "Socke"
+  },
+  {
+   "en": "shoes",
+   "t": "Schuhe"
+  },
+  {
+   "en": "shoe",
+   "t": "Schuh"
+  },
+  {
+   "en": "boots",
+   "t": "Stiefel"
+  },
+  {
+   "en": "coat",
+   "t": "Mantel"
+  },
+  {
+   "en": "jacket",
+   "t": "Jacke"
+  },
+  {
+   "en": "hat",
+   "t": "Mütze"
+  },
+  {
+   "en": "gloves",
+   "t": "Handschuhe"
+  },
+  {
+   "en": "mittens",
+   "t": "Fäustlinge"
+  },
+  {
+   "en": "scarf",
+   "t": "Schal"
+  },
+  {
+   "en": "pajamas",
+   "t": "Schlafanzug"
+  },
+  {
+   "en": "diaper",
+   "t": "Windel"
+  },
+  {
+   "en": "underwear",
+   "t": "Unterhose"
+  },
+  {
+   "en": "sweater",
+   "t": "Pullover"
+  },
+  {
+   "en": "home",
+   "t": "Zuhause"
+  },
+  {
+   "en": "house",
+   "t": "Haus"
+  },
+  {
+   "en": "bedroom",
+   "t": "Schlafzimmer"
+  },
+  {
+   "en": "bathroom",
+   "category": "home",
+   "t": "Badezimmer"
+  },
+  {
+   "en": "kitchen",
+   "t": "Küche"
+  },
+  {
+   "en": "living room",
+   "t": "Wohnzimmer"
+  },
+  {
+   "en": "bed",
+   "t": "Bett"
+  },
+  {
+   "en": "chair",
+   "t": "Stuhl"
+  },
+  {
+   "en": "table",
+   "t": "Tisch"
+  },
+  {
+   "en": "sofa",
+   "t": "Sofa"
+  },
+  {
+   "en": "couch",
+   "t": "Sofa"
+  },
+  {
+   "en": "door",
+   "t": "Tür"
+  },
+  {
+   "en": "window",
+   "t": "Fenster"
+  },
+  {
+   "en": "light",
+   "t": "Licht"
+  },
+  {
+   "en": "bathtub",
+   "t": "Badewanne"
+  },
+  {
+   "en": "bath",
+   "t": "baden"
+  },
+  {
+   "en": "shower",
+   "t": "Dusche"
+  },
+  {
+   "en": "toilet",
+   "t": "Klo"
+  },
+  {
+   "en": "sink",
+   "t": "Waschbecken"
+  },
+  {
+   "en": "towel",
+   "t": "Handtuch"
+  },
+  {
+   "en": "soap",
+   "t": "Seife"
+  },
+  {
+   "en": "toothbrush",
+   "t": "Zahnbürste"
+  },
+  {
+   "en": "toothpaste",
+   "t": "Zahnpasta"
+  },
+  {
+   "en": "blanket",
+   "t": "Decke"
+  },
+  {
+   "en": "pillow",
+   "t": "Kissen"
+  },
+  {
+   "en": "cup",
+   "t": "Becher"
+  },
+  {
+   "en": "bowl",
+   "t": "Schüssel"
+  },
+  {
+   "en": "plate",
+   "t": "Teller"
+  },
+  {
+   "en": "spoon",
+   "t": "Löffel"
+  },
+  {
+   "en": "fork",
+   "t": "Gabel"
+  },
+  {
+   "en": "chopsticks",
+   "t": "Essstäbchen"
+  },
+  {
+   "en": "bottle",
+   "t": "Flasche"
+  },
+  {
+   "en": "phone",
+   "t": "Telefon"
+  },
+  {
+   "en": "tv",
+   "t": "Fernseher"
+  },
+  {
+   "en": "television",
+   "t": "Fernseher"
+  },
+  {
+   "en": "toys",
+   "t": "Spielzeug"
+  },
+  {
+   "en": "toy",
+   "t": "Spielzeug"
+  },
+  {
+   "en": "ball",
+   "t": "Ball"
+  },
+  {
+   "en": "blocks",
+   "t": "Bausteine"
+  },
+  {
+   "en": "block",
+   "t": "Baustein"
+  },
+  {
+   "en": "car",
+   "t": "Auto"
+  },
+  {
+   "en": "cars",
+   "t": "Autos"
+  },
+  {
+   "en": "train",
+   "t": "Zug"
+  },
+  {
+   "en": "truck",
+   "t": "Lastwagen"
+  },
+  {
+   "en": "bus",
+   "t": "Bus"
+  },
+  {
+   "en": "airplane",
+   "t": "Flugzeug"
+  },
+  {
+   "en": "plane",
+   "t": "Flugzeug"
+  },
+  {
+   "en": "boat",
+   "t": "Boot"
+  },
+  {
+   "en": "bike",
+   "t": "Fahrrad"
+  },
+  {
+   "en": "bicycle",
+   "t": "Fahrrad"
+  },
+  {
+   "en": "doll",
+   "t": "Puppe"
+  },
+  {
+   "en": "puzzle",
+   "t": "Puzzle"
+  },
+  {
+   "en": "book",
+   "t": "Buch"
+  },
+  {
+   "en": "books",
+   "t": "Bücher"
+  },
+  {
+   "en": "crayon",
+   "t": "Wachsmalstift"
+  },
+  {
+   "en": "crayons",
+   "t": "Wachsmalstifte"
+  },
+  {
+   "en": "bubbles",
+   "t": "Seifenblasen"
+  },
+  {
+   "en": "balloon",
+   "t": "Luftballon"
+  },
+  {
+   "en": "swing",
+   "t": "Schaukel"
+  },
+  {
+   "en": "slide",
+   "t": "Rutsche"
+  },
+  {
+   "en": "teddy bear",
+   "t": "Teddybär"
+  },
+  {
+   "en": "stuffed animal",
+   "t": "Kuscheltier"
+  },
+  {
+   "en": "outside",
+   "t": "draußen"
+  },
+  {
+   "en": "park",
+   "t": "Park"
+  },
+  {
+   "en": "playground",
+   "t": "Spielplatz"
+  },
+  {
+   "en": "school",
+   "t": "Schule"
+  },
+  {
+   "en": "store",
+   "t": "Laden"
+  },
+  {
+   "en": "sun",
+   "t": "Sonne"
+  },
+  {
+   "en": "moon",
+   "t": "Mond"
+  },
+  {
+   "en": "star",
+   "t": "Stern"
+  },
+  {
+   "en": "stars",
+   "t": "Sterne"
+  },
+  {
+   "en": "sky",
+   "t": "Himmel"
+  },
+  {
+   "en": "cloud",
+   "t": "Wolke"
+  },
+  {
+   "en": "rain",
+   "t": "Regen"
+  },
+  {
+   "en": "snow",
+   "t": "Schnee"
+  },
+  {
+   "en": "tree",
+   "t": "Baum"
+  },
+  {
+   "en": "flower",
+   "t": "Blume"
+  },
+  {
+   "en": "flowers",
+   "t": "Blumen"
+  },
+  {
+   "en": "grass",
+   "t": "Gras"
+  },
+  {
+   "en": "rock",
+   "t": "Stein"
+  },
+  {
+   "en": "colors",
+   "t": "Farben"
+  },
+  {
+   "en": "color",
+   "section": "verbs",
+   "t": "ausmalen"
+  },
+  {
+   "en": "color",
+   "t": "Farbe"
+  },
+  {
+   "en": "red",
+   "t": "rot"
+  },
+  {
+   "en": "blue",
+   "t": "blau"
+  },
+  {
+   "en": "yellow",
+   "t": "gelb"
+  },
+  {
+   "en": "green",
+   "t": "grün"
+  },
+  {
+   "en": "purple",
+   "t": "lila"
+  },
+  {
+   "en": "pink",
+   "t": "rosa"
+  },
+  {
+   "en": "black",
+   "t": "schwarz"
+  },
+  {
+   "en": "white",
+   "t": "weiß"
+  },
+  {
+   "en": "brown",
+   "t": "braun"
+  },
+  {
+   "en": "numbers",
+   "t": "Zahlen"
+  },
+  {
+   "en": "one",
+   "t": "eins"
+  },
+  {
+   "en": "two",
+   "t": "zwei"
+  },
+  {
+   "en": "three",
+   "t": "drei"
+  },
+  {
+   "en": "four",
+   "t": "vier"
+  },
+  {
+   "en": "five",
+   "t": "fünf"
+  },
+  {
+   "en": "six",
+   "t": "sechs"
+  },
+  {
+   "en": "seven",
+   "t": "sieben"
+  },
+  {
+   "en": "eight",
+   "t": "acht"
+  },
+  {
+   "en": "nine",
+   "t": "neun"
+  },
+  {
+   "en": "ten",
+   "t": "zehn"
+  },
+  {
+   "en": "actions",
+   "t": "Aktionen"
+  },
+  {
+   "en": "run",
+   "t": "rennen"
+  },
+  {
+   "en": "jump",
+   "t": "springen"
+  },
+  {
+   "en": "walk",
+   "t": "gehen"
+  },
+  {
+   "en": "sit",
+   "t": "sitzen"
+  },
+  {
+   "en": "stand",
+   "t": "stehen"
+  },
+  {
+   "en": "sleep",
+   "t": "schlafen"
+  },
+  {
+   "en": "wake up",
+   "t": "aufwachen"
+  },
+  {
+   "en": "play",
+   "t": "spielen"
+  },
+  {
+   "en": "wash",
+   "t": "waschen"
+  },
+  {
+   "en": "wash hands",
+   "t": "Hände waschen"
+  },
+  {
+   "en": "brush teeth",
+   "t": "Zähne putzen"
+  },
+  {
+   "en": "read",
+   "t": "lesen"
+  },
+  {
+   "en": "sing",
+   "t": "singen"
+  },
+  {
+   "en": "dance",
+   "t": "tanzen"
+  },
+  {
+   "en": "throw",
+   "t": "werfen"
+  },
+  {
+   "en": "catch",
+   "t": "fangen"
+  },
+  {
+   "en": "kick",
+   "t": "kicken"
+  },
+  {
+   "en": "climb",
+   "t": "klettern"
+  },
+  {
+   "en": "swim",
+   "t": "schwimmen"
+  },
+  {
+   "en": "ride",
+   "t": "fahren"
+  },
+  {
+   "en": "draw",
+   "t": "malen"
+  },
+  {
+   "en": "build",
+   "t": "bauen"
+  },
+  {
+   "en": "push",
+   "t": "schieben"
+  },
+  {
+   "en": "pull",
+   "t": "ziehen"
+  },
+  {
+   "en": "take",
+   "t": "nehmen"
+  },
+  {
+   "en": "look",
+   "t": "gucken"
+  },
+  {
+   "en": "watch",
+   "section": "verbs",
+   "t": "schauen"
+  },
+  {
+   "en": "watch",
+   "t": "Uhr"
+  },
+  {
+   "en": "listen",
+   "t": "hören"
+  },
+  {
+   "en": "share",
+   "t": "teilen"
+  },
+  {
+   "en": "cry",
+   "t": "weinen"
+  },
+  {
+   "en": "laugh",
+   "t": "lachen"
+  },
+  {
+   "en": "smile",
+   "t": "lächeln"
+  },
+  {
+   "en": "talk",
+   "t": "reden"
+  },
+  {
+   "en": "say",
+   "t": "sagen"
+  },
+  {
+   "en": "tell",
+   "t": "erzählen"
+  },
+  {
+   "en": "ask",
+   "t": "fragen"
+  },
+  {
+   "en": "answer",
+   "t": "antworten"
+  },
+  {
+   "en": "tickle",
+   "t": "kitzeln"
+  },
+  {
+   "en": "blow",
+   "t": "pusten"
+  },
+  {
+   "en": "clap",
+   "t": "klatschen"
+  },
+  {
+   "en": "wave",
+   "t": "winken"
+  },
+  {
+   "en": "point",
+   "t": "zeigen"
+  },
+  {
+   "en": "hold",
+   "t": "halten"
+  },
+  {
+   "en": "carry",
+   "t": "tragen"
+  },
+  {
+   "en": "put",
+   "t": "hinlegen"
+  },
+  {
+   "en": "put away",
+   "t": "wegräumen"
+  },
+  {
+   "en": "clean up",
+   "t": "aufräumen"
+  },
+  {
+   "en": "turn on",
+   "t": "anmachen"
+  },
+  {
+   "en": "turn off",
+   "t": "ausmachen"
+  },
+  {
+   "en": "come",
+   "t": "komm"
+  },
+  {
+   "en": "come here",
+   "t": "komm her"
+  },
+  {
+   "en": "sit down",
+   "t": "setz dich"
+  },
+  {
+   "en": "get up",
+   "t": "steh auf"
+  },
+  {
+   "en": "fall down",
+   "t": "hingefallen"
+  },
+  {
+   "en": "expressions",
+   "t": "Gefühle"
+  },
+  {
+   "en": "health",
+   "t": "Gesundheit"
+  },
+  {
+   "en": "medicine",
+   "t": "Medizin"
+  },
+  {
+   "en": "band-aid",
+   "t": "Pflaster"
+  },
+  {
+   "en": "bandaid",
+   "t": "Pflaster"
+  },
+  {
+   "en": "holidays",
+   "t": "Feste"
+  },
+  {
+   "en": "birthday",
+   "t": "Geburtstag"
+  },
+  {
+   "en": "party",
+   "t": "Party"
+  },
+  {
+   "en": "present",
+   "t": "Geschenk"
+  },
+  {
+   "en": "gift",
+   "t": "Geschenk"
+  },
+  {
+   "en": "learning",
+   "t": "Lernen"
+  },
+  {
+   "en": "decorating",
+   "t": "Dekorieren"
+  },
+  {
+   "en": "music",
+   "t": "Musik"
+  },
+  {
+   "en": "song",
+   "t": "Lied"
+  },
+  {
+   "en": "core",
+   "t": "Kernwörter"
+  },
+  {
+   "en": "core words",
+   "t": "Kernwörter"
+  }
+ ]
+}
