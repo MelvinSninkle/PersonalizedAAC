@@ -76,7 +76,7 @@ export default async function handler(req, res) {
       for (const r of rows) {
         if (r.role !== 'student' || !r.label) continue;
         if (!byChild.has(r.childId)) byChild.set(r.childId, []);
-        byChild.get(r.childId).push({ label: r.label, section: r.section, occurredAt: r.occurredAt });
+        byChild.get(r.childId).push({ label: r.label, section: r.section, categoryName: r.categoryName, occurredAt: r.occurredAt });
       }
       for (const [cid, taps] of byChild) {
         detectMilestones(db, cid, taps).catch(() => {});
