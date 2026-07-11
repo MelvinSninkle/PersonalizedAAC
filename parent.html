@@ -629,6 +629,12 @@
       <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Sentence constructor
         <input type="checkbox" id="acc-sb">
       </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Sentence tile pick-up
+        <select id="acc-sb-lift" style="padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;">
+          <option value="longpress">Hold, then drag (default — scrolling still works)</option>
+          <option value="drag">Drag right away (eye tracker / mouse)</option>
+        </select>
+      </label>
       <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Sentence bar clears after (minutes)
         <input type="number" id="acc-sb-idle" min="1" max="10" step="1" value="1" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;">
       </label>
@@ -2786,6 +2792,7 @@
     if (accNav) {
       accNav.value = childSettings.navMode === 'buttons' ? 'buttons' : 'scroll';
       document.getElementById('acc-sb').checked = !!childSettings.sentenceBuilder;
+      document.getElementById('acc-sb-lift').value = childSettings.sentenceLift === 'drag' ? 'drag' : 'longpress';
       const idle = parseInt(childSettings.sentenceIdleMin, 10);
       document.getElementById('acc-sb-idle').value = (Number.isFinite(idle) && idle >= 1 && idle <= 10) ? idle : 1;
       document.getElementById('acc-listen-nav').checked = childSettings.listenRepeatNav !== false;
@@ -2794,6 +2801,7 @@
         childSettings = { ...childSettings,
           navMode: accNav.value === 'buttons' ? 'buttons' : 'scroll',
           sentenceBuilder: document.getElementById('acc-sb').checked,
+          sentenceLift: document.getElementById('acc-sb-lift').value === 'drag' ? 'drag' : 'longpress',
           sentenceIdleMin: idleV,
           listenRepeatNav: document.getElementById('acc-listen-nav').checked,
         };

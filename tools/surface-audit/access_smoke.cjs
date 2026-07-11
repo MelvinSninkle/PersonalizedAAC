@@ -16,7 +16,7 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
   ok('hooks exposed', await page.evaluate(() => !!window.__accessHooks));
 
   // ── Feature 1: button navigation ──
-  await page.evaluate(() => window.__accessHooks.applyAccessSettings({ navMode: 'buttons', sentenceBuilder: true, sentenceIdleMin: 2, listenRepeatNav: true }));
+  await page.evaluate(() => window.__accessHooks.applyAccessSettings({ navMode: 'buttons', sentenceBuilder: true, sentenceLift: 'drag', sentenceIdleMin: 2, listenRepeatNav: true }));
   ok('body.nav-buttons-mode', await page.evaluate(() => document.body.classList.contains('nav-buttons-mode')));
   ok('pager bars inserted (10)', await page.evaluate(() => document.querySelectorAll('.pager-bar').length) === 10);
   const overflowing = await page.evaluate(() => document.querySelectorAll('.pager-bar.has-overflow').length);
@@ -77,6 +77,36 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
   await page.waitForTimeout(200);
   ok('chip tap removes + restores header', await page.evaluate(() =>
     !document.body.classList.contains('sentence-active') && document.querySelectorAll('.sentence-chip').length === 0));
+
+  // ── Feature 2b: long-press lift (the default) ──
+  await page.evaluate(() => window.__accessHooks.applyAccessSettings({ sentenceBuilder: true, sentenceLift: 'longpress' }));
+  ok('longpress mode leaves touch-action alone', await page.evaluate(() =>
+    !document.body.classList.contains('sb-lift-drag')));
+  const tile2 = page.locator('.items-grid .tile-wrap').first();
+  const t2 = await tile2.boundingBox();
+  const h2 = await page.locator('header').boundingBox();
+  // quick move without holding must NOT lift (that's a scroll/tap)
+  await page.mouse.move(t2.x + 20, t2.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(t2.x + 20, t2.y - 60);
+  const liftedEarly = await page.evaluate(() => !!document.querySelector('.sb-drag-ghost'));
+  await page.mouse.up();
+  ok('longpress: quick move does not lift', liftedEarly === false);
+  // hold 600ms, then drag to the header → stages
+  await page.mouse.move(t2.x + 20, t2.y + 20);
+  await page.mouse.down();
+  await page.waitForTimeout(600);
+  const liftedAfterHold = await page.evaluate(() => !!document.querySelector('.sb-drag-ghost'));
+  for (let i = 1; i <= 6; i++) {
+    await page.mouse.move(t2.x + 20 + (h2.x + h2.width / 2 - t2.x - 20) * i / 6,
+                          t2.y + 20 + (h2.y + h2.height / 2 - t2.y - 20) * i / 6);
+  }
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  ok('longpress: hold lifts the tile', liftedAfterHold === true);
+  ok('longpress: drop on bar stages a chip', await page.evaluate(() =>
+    document.querySelectorAll('.sentence-chip').length) === 1);
+  await page.evaluate(() => window.__accessHooks.sbClear());
 
   // ── Feature 3: repeat-navigate core ──
   const nav = await page.evaluate(async () => {

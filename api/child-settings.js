@@ -52,7 +52,7 @@ export default async function handler(req, res) {
     // Access experiments (button navigation, sentence constructor, listening
     // repeat-navigate) are ADMIN-only while dark-launched: non-admin saves
     // silently keep the current values, so ordinary settings writes never fail.
-    const ACCESS_KEYS = ['navMode', 'sentenceBuilder', 'sentenceIdleMin', 'listenRepeatNav'];
+    const ACCESS_KEYS = ['navMode', 'sentenceBuilder', 'sentenceIdleMin', 'sentenceLift', 'listenRepeatNav'];
     if (auth.user.role !== 'admin') {
       try {
         const cur = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];

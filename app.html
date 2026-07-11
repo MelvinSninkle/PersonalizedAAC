@@ -586,9 +586,11 @@
     font: 700 16px Fredoka, ui-rounded, system-ui, sans-serif; color: #ad1457;
   }
   header.sb-drop-hot { outline: 4px solid #66bb6a; outline-offset: -4px; }
-  /* While composing, tiles own the touch gesture so a finger-drag can reach
-     the bar (button-nav pairs well with this; see parent settings hint). */
-  body.sb-on:not(.edit-mode) .items-grid .tile-wrap { touch-action: none; }
+  /* Quick-drag lift: tiles own the touch gesture so a finger-drag can reach
+     the bar (pairs well with button-nav). Long-press lift keeps native
+     scrolling — the hold is the claim. */
+  body.sb-on.sb-lift-drag:not(.edit-mode) .items-grid .tile-wrap { touch-action: none; }
+  .tile-wrap.sb-lifting .tile-square { transform: scale(1.06); transition: transform .15s; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
 
   /* Listening repeat-navigate: found-it flash on the tile. */
   .tile-wrap.listen-hit .tile-square {
@@ -6111,15 +6113,17 @@
   // settings are writable only by admins (server-enforced in child-settings);
   // the board simply honors whatever was set for this child.
   // ===========================================================================
-  const ACCESS = { navMode: 'scroll', sentenceBuilder: false, sentenceIdleMin: 1, listenRepeatNav: true };
+  const ACCESS = { navMode: 'scroll', sentenceBuilder: false, sentenceIdleMin: 1, sentenceLift: 'longpress', listenRepeatNav: true };
   function applyAccessSettings(s) {
     ACCESS.navMode = s.navMode === 'buttons' ? 'buttons' : 'scroll';
     ACCESS.sentenceBuilder = !!s.sentenceBuilder;
     const m = parseInt(s.sentenceIdleMin, 10);
     ACCESS.sentenceIdleMin = (Number.isFinite(m) && m >= 1 && m <= 10) ? m : 1;
+    ACCESS.sentenceLift = s.sentenceLift === 'drag' ? 'drag' : 'longpress';
     ACCESS.listenRepeatNav = s.listenRepeatNav !== false;
     document.body.classList.toggle('nav-buttons-mode', ACCESS.navMode === 'buttons');
     document.body.classList.toggle('sb-on', ACCESS.sentenceBuilder);
+    document.body.classList.toggle('sb-lift-drag', ACCESS.sentenceBuilder && ACCESS.sentenceLift === 'drag');
     if (!ACCESS.sentenceBuilder) sbClear();
     updateAllPagers();
   }
@@ -6252,27 +6256,61 @@
   (function wireSentenceDrag() {
     const playBtn = document.getElementById('sentence-play');
     if (playBtn) playBtn.addEventListener('click', sbPlayAll);
-    const LIFT = 22;   // > TAP_TOLERANCE(18): a lift can never double-fire as a tap
+    const LIFT = 22;        // quick-drag: > TAP_TOLERANCE(18) so a lift can never double-fire as a tap
+    const HOLD_MS = 450;    // long-press: hold this long (moving < WIGGLE) to lift
+    const WIGGLE = 10;      // movement during the hold that still counts as holding still
+    function sbLift(d) {
+      d.active = true;
+      const ghost = document.createElement('div');
+      ghost.className = 'sb-drag-ghost';
+      const sq = d.wrap.querySelector('.tile-square');
+      const bg = sq && sq.style.backgroundImage;
+      if (bg) ghost.style.backgroundImage = bg;
+      else ghost.textContent = (d.wrap.querySelector('.tile-label') || {}).textContent || '';
+      document.body.appendChild(ghost);
+      d.ghost = ghost;
+      d.ghost.style.left = (d.lx - 46) + 'px';
+      d.ghost.style.top = (d.ly - 46) + 'px';
+      d.wrap.classList.remove('sb-lifting');
+    }
+    function sbAbortHold(d) {
+      if (d.holdTimer) { clearTimeout(d.holdTimer); d.holdTimer = null; }
+      d.wrap.classList.remove('sb-lifting');
+    }
     document.addEventListener('pointerdown', (e) => {
       if (!ACCESS.sentenceBuilder || editMode) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       const wrap = e.target.closest && e.target.closest('.items-grid .tile-wrap');
       if (!wrap || !wrap.dataset.entityId) return;
-      SB.drag = { wrap, sx: e.clientX, sy: e.clientY, active: false, ghost: null, pid: e.pointerId };
+      const d = { wrap, sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY,
+                  active: false, ghost: null, pid: e.pointerId, holdTimer: null };
+      SB.drag = d;
+      if (ACCESS.sentenceLift === 'longpress') {
+        wrap.classList.add('sb-lifting');
+        d.holdTimer = setTimeout(() => {
+          d.holdTimer = null;
+          if (SB.drag === d && !d.active) sbLift(d);
+        }, HOLD_MS);
+      }
     });
+    // While a long-press lift is active, the finger owns the gesture — block
+    // the browser from starting a scroll mid-drag. (Quick-drag mode does this
+    // statically with touch-action: none.)
+    document.addEventListener('touchmove', (e) => {
+      if (SB.drag && SB.drag.active) e.preventDefault();
+    }, { passive: false });
     document.addEventListener('pointermove', (e) => {
       const d = SB.drag; if (!d || e.pointerId !== d.pid) return;
+      d.lx = e.clientX; d.ly = e.clientY;
       if (!d.active) {
-        if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < LIFT) return;
-        d.active = true;
-        const ghost = document.createElement('div');
-        ghost.className = 'sb-drag-ghost';
-        const sq = d.wrap.querySelector('.tile-square');
-        const bg = sq && sq.style.backgroundImage;
-        if (bg) ghost.style.backgroundImage = bg;
-        else ghost.textContent = (d.wrap.querySelector('.tile-label') || {}).textContent || '';
-        document.body.appendChild(ghost);
-        d.ghost = ghost;
+        const moved = Math.hypot(e.clientX - d.sx, e.clientY - d.sy);
+        if (ACCESS.sentenceLift === 'longpress') {
+          // Moving during the hold means scrolling or tapping, not lifting.
+          if (moved > WIGGLE) { sbAbortHold(d); SB.drag = null; }
+          return;
+        }
+        if (moved < LIFT) return;
+        sbLift(d);
       }
       d.ghost.style.left = (e.clientX - 46) + 'px';
       d.ghost.style.top = (e.clientY - 46) + 'px';
@@ -6282,6 +6320,7 @@
     async function finish(e) {
       const d = SB.drag; if (!d || e.pointerId !== d.pid) return;
       SB.drag = null;
+      sbAbortHold(d);
       const hdr = document.querySelector('header');
       if (hdr) hdr.classList.remove('sb-drop-hot');
       if (d.ghost) d.ghost.remove();
@@ -6297,6 +6336,7 @@
     document.addEventListener('pointerup', finish);
     document.addEventListener('pointercancel', () => {
       const d = SB.drag; SB.drag = null;
+      if (d) sbAbortHold(d);
       if (d && d.ghost) d.ghost.remove();
       const hdr = document.querySelector('header');
       if (hdr) hdr.classList.remove('sb-drop-hot');

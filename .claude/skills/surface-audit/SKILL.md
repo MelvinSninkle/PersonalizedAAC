@@ -258,7 +258,8 @@ boards MUST show a word element because their art renders with no baked text
 it prefers the tile's seeded clip, which is synthesized from the translation.
 
 **E6. Access experiments are admin-only while dark-launched.** The
-`navMode` / `sentenceBuilder` / `sentenceIdleMin` / `listenRepeatNav` keys in
+`navMode` / `sentenceBuilder` / `sentenceIdleMin` / `sentenceLift` /
+`listenRepeatNav` keys in
 child settings are writable ONLY by admins — `api/child-settings.js` restores
 the current values on any non-admin save (same silent-keep pattern as
 language, E1). The board (app.html `applyAccessSettings`) honors whatever is
@@ -269,7 +270,7 @@ here and in the panel reveal — nothing else should need touching. VERIFY:
 grep child-settings.js for ACCESS_KEYS; confirm a parent-role POST cannot
 change them (stub harness: save with role=parent, read back). Runtime: run
 `python3 tools/surface-audit/stub_server.py &` then
-`node tools/surface-audit/access_smoke.js` — 17 checks covering button-nav
+`node tools/surface-audit/access_smoke.cjs` — 17 checks covering button-nav
 paging/alignment, the sentence-bar drag lifecycle, and repeat-navigate
 highlight must ALL PASS.
 
