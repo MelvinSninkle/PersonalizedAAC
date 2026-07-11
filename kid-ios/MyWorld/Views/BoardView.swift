@@ -20,6 +20,8 @@ struct BoardView: View {
     @Environment(Scheduler.self) private var scheduler
     @Environment(AddTileQueue.self) private var addQueue
     @Environment(AutoTeachRunner.self) private var autoTeach
+    @Environment(AccessPrefs.self) private var access
+    @Environment(SentenceBar.self) private var sentence
     @Environment(\.horizontalSizeClass) private var hSize
     @Environment(\.verticalSizeClass) private var vSize
 
@@ -108,6 +110,14 @@ struct BoardView: View {
             }
         }
         .background(Color(hex: "#fff7fb"))
+        // Shared space for the sentence-lift gesture: tiles report drag points
+        // here, and the header drop zone is y ≤ SentenceBar.dropZoneMaxY.
+        .coordinateSpace(name: "board")
+        .overlay {
+            if let d = sentence.drag {
+                SentenceDragGhost(tile: d.tile).position(d.point)
+            }
+        }
         .overlay { emptyBoardOverlay }
         .overlay(alignment: .top) { scheduledPromptOverlay }
         .overlay(alignment: .top) { autoTeachOverlay }
@@ -159,6 +169,7 @@ struct BoardView: View {
         }
         .task {
             prefs.attach(childId: auth.childSlug)
+            access.attach(childId: auth.childSlug)
             await board.refresh(childId: auth.childSlug)
             didInitialLoad = true
             live.start(childId: auth.childSlug)
@@ -178,6 +189,7 @@ struct BoardView: View {
         .refreshable {
             await board.refresh(childId: auth.childSlug)
             scheduler.refreshSchedules()
+            access.refresh()
         }
         .onChange(of: live.latest) { _, cmd in
             guard let cmd else { return }

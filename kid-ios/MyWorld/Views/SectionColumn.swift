@@ -24,9 +24,24 @@ struct SectionColumn: View {
     @Environment(DisplayPrefs.self) private var prefs
     @Environment(AuthManager.self) private var auth
     @Environment(AddTileQueue.self) private var addQueue
-    @State private var selectedCategoryId: Int?
-    @State private var selectedSubcategoryId: Int?
+    @Environment(AccessPrefs.self) private var access
+    @Environment(BoardNav.self) private var nav
+    @Environment(SentenceBar.self) private var sentence
     @State private var openRoom: Category?
+    /// Button-navigation page for the tile grid (strips page themselves).
+    @State private var gridPage = 0
+    @State private var tilesPerPage = 20
+
+    // Selection is HOISTED into BoardNav (it was per-column @State) so
+    // listening repeat-navigate can select a category from the header.
+    private var selectedCategoryId: Int? { nav.category(section) }
+    private var selectedSubcategoryId: Int? { nav.subcategory(section) }
+    private var catBinding: Binding<Int?> {
+        Binding(get: { nav.category(section) }, set: { nav.setCategory(section, $0) })
+    }
+    private var subBinding: Binding<Int?> {
+        Binding(get: { nav.subcategory(section) }, set: { nav.setSubcategory(section, $0) })
+    }
 
     /// Top-level category label at the moment of tap — landed alongside the
     /// event so the analytics Use chart + Top Words grouping work. We resolve
@@ -67,14 +82,16 @@ struct SectionColumn: View {
 
             let cats = board.roots(in: section)
             CategoryTabStrip(categories: cats,
-                             selectedId: noting($selectedCategoryId),
+                             selectedId: noting(catBinding),
                              hideLabels: prefs.hideLabels,
+                             paged: access.buttonsNav && !editMode,
                              onDropTile: chipDropHandler)
 
             if let cat = activeCategory(in: cats), !board.children(of: cat).isEmpty {
                 SubcategoryStrip(subcategories: board.children(of: cat),
-                                 selectedId: noting($selectedSubcategoryId),
+                                 selectedId: noting(subBinding),
                                  hideLabels: prefs.hideLabels,
+                                 paged: access.buttonsNav && !editMode,
                                  onDropTile: chipDropHandler)
             }
 
@@ -84,8 +101,19 @@ struct SectionColumn: View {
         .onAppear { ensureSelection(in: cats) }
         .onChange(of: cats.map(\.id)) { _, _ in ensureSelection(in: cats) }
         .onChange(of: selectedCategoryId) { _, _ in
-            selectedSubcategoryId = nil
+            nav.setSubcategory(section, nil)
             openRoom = nil
+            gridPage = 0
+        }
+        .onChange(of: selectedSubcategoryId) { _, _ in gridPage = 0 }
+        // Listening repeat-navigate landed on a tile in THIS column: jump the
+        // paged grid to its page (scroll mode scrolls inside normalTilesGrid).
+        .onChange(of: nav.highlight) { _, h in
+            guard let h, h.section == section, access.buttonsNav, !editMode else { return }
+            let tiles = effectiveCategory.map { board.tiles(in: $0) } ?? []
+            if let idx = tiles.firstIndex(where: { $0.id == h.tileId }) {
+                gridPage = idx / max(1, tilesPerPage)
+            }
         }
         // Tap a subcategory chip → speak it (only for location chips, matching
         // the user's "click a location subcategory speaks its name" intent).
@@ -122,7 +150,7 @@ struct SectionColumn: View {
 
     private func ensureSelection(in cats: [Category]) {
         if selectedCategoryId == nil || !cats.contains(where: { $0.id == selectedCategoryId }) {
-            selectedCategoryId = cats.first?.id
+            nav.setCategory(section, cats.first?.id)
         }
     }
 
@@ -151,28 +179,95 @@ struct SectionColumn: View {
         }
     }
 
+    /// One grid cell: the tile, the edit-mode drag plumbing, the transient
+    /// listen-navigate highlight, and (when the sentence constructor is on)
+    /// the lift gesture that carries a copy up to the header bar.
+    @ViewBuilder
+    private func tileCell(_ tile: Tile) -> some View {
+        let base = TileView(tile: tile, onTap: { t in playWithLogging(t) },
+                            editMode: editMode, onEdit: onEditTile,
+                            posterMode: effectiveCategory?.isPoster ?? false)
+            .frame(width: tileSize)
+            .overlay {
+                if nav.highlight?.tileId == tile.id {
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(Color(hex: "#ffd400"), lineWidth: 5)
+                        .shadow(color: Color(hex: "#ffd400").opacity(0.6), radius: 8)
+                }
+            }
+            .id(tile.id)
+            // Unlocked-board drag: long-press-drag a tile onto another
+            // tile to reorder, or onto a category/subcategory chip to
+            // move it there. The payload carries the section so a tile
+            // can never cross the People/Nouns/Verbs family boundary.
+            // Only attached while unlocked — the child's long-presses
+            // must never start a drag session.
+            .draggableIf(editMode, "tile|\(section.rawValue)|\(tile.id)")
+            .dropDestination(for: String.self) { items, _ in
+                handleTileDrop(items, onto: tile)
+            }
+        if access.sentenceBuilder && !editMode {
+            if access.sentenceLift == "drag" {
+                base.simultaneousGesture(quickLift(tile))
+            } else {
+                base.simultaneousGesture(longpressLift(tile))
+            }
+        } else {
+            base
+        }
+    }
+
+    // MARK: -- Sentence constructor lift (both pick-up styles; see web parity)
+
+    /// Default: hold ~0.45s to lift, then drag to the bar — normal taps and
+    /// (scroll-mode) panning keep working because the hold is the claim.
+    private func longpressLift(_ tile: Tile) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.45)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("board")))
+            .onChanged { value in
+                if case .second(true, let drag) = value, let drag {
+                    sentence.dragUpdate(tile, at: drag.location)
+                }
+            }
+            .onEnded { value in
+                if case .second(true, let drag) = value, let drag {
+                    if sentence.dragEnd(at: drag.location) { stageTile(tile) }
+                } else {
+                    sentence.dragCancel()
+                }
+            }
+    }
+
+    /// Eye-tracker / mouse rigs: lift on first movement, no hold.
+    private func quickLift(_ tile: Tile) -> some Gesture {
+        DragGesture(minimumDistance: 24, coordinateSpace: .named("board"))
+            .onChanged { sentence.dragUpdate(tile, at: $0.location) }
+            .onEnded { if sentence.dragEnd(at: $0.location) { stageTile(tile) } }
+    }
+
+    /// Staging speaks + logs like a normal tap (milestones see the combo);
+    /// the tile itself stays on the board — the chip is a copy.
+    private func stageTile(_ tile: Tile) {
+        sentence.stage(tile, idleMinutes: access.sentenceIdleMin)
+        playWithLogging(tile)
+    }
+
     private var normalTilesGrid: some View {
         let tiles = effectiveCategory.map { board.tiles(in: $0) } ?? []
         let cols = max(1, prefs.across(section))
         let gridCols = Array(repeating: GridItem(.fixed(tileSize), spacing: BoardMetrics.tileGap),
                              count: cols)
-        return ScrollView {
+        // Button navigation replaces scrolling with whole-page turns: only
+        // full tiles render on a page, so the tile that WOULD have been cut
+        // off is exactly the first tile of the next page.
+        if access.buttonsNav && !editMode {
+            return AnyView(pagedGrid(tiles: tiles, cols: cols, gridCols: gridCols))
+        }
+        return AnyView(ScrollViewReader { proxy in
+            ScrollView {
             LazyVGrid(columns: gridCols, alignment: .leading, spacing: BoardMetrics.tileGap) {
                 ForEach(tiles) { tile in
-                    TileView(tile: tile, onTap: { t in playWithLogging(t) },
-                             editMode: editMode, onEdit: onEditTile,
-                             posterMode: effectiveCategory?.isPoster ?? false)
-                    .frame(width: tileSize)
-                    // Unlocked-board drag: long-press-drag a tile onto another
-                    // tile to reorder, or onto a category/subcategory chip to
-                    // move it there. The payload carries the section so a tile
-                    // can never cross the People/Nouns/Verbs family boundary.
-                    // Only attached while unlocked — the child's long-presses
-                    // must never start a drag session.
-                    .draggableIf(editMode, "tile|\(section.rawValue)|\(tile.id)")
-                    .dropDestination(for: String.self) { items, _ in
-                        handleTileDrop(items, onto: tile)
-                    }
+                    tileCell(tile)
                 }
                 // In-flight adds land WHERE THE + CELL WAS: each rendering job
                 // for this folder shows as a shimmering placeholder in the
@@ -190,8 +285,40 @@ struct SectionColumn: View {
             }
             .padding(.horizontal, BoardMetrics.columnPad)
             .padding(.vertical, 8)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onChange(of: nav.highlight) { _, h in
+                guard let h, h.section == section else { return }
+                withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(h.tileId, anchor: .center) }
+            }
+        })
+    }
+
+    /// Paged grid for button-navigation mode: a whole fresh screen per press.
+    private func pagedGrid(tiles: [Tile], cols: Int, gridCols: [GridItem]) -> some View {
+        GeometryReader { geo in
+            let cellH = tileSize + (prefs.hideLabels ? 0 : 24) + BoardMetrics.tileGap
+            let rows = max(1, Int((geo.size.height - 62) / cellH))
+            let per = max(1, rows * cols)
+            let pageCount = max(1, Int(ceil(Double(tiles.count) / Double(per))))
+            let page = min(gridPage, pageCount - 1)
+            let slice = Array(tiles.dropFirst(page * per).prefix(per))
+            VStack(spacing: 0) {
+                LazyVGrid(columns: gridCols, alignment: .leading, spacing: BoardMetrics.tileGap) {
+                    ForEach(slice) { tile in tileCell(tile) }
+                }
+                .padding(.horizontal, BoardMetrics.columnPad)
+                .padding(.vertical, 8)
+                Spacer(minLength: 0)
+                if pageCount > 1 {
+                    PagerBar(vertical: true, page: page, pageCount: pageCount,
+                             onPrev: { gridPage = max(0, page - 1) },
+                             onNext: { gridPage = min(pageCount - 1, page + 1) })
+                }
+            }
+            .onAppear { tilesPerPage = per }
+            .onChange(of: per) { _, v in tilesPerPage = v }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// Active add-tile jobs headed for the folder on screen right now.

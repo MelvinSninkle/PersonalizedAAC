@@ -1,7 +1,24 @@
 package io.andrewpeterson.myworld.ui.board
 
+import android.graphics.Bitmap
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import io.andrewpeterson.myworld.model.Tile
+import io.andrewpeterson.myworld.model.display
+import io.andrewpeterson.myworld.ui.theme.Brand
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -48,6 +65,9 @@ fun HeaderBar(
     val prefs by c.displayPrefs.data.collectAsState()
     val user by c.auth.user.collectAsState()
     val textColor = hexColor(prefs.colorHeaderText, Color.White)
+    val staged by c.sentenceBar.staged.collectAsState()
+    val sentenceDrag by c.sentenceBar.drag.collectAsState()
+    val sentenceActive = staged.isNotEmpty()
 
     // Hidden gesture: triple-tap the bar opens settings (sign out, cache).
     var taps by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0L to 0) }
@@ -62,11 +82,19 @@ fun HeaderBar(
     // Listening takes over the whole bar: title, lock, teach, play all hide —
     // one red stop button, then the live caption strip (iOS/web parity).
     Box(
-        Modifier.fillMaxWidth().height(if (listening) 104.dp else 48.dp)
+        Modifier.fillMaxWidth().height(if (listening || sentenceActive) 104.dp else 48.dp)
             .background(hexColor(prefs.colorHeaderBg))
+            .then(if (sentenceDrag?.overHeader == true)
+                Modifier.border(4.dp, Color(0xFF66BB6A))
+            else Modifier)
             .combinedClickable(onClick = { noteTap() }, onLongClick = {}),
     ) {
-        if (listening) {
+        if (sentenceActive) {
+            // Sentence constructor: while composing, the strip is the ONLY
+            // header content — title, lock, mic, and pills all yield (the
+            // background color stays). Emptying the strip restores them.
+            SentenceStripRow()
+        } else if (listening) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp).align(Alignment.CenterStart),
                 verticalAlignment = Alignment.CenterVertically,
@@ -127,4 +155,62 @@ private fun HeaderRound(emoji: String, onTap: () -> Unit) {
             .combinedClickable(onClick = onTap, onLongClick = {}),
         contentAlignment = Alignment.Center,
     ) { Text(emoji, fontSize = 19.sp) }
+}
+
+/**
+ * The sentence-constructor strip: staged chips (tap one to take it back out)
+ * and the ▶ that plays the whole sentence in order. Port of the web bar and
+ * iOS SentenceStripView.
+ */
+@Composable
+private fun SentenceStripRow() {
+    val c = LocalAppContainer.current
+    val staged by c.sentenceBar.staged.collectAsState()
+    val access by c.access.data.collectAsState()
+
+    Row(
+        Modifier.fillMaxSize().padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LazyRow(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            itemsIndexed(staged) { idx, tile ->
+                SentenceChipView(tile) { c.sentenceBar.removeAt(idx, access.sentenceIdleMin) }
+                Spacer(Modifier.width(8.dp))
+            }
+        }
+        Box(
+            Modifier.size(60.dp)
+                .background(Color(0xFF2E7D32), CircleShape)
+                .clickable { c.sentenceBar.playAll(c.auth.childSlug, access.sentenceIdleMin) },
+            contentAlignment = Alignment.Center,
+        ) { Text("▶", fontSize = 24.sp, color = Color.White) }
+    }
+}
+
+@Composable
+private fun SentenceChipView(tile: Tile, onRemove: () -> Unit) {
+    val c = LocalAppContainer.current
+    val image by produceState<Bitmap?>(initialValue = null, tile.imageKey) {
+        val key = tile.imageKey
+        value = if (key.isNullOrEmpty()) null else withContext(Dispatchers.Default) {
+            c.media.bitmap(key, maxDim = 320)
+        }
+    }
+    Box(
+        Modifier.size(76.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFFFCE4EC))
+            .clickable(onClick = onRemove),
+        contentAlignment = Alignment.Center,
+    ) {
+        val img = image
+        if (img != null) {
+            Image(img.asImageBitmap(), contentDescription = tile.display,
+                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            Text(tile.display, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                color = Brand.pinkDeep, maxLines = 2,
+                modifier = Modifier.padding(horizontal = 6.dp))
+        }
+    }
 }

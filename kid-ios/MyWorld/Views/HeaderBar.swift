@@ -16,6 +16,7 @@ struct HeaderBar: View {
     @Environment(DeviceMode.self) private var mode
     @Environment(BoardStore.self) private var board
     @Environment(GameController.self) private var game
+    @Environment(SentenceBar.self) private var sentence
 
     @Binding var editMode: Bool
     @Binding var showDisplay: Bool
@@ -33,7 +34,13 @@ struct HeaderBar: View {
         ZStack {
             // Centered content: the branded title, or — while listening — the
             // live one-tile-high strip that takes over the branding spot.
-            if listening {
+            if sentence.active {
+                // Sentence constructor: while composing, the strip is the ONLY
+                // header content — name, globe, and buttons all yield (the
+                // background color stays). Emptying the strip restores them.
+                SentenceStripView()
+                    .padding(.horizontal, 8)
+            } else if listening {
                 ListenStripView(speech: speech)
                     .padding(.horizontal, 66)   // clear the side buttons
             } else {
@@ -46,21 +53,27 @@ struct HeaderBar: View {
                 }
             }
 
-            HStack(spacing: 10) {
-                // While the listening strip owns the header, the lock hides
-                // too — only the stop button remains, with room to breathe,
-                // so the controls never crowd the live tiles.
-                if !listening { lockButton }
-                listenButton
-                    .padding(.trailing, listening ? 6 : 0)
-                Spacer()
-                trailingControls
+            if !sentence.active {
+                HStack(spacing: 10) {
+                    // While the listening strip owns the header, the lock hides
+                    // too — only the stop button remains, with room to breathe,
+                    // so the controls never crowd the live tiles.
+                    if !listening { lockButton }
+                    listenButton
+                        .padding(.trailing, listening ? 6 : 0)
+                    Spacer()
+                    trailingControls
+                }
+                .padding(.horizontal, 12)
             }
-            .padding(.horizontal, 12)
         }
-        .frame(height: listening ? 104 : 48)
+        .frame(height: (listening || sentence.active) ? 104 : 48)
         .animation(.easeInOut(duration: 0.2), value: listening)
+        .animation(.easeInOut(duration: 0.2), value: sentence.active)
         .background(Color(hex: prefs.colorHeaderBg))
+        // Drop-target glow while a lifted tile hovers over the bar.
+        .overlay(Rectangle().stroke(Color(hex: "#66bb6a"),
+                                    lineWidth: sentence.drag?.overHeader == true ? 4 : 0))
         .onTapGesture(count: 3) {
             // Hidden gesture: triple-tap the bar to open settings (sign out,
             // clear cache). Long-press the lock for edit mode.

@@ -54,6 +54,27 @@ fun ListenStripView() {
 
     val tokens = ListenTokenizer.tokenize(words, ListenTokenizer.lexicon(tiles))
     val listState = rememberLazyListState()
+    val access by c.access.data.collectAsState()
+
+    // A word matched twice IN A ROW = "show me": open that tile's category and
+    // flash it (BoardNav drives the section columns). Keyed by the pair's
+    // stable source-word id so re-emitted partials don't re-trigger.
+    var lastNavKey by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+    LaunchedEffect(tokens.size) {
+        if (!access.listenRepeatNav) return@LaunchedEffect
+        for (i in tokens.indices.reversed()) {
+            if (i < 1) break
+            val a = tokens[i].tile ?: continue
+            val b = tokens[i - 1].tile ?: continue
+            if (a.id != b.id) continue
+            val key = "${a.id}@${tokens[i].id}"
+            if (key != lastNavKey) {
+                lastNavKey = key
+                c.boardNav.navigate(a, c.board)
+            }
+            return@LaunchedEffect
+        }
+    }
 
     LaunchedEffect(tokens.size, liveTail) {
         val count = tokens.size + (if (liveTail.isNotEmpty()) 1 else 0)

@@ -108,6 +108,20 @@ final class GameAudio {
         } catch { }
     }
 
+    /// Play a downloaded audio file and suspend until it (roughly) finishes —
+    /// the sentence bar's ▶ chains staged tiles' recorded clips this way.
+    func playFileAwait(_ url: URL) async {
+        do {
+            let p = try AVAudioPlayer(contentsOf: url)
+            p.volume = 1.0
+            p.prepareToPlay()
+            p.play()
+            speakPlayer = p
+            let secs = max(0.3, p.duration) + 0.25
+            try? await Task.sleep(nanoseconds: UInt64(secs * 1_000_000_000))
+        } catch { }
+    }
+
     /// Pick a random cheer phrase and speak it (plays over the music, which the
     /// caller stops a moment later — same as the web's celebration).
     func playCheer(childId: String) {

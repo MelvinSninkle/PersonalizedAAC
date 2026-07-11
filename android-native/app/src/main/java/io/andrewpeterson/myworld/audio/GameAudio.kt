@@ -85,7 +85,7 @@ class GameAudio(
         speakLocalAwait(text)
     }
 
-    private suspend fun playFileAwait(f: File): Boolean =
+    suspend fun playFileAwait(f: File): Boolean =
         withContext(Dispatchers.Main.immediate) {
             suspendCancellableCoroutine { cont ->
                 try {
