@@ -68,6 +68,20 @@ export default async function handler(req, res) {
         VALUES (${r.role}, ${r.itemId}, ${r.section}, ${r.label}, ${r.categoryName}, ${r.subcategoryName}, ${r.clientId}, ${r.childId}, ${r.occurredAt})
       `;
     }
+    // Milestone detection rides the ingestion (fire-and-forget — a detector
+    // hiccup must never fail a tap). Student taps only, grouped per child.
+    try {
+      const { detectMilestones } = await import('./_lib/milestones.js');
+      const byChild = new Map();
+      for (const r of rows) {
+        if (r.role !== 'student' || !r.label) continue;
+        if (!byChild.has(r.childId)) byChild.set(r.childId, []);
+        byChild.get(r.childId).push({ label: r.label, section: r.section, occurredAt: r.occurredAt });
+      }
+      for (const [cid, taps] of byChild) {
+        detectMilestones(db, cid, taps).catch(() => {});
+      }
+    } catch (_) { /* detection is best-effort */ }
     res.status(200).json({ ok: true, count: rows.length });
   } catch (err) {
     res.status(500).json({ error: 'Insert failed', detail: String(err.message || err) });

@@ -217,6 +217,13 @@ class H(http.server.SimpleHTTPRequestHandler):
                                       'personalized': False, 'onBoard': wi == 0})
                 return self.send_json({'tiles': tiles})
             return self.send_json({})
+        if u.path.startswith('/api/milestones'):
+            return self.send_json({'milestones': [
+                {'kind': 'first_combo', 'key': 'first', 'payload': {'phrase': 'more bubbles'}, 'at': '2026-07-10T15:02:00Z'},
+                {'kind': 'chain3', 'key': 'first', 'payload': {'phrase': 'I want cookie'}, 'at': '2026-07-11T09:10:00Z'},
+                {'kind': 'words', 'key': 'words_25', 'payload': {'count': 25}, 'at': '2026-07-09T12:00:00Z'},
+                {'kind': 'combo', 'key': 'combo:eat→banana', 'payload': {'phrase': 'eat banana'}, 'at': '2026-07-11T08:00:00Z'},
+            ]})
         if u.path.startswith('/api/onboarding/voices'):
             return self.send_json({'voices': [
                 {'id': 'sB7vwSCyX0tQmU24cW2C', 'name': 'Jon', 'gender': 'Male', 'accent': 'American'},

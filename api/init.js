@@ -917,6 +917,20 @@ Size: {size}.',
         sort_order  INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (section, label_norm, parent_norm)
       )`;
+    // Communication milestones (first two-word combo, vocabulary marks…) —
+    // detected on /api/events ingestion, deduped by (child, kind, detail_key).
+    await db`
+      CREATE TABLE IF NOT EXISTS milestones (
+        id          BIGSERIAL PRIMARY KEY,
+        child_id    TEXT NOT NULL,
+        kind        TEXT NOT NULL,
+        detail_key  TEXT NOT NULL,
+        payload     JSONB,
+        occurred_at TIMESTAMPTZ NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (child_id, kind, detail_key)
+      )`;
+    await db`CREATE INDEX IF NOT EXISTS milestones_child_idx ON milestones(child_id, occurred_at DESC)`;
     // Emails pre-authorized for a role BEFORE signup (admin Reports page);
     // registration applies + consumes the grant. 'admin' never applies.
     await db`

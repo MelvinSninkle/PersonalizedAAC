@@ -229,6 +229,14 @@ person). Any NEW hit must be a parent/admin edit path, never a translation.
 the shared `applyRoleGrant`, then consumes the row. If a diff adds another
 account-creation path, it must call `applyRoleGrant` too.
 
+**E4. Milestones are observational and unsinkable.** Detection
+(`api/_lib/milestones.js`) runs fire-and-forget on `/api/events` ingestion —
+it may never block or fail a tap insert (verify the events.js hook is wrapped
+and `.catch(() => {})`ed). Dedup is the UNIQUE (child, kind, detail_key)
+constraint, so re-ingestion can't duplicate a "first". Push respects
+`settings.milestonesPush === false` opt-out. `/api/milestones` GET is
+roster-gated like any child endpoint (A1).
+
 ## F. Store & credits integrity
 
 **F1. Ledger is append-only truth.** `credit_ledger` SUM = balance;
