@@ -3,7 +3,10 @@
 import http.server, json, struct, zlib, hashlib, re
 from urllib.parse import urlparse, parse_qs
 
-ROOT = '/home/user/PersonalizedAAC'
+import os
+ROOT = os.environ.get('STUB_ROOT', '/home/user/PersonalizedAAC')
+if not os.path.isdir(ROOT):
+    ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def png_solid(rgb, size=256):
     def chunk(tag, data):
