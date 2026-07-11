@@ -583,9 +583,10 @@
     <audio id="voice-audio" preload="none" style="display:none;"></audio>
   </div>
 
-  <!-- BOARD LANGUAGE — display + audio layer; tile identity stays English -->
-  <div class="section-label">Language</div>
-  <div class="panel" id="lang-panel">
+  <!-- BOARD LANGUAGE — display + audio layer; tile identity stays English.
+       Limited testing: revealed only for role admin / language_tester. -->
+  <div class="section-label lang-tester-only" style="display:none;">Language</div>
+  <div class="panel lang-tester-only" id="lang-panel" style="display:none;">
     <h2>Board language</h2>
     <p class="hint">The words on the tiles and the voice that speaks them. Pictures stay the same. New tiles use it right away; ask us to refresh existing tiles' audio after a change.</p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -1025,6 +1026,9 @@
       if (!r.ok) return;
       const u = (await r.json()).user;
       // Therapist view + invite/team features are day-two — admin only for now.
+      if (u && (u.role === 'admin' || u.role === 'language_tester')) {
+        document.querySelectorAll('.lang-tester-only').forEach(n => { n.style.display = ''; });
+      }
       if (u && u.role === 'admin') {
         const el = document.getElementById('admin-taxonomy'); if (el) el.style.display = '';
         const ts = document.getElementById('therapist-switch'); if (ts) ts.style.display = '';

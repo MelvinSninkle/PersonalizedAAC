@@ -36,9 +36,19 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    if (!['admin', 'parent', 'therapist', 'school_team'].includes(auth.user.role)) { res.status(403).json({ error: 'Not allowed' }); return; }
+    if (!['admin', 'parent', 'therapist', 'school_team', 'language_tester'].includes(auth.user.role)) { res.status(403).json({ error: 'Not allowed' }); return; }
     const b = (typeof req.body === 'object' && req.body) || {};
     const settings = (b.settings && typeof b.settings === 'object') ? b.settings : {};
+    // Board language is in limited testing: only admins and the
+    // language_tester role may CHANGE it. Everyone else's saves silently
+    // keep the current value, so ordinary settings writes never fail.
+    if (!['admin', 'language_tester'].includes(auth.user.role)) {
+      try {
+        const cur = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+        const curLang = (cur && cur.settings && cur.settings.language) || 'en';
+        if ((settings.language || 'en') !== curLang) settings.language = curLang;
+      } catch (_) { delete settings.language; }
+    }
     try {
       await db`
         INSERT INTO child_settings (child_id, settings, updated_at)

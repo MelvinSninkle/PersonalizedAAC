@@ -449,6 +449,7 @@ export async function processSeedJob(db, job, getCtx) {
         // improve. Otherwise it's a related-tile composition reference.
         const isGuidedRetry = !!job.guidance;
         const r = await renderTaxonomyTile({ tax, styleGuide: c.styleGuide, childAnchor: c.childAnchor, settings: c.settings,
+                                             suppressBakedText: !!c.trMap,
                                              referenceImageKeys: (!isGuidedRetry && job.ref_key) ? [job.ref_key] : [],
                                              guidance: job.guidance || '',
                                              priorKey: isGuidedRetry ? job.ref_key : null });

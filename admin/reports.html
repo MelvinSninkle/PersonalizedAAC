@@ -73,6 +73,14 @@
   <div class="panel">
     <div class="head"><h2>Accounts &amp; logins</h2>
       <span class="sub">last login is stamped on every login path (email, Apple, signup)</span>
+      <input type="text" id="role-email" placeholder="email" style="font-size:12px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;width:180px;">
+      <select id="role-pick" style="font-size:12px;padding:4px 6px;">
+        <option value="language_tester">language tester</option>
+        <option value="therapist">therapist</option>
+        <option value="parent">parent (revoke)</option>
+      </select>
+      <button class="csv" id="role-grant" style="margin-left:0;">Grant</button>
+      <span id="role-msg" style="font-size:11px;color:var(--muted);"></span>
       <button class="csv" data-csv="logins">⬇ CSV</button></div>
     <div class="tablewrap"><table id="t-logins"></table></div>
   </div>
@@ -208,6 +216,21 @@
       $('chips').innerHTML = '<div class="chip bad"><b>!</b>' + esc(e.message || e) + '</div>';
     }
   }
+  $('role-grant').addEventListener('click', async () => {
+    const email = $('role-email').value.trim();
+    if (!email) { $('role-msg').textContent = 'enter an email'; return; }
+    $('role-msg').textContent = '…';
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = 'Bearer ' + token;
+      const r = await fetch('/api/admin/lab?action=role', { method: 'POST', credentials: 'same-origin', headers,
+        body: JSON.stringify({ email, role: $('role-pick').value }) });
+      const d = await r.json().catch(() => ({}));
+      $('role-msg').textContent = r.ok ? '✓ ' + d.role : (d.error || 'failed');
+      if (r.ok) load();
+    } catch (e) { $('role-msg').textContent = String(e.message || e); }
+  });
+
   $('days').addEventListener('change', load);
   $('refresh').addEventListener('click', load);
   load();

@@ -203,7 +203,7 @@ function noFaceRule(category) {
 // Render one taxonomy tile. `styleGuide` is the loaded { image, label } (or null),
 // `childAnchor` the loaded { buffer, contentType, name } (or null), `settings`
 // the lab_settings row. Returns { ok, b64?, contentType?, prompt?, costCents?, model?, detail? }.
-export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], worldRefKeys = [], guidance = '', priorKey = null, model = null }) {
+export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], worldRefKeys = [], guidance = '', priorKey = null, model = null, suppressBakedText = false }) {
   const section = String(tax.column_name || '').toLowerCase();
   let content = tax.prompt_template || `A friendly illustration of ${tax.label}.`;
   const mentionsRef = /\{reference\}/i.test(content);
@@ -236,6 +236,14 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
     });
   } else {
     prompt = `Generate a child-friendly illustration. Subject: ${content}. ${styleDescPhrase} ${subject ? '' : noFaceRule(tax.category)}`;
+  }
+  // Non-English boards: never bake the word into the art. Image models
+  // render CJK (and most non-Latin) text unreliably, and the app already
+  // draws the translated label under every tile — clean art is the safe
+  // and correct look. Appended last so it overrides any caption
+  // instruction inside the master prompt.
+  if (suppressBakedText) {
+    prompt += '\n\nIMPORTANT OVERRIDE: render NO text of any kind in the image — no words, letters, captions, or labels. The word is displayed by the app below the picture, not inside it.';
   }
 
   // Ordered images + positional legend (style first, subject second).

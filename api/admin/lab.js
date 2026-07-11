@@ -39,6 +39,7 @@ import publish from './_lab-publish.js';
 import boards from './_lab-boards.js';
 import reports from './_lab-reports.js';
 import translations from './_lab-translations.js';
+import role from './_lab-role.js';
 
 export const config = { maxDuration: 300 };
 
@@ -69,6 +70,7 @@ const HANDLERS = {
   'boards': boards,
   'reports': reports,
   'translations': translations,
+  'role': role,
 };
 
 export default async function handler(req, res) {
