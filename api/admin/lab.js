@@ -40,10 +40,12 @@ import boards from './_lab-boards.js';
 import reports from './_lab-reports.js';
 import translations from './_lab-translations.js';
 import role from './_lab-role.js';
+import demoAudio from './_lab-demo-audio.js';
 
 export const config = { maxDuration: 300 };
 
 const HANDLERS = {
+  'demo-audio': demoAudio,
   'generate': generate,
   'generate-scene': generateScene,
   'batch-generate': batchGenerate,

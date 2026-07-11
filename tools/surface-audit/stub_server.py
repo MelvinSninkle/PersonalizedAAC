@@ -82,6 +82,15 @@ class H(http.server.SimpleHTTPRequestHandler):
             return self.send_json({'step': 'child_photo', 'childId': 'testkid',
                                    'data': {'childName': 'Fletcher', 'birthDate': '2022-03-01',
                                             'seedNextG': 0, 'seededCount': 0}})
+        if u.path.startswith('/api/demo'):
+            tiles = []
+            for sec in ['people', 'nouns', 'verbs', 'needs']:
+                for i in range(8):
+                    tiles.append(dict(label=f'{sec} word {i}', section=sec,
+                                      category='Food' if sec == 'nouns' else ('Family' if sec == 'people' else ''),
+                                      subcategory='', imageKey=f'demo-{sec}-{i}'))
+            return self.send_json({'ok': True, 'tiles': tiles, 'folders': [],
+                                   'voices': [{'id': 'v1', 'name': 'Bella'}]})
         if u.path.startswith('/api/child-settings'):
             return self.send_json({'settings': {'tz': 'America/Denver'}})
         if u.path.startswith('/api/relationships'):

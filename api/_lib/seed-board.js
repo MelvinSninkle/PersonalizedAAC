@@ -536,5 +536,18 @@ export async function seedStatus(db, childId) {
   }
   const remaining = (k) => Math.max(0, k.total - k.done - k.dead);
   const active = remaining(agg.place) + remaining(agg.render) + remaining(agg.voice) + remaining(agg.chip) > 0;
-  return { active, ...agg };
+
+  // The newest finished renders, so onboarding can show each of the child's
+  // words appearing live around the founder letter ("magic gallery").
+  let recentImages = [];
+  try {
+    recentImages = (await db`
+      SELECT sj.image_key AS key, t.label
+      FROM seed_jobs sj LEFT JOIN taxonomy t ON t.id = sj.taxonomy_id
+      WHERE sj.child_id = ${childId} AND sj.kind = 'render'
+        AND sj.status = 'done' AND sj.image_key IS NOT NULL
+      ORDER BY sj.updated_at DESC LIMIT 48`)
+      .map((r) => ({ key: r.key, label: r.label || '' }));
+  } catch (_) { /* gallery is best-effort */ }
+  return { active, recentImages, ...agg };
 }

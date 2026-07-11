@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Try the board · My World — Tap to Talk</title>
+<link rel="icon" href="/icons/myworld-globe.png">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* The PUBLIC practice board — a real, tappable copy of the starter board
+     every family begins with. Strictly read-only: its only server contact is
+     GET /api/demo and GET /api/media for shared-library art/audio. There is
+     no adding, no generating, no logging — nothing a visitor can spend. */
+  :root { --pink:#ff1493; --pink-deep:#ad1457; --line:#f3c6dd; --muted:#6b7280; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:'Fredoka',ui-rounded,system-ui,sans-serif; background:#fff7fb; color:#1f2430; }
+  header { background:var(--pink); color:#fff; padding:10px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  header img { width:26px; height:26px; }
+  header h1 { font-size:18px; margin:0; font-weight:700; }
+  header .spacer { flex:1; }
+  header a.cta { background:#fff; color:var(--pink-deep); text-decoration:none; font-weight:700; padding:8px 16px; border-radius:999px; font-size:14px; }
+  .banner { background:#fce4ec; border-bottom:1px solid var(--line); padding:10px 16px; font-size:14px; color:var(--pink-deep); text-align:center; }
+  .banner b { font-weight:700; }
+  .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:10px 16px; }
+  .voice-chip { border:2px solid var(--line); background:#fff; border-radius:999px; padding:7px 14px; font:inherit; font-size:13px; font-weight:600; color:var(--pink-deep); cursor:pointer; }
+  .voice-chip.active { border-color:var(--pink); background:#fff0f6; }
+  .stats { margin-left:auto; display:flex; gap:14px; font-size:13px; color:var(--muted); }
+  .stats b { color:var(--pink-deep); font-size:16px; }
+  main { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:2px; padding:0 8px 8px; }
+  .col { background:#fff; border-radius:14px; padding:8px; min-height:340px; }
+  .col h2 { font-size:16px; color:var(--pink-deep); margin:4px 8px 6px; }
+  .chips { display:flex; gap:8px; overflow-x:auto; padding:4px 4px 8px; scrollbar-width:none; }
+  .chips::-webkit-scrollbar { display:none; }
+  .chip { flex:0 0 auto; width:62px; cursor:pointer; text-align:center; }
+  .chip .sq { width:62px; height:62px; border-radius:12px; background:#fff center/cover no-repeat; border:1px solid rgba(0,0,0,.08); }
+  .chip.active .sq { border:3px solid var(--pink); }
+  .chip .lb { font-size:10px; font-weight:600; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(86px,1fr)); gap:8px; padding:4px; }
+  .tile { cursor:pointer; }
+  .tile .sq { width:100%; aspect-ratio:1; border-radius:14px; background:#fdf2f8 center/cover no-repeat; border:1px solid rgba(0,0,0,.06); transition:transform .08s; }
+  .tile:active .sq { transform:scale(.94); }
+  .tile .lb { font-size:11px; font-weight:600; text-align:center; margin-top:2px; color:#374151; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .needs { background:#fff7e6; border-radius:14px; margin:2px 8px 12px; padding:8px; }
+  .needs .grid { grid-template-columns:repeat(auto-fill,minmax(74px,1fr)); }
+  .foot { text-align:center; padding:18px; font-size:14px; color:var(--muted); }
+  .foot a { color:var(--pink-deep); font-weight:700; }
+  #loading { text-align:center; padding:60px 20px; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <img src="/icons/myworld-globe.png" alt="">
+  <h1>My World · Try the board</h1>
+  <div class="spacer"></div>
+  <a class="cta" href="/signup.html">Make it your child's →</a>
+</header>
+
+<div class="banner">
+  <b>This is the starter board every family begins with.</b>
+  Your child's board becomes <b>theirs</b> — their people, their foods, pictures of their
+  actual world, in the art style you choose, speaking in the voice you pick.
+</div>
+
+<div class="toolbar">
+  <span style="font-size:13px;color:var(--muted);font-weight:600;">Voice:</span>
+  <div id="voices" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+  <div class="stats" title="On a real board, every tap builds your child's progress charts, word history, and milestone moments.">
+    <span>Taps this visit <b id="st-taps">0</b></span>
+    <span>Different words <b id="st-words">0</b></span>
+  </div>
+</div>
+
+<div id="loading">Loading the board…</div>
+<main id="board" style="display:none;"></main>
+<div class="needs" id="needs" style="display:none;">
+  <h2 style="font-size:15px;color:#92400e;margin:2px 6px 6px;">Needs</h2>
+  <div class="grid" id="needs-grid"></div>
+</div>
+
+<div class="foot">
+  Like what you see? <a href="/signup.html">Create your child's own board</a> —
+  it takes about ten minutes, and the pictures are made just for them.
+</div>
+
+<script>
+(() => {
+  const media = (k) => '/api/media?key=' + encodeURIComponent(k);
+  const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  let DATA = null;
+  let VOICE = '';          // '' = the device's own voice (speechSynthesis)
+  const sel = { people: {}, nouns: {}, verbs: {} };   // per section: {cat, sub}
+  const tapped = new Set();
+  let taps = 0;
+
+  // Local-only stats — a taste of the real product's tracking; nothing posts.
+  function noteTap(label) {
+    taps++; tapped.add(label.toLowerCase());
+    document.getElementById('st-taps').textContent = taps;
+    document.getElementById('st-words').textContent = tapped.size;
+  }
+
+  const audioEl = new Audio();
+  function speak(label) {
+    noteTap(label);
+    if (VOICE) {
+      audioEl.src = media('demo-audio/' + VOICE + '/' + slug(label) + '.mp3');
+      audioEl.currentTime = 0;
+      audioEl.play().catch(() => speakLocal(label));
+      audioEl.onerror = () => speakLocal(label);
+      return;
+    }
+    speakLocal(label);
+  }
+  function speakLocal(label) {
+    try {
+      const u = new SpeechSynthesisUtterance(label);
+      u.rate = 0.95;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+    } catch (_) {}
+  }
+
+  function folderIcon(section, name) {
+    const n = String(name || '').toLowerCase();
+    const f = (DATA.folders || []).find((x) => x.label === n && (!x.section || x.section === section))
+           || (DATA.folders || []).find((x) => x.label === n);
+    return f ? f.imageKey : null;
+  }
+
+  function renderVoices() {
+    const wrap = document.getElementById('voices');
+    wrap.innerHTML = '';
+    const opts = [{ id: '', name: 'Device voice' }, ...(DATA.voices || [])];
+    for (const v of opts) {
+      const b = document.createElement('button');
+      b.className = 'voice-chip' + (VOICE === v.id ? ' active' : '');
+      b.textContent = v.name;
+      b.addEventListener('click', () => { VOICE = v.id; renderVoices(); speak(v.id ? 'Hello! I can be your voice.' : 'Hello!'); });
+      wrap.appendChild(b);
+    }
+  }
+
+  function tilesFor(section) { return DATA.tiles.filter((t) => t.section === section); }
+
+  function renderSection(section, host) {
+    const tiles = tilesFor(section);
+    const cats = [...new Set(tiles.map((t) => t.category).filter(Boolean))];
+    const s = sel[section];
+    if (!s.cat || !cats.includes(s.cat)) s.cat = cats[0] || '';
+    const subs = [...new Set(tiles.filter((t) => t.category === s.cat).map((t) => t.subcategory).filter(Boolean))];
+    if (subs.length && (!s.sub || !subs.includes(s.sub))) s.sub = subs[0];
+    if (!subs.length) s.sub = '';
+
+    host.innerHTML = '<h2>' + section[0].toUpperCase() + section.slice(1) + '</h2>';
+    const mkChips = (names, active, onPick, compact) => {
+      const row = document.createElement('div');
+      row.className = 'chips';
+      for (const name of names) {
+        const c = document.createElement('div');
+        c.className = 'chip' + (name === active ? ' active' : '');
+        const sq = document.createElement('div');
+        sq.className = 'sq';
+        const ik = folderIcon(section, name);
+        if (ik) sq.style.backgroundImage = 'url("' + media(ik) + '")';
+        const lb = document.createElement('div');
+        lb.className = 'lb'; lb.textContent = name;
+        c.appendChild(sq); c.appendChild(lb);
+        c.addEventListener('click', () => { onPick(name); renderSection(section, host); });
+        row.appendChild(c);
+      }
+      return row;
+    };
+    if (cats.length > 1) host.appendChild(mkChips(cats, s.cat, (n) => { s.cat = n; s.sub = ''; }));
+    if (subs.length > 1) host.appendChild(mkChips(subs, s.sub, (n) => { s.sub = n; }, true));
+
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    const shown = tiles.filter((t) => t.category === s.cat && (!s.sub || t.subcategory === s.sub)).slice(0, 60);
+    for (const t of shown) {
+      const el = document.createElement('div');
+      el.className = 'tile';
+      const sq = document.createElement('div');
+      sq.className = 'sq';
+      sq.style.backgroundImage = 'url("' + media(t.imageKey) + '")';
+      const lb = document.createElement('div');
+      lb.className = 'lb'; lb.textContent = t.label;
+      el.appendChild(sq); el.appendChild(lb);
+      el.addEventListener('click', () => speak(t.label));
+      grid.appendChild(el);
+    }
+    host.appendChild(grid);
+  }
+
+  function renderNeeds() {
+    const tiles = tilesFor('needs').slice(0, 24);
+    if (!tiles.length) return;
+    document.getElementById('needs').style.display = '';
+    const grid = document.getElementById('needs-grid');
+    grid.innerHTML = '';
+    for (const t of tiles) {
+      const el = document.createElement('div');
+      el.className = 'tile';
+      const sq = document.createElement('div');
+      sq.className = 'sq';
+      sq.style.backgroundImage = 'url("' + media(t.imageKey) + '")';
+      const lb = document.createElement('div');
+      lb.className = 'lb'; lb.textContent = t.label;
+      el.appendChild(sq); el.appendChild(lb);
+      el.addEventListener('click', () => speak(t.label));
+      grid.appendChild(el);
+    }
+  }
+
+  async function boot() {
+    try {
+      const r = await fetch('/api/demo');
+      DATA = await r.json();
+      if (!DATA || !Array.isArray(DATA.tiles) || !DATA.tiles.length) throw new Error('empty');
+    } catch (_) {
+      document.getElementById('loading').textContent =
+        'The practice board isn’t available right now — but the real thing is. Tap "Make it your child’s" above!';
+      return;
+    }
+    document.getElementById('loading').style.display = 'none';
+    const board = document.getElementById('board');
+    board.style.display = '';
+    renderVoices();
+    for (const section of ['people', 'nouns', 'verbs']) {
+      const col = document.createElement('div');
+      col.className = 'col';
+      board.appendChild(col);
+      renderSection(section, col);
+    }
+    renderNeeds();
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

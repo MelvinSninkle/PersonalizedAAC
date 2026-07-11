@@ -12,17 +12,25 @@ export default async function handler(req, res) {
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
-  const auth = await checkAuth(req);
-  if (!auth.ok) {
-    res.status(auth.status).json({ error: auth.error });
-    return;
-  }
-
   const key = typeof req.query.key === 'string' ? req.query.key : '';
   if (!key) {
     res.status(400).json({ error: 'key required' });
     return;
   }
+
+  // PUBLIC shared-library prefixes — the ONLY unauthenticated media reads.
+  // These hold generic default tile art, folder icons, and the pre-rendered
+  // practice-board audio: effectively marketing material with no child data.
+  // Everything else keeps the full auth + per-child ownership gate below.
+  const PUBLIC_PREFIXES = ['taxonomy-defaults/', 'category-defaults/', 'style-defaults/', 'demo-audio/'];
+  const isPublic = PUBLIC_PREFIXES.some((p) => key.startsWith(p)) && !key.includes('..');
+
+  if (!isPublic) {
+    const auth = await checkAuth(req);
+    if (!auth.ok) {
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
 
   // Ownership: a key found in any child-scoped table is private to those
   // children — the caller must have access to at least one (admins pass).
@@ -51,6 +59,7 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('media ownership check failed:', String(err.message || err));
   }
+  }
 
   let result;
   try {
@@ -66,8 +75,9 @@ export default async function handler(req, res) {
 
   res.setHeader('Content-Type', result.blob.contentType || 'application/octet-stream');
   if (result.blob.size) res.setHeader('Content-Length', result.blob.size);
-  // Private, short-lived browser cache — the bytes are sensitive.
-  res.setHeader('Cache-Control', 'private, max-age=300');
+  // Private, short-lived browser cache — the bytes are sensitive. The public
+  // shared-library prefixes CDN-cache instead (generic art, no child data).
+  res.setHeader('Cache-Control', isPublic ? 'public, s-maxage=86400, max-age=3600' : 'private, max-age=300');
 
   const reader = result.stream.getReader();
   try {

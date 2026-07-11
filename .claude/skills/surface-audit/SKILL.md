@@ -85,6 +85,19 @@ files still gate writes through it.
 test accounts on a deployed preview, fetch a media key belonging to family B
 while authenticated as family A → expect 403. An anonymous fetch → 401.
 
+**A-PUBLIC. The practice board is the ONLY unauthenticated surface.**
+Two deliberate public reads exist: `GET /api/demo` (starter-board projection:
+labels + shared default art keys, nothing child-owned, GET-only) and
+`/api/media` for the `PUBLIC_PREFIXES` whitelist (`taxonomy-defaults/`,
+`category-defaults/`, `style-defaults/`, `demo-audio/`) — generic library
+assets with no child data. VERIFY: (1) the whitelist in api/media.js has
+exactly those four prefixes and every OTHER key still hits checkAuth +
+ownership; (2) api/demo.js selects no child_id / user columns and rejects
+non-GET; (3) practice.html contains no add/edit affordances and calls no
+writing or generating API (its network surface is demo + media only —
+tools/surface-audit runtime check covers this); (4) demo audio is
+PRE-RENDERED via Lab → demo-audio; a public live-TTS route must never exist.
+
 ## B. Voice pipeline (what speaks, in whose voice, on which device)
 
 **B1. The operator's personal cloned voice is unreachable by non-admins.**
