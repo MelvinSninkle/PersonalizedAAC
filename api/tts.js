@@ -91,7 +91,7 @@ export default async function handler(req, res) {
     else {
       try {
         const { voiceSelectable } = await import('./_lib/voices.js');
-        if (await voiceSelectable(sql(), explicitVoice, { isAdmin: false })) { voiceId = explicitVoice; voiceResolved = true; }
+        if (await voiceSelectable(sql(), explicitVoice, { isAdmin: false, role: String((auth.user && auth.user.role) || '') })) { voiceId = explicitVoice; voiceResolved = true; }
       } catch (_) { /* fall through to the child's saved voice */ }
     }
   }

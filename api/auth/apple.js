@@ -136,6 +136,11 @@ export default async function handler(req, res) {
         VALUES (${email}, '', 'parent', ${slug}, ${appleUserId}, NOW())
         RETURNING id, email, role, child_slug`;
       row = inserted[0];
+      // Pre-authorized tester/therapist emails get their role from signup #1.
+      try {
+        const { applyRoleGrant } = await import('../_lib/role-grants.js');
+        row = await applyRoleGrant(db, row);
+      } catch (_) {}
     }
 
     const exp = Date.now() + SESSION_MAX_AGE * 1000;

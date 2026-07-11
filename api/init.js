@@ -917,6 +917,14 @@ Size: {size}.',
         sort_order  INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (section, label_norm, parent_norm)
       )`;
+    // Emails pre-authorized for a role BEFORE signup (admin Reports page);
+    // registration applies + consumes the grant. 'admin' never applies.
+    await db`
+      CREATE TABLE IF NOT EXISTS role_grants (
+        email      TEXT PRIMARY KEY,
+        role       TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
     // Board-content translations (display + audio layer over the canonical
     // English taxonomy; see api/_lib/i18n.js). Keyed by English label with
     // optional section/category narrowing for homonyms.

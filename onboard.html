@@ -97,6 +97,16 @@
     <input id="in-birth" type="date">
     <div style="font-size:11px;color:#666;margin-top:4px;line-height:1.3;">Used to start with vocabulary at the right level — older words stay hidden until they're ready. Never shown publicly.</div>
 
+    <!-- Board language — limited testing: revealed only for admin / language_tester -->
+    <div id="lang-row" style="display:none;">
+      <label style="margin-top:16px;">Board language <span style="font-weight:400;color:#9ca3af;font-size:11px;">(testing)</span></label>
+      <p class="note" style="margin:0 0 8px;">The words on the tiles and the voice that speaks them. Pictures stay the same.</p>
+      <select id="in-lang" style="width:100%;max-width:340px;padding:10px;border:1px solid #f3c6dd;border-radius:10px;font:inherit;">
+        <option value="en">English</option>
+        <option value="zh">中文（简体）· Simplified Chinese</option>
+      </select>
+    </div>
+
     <label style="margin-top:16px;">Is your child a boy or a girl?</label>
     <p class="note" style="margin:0 0 8px;">Used so the board speaks about your child correctly.
       If your family has specific needs beyond this — or you're ever having a hard time getting an
@@ -524,6 +534,15 @@
       refreshContinue();
     } catch (err) { $('style-msg').textContent = 'Upload failed: ' + (err.message || err); }
   });
+  // Board language row: limited testing — revealed for admin / language_tester.
+  (async () => {
+    try {
+      const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null);
+      const role = me && me.user && me.user.role;
+      if (role === 'admin' || role === 'language_tester') document.getElementById('lang-row').style.display = '';
+    } catch (_) {}
+  })();
+
   // Launch support contact — swap for a real support@ alias when one exists.
   const SUPPORT_EMAIL = 'support@myworldtaptotalk.com';
   const supportLink = document.getElementById('support-link');
@@ -550,7 +569,9 @@
     if (!birthDate) { msg.textContent = 'Please enter your child’s birthday.'; $('in-birth').focus(); return; }
     $('style-continue').disabled = true; $('style-msg').textContent = 'Saving…';
     try {
-      await apiJSON('/api/onboarding/child', { name, birthDate, tier: 'under3', styleGuideId: selectedStyle.id, voiceId: selectedVoiceId, favoriteColor, pronoun: selectedPronoun });
+      const langSel = document.getElementById('in-lang');
+      const language = (document.getElementById('lang-row').style.display !== 'none' && langSel) ? langSel.value : 'en';
+      await apiJSON('/api/onboarding/child', { name, birthDate, tier: 'under3', styleGuideId: selectedStyle.id, voiceId: selectedVoiceId, favoriteColor, pronoun: selectedPronoun, language });
       CHILD_NAME = name; applyName();
       await loadRelOptions();
       showPhase('people');
@@ -571,7 +592,7 @@
     let playingFor = null;
     for (const v of voices) {
       const card = document.createElement('div'); card.className = 'style-card'; card.dataset.id = v.id;
-      const meta = [v.gender, v.accent].filter(Boolean).join(' · ');
+      const meta = [v.gender, v.accent, (v.lang && v.lang !== 'en') ? v.lang.toUpperCase() : null].filter(Boolean).join(' · ');
       card.innerHTML =
         '<div class="lbl" style="font-size:14px;">' + v.name + '</div>' +
         (meta ? '<div style="font-size:11px;color:var(--faint);margin-top:2px;">' + meta + '</div>' : '') +

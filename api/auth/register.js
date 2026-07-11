@@ -118,6 +118,11 @@ export default async function handler(req, res) {
         }
       }
       if (!user) { res.status(500).json({ error: 'Could not allocate a board name — please try again.' }); return; }
+      // Pre-authorized tester/therapist emails get their role from signup #1.
+      try {
+        const { applyRoleGrant } = await import('../_lib/role-grants.js');
+        user = await applyRoleGrant(db, user);
+      } catch (_) {}
 
       // Record the consent event (timestamp + policy version) with the account.
       try {

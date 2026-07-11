@@ -38,6 +38,9 @@ export async function ensureVoicesTable(db) {
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
+  // Voice language ('en' default). Non-English voices are visible/selectable
+  // only to admins + language_tester accounts while languages are in testing.
+  await db`ALTER TABLE voices ADD COLUMN IF NOT EXISTS lang TEXT NOT NULL DEFAULT 'en'`;
   // One-time seed from the legacy hardcoded list so existing deployments keep
   // their catalog (and existing children's voiceIds stay selectable).
   const n = await db`SELECT count(*)::int AS n FROM voices`;
@@ -53,23 +56,33 @@ export async function ensureVoicesTable(db) {
 
 /// Active catalog voices in picker order. Falls back to the hardcoded list if
 /// the table is unreachable, so onboarding never loses its voice step.
-export async function listVoices(db, { includeInactive = false } = {}) {
+export async function listVoices(db, { includeInactive = false, allLangs = false } = {}) {
   try {
     await ensureVoicesTable(db);
     const rows = includeInactive
-      ? await db`SELECT id, name, gender, accent, active, sort_order FROM voices ORDER BY sort_order, created_at`
-      : await db`SELECT id, name, gender, accent, active, sort_order FROM voices WHERE active = TRUE ORDER BY sort_order, created_at`;
-    if (rows.length || includeInactive) return rows.map(r => ({ ...r, active: !!r.active }));
+      ? await db`SELECT id, name, gender, accent, active, sort_order, lang FROM voices ORDER BY sort_order, created_at`
+      : await db`SELECT id, name, gender, accent, active, sort_order, lang FROM voices WHERE active = TRUE ORDER BY sort_order, created_at`;
+    if (rows.length || includeInactive) {
+      const out = rows.map(r => ({ ...r, lang: r.lang || 'en', active: !!r.active }));
+      // Non-English voices are in limited testing — hidden from ordinary
+      // accounts so the catalog doesn't advertise untested languages.
+      return allLangs ? out : out.filter(v => v.lang === 'en');
+    }
   } catch (_) { /* fall through */ }
-  return ONBOARDING_VOICES.map((v, i) => ({ ...v, active: true, sort_order: i }));
+  return ONBOARDING_VOICES.map((v, i) => ({ ...v, lang: 'en', active: true, sort_order: i }));
+}
+
+/// May this role see/select non-English voices?
+export function langTester(role) {
+  return role === 'admin' || role === 'language_tester';
 }
 
 /// Async, table-aware selectability: any ACTIVE catalog voice is open to
 /// everyone; anything else (incl. the env admin voice) is admin-only.
-export async function voiceSelectable(db, id, { isAdmin = false } = {}) {
-  if (isAdmin) return true;
+export async function voiceSelectable(db, id, { isAdmin = false, role = '' } = {}) {
+  if (isAdmin || role === 'admin') return true;
   try {
-    const list = await listVoices(db);
+    const list = await listVoices(db, { allLangs: langTester(role) });
     return list.some(v => v.id === id);
   } catch (_) { return isSelectableVoice(id, { isAdmin }); }
 }
