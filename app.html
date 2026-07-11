@@ -5145,9 +5145,11 @@
     // (they're authored easiest-first); description, then a generic question,
     // fill in for tiles without clues.
     if (G.clueQuiz) {
-      const clues = (t.descriptiveClues || []).filter(Boolean);
+      // Clues/descriptions are English taxonomy prose — on a translated
+      // board the prompt is the word itself, in the board's language.
+      const clues = t.displayLabel ? [] : (t.descriptiveClues || []).filter(Boolean);
       const text = clues.length ? clues[Math.min(G.misses || 0, clues.length - 1)]
-                 : (t.description || ('Who or what is the ' + t.label + '?'));
+                 : (t.displayLabel || t.description || ('Who or what is the ' + t.label + '?'));
       const url = await teachAudioURL(text);
       if (url) { const v = gVoice(); v.src = url; v.currentTime = 0; v.play().catch(() => {}); }
       return;
@@ -5276,7 +5278,10 @@
       const it = SLIDE.items[SLIDE.i]; SLIDE.i++;
       const img = document.getElementById('slide-img'), lab = document.getElementById('slide-label');
       const url = await getMediaURL(it.imageKey); if (url && img) img.src = url;
-      if (lab) lab.textContent = SLIDE.labelStyle === 'first_person' ? ('I can see a ' + it.label) : it.label;
+      // Translated boards show the board-language word and skip the English
+      // sentence frame — the frame is English prose, not a translatable label.
+      const word = it.displayLabel || it.label;
+      if (lab) lab.textContent = (SLIDE.labelStyle === 'first_person' && !it.displayLabel) ? ('I can see a ' + it.label) : word;
       if (it.soundKey) { const su = await getMediaURL(it.soundKey); if (su) { const v = gVoice(); v.src = su; v.currentTime = 0; v.play().catch(() => {}); } }
     };
     await showOne();
@@ -5366,10 +5371,14 @@
       // The word first — the tile's recorded audio when it has one, else TTS.
       let wu = null;
       if (it.soundKey) wu = await getMediaURL(it.soundKey);
-      if (!wu) wu = await teachAudioURL(it.label);
+      if (!wu) wu = await teachAudioURL(it.displayLabel || it.label);
+      // Translated boards: the art has no baked caption band, so the word
+      // itself goes in the caption slot for the whole slide.
+      if (it.displayLabel) clueEl.textContent = it.displayLabel;
       if (wu && TEACH.running) await playAwait(wu);
-      // …then every teaching clue, shown while it's spoken.
-      for (const clue of (it.descriptiveClues || [])) {
+      // …then every teaching clue, shown while it's spoken. Clues are English
+      // taxonomy prose — skipped on translated boards.
+      for (const clue of (it.displayLabel ? [] : (it.descriptiveClues || []))) {
         if (!TEACH.running) break;
         clueEl.textContent = clue;
         const cu = await teachAudioURL(clue);

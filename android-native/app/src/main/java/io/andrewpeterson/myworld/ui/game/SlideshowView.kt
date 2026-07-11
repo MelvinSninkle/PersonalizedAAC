@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import io.andrewpeterson.myworld.LocalAppContainer
 import io.andrewpeterson.myworld.game.GameController
 import io.andrewpeterson.myworld.model.Tile
+import io.andrewpeterson.myworld.model.display
 import io.andrewpeterson.myworld.net.tickExposure
 import io.andrewpeterson.myworld.ui.LongPressExitButton
 import io.andrewpeterson.myworld.ui.theme.Brand
@@ -83,7 +84,11 @@ fun SlideshowView(session: GameController.Session, onExit: () -> Unit) {
         val secs = (session.secondsPerImage ?: 5.0).coerceAtLeast(2.0)
         while (true) {
             val tile = deck[pos % deck.size]
-            if (firstPerson) c.gameAudio.speak("I can see a ${tile.label}", c.auth.childSlug)
+            // Translated boards speak the board-language word alone — the
+            // English sentence frame doesn't translate here.
+            if (firstPerson) c.gameAudio.speak(
+                if (tile.displayLabel.isNullOrEmpty()) "I can see a ${tile.label}" else tile.display,
+                c.auth.childSlug)
             else c.tilePlayer.play(tile)
             delay((secs * 1000).toLong())
             pos += 1   // loops forever — the limit timer or hold-✕ ends it
@@ -92,7 +97,7 @@ fun SlideshowView(session: GameController.Session, onExit: () -> Unit) {
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { c.gameAudio.stopMusic() } }
 
     val tile = deck.getOrNull(pos % maxOf(1, deck.size))
-    SlideScaffold(tile = tile, caption = tile?.label, sub = null, progress = null) {
+    SlideScaffold(tile = tile, caption = tile?.display, sub = null, progress = null) {
         tickDominantOnExit(); onExit()
     }
 }
@@ -137,8 +142,9 @@ fun TeachShowView(session: GameController.Session, onExit: () -> Unit) {
             pos = i; clue = ""
             // Let the new image actually be ON SCREEN before the word plays.
             delay(350)
-            c.gameAudio.speakAwait(deck[i].label, childId)
-            for (cl in deck[i].descriptiveClues ?: emptyList()) {
+            c.gameAudio.speakAwait(deck[i].display, childId)
+            // Clues are English taxonomy prose — skipped on translated boards.
+            for (cl in (if (deck[i].displayLabel == null) deck[i].descriptiveClues ?: emptyList() else emptyList())) {
                 clue = cl
                 c.gameAudio.speakAwait(cl, childId)
                 delay(350)
@@ -151,7 +157,9 @@ fun TeachShowView(session: GameController.Session, onExit: () -> Unit) {
     val tile = deck.getOrNull(pos)
     SlideScaffold(
         tile = tile,
-        caption = null,   // the tile art carries its own caption band
+        // English art carries its own caption band; translated art renders
+        // with no baked text, so the board-language word is shown here.
+        caption = tile?.displayLabel,
         sub = clue.takeIf { it.isNotEmpty() },
         progress = if (deck.isNotEmpty()) "${minOf(pos + 1, deck.size)} / ${deck.size}" else null,
     ) { tickDominantOnExit(); onExit() }

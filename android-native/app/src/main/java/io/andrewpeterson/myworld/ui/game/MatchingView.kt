@@ -53,6 +53,7 @@ import io.andrewpeterson.myworld.LocalAppContainer
 import io.andrewpeterson.myworld.game.GameController
 import io.andrewpeterson.myworld.live.LivePayload
 import io.andrewpeterson.myworld.model.Tile
+import io.andrewpeterson.myworld.model.display
 import io.andrewpeterson.myworld.net.GameLogPayload
 import io.andrewpeterson.myworld.net.submitGameLog
 import io.andrewpeterson.myworld.ui.LongPressExitButton
@@ -118,6 +119,9 @@ fun MatchingView(session: GameController.Session, onExit: () -> Unit) {
     )
 
     fun cluePrompt(t: Tile, missCount: Int): String {
+        // Clues/descriptions are English taxonomy prose — translated boards
+        // hear the word itself in the board's language.
+        if (!t.displayLabel.isNullOrEmpty()) return t.display
         val clues = (t.descriptiveClues ?: emptyList()).map { it.trim() }.filter { it.isNotEmpty() }
         if (clues.isNotEmpty()) return clues[minOf(missCount, clues.size - 1)]
         t.description?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
@@ -129,7 +133,8 @@ fun MatchingView(session: GameController.Session, onExit: () -> Unit) {
         when (session.mode) {
             is GameController.Mode.AuditoryComprehension -> {
                 val desc = t.description?.trim()
-                val prompt = if (!desc.isNullOrEmpty()) desc else "Who or what is the ${t.label}?"
+                val prompt = if (!t.displayLabel.isNullOrEmpty()) t.display
+                    else if (!desc.isNullOrEmpty()) desc else "Who or what is the ${t.label}?"
                 c.gameAudio.speak(prompt, c.auth.childSlug)
             }
             is GameController.Mode.ClueQuiz ->

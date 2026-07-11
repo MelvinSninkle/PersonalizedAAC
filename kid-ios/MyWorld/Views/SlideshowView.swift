@@ -33,6 +33,9 @@ struct SlideshowView: View {
     private var current: Tile? { deck.indices.contains(pos) ? deck[pos] : nil }
     private var spokenPhrase: String {
         guard let t = current else { return "" }
+        // Translated boards speak the board-language word alone — the
+        // "I can see a" frame is English prose that doesn't translate here.
+        if let d = t.displayLabel, !d.isEmpty { return d }
         return firstPerson ? "I can see a \(t.label)" : t.label
     }
 
@@ -189,9 +192,16 @@ struct TeachShowView: View {
                     ProgressView().tint(Color(hex: "#ad1457")).frame(height: 300)
                 }
 
+                if let d = current?.displayLabel, !d.isEmpty {
+                    // Translated boards: non-English art renders with no baked
+                    // caption band, so the word must be shown here.
+                    Text(d)
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(hex: "#ad1457"))
+                }
                 if current != nil {
-                    // No separate word label — the tile art carries its own
-                    // caption band; repeating it read as clutter.
+                    // No separate word label (English boards) — the tile art
+                    // carries its own caption band; repeating it read as clutter.
                     // The clue being spoken right now — empty between clues.
                     Text(clue)
                         .font(.system(size: 24, weight: .semibold, design: .rounded))
@@ -256,9 +266,10 @@ struct TeachShowView: View {
             try? await Task.sleep(nanoseconds: 350_000_000)
             if Task.isCancelled { return }
             // The word first…
-            await GameAudio.shared.speakAwait(tile.label, childId: childId)
-            // …then every teaching clue, shown while it's spoken.
-            for c in tile.descriptiveClues ?? [] {
+            await GameAudio.shared.speakAwait(tile.display, childId: childId)
+            // …then every teaching clue, shown while it's spoken. Clues are
+            // English taxonomy prose — skipped on translated boards.
+            for c in (tile.displayLabel == nil ? (tile.descriptiveClues ?? []) : []) {
                 if Task.isCancelled { return }
                 await MainActor.run { clue = c }
                 await GameAudio.shared.speakAwait(c, childId: childId)

@@ -237,6 +237,26 @@ constraint, so re-ingestion can't duplicate a "first". Push respects
 `settings.milestonesPush === false` opt-out. `/api/milestones` GET is
 roster-gated like any child endpoint (A1).
 
+**E5. Game & teaching surfaces render the board's language, not English.**
+Every child-facing surface that SHOWS or SPEAKS a tile word — the passive
+slideshow, "Teach me", matching / clue quiz / auditory comprehension,
+expressive naming reinforcement — must use `displayLabel` (iOS/Android
+`.display`, web `it.displayLabel || it.label`), and must gate off the three
+kinds of English-only prose when `displayLabel` is set: sentence frames
+("I can see a …", "Who or what is the …?"), `descriptive_clues`, and
+`description`. On translated boards the prompt degrades to the word itself
+in the board's language. VERIFY: grep the game views for raw `.label` /
+`${t.label}` / `tile.label` in any string that is spoken or rendered —
+`kid-ios/MyWorld/Views/{Slideshow,Matching,ExpressiveNaming}View.swift`,
+`android-native/.../ui/game/*.kt`, and app.html's SLIDE / TEACH / playPrompt
+blocks. Raw `.label` is CORRECT only in game-log/analytics payloads
+(`GameLogPayload`, `LivePayload`, `recordAttempt`) — logged identity stays
+English forever. Two accepted display quirks: English boards show no separate
+word element (the art's baked caption band carries it), while translated
+boards MUST show a word element because their art renders with no baked text
+(C-section `suppressBakedText`); and `TilePlayer.play(tile)` is always safe —
+it prefers the tile's seeded clip, which is synthesized from the translation.
+
 ## F. Store & credits integrity
 
 **F1. Ledger is append-only truth.** `credit_ledger` SUM = balance;
