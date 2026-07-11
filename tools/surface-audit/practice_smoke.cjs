@@ -9,12 +9,23 @@ const fs = require('fs');
 const EXE = process.env.CHROMIUM_PATH
   || (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
 
+// Prefer the FULL Chromium build: Playwright's default headless is the
+// stripped "headless shell", which broke the board render in CI. channel
+// 'chromium' selects the full build's new headless mode.
+async function launchBrowser() {
+  if (EXE) return chromium.launch({ executablePath: EXE });
+  try { return await chromium.launch({ channel: 'chromium' }); }
+  catch (_) { return chromium.launch(); }
+}
+
+const fails = [];
 (async () => {
-  const browser = await chromium.launch(EXE ? { executablePath: EXE } : {});
+  const browser = await launchBrowser();
   const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
-  const fails = [];
+  fails.length = 0;
   const ok = (n, c) => { console.log((c ? 'PASS ' : 'FAIL ') + n); if (!c) fails.push(n); };
   page.on('pageerror', (e) => fails.push('pageerror: ' + e.message));
+  page.on('console', (m) => { if (m.type() === 'error') console.log('  [console.error]', m.text().slice(0, 300)); });
   const reqs = [];
   page.on('request', (r) => { if (r.url().includes('/api/')) reqs.push(r.url()); });
 
@@ -33,4 +44,8 @@ const EXE = process.env.CHROMIUM_PATH
   await browser.close();
   console.log(fails.length ? 'FAILURES: ' + JSON.stringify(fails) : 'ALL PASS');
   process.exit(fails.length ? 1 : 0);
-})().catch((e) => { console.error('CRASH', e); process.exit(1); });
+})().catch((e) => {
+  console.error('CRASH', e && e.message ? e.message.split('\n')[0] : e);
+  if (fails.length) console.error('collected failures:', JSON.stringify(fails));
+  process.exit(1);
+});
