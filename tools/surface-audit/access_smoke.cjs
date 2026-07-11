@@ -1,7 +1,15 @@
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+// Playwright resolution: plain `playwright` in CI (npm i playwright +
+// npx playwright install chromium); the /opt paths are the Claude Code
+// remote-environment fallbacks.
+let chromium;
+try { ({ chromium } = require('playwright')); }
+catch (_) { ({ chromium } = require('/opt/node22/lib/node_modules/playwright')); }
+const fs = require('fs');
+const EXE = process.env.CHROMIUM_PATH
+  || (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+  const browser = await chromium.launch(EXE ? { executablePath: EXE } : {});
   const page = await browser.newPage({ viewport: { width: 900, height: 620 } });
   const fails = [];
   const ok = (name, cond) => { console.log((cond ? 'PASS' : 'FAIL') + ' ' + name); if (!cond) fails.push(name); };
