@@ -41,10 +41,12 @@ import reports from './_lab-reports.js';
 import translations from './_lab-translations.js';
 import role from './_lab-role.js';
 import demoAudio from './_lab-demo-audio.js';
+import backup from './_lab-backup.js';
 
 export const config = { maxDuration: 300 };
 
 const HANDLERS = {
+  'backup': backup,
   'demo-audio': demoAudio,
   'generate': generate,
   'generate-scene': generateScene,
