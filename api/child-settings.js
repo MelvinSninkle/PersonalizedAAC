@@ -49,6 +49,19 @@ export default async function handler(req, res) {
         if ((settings.language || 'en') !== curLang) settings.language = curLang;
       } catch (_) { delete settings.language; }
     }
+    // Access experiments (button navigation, sentence constructor, listening
+    // repeat-navigate) are ADMIN-only while dark-launched: non-admin saves
+    // silently keep the current values, so ordinary settings writes never fail.
+    const ACCESS_KEYS = ['navMode', 'sentenceBuilder', 'sentenceIdleMin', 'listenRepeatNav'];
+    if (auth.user.role !== 'admin') {
+      try {
+        const cur = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+        const cs = (cur && cur.settings) || {};
+        for (const k of ACCESS_KEYS) {
+          if (cs[k] === undefined) delete settings[k]; else settings[k] = cs[k];
+        }
+      } catch (_) { for (const k of ACCESS_KEYS) delete settings[k]; }
+    }
     try {
       await db`
         INSERT INTO child_settings (child_id, settings, updated_at)

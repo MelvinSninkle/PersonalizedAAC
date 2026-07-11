@@ -612,6 +612,34 @@
     </div>
   </div>
 
+  <div class="section-label admin-access-only" style="display:none;">Access (admin testing)</div>
+  <div class="panel admin-access-only" id="access-panel" style="display:none;">
+    <h2>Access experiments</h2>
+    <p class="hint">Dark-launched accessibility features — admin-only while in testing.
+      Button navigation replaces every scroll with big page-turn buttons (for eye-tracker
+      users). The sentence constructor lets a child drag tiles up to the top bar and play
+      them together; on touch screens it works best combined with button navigation.</p>
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:520px;">
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Board navigation
+        <select id="acc-nav" style="padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;">
+          <option value="scroll">Scroll (default)</option>
+          <option value="buttons">Buttons (eye tracker)</option>
+        </select>
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Sentence constructor
+        <input type="checkbox" id="acc-sb">
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Sentence bar clears after (minutes)
+        <input type="number" id="acc-sb-idle" min="1" max="10" step="1" value="1" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;">
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Listening: saying a word twice jumps to its tile
+        <input type="checkbox" id="acc-listen-nav" checked>
+      </label>
+      <div><button class="btn primary" id="acc-save">Save access settings</button>
+        <span id="acc-msg" class="hint"></span></div>
+    </div>
+  </div>
+
   <!-- ALBUM -->
   <div class="section-label">Picture album</div>
   <div class="panel" id="album-panel">
@@ -1043,6 +1071,7 @@
         document.querySelectorAll('.lang-tester-only').forEach(n => { n.style.display = ''; });
       }
       if (u && u.role === 'admin') {
+        document.querySelectorAll('.admin-access-only').forEach(n => { n.style.display = ''; });
         const el = document.getElementById('admin-taxonomy'); if (el) el.style.display = '';
         const ts = document.getElementById('therapist-switch'); if (ts) ts.style.display = '';
         document.querySelectorAll('.therapist-only').forEach(n => { n.style.display = ''; });
@@ -2749,6 +2778,26 @@
       document.getElementById('lang-save').addEventListener('click', () => {
         childSettings = { ...childSettings, language: langSel.value };
         saveSettingsToServer('Saved ✓ — the board updates on its next sync', 'lang-msg');
+      });
+    }
+
+    // ---- Access experiments (admin dark-launch; server enforces admin-only) ----
+    const accNav = document.getElementById('acc-nav');
+    if (accNav) {
+      accNav.value = childSettings.navMode === 'buttons' ? 'buttons' : 'scroll';
+      document.getElementById('acc-sb').checked = !!childSettings.sentenceBuilder;
+      const idle = parseInt(childSettings.sentenceIdleMin, 10);
+      document.getElementById('acc-sb-idle').value = (Number.isFinite(idle) && idle >= 1 && idle <= 10) ? idle : 1;
+      document.getElementById('acc-listen-nav').checked = childSettings.listenRepeatNav !== false;
+      document.getElementById('acc-save').addEventListener('click', () => {
+        const idleV = Math.min(10, Math.max(1, parseInt(document.getElementById('acc-sb-idle').value, 10) || 1));
+        childSettings = { ...childSettings,
+          navMode: accNav.value === 'buttons' ? 'buttons' : 'scroll',
+          sentenceBuilder: document.getElementById('acc-sb').checked,
+          sentenceIdleMin: idleV,
+          listenRepeatNav: document.getElementById('acc-listen-nav').checked,
+        };
+        saveSettingsToServer('Saved ✓ — the board picks it up on its next settings sync', 'acc-msg');
       });
     }
 
