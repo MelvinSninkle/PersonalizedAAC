@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.andrewpeterson.myworld.LocalAppContainer
 import io.andrewpeterson.myworld.model.Tile
+import io.andrewpeterson.myworld.model.display
 import io.andrewpeterson.myworld.ui.theme.Brand
 import io.andrewpeterson.myworld.ui.theme.hexColor
 import kotlinx.coroutines.Dispatchers
@@ -110,7 +111,7 @@ fun TileView(
                     contentScale = if (posterMode) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
-                tile.imageKey.isNullOrEmpty() -> WordTilePlaceholder(tile.label)
+                tile.imageKey.isNullOrEmpty() -> WordTilePlaceholder(tile.display)
                 else -> Box(Modifier.fillMaxSize())   // image still loading — quiet
             }
             if (editMode) {
@@ -125,7 +126,7 @@ fun TileView(
         }
         if (!hideLabel) {
             Text(
-                tile.label,
+                tile.display,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Brand.ink,

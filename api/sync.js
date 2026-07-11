@@ -86,8 +86,11 @@ export default async function handler(req, res) {
     // below; parents' custom uploads have no set and fall through to generic.
     const normLbl = (v) => String(v || '').trim().toLowerCase();
     let styleTileDefs = new Map(), styleChipDefs = new Map();
+    let boardLang = 'en';
     try {
       const csRow = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+      const langRaw = csRow && csRow.settings && csRow.settings.language;
+      if (typeof langRaw === 'string' && langRaw) boardLang = langRaw;
       const sgId = Number(csRow && csRow.settings && csRow.settings.styleGuideId) || 0;
       if (sgId > 0) {
         const [sd, cd] = await Promise.all([
@@ -202,8 +205,35 @@ export default async function handler(req, res) {
                          styling: member };
     } catch (_) { /* flags are advisory — sync must never fail over them */ }
 
+    // Board language ≠ English → attach displayLabel (never rewrite label:
+    // English stays the identity for shop/style/analytics; clients render
+    // displayLabel when present). Text the family typed in their own language
+    // simply won't match the dictionary and passes through untouched.
+    let langOut = null;
+    if (boardLang !== 'en') {
+      try {
+        const { loadTranslationMap, translate } = await import('./_lib/i18n.js');
+        const trMap = await loadTranslationMap(db, boardLang);
+        if (trMap) {
+          langOut = boardLang;
+          const catById = new Map(cats.map((c) => [c.id, c]));
+          for (const c of cats) {
+            const t = translate(trMap, { label: c.label, section: c.section });
+            if (t) c.display_label = t.label;
+          }
+          for (const i of outItems) {
+            const cat = i.category_id ? catById.get(i.category_id) : null;
+            const t = translate(trMap, { label: i.label, section: i.section,
+                                         category: cat ? cat.label : '' });
+            if (t) i.display_label = t.label;
+          }
+        }
+      } catch (_) { /* translation is best-effort — sync must never fail over it */ }
+    }
+
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
+      language: langOut,
       categories: cats.map(rowToCategory),
       items: outItems.map(rowToItem),
       ageFilter: { applied: !!appliedBand, band: appliedBand, hiddenCount: items.length - outItems.length },

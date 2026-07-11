@@ -31,6 +31,7 @@ import { createHash } from 'node:crypto';
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { loadChildVoiceId, synthesizeVoice } from '../_lib/onboarding-render.js';
+import { childLanguage, loadTranslationMap, translate } from '../_lib/i18n.js';
 
 export const config = { maxDuration: 300 };
 
@@ -116,9 +117,17 @@ async function pushSounds(db, childId) {
   const mid = process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
 
   const rows = await db`
-    SELECT i.id, i.sound_key, t.label, t.pronunciation
+    SELECT i.id, i.sound_key, i.section, t.label, t.pronunciation, t.category
     FROM items i JOIN taxonomy t ON t.id = i.taxonomy_slug
     WHERE i.child_id = ${childId}`;
+  // Non-English board → push clips in ITS language. This is also how an
+  // existing board gets re-voiced after its language changes: flip the
+  // language, push sounds.
+  let trMap = null;
+  try {
+    const lang = await childLanguage(db, childId);
+    if (lang !== 'en') trMap = await loadTranslationMap(db, lang);
+  } catch (_) {}
   // Replace only seeded clips + empty slots; a parent's own recording (any
   // other key) is theirs and never overwritten.
   const seeded = (k) => !k || (String(k).startsWith('onboarding/') && String(k).includes('/voice/'));
@@ -127,7 +136,11 @@ async function pushSounds(db, childId) {
   let already = 0;
   for (const r of rows) {
     if (!seeded(r.sound_key)) continue;
-    const text = String(r.pronunciation || r.label || '').trim().slice(0, 300);
+    let text = String(r.pronunciation || r.label || '').trim().slice(0, 300);
+    if (trMap) {
+      const t = translate(trMap, { label: r.label, section: r.section, category: r.category || '' });
+      if (t) text = String(t.pronunciation || t.label).trim().slice(0, 300);
+    }
     if (!text) continue;
     const stamp = createHash('sha256').update(`${mid}|${vid}|default|${text}`).digest('hex').slice(0, 16);
     const soundKey = `onboarding/${childId}/voice/tts-${stamp}.mp3`;

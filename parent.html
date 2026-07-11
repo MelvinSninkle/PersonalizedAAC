@@ -583,6 +583,21 @@
     <audio id="voice-audio" preload="none" style="display:none;"></audio>
   </div>
 
+  <!-- BOARD LANGUAGE — display + audio layer; tile identity stays English -->
+  <div class="section-label">Language</div>
+  <div class="panel" id="lang-panel">
+    <h2>Board language</h2>
+    <p class="hint">The words on the tiles and the voice that speaks them. Pictures stay the same. New tiles use it right away; ask us to refresh existing tiles' audio after a change.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <select id="lang-pick" style="flex:1;min-width:200px;max-width:340px;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;">
+        <option value="en">English</option>
+        <option value="zh">中文（简体）· Simplified Chinese</option>
+      </select>
+      <button class="btn primary" id="lang-save">Save language</button>
+      <span id="lang-msg" style="font-size:13px;color:var(--muted);"></span>
+    </div>
+  </div>
+
   <!-- ALBUM -->
   <div class="section-label">Picture album</div>
   <div class="panel" id="album-panel">
@@ -2679,6 +2694,18 @@
         saveSettingsToServer('Voice saved ✓ — new tiles use it right away', 'voice-msg');
       });
     })();
+
+    // ---- Board language (childSettings.language → sync displayLabel + seeded audio) ----
+    const langSel = document.getElementById('lang-pick');
+    if (langSel) {
+      if (childSettings.language && [...langSel.options].some((o) => o.value === childSettings.language)) {
+        langSel.value = childSettings.language;
+      }
+      document.getElementById('lang-save').addEventListener('click', () => {
+        childSettings = { ...childSettings, language: langSel.value };
+        saveSettingsToServer('Saved ✓ — the board updates on its next sync', 'lang-msg');
+      });
+    }
 
     document.getElementById('banner-save').addEventListener('click', () => {
       const hex = bannerColorEl.value;

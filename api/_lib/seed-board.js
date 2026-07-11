@@ -21,6 +21,7 @@ import { randomUUID } from 'node:crypto';
 import { loadStyleGuide, loadChildAnchor, loadChildStyleGuideId, renderTaxonomyTile,
          loadChildVoiceId, synthesizeVoice, isDefaultableTile } from './onboarding-render.js';
 import { archivePriorImage } from './image-history.js';
+import { childLanguage, loadTranslationMap, translate } from './i18n.js';
 
 export const MAX_SEED_ATTEMPTS = 3;
 
@@ -354,6 +355,17 @@ async function jobFailed(db, id, err) {
              error = ${String(err && (err.message || err)).slice(0, 500)}, updated_at = NOW() WHERE id = ${id}`;
 }
 
+// What a seeded tile SAYS: the translated word for non-English boards
+// (pronunciation override first), else the English pronunciation/label.
+function spokenTextFor(c, tax) {
+  if (c.trMap) {
+    const t = translate(c.trMap, { label: tax.label,
+      section: String(tax.column_name || '').toLowerCase(), category: tax.category || '' });
+    if (t) return t.pronunciation || t.label;
+  }
+  return tax.pronunciation || tax.label;
+}
+
 // Per-child context (style guide, anchor, settings, voice) cached across the
 // jobs of one drain pass so 20 renders don't re-read the same blobs 20 times.
 export function makeSeedContext(db) {
@@ -371,8 +383,15 @@ export function makeSeedContext(db) {
     ]);
     let styleGuide = null;
     try { styleGuide = await loadStyleGuide(db, styleGuideId); } catch (_) { styleGuide = null; }
+    // Non-English board → clips must SPEAK the child's language (display is
+    // handled live by /api/sync, but audio is baked per item at seed time).
+    let trMap = null;
+    try {
+      const lang = await childLanguage(db, childId);
+      if (lang !== 'en') trMap = await loadTranslationMap(db, lang);
+    } catch (_) { /* translation is best-effort */ }
     const out = {
-      styleGuide, childAnchor, voiceId,
+      styleGuide, childAnchor, voiceId, trMap,
       ownerEmail: (ownerRows[0] && ownerRows[0].email) || null,
       settings: settingsRows[0] || { master_prompt: '', size_default: '1024x1024' },
     };
@@ -462,7 +481,7 @@ export async function processSeedJob(db, job, getCtx) {
         } catch (_) {}
       }
       if (!item.sound_key) {
-        const mp3 = await synthesizeVoice({ text: tax.pronunciation || tax.label, voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
+        const mp3 = await synthesizeVoice({ text: spokenTextFor(c, tax), voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
         if (mp3) {
           const soundKey = `onboarding/${job.child_id}/voice/${randomUUID()}.mp3`;
           await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });
@@ -476,7 +495,7 @@ export async function processSeedJob(db, job, getCtx) {
 
     if (job.kind === 'voice') {
       if (!item.sound_key) {
-        const mp3 = await synthesizeVoice({ text: tax.pronunciation || tax.label, voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
+        const mp3 = await synthesizeVoice({ text: spokenTextFor(c, tax), voiceId: c.voiceId, db, childId: job.child_id, kind: 'seed' });
         if (mp3) {
           const soundKey = `onboarding/${job.child_id}/voice/${randomUUID()}.mp3`;
           await put(soundKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });

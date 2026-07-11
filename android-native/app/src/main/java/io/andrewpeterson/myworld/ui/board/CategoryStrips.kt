@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.andrewpeterson.myworld.LocalAppContainer
 import io.andrewpeterson.myworld.model.Category
+import io.andrewpeterson.myworld.model.display
 import io.andrewpeterson.myworld.ui.theme.Brand
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -131,7 +132,7 @@ fun CategoryChip(
             }
         }
         if (!compact && !hideLabel) {
-            Text(category.label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+            Text(category.display, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                 color = Brand.ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.width(side))
         }

@@ -917,6 +917,21 @@ Size: {size}.',
         sort_order  INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (section, label_norm, parent_norm)
       )`;
+    // Board-content translations (display + audio layer over the canonical
+    // English taxonomy; see api/_lib/i18n.js). Keyed by English label with
+    // optional section/category narrowing for homonyms.
+    await db`
+      CREATE TABLE IF NOT EXISTS label_translations (
+        lang          TEXT NOT NULL,
+        section       TEXT NOT NULL DEFAULT '',
+        category_norm TEXT NOT NULL DEFAULT '',
+        label_norm    TEXT NOT NULL,
+        label         TEXT NOT NULL,
+        pronunciation TEXT,
+        status        TEXT NOT NULL DEFAULT 'machine',
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (lang, section, category_norm, label_norm)
+      )`;
     // Board heartbeat: the last time each board pulled /api/sync (admin
     // reports' "is this device in sync" signal). One row per board.
     await db`

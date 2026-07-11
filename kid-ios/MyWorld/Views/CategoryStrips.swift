@@ -97,7 +97,7 @@ struct CategoryChip: View {
                 )
 
                 if !compact && !hideLabel {
-                    Text(category.label)
+                    Text(category.display)
                         .font(.system(size: 11, weight: .semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)

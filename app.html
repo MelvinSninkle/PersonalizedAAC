@@ -2295,7 +2295,7 @@
       const isActive = cat.id === topAncestorId;
       const tile = makeTile({
         kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: false,
-        label: cat.label, isCategory: true, isActive, forgivingTap: !editMode,
+        label: cat.displayLabel || cat.label, isCategory: true, isActive, forgivingTap: !editMode,
         onClick: () => { activeCategoryId[section] = cat.id; notePlayScope('cat:' + cat.id); renderSection(section); },
         onEdit: () => openCatModal(section, cat),
       });
@@ -2423,7 +2423,7 @@
     items.filter(i => i.categoryId === activeId).forEach(it => {
       const tile = makeTile({
         kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: tvPoster,
-        label: it.label, pinned: it.pinned, forgivingTap: !editMode,
+        label: it.displayLabel || it.label, pinned: it.pinned, forgivingTap: !editMode,
         onClick: () => {
           if (editMode) { openItemModal(section, activeId, it); return; }
           tapSpeak(it, tapCategoryName, tapSubcategoryName);
@@ -2534,7 +2534,7 @@
     items.forEach(it => {
       const tile = makeTile({
         kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: false,
-        label: it.label, pinned: false, forgivingTap: !editMode,
+        label: it.displayLabel || it.label, pinned: false, forgivingTap: !editMode,
         onClick: () => {
           if (editMode) { openItemModal('needs', null, it); return; }
           tapSpeak(it, null, null);   // needs items have no category path
@@ -2883,6 +2883,7 @@
       for (const c of (data.categories || [])) {
         catsStore.put({
           id: c.id, section: c.section, label: c.label,
+          displayLabel: c.displayLabel || null,   // translated board language (display + speech)
           parentId: c.parentId, order: c.order,
           imageKey: c.imageKey, keepAspect: !!c.keepAspect,
           kind: c.kind || null,
@@ -2891,6 +2892,7 @@
       for (const it of (data.items || [])) {
         itemsStore.put({
           id: it.id, section: it.section, categoryId: it.categoryId, label: it.label,
+          displayLabel: it.displayLabel || null,
           order: it.order, pinned: !!it.pinned,
           imageKey: it.imageKey, soundKey: it.soundKey, keepAspect: !!it.keepAspect,
           description: it.description || null,                    // PRD §5 auditory-comp prompt
