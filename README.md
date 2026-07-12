@@ -65,6 +65,18 @@ The recent feature waves, in the rough order they shipped:
 - **Style everywhere, cheaply** — per-image styled tracking (`items.styled_style_id` / `styled_at`) makes personalization idempotent: *Personalize all* and the per-folder **✨ Style** batch skip already-styled art (and re-eligibility after a style change is staleness-aware), folder chips render in the child's style, and every tile editor has a one-tap **✨ Match my child's style**.
 - **System defaults coverage** — `admin/defaults.html` gallery with a *Push from reference* backfill so a brand-new board always has complete default headers, chips, and tile art before any personalization spend.
 
+### Latest wave (2026-07) — languages, access features, safety & the public board
+
+- **Board languages** (en / zh / es / fr / pt / de) — full-taxonomy dictionaries (~1,436 entries each, `api/_lib/i18n/`) applied as a **display + audio layer** at `/api/sync` (`displayLabel`; English `label` stays the permanent identity). Games and slideshows render the board's language and gate off English-only prose (clues, sentence frames) on translated boards; non-English art renders with **no baked text**. Tester-gated (`language_tester` role) while in dark launch; seeded/managed via Lab → Translations.
+- **Access features, all three platforms** (admin dark-launch, parent dashboard → Access): **button navigation** replaces every scroll with whole-page paddle turns (eye-tracker / switch rigs; the tile that would be cut off becomes page N+1's first tile); the **sentence constructor** (long-press-lift by default or quick-drag, parent-set idle clear 1–10 min) stages tiles into the header **silently** — ▶ speaks the sentence, ✕ clears it, staging still logs so milestones see combinations; **listening repeat-navigate** — a word heard twice in a row makes the board open that tile's category and flash it yellow.
+- **Touch controls** (parent-set, Board → Touch & safety): **taps interrupt** (default OFF — a child stimming on one button hears each word complete) and **double-tap teach** (same tile twice within 2.5s speaks its three teaching facts).
+- **Safety controls** (synced child settings, same panel; honored web + iOS + Android): **quick-tap close** (game ✕ without the 1.2s child-proofing hold) and **password-free unlock** for older capable kids — enabling shows a strong warning and re-verifies the account password once; disabling is friction-free. The parent dashboard's Board tab reorganized into **themed accordions** (Words & look / Voice & language / Touch & safety / Access / Album / Organize).
+- **Honest game scoring** — sessions with fewer than 3 answers are recorded (annotated "too short to score") but excluded from weekly accuracy and spike baselines; ended-early games no longer count non-clicks as misses.
+- **Curated default art without prompts** — 📤 direct upload on every defaults-view tile card writes the shared default layer only (generic or per-style); sync overlays defaults onto every *replaceable* tile, and family-personalized art is never touched. The tile editor shows **Previous pictures** (from `item_image_history`) with tap-to-revert; reverts archive the current image first.
+- **Public practice board** (`/practice`) — the starter board as a zero-auth, zero-spend demo: pre-rendered demo audio (Lab `demo-audio` builder), voice chips, localStorage-only stats, media whitelisted to the four shared prefixes; its entire server surface is two GETs. Landing page links it ("Try the board live").
+- **Magic onboarding** — the board-build wait is now a personal letter from Andrew with the child's freshly rendered tiles fading in around it as seed jobs complete (`seedStatus.recentImages`).
+- **CI + nightly backups + docs** — `.github/workflows/ci.yml` (syntax gates, i18n coverage, surface-audit invariant greps, two Playwright smoke suites against a stdlib stub server) and `backup.yml` (nightly pg_dump artifact); `docs/OWNERS-MANUAL.md` + six runbooks.
+
 ---
 
 ## The views
@@ -113,6 +125,10 @@ The visible surface for Fletcher:
   - Section colors (per main section + Needs)
   - **Header bar background + text colors**
   - **Default view for this device**
+  - **Buttons & safety** — the one exception to per-device: quick-tap ✕ and
+    password-free unlock are SYNCED child settings (read-merge-write against
+    `/api/child-settings`); enabling password-free unlock re-verifies the
+    account password behind a strong warning.
 - Header layout: 🔒 lock (left) — MyWorld globe icon + "Fletcher's World" — 🙋 Play with me (right). All flank the title in one centered group. In **edit mode** the edit-only buttons appear on a second row below the title for a clean two-row header.
 
 ### Game / slideshow runtime
@@ -160,6 +176,7 @@ The control surface for Andrew:
   - **✎ on any tile / category / subcategory** opens the **full Add/Edit modal** in edit mode: change label, swap the image (regenerate from a new photo, or upload), regenerate the voice with a tweaked phrase, toggle Pin-to-top, flip keep-aspect, or delete. **+ tile / + Category / + subcategory** open the same modal in add mode. The voice section hides for categories. Add and Edit are the same surface on both the kid board and the parent organizer.
 - **Review new tiles** — when a bulk photo import (from the iOS app or web) finishes, a panel at the top of the dashboard surfaces the AI-named tiles (art + a play-the-voice button + editable name / pronunciation) to confirm, rename, or remove. See *Making tiles from photos*.
 - **Reference images for AI tile generation** — uploaded photos used as style/subject references for `/api/generate-image`.
+- **Board tab: themed accordions** — the settings panels are grouped into collapsed `<details>` accordions (📚 Words & look · 🔊 Voice & language · ✋ Touch & safety · 🧪 Access experiments (admin) · 🖼 Picture album · 🗂 Organize & people). Touch & safety hosts the tap-interrupt / double-tap-teach toggles and the Safety panel (quick-tap ✕, password-free unlock with the password-confirmed enable flow).
 - **Backup** — download a JSON of the entire board with images/audio base64-embedded.
 - **Admin-only**: a `🧬 Taxonomy` link in the top-right opens the workbench at `/admin/taxonomy.html`. Surfaced only when `/api/auth/me` returns role `admin`; other parents never see it.
 
