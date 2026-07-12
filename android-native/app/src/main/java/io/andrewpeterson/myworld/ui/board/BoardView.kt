@@ -163,7 +163,14 @@ fun BoardView() {
         HeaderBar(
             editMode = editMode,
             onLockTap = { if (editMode) editMode = false },
-            onLockLongPress = { if (!editMode) showUnlock = true },
+            onLockLongPress = {
+                if (!editMode) {
+                    // Password-free unlock (synced safety setting): the parent
+                    // proved ownership with their password when enabling it.
+                    if (io.andrewpeterson.myworld.access.TouchConfig.easyUnlock) editMode = true
+                    else showUnlock = true
+                }
+            },
             onTripleTap = { showSettings = true },
             onShowDisplay = { showDisplay = true },
             onTeachTap = { startTeachShow() },

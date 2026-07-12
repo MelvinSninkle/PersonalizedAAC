@@ -1481,6 +1481,7 @@
       <option value="therapist" id="opt-therapist-view">Therapist view</option>
     </select>
     <label style="margin-top:18px;">Buttons &amp; safety</label>
+    <div style="font-size:12px;color:#666;margin:4px 0 2px;">Unlike the settings above, these follow the child — they apply on every device this board is used on.</div>
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-easy-close">
       <label for="disp-easy-close">Close buttons work with a quick tap
@@ -1717,13 +1718,6 @@
   // Per-device display preferences (not synced — screen sizes differ).
   const DISPLAY_DEFAULTS = {
     hideLabels: false,
-    // Buttons & safety (per device, like everything else here):
-    //   easyClose  — game ✕ closes on a quick tap instead of the 1.2s hold.
-    //   easyUnlock — the lock opens edit mode without re-entering the account
-    //                password. Enabling it requires the password ONCE (plus a
-    //                strong warning) so only the account owner can waive it.
-    easyClose: false,
-    easyUnlock: false,
     sectionVisible: { people: true, nouns: true, verbs: true, needs: true },
     // 'needs' has no own tilesAcross — it's computed as the sum of the visible main sections.
     tilesAcross: { people: 2, nouns: 5, verbs: 2 },
@@ -1767,8 +1761,6 @@
       const raw = JSON.parse(localStorage.getItem(DISPLAY_KEY) || '{}');
       display = {
         hideLabels: !!raw.hideLabels,
-        easyClose: !!raw.easyClose,
-        easyUnlock: !!raw.easyUnlock,
         sectionVisible: {
           people: raw.sectionVisible?.people !== false,
           nouns:  raw.sectionVisible?.nouns  !== false,
@@ -2692,6 +2684,14 @@
   //   doubleTapTeach — the SAME tile tapped again within the window plays its
   //                    teaching facts (descriptive clues, up to three).
   const TOUCH = { interrupt: false, doubleTapTeach: false };
+  // Safety controls — SYNCED child settings (they're facts about the child,
+  // not the device): a capable kid gets quick-tap ✕ and password-free unlock
+  // on every screen he uses. Parent-writable; set from the parent dashboard
+  // (Board → Touch & safety) or this board's Display modal.
+  //   easyClose  — game ✕ closes on a quick tap instead of the 1.2s hold.
+  //   easyUnlock — the lock opens edit mode without the account password.
+  //                Enabling requires the password ONCE plus a strong warning.
+  const SAFETY = { easyClose: false, easyUnlock: false };
   const DOUBLE_TAP_WINDOW_MS = 2500;
   let _lastTapItemId = null, _lastTapItemAt = 0;
 
@@ -2853,9 +2853,9 @@
       setTimeout(() => { if (!editMode) ms.textContent = ''; }, 2500);
       return;
     }
-    // Password-free unlock (Display → Buttons & safety): the account owner
+    // Password-free unlock (synced safety setting): the account owner
     // already proved ownership with their password when they enabled it.
-    if (display.easyUnlock && sessionUser && canEdit()) { setEditMode(true); return; }
+    if (SAFETY.easyUnlock && sessionUser && canEdit()) { setEditMode(true); return; }
     // Editor role → re-enter the account password (still guards against a kid
     // sliding into edit mode). No session at all → fall back to the admin token.
     loginMode = sessionUser ? 'password' : 'token';
@@ -4290,8 +4290,8 @@
     }
     const hb = document.getElementById('disp-color-header-bg');     if (hb) hb.value = display.headerColors.bg;
     const ht = document.getElementById('disp-color-header-text');   if (ht) ht.value = display.headerColors.text;
-    document.getElementById('disp-easy-close').checked = display.easyClose;
-    document.getElementById('disp-easy-unlock').checked = display.easyUnlock;
+    document.getElementById('disp-easy-close').checked = SAFETY.easyClose;
+    document.getElementById('disp-easy-unlock').checked = SAFETY.easyUnlock;
     document.getElementById('disp-unlock-confirm').style.display = 'none';
     document.getElementById('disp-unlock-pass').value = '';
     document.getElementById('disp-unlock-msg').textContent = '';
@@ -4362,15 +4362,36 @@
   // Buttons & safety: quick-tap close is a plain toggle; password-free unlock
   // demands the account password ONCE (with a big warning) before it sticks —
   // proof it's the parent waiving the gate, not whoever found the modal open.
+  // Both are SYNCED child settings: read-merge-write so we never clobber the
+  // rest of the blob (voice, schedules, touch controls…).
+  async function saveSafety(patch) {
+    const url = '/api/child-settings?childId=' + encodeURIComponent(CHILD_ID);
+    const r = await apiFetch(url);
+    if (!r.ok) throw new Error('load ' + r.status);
+    const cur = (await r.json()).settings || {};
+    const next = { ...cur, ...patch };
+    const w = await apiFetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: next }),
+    });
+    if (!w.ok) throw new Error('save ' + w.status);
+    SAFETY.easyClose = !!next.easyClose;
+    SAFETY.easyUnlock = !!next.easyUnlock;
+  }
   (function wireSafetyToggles() {
     const closeCb = document.getElementById('disp-easy-close');
-    closeCb.addEventListener('change', () => { display.easyClose = closeCb.checked; commitDisplay(); });
+    closeCb.addEventListener('change', async () => {
+      const want = closeCb.checked;
+      try { await saveSafety({ easyClose: want }); }
+      catch (_) { closeCb.checked = SAFETY.easyClose; }   // offline / no permission — revert
+    });
     const unlockCb = document.getElementById('disp-easy-unlock');
     const box = document.getElementById('disp-unlock-confirm');
     const msg = document.getElementById('disp-unlock-msg');
-    unlockCb.addEventListener('change', () => {
+    unlockCb.addEventListener('change', async () => {
       if (!unlockCb.checked) {                       // restoring the password never needs friction
-        display.easyUnlock = false; commitDisplay();
+        try { await saveSafety({ easyUnlock: false }); }
+        catch (_) { unlockCb.checked = SAFETY.easyUnlock; }
         box.style.display = 'none';
         return;
       }
@@ -4401,7 +4422,7 @@
         });
         if (r.status === 401) { msg.textContent = 'Incorrect password.'; return; }
         if (!r.ok) { msg.textContent = 'Server error: ' + r.status; return; }
-        display.easyUnlock = true; commitDisplay();
+        await saveSafety({ easyUnlock: true });
         unlockCb.checked = true;
         box.style.display = 'none';
       } catch (err) {
@@ -4905,6 +4926,8 @@
       // Touch controls (ordinary parent settings, no gate).
       TOUCH.interrupt = !!s.tapInterrupt;
       TOUCH.doubleTapTeach = !!s.doubleTapTeach;
+      SAFETY.easyClose = !!s.easyClose;
+      SAFETY.easyUnlock = !!s.easyUnlock;
       const kd = s.kidDisplay;
       if (kd && /^#[0-9a-fA-F]{6}$/.test(String(kd.colorHeaderBg || ''))) {
         document.documentElement.style.setProperty('--hdr-bg', kd.colorHeaderBg);
@@ -6266,8 +6289,8 @@
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     exitPid = e.pointerId;
     try { exitBtn.setPointerCapture(exitPid); } catch (_) {}
-    // Quick-tap close (Display → Buttons & safety) skips the child-proofing hold.
-    exitTimer = setTimeout(stopGame, display.easyClose ? 0 : 1200);
+    // Quick-tap close (synced safety setting) skips the child-proofing hold.
+    exitTimer = setTimeout(stopGame, SAFETY.easyClose ? 0 : 1200);
   }
   function cancelExit() {
     if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; }

@@ -129,7 +129,10 @@ struct HeaderBar: View {
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.7)
                 .onEnded { _ in
-                    if !editMode { showUnlock = true }
+                    guard !editMode else { return }
+                    // Password-free unlock (synced safety setting): the parent
+                    // proved ownership with their password when enabling it.
+                    if TouchConfig.easyUnlock { editMode = true } else { showUnlock = true }
                 }
         )
     }

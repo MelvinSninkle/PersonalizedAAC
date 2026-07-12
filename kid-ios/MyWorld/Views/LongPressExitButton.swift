@@ -21,7 +21,14 @@ struct LongPressExitButton: View {
             .background(background)
             .clipShape(Circle())
             .contentShape(Rectangle())
-            .onTapGesture {}            // absorb stray taps; do nothing visible
+            .onTapGesture {
+                // Quick-tap close is a synced safety setting for older kids;
+                // default keeps the tap as a deliberate no-op (kids mash).
+                if TouchConfig.easyClose {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    onExit()
+                }
+            }
             .onLongPressGesture(minimumDuration: 0.7) {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 onExit()
