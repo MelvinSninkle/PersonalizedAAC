@@ -141,9 +141,8 @@ struct NeedsStrip: View {
 
     private func stageTile(_ tile: Tile) {
         sentence.stage(tile, idleMinutes: access.sentenceIdleMin)
-        Task {
-            await TilePlayer.shared.play(tile, childId: auth.childSlug, categoryName: "Needs")
-        }
+        // Logged, not spoken — staging is composing; ▶ says the sentence.
+        TilePlayer.shared.logOnly(tile, childId: auth.childSlug, categoryName: "Needs")
     }
 
     private func stripPaddle(_ icon: String, disabled: Bool, action: @escaping () -> Void) -> some View {

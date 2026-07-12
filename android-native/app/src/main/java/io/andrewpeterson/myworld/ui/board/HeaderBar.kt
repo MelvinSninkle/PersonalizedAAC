@@ -178,6 +178,15 @@ private fun SentenceStripRow() {
                 Spacer(Modifier.width(8.dp))
             }
         }
+        // Quick clear — a mis-tap costs one rebuild; a stuck sentence would
+        // cost the whole feature. Deliberately a short tap.
+        Box(
+            Modifier.size(46.dp)
+                .background(Color.White.copy(alpha = 0.22f), CircleShape)
+                .clickable { c.sentenceBar.clear() },
+            contentAlignment = Alignment.Center,
+        ) { Text("✕", fontSize = 18.sp, color = Color.White) }
+        Spacer(Modifier.width(8.dp))
         Box(
             Modifier.size(60.dp)
                 .background(Color(0xFF2E7D32), CircleShape)

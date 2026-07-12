@@ -102,7 +102,8 @@ fun NeedsStrip(
                         c.sentenceBar.dragEnd()
                         if (hit) {
                             c.sentenceBar.stage(tile, access.sentenceIdleMin)
-                            tap(tile)
+                            // Logged, not spoken — ▶ says the sentence.
+                            c.tilePlayer.logOnly(tile, childId = c.auth.childSlug, categoryName = "Needs")
                         }
                     }
                     val cancel: () -> Unit = { dragId = null; c.sentenceBar.dragEnd() }

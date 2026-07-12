@@ -245,11 +245,14 @@ struct SectionColumn: View {
             .onEnded { if sentence.dragEnd(at: $0.location) { stageTile(tile) } }
     }
 
-    /// Staging speaks + logs like a normal tap (milestones see the combo);
-    /// the tile itself stays on the board — the chip is a copy.
+    /// Staging logs like a normal tap (milestones see the combo) but stays
+    /// SILENT — the child is composing, not speaking; ▶ says the sentence.
+    /// The tile itself stays on the board — the chip is a copy.
     private func stageTile(_ tile: Tile) {
         sentence.stage(tile, idleMinutes: access.sentenceIdleMin)
-        playWithLogging(tile)
+        TilePlayer.shared.logOnly(tile, childId: auth.childSlug,
+                                  categoryName: activeCategoryName,
+                                  subcategoryName: activeSubcategoryName)
     }
 
     private var normalTilesGrid: some View {

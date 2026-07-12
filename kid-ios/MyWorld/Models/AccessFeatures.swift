@@ -194,6 +194,18 @@ struct SentenceStripView: View {
                 }
                 .padding(.leading, 10)
             }
+            // Quick clear — a mis-tap costs one rebuild; a stuck sentence
+            // would cost the whole feature. Deliberately a short tap.
+            Button {
+                sentence.clear()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 46, height: 46)
+                    .background(Circle().fill(Color.white.opacity(0.22)))
+            }
+            .buttonStyle(.plain)
             Button {
                 sentence.playAll(childId: auth.childSlug, idleMinutes: access.sentenceIdleMin)
             } label: {

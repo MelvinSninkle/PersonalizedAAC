@@ -108,6 +108,12 @@ class TilePlayer(
         }
     }
 
+    /** Log a board interaction without playing anything — the sentence bar
+     *  stages silently (▶ does the talking) but milestones still see combos. */
+    fun logOnly(tile: Tile, childId: String?, categoryName: String? = null, subcategoryName: String? = null) {
+        if (!childId.isNullOrEmpty()) logTap(tile, childId, categoryName, subcategoryName)
+    }
+
     /** The server expects { childId, events: [ {...} ] } — a bare event
      *  object hits the 400 'events array required' branch silently. */
     private fun logTap(tile: Tile, childId: String, categoryName: String?, subcategoryName: String?) {

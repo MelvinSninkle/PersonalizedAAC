@@ -80,6 +80,14 @@ final class TilePlayer {
         speak(tile.label)
     }
 
+    /// Log a board interaction without playing anything — the sentence bar
+    /// stages silently (▶ does the talking) but milestones still see combos.
+    func logOnly(_ tile: Tile, childId: String?,
+                 categoryName: String? = nil, subcategoryName: String? = nil) {
+        guard let childId, !childId.isEmpty else { return }
+        logTap(tile, childId: childId, categoryName: categoryName, subcategoryName: subcategoryName)
+    }
+
     /// The server expects { events: [{ ... }] }; sending a bare event
     /// object hits the 400 'events array required' branch silently.
     private func logTap(_ tile: Tile, childId: String,
