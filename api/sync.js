@@ -185,7 +185,11 @@ export default async function handler(req, res) {
       // then the generic default for default-able tiles.
       const styled = styleTileDefs.get(i.taxonomy_slug);
       if (styled) { i.image_key = styled; continue; }
-      if (tax.default_image_key && isDefaultableTile(tax)) i.image_key = tax.default_image_key;
+      // The generic default applies to person-y tiles too (the admin curates
+      // group-of-children imagery for those) — a generic picture beats a bare
+      // word-tile until the per-child render lands. The `replaceable` guard
+      // above means a family's own art is never touched.
+      if (tax.default_image_key) i.image_key = tax.default_image_key;
     }
 
     // Age-band filter: when the child has a birth date AND the parent hasn't

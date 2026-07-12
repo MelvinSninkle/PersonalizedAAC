@@ -8,6 +8,18 @@ import Observation
 // under kidDisplay), so this holder reads the raw child-settings blob rather
 // than riding DisplayPrefs (whose didSet save-back would echo writes).
 
+/// Touch controls (parent-set, NOT admin-gated — ordinary board settings).
+/// Static so TilePlayer (a singleton with no view context) can read them.
+///   interrupt      — a new tap cuts off audio that's still playing. OFF by
+///                    default: a child stimming on one button hears each
+///                    word complete instead of machine-gun restarts.
+///   doubleTapTeach — the SAME tile tapped again within the window speaks
+///                    its teaching facts (descriptive clues, up to three).
+enum TouchConfig {
+    @MainActor static var interrupt = false
+    @MainActor static var doubleTapTeach = false
+}
+
 /// The five access keys, defaulted to the shipped behavior.
 @Observable
 final class AccessPrefs {
@@ -38,6 +50,9 @@ final class AccessPrefs {
             sentenceIdleMin = (1...10).contains(m) ? m : 1
             sentenceLift = (s["sentenceLift"] as? String) == "drag" ? "drag" : "longpress"
             listenRepeatNav = (s["listenRepeatNav"] as? Bool) ?? true
+            // Touch controls ride the same settings fetch (root keys too).
+            TouchConfig.interrupt = (s["tapInterrupt"] as? Bool) ?? false
+            TouchConfig.doubleTapTeach = (s["doubleTapTeach"] as? Bool) ?? false
         }
     }
 }

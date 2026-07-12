@@ -612,6 +612,27 @@
     </div>
   </div>
 
+  <div class="section-label">Touch</div>
+  <div class="panel" id="touch-panel">
+    <h2>Touch controls</h2>
+    <p class="hint">How the board responds to your child's taps while a word is still playing.</p>
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:520px;">
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>New taps interrupt the word that's playing
+          <span class="hint" style="display:block;margin:2px 0 0;">Off (default): each word finishes before the next tap counts — steadier for a child
+          who presses the same button repeatedly. On: every tap responds instantly.</span></span>
+        <input type="checkbox" id="touch-interrupt">
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>Double-tap teaches the word
+          <span class="hint" style="display:block;margin:2px 0 0;">Tapping the same tile twice quickly plays its teaching facts (up to three per word).</span></span>
+        <input type="checkbox" id="touch-doubletap">
+      </label>
+      <div><button class="btn primary" id="touch-save">Save touch controls</button>
+        <span id="touch-msg" class="hint"></span></div>
+    </div>
+  </div>
+
   <div class="section-label admin-access-only" style="display:none;">Access (admin testing)</div>
   <div class="panel admin-access-only" id="access-panel" style="display:none;">
     <h2>Access experiments</h2>
@@ -2784,6 +2805,20 @@
       document.getElementById('lang-save').addEventListener('click', () => {
         childSettings = { ...childSettings, language: langSel.value };
         saveSettingsToServer('Saved ✓ — the board updates on its next sync', 'lang-msg');
+      });
+    }
+
+    // ---- Touch controls (ordinary parent settings) ----
+    const touchInt = document.getElementById('touch-interrupt');
+    if (touchInt) {
+      touchInt.checked = !!childSettings.tapInterrupt;
+      document.getElementById('touch-doubletap').checked = !!childSettings.doubleTapTeach;
+      document.getElementById('touch-save').addEventListener('click', () => {
+        childSettings = { ...childSettings,
+          tapInterrupt: touchInt.checked,
+          doubleTapTeach: document.getElementById('touch-doubletap').checked,
+        };
+        saveSettingsToServer('Saved ✓ — the board picks it up on its next settings sync', 'touch-msg');
       });
     }
 

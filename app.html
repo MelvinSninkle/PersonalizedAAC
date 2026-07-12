@@ -1313,6 +1313,14 @@
     <textarea id="item-description" rows="2" placeholder='e.g. "Lives in a field, has four legs, eats grass." Spoken aloud — the child picks the matching tile.' style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font:inherit;box-sizing:border-box;"></textarea>
     <div style="font-size:12px;color:#666;margin-top:4px;">If left blank the game falls back to "Who or what is the [tile name]?"</div>
     <div class="error" id="item-error"></div>
+    <!-- Every picture this tile has ever worn (the album keeps them all) —
+         tap one to put it back. Reverting archives the current picture, so
+         it's always reversible. -->
+    <div id="item-history-row" style="display:none;margin:8px 0 2px;">
+      <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:4px;">Previous pictures <span style="font-weight:400;color:#999;">(tap to bring one back)</span></div>
+      <div id="item-history-strip" style="display:flex;gap:8px;overflow-x:auto;padding:2px;"></div>
+      <div id="item-history-msg" style="font-size:12px;color:#888;margin-top:2px;"></div>
+    </div>
     <div id="item-redraw-row" style="display:none;margin:6px 0 2px;">
       <button class="secondary" id="item-redraw" title="One tap — re-draws this picture in your child's chosen style automatically. The first redo of each tile is free; after that it uses 1 credit. The old picture is archived, never deleted.">✨ Match my child's style</button>
       <span id="item-redraw-note" style="font-size:12px;color:#2e7d32;margin-left:8px;"></span>
@@ -2640,11 +2648,60 @@
       } catch (_) {}
     });
   }, { capture: true });
+  // Touch controls (parent-set in the dashboard Board tab):
+  //   interrupt      — a new tap cuts off the audio that's still playing.
+  //                    OFF (default): taps during playback are ignored, so a
+  //                    child stimming on one button hears each word complete.
+  //   doubleTapTeach — the SAME tile tapped again within the window plays its
+  //                    teaching facts (descriptive clues, up to three).
+  const TOUCH = { interrupt: false, doubleTapTeach: false };
+  const DOUBLE_TAP_WINDOW_MS = 2500;
+  let _lastTapItemId = null, _lastTapItemAt = 0;
+
+  /// Cut playback loose NOW — pausing + dispatching 'ended' runs playSound's
+  /// own release handler, so `speaking` and the safety timer clean up the
+  /// same way a natural finish does.
+  function stopSpeaking() {
+    try {
+      const player = document.getElementById('audio-player');
+      player.pause();
+      player.dispatchEvent(new Event('ended'));
+    } catch (_) { speaking = false; }
+  }
+
+  /// Double-tap teach: the tile's facts, spoken in order. Uses the game voice
+  /// channel so it can't fight the tile channel's `speaking` bookkeeping.
+  async function playClues(item) {
+    const clues = (item.descriptiveClues || []).filter(Boolean).slice(0, 3);
+    if (speaking) stopSpeaking();
+    for (const clue of clues) {
+      try {
+        const u = await teachAudioURL(clue);
+        if (u) await playAwait(u);
+      } catch (_) {}
+    }
+  }
+
   function tapSpeak(item, categoryName, subcategoryName) {
     const now = Date.now();
     if (now - _lastTapAt < 250) return;   // swallow an accidental double-tap / bounce
     _lastTapAt = now;
-    if (speaking) return;
+    // Same tile again inside the window → its teaching facts (when enabled
+    // and it has any). Logged like a normal tap; a third tap starts fresh.
+    if (TOUCH.doubleTapTeach && item.id === _lastTapItemId
+        && (now - _lastTapItemAt) < DOUBLE_TAP_WINDOW_MS
+        && !item.displayLabel   // clues are English taxonomy prose (E5)
+        && (item.descriptiveClues || []).length) {
+      _lastTapItemId = null; _lastTapItemAt = 0;
+      enqueueEvent(item, categoryName, subcategoryName);
+      playClues(item);
+      return;
+    }
+    _lastTapItemId = item.id; _lastTapItemAt = now;
+    if (speaking) {
+      if (!TOUCH.interrupt) return;
+      stopSpeaking();
+    }
     enqueueEvent(item, categoryName, subcategoryName);
     playSound(item);   // playSound sets and clears `speaking`
   }
@@ -3231,6 +3288,14 @@
     document.getElementById('item-redraw-row').style.display = (item && item.taxonomySlug) ? 'block' : 'none';
     document.getElementById('item-redraw-note').textContent = '';
 
+    // Past pictures: the tile's archive with one-tap revert (edit mode only,
+    // existing items only — a brand-new tile has no history yet).
+    const histRow = document.getElementById('item-history-row');
+    const histStrip = document.getElementById('item-history-strip');
+    const histMsg = document.getElementById('item-history-msg');
+    histRow.style.display = 'none'; histStrip.innerHTML = ''; histMsg.textContent = '';
+    if (item && item.id) loadItemHistory(item);
+
     // AI-tile section: clear status/preview (the look defaults to board style).
     document.getElementById('item-look-style').checked = true;
     document.getElementById('item-magic-status').textContent = '—';
@@ -3238,6 +3303,46 @@
     mp.style.display = 'none'; mp.removeAttribute('src');
 
     itemModal.classList.add('show');
+  }
+
+  async function loadItemHistory(item) {
+    const histRow = document.getElementById('item-history-row');
+    const histStrip = document.getElementById('item-history-strip');
+    const histMsg = document.getElementById('item-history-msg');
+    try {
+      const r = await apiFetch('/api/items?history=' + encodeURIComponent(item.id));
+      if (!r.ok) return;
+      const d = await r.json();
+      const rows = (d.history || []).filter((h) => h.key && h.key !== d.currentKey);
+      if (!rows.length) return;
+      histRow.style.display = '';
+      for (const h of rows.slice(0, 12)) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.style.cssText = 'flex:0 0 auto;width:64px;height:64px;border-radius:10px;border:2px solid #e5e7eb;background:#fff center/cover no-repeat;cursor:pointer;padding:0;';
+        b.title = 'Bring this picture back' + (h.source ? ' (' + h.source + ')' : '');
+        getMediaURL(h.key).then((u) => { if (u) b.style.backgroundImage = 'url("' + u + '")'; }).catch(() => {});
+        b.addEventListener('click', async () => {
+          if (!confirm('Put this picture back on the tile? The current picture is saved to the album, so you can switch again anytime.')) return;
+          histMsg.textContent = 'Restoring…';
+          try {
+            const rr = await apiFetch('/api/items', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ op: 'revert-image', id: item.id, key: h.key }),
+            });
+            if (!rr.ok) throw new Error((await rr.json().catch(() => ({}))).error || 'revert failed');
+            histMsg.textContent = '✓ Restored';
+            try { await resyncIfChanged(); } catch (_) {}
+            await renderAll();
+            itemModal.classList.remove('show');
+          } catch (err) {
+            histMsg.textContent = '✗ ' + (err.message || err);
+          }
+        });
+        histStrip.appendChild(b);
+      }
+    } catch (_) {}
   }
 
   document.getElementById('item-image').addEventListener('change', (e) => {
@@ -4699,6 +4804,9 @@
       // Access experiments (admin dark-launch): navigation mode, sentence
       // constructor, listening repeat-navigate.
       try { applyAccessSettings(s); } catch (_) {}
+      // Touch controls (ordinary parent settings, no gate).
+      TOUCH.interrupt = !!s.tapInterrupt;
+      TOUCH.doubleTapTeach = !!s.doubleTapTeach;
       const kd = s.kidDisplay;
       if (kd && /^#[0-9a-fA-F]{6}$/.test(String(kd.colorHeaderBg || ''))) {
         document.documentElement.style.setProperty('--hdr-bg', kd.colorHeaderBg);

@@ -23,13 +23,61 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
-    if (req.method === 'POST')   return await create(req, res, db, auth.user);
+    if (req.method === 'GET')    return await imageHistory(req, res, db, auth.user);
+    if (req.method === 'POST') {
+      const b = (typeof req.body === 'object' && req.body) || {};
+      if (b.op === 'revert-image') return await revertImage(req, res, db, auth.user, b);
+      return await create(req, res, db, auth.user);
+    }
     if (req.method === 'PUT')    return await update(req, res, db, auth.user);
     if (req.method === 'DELETE') return await remove(req, res, db, auth.user);
     res.status(405).json({ error: 'Method not allowed' });
   } catch (err) {
     res.status(500).json({ error: 'Request failed', detail: String(err.message || err) });
   }
+}
+
+// GET ?history=<itemId> — the tile's past pictures (the album rows), newest
+// first, so the edit modal can offer one-tap revert. Gated by the same
+// ownership rule as editing the tile itself.
+async function imageHistory(req, res, db, user) {
+  const itemId = Number(req.query.history);
+  if (!Number.isFinite(itemId)) { res.status(400).json({ error: 'history=<itemId> required' }); return; }
+  const item = (await db`SELECT id, child_id, owner_user_id, image_key FROM items WHERE id = ${itemId} LIMIT 1`)[0];
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  if (!(await canEditContent(user, item, db))) { res.status(403).json({ error: 'Not allowed' }); return; }
+  const rows = await db`
+    SELECT blob_key, source, archived_at FROM item_image_history
+    WHERE item_id = ${itemId} AND child_id = ${item.child_id}
+    ORDER BY archived_at DESC LIMIT 24`;
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(200).json({ ok: true, currentKey: item.image_key || null,
+    history: rows.map((r) => ({ key: r.blob_key, source: r.source || null, archivedAt: r.archived_at })) });
+}
+
+// POST { op:'revert-image', id, key } — put a past picture back on the tile.
+// The current picture is archived first, so reverting is itself revertible;
+// the history row stays (the album keeps everything, forever).
+async function revertImage(req, res, db, user, b) {
+  const itemId = Number(b.id);
+  const key = String(b.key || '').slice(0, 300);
+  if (!Number.isFinite(itemId) || !key) { res.status(400).json({ error: 'id and key required' }); return; }
+  const item = (await db`SELECT id, child_id, owner_user_id, image_key, label, section
+                         FROM items WHERE id = ${itemId} LIMIT 1`)[0];
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  if (!(await canEditContent(user, item, db))) { res.status(403).json({ error: 'Not allowed' }); return; }
+  // The key must come from THIS tile's own history — no arbitrary blob keys.
+  const hist = await db`
+    SELECT 1 FROM item_image_history
+    WHERE item_id = ${itemId} AND child_id = ${item.child_id} AND blob_key = ${key} LIMIT 1`;
+  if (!hist.length) { res.status(400).json({ error: 'key is not in this tile\'s history' }); return; }
+  if (item.image_key && item.image_key !== key) {
+    await archivePriorImage({ db, childId: item.child_id, itemId: item.id, oldKey: item.image_key,
+                              label: item.label, section: item.section, source: 'revert',
+                              who: user && user.email ? user.email : null });
+  }
+  await db`UPDATE items SET image_key = ${key}, updated_at = NOW() WHERE id = ${item.id}`;
+  res.status(200).json({ ok: true, imageKey: key });
 }
 
 async function create(req, res, db, user) {

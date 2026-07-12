@@ -82,6 +82,8 @@ class AppContainer(context: Context) {
 
     init {
         PlayScope.init(context)
+        // Double-tap teach speaks clues on the game voice channel.
+        tilePlayer.gameAudio = gameAudio
     }
 }
 

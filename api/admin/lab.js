@@ -42,11 +42,13 @@ import translations from './_lab-translations.js';
 import role from './_lab-role.js';
 import demoAudio from './_lab-demo-audio.js';
 import backup from './_lab-backup.js';
+import defaultUpload from './_lab-default-upload.js';
 
 export const config = { maxDuration: 300 };
 
 const HANDLERS = {
   'backup': backup,
+  'default-upload': defaultUpload,
   'demo-audio': demoAudio,
   'generate': generate,
   'generate-scene': generateScene,

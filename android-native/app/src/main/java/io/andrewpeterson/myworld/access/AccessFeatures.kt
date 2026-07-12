@@ -27,6 +27,20 @@ import kotlinx.serialization.json.intOrNull
  * in api/child-settings.js); the keys live at the settings ROOT, so this
  * reads the raw child-settings blob rather than riding kidDisplay.
  */
+/**
+ * Touch controls (parent-set, NOT admin-gated — ordinary board settings).
+ * A plain object so TilePlayer can read them without a view/store handle.
+ *   interrupt      — a new tap cuts off audio that's still playing. OFF by
+ *                    default: a child stimming on one button hears each
+ *                    word complete instead of machine-gun restarts.
+ *   doubleTapTeach — the SAME tile tapped again within the window speaks
+ *                    its teaching facts (descriptive clues, up to three).
+ */
+object TouchConfig {
+    @Volatile var interrupt = false
+    @Volatile var doubleTapTeach = false
+}
+
 data class AccessData(
     val navMode: String = "scroll",            // "scroll" | "buttons"
     val sentenceBuilder: Boolean = false,
@@ -62,6 +76,9 @@ class AccessPrefs(private val api: ApiClient, private val scope: CoroutineScope)
                 sentenceLift = if (str("sentenceLift") == "drag") "drag" else "longpress",
                 listenRepeatNav = bool("listenRepeatNav") ?: true,
             )
+            // Touch controls ride the same settings fetch (root keys too).
+            TouchConfig.interrupt = bool("tapInterrupt") ?: false
+            TouchConfig.doubleTapTeach = bool("doubleTapTeach") ?: false
         }
     }
 }
