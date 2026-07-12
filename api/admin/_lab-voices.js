@@ -103,11 +103,11 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-      const voices = await listVoices(db, { includeInactive: true });
+      const voices = await listVoices(db, { includeInactive: true, allLangs: true });
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ ok: true, voices: voices.map(v => ({
         id: v.id, name: v.name, gender: v.gender, accent: v.accent,
-        active: !!v.active, sortOrder: v.sort_order,
+        lang: v.lang || 'en', active: !!v.active, sortOrder: v.sort_order,
       })) });
       return;
     }
@@ -115,6 +115,7 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const id = String(b.id || '').trim();
       if (!ID_RE.test(id)) { res.status(400).json({ error: 'id must be an ElevenLabs voice id (8-40 alphanumerics)' }); return; }
+      const lang = /^[a-z]{2}$/.test(String(b.lang || '').trim()) ? String(b.lang).trim() : 'en';
       let name = String(b.name || '').trim().slice(0, 60);
       let gender = String(b.gender || '').trim().slice(0, 20) || null;
       let accent = String(b.accent || '').trim().slice(0, 40) || null;
@@ -124,10 +125,10 @@ export default async function handler(req, res) {
       if (!gender && looked) gender = looked.gender;
       if (!accent && looked) accent = looked.accent;
       const maxSort = (await db`SELECT COALESCE(max(sort_order), -1)::int AS m FROM voices`)[0].m;
-      await db`INSERT INTO voices (id, name, gender, accent, active, sort_order)
-               VALUES (${id}, ${name}, ${gender}, ${accent}, TRUE, ${maxSort + 1})
-               ON CONFLICT (id) DO UPDATE SET name = ${name}, gender = ${gender}, accent = ${accent}`;
-      res.status(200).json({ ok: true, voice: { id, name, gender, accent, active: true, sortOrder: maxSort + 1 },
+      await db`INSERT INTO voices (id, name, gender, accent, active, sort_order, lang)
+               VALUES (${id}, ${name}, ${gender}, ${accent}, TRUE, ${maxSort + 1}, ${lang})
+               ON CONFLICT (id) DO UPDATE SET name = ${name}, gender = ${gender}, accent = ${accent}, lang = ${lang}`;
+      res.status(200).json({ ok: true, voice: { id, name, gender, accent, lang, active: true, sortOrder: maxSort + 1 },
                              lookedUp: !!looked });
       return;
     }
@@ -143,7 +144,8 @@ export default async function handler(req, res) {
         gender     = CASE WHEN ${'gender' in b} THEN ${b.gender ? String(b.gender).slice(0, 20) : null} ELSE gender END,
         accent     = CASE WHEN ${'accent' in b} THEN ${b.accent ? String(b.accent).slice(0, 40) : null} ELSE accent END,
         active     = COALESCE(${typeof b.active === 'boolean' ? b.active : null}, active),
-        sort_order = COALESCE(${Number.isInteger(b.sortOrder) ? b.sortOrder : null}, sort_order)
+        sort_order = COALESCE(${Number.isInteger(b.sortOrder) ? b.sortOrder : null}, sort_order),
+        lang       = COALESCE(${/^[a-z]{2}$/.test(String(b.lang || '')) ? String(b.lang) : null}, lang)
         WHERE id = ${id}`;
       res.status(200).json({ ok: true });
       return;

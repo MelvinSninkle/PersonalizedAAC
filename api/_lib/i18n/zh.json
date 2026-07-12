@@ -1,0 +1,5966 @@
+{
+ "lang": "zh",
+ "name": "中文（简体）/ Simplified Chinese",
+ "note": "Toddler-register Mandarin for the AAC board. Written to be what a mainland caregiver would naturally SAY to a 2-4 year old (抱抱, 尿尿, 还要), not dictionary glosses. Keys match taxonomy/category labels case-insensitively. `section` (needs|people|nouns|verbs) and `category` narrow a match for homonyms — most entries need neither. `pron` overrides the TTS text when the display text reads wrong aloud. status starts 'machine'; the review partner flips rows to 'reviewed' via the Lab CSV round-trip.",
+ "entries": [
+  {
+   "en": "yes",
+   "zh": "要"
+  },
+  {
+   "en": "no",
+   "zh": "不要"
+  },
+  {
+   "en": "I want",
+   "zh": "我要"
+  },
+  {
+   "en": "I like",
+   "zh": "我喜欢"
+  },
+  {
+   "en": "I LIKE",
+   "zh": "我喜欢"
+  },
+  {
+   "en": "I don't like",
+   "zh": "我不喜欢"
+  },
+  {
+   "en": "more",
+   "zh": "还要"
+  },
+  {
+   "en": "all done",
+   "zh": "好了"
+  },
+  {
+   "en": "again",
+   "zh": "再来一次"
+  },
+  {
+   "en": "help",
+   "section": "needs",
+   "zh": "帮帮我"
+  },
+  {
+   "en": "help",
+   "section": "verbs",
+   "zh": "帮忙"
+  },
+  {
+   "en": "stop",
+   "zh": "停"
+  },
+  {
+   "en": "go",
+   "zh": "走"
+  },
+  {
+   "en": "wait",
+   "zh": "等一下"
+  },
+  {
+   "en": "mine",
+   "zh": "我的"
+  },
+  {
+   "en": "please",
+   "zh": "请"
+  },
+  {
+   "en": "thank you",
+   "zh": "谢谢"
+  },
+  {
+   "en": "hi",
+   "zh": "你好"
+  },
+  {
+   "en": "hello",
+   "zh": "你好"
+  },
+  {
+   "en": "bye",
+   "zh": "再见"
+  },
+  {
+   "en": "goodbye",
+   "zh": "再见"
+  },
+  {
+   "en": "potty",
+   "zh": "尿尿"
+  },
+  {
+   "en": "bathroom",
+   "zh": "上厕所"
+  },
+  {
+   "en": "eat",
+   "zh": "吃"
+  },
+  {
+   "en": "drink",
+   "section": "needs",
+   "zh": "喝"
+  },
+  {
+   "en": "drink",
+   "section": "verbs",
+   "zh": "喝"
+  },
+  {
+   "en": "drink",
+   "section": "nouns",
+   "zh": "饮料"
+  },
+  {
+   "en": "hungry",
+   "zh": "饿了"
+  },
+  {
+   "en": "thirsty",
+   "zh": "渴了"
+  },
+  {
+   "en": "tired",
+   "zh": "累了"
+  },
+  {
+   "en": "sleepy",
+   "zh": "困了"
+  },
+  {
+   "en": "hurt",
+   "zh": "疼"
+  },
+  {
+   "en": "sick",
+   "zh": "不舒服"
+  },
+  {
+   "en": "hot",
+   "zh": "热"
+  },
+  {
+   "en": "cold",
+   "zh": "冷"
+  },
+  {
+   "en": "hug",
+   "zh": "抱抱"
+  },
+  {
+   "en": "kiss",
+   "zh": "亲亲"
+  },
+  {
+   "en": "give",
+   "section": "needs",
+   "zh": "给我"
+  },
+  {
+   "en": "give",
+   "section": "verbs",
+   "zh": "给"
+  },
+  {
+   "en": "open",
+   "zh": "打开"
+  },
+  {
+   "en": "close",
+   "zh": "关上"
+  },
+  {
+   "en": "up",
+   "zh": "上去"
+  },
+  {
+   "en": "down",
+   "zh": "下来"
+  },
+  {
+   "en": "in",
+   "zh": "里面"
+  },
+  {
+   "en": "out",
+   "zh": "出去"
+  },
+  {
+   "en": "on",
+   "zh": "上面"
+  },
+  {
+   "en": "off",
+   "zh": "拿掉"
+  },
+  {
+   "en": "big",
+   "zh": "大"
+  },
+  {
+   "en": "little",
+   "zh": "小"
+  },
+  {
+   "en": "small",
+   "zh": "小"
+  },
+  {
+   "en": "fast",
+   "zh": "快"
+  },
+  {
+   "en": "slow",
+   "zh": "慢"
+  },
+  {
+   "en": "loud",
+   "zh": "大声"
+  },
+  {
+   "en": "quiet",
+   "zh": "安静"
+  },
+  {
+   "en": "dirty",
+   "zh": "脏了"
+  },
+  {
+   "en": "clean",
+   "section": "verbs",
+   "zh": "打扫"
+  },
+  {
+   "en": "clean",
+   "zh": "干净"
+  },
+  {
+   "en": "wet",
+   "zh": "湿了"
+  },
+  {
+   "en": "dry",
+   "zh": "干的"
+  },
+  {
+   "en": "good",
+   "zh": "好"
+  },
+  {
+   "en": "bad",
+   "zh": "不好"
+  },
+  {
+   "en": "happy",
+   "zh": "开心"
+  },
+  {
+   "en": "sad",
+   "zh": "难过"
+  },
+  {
+   "en": "angry",
+   "zh": "生气"
+  },
+  {
+   "en": "mad",
+   "zh": "生气"
+  },
+  {
+   "en": "scared",
+   "zh": "害怕"
+  },
+  {
+   "en": "surprised",
+   "zh": "惊讶"
+  },
+  {
+   "en": "silly",
+   "zh": "调皮"
+  },
+  {
+   "en": "excited",
+   "zh": "兴奋"
+  },
+  {
+   "en": "bored",
+   "zh": "无聊"
+  },
+  {
+   "en": "shy",
+   "zh": "害羞"
+  },
+  {
+   "en": "family",
+   "zh": "家人"
+  },
+  {
+   "en": "friends",
+   "zh": "朋友"
+  },
+  {
+   "en": "friend",
+   "zh": "朋友"
+  },
+  {
+   "en": "mom",
+   "zh": "妈妈"
+  },
+  {
+   "en": "mommy",
+   "zh": "妈妈"
+  },
+  {
+   "en": "mother",
+   "zh": "妈妈"
+  },
+  {
+   "en": "dad",
+   "zh": "爸爸"
+  },
+  {
+   "en": "daddy",
+   "zh": "爸爸"
+  },
+  {
+   "en": "father",
+   "zh": "爸爸"
+  },
+  {
+   "en": "baby",
+   "zh": "宝宝"
+  },
+  {
+   "en": "brother",
+   "zh": "哥哥",
+   "pron": "哥哥"
+  },
+  {
+   "en": "big brother",
+   "zh": "哥哥"
+  },
+  {
+   "en": "little brother",
+   "zh": "弟弟"
+  },
+  {
+   "en": "sister",
+   "zh": "姐姐"
+  },
+  {
+   "en": "big sister",
+   "zh": "姐姐"
+  },
+  {
+   "en": "little sister",
+   "zh": "妹妹"
+  },
+  {
+   "en": "grandma",
+   "zh": "奶奶"
+  },
+  {
+   "en": "grandmother",
+   "zh": "奶奶"
+  },
+  {
+   "en": "gran",
+   "zh": "奶奶"
+  },
+  {
+   "en": "granny",
+   "zh": "奶奶"
+  },
+  {
+   "en": "grandpa",
+   "zh": "爷爷"
+  },
+  {
+   "en": "grandfather",
+   "zh": "爷爷"
+  },
+  {
+   "en": "aunt",
+   "zh": "阿姨"
+  },
+  {
+   "en": "aunty",
+   "zh": "阿姨"
+  },
+  {
+   "en": "auntie",
+   "zh": "阿姨"
+  },
+  {
+   "en": "uncle",
+   "zh": "叔叔"
+  },
+  {
+   "en": "cousin",
+   "zh": "表哥"
+  },
+  {
+   "en": "teacher",
+   "zh": "老师"
+  },
+  {
+   "en": "doctor",
+   "zh": "医生"
+  },
+  {
+   "en": "nurse",
+   "zh": "护士"
+  },
+  {
+   "en": "me",
+   "zh": "我"
+  },
+  {
+   "en": "you",
+   "zh": "你"
+  },
+  {
+   "en": "pet",
+   "zh": "宠物"
+  },
+  {
+   "en": "pets",
+   "zh": "宠物"
+  },
+  {
+   "en": "body",
+   "zh": "身体"
+  },
+  {
+   "en": "arm",
+   "zh": "手臂"
+  },
+  {
+   "en": "back",
+   "section": "nouns",
+   "zh": "背"
+  },
+  {
+   "en": "cheek",
+   "zh": "脸颊"
+  },
+  {
+   "en": "chest",
+   "zh": "胸口"
+  },
+  {
+   "en": "chin",
+   "zh": "下巴"
+  },
+  {
+   "en": "ear",
+   "zh": "耳朵"
+  },
+  {
+   "en": "ears",
+   "zh": "耳朵"
+  },
+  {
+   "en": "eye",
+   "zh": "眼睛"
+  },
+  {
+   "en": "eyes",
+   "zh": "眼睛"
+  },
+  {
+   "en": "face",
+   "zh": "脸"
+  },
+  {
+   "en": "faces",
+   "zh": "脸"
+  },
+  {
+   "en": "finger",
+   "zh": "手指"
+  },
+  {
+   "en": "fingers",
+   "zh": "手指"
+  },
+  {
+   "en": "foot",
+   "zh": "脚"
+  },
+  {
+   "en": "feet",
+   "zh": "脚"
+  },
+  {
+   "en": "hair",
+   "zh": "头发"
+  },
+  {
+   "en": "hand",
+   "zh": "手"
+  },
+  {
+   "en": "hands",
+   "zh": "手"
+  },
+  {
+   "en": "head",
+   "zh": "头"
+  },
+  {
+   "en": "knee",
+   "zh": "膝盖"
+  },
+  {
+   "en": "leg",
+   "zh": "腿"
+  },
+  {
+   "en": "legs",
+   "zh": "腿"
+  },
+  {
+   "en": "mouth",
+   "zh": "嘴巴"
+  },
+  {
+   "en": "neck",
+   "zh": "脖子"
+  },
+  {
+   "en": "nose",
+   "zh": "鼻子"
+  },
+  {
+   "en": "shoulder",
+   "zh": "肩膀"
+  },
+  {
+   "en": "tummy",
+   "zh": "肚子"
+  },
+  {
+   "en": "stomach",
+   "zh": "肚子"
+  },
+  {
+   "en": "belly",
+   "zh": "肚子"
+  },
+  {
+   "en": "teeth",
+   "zh": "牙齿"
+  },
+  {
+   "en": "tooth",
+   "zh": "牙齿"
+  },
+  {
+   "en": "toe",
+   "zh": "脚趾"
+  },
+  {
+   "en": "toes",
+   "zh": "脚趾"
+  },
+  {
+   "en": "tongue",
+   "zh": "舌头"
+  },
+  {
+   "en": "elbow",
+   "zh": "手肘"
+  },
+  {
+   "en": "wrist",
+   "zh": "手腕"
+  },
+  {
+   "en": "ankle",
+   "zh": "脚踝"
+  },
+  {
+   "en": "joints",
+   "zh": "关节"
+  },
+  {
+   "en": "food",
+   "zh": "食物"
+  },
+  {
+   "en": "snacks",
+   "zh": "零食"
+  },
+  {
+   "en": "snack",
+   "zh": "零食"
+  },
+  {
+   "en": "meals",
+   "zh": "正餐"
+  },
+  {
+   "en": "meal",
+   "zh": "正餐"
+  },
+  {
+   "en": "breakfast",
+   "zh": "早饭"
+  },
+  {
+   "en": "lunch",
+   "zh": "午饭"
+  },
+  {
+   "en": "dinner",
+   "zh": "晚饭"
+  },
+  {
+   "en": "fruits",
+   "zh": "水果"
+  },
+  {
+   "en": "fruit",
+   "zh": "水果"
+  },
+  {
+   "en": "vegetables",
+   "zh": "蔬菜"
+  },
+  {
+   "en": "vegetable",
+   "zh": "蔬菜"
+  },
+  {
+   "en": "drinks",
+   "zh": "饮料"
+  },
+  {
+   "en": "apple",
+   "zh": "苹果"
+  },
+  {
+   "en": "banana",
+   "zh": "香蕉"
+  },
+  {
+   "en": "orange",
+   "category": "colors",
+   "zh": "橙色"
+  },
+  {
+   "en": "orange",
+   "zh": "橙子"
+  },
+  {
+   "en": "grapes",
+   "zh": "葡萄"
+  },
+  {
+   "en": "grape",
+   "zh": "葡萄"
+  },
+  {
+   "en": "strawberry",
+   "zh": "草莓"
+  },
+  {
+   "en": "watermelon",
+   "zh": "西瓜"
+  },
+  {
+   "en": "pear",
+   "zh": "梨"
+  },
+  {
+   "en": "peach",
+   "zh": "桃子"
+  },
+  {
+   "en": "mango",
+   "zh": "芒果"
+  },
+  {
+   "en": "blueberry",
+   "zh": "蓝莓"
+  },
+  {
+   "en": "blueberries",
+   "zh": "蓝莓"
+  },
+  {
+   "en": "cookie",
+   "zh": "饼干"
+  },
+  {
+   "en": "cookies",
+   "zh": "饼干"
+  },
+  {
+   "en": "crackers",
+   "zh": "薄脆饼干"
+  },
+  {
+   "en": "cracker",
+   "zh": "薄脆饼干"
+  },
+  {
+   "en": "yogurt",
+   "zh": "酸奶"
+  },
+  {
+   "en": "cheese",
+   "zh": "奶酪"
+  },
+  {
+   "en": "milk",
+   "zh": "牛奶"
+  },
+  {
+   "en": "water",
+   "zh": "水"
+  },
+  {
+   "en": "juice",
+   "zh": "果汁"
+  },
+  {
+   "en": "bread",
+   "zh": "面包"
+  },
+  {
+   "en": "rice",
+   "zh": "米饭"
+  },
+  {
+   "en": "noodles",
+   "zh": "面条"
+  },
+  {
+   "en": "pasta",
+   "zh": "意大利面"
+  },
+  {
+   "en": "pizza",
+   "zh": "披萨"
+  },
+  {
+   "en": "soup",
+   "zh": "汤"
+  },
+  {
+   "en": "egg",
+   "zh": "鸡蛋"
+  },
+  {
+   "en": "eggs",
+   "zh": "鸡蛋"
+  },
+  {
+   "en": "chicken",
+   "category": "food",
+   "zh": "鸡肉"
+  },
+  {
+   "en": "chicken",
+   "zh": "小鸡"
+  },
+  {
+   "en": "fish",
+   "category": "food",
+   "zh": "鱼肉"
+  },
+  {
+   "en": "fish",
+   "zh": "鱼"
+  },
+  {
+   "en": "meat",
+   "zh": "肉"
+  },
+  {
+   "en": "carrot",
+   "zh": "胡萝卜"
+  },
+  {
+   "en": "carrots",
+   "zh": "胡萝卜"
+  },
+  {
+   "en": "broccoli",
+   "zh": "西兰花"
+  },
+  {
+   "en": "corn",
+   "zh": "玉米"
+  },
+  {
+   "en": "potato",
+   "zh": "土豆"
+  },
+  {
+   "en": "tomato",
+   "zh": "西红柿"
+  },
+  {
+   "en": "cucumber",
+   "zh": "黄瓜"
+  },
+  {
+   "en": "cereal",
+   "zh": "麦片"
+  },
+  {
+   "en": "pancake",
+   "zh": "松饼"
+  },
+  {
+   "en": "pancakes",
+   "zh": "松饼"
+  },
+  {
+   "en": "sandwich",
+   "zh": "三明治"
+  },
+  {
+   "en": "ice cream",
+   "zh": "冰淇淋"
+  },
+  {
+   "en": "cake",
+   "zh": "蛋糕"
+  },
+  {
+   "en": "candy",
+   "zh": "糖果"
+  },
+  {
+   "en": "chips",
+   "zh": "薯片"
+  },
+  {
+   "en": "popcorn",
+   "zh": "爆米花"
+  },
+  {
+   "en": "tacos",
+   "zh": "墨西哥卷饼"
+  },
+  {
+   "en": "taco",
+   "zh": "墨西哥卷饼"
+  },
+  {
+   "en": "dumpling",
+   "zh": "饺子"
+  },
+  {
+   "en": "dumplings",
+   "zh": "饺子"
+  },
+  {
+   "en": "animals",
+   "zh": "动物"
+  },
+  {
+   "en": "animal",
+   "zh": "动物"
+  },
+  {
+   "en": "farm",
+   "zh": "农场"
+  },
+  {
+   "en": "zoo",
+   "zh": "动物园"
+  },
+  {
+   "en": "dog",
+   "zh": "小狗"
+  },
+  {
+   "en": "puppy",
+   "zh": "小狗"
+  },
+  {
+   "en": "cat",
+   "zh": "小猫"
+  },
+  {
+   "en": "kitten",
+   "zh": "小猫"
+  },
+  {
+   "en": "cow",
+   "zh": "奶牛"
+  },
+  {
+   "en": "horse",
+   "zh": "马"
+  },
+  {
+   "en": "pig",
+   "zh": "猪"
+  },
+  {
+   "en": "sheep",
+   "zh": "绵羊"
+  },
+  {
+   "en": "goat",
+   "zh": "山羊"
+  },
+  {
+   "en": "duck",
+   "zh": "鸭子"
+  },
+  {
+   "en": "rabbit",
+   "zh": "兔子"
+  },
+  {
+   "en": "bunny",
+   "zh": "兔子"
+  },
+  {
+   "en": "bird",
+   "zh": "小鸟"
+  },
+  {
+   "en": "mouse",
+   "zh": "老鼠"
+  },
+  {
+   "en": "lion",
+   "zh": "狮子"
+  },
+  {
+   "en": "tiger",
+   "zh": "老虎"
+  },
+  {
+   "en": "bear",
+   "section": "nouns",
+   "category": "animals",
+   "zh": "熊"
+  },
+  {
+   "en": "bear",
+   "zh": "小熊"
+  },
+  {
+   "en": "elephant",
+   "zh": "大象"
+  },
+  {
+   "en": "monkey",
+   "zh": "猴子"
+  },
+  {
+   "en": "giraffe",
+   "zh": "长颈鹿"
+  },
+  {
+   "en": "zebra",
+   "zh": "斑马"
+  },
+  {
+   "en": "panda",
+   "zh": "熊猫"
+  },
+  {
+   "en": "penguin",
+   "zh": "企鹅"
+  },
+  {
+   "en": "frog",
+   "zh": "青蛙"
+  },
+  {
+   "en": "turtle",
+   "zh": "乌龟"
+  },
+  {
+   "en": "snake",
+   "zh": "蛇"
+  },
+  {
+   "en": "butterfly",
+   "zh": "蝴蝶"
+  },
+  {
+   "en": "bee",
+   "zh": "蜜蜂"
+  },
+  {
+   "en": "spider",
+   "zh": "蜘蛛"
+  },
+  {
+   "en": "ant",
+   "zh": "蚂蚁"
+  },
+  {
+   "en": "dinosaur",
+   "zh": "恐龙"
+  },
+  {
+   "en": "clothes",
+   "zh": "衣服"
+  },
+  {
+   "en": "shirt",
+   "zh": "上衣"
+  },
+  {
+   "en": "t-shirt",
+   "zh": "T恤",
+   "pron": "T恤衫"
+  },
+  {
+   "en": "pants",
+   "zh": "裤子"
+  },
+  {
+   "en": "shorts",
+   "zh": "短裤"
+  },
+  {
+   "en": "dress",
+   "zh": "连衣裙"
+  },
+  {
+   "en": "skirt",
+   "zh": "裙子"
+  },
+  {
+   "en": "socks",
+   "zh": "袜子"
+  },
+  {
+   "en": "sock",
+   "zh": "袜子"
+  },
+  {
+   "en": "shoes",
+   "zh": "鞋子"
+  },
+  {
+   "en": "shoe",
+   "zh": "鞋子"
+  },
+  {
+   "en": "boots",
+   "zh": "靴子"
+  },
+  {
+   "en": "coat",
+   "zh": "外套"
+  },
+  {
+   "en": "jacket",
+   "zh": "夹克"
+  },
+  {
+   "en": "hat",
+   "zh": "帽子"
+  },
+  {
+   "en": "gloves",
+   "zh": "手套"
+  },
+  {
+   "en": "mittens",
+   "zh": "手套"
+  },
+  {
+   "en": "scarf",
+   "zh": "围巾"
+  },
+  {
+   "en": "pajamas",
+   "zh": "睡衣"
+  },
+  {
+   "en": "diaper",
+   "zh": "尿布"
+  },
+  {
+   "en": "underwear",
+   "zh": "内裤"
+  },
+  {
+   "en": "sweater",
+   "zh": "毛衣"
+  },
+  {
+   "en": "home",
+   "zh": "家"
+  },
+  {
+   "en": "house",
+   "zh": "房子"
+  },
+  {
+   "en": "bedroom",
+   "zh": "卧室"
+  },
+  {
+   "en": "bathroom",
+   "category": "home",
+   "zh": "卫生间"
+  },
+  {
+   "en": "kitchen",
+   "zh": "厨房"
+  },
+  {
+   "en": "living room",
+   "zh": "客厅"
+  },
+  {
+   "en": "bed",
+   "zh": "床"
+  },
+  {
+   "en": "chair",
+   "zh": "椅子"
+  },
+  {
+   "en": "table",
+   "zh": "桌子"
+  },
+  {
+   "en": "sofa",
+   "zh": "沙发"
+  },
+  {
+   "en": "couch",
+   "zh": "沙发"
+  },
+  {
+   "en": "door",
+   "zh": "门"
+  },
+  {
+   "en": "window",
+   "zh": "窗户"
+  },
+  {
+   "en": "light",
+   "zh": "灯"
+  },
+  {
+   "en": "bathtub",
+   "zh": "浴缸"
+  },
+  {
+   "en": "bath",
+   "zh": "洗澡"
+  },
+  {
+   "en": "shower",
+   "zh": "淋浴"
+  },
+  {
+   "en": "toilet",
+   "zh": "马桶"
+  },
+  {
+   "en": "sink",
+   "zh": "洗手池"
+  },
+  {
+   "en": "towel",
+   "zh": "毛巾"
+  },
+  {
+   "en": "soap",
+   "zh": "肥皂"
+  },
+  {
+   "en": "toothbrush",
+   "zh": "牙刷"
+  },
+  {
+   "en": "toothpaste",
+   "zh": "牙膏"
+  },
+  {
+   "en": "blanket",
+   "zh": "毯子"
+  },
+  {
+   "en": "pillow",
+   "zh": "枕头"
+  },
+  {
+   "en": "cup",
+   "zh": "杯子"
+  },
+  {
+   "en": "bowl",
+   "zh": "碗"
+  },
+  {
+   "en": "plate",
+   "zh": "盘子"
+  },
+  {
+   "en": "spoon",
+   "zh": "勺子"
+  },
+  {
+   "en": "fork",
+   "zh": "叉子"
+  },
+  {
+   "en": "chopsticks",
+   "zh": "筷子"
+  },
+  {
+   "en": "bottle",
+   "zh": "瓶子"
+  },
+  {
+   "en": "phone",
+   "zh": "手机"
+  },
+  {
+   "en": "tv",
+   "zh": "电视"
+  },
+  {
+   "en": "television",
+   "zh": "电视"
+  },
+  {
+   "en": "toys",
+   "zh": "玩具"
+  },
+  {
+   "en": "toy",
+   "zh": "玩具"
+  },
+  {
+   "en": "ball",
+   "zh": "球"
+  },
+  {
+   "en": "blocks",
+   "zh": "积木"
+  },
+  {
+   "en": "block",
+   "zh": "积木"
+  },
+  {
+   "en": "car",
+   "zh": "小汽车"
+  },
+  {
+   "en": "cars",
+   "zh": "小汽车"
+  },
+  {
+   "en": "train",
+   "zh": "火车"
+  },
+  {
+   "en": "truck",
+   "zh": "卡车"
+  },
+  {
+   "en": "bus",
+   "zh": "公共汽车"
+  },
+  {
+   "en": "airplane",
+   "zh": "飞机"
+  },
+  {
+   "en": "plane",
+   "zh": "飞机"
+  },
+  {
+   "en": "boat",
+   "zh": "船"
+  },
+  {
+   "en": "bike",
+   "zh": "自行车"
+  },
+  {
+   "en": "bicycle",
+   "zh": "自行车"
+  },
+  {
+   "en": "doll",
+   "zh": "娃娃"
+  },
+  {
+   "en": "puzzle",
+   "zh": "拼图"
+  },
+  {
+   "en": "book",
+   "zh": "书"
+  },
+  {
+   "en": "books",
+   "zh": "书"
+  },
+  {
+   "en": "crayon",
+   "zh": "蜡笔"
+  },
+  {
+   "en": "crayons",
+   "zh": "蜡笔"
+  },
+  {
+   "en": "bubbles",
+   "zh": "泡泡"
+  },
+  {
+   "en": "balloon",
+   "zh": "气球"
+  },
+  {
+   "en": "swing",
+   "zh": "秋千"
+  },
+  {
+   "en": "slide",
+   "zh": "滑梯"
+  },
+  {
+   "en": "teddy bear",
+   "zh": "泰迪熊"
+  },
+  {
+   "en": "stuffed animal",
+   "zh": "毛绒玩具"
+  },
+  {
+   "en": "outside",
+   "zh": "外面"
+  },
+  {
+   "en": "park",
+   "zh": "公园"
+  },
+  {
+   "en": "playground",
+   "zh": "游乐场"
+  },
+  {
+   "en": "school",
+   "zh": "学校"
+  },
+  {
+   "en": "store",
+   "zh": "商店"
+  },
+  {
+   "en": "sun",
+   "zh": "太阳"
+  },
+  {
+   "en": "moon",
+   "zh": "月亮"
+  },
+  {
+   "en": "star",
+   "zh": "星星"
+  },
+  {
+   "en": "stars",
+   "zh": "星星"
+  },
+  {
+   "en": "sky",
+   "zh": "天空"
+  },
+  {
+   "en": "cloud",
+   "zh": "云"
+  },
+  {
+   "en": "rain",
+   "zh": "下雨"
+  },
+  {
+   "en": "snow",
+   "zh": "雪"
+  },
+  {
+   "en": "tree",
+   "zh": "树"
+  },
+  {
+   "en": "flower",
+   "zh": "花"
+  },
+  {
+   "en": "flowers",
+   "zh": "花"
+  },
+  {
+   "en": "grass",
+   "zh": "草"
+  },
+  {
+   "en": "rock",
+   "zh": "石头"
+  },
+  {
+   "en": "water",
+   "category": "outside",
+   "zh": "水"
+  },
+  {
+   "en": "colors",
+   "zh": "颜色"
+  },
+  {
+   "en": "color",
+   "section": "verbs",
+   "zh": "涂颜色"
+  },
+  {
+   "en": "color",
+   "zh": "颜色"
+  },
+  {
+   "en": "red",
+   "zh": "红色"
+  },
+  {
+   "en": "blue",
+   "zh": "蓝色"
+  },
+  {
+   "en": "yellow",
+   "zh": "黄色"
+  },
+  {
+   "en": "green",
+   "zh": "绿色"
+  },
+  {
+   "en": "purple",
+   "zh": "紫色"
+  },
+  {
+   "en": "pink",
+   "zh": "粉色"
+  },
+  {
+   "en": "black",
+   "zh": "黑色"
+  },
+  {
+   "en": "white",
+   "zh": "白色"
+  },
+  {
+   "en": "brown",
+   "zh": "棕色"
+  },
+  {
+   "en": "numbers",
+   "zh": "数字"
+  },
+  {
+   "en": "one",
+   "zh": "一"
+  },
+  {
+   "en": "two",
+   "zh": "二"
+  },
+  {
+   "en": "three",
+   "zh": "三"
+  },
+  {
+   "en": "four",
+   "zh": "四"
+  },
+  {
+   "en": "five",
+   "zh": "五"
+  },
+  {
+   "en": "six",
+   "zh": "六"
+  },
+  {
+   "en": "seven",
+   "zh": "七"
+  },
+  {
+   "en": "eight",
+   "zh": "八"
+  },
+  {
+   "en": "nine",
+   "zh": "九"
+  },
+  {
+   "en": "ten",
+   "zh": "十"
+  },
+  {
+   "en": "actions",
+   "zh": "动作"
+  },
+  {
+   "en": "run",
+   "zh": "跑"
+  },
+  {
+   "en": "jump",
+   "zh": "跳"
+  },
+  {
+   "en": "walk",
+   "zh": "走路"
+  },
+  {
+   "en": "sit",
+   "zh": "坐下"
+  },
+  {
+   "en": "stand",
+   "zh": "站起来"
+  },
+  {
+   "en": "sleep",
+   "zh": "睡觉"
+  },
+  {
+   "en": "wake up",
+   "zh": "起床"
+  },
+  {
+   "en": "play",
+   "zh": "玩"
+  },
+  {
+   "en": "wash",
+   "zh": "洗"
+  },
+  {
+   "en": "wash hands",
+   "zh": "洗手"
+  },
+  {
+   "en": "brush teeth",
+   "zh": "刷牙"
+  },
+  {
+   "en": "read",
+   "zh": "看书"
+  },
+  {
+   "en": "sing",
+   "zh": "唱歌"
+  },
+  {
+   "en": "dance",
+   "zh": "跳舞"
+  },
+  {
+   "en": "throw",
+   "zh": "扔"
+  },
+  {
+   "en": "catch",
+   "zh": "接住"
+  },
+  {
+   "en": "kick",
+   "zh": "踢"
+  },
+  {
+   "en": "climb",
+   "zh": "爬"
+  },
+  {
+   "en": "swim",
+   "zh": "游泳"
+  },
+  {
+   "en": "ride",
+   "zh": "骑"
+  },
+  {
+   "en": "draw",
+   "zh": "画画"
+  },
+  {
+   "en": "build",
+   "zh": "搭积木"
+  },
+  {
+   "en": "push",
+   "zh": "推"
+  },
+  {
+   "en": "pull",
+   "zh": "拉"
+  },
+  {
+   "en": "take",
+   "zh": "拿"
+  },
+  {
+   "en": "look",
+   "zh": "看"
+  },
+  {
+   "en": "watch",
+   "section": "verbs",
+   "zh": "看"
+  },
+  {
+   "en": "watch",
+   "zh": "手表"
+  },
+  {
+   "en": "listen",
+   "zh": "听"
+  },
+  {
+   "en": "share",
+   "zh": "分享"
+  },
+  {
+   "en": "cry",
+   "zh": "哭"
+  },
+  {
+   "en": "laugh",
+   "zh": "笑"
+  },
+  {
+   "en": "smile",
+   "zh": "微笑"
+  },
+  {
+   "en": "talk",
+   "zh": "说话"
+  },
+  {
+   "en": "say",
+   "zh": "说"
+  },
+  {
+   "en": "tell",
+   "zh": "告诉"
+  },
+  {
+   "en": "ask",
+   "zh": "问"
+  },
+  {
+   "en": "answer",
+   "zh": "回答"
+  },
+  {
+   "en": "sing a song",
+   "zh": "唱歌"
+  },
+  {
+   "en": "tickle",
+   "zh": "挠痒痒"
+  },
+  {
+   "en": "blow",
+   "zh": "吹"
+  },
+  {
+   "en": "clap",
+   "zh": "拍手"
+  },
+  {
+   "en": "wave",
+   "zh": "挥手"
+  },
+  {
+   "en": "point",
+   "zh": "指"
+  },
+  {
+   "en": "hold",
+   "zh": "抱着"
+  },
+  {
+   "en": "carry",
+   "zh": "抱"
+  },
+  {
+   "en": "put",
+   "zh": "放"
+  },
+  {
+   "en": "put away",
+   "zh": "收起来"
+  },
+  {
+   "en": "clean up",
+   "zh": "收拾"
+  },
+  {
+   "en": "turn on",
+   "zh": "打开"
+  },
+  {
+   "en": "turn off",
+   "zh": "关掉"
+  },
+  {
+   "en": "come",
+   "zh": "过来"
+  },
+  {
+   "en": "come here",
+   "zh": "过来"
+  },
+  {
+   "en": "sit down",
+   "zh": "坐下"
+  },
+  {
+   "en": "get up",
+   "zh": "起来"
+  },
+  {
+   "en": "fall down",
+   "zh": "摔倒了"
+  },
+  {
+   "en": "expressions",
+   "zh": "表情"
+  },
+  {
+   "en": "health",
+   "zh": "健康"
+  },
+  {
+   "en": "medicine",
+   "zh": "药"
+  },
+  {
+   "en": "band-aid",
+   "zh": "创可贴"
+  },
+  {
+   "en": "bandaid",
+   "zh": "创可贴"
+  },
+  {
+   "en": "holidays",
+   "zh": "节日"
+  },
+  {
+   "en": "birthday",
+   "zh": "生日"
+  },
+  {
+   "en": "party",
+   "zh": "聚会"
+  },
+  {
+   "en": "present",
+   "zh": "礼物"
+  },
+  {
+   "en": "gift",
+   "zh": "礼物"
+  },
+  {
+   "en": "learning",
+   "zh": "学习"
+  },
+  {
+   "en": "decorating",
+   "zh": "装饰"
+  },
+  {
+   "en": "music",
+   "zh": "音乐"
+  },
+  {
+   "en": "song",
+   "zh": "歌"
+  },
+  {
+   "en": "core",
+   "zh": "核心词"
+  },
+  {
+   "en": "core words",
+   "zh": "核心词"
+  },
+  {
+   "en": "1",
+   "t": "1",
+   "pron": "一"
+  },
+  {
+   "en": "2",
+   "t": "2",
+   "pron": "二"
+  },
+  {
+   "en": "3",
+   "t": "3",
+   "pron": "三"
+  },
+  {
+   "en": "4",
+   "t": "4",
+   "pron": "四"
+  },
+  {
+   "en": "5",
+   "t": "5",
+   "pron": "五"
+  },
+  {
+   "en": "6",
+   "t": "6",
+   "pron": "六"
+  },
+  {
+   "en": "7",
+   "t": "7",
+   "pron": "七"
+  },
+  {
+   "en": "8",
+   "t": "8",
+   "pron": "八"
+  },
+  {
+   "en": "9",
+   "t": "9",
+   "pron": "九"
+  },
+  {
+   "en": "10",
+   "t": "10",
+   "pron": "十"
+  },
+  {
+   "en": "11",
+   "t": "11",
+   "pron": "十一"
+  },
+  {
+   "en": "12",
+   "t": "12",
+   "pron": "十二"
+  },
+  {
+   "en": "13",
+   "t": "13",
+   "pron": "十三"
+  },
+  {
+   "en": "14",
+   "t": "14",
+   "pron": "十四"
+  },
+  {
+   "en": "15",
+   "t": "15",
+   "pron": "十五"
+  },
+  {
+   "en": "16",
+   "t": "16",
+   "pron": "十六"
+  },
+  {
+   "en": "17",
+   "t": "17",
+   "pron": "十七"
+  },
+  {
+   "en": "18",
+   "t": "18",
+   "pron": "十八"
+  },
+  {
+   "en": "19",
+   "t": "19",
+   "pron": "十九"
+  },
+  {
+   "en": "20",
+   "t": "20",
+   "pron": "二十"
+  },
+  {
+   "en": "21",
+   "t": "21",
+   "pron": "二十一"
+  },
+  {
+   "en": "22",
+   "t": "22",
+   "pron": "二十二"
+  },
+  {
+   "en": "23",
+   "t": "23",
+   "pron": "二十三"
+  },
+  {
+   "en": "24",
+   "t": "24",
+   "pron": "二十四"
+  },
+  {
+   "en": "25",
+   "t": "25",
+   "pron": "二十五"
+  },
+  {
+   "en": "26",
+   "t": "26",
+   "pron": "二十六"
+  },
+  {
+   "en": "27",
+   "t": "27",
+   "pron": "二十七"
+  },
+  {
+   "en": "28",
+   "t": "28",
+   "pron": "二十八"
+  },
+  {
+   "en": "29",
+   "t": "29",
+   "pron": "二十九"
+  },
+  {
+   "en": "30",
+   "t": "30",
+   "pron": "三十"
+  },
+  {
+   "en": "31",
+   "t": "31",
+   "pron": "三十一"
+  },
+  {
+   "en": "32",
+   "t": "32",
+   "pron": "三十二"
+  },
+  {
+   "en": "33",
+   "t": "33",
+   "pron": "三十三"
+  },
+  {
+   "en": "34",
+   "t": "34",
+   "pron": "三十四"
+  },
+  {
+   "en": "35",
+   "t": "35",
+   "pron": "三十五"
+  },
+  {
+   "en": "36",
+   "t": "36",
+   "pron": "三十六"
+  },
+  {
+   "en": "37",
+   "t": "37",
+   "pron": "三十七"
+  },
+  {
+   "en": "38",
+   "t": "38",
+   "pron": "三十八"
+  },
+  {
+   "en": "39",
+   "t": "39",
+   "pron": "三十九"
+  },
+  {
+   "en": "40",
+   "t": "40",
+   "pron": "四十"
+  },
+  {
+   "en": "41",
+   "t": "41",
+   "pron": "四十一"
+  },
+  {
+   "en": "42",
+   "t": "42",
+   "pron": "四十二"
+  },
+  {
+   "en": "43",
+   "t": "43",
+   "pron": "四十三"
+  },
+  {
+   "en": "44",
+   "t": "44",
+   "pron": "四十四"
+  },
+  {
+   "en": "45",
+   "t": "45",
+   "pron": "四十五"
+  },
+  {
+   "en": "46",
+   "t": "46",
+   "pron": "四十六"
+  },
+  {
+   "en": "47",
+   "t": "47",
+   "pron": "四十七"
+  },
+  {
+   "en": "48",
+   "t": "48",
+   "pron": "四十八"
+  },
+  {
+   "en": "49",
+   "t": "49",
+   "pron": "四十九"
+  },
+  {
+   "en": "50",
+   "t": "50",
+   "pron": "五十"
+  },
+  {
+   "en": "51",
+   "t": "51",
+   "pron": "五十一"
+  },
+  {
+   "en": "52",
+   "t": "52",
+   "pron": "五十二"
+  },
+  {
+   "en": "53",
+   "t": "53",
+   "pron": "五十三"
+  },
+  {
+   "en": "54",
+   "t": "54",
+   "pron": "五十四"
+  },
+  {
+   "en": "55",
+   "t": "55",
+   "pron": "五十五"
+  },
+  {
+   "en": "56",
+   "t": "56",
+   "pron": "五十六"
+  },
+  {
+   "en": "57",
+   "t": "57",
+   "pron": "五十七"
+  },
+  {
+   "en": "58",
+   "t": "58",
+   "pron": "五十八"
+  },
+  {
+   "en": "59",
+   "t": "59",
+   "pron": "五十九"
+  },
+  {
+   "en": "60",
+   "t": "60",
+   "pron": "六十"
+  },
+  {
+   "en": "61",
+   "t": "61",
+   "pron": "六十一"
+  },
+  {
+   "en": "62",
+   "t": "62",
+   "pron": "六十二"
+  },
+  {
+   "en": "63",
+   "t": "63",
+   "pron": "六十三"
+  },
+  {
+   "en": "64",
+   "t": "64",
+   "pron": "六十四"
+  },
+  {
+   "en": "65",
+   "t": "65",
+   "pron": "六十五"
+  },
+  {
+   "en": "66",
+   "t": "66",
+   "pron": "六十六"
+  },
+  {
+   "en": "67",
+   "t": "67",
+   "pron": "六十七"
+  },
+  {
+   "en": "68",
+   "t": "68",
+   "pron": "六十八"
+  },
+  {
+   "en": "69",
+   "t": "69",
+   "pron": "六十九"
+  },
+  {
+   "en": "70",
+   "t": "70",
+   "pron": "七十"
+  },
+  {
+   "en": "71",
+   "t": "71",
+   "pron": "七十一"
+  },
+  {
+   "en": "72",
+   "t": "72",
+   "pron": "七十二"
+  },
+  {
+   "en": "73",
+   "t": "73",
+   "pron": "七十三"
+  },
+  {
+   "en": "74",
+   "t": "74",
+   "pron": "七十四"
+  },
+  {
+   "en": "75",
+   "t": "75",
+   "pron": "七十五"
+  },
+  {
+   "en": "76",
+   "t": "76",
+   "pron": "七十六"
+  },
+  {
+   "en": "77",
+   "t": "77",
+   "pron": "七十七"
+  },
+  {
+   "en": "78",
+   "t": "78",
+   "pron": "七十八"
+  },
+  {
+   "en": "79",
+   "t": "79",
+   "pron": "七十九"
+  },
+  {
+   "en": "80",
+   "t": "80",
+   "pron": "八十"
+  },
+  {
+   "en": "81",
+   "t": "81",
+   "pron": "八十一"
+  },
+  {
+   "en": "82",
+   "t": "82",
+   "pron": "八十二"
+  },
+  {
+   "en": "83",
+   "t": "83",
+   "pron": "八十三"
+  },
+  {
+   "en": "84",
+   "t": "84",
+   "pron": "八十四"
+  },
+  {
+   "en": "85",
+   "t": "85",
+   "pron": "八十五"
+  },
+  {
+   "en": "86",
+   "t": "86",
+   "pron": "八十六"
+  },
+  {
+   "en": "87",
+   "t": "87",
+   "pron": "八十七"
+  },
+  {
+   "en": "88",
+   "t": "88",
+   "pron": "八十八"
+  },
+  {
+   "en": "89",
+   "t": "89",
+   "pron": "八十九"
+  },
+  {
+   "en": "90",
+   "t": "90",
+   "pron": "九十"
+  },
+  {
+   "en": "91",
+   "t": "91",
+   "pron": "九十一"
+  },
+  {
+   "en": "92",
+   "t": "92",
+   "pron": "九十二"
+  },
+  {
+   "en": "93",
+   "t": "93",
+   "pron": "九十三"
+  },
+  {
+   "en": "94",
+   "t": "94",
+   "pron": "九十四"
+  },
+  {
+   "en": "95",
+   "t": "95",
+   "pron": "九十五"
+  },
+  {
+   "en": "96",
+   "t": "96",
+   "pron": "九十六"
+  },
+  {
+   "en": "97",
+   "t": "97",
+   "pron": "九十七"
+  },
+  {
+   "en": "98",
+   "t": "98",
+   "pron": "九十八"
+  },
+  {
+   "en": "99",
+   "t": "99",
+   "pron": "九十九"
+  },
+  {
+   "en": "100",
+   "t": "100",
+   "pron": "一百"
+  },
+  {
+   "en": "A",
+   "category": "abc",
+   "t": "A"
+  },
+  {
+   "en": "A",
+   "category": "letters",
+   "t": "A"
+  },
+  {
+   "en": "A",
+   "category": "learning",
+   "t": "A"
+  },
+  {
+   "en": "B",
+   "category": "abc",
+   "t": "B"
+  },
+  {
+   "en": "B",
+   "category": "letters",
+   "t": "B"
+  },
+  {
+   "en": "B",
+   "category": "learning",
+   "t": "B"
+  },
+  {
+   "en": "C",
+   "category": "abc",
+   "t": "C"
+  },
+  {
+   "en": "C",
+   "category": "letters",
+   "t": "C"
+  },
+  {
+   "en": "C",
+   "category": "learning",
+   "t": "C"
+  },
+  {
+   "en": "D",
+   "category": "abc",
+   "t": "D"
+  },
+  {
+   "en": "D",
+   "category": "letters",
+   "t": "D"
+  },
+  {
+   "en": "D",
+   "category": "learning",
+   "t": "D"
+  },
+  {
+   "en": "E",
+   "category": "abc",
+   "t": "E"
+  },
+  {
+   "en": "E",
+   "category": "letters",
+   "t": "E"
+  },
+  {
+   "en": "E",
+   "category": "learning",
+   "t": "E"
+  },
+  {
+   "en": "F",
+   "category": "abc",
+   "t": "F"
+  },
+  {
+   "en": "F",
+   "category": "letters",
+   "t": "F"
+  },
+  {
+   "en": "F",
+   "category": "learning",
+   "t": "F"
+  },
+  {
+   "en": "G",
+   "category": "abc",
+   "t": "G"
+  },
+  {
+   "en": "G",
+   "category": "letters",
+   "t": "G"
+  },
+  {
+   "en": "G",
+   "category": "learning",
+   "t": "G"
+  },
+  {
+   "en": "H",
+   "category": "abc",
+   "t": "H"
+  },
+  {
+   "en": "H",
+   "category": "letters",
+   "t": "H"
+  },
+  {
+   "en": "H",
+   "category": "learning",
+   "t": "H"
+  },
+  {
+   "en": "I",
+   "category": "abc",
+   "t": "I"
+  },
+  {
+   "en": "I",
+   "category": "letters",
+   "t": "I"
+  },
+  {
+   "en": "I",
+   "category": "learning",
+   "t": "I"
+  },
+  {
+   "en": "J",
+   "category": "abc",
+   "t": "J"
+  },
+  {
+   "en": "J",
+   "category": "letters",
+   "t": "J"
+  },
+  {
+   "en": "J",
+   "category": "learning",
+   "t": "J"
+  },
+  {
+   "en": "K",
+   "category": "abc",
+   "t": "K"
+  },
+  {
+   "en": "K",
+   "category": "letters",
+   "t": "K"
+  },
+  {
+   "en": "K",
+   "category": "learning",
+   "t": "K"
+  },
+  {
+   "en": "L",
+   "category": "abc",
+   "t": "L"
+  },
+  {
+   "en": "L",
+   "category": "letters",
+   "t": "L"
+  },
+  {
+   "en": "L",
+   "category": "learning",
+   "t": "L"
+  },
+  {
+   "en": "M",
+   "category": "abc",
+   "t": "M"
+  },
+  {
+   "en": "M",
+   "category": "letters",
+   "t": "M"
+  },
+  {
+   "en": "M",
+   "category": "learning",
+   "t": "M"
+  },
+  {
+   "en": "N",
+   "category": "abc",
+   "t": "N"
+  },
+  {
+   "en": "N",
+   "category": "letters",
+   "t": "N"
+  },
+  {
+   "en": "N",
+   "category": "learning",
+   "t": "N"
+  },
+  {
+   "en": "O",
+   "category": "abc",
+   "t": "O"
+  },
+  {
+   "en": "O",
+   "category": "letters",
+   "t": "O"
+  },
+  {
+   "en": "O",
+   "category": "learning",
+   "t": "O"
+  },
+  {
+   "en": "P",
+   "category": "abc",
+   "t": "P"
+  },
+  {
+   "en": "P",
+   "category": "letters",
+   "t": "P"
+  },
+  {
+   "en": "P",
+   "category": "learning",
+   "t": "P"
+  },
+  {
+   "en": "Q",
+   "category": "abc",
+   "t": "Q"
+  },
+  {
+   "en": "Q",
+   "category": "letters",
+   "t": "Q"
+  },
+  {
+   "en": "Q",
+   "category": "learning",
+   "t": "Q"
+  },
+  {
+   "en": "R",
+   "category": "abc",
+   "t": "R"
+  },
+  {
+   "en": "R",
+   "category": "letters",
+   "t": "R"
+  },
+  {
+   "en": "R",
+   "category": "learning",
+   "t": "R"
+  },
+  {
+   "en": "S",
+   "category": "abc",
+   "t": "S"
+  },
+  {
+   "en": "S",
+   "category": "letters",
+   "t": "S"
+  },
+  {
+   "en": "S",
+   "category": "learning",
+   "t": "S"
+  },
+  {
+   "en": "T",
+   "category": "abc",
+   "t": "T"
+  },
+  {
+   "en": "T",
+   "category": "letters",
+   "t": "T"
+  },
+  {
+   "en": "T",
+   "category": "learning",
+   "t": "T"
+  },
+  {
+   "en": "U",
+   "category": "abc",
+   "t": "U"
+  },
+  {
+   "en": "U",
+   "category": "letters",
+   "t": "U"
+  },
+  {
+   "en": "U",
+   "category": "learning",
+   "t": "U"
+  },
+  {
+   "en": "V",
+   "category": "abc",
+   "t": "V"
+  },
+  {
+   "en": "V",
+   "category": "letters",
+   "t": "V"
+  },
+  {
+   "en": "V",
+   "category": "learning",
+   "t": "V"
+  },
+  {
+   "en": "W",
+   "category": "abc",
+   "t": "W"
+  },
+  {
+   "en": "W",
+   "category": "letters",
+   "t": "W"
+  },
+  {
+   "en": "W",
+   "category": "learning",
+   "t": "W"
+  },
+  {
+   "en": "X",
+   "category": "abc",
+   "t": "X"
+  },
+  {
+   "en": "X",
+   "category": "letters",
+   "t": "X"
+  },
+  {
+   "en": "X",
+   "category": "learning",
+   "t": "X"
+  },
+  {
+   "en": "Y",
+   "category": "abc",
+   "t": "Y"
+  },
+  {
+   "en": "Y",
+   "category": "letters",
+   "t": "Y"
+  },
+  {
+   "en": "Y",
+   "category": "learning",
+   "t": "Y"
+  },
+  {
+   "en": "Z",
+   "category": "abc",
+   "t": "Z"
+  },
+  {
+   "en": "Z",
+   "category": "letters",
+   "t": "Z"
+  },
+  {
+   "en": "Z",
+   "category": "learning",
+   "t": "Z"
+  },
+  {
+   "en": "1 o'clock",
+   "t": "一点"
+  },
+  {
+   "en": "2 o'clock",
+   "t": "两点"
+  },
+  {
+   "en": "3 o'clock",
+   "t": "三点"
+  },
+  {
+   "en": "4 o'clock",
+   "t": "四点"
+  },
+  {
+   "en": "5 o'clock",
+   "t": "五点"
+  },
+  {
+   "en": "6 o'clock",
+   "t": "六点"
+  },
+  {
+   "en": "7 o'clock",
+   "t": "七点"
+  },
+  {
+   "en": "8 o'clock",
+   "t": "八点"
+  },
+  {
+   "en": "9 o'clock",
+   "t": "九点"
+  },
+  {
+   "en": "10 o'clock",
+   "t": "十点"
+  },
+  {
+   "en": "11 o'clock",
+   "t": "十一点"
+  },
+  {
+   "en": "12 o'clock",
+   "t": "十二点"
+  },
+  {
+   "en": "o'clock",
+   "t": "点钟"
+  },
+  {
+   "en": "april fools day",
+   "t": "愚人节"
+  },
+  {
+   "en": "christmas eve",
+   "t": "平安夜"
+  },
+  {
+   "en": "happy new year",
+   "t": "新年快乐"
+  },
+  {
+   "en": "independence day",
+   "t": "独立日"
+  },
+  {
+   "en": "memorial day",
+   "t": "阵亡将士纪念日"
+  },
+  {
+   "en": "merry christmas",
+   "t": "圣诞快乐"
+  },
+  {
+   "en": "new year's eve",
+   "t": "跨年夜"
+  },
+  {
+   "en": "st. patrick's day",
+   "t": "圣帕特里克节"
+  },
+  {
+   "en": "christmas",
+   "t": "圣诞节"
+  },
+  {
+   "en": "easter",
+   "t": "复活节"
+  },
+  {
+   "en": "father's day",
+   "t": "父亲节"
+  },
+  {
+   "en": "fourth of july",
+   "t": "七月四日"
+  },
+  {
+   "en": "halloween",
+   "t": "万圣节"
+  },
+  {
+   "en": "hanukkah",
+   "t": "光明节"
+  },
+  {
+   "en": "mother's day",
+   "t": "母亲节"
+  },
+  {
+   "en": "new year",
+   "t": "新年"
+  },
+  {
+   "en": "thanksgiving",
+   "t": "感恩节"
+  },
+  {
+   "en": "valentine's day",
+   "t": "情人节"
+  },
+  {
+   "en": "my turn",
+   "t": "该我了"
+  },
+  {
+   "en": "almost",
+   "t": "差一点"
+  },
+  {
+   "en": "always",
+   "t": "总是"
+  },
+  {
+   "en": "carefully",
+   "t": "小心地"
+  },
+  {
+   "en": "gently",
+   "t": "轻轻地"
+  },
+  {
+   "en": "loudly",
+   "t": "大声地"
+  },
+  {
+   "en": "never",
+   "t": "从不"
+  },
+  {
+   "en": "quickly",
+   "t": "快快地"
+  },
+  {
+   "en": "quietly",
+   "t": "轻声地"
+  },
+  {
+   "en": "slowly",
+   "t": "慢慢地"
+  },
+  {
+   "en": "sometimes",
+   "t": "有时候"
+  },
+  {
+   "en": "beetle",
+   "t": "甲虫"
+  },
+  {
+   "en": "centipede",
+   "t": "蜈蚣"
+  },
+  {
+   "en": "daddy long legs",
+   "t": "长腿蜘蛛"
+  },
+  {
+   "en": "firefly",
+   "t": "萤火虫"
+  },
+  {
+   "en": "grasshopper",
+   "t": "蚱蜢"
+  },
+  {
+   "en": "mosquito",
+   "t": "蚊子"
+  },
+  {
+   "en": "moth",
+   "t": "飞蛾"
+  },
+  {
+   "en": "pill bug",
+   "t": "西瓜虫"
+  },
+  {
+   "en": "praying mantis",
+   "t": "螳螂"
+  },
+  {
+   "en": "worm",
+   "t": "蚯蚓"
+  },
+  {
+   "en": "caterpillar",
+   "t": "毛毛虫"
+  },
+  {
+   "en": "dragonfly",
+   "t": "蜻蜓"
+  },
+  {
+   "en": "ladybug",
+   "t": "瓢虫"
+  },
+  {
+   "en": "snail",
+   "t": "蜗牛"
+  },
+  {
+   "en": "allosaurus",
+   "t": "异特龙"
+  },
+  {
+   "en": "ankylosaurus",
+   "t": "甲龙"
+  },
+  {
+   "en": "brachiosaurus",
+   "t": "腕龙"
+  },
+  {
+   "en": "carnotaurus",
+   "t": "食肉牛龙"
+  },
+  {
+   "en": "corythosaurus",
+   "t": "冠龙"
+  },
+  {
+   "en": "deinonychus",
+   "t": "恐爪龙"
+  },
+  {
+   "en": "dilophosaurus",
+   "t": "双脊龙"
+  },
+  {
+   "en": "giganotosaurus",
+   "t": "南方巨兽龙"
+  },
+  {
+   "en": "iguanodon",
+   "t": "禽龙"
+  },
+  {
+   "en": "kentrosaurus",
+   "t": "肯氏龙"
+  },
+  {
+   "en": "pachycephalosaurus",
+   "t": "肿头龙"
+  },
+  {
+   "en": "parasaurolophus",
+   "t": "副栉龙"
+  },
+  {
+   "en": "spinosaurus",
+   "t": "棘龙"
+  },
+  {
+   "en": "styracosaurus",
+   "t": "戟龙"
+  },
+  {
+   "en": "t-rex",
+   "t": "霸王龙"
+  },
+  {
+   "en": "therizinosaurus",
+   "t": "镰刀龙"
+  },
+  {
+   "en": "brontosaurus",
+   "t": "雷龙"
+  },
+  {
+   "en": "pterodactyl",
+   "t": "翼龙"
+  },
+  {
+   "en": "stegosaurus",
+   "t": "剑龙"
+  },
+  {
+   "en": "triceratops",
+   "t": "三角龙"
+  },
+  {
+   "en": "velociraptor",
+   "t": "迅猛龙"
+  },
+  {
+   "en": "chick",
+   "t": "小鸡"
+  },
+  {
+   "en": "goose",
+   "t": "鹅"
+  },
+  {
+   "en": "peacock",
+   "t": "孔雀"
+  },
+  {
+   "en": "pony",
+   "t": "小马"
+  },
+  {
+   "en": "alpaca",
+   "t": "羊驼"
+  },
+  {
+   "en": "donkey",
+   "t": "驴"
+  },
+  {
+   "en": "llama",
+   "t": "骆马"
+  },
+  {
+   "en": "rooster",
+   "t": "公鸡"
+  },
+  {
+   "en": "turkey",
+   "t": "火鸡"
+  },
+  {
+   "en": "angelfish",
+   "t": "神仙鱼"
+  },
+  {
+   "en": "catfish",
+   "t": "鲶鱼"
+  },
+  {
+   "en": "clownfish",
+   "t": "小丑鱼"
+  },
+  {
+   "en": "goldfish",
+   "t": "金鱼"
+  },
+  {
+   "en": "guppy",
+   "t": "孔雀鱼"
+  },
+  {
+   "en": "marlin",
+   "t": "马林鱼"
+  },
+  {
+   "en": "pufferfish",
+   "t": "河豚"
+  },
+  {
+   "en": "salmon",
+   "t": "三文鱼"
+  },
+  {
+   "en": "scallop",
+   "t": "扇贝"
+  },
+  {
+   "en": "sea urchin",
+   "t": "海胆"
+  },
+  {
+   "en": "seahorse",
+   "t": "海马"
+  },
+  {
+   "en": "shrimp",
+   "t": "虾"
+  },
+  {
+   "en": "squid",
+   "t": "鱿鱼"
+  },
+  {
+   "en": "stingray",
+   "t": "魟鱼"
+  },
+  {
+   "en": "eel",
+   "t": "鳗鱼"
+  },
+  {
+   "en": "manatee",
+   "t": "海牛"
+  },
+  {
+   "en": "sea lion",
+   "t": "海狮"
+  },
+  {
+   "en": "sea turtle",
+   "t": "海龟"
+  },
+  {
+   "en": "crab",
+   "t": "螃蟹"
+  },
+  {
+   "en": "dolphin",
+   "t": "海豚"
+  },
+  {
+   "en": "jellyfish",
+   "t": "水母"
+  },
+  {
+   "en": "lobster",
+   "t": "龙虾"
+  },
+  {
+   "en": "octopus",
+   "t": "章鱼"
+  },
+  {
+   "en": "seal",
+   "t": "海豹"
+  },
+  {
+   "en": "shark",
+   "t": "鲨鱼"
+  },
+  {
+   "en": "starfish",
+   "t": "海星"
+  },
+  {
+   "en": "walrus",
+   "t": "海象"
+  },
+  {
+   "en": "whale",
+   "t": "鲸鱼"
+  },
+  {
+   "en": "crow",
+   "t": "乌鸦"
+  },
+  {
+   "en": "moose",
+   "t": "驼鹿"
+  },
+  {
+   "en": "woodpecker",
+   "t": "啄木鸟"
+  },
+  {
+   "en": "deer",
+   "t": "小鹿"
+  },
+  {
+   "en": "fox",
+   "t": "狐狸"
+  },
+  {
+   "en": "owl",
+   "t": "猫头鹰"
+  },
+  {
+   "en": "raccoon",
+   "t": "浣熊"
+  },
+  {
+   "en": "squirrel",
+   "t": "松鼠"
+  },
+  {
+   "en": "wolf",
+   "t": "狼"
+  },
+  {
+   "en": "chimpanzee",
+   "t": "黑猩猩"
+  },
+  {
+   "en": "toucan",
+   "t": "巨嘴鸟"
+  },
+  {
+   "en": "gorilla",
+   "t": "大猩猩"
+  },
+  {
+   "en": "hippo",
+   "t": "河马"
+  },
+  {
+   "en": "kangaroo",
+   "t": "袋鼠"
+  },
+  {
+   "en": "koala",
+   "t": "考拉"
+  },
+  {
+   "en": "bat",
+   "t": "蝙蝠"
+  },
+  {
+   "en": "beaver",
+   "t": "河狸"
+  },
+  {
+   "en": "cheetah",
+   "t": "猎豹"
+  },
+  {
+   "en": "chipmunk",
+   "t": "花栗鼠"
+  },
+  {
+   "en": "hedgehog",
+   "t": "刺猬"
+  },
+  {
+   "en": "jaguar",
+   "t": "美洲豹"
+  },
+  {
+   "en": "leopard",
+   "t": "豹子"
+  },
+  {
+   "en": "opossum",
+   "t": "负鼠"
+  },
+  {
+   "en": "otter",
+   "t": "水獭"
+  },
+  {
+   "en": "skunk",
+   "t": "臭鼬"
+  },
+  {
+   "en": "sloth",
+   "t": "树懒"
+  },
+  {
+   "en": "ferret",
+   "t": "雪貂"
+  },
+  {
+   "en": "gerbil",
+   "t": "沙鼠"
+  },
+  {
+   "en": "guinea pig",
+   "t": "豚鼠"
+  },
+  {
+   "en": "hamster",
+   "t": "仓鼠"
+  },
+  {
+   "en": "lizard",
+   "t": "蜥蜴"
+  },
+  {
+   "en": "parrot",
+   "t": "鹦鹉"
+  },
+  {
+   "en": "arctic hare",
+   "t": "北极兔"
+  },
+  {
+   "en": "arctic fox",
+   "t": "北极狐"
+  },
+  {
+   "en": "narwhal",
+   "t": "独角鲸"
+  },
+  {
+   "en": "polar bear",
+   "t": "北极熊"
+  },
+  {
+   "en": "puffin",
+   "t": "海鹦"
+  },
+  {
+   "en": "alligator",
+   "t": "短吻鳄"
+  },
+  {
+   "en": "chameleon",
+   "t": "变色龙"
+  },
+  {
+   "en": "crocodile",
+   "t": "鳄鱼"
+  },
+  {
+   "en": "gecko",
+   "t": "壁虎"
+  },
+  {
+   "en": "toad",
+   "t": "癞蛤蟆"
+  },
+  {
+   "en": "how",
+   "t": "怎么"
+  },
+  {
+   "en": "what",
+   "t": "什么"
+  },
+  {
+   "en": "when",
+   "t": "什么时候"
+  },
+  {
+   "en": "where",
+   "t": "哪里"
+  },
+  {
+   "en": "who",
+   "t": "谁"
+  },
+  {
+   "en": "why",
+   "t": "为什么"
+  },
+  {
+   "en": "lip",
+   "t": "嘴唇"
+  },
+  {
+   "en": "beard",
+   "t": "胡子"
+  },
+  {
+   "en": "dimple",
+   "t": "酒窝"
+  },
+  {
+   "en": "eyebrow",
+   "t": "眉毛"
+  },
+  {
+   "en": "eyelash",
+   "t": "睫毛"
+  },
+  {
+   "en": "freckle",
+   "t": "雀斑"
+  },
+  {
+   "en": "hip",
+   "t": "胯"
+  },
+  {
+   "en": "knuckle",
+   "t": "指关节"
+  },
+  {
+   "en": "waist",
+   "t": "腰"
+  },
+  {
+   "en": "baseball cap",
+   "t": "棒球帽"
+  },
+  {
+   "en": "beanie",
+   "t": "毛线帽"
+  },
+  {
+   "en": "jeans",
+   "t": "牛仔裤"
+  },
+  {
+   "en": "rain boots",
+   "t": "雨靴"
+  },
+  {
+   "en": "sneakers",
+   "t": "运动鞋"
+  },
+  {
+   "en": "hoodie",
+   "t": "连帽衫"
+  },
+  {
+   "en": "robe",
+   "t": "浴袍"
+  },
+  {
+   "en": "sandals",
+   "t": "凉鞋"
+  },
+  {
+   "en": "slippers",
+   "t": "拖鞋"
+  },
+  {
+   "en": "swimsuit",
+   "t": "泳衣"
+  },
+  {
+   "en": "cloudy",
+   "t": "多云"
+  },
+  {
+   "en": "cool",
+   "t": "凉快"
+  },
+  {
+   "en": "foggy",
+   "t": "有雾"
+  },
+  {
+   "en": "funny",
+   "t": "好笑"
+  },
+  {
+   "en": "hard",
+   "t": "硬"
+  },
+  {
+   "en": "lightning",
+   "t": "闪电"
+  },
+  {
+   "en": "new",
+   "t": "新的"
+  },
+  {
+   "en": "pretty",
+   "t": "漂亮"
+  },
+  {
+   "en": "rainbow",
+   "t": "彩虹"
+  },
+  {
+   "en": "rainy",
+   "t": "下雨天"
+  },
+  {
+   "en": "scary",
+   "t": "吓人"
+  },
+  {
+   "en": "short",
+   "t": "矮"
+  },
+  {
+   "en": "snowy",
+   "t": "下雪天"
+  },
+  {
+   "en": "soft",
+   "t": "软软的"
+  },
+  {
+   "en": "sticky",
+   "t": "黏黏的"
+  },
+  {
+   "en": "stormy",
+   "t": "暴风雨"
+  },
+  {
+   "en": "sunny",
+   "t": "晴天"
+  },
+  {
+   "en": "sweet",
+   "t": "甜"
+  },
+  {
+   "en": "tall",
+   "t": "高"
+  },
+  {
+   "en": "tornado",
+   "t": "龙卷风"
+  },
+  {
+   "en": "warm",
+   "t": "暖和"
+  },
+  {
+   "en": "windy",
+   "t": "刮风"
+  },
+  {
+   "en": "busy",
+   "t": "忙"
+  },
+  {
+   "en": "careful",
+   "t": "小心"
+  },
+  {
+   "en": "fancy",
+   "t": "华丽"
+  },
+  {
+   "en": "friendly",
+   "t": "友好"
+  },
+  {
+   "en": "gentle",
+   "t": "温柔"
+  },
+  {
+   "en": "goofy",
+   "t": "傻乎乎"
+  },
+  {
+   "en": "helpful",
+   "t": "乐于助人"
+  },
+  {
+   "en": "kind",
+   "t": "善良"
+  },
+  {
+   "en": "lazy",
+   "t": "懒"
+  },
+  {
+   "en": "mean",
+   "t": "凶"
+  },
+  {
+   "en": "polite",
+   "t": "有礼貌"
+  },
+  {
+   "en": "smart",
+   "t": "聪明"
+  },
+  {
+   "en": "broken",
+   "t": "坏了"
+  },
+  {
+   "en": "different",
+   "t": "不一样"
+  },
+  {
+   "en": "easy",
+   "t": "容易"
+  },
+  {
+   "en": "empty",
+   "t": "空的"
+  },
+  {
+   "en": "full",
+   "t": "满的"
+  },
+  {
+   "en": "heavy",
+   "t": "重"
+  },
+  {
+   "en": "light_wt",
+   "t": "轻"
+  },
+  {
+   "en": "same",
+   "t": "一样"
+  },
+  {
+   "en": "asleep",
+   "t": "睡着了"
+  },
+  {
+   "en": "awake",
+   "t": "醒着"
+  },
+  {
+   "en": "bright",
+   "t": "亮"
+  },
+  {
+   "en": "closed",
+   "t": "关着"
+  },
+  {
+   "en": "dark",
+   "t": "黑"
+  },
+  {
+   "en": "deep",
+   "t": "深"
+  },
+  {
+   "en": "dull",
+   "t": "暗淡"
+  },
+  {
+   "en": "early",
+   "t": "早"
+  },
+  {
+   "en": "equal",
+   "t": "相等"
+  },
+  {
+   "en": "everywhere",
+   "t": "到处"
+  },
+  {
+   "en": "first",
+   "t": "第一"
+  },
+  {
+   "en": "last",
+   "t": "最后"
+  },
+  {
+   "en": "late",
+   "t": "晚了"
+  },
+  {
+   "en": "less",
+   "t": "更少"
+  },
+  {
+   "en": "longer",
+   "t": "更长"
+  },
+  {
+   "en": "noisy",
+   "t": "吵"
+  },
+  {
+   "en": "nowhere",
+   "t": "哪儿都没有"
+  },
+  {
+   "en": "old",
+   "t": "旧"
+  },
+  {
+   "en": "right (correct)",
+   "t": "对"
+  },
+  {
+   "en": "rough",
+   "t": "粗糙"
+  },
+  {
+   "en": "safe",
+   "t": "安全"
+  },
+  {
+   "en": "shallow",
+   "t": "浅"
+  },
+  {
+   "en": "shiny",
+   "t": "闪亮"
+  },
+  {
+   "en": "shorter",
+   "t": "更短"
+  },
+  {
+   "en": "smooth",
+   "t": "光滑"
+  },
+  {
+   "en": "sour",
+   "t": "酸"
+  },
+  {
+   "en": "strong",
+   "t": "强壮"
+  },
+  {
+   "en": "there",
+   "t": "那里"
+  },
+  {
+   "en": "thick",
+   "t": "厚"
+  },
+  {
+   "en": "thin",
+   "t": "薄"
+  },
+  {
+   "en": "weak",
+   "t": "弱"
+  },
+  {
+   "en": "wrong",
+   "t": "错"
+  },
+  {
+   "en": "young",
+   "t": "年轻"
+  },
+  {
+   "en": "calm",
+   "t": "平静"
+  },
+  {
+   "en": "confused",
+   "t": "困惑"
+  },
+  {
+   "en": "embarrassed",
+   "t": "尴尬"
+  },
+  {
+   "en": "frustrated",
+   "t": "好烦"
+  },
+  {
+   "en": "lonely",
+   "t": "孤单"
+  },
+  {
+   "en": "nervous",
+   "t": "紧张"
+  },
+  {
+   "en": "proud",
+   "t": "自豪"
+  },
+  {
+   "en": "worried",
+   "t": "担心"
+  },
+  {
+   "en": "brave",
+   "t": "勇敢"
+  },
+  {
+   "en": "curious",
+   "t": "好奇"
+  },
+  {
+   "en": "disappointed",
+   "t": "失望"
+  },
+  {
+   "en": "grateful",
+   "t": "感恩"
+  },
+  {
+   "en": "hopeful",
+   "t": "充满希望"
+  },
+  {
+   "en": "jealous",
+   "t": "嫉妒"
+  },
+  {
+   "en": "bagel",
+   "t": "贝果"
+  },
+  {
+   "en": "muffin",
+   "t": "玛芬"
+  },
+  {
+   "en": "oatmeal",
+   "t": "燕麦粥"
+  },
+  {
+   "en": "waffle",
+   "t": "华夫饼"
+  },
+  {
+   "en": "butter",
+   "t": "黄油"
+  },
+  {
+   "en": "jam",
+   "t": "果酱"
+  },
+  {
+   "en": "ketchup",
+   "t": "番茄酱"
+  },
+  {
+   "en": "salt",
+   "t": "盐"
+  },
+  {
+   "en": "syrup",
+   "t": "糖浆"
+  },
+  {
+   "en": "smoothie",
+   "t": "果昔"
+  },
+  {
+   "en": "cherry",
+   "t": "樱桃"
+  },
+  {
+   "en": "kiwi",
+   "t": "猕猴桃"
+  },
+  {
+   "en": "pineapple",
+   "t": "菠萝"
+  },
+  {
+   "en": "avocado",
+   "t": "牛油果"
+  },
+  {
+   "en": "coconut",
+   "t": "椰子"
+  },
+  {
+   "en": "lemon",
+   "t": "柠檬"
+  },
+  {
+   "en": "plum",
+   "t": "李子"
+  },
+  {
+   "en": "pomegranate",
+   "t": "石榴"
+  },
+  {
+   "en": "burrito",
+   "t": "墨西哥卷饼"
+  },
+  {
+   "en": "fries",
+   "t": "薯条"
+  },
+  {
+   "en": "hamburger",
+   "t": "汉堡"
+  },
+  {
+   "en": "hot dog",
+   "t": "热狗"
+  },
+  {
+   "en": "salad",
+   "t": "沙拉"
+  },
+  {
+   "en": "sushi",
+   "t": "寿司"
+  },
+  {
+   "en": "pretzel",
+   "t": "椒盐卷饼"
+  },
+  {
+   "en": "chocolate",
+   "t": "巧克力"
+  },
+  {
+   "en": "donut",
+   "t": "甜甜圈"
+  },
+  {
+   "en": "lollipop",
+   "t": "棒棒糖"
+  },
+  {
+   "en": "asparagus",
+   "t": "芦笋"
+  },
+  {
+   "en": "cauliflower",
+   "t": "花菜"
+  },
+  {
+   "en": "eggplant",
+   "t": "茄子"
+  },
+  {
+   "en": "spinach",
+   "t": "菠菜"
+  },
+  {
+   "en": "squash",
+   "t": "南瓜"
+  },
+  {
+   "en": "zucchini",
+   "t": "西葫芦"
+  },
+  {
+   "en": "celery",
+   "t": "芹菜"
+  },
+  {
+   "en": "lettuce",
+   "t": "生菜"
+  },
+  {
+   "en": "mushroom",
+   "t": "蘑菇"
+  },
+  {
+   "en": "onion",
+   "t": "洋葱"
+  },
+  {
+   "en": "peas",
+   "t": "豌豆"
+  },
+  {
+   "en": "pepper",
+   "t": "甜椒"
+  },
+  {
+   "en": "cough",
+   "t": "咳嗽"
+  },
+  {
+   "en": "dizzy",
+   "t": "头晕"
+  },
+  {
+   "en": "itchy",
+   "t": "痒"
+  },
+  {
+   "en": "sneeze",
+   "t": "打喷嚏"
+  },
+  {
+   "en": "sore",
+   "t": "酸痛"
+  },
+  {
+   "en": "comb",
+   "t": "梳子"
+  },
+  {
+   "en": "faucet",
+   "t": "水龙头"
+  },
+  {
+   "en": "hairbrush",
+   "t": "发刷"
+  },
+  {
+   "en": "mirror",
+   "t": "镜子"
+  },
+  {
+   "en": "shampoo",
+   "t": "洗发水"
+  },
+  {
+   "en": "blender",
+   "t": "搅拌机"
+  },
+  {
+   "en": "dishwasher",
+   "t": "洗碗机"
+  },
+  {
+   "en": "knife",
+   "t": "刀"
+  },
+  {
+   "en": "microwave",
+   "t": "微波炉"
+  },
+  {
+   "en": "oven",
+   "t": "烤箱"
+  },
+  {
+   "en": "pan",
+   "t": "平底锅"
+  },
+  {
+   "en": "pot",
+   "t": "锅"
+  },
+  {
+   "en": "refrigerator",
+   "t": "冰箱"
+  },
+  {
+   "en": "stove",
+   "t": "炉子"
+  },
+  {
+   "en": "toaster",
+   "t": "烤面包机"
+  },
+  {
+   "en": "bib",
+   "t": "围嘴"
+  },
+  {
+   "en": "lunchbox",
+   "t": "饭盒"
+  },
+  {
+   "en": "mug",
+   "t": "马克杯"
+  },
+  {
+   "en": "napkin",
+   "t": "餐巾"
+  },
+  {
+   "en": "pitcher",
+   "t": "水壶"
+  },
+  {
+   "en": "placemat",
+   "t": "餐垫"
+  },
+  {
+   "en": "sippy cup",
+   "t": "学饮杯"
+  },
+  {
+   "en": "straw",
+   "t": "吸管"
+  },
+  {
+   "en": "thermos",
+   "t": "保温杯"
+  },
+  {
+   "en": "tray",
+   "t": "托盘"
+  },
+  {
+   "en": "water bottle",
+   "t": "水瓶"
+  },
+  {
+   "en": "button",
+   "t": "按钮"
+  },
+  {
+   "en": "camera",
+   "t": "相机"
+  },
+  {
+   "en": "charger",
+   "t": "充电器"
+  },
+  {
+   "en": "headphones",
+   "t": "耳机"
+  },
+  {
+   "en": "laptop",
+   "t": "笔记本电脑"
+  },
+  {
+   "en": "remote",
+   "t": "遥控器"
+  },
+  {
+   "en": "screen",
+   "t": "屏幕"
+  },
+  {
+   "en": "speaker",
+   "t": "音箱"
+  },
+  {
+   "en": "tablet",
+   "t": "平板"
+  },
+  {
+   "en": "gold",
+   "t": "金色"
+  },
+  {
+   "en": "gray",
+   "t": "灰色"
+  },
+  {
+   "en": "navy",
+   "t": "藏青色"
+  },
+  {
+   "en": "silver",
+   "t": "银色"
+  },
+  {
+   "en": "tan",
+   "t": "浅棕色"
+  },
+  {
+   "en": "teal",
+   "t": "青色"
+  },
+  {
+   "en": "arrow",
+   "t": "箭头"
+  },
+  {
+   "en": "circle",
+   "t": "圆形"
+  },
+  {
+   "en": "crescent",
+   "t": "月牙形"
+  },
+  {
+   "en": "cross",
+   "t": "十字"
+  },
+  {
+   "en": "diamond",
+   "t": "菱形"
+  },
+  {
+   "en": "heart",
+   "t": "心形"
+  },
+  {
+   "en": "hexagon",
+   "t": "六边形"
+  },
+  {
+   "en": "octagon",
+   "t": "八边形"
+  },
+  {
+   "en": "oval",
+   "t": "椭圆形"
+  },
+  {
+   "en": "pentagon",
+   "t": "五边形"
+  },
+  {
+   "en": "rectangle",
+   "t": "长方形"
+  },
+  {
+   "en": "square",
+   "t": "正方形"
+  },
+  {
+   "en": "triangle",
+   "t": "三角形"
+  },
+  {
+   "en": "and",
+   "t": "和"
+  },
+  {
+   "en": "because",
+   "t": "因为"
+  },
+  {
+   "en": "but",
+   "t": "但是"
+  },
+  {
+   "en": "can",
+   "t": "能"
+  },
+  {
+   "en": "for",
+   "t": "给"
+  },
+  {
+   "en": "is",
+   "t": "是"
+  },
+  {
+   "en": "it",
+   "t": "它"
+  },
+  {
+   "en": "that",
+   "t": "那个"
+  },
+  {
+   "en": "the",
+   "t": "这"
+  },
+  {
+   "en": "this",
+   "t": "这个"
+  },
+  {
+   "en": "to",
+   "t": "到"
+  },
+  {
+   "en": "will",
+   "t": "会"
+  },
+  {
+   "en": "with",
+   "t": "跟"
+  },
+  {
+   "en": "if",
+   "t": "如果"
+  },
+  {
+   "en": "or",
+   "t": "或者"
+  },
+  {
+   "en": "so",
+   "t": "所以"
+  },
+  {
+   "en": "am",
+   "t": "是"
+  },
+  {
+   "en": "are",
+   "t": "是"
+  },
+  {
+   "en": "could",
+   "t": "可以"
+  },
+  {
+   "en": "had",
+   "t": "有过"
+  },
+  {
+   "en": "has",
+   "t": "有"
+  },
+  {
+   "en": "have",
+   "t": "有"
+  },
+  {
+   "en": "was",
+   "t": "是"
+  },
+  {
+   "en": "would",
+   "t": "会"
+  },
+  {
+   "en": "don't",
+   "t": "不要"
+  },
+  {
+   "en": "not",
+   "t": "不"
+  },
+  {
+   "en": "a",
+   "t": "一个"
+  },
+  {
+   "en": "i",
+   "t": "我"
+  },
+  {
+   "en": "cart",
+   "t": "购物车"
+  },
+  {
+   "en": "change",
+   "t": "零钱"
+  },
+  {
+   "en": "coin",
+   "t": "硬币"
+  },
+  {
+   "en": "dollar",
+   "t": "美元"
+  },
+  {
+   "en": "list",
+   "t": "清单"
+  },
+  {
+   "en": "money",
+   "t": "钱"
+  },
+  {
+   "en": "receipt",
+   "t": "收据"
+  },
+  {
+   "en": "wallet",
+   "t": "钱包"
+  },
+  {
+   "en": "drum",
+   "t": "鼓"
+  },
+  {
+   "en": "flute",
+   "t": "长笛"
+  },
+  {
+   "en": "guitar",
+   "t": "吉他"
+  },
+  {
+   "en": "harmonica",
+   "t": "口琴"
+  },
+  {
+   "en": "maracas",
+   "t": "沙锤"
+  },
+  {
+   "en": "piano",
+   "t": "钢琴"
+  },
+  {
+   "en": "tambourine",
+   "t": "铃鼓"
+  },
+  {
+   "en": "trumpet",
+   "t": "小号"
+  },
+  {
+   "en": "violin",
+   "t": "小提琴"
+  },
+  {
+   "en": "xylophone",
+   "t": "木琴"
+  },
+  {
+   "en": "aloe vera",
+   "t": "芦荟"
+  },
+  {
+   "en": "bamboo",
+   "t": "竹子"
+  },
+  {
+   "en": "bush",
+   "t": "灌木"
+  },
+  {
+   "en": "coral",
+   "t": "珊瑚"
+  },
+  {
+   "en": "dandelion",
+   "t": "蒲公英"
+  },
+  {
+   "en": "four leaf clover",
+   "t": "四叶草"
+  },
+  {
+   "en": "ivy",
+   "t": "常春藤"
+  },
+  {
+   "en": "lavender",
+   "t": "薰衣草"
+  },
+  {
+   "en": "lily",
+   "t": "百合"
+  },
+  {
+   "en": "mangrove",
+   "t": "红树"
+  },
+  {
+   "en": "mint",
+   "t": "薄荷"
+  },
+  {
+   "en": "orchid",
+   "t": "兰花"
+  },
+  {
+   "en": "palm tree",
+   "t": "棕榈树"
+  },
+  {
+   "en": "pine tree",
+   "t": "松树"
+  },
+  {
+   "en": "sargassum",
+   "t": "马尾藻"
+  },
+  {
+   "en": "sea fan",
+   "t": "海扇"
+  },
+  {
+   "en": "sea lettuce",
+   "t": "海白菜"
+  },
+  {
+   "en": "seaweed",
+   "t": "海藻"
+  },
+  {
+   "en": "cactus",
+   "t": "仙人掌"
+  },
+  {
+   "en": "daisy",
+   "t": "雏菊"
+  },
+  {
+   "en": "fern",
+   "t": "蕨类"
+  },
+  {
+   "en": "leaf",
+   "t": "叶子"
+  },
+  {
+   "en": "rose",
+   "t": "玫瑰"
+  },
+  {
+   "en": "sunflower",
+   "t": "向日葵"
+  },
+  {
+   "en": "tulip",
+   "t": "郁金香"
+  },
+  {
+   "en": "astronaut",
+   "t": "宇航员"
+  },
+  {
+   "en": "comet",
+   "t": "彗星"
+  },
+  {
+   "en": "galaxy",
+   "t": "星系"
+  },
+  {
+   "en": "planet",
+   "t": "行星"
+  },
+  {
+   "en": "bath time",
+   "t": "洗澡时间"
+  },
+  {
+   "en": "bedtime",
+   "t": "睡觉时间"
+  },
+  {
+   "en": "favorite book",
+   "t": "最爱的书"
+  },
+  {
+   "en": "grandma's house",
+   "t": "奶奶家"
+  },
+  {
+   "en": "grandpa's house",
+   "t": "爷爷家"
+  },
+  {
+   "en": "my lovey",
+   "t": "我的安抚玩具"
+  },
+  {
+   "en": "our car",
+   "t": "我们的车"
+  },
+  {
+   "en": "our park",
+   "t": "我们的公园"
+  },
+  {
+   "en": "our pet",
+   "t": "我们的宠物"
+  },
+  {
+   "en": "special snack",
+   "t": "特别的零食"
+  },
+  {
+   "en": "my app",
+   "t": "我的应用"
+  },
+  {
+   "en": "my character",
+   "t": "我的角色"
+  },
+  {
+   "en": "my movie",
+   "t": "我的电影"
+  },
+  {
+   "en": "my show",
+   "t": "我的节目"
+  },
+  {
+   "en": "my song",
+   "t": "我的歌"
+  },
+  {
+   "en": "beach",
+   "t": "海滩"
+  },
+  {
+   "en": "city",
+   "t": "城市"
+  },
+  {
+   "en": "country",
+   "t": "国家"
+  },
+  {
+   "en": "flag",
+   "t": "旗子"
+  },
+  {
+   "en": "forest",
+   "t": "森林"
+  },
+  {
+   "en": "lake",
+   "t": "湖"
+  },
+  {
+   "en": "map",
+   "t": "地图"
+  },
+  {
+   "en": "mountain",
+   "t": "山"
+  },
+  {
+   "en": "ocean",
+   "t": "海洋"
+  },
+  {
+   "en": "river",
+   "t": "河"
+  },
+  {
+   "en": "street",
+   "t": "街道"
+  },
+  {
+   "en": "town",
+   "t": "小镇"
+  },
+  {
+   "en": "driveway",
+   "t": "车道"
+  },
+  {
+   "en": "hose",
+   "t": "水管"
+  },
+  {
+   "en": "mailbox",
+   "t": "信箱"
+  },
+  {
+   "en": "sandbox",
+   "t": "沙坑"
+  },
+  {
+   "en": "sidewalk",
+   "t": "人行道"
+  },
+  {
+   "en": "sprinkler",
+   "t": "洒水器"
+  },
+  {
+   "en": "behind",
+   "t": "后面"
+  },
+  {
+   "en": "between",
+   "t": "中间"
+  },
+  {
+   "en": "here",
+   "t": "这里"
+  },
+  {
+   "en": "next to",
+   "t": "旁边"
+  },
+  {
+   "en": "over",
+   "t": "上方"
+  },
+  {
+   "en": "under",
+   "t": "下面"
+  },
+  {
+   "en": "bottom",
+   "t": "底下"
+  },
+  {
+   "en": "front",
+   "t": "前面"
+  },
+  {
+   "en": "left",
+   "t": "左边"
+  },
+  {
+   "en": "middle",
+   "t": "中间"
+  },
+  {
+   "en": "right",
+   "t": "右边"
+  },
+  {
+   "en": "side",
+   "t": "边"
+  },
+  {
+   "en": "top",
+   "t": "上面"
+  },
+  {
+   "en": "around",
+   "t": "周围"
+  },
+  {
+   "en": "at",
+   "t": "在"
+  },
+  {
+   "en": "from",
+   "t": "从"
+  },
+  {
+   "en": "inside",
+   "t": "里面"
+  },
+  {
+   "en": "of",
+   "t": "的"
+  },
+  {
+   "en": "through",
+   "t": "穿过"
+  },
+  {
+   "en": "all",
+   "t": "全部"
+  },
+  {
+   "en": "any",
+   "t": "任何"
+  },
+  {
+   "en": "every",
+   "t": "每个"
+  },
+  {
+   "en": "few",
+   "t": "几个"
+  },
+  {
+   "en": "many",
+   "t": "很多"
+  },
+  {
+   "en": "much",
+   "t": "很多"
+  },
+  {
+   "en": "none",
+   "t": "没有"
+  },
+  {
+   "en": "some",
+   "t": "一些"
+  },
+  {
+   "en": "backpack",
+   "t": "书包"
+  },
+  {
+   "en": "bookshelf",
+   "t": "书架"
+  },
+  {
+   "en": "classroom",
+   "t": "教室"
+  },
+  {
+   "en": "desk",
+   "t": "课桌"
+  },
+  {
+   "en": "eraser",
+   "t": "橡皮"
+  },
+  {
+   "en": "glue",
+   "t": "胶水"
+  },
+  {
+   "en": "marker",
+   "t": "马克笔"
+  },
+  {
+   "en": "notebook",
+   "t": "笔记本"
+  },
+  {
+   "en": "paper",
+   "t": "纸"
+  },
+  {
+   "en": "pencil",
+   "t": "铅笔"
+  },
+  {
+   "en": "recess",
+   "t": "课间休息"
+  },
+  {
+   "en": "ruler",
+   "t": "尺子"
+  },
+  {
+   "en": "scissors",
+   "t": "剪刀"
+  },
+  {
+   "en": "whiteboard",
+   "t": "白板"
+  },
+  {
+   "en": "arrival",
+   "t": "到校"
+  },
+  {
+   "en": "art",
+   "t": "美术课"
+  },
+  {
+   "en": "calm corner",
+   "t": "冷静角"
+  },
+  {
+   "en": "centers",
+   "t": "学习角"
+  },
+  {
+   "en": "class pet",
+   "t": "班级宠物"
+  },
+  {
+   "en": "dismissal",
+   "t": "放学"
+  },
+  {
+   "en": "field trip",
+   "t": "校外活动"
+  },
+  {
+   "en": "fire drill",
+   "t": "消防演习"
+  },
+  {
+   "en": "library day",
+   "t": "图书馆日"
+  },
+  {
+   "en": "line up",
+   "t": "排队"
+  },
+  {
+   "en": "lockdown drill",
+   "t": "安全演习"
+  },
+  {
+   "en": "lunchroom",
+   "t": "食堂"
+  },
+  {
+   "en": "my aide",
+   "t": "我的助理老师"
+  },
+  {
+   "en": "my class job",
+   "t": "我的班级任务"
+  },
+  {
+   "en": "my teacher",
+   "t": "我的老师"
+  },
+  {
+   "en": "pe",
+   "t": "体育课"
+  },
+  {
+   "en": "picture day",
+   "t": "拍照日"
+  },
+  {
+   "en": "quiet time",
+   "t": "安静时间"
+  },
+  {
+   "en": "show and tell",
+   "t": "展示分享"
+  },
+  {
+   "en": "i love you",
+   "t": "我爱你"
+  },
+  {
+   "en": "sorry",
+   "t": "对不起"
+  },
+  {
+   "en": "circle time",
+   "t": "圆圈时间"
+  },
+  {
+   "en": "line leader",
+   "t": "排头"
+  },
+  {
+   "en": "may i",
+   "t": "我可以吗"
+  },
+  {
+   "en": "quiet please",
+   "t": "请安静"
+  },
+  {
+   "en": "raise my hand",
+   "t": "举手"
+  },
+  {
+   "en": "sharing time",
+   "t": "分享时间"
+  },
+  {
+   "en": "i did it",
+   "t": "我做到了"
+  },
+  {
+   "en": "i need a break",
+   "t": "我需要休息"
+  },
+  {
+   "en": "i'm hungry",
+   "t": "我饿了"
+  },
+  {
+   "en": "i'm thirsty",
+   "t": "我渴了"
+  },
+  {
+   "en": "good job",
+   "t": "真棒"
+  },
+  {
+   "en": "my turn now",
+   "t": "现在轮到我"
+  },
+  {
+   "en": "try again",
+   "t": "再试一次"
+  },
+  {
+   "en": "your turn",
+   "t": "轮到你"
+  },
+  {
+   "en": "yucky",
+   "t": "好恶心"
+  },
+  {
+   "en": "yummy",
+   "t": "好吃"
+  },
+  {
+   "en": "cuddle",
+   "t": "搂抱"
+  },
+  {
+   "en": "family hug",
+   "t": "全家抱抱"
+  },
+  {
+   "en": "goodnight kiss",
+   "t": "晚安吻"
+  },
+  {
+   "en": "piggyback",
+   "t": "背背"
+  },
+  {
+   "en": "snuggle",
+   "t": "依偎"
+  },
+  {
+   "en": "carry me",
+   "t": "抱我"
+  },
+  {
+   "en": "hold me",
+   "t": "抱着我"
+  },
+  {
+   "en": "one more book",
+   "t": "再读一本书"
+  },
+  {
+   "en": "read to me",
+   "t": "给我读书"
+  },
+  {
+   "en": "snuggle with me",
+   "t": "陪我依偎"
+  },
+  {
+   "en": "tuck me in",
+   "t": "给我盖被子"
+  },
+  {
+   "en": "i miss you",
+   "t": "我想你"
+  },
+  {
+   "en": "i need help",
+   "t": "我需要帮助"
+  },
+  {
+   "en": "i see you",
+   "t": "我看到你了"
+  },
+  {
+   "en": "i want that",
+   "t": "我要那个"
+  },
+  {
+   "en": "all done eating",
+   "t": "吃完了"
+  },
+  {
+   "en": "excuse me",
+   "t": "不好意思"
+  },
+  {
+   "en": "good morning",
+   "t": "早上好"
+  },
+  {
+   "en": "good night",
+   "t": "晚安"
+  },
+  {
+   "en": "happy birthday",
+   "t": "生日快乐"
+  },
+  {
+   "en": "have a good day",
+   "t": "祝你今天愉快"
+  },
+  {
+   "en": "let's go",
+   "t": "走吧"
+  },
+  {
+   "en": "more please",
+   "t": "再来一点"
+  },
+  {
+   "en": "no thank you",
+   "t": "不用了谢谢"
+  },
+  {
+   "en": "ready to play",
+   "t": "准备好玩了"
+  },
+  {
+   "en": "see you later",
+   "t": "回头见"
+  },
+  {
+   "en": "sorry about that",
+   "t": "真抱歉"
+  },
+  {
+   "en": "time to",
+   "t": "到时间了"
+  },
+  {
+   "en": "wait a minute",
+   "t": "等一下"
+  },
+  {
+   "en": "what's that",
+   "t": "那是什么"
+  },
+  {
+   "en": "where are you",
+   "t": "你在哪里"
+  },
+  {
+   "en": "yes please",
+   "t": "好的谢谢"
+  },
+  {
+   "en": "baseball",
+   "t": "棒球"
+  },
+  {
+   "en": "basketball",
+   "t": "篮球"
+  },
+  {
+   "en": "bowling",
+   "t": "保龄球"
+  },
+  {
+   "en": "dancing",
+   "t": "跳舞"
+  },
+  {
+   "en": "football",
+   "t": "橄榄球"
+  },
+  {
+   "en": "golf",
+   "t": "高尔夫"
+  },
+  {
+   "en": "gymnastics",
+   "t": "体操"
+  },
+  {
+   "en": "hockey",
+   "t": "曲棍球"
+  },
+  {
+   "en": "skating",
+   "t": "滑冰"
+  },
+  {
+   "en": "soccer",
+   "t": "足球"
+  },
+  {
+   "en": "swimming",
+   "t": "游泳"
+  },
+  {
+   "en": "tennis",
+   "t": "网球"
+  },
+  {
+   "en": "co-treat partner",
+   "t": "协同治疗伙伴"
+  },
+  {
+   "en": "favorite toy here",
+   "t": "这里最爱的玩具"
+  },
+  {
+   "en": "my reinforcer",
+   "t": "我的奖励"
+  },
+  {
+   "en": "quiet space",
+   "t": "安静空间"
+  },
+  {
+   "en": "sensory bin",
+   "t": "感官箱"
+  },
+  {
+   "en": "session end",
+   "t": "训练结束"
+  },
+  {
+   "en": "session start",
+   "t": "训练开始"
+  },
+  {
+   "en": "target word",
+   "t": "目标词"
+  },
+  {
+   "en": "therapy room",
+   "t": "治疗室"
+  },
+  {
+   "en": "visual schedule",
+   "t": "视觉日程表"
+  },
+  {
+   "en": "therapist",
+   "t": "治疗师"
+  },
+  {
+   "en": "after",
+   "t": "之后"
+  },
+  {
+   "en": "afternoon",
+   "t": "下午"
+  },
+  {
+   "en": "before",
+   "t": "之前"
+  },
+  {
+   "en": "later",
+   "t": "等一会儿"
+  },
+  {
+   "en": "morning",
+   "t": "早上"
+  },
+  {
+   "en": "night",
+   "t": "晚上"
+  },
+  {
+   "en": "now",
+   "t": "现在"
+  },
+  {
+   "en": "soon",
+   "t": "很快"
+  },
+  {
+   "en": "today",
+   "t": "今天"
+  },
+  {
+   "en": "tomorrow",
+   "t": "明天"
+  },
+  {
+   "en": "yesterday",
+   "t": "昨天"
+  },
+  {
+   "en": "half past",
+   "t": "半"
+  },
+  {
+   "en": "hour",
+   "t": "小时"
+  },
+  {
+   "en": "midnight",
+   "t": "午夜"
+  },
+  {
+   "en": "minute",
+   "t": "分钟"
+  },
+  {
+   "en": "noon",
+   "t": "中午"
+  },
+  {
+   "en": "quarter",
+   "t": "一刻"
+  },
+  {
+   "en": "january",
+   "t": "一月"
+  },
+  {
+   "en": "february",
+   "t": "二月"
+  },
+  {
+   "en": "march",
+   "t": "三月"
+  },
+  {
+   "en": "april",
+   "t": "四月"
+  },
+  {
+   "en": "may",
+   "t": "五月"
+  },
+  {
+   "en": "june",
+   "t": "六月"
+  },
+  {
+   "en": "july",
+   "t": "七月"
+  },
+  {
+   "en": "august",
+   "t": "八月"
+  },
+  {
+   "en": "september",
+   "t": "九月"
+  },
+  {
+   "en": "october",
+   "t": "十月"
+  },
+  {
+   "en": "november",
+   "t": "十一月"
+  },
+  {
+   "en": "december",
+   "t": "十二月"
+  },
+  {
+   "en": "fall",
+   "t": "秋天"
+  },
+  {
+   "en": "spring",
+   "t": "春天"
+  },
+  {
+   "en": "summer",
+   "t": "夏天"
+  },
+  {
+   "en": "winter",
+   "t": "冬天"
+  },
+  {
+   "en": "second",
+   "t": "秒"
+  },
+  {
+   "en": "tonight",
+   "t": "今晚"
+  },
+  {
+   "en": "week",
+   "t": "星期"
+  },
+  {
+   "en": "weekday",
+   "t": "工作日"
+  },
+  {
+   "en": "weekend",
+   "t": "周末"
+  },
+  {
+   "en": "year",
+   "t": "年"
+  },
+  {
+   "en": "drill",
+   "t": "电钻"
+  },
+  {
+   "en": "hammer",
+   "t": "锤子"
+  },
+  {
+   "en": "paintbrush",
+   "t": "画笔"
+  },
+  {
+   "en": "saw",
+   "t": "锯子"
+  },
+  {
+   "en": "screwdriver",
+   "t": "螺丝刀"
+  },
+  {
+   "en": "toolbox",
+   "t": "工具箱"
+  },
+  {
+   "en": "wrench",
+   "t": "扳手"
+  },
+  {
+   "en": "action figure",
+   "t": "人偶"
+  },
+  {
+   "en": "building bricks",
+   "t": "拼插积木"
+  },
+  {
+   "en": "dollhouse",
+   "t": "娃娃屋"
+  },
+  {
+   "en": "hula hoop",
+   "t": "呼啦圈"
+  },
+  {
+   "en": "jump rope",
+   "t": "跳绳"
+  },
+  {
+   "en": "kite",
+   "t": "风筝"
+  },
+  {
+   "en": "marble",
+   "t": "弹珠"
+  },
+  {
+   "en": "play dough",
+   "t": "橡皮泥"
+  },
+  {
+   "en": "robot",
+   "t": "机器人"
+  },
+  {
+   "en": "slinky",
+   "t": "彩虹圈"
+  },
+  {
+   "en": "stickers",
+   "t": "贴纸"
+  },
+  {
+   "en": "stroller",
+   "t": "婴儿车"
+  },
+  {
+   "en": "hot air balloon",
+   "t": "热气球"
+  },
+  {
+   "en": "rocket",
+   "t": "火箭"
+  },
+  {
+   "en": "sailboat",
+   "t": "帆船"
+  },
+  {
+   "en": "ship",
+   "t": "大船"
+  },
+  {
+   "en": "submarine",
+   "t": "潜水艇"
+  },
+  {
+   "en": "ambulance",
+   "t": "救护车"
+  },
+  {
+   "en": "fire truck",
+   "t": "消防车"
+  },
+  {
+   "en": "helicopter",
+   "t": "直升机"
+  },
+  {
+   "en": "police car",
+   "t": "警车"
+  },
+  {
+   "en": "rv",
+   "t": "房车"
+  },
+  {
+   "en": "motorcycle",
+   "t": "摩托车"
+  },
+  {
+   "en": "race car",
+   "t": "赛车"
+  },
+  {
+   "en": "scooter",
+   "t": "滑板车"
+  },
+  {
+   "en": "skateboard",
+   "t": "滑板"
+  },
+  {
+   "en": "taxi",
+   "t": "出租车"
+  },
+  {
+   "en": "bulldozer",
+   "t": "推土机"
+  },
+  {
+   "en": "cement mixer",
+   "t": "水泥搅拌车"
+  },
+  {
+   "en": "crane",
+   "t": "起重机"
+  },
+  {
+   "en": "dump truck",
+   "t": "翻斗车"
+  },
+  {
+   "en": "garbage truck",
+   "t": "垃圾车"
+  },
+  {
+   "en": "tractor",
+   "t": "拖拉机"
+  },
+  {
+   "en": "chef",
+   "t": "厨师"
+  },
+  {
+   "en": "dentist",
+   "t": "牙医"
+  },
+  {
+   "en": "farmer",
+   "t": "农民"
+  },
+  {
+   "en": "firefighter",
+   "t": "消防员"
+  },
+  {
+   "en": "librarian",
+   "t": "图书管理员"
+  },
+  {
+   "en": "mail carrier",
+   "t": "邮递员"
+  },
+  {
+   "en": "mechanic",
+   "t": "修理工"
+  },
+  {
+   "en": "plumber",
+   "t": "水管工"
+  },
+  {
+   "en": "police officer",
+   "t": "警察"
+  },
+  {
+   "en": "vet",
+   "t": "兽医"
+  },
+  {
+   "en": "he",
+   "t": "他"
+  },
+  {
+   "en": "my",
+   "t": "我的"
+  },
+  {
+   "en": "she",
+   "t": "她"
+  },
+  {
+   "en": "they",
+   "t": "他们"
+  },
+  {
+   "en": "we",
+   "t": "我们"
+  },
+  {
+   "en": "your",
+   "t": "你的"
+  },
+  {
+   "en": "her",
+   "t": "她的"
+  },
+  {
+   "en": "hers",
+   "t": "她的"
+  },
+  {
+   "en": "him",
+   "t": "他"
+  },
+  {
+   "en": "his",
+   "t": "他的"
+  },
+  {
+   "en": "these",
+   "t": "这些"
+  },
+  {
+   "en": "those",
+   "t": "那些"
+  },
+  {
+   "en": "cook",
+   "t": "做饭"
+  },
+  {
+   "en": "do",
+   "t": "做"
+  },
+  {
+   "en": "drive",
+   "t": "开车"
+  },
+  {
+   "en": "feel",
+   "t": "感觉"
+  },
+  {
+   "en": "find",
+   "t": "找到"
+  },
+  {
+   "en": "fix",
+   "t": "修理"
+  },
+  {
+   "en": "get",
+   "t": "拿到"
+  },
+  {
+   "en": "hear",
+   "t": "听到"
+  },
+  {
+   "en": "know",
+   "t": "知道"
+  },
+  {
+   "en": "make",
+   "t": "制作"
+  },
+  {
+   "en": "remember",
+   "t": "记得"
+  },
+  {
+   "en": "see",
+   "t": "看见"
+  },
+  {
+   "en": "think",
+   "t": "想"
+  },
+  {
+   "en": "try",
+   "t": "试试"
+  },
+  {
+   "en": "bounce",
+   "t": "弹跳"
+  },
+  {
+   "en": "frown",
+   "t": "皱眉"
+  },
+  {
+   "en": "pinch",
+   "t": "捏"
+  },
+  {
+   "en": "roll",
+   "t": "滚"
+  },
+  {
+   "en": "shout",
+   "t": "大喊"
+  },
+  {
+   "en": "squeeze",
+   "t": "挤"
+  },
+  {
+   "en": "whisper",
+   "t": "悄悄说"
+  },
+  {
+   "en": "cut",
+   "t": "剪"
+  },
+  {
+   "en": "dig",
+   "t": "挖"
+  },
+  {
+   "en": "fall_v",
+   "t": "摔倒"
+  },
+  {
+   "en": "fly",
+   "t": "苍蝇"
+  },
+  {
+   "en": "hop",
+   "t": "单脚跳"
+  },
+  {
+   "en": "paint",
+   "t": "涂色"
+  },
+  {
+   "en": "pour",
+   "t": "倒"
+  },
+  {
+   "en": "skip",
+   "t": "蹦蹦跳跳"
+  },
+  {
+   "en": "splash",
+   "t": "溅水"
+  },
+  {
+   "en": "stir",
+   "t": "搅拌"
+  },
+  {
+   "en": "adverbs",
+   "t": "副词"
+  },
+  {
+   "en": "asking",
+   "t": "提问"
+  },
+  {
+   "en": "community",
+   "t": "社区"
+  },
+  {
+   "en": "describing",
+   "t": "描述词"
+  },
+  {
+   "en": "events",
+   "t": "活动"
+  },
+  {
+   "en": "feelings",
+   "t": "心情"
+  },
+  {
+   "en": "linking",
+   "t": "连接词"
+  },
+  {
+   "en": "nature",
+   "t": "大自然"
+  },
+  {
+   "en": "personalize",
+   "t": "我的专属"
+  },
+  {
+   "en": "places",
+   "t": "地方"
+  },
+  {
+   "en": "position",
+   "t": "位置"
+  },
+  {
+   "en": "pronouns",
+   "t": "代词"
+  },
+  {
+   "en": "quantifiers",
+   "t": "数量词"
+  },
+  {
+   "en": "social",
+   "t": "社交"
+  },
+  {
+   "en": "sports",
+   "t": "运动"
+  },
+  {
+   "en": "therapy",
+   "t": "治疗"
+  },
+  {
+   "en": "therapy team",
+   "t": "治疗团队"
+  },
+  {
+   "en": "time",
+   "t": "时间"
+  },
+  {
+   "en": "tools",
+   "t": "工具"
+  },
+  {
+   "en": "vehicles",
+   "t": "交通工具"
+  },
+  {
+   "en": "air & sea",
+   "t": "海陆空"
+  },
+  {
+   "en": "bugs",
+   "t": "昆虫"
+  },
+  {
+   "en": "character",
+   "t": "性格"
+  },
+  {
+   "en": "clock",
+   "t": "时钟"
+  },
+  {
+   "en": "condiments",
+   "t": "调味品"
+  },
+  {
+   "en": "conjunctions",
+   "t": "连词"
+  },
+  {
+   "en": "core descriptors",
+   "t": "核心描述词"
+  },
+  {
+   "en": "daily gestalts",
+   "t": "日常短语"
+  },
+  {
+   "en": "dinosaurs",
+   "t": "恐龙"
+  },
+  {
+   "en": "direction",
+   "t": "方向"
+  },
+  {
+   "en": "emergency",
+   "t": "紧急"
+  },
+  {
+   "en": "expressive",
+   "t": "表达"
+  },
+  {
+   "en": "extended",
+   "t": "更多"
+  },
+  {
+   "en": "family gestalts",
+   "t": "家庭短语"
+  },
+  {
+   "en": "family-authored",
+   "t": "家庭自创"
+  },
+  {
+   "en": "fruit more",
+   "t": "更多水果"
+  },
+  {
+   "en": "geography",
+   "t": "地理"
+  },
+  {
+   "en": "gestalts",
+   "t": "常用短语"
+  },
+  {
+   "en": "helping verbs",
+   "t": "助动词"
+  },
+  {
+   "en": "hours",
+   "t": "钟点"
+  },
+  {
+   "en": "jungle",
+   "t": "丛林"
+  },
+  {
+   "en": "letters",
+   "t": "字母"
+  },
+  {
+   "en": "meals more",
+   "t": "更多正餐"
+  },
+  {
+   "en": "mealtime",
+   "t": "用餐时间"
+  },
+  {
+   "en": "media (family-authored)",
+   "t": "家庭媒体"
+  },
+  {
+   "en": "months",
+   "t": "月份"
+  },
+  {
+   "en": "more mammals",
+   "t": "更多哺乳动物"
+  },
+  {
+   "en": "negation",
+   "t": "否定词"
+  },
+  {
+   "en": "opposites",
+   "t": "反义词"
+  },
+  {
+   "en": "outdoor",
+   "t": "户外"
+  },
+  {
+   "en": "personal",
+   "t": "个人"
+  },
+  {
+   "en": "plants",
+   "t": "植物"
+  },
+  {
+   "en": "polar",
+   "t": "极地"
+  },
+  {
+   "en": "prepositions",
+   "t": "介词"
+  },
+  {
+   "en": "reptiles & amphibians",
+   "t": "爬行和两栖动物"
+  },
+  {
+   "en": "school (teacher authoring)",
+   "t": "学校（老师创建）"
+  },
+  {
+   "en": "sea",
+   "t": "海洋"
+  },
+  {
+   "en": "seasons",
+   "t": "季节"
+  },
+  {
+   "en": "shapes",
+   "t": "形状"
+  },
+  {
+   "en": "tech",
+   "t": "电子设备"
+  },
+  {
+   "en": "therapy (clinician authoring)",
+   "t": "治疗（治疗师创建）"
+  },
+  {
+   "en": "treats",
+   "t": "甜点"
+  },
+  {
+   "en": "units",
+   "t": "时间单位"
+  },
+  {
+   "en": "veg more",
+   "t": "更多蔬菜"
+  },
+  {
+   "en": "work",
+   "t": "工程车"
+  },
+  {
+   "en": "workers",
+   "t": "职业"
+  },
+  {
+   "en": "lime",
+   "t": "青柠"
+  },
+  {
+   "en": "glue",
+   "section": "verbs",
+   "t": "粘"
+  },
+  {
+   "en": "fly",
+   "section": "verbs",
+   "t": "飞"
+  },
+  {
+   "en": "pepper",
+   "category": "condiments",
+   "t": "胡椒"
+  },
+  {
+   "en": "lime",
+   "category": "colors",
+   "t": "柠檬绿"
+  },
+  {
+   "en": "lime",
+   "category": "learning",
+   "t": "柠檬绿"
+  }
+ ]
+}

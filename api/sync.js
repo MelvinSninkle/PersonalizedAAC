@@ -86,8 +86,11 @@ export default async function handler(req, res) {
     // below; parents' custom uploads have no set and fall through to generic.
     const normLbl = (v) => String(v || '').trim().toLowerCase();
     let styleTileDefs = new Map(), styleChipDefs = new Map();
+    let boardLang = 'en';
     try {
       const csRow = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+      const langRaw = csRow && csRow.settings && csRow.settings.language;
+      if (typeof langRaw === 'string' && langRaw) boardLang = langRaw;
       const sgId = Number(csRow && csRow.settings && csRow.settings.styleGuideId) || 0;
       if (sgId > 0) {
         const [sd, cd] = await Promise.all([
@@ -130,10 +133,28 @@ export default async function handler(req, res) {
     const slugs = [...new Set(items.map(i => i.taxonomy_slug).filter(Boolean))];
     const taxBySlug = new Map();
     if (slugs.length) {
-      const rows = await db`SELECT id, acquisition_age, default_image_key, column_name, subject_mode, prompt_template, descriptive_clues
-                            FROM taxonomy WHERE id = ANY(${slugs})`;
+      let rows;
+      try {
+        rows = await db`SELECT id, acquisition_age, default_image_key, column_name, subject_mode, prompt_template, descriptive_clues, match_terms
+                        FROM taxonomy WHERE id = ANY(${slugs})`;
+      } catch (_) {
+        rows = await db`SELECT id, acquisition_age, default_image_key, column_name, subject_mode, prompt_template, descriptive_clues
+                        FROM taxonomy WHERE id = ANY(${slugs})`;
+      }
       for (const r of rows) taxBySlug.set(r.id, r);
     }
+
+    // Listening-mode match terms: curated taxonomy.match_terms + generated
+    // English inflections, expanded ONCE here so every client's tokenizer
+    // just indexes strings (the morphology never gets ported to devices).
+    try {
+      const { expandMatchTerms } = await import('./_lib/word-match.js');
+      for (const i of items) {
+        const tax = i.taxonomy_slug ? taxBySlug.get(i.taxonomy_slug) : null;
+        const terms = expandMatchTerms(i.label, (tax && tax.match_terms) || []);
+        if (terms.length) i.match_terms_out = terms;
+      }
+    } catch (_) { /* matching enrichment is best-effort */ }
 
     // Teaching clues ride along on each linked tile (taxonomy.descriptive_clues)
     // so the boards' "Teach me" slideshow can speak the word + all its clues
@@ -164,7 +185,11 @@ export default async function handler(req, res) {
       // then the generic default for default-able tiles.
       const styled = styleTileDefs.get(i.taxonomy_slug);
       if (styled) { i.image_key = styled; continue; }
-      if (tax.default_image_key && isDefaultableTile(tax)) i.image_key = tax.default_image_key;
+      // The generic default applies to person-y tiles too (the admin curates
+      // group-of-children imagery for those) — a generic picture beats a bare
+      // word-tile until the per-child render lands. The `replaceable` guard
+      // above means a family's own art is never touched.
+      if (tax.default_image_key) i.image_key = tax.default_image_key;
     }
 
     // Age-band filter: when the child has a birth date AND the parent hasn't
@@ -202,8 +227,35 @@ export default async function handler(req, res) {
                          styling: member };
     } catch (_) { /* flags are advisory — sync must never fail over them */ }
 
+    // Board language ≠ English → attach displayLabel (never rewrite label:
+    // English stays the identity for shop/style/analytics; clients render
+    // displayLabel when present). Text the family typed in their own language
+    // simply won't match the dictionary and passes through untouched.
+    let langOut = null;
+    if (boardLang !== 'en') {
+      try {
+        const { loadTranslationMap, translate } = await import('./_lib/i18n.js');
+        const trMap = await loadTranslationMap(db, boardLang);
+        if (trMap) {
+          langOut = boardLang;
+          const catById = new Map(cats.map((c) => [c.id, c]));
+          for (const c of cats) {
+            const t = translate(trMap, { label: c.label, section: c.section });
+            if (t) c.display_label = t.label;
+          }
+          for (const i of outItems) {
+            const cat = i.category_id ? catById.get(i.category_id) : null;
+            const t = translate(trMap, { label: i.label, section: i.section,
+                                         category: cat ? cat.label : '' });
+            if (t) i.display_label = t.label;
+          }
+        }
+      } catch (_) { /* translation is best-effort — sync must never fail over it */ }
+    }
+
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
+      language: langOut,
       categories: cats.map(rowToCategory),
       items: outItems.map(rowToItem),
       ageFilter: { applied: !!appliedBand, band: appliedBand, hiddenCount: items.length - outItems.length },

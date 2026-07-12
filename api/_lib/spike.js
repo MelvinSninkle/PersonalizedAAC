@@ -66,6 +66,7 @@ export async function detectSpikes(db, { sessionId, childId, skillSlug, mode, sc
     FROM sessions
     WHERE child_id = ${childId} AND skill_slug = ${skillSlug} AND mode = ${mode}
       AND id <> ${sessionId} AND scoring_version >= 2
+      AND COALESCE(NULLIF(slides_attempted, 0), NULLIF(item_count, 0)) >= 3
       AND started_at >= now() - interval '90 days'
     ORDER BY started_at DESC
     LIMIT ${ROLLING_WINDOW}`;

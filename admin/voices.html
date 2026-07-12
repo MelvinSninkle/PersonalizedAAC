@@ -91,10 +91,18 @@
       <input type="text" id="add-name" placeholder="Name (auto)" style="width:130px;">
       <input type="text" id="add-accent" placeholder="Accent (auto)" style="width:130px;">
       <input type="text" id="add-gender" placeholder="Gender (auto)" style="width:110px;">
+      <select id="add-lang" title="Voice language — non-English voices are only visible to admins and language-tester accounts">
+        <option value="en">English</option>
+        <option value="zh">中文 zh</option>
+        <option value="es">Español es</option>
+        <option value="fr">Français fr</option>
+        <option value="pt">Português pt</option>
+        <option value="de">Deutsch de</option>
+      </select>
       <button class="primary" id="add-btn">Add voice</button>
       <span id="add-msg"></span>
     </div>
-    <div class="note">Paste an id from the ElevenLabs voice library — name, accent and gender are looked up automatically if left blank. Active voices appear in the onboarding picker immediately.</div>
+    <div class="note">Paste an id from the ElevenLabs voice library — name, accent and gender are looked up automatically if left blank. Active <b>English</b> voices appear in everyone's onboarding picker immediately; voices tagged another language stay hidden from ordinary accounts and only show for admins + language-tester families.</div>
   </div>
 
   <div class="panel" id="bench-panel">
@@ -350,6 +358,7 @@
     if (name) body.name = name;
     if (accent) body.accent = accent;
     if (gender) body.gender = gender;
+    body.lang = document.getElementById('add-lang').value;
     const btn = document.getElementById('add-btn');
     try {
       const r = await withSpinner(btn, () => api('/api/admin/lab?action=voices', { method: 'POST', body: body }));

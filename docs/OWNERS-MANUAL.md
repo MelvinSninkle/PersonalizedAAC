@@ -1,0 +1,134 @@
+# My World: Tap to Talk — Owner's Manual
+
+The operating map for the whole product. Written for the owner (Andrew) and
+for any future engineer or AI assistant who needs to work on this without
+the original build context. Detailed how-tos live in `docs/runbooks/`;
+mechanical safety invariants live in `.claude/skills/surface-audit/SKILL.md`
+(and run as CI, see below). Content/vocabulary conventions live in
+`.claude/skills/update-taxonomy/SKILL.md` and
+`.claude/skills/aac-prompt-author/SKILL.md`.
+
+## What this product is
+
+A personalized AAC (augmentative/alternative communication) board for
+nonverbal children. The core bet: a child recognizes THEIR OWN world — their
+people, foods, toys, home — so every tile's art is generated for that child
+in a family-chosen style, and every tile speaks in a family-chosen voice.
+Reference child: Fletcher. Legal entity: My World Tap to Talk LLC.
+Domain: myworldtaptotalk.com · support@myworldtaptotalk.com.
+
+## The surfaces
+
+| Surface | File / target | Who |
+|---|---|---|
+| Kid board (web) | app.html (`/u/<slug>`) | child |
+| Kid board (iPad) | kid-ios/ (XcodeGen → Xcode) | child |
+| Kid board (Android/Fire) | android-native/ | child |
+| Parent dashboard | parent.html (`/parent/<slug>`) — 5 tabs | parent |
+| Onboarding | onboard.html (signup → style → people → scene → board build) | parent |
+| Therapist console | therapist*.html | therapist role |
+| Store | store.html (+ native IAP) | parent |
+| **Public practice board** | practice.html (`/practice`) — the ONLY unauthenticated surface | prospects |
+| Landing | index.html | public |
+| Admin Lab | admin/*.html (taxonomy, defaults, publish, voices, reports, …) | admin only |
+
+## Architecture in one paragraph
+
+Vercel serverless (ESM) + Neon Postgres + Vercel Blob (private) + OpenAI /
+Gemini for image gen + ElevenLabs for TTS + Resend for email + Stripe /
+Google Play for billing + APNs for push. Every endpoint self-gates
+(`checkAuth`, `canAccessChild`, `requireAdmin`). The board syncs through
+`/api/sync`, which resolves per-child data + shared defaults at READ time
+(style defaults → generic defaults → word tiles). Migrations run inline in
+`api/init.js` (`CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`);
+endpoints reading new columns carry pre-migration fallback queries.
+
+## Non-negotiable invariants (the "why" behind CI)
+
+1. **Family isolation** — one family's media/data must never reach another.
+   Enforced per-endpoint + `api/media.js`'s ownership union. CI greps it.
+2. **English labels are identity** — translations are a display/audio layer
+   (`displayLabel` at sync time); nothing rewrites `label` columns except
+   the four whitelisted parent/admin edit paths.
+3. **The Vercel 100-function ceiling** — ~88 routed functions live in api/.
+   New admin capability goes behind `api/admin/lab.js?action=` as an
+   `_`-prefixed file (not counted). CI warns at 96.
+4. **No public spend paths** — the practice board pre-renders its audio;
+   there is no unauthenticated TTS/image-gen route, ever.
+5. **TTS cache-key lockstep** — three sites build the same sha256 key
+   (tts.js, synthesizeVoice, publish pushSounds). Change all or none.
+
+## Roles & gating
+
+- `admin` (Andrew) — everything; Lab; access experiments; tier simulator.
+- `parent` — their children only.
+- `therapist` / `school_team` — invited via child_access.
+- `language_tester` — may change board language (dark launch).
+- Pre-authorized signups: `role_grants` (Lab → Reports → Accounts) applies
+  at BOTH signup paths; `admin` is never grantable.
+
+## Dark-launched features (admin-only while testing)
+
+- **Board languages** (en/zh/es/fr/pt/de): dictionaries in `api/_lib/i18n/`,
+  seeded via Lab → Translations, tester loop = CSV export → native review →
+  import. Non-English art renders with no baked text.
+- **Access experiments** (parent dashboard → Access panel, admin-only):
+  `navMode` buttons paging (eye tracker), `sentenceBuilder` (+`sentenceLift`
+  hold/drag, `sentenceIdleMin`), `listenRepeatNav` (say a word twice → board
+  jumps to the tile). Implemented on web + iOS + Android.
+
+## Money
+
+Stripe (web) + Google Play billing (Android; verify-before-consume) +
+`credits` for image generation. Reports: admin/reports.html (purchases vs
+fulfillment, logins, sync health). Stripe is in TEST mode until the LLC
+bank account clears — see runbooks/stripe-go-live.md.
+
+## The pipelines
+
+- **Board build**: onboard places words instantly (chunked `seed-core`),
+  then durable `seed_jobs` (render/voice/chip) drain via the every-minute
+  cron `run-tile-jobs`. Progress = `seedStatus` (also feeds the onboarding
+  "magic gallery"). Stuck builds: Lab tools re-arm dead jobs.
+- **Image generation**: `buildPortraitPrompt`/`renderTaxonomyTile` — single
+  prompt source; style guides + child anchor photo; `IMAGE_GEN_DAILY_LIMIT`.
+- **Audio**: recorded clip per tile (child's chosen voice) with shared
+  render cache; runtime TTS through `/api/tts` (triple-guarded).
+- **Milestones**: detected inline on `/api/events` (pivot-grammar frames);
+  push respects opt-out; keepsakes in parent Home → Moments.
+- **Auto-Teach**: scheduled exposure slideshows/games from onboarding prefs.
+
+## CI, backups, audits
+
+- `.github/workflows/ci.yml`: syntax gates + surface-audit invariant greps +
+  Playwright smoke (board access features + practice board) on every push.
+- `.github/workflows/backup.yml`: nightly pg_dump artifact (needs the
+  `BACKUP_DATABASE_URL` secret — see runbooks/backup-restore.md).
+- Run the full audit anytime by invoking the `surface-audit` skill, or
+  locally: `bash tools/surface-audit/invariants.sh` + the two smoke suites
+  against `tools/surface-audit/stub_server.py`.
+
+## Runbooks
+
+- runbooks/tester-family-onboarding.md — invite → role grant → language →
+  voices → verify.
+- runbooks/release.md — web (Vercel), iOS (TestFlight, hard-won notes),
+  Android.
+- runbooks/incident-triage.md — sync/images/TTS/credits failures → where to
+  look first.
+- runbooks/domain-flip.md — moving off aac.andrewpeterson.io (6 hardcoded
+  sites).
+- runbooks/stripe-go-live.md — test → live.
+- runbooks/backup-restore.md — dumps, blob inventory, restores.
+
+## Known open items (as of 2026-07-11)
+
+- `[BUSINESS ADDRESS]` placeholder in privacy.html — needs the LLC address.
+- Domain flip pending myworldtaptotalk.com being attached to Vercel.
+- Stripe live keys pending LLC bank approval.
+- Native access features + language pickers await a human test pass
+  (mechanically verified only).
+- Founder letter in onboard.html Phase 4 is a draft in Andrew's voice —
+  edit freely; the support email link is live.
+- Demo audio for /practice must be built once: Lab → `action=demo-audio`
+  (POST op=build with 2–3 catalog voiceIds; resumable).

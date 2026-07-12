@@ -7,6 +7,12 @@ struct Tile: Codable, Identifiable, Hashable {
     let section: BoardSection
     let categoryId: Int?
     let label: String
+    /// Board-language translation from /api/sync (nil on English boards).
+    /// `label` stays the canonical English identity; render `display`.
+    let displayLabel: String?
+    /// Pre-expanded listening-mode variants from /api/sync (loves/loving/
+    /// loved…). Server-computed — never generate morphology on-device.
+    let matchTerms: [String]?
     let imageKey: String?
     let imageUrl: String?
     let soundKey: String?
@@ -68,4 +74,9 @@ struct Tile: Codable, Identifiable, Hashable {
         descriptiveClues = try c.decodeIfPresent([String].self, forKey: .descriptiveClues)
         needsReview = try c.decodeIfPresent(Bool.self, forKey: .needsReview) ?? false
     }
+}
+
+extension Tile {
+    /// What the child sees and hears named on the board.
+    var display: String { displayLabel ?? label }
 }

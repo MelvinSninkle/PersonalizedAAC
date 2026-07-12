@@ -19,13 +19,16 @@ export default async function handler(req, res) {
   const name = String(b.name || '').slice(0, 80).trim();
   const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(String(b.birthDate || '')) ? String(b.birthDate) : null;
   const tier = TIER_LABELS.has(b.tier) ? b.tier : 'under3';
-  const language = LANGUAGE_LABELS.has(b.language) ? b.language : 'en';
+  // Board language is in limited testing — admins + language_tester only;
+  // everyone else onboards in English.
+  const langAllowed = ['admin', 'language_tester'].includes(auth.user.role);
+  const language = (langAllowed && LANGUAGE_LABELS.has(b.language)) ? b.language : 'en';
   // ElevenLabs voice ids are ~20-char alphanumerics; accept and store the
   // parent's pick so every tile's generated audio speaks in that voice. Gate it
   // to the curated catalog — only an admin may assign the reserved default voice.
   const rawVoice = typeof b.voiceId === 'string' && /^[A-Za-z0-9]{8,40}$/.test(b.voiceId.trim())
     ? b.voiceId.trim() : null;
-  const voiceId = (rawVoice && await voiceSelectable(sql(), rawVoice, { isAdmin: auth.user.role === 'admin' })) ? rawVoice : null;
+  const voiceId = (rawVoice && await voiceSelectable(sql(), rawVoice, { isAdmin: auth.user.role === 'admin', role: auth.user.role })) ? rawVoice : null;
   // The chosen art style (a style_guides id) becomes the child's HOUSE STYLE —
   // every tile generated later attaches this exemplar so the board stays
   // visually consistent.
@@ -82,7 +85,8 @@ export default async function handler(req, res) {
     // (TTS, taxonomy filtering when translations land) can read it.
     const csRow = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
     const settings = (csRow && csRow.settings) || {};
-    settings.language = language;
+    // Never clobber a tester-set language when a non-tester reruns onboarding.
+    if (langAllowed || !settings.language) settings.language = language;
     if (voiceId) settings.voiceId = voiceId;
     if (styleGuideId) settings.styleGuideId = styleGuideId;
     if (favoriteColor) {

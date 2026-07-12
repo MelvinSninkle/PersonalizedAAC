@@ -45,6 +45,12 @@ data class Tile(
     val section: BoardSection = BoardSection.NOUNS,
     val categoryId: Int? = null,
     val label: String = "",
+    /** Board-language translation from /api/sync (null on English boards).
+     *  `label` stays the canonical English identity; render [display]. */
+    val displayLabel: String? = null,
+    /** Pre-expanded listening-mode variants from /api/sync (loves/loving/
+     *  loved…). Server-computed — never generate morphology on-device. */
+    val matchTerms: List<String>? = null,
     val imageKey: String? = null,
     val imageUrl: String? = null,
     val soundKey: String? = null,
@@ -69,6 +75,8 @@ data class Category(
     val id: Int,
     val section: BoardSection = BoardSection.NOUNS,
     val label: String = "",
+    /** Board-language translation from /api/sync (null on English boards). */
+    val displayLabel: String? = null,
     val parentId: Int? = null,
     val imageKey: String? = null,
     val imageUrl: String? = null,
@@ -133,3 +141,7 @@ object BoardMetrics {
         return a * tile + (a - 1) * TILE_GAP + 2 * COLUMN_PAD
     }
 }
+
+/** What the child sees and hears named on the board. */
+val Tile.display: String get() = displayLabel ?: label
+val Category.display: String get() = displayLabel ?: label

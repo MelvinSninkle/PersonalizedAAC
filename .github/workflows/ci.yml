@@ -1,0 +1,50 @@
+# CI safety net — every push/PR must keep the product's standing invariants.
+# Three layers, cheapest first:
+#   1. syntax-checks: every serverless function + inline HTML script parses,
+#      every i18n dictionary is valid and fully covers the taxonomy seed.
+#   2. invariants: the mechanical subset of the surface-audit skill (label
+#      writes, TTS cache-key lockstep, media ownership union, public-prefix
+#      whitelist, admin gates, Vercel function ceiling).
+#   3. smoke: real Chromium drives app.html and practice.html against the
+#      stub server — button navigation paging, the sentence-bar drag
+#      lifecycle (both lift styles), repeat-navigate highlight, and the
+#      practice board's read-only network surface.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax + i18n coverage
+        run: bash tools/ci/syntax-checks.sh
+      - name: Surface-audit invariants
+        run: bash tools/surface-audit/invariants.sh
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Board + practice smoke suites
+        run: |
+          python3 tools/surface-audit/stub_server.py &
+          STUB_PID=$!
+          sleep 2
+          node tools/surface-audit/access_smoke.cjs
+          node tools/surface-audit/practice_smoke.cjs
+          kill $STUB_PID

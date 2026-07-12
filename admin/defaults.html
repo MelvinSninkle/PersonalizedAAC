@@ -300,6 +300,13 @@
     if (MODE !== 'style') return '';
     return '<button class="regen" title="Regenerate this image in the selected style" ' + data + '>🎨</button>';
   }
+  // Direct upload: set this tile's default from a hand-picked image — the
+  // curation path for stock/group imagery, no prompt round-trip. Uploads to
+  // the selected scope (generic or the chosen style) and NEVER touches any
+  // family's own tiles (defaults are a sync-time fallback layer only).
+  function uploadBtnHTML(taxId) {
+    return '<button class="regen upload-def" style="right:34px;" title="Upload an image as this tile\'s default" data-id="' + esc(taxId) + '">📤</button>';
+  }
   function tileCardHTML(t) {
     const state = tileState(t);
     const cls = state === 'done' ? '' : ' ' + state;
@@ -309,7 +316,8 @@
       : '<span class="placeholder">' + (state === 'personal' ? 'personalized per child' : 'no image yet') + '</span>';
     return '<div class="card' + cls + '" data-card="t:' + esc(t.id) + '" title="' + title + '">' +
       '<div class="imgwrap">' + img + badgeHTML(state, t.error) +
-      regenBtnHTML('data-kind="tile" data-id="' + esc(t.id) + '"') + '</div>' +
+      regenBtnHTML('data-kind="tile" data-id="' + esc(t.id) + '"') +
+      uploadBtnHTML(t.id) + '</div>' +
       '<div class="word">' + esc(t.label) + '</div></div>';
   }
   function chipCardHTML(c) {
@@ -553,6 +561,54 @@
   document.getElementById('regen-all').addEventListener('click', () => {
     if (!confirm('Regenerate EVERY tile and chip for this style?\n\nThis re-renders the whole set (existing art is replaced) and costs a generation per image. It can take a long while — leave this tab open.')) return;
     runBulk(['tiles', 'chips'], true);
+  });
+
+  // ── Per-tile direct upload (both modes) ───────────────────────────────
+  const upInput = document.createElement('input');
+  upInput.type = 'file'; upInput.accept = 'image/*'; upInput.style.display = 'none';
+  document.body.appendChild(upInput);
+  let upTaxId = null, upCard = null;
+  document.getElementById('board').addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.upload-def');
+    if (!btn) return;
+    ev.stopPropagation();
+    upTaxId = btn.dataset.id;
+    upCard = btn.closest('.card');
+    upInput.value = '';
+    upInput.click();
+  });
+  upInput.addEventListener('change', async () => {
+    const file = upInput.files && upInput.files[0];
+    if (!file || !upTaxId) return;
+    const card = upCard; card && card.classList.add('busy');
+    try {
+      // Downscale client-side to a 1024px square-fitting PNG — board tiles
+      // never need more, and it keeps the request small.
+      const b64 = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const max = 1024;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const cv = document.createElement('canvas');
+          cv.width = Math.round(img.width * scale);
+          cv.height = Math.round(img.height * scale);
+          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+          resolve(cv.toDataURL('image/png'));
+        };
+        img.onerror = () => reject(new Error('could not read image'));
+        img.src = URL.createObjectURL(file);
+      });
+      const body = { taxonomyId: upTaxId, imageBase64: b64 };
+      if (MODE === 'style') body.styleGuideId = styleGuideId();
+      const r = await apiPost('/api/admin/lab?action=default-upload', body);
+      const t = TILES.find((x) => String(x.id) === String(upTaxId));
+      if (t) { t.imageKey = r.imageKey; t.status = 'done'; t.error = null; }
+      updateStat();
+      render();
+    } catch (e) {
+      card && card.classList.remove('busy');
+      alert('Upload failed: ' + (e.message || e));
+    }
   });
 
   // ── Per-image regenerate (style mode) ─────────────────────────────────

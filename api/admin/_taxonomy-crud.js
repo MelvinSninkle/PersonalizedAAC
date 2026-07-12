@@ -35,6 +35,7 @@ function rowOut(r) {
     subcategory: r.subcategory,
     label: r.label,
     pronunciation: r.pronunciation,
+    matchTerms: Array.isArray(r.match_terms) ? r.match_terms : [],
     promptTemplate: r.prompt_template,
     subjectMode: r.subject_mode,
     parentPhotoBehavior: r.parent_photo_behavior,
@@ -105,6 +106,7 @@ function validateRow(body, { partial }) {
   if (body.category !== undefined)      out.category = body.category ? String(body.category).slice(0, 100) : null;
   if (body.subcategory !== undefined)   out.subcategory = body.subcategory ? String(body.subcategory).slice(0, 100) : null;
   if (body.pronunciation !== undefined) out.pronunciation = body.pronunciation ? String(body.pronunciation).slice(0, 200) : null;
+  if (body.matchTerms !== undefined) out.matchTerms = cleanStrArray(body.matchTerms, 24, 60);
   if (body.notes !== undefined)         out.notes = body.notes ? String(body.notes).slice(0, 2000) : null;
   if (body.core !== undefined)          out.core = !!body.core;
   if (body.archived !== undefined)      out.archived = !!body.archived;
@@ -191,7 +193,7 @@ async function create(req, res, db) {
 
   const rows = await db`
     INSERT INTO taxonomy (
-      id, column_name, category, subcategory, label, pronunciation,
+      id, column_name, category, subcategory, label, pronunciation, match_terms,
       prompt_template, subject_mode, parent_photo_behavior, phase, core, notes, acquisition_age,
       growth_stage, meal_context, is_gestalt, gestalt_type, gestalt_meaning,
       gestalt_target_words, descriptive_clues, representation_levels,
@@ -200,7 +202,7 @@ async function create(req, res, db) {
       status, archived, created_by, updated_by
     ) VALUES (
       ${value.id}, ${value.column}, ${value.category ?? null}, ${value.subcategory ?? null},
-      ${value.label}, ${value.pronunciation ?? null},
+      ${value.label}, ${value.pronunciation ?? null}, ${value.matchTerms ?? null},
       ${value.promptTemplate}, ${value.subjectMode}, ${value.parentPhotoBehavior},
       ${value.phase ?? 'v1_core'}, ${value.core === undefined ? true : value.core}, ${value.notes ?? null}, ${value.acquisitionAge ?? null},
       ${value.growthStage ?? null}, ${value.mealContext ?? null},
@@ -254,6 +256,7 @@ async function update(req, res, db) {
       subcategory            = ${value.subcategory           !== undefined ? value.subcategory           : old.subcategory},
       label                  = ${value.label                 ?? old.label},
       pronunciation          = ${value.pronunciation         !== undefined ? value.pronunciation         : old.pronunciation},
+      match_terms            = ${value.matchTerms            !== undefined ? value.matchTerms            : old.match_terms},
       prompt_template        = ${value.promptTemplate        ?? old.prompt_template},
       subject_mode           = ${value.subjectMode           ?? old.subject_mode},
       parent_photo_behavior  = ${value.parentPhotoBehavior   ?? old.parent_photo_behavior},

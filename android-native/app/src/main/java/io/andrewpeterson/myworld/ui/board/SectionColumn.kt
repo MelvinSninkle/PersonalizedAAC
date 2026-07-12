@@ -4,7 +4,16 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,8 +85,15 @@ fun SectionColumn(
     val allTiles by c.board.tiles.collectAsState()
     val tileJobs by c.addTileQueue.jobs.collectAsState()
 
-    var selectedCategoryId by remember { mutableStateOf<Int?>(null) }
-    var selectedSubcategoryId by remember { mutableStateOf<Int?>(null) }
+    // Selection is HOISTED into BoardNav (it was per-column local state) so
+    // listening repeat-navigate can select a category from the header.
+    val access by c.access.data.collectAsState()
+    val navCat by c.boardNav.cat.collectAsState()
+    val navSub by c.boardNav.sub.collectAsState()
+    val highlight by c.boardNav.highlight.collectAsState()
+    val selectedCategoryId = navCat[section]
+    val selectedSubcategoryId = navSub[section]
+    var gridPage by remember { mutableStateOf(0) }
 
     // Chip drop-targets (root coords) — a long-press drag that ends over a
     // chip moves the tile into that folder (iOS drag-to-chip parity).
@@ -88,10 +104,14 @@ fun SectionColumn(
     // ensureSelection: keep a valid chip selected as the board changes.
     LaunchedEffect(roots.map { it.id }) {
         if (selectedCategoryId == null || roots.none { it.id == selectedCategoryId }) {
-            selectedCategoryId = roots.firstOrNull()?.id
+            c.boardNav.setCategory(section, roots.firstOrNull()?.id)
         }
     }
-    LaunchedEffect(selectedCategoryId) { selectedSubcategoryId = null }
+    LaunchedEffect(selectedCategoryId) {
+        c.boardNav.setSubcategory(section, null)
+        gridPage = 0
+    }
+    LaunchedEffect(selectedSubcategoryId) { gridPage = 0 }
 
     val activeCategory = roots.firstOrNull { it.id == selectedCategoryId } ?: roots.firstOrNull()
     val subs = activeCategory?.let { c.board.children(it) } ?: emptyList()
@@ -123,16 +143,18 @@ fun SectionColumn(
         }
 
         CategoryTabStrip(roots, selectedCategoryId, prefs.hideLabels,
+            paged = access.buttonsNav && !editMode,
             onChipBounds = if (editMode) ({ id, r -> chipRects[id] = r }) else null) { id ->
-            selectedCategoryId = id
+            c.boardNav.setCategory(section, id)
             // Every REAL chip press is remembered as the header Play/Teach scope.
             io.andrewpeterson.myworld.game.PlayScope.note("cat:$id", c.auth.childSlug)
         }
 
         if (activeCategory != null && subs.isNotEmpty()) {
             SubcategoryStrip(subs, selectedSubcategoryId ?: subs.first().id, prefs.hideLabels,
+                paged = access.buttonsNav && !editMode,
                 onChipBounds = if (editMode) ({ id, r -> chipRects[id] = r }) else null) { id ->
-                selectedSubcategoryId = id
+                c.boardNav.setSubcategory(section, id)
                 io.andrewpeterson.myworld.game.PlayScope.note("cat:$id", c.auth.childSlug)
                 // Location chips speak their name on selection.
                 cats.firstOrNull { it.id == id && it.isLocation }?.let { chip ->
@@ -150,7 +172,14 @@ fun SectionColumn(
                 TileGrid(c.board.tilesIn(effectiveCategory), cols, tileSize, prefs.hideLabels,
                     posterMode = effectiveCategory.isPoster,
                     editMode = editMode, onEditTile = onEditTile,
-                    onTap = { playWithLogging(it, effectiveCategory.label) })
+                    onTap = { playWithLogging(it, effectiveCategory.label) },
+                    access = access,
+                    highlightId = highlight?.takeIf { it.section == section }?.tileId,
+                    page = gridPage, onSetPage = { gridPage = it },
+                    onStage = { t ->
+                        c.sentenceBar.stage(t, access.sentenceIdleMin)
+                        playWithLogging(t, effectiveCategory.label)
+                    })
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(cols),
@@ -182,7 +211,14 @@ fun SectionColumn(
                 onAdd = if (editMode) ({ onAdd(section, effectiveCategory?.id) }) else null,
                 renderingJobs = jobsHere,
                 onDismissJob = { c.addTileQueue.dismiss(it) },
-                chipRects = chipRects)
+                chipRects = chipRects,
+                access = access,
+                highlightId = highlight?.takeIf { it.section == section }?.tileId,
+                page = gridPage, onSetPage = { gridPage = it },
+                onStage = { t ->
+                    c.sentenceBar.stage(t, access.sentenceIdleMin)
+                    playWithLogging(t)
+                })
         }
     }
 
@@ -204,9 +240,18 @@ private fun TileGrid(
     renderingJobs: List<AddTileQueue.TileJob> = emptyList(),
     onDismissJob: (Long) -> Unit = {},
     chipRects: Map<Int, Rect> = emptyMap(),
+    access: io.andrewpeterson.myworld.access.AccessData = io.andrewpeterson.myworld.access.AccessData(),
+    highlightId: Int? = null,
+    page: Int = 0,
+    onSetPage: (Int) -> Unit = {},
+    onStage: (Tile) -> Unit = {},
 ) {
     val c = LocalAppContainer.current
     val scope = rememberCoroutineScope()
+    val sentenceOn = access.sentenceBuilder && !editMode
+    val paged = access.buttonsNav && !editMode
+    val dropZonePx = with(LocalDensity.current) { 140.dp.toPx() }
+    val gridState = rememberLazyGridState()
 
     // Long-press drag state — uniform tile size means the drop target is just
     // "whichever cell rect the pointer ends inside" (the plan's port #7).
@@ -253,14 +298,36 @@ private fun TileGrid(
         }
     }
 
+    // Button navigation: whole-page turns instead of scrolling — only full
+    // tiles render on a page, so the tile that WOULD have been cut off is
+    // exactly the first tile of the next page. Scroll mode keeps the lazy
+    // grid (and scrolls to a repeat-navigate highlight).
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val cellH = tileSize + (if (hideLabels) 0.dp else 24.dp) + BoardMetrics.TILE_GAP.dp
+        val rows = if (paged) maxOf(1, ((maxHeight - 62.dp) / cellH).toInt()) else Int.MAX_VALUE
+        val per = if (paged) maxOf(1, rows * cols) else tiles.size
+        val pageCount = if (paged) maxOf(1, (tiles.size + per - 1) / per) else 1
+        val p = minOf(page, pageCount - 1)
+        val shown = if (paged) tiles.drop(p * per).take(per) else tiles
+
+        LaunchedEffect(highlightId, paged, per) {
+            val idx = tiles.indexOfFirst { it.id == highlightId }
+            if (idx < 0) return@LaunchedEffect
+            if (paged) onSetPage(idx / per)
+            else gridState.animateScrollToItem(idx)
+        }
+
+        Column(Modifier.fillMaxSize()) {
     LazyVerticalGrid(
+        state = gridState,
+        userScrollEnabled = !paged,
         columns = GridCells.Fixed(cols),
         horizontalArrangement = Arrangement.spacedBy(BoardMetrics.TILE_GAP.dp),
         verticalArrangement = Arrangement.spacedBy(BoardMetrics.TILE_GAP.dp),
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxWidth().let { if (paged) it.weight(1f) else it.fillMaxHeight() }
             .padding(horizontal = BoardMetrics.COLUMN_PAD.dp, vertical = 8.dp),
     ) {
-        items(tiles, key = { it.id }) { tile ->
+        items(shown, key = { it.id }) { tile ->
             val isDragging = dragId == tile.id
             Box(
                 Modifier
@@ -277,18 +344,55 @@ private fun TileGrid(
                             scaleX = 1.06f; scaleY = 1.06f; alpha = 0.85f
                         }
                     }
-                    .then(if (editMode) Modifier.pointerInput(tile.id, tiles.map { it.id }) {
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = {
+                    .then(if (tile.id == highlightId)
+                        Modifier.border(5.dp, Color(0xFFFFD400), RoundedCornerShape(16.dp))
+                    else Modifier)
+                    .then(when {
+                        editMode -> Modifier.pointerInput(tile.id, tiles.map { it.id }) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = {
+                                    dragOrigin = cellRects[tile.id]?.center ?: Offset.Zero
+                                    dragPos = dragOrigin
+                                    dragId = tile.id
+                                },
+                                onDrag = { change, amount -> change.consume(); dragPos += amount },
+                                onDragEnd = { completeDrag() },
+                                onDragCancel = { dragId = null },
+                            )
+                        }
+                        // Sentence constructor: lift a COPY up to the header
+                        // bar. Long-press (default) keeps normal scrolling —
+                        // the hold is the gesture claim; quick-drag lifts on
+                        // first movement (eye tracker / mouse rigs).
+                        sentenceOn -> Modifier.pointerInput(tile.id, access.sentenceLift) {
+                            val start: (Offset) -> Unit = {
                                 dragOrigin = cellRects[tile.id]?.center ?: Offset.Zero
                                 dragPos = dragOrigin
                                 dragId = tile.id
-                            },
-                            onDrag = { change, amount -> change.consume(); dragPos += amount },
-                            onDragEnd = { completeDrag() },
-                            onDragCancel = { dragId = null },
-                        )
-                    } else Modifier),
+                                c.sentenceBar.dragUpdate(tile, false)
+                            }
+                            val move: (androidx.compose.ui.input.pointer.PointerInputChange, Offset) -> Unit = { change, amount ->
+                                change.consume()
+                                dragPos += amount
+                                c.sentenceBar.dragUpdate(tile, dragPos.y <= dropZonePx)
+                            }
+                            val end: () -> Unit = {
+                                val hit = dragPos.y <= dropZonePx
+                                dragId = null
+                                c.sentenceBar.dragEnd()
+                                if (hit) onStage(tile)
+                            }
+                            val cancel: () -> Unit = { dragId = null; c.sentenceBar.dragEnd() }
+                            if (access.sentenceLift == "drag") {
+                                detectDragGestures(onDragStart = start, onDrag = move,
+                                    onDragEnd = end, onDragCancel = cancel)
+                            } else {
+                                detectDragGesturesAfterLongPress(onDragStart = start, onDrag = move,
+                                    onDragEnd = end, onDragCancel = cancel)
+                            }
+                        }
+                        else -> Modifier
+                    }),
             ) {
                 TileView(tile, tileSize, hideLabels, onTap,
                     editMode = editMode, onEdit = onEditTile, posterMode = posterMode)
@@ -304,6 +408,32 @@ private fun TileGrid(
         if (onAdd != null) {
             item(key = "add-cell") { AddTileCell(tileSize, onAdd) }
         }
+    }
+        if (paged && pageCount > 1) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)) {
+                PagerPaddle("⬆", enabled = p > 0, modifier = Modifier.weight(1f)) { onSetPage(maxOf(0, p - 1)) }
+                Spacer(Modifier.width(10.dp))
+                PagerPaddle("⬇", enabled = p < pageCount - 1, modifier = Modifier.weight(1f)) { onSetPage(minOf(pageCount - 1, p + 1)) }
+            }
+        }
+        }
+    }
+}
+
+/** Big page-turn button for button-navigation mode (eye-tracker sized). */
+@Composable
+fun PagerPaddle(glyph: String, enabled: Boolean, modifier: Modifier = Modifier, onTap: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    Box(
+        modifier
+            .height(46.dp)
+            .background(Color.White.copy(alpha = if (enabled) 1f else 0.4f), shape)
+            .border(2.dp, Color(0xFFC9D5E8), shape)
+            .then(if (enabled) Modifier.clickable(onClick = onTap) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(glyph, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+            color = Color(0xFF2B3A55).copy(alpha = if (enabled) 1f else 0.35f))
     }
 }
 

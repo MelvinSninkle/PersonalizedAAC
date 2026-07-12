@@ -34,6 +34,29 @@ export default async function handler(req, res) {
       WHERE child_id = ${childId} AND status = 'failed' AND attempts >= ${MAX_SEED_ATTEMPTS}
       RETURNING id`;
 
+    // Re-open DONE jobs whose tile no longer has what the job made. The dedup
+    // key (child, kind, taxonomy) means a completed job never re-runs — which
+    // was unrecoverable when a board was wiped/re-placed after the build:
+    // items came back artless, every job read "done", and this rescue had
+    // nothing to re-arm (the "926 placed, 0 queued, board still blank" trap).
+    // A tile whose image is NULL/empty or still the shared default fallback
+    // gets its render re-queued; a tile with no recorded audio gets its voice
+    // re-queued. Idempotent: healthy tiles match nothing.
+    const reopenedRenders = await db`
+      UPDATE seed_jobs sj SET status = 'queued', attempts = 0, error = NULL, updated_at = NOW()
+      FROM items i
+      WHERE sj.child_id = ${childId} AND sj.kind = 'render' AND sj.status = 'done'
+        AND i.child_id = sj.child_id AND i.taxonomy_slug = sj.taxonomy_id
+        AND (i.image_key IS NULL OR i.image_key = '' OR i.image_key LIKE 'taxonomy-defaults/%')
+      RETURNING sj.id`;
+    const reopenedVoices = await db`
+      UPDATE seed_jobs sj SET status = 'queued', attempts = 0, error = NULL, updated_at = NOW()
+      FROM items i
+      WHERE sj.child_id = ${childId} AND sj.kind = 'voice' AND sj.status = 'done'
+        AND i.child_id = sj.child_id AND i.taxonomy_slug = sj.taxonomy_id
+        AND (i.sound_key IS NULL OR i.sound_key = '')
+      RETURNING sj.id`;
+
     const build = await buildBoard(db, childId);
     const status = await seedStatus(db, childId);
 
@@ -50,8 +73,10 @@ export default async function handler(req, res) {
       personalRenders: build.personalRenders !== false,
       ownerTier: build.ownerTier || null,
       rearmedJobs: rearmed.length,
+      reopenedRenders: reopenedRenders.length,
+      reopenedVoices: reopenedVoices.length,
       status,
-      note: `Placed ${build.placed}/${build.total} words; queued ${build.renders} renders + ${build.voices} voices; re-armed ${rearmed.length} dead jobs. The cron finishes the rest server-side.${gateNote}`,
+      note: `Placed ${build.placed}/${build.total} words; queued ${build.renders} renders + ${build.voices} voices; re-armed ${rearmed.length} dead jobs; re-opened ${reopenedRenders.length} art-less renders + ${reopenedVoices.length} silent voices. The cron finishes the rest server-side.${gateNote}`,
     });
   } catch (err) {
     res.status(500).json({ error: 'build-board failed', detail: String(err.message || err) });

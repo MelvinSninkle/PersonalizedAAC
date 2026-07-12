@@ -42,7 +42,7 @@ struct TileView: View {
                             .fill(Color(hex: "#fdf2f8"))
                         RoundedRectangle(cornerRadius: 18)
                             .strokeBorder(Color(hex: "#f3c6dd"), style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
-                        Text(tile.label)
+                        Text(tile.display)
                             .font(.system(size: 19, weight: .heavy, design: .rounded))
                             .foregroundStyle(Color(hex: "#9d2463"))
                             .multilineTextAlignment(.center)
@@ -84,7 +84,7 @@ struct TileView: View {
                 }
 
                 if !prefs.hideLabels {
-                    Text(tile.label)
+                    Text(tile.display)
                         .font(.system(size: 17, weight: .semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)

@@ -1,0 +1,47 @@
+# Nightly database backup — the children's boards, photos-metadata, events,
+# and settings are irreplaceable; this keeps a 30-day rolling window of full
+# dumps as GitHub artifacts (private to the repo).
+#
+# SETUP (one time): add a repo secret named BACKUP_DATABASE_URL containing the
+# Neon UNPOOLED connection string (Vercel env DATABASE_URL_UNPOOLED /
+# POSTGRES_URL_NON_POOLING — pg_dump needs a direct connection, not the
+# pooler). Settings → Secrets and variables → Actions → New repository secret.
+#
+# Blobs (tile art / audio) are NOT in the dump — they live in Vercel Blob,
+# which is itself replicated; the Lab backup action's `inventory` op
+# reconciles blob keys against the database. See docs/runbooks/backup-restore.md.
+name: Nightly DB backup
+
+on:
+  schedule:
+    - cron: '17 8 * * *'   # 08:17 UTC daily
+  workflow_dispatch: {}
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secret
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Set the BACKUP_DATABASE_URL repo secret (Neon UNPOOLED url)"
+            exit 1
+          fi
+      - name: Install postgres client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client >/dev/null
+      - name: pg_dump
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          pg_dump "$DATABASE_URL" --no-owner --format=custom \
+            --file="myworld-$(date +%F).dump"
+          ls -lh myworld-*.dump
+      - uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: myworld-*.dump
+          retention-days: 30

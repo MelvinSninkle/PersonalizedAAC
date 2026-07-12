@@ -19,6 +19,9 @@ struct NeedsStrip: View {
     @Environment(BoardStore.self) private var board
     @Environment(DisplayPrefs.self) private var prefs
     @Environment(AuthManager.self) private var auth
+    @Environment(AccessPrefs.self) private var access
+    @Environment(SentenceBar.self) private var sentence
+    @State private var page = 0
 
     private var tiles: [Tile] {
         board.tiles
@@ -41,22 +44,31 @@ struct NeedsStrip: View {
         // "+ Add tile" cell is reachable even before any Needs tiles exist.
         if tiles.isEmpty && !editMode {
             EmptyView()
+        } else if access.buttonsNav && !editMode {
+            // Button navigation: whole-page turns instead of a sideways scroll.
+            GeometryReader { geo in
+                let per = max(1, Int((geo.size.width - 108) / (tileSize + BoardMetrics.tileGap)))
+                let pageCount = max(1, Int(ceil(Double(tiles.count) / Double(per))))
+                let p = min(page, pageCount - 1)
+                let slice = Array(tiles.dropFirst(p * per).prefix(per))
+                HStack(spacing: BoardMetrics.tileGap) {
+                    stripPaddle("chevron.left", disabled: p <= 0) { page = max(0, p - 1) }
+                        .opacity(pageCount > 1 ? 1 : 0)
+                    ForEach(slice) { tile in needsCell(tile) }
+                    Spacer(minLength: 0)
+                    stripPaddle("chevron.right", disabled: p >= pageCount - 1) { page = min(pageCount - 1, p + 1) }
+                        .opacity(pageCount > 1 ? 1 : 0)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8)
+            }
+            .frame(height: stripHeight)
+            .background(Color(hex: prefs.colorNeeds))
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: BoardMetrics.tileGap) {
                     ForEach(tiles) { tile in
-                        TileView(tile: tile,
-                                 onTap: { t in
-                                     Task {
-                                         await TilePlayer.shared.play(
-                                             t,
-                                             childId: auth.childSlug,
-                                             categoryName: "Needs"
-                                         )
-                                     }
-                                 },
-                                 editMode: editMode, onEdit: onEditTile)
-                        .frame(width: tileSize)
+                        needsCell(tile)
                         // Unlocked drag-to-reorder within the strip (Needs is
                         // flat — no categories, and never crosses sections).
                         .draggableIf(editMode, "tile|needs|\(tile.id)")
@@ -75,6 +87,78 @@ struct NeedsStrip: View {
             .frame(height: stripHeight)
             .background(Color(hex: prefs.colorNeeds))
         }
+    }
+
+    /// One Needs tile with the sentence-constructor lift attached when it's on
+    /// — the core words (more, eat, all done) belong in built sentences too.
+    @ViewBuilder
+    private func needsCell(_ tile: Tile) -> some View {
+        let base = TileView(tile: tile,
+                            onTap: { t in
+                                Task {
+                                    await TilePlayer.shared.play(
+                                        t,
+                                        childId: auth.childSlug,
+                                        categoryName: "Needs"
+                                    )
+                                }
+                            },
+                            editMode: editMode, onEdit: onEditTile)
+            .frame(width: tileSize)
+        if access.sentenceBuilder && !editMode {
+            if access.sentenceLift == "drag" {
+                base.simultaneousGesture(quickLift(tile))
+            } else {
+                base.simultaneousGesture(longpressLift(tile))
+            }
+        } else {
+            base
+        }
+    }
+
+    private func longpressLift(_ tile: Tile) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.45)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("board")))
+            .onChanged { value in
+                if case .second(true, let drag) = value, let drag {
+                    sentence.dragUpdate(tile, at: drag.location)
+                }
+            }
+            .onEnded { value in
+                if case .second(true, let drag) = value, let drag {
+                    if sentence.dragEnd(at: drag.location) { stageTile(tile) }
+                } else {
+                    sentence.dragCancel()
+                }
+            }
+    }
+
+    private func quickLift(_ tile: Tile) -> some Gesture {
+        DragGesture(minimumDistance: 24, coordinateSpace: .named("board"))
+            .onChanged { sentence.dragUpdate(tile, at: $0.location) }
+            .onEnded { if sentence.dragEnd(at: $0.location) { stageTile(tile) } }
+    }
+
+    private func stageTile(_ tile: Tile) {
+        sentence.stage(tile, idleMinutes: access.sentenceIdleMin)
+        Task {
+            await TilePlayer.shared.play(tile, childId: auth.childSlug, categoryName: "Needs")
+        }
+    }
+
+    private func stripPaddle(_ icon: String, disabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(Color(hex: "#2b3a55"))
+                .frame(width: 44, height: tileSize)
+                .background(RoundedRectangle(cornerRadius: 12).fill(.white))
+                .overlay(RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color(hex: "#c9d5e8"), lineWidth: 2))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.25 : 1)
     }
 
     /// Reorder within the strip — same splice + i*1000 resequence as the web.

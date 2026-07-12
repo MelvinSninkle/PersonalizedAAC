@@ -16,6 +16,11 @@ final class TilePlayer {
     private var player: AVAudioPlayer?
     private let speech = AVSpeechSynthesizer()
 
+    // Double-tap-teach bookkeeping (mirrors the web board's tapSpeak).
+    private var lastTapTileId: Int?
+    private var lastTapAt: Date = .distantPast
+    private static let doubleTapWindow: TimeInterval = 2.5
+
     /// Plays a tile's audio AND (when `childId` is provided) logs the tap.
     ///
     /// FREE-TAP CALLERS on the board MUST pass `childId`, otherwise nothing
@@ -33,25 +38,32 @@ final class TilePlayer {
               childId: String? = nil,
               categoryName: String? = nil,
               subcategoryName: String? = nil) async {
-        // Log the tap (fire-and-forget — UI never waits on analytics).
-        // The server expects { events: [{ ... }] }; sending a bare event
-        // object hits the 400 'events array required' branch silently.
+        // Touch controls apply only to logged board taps (childId present) —
+        // game/slideshow playback is never gated. Mirrors web tapSpeak:
+        // the double-tap-teach check runs BEFORE the interrupt gate, so a
+        // second tap teaches even while the first word is still playing.
         if let childId, !childId.isEmpty {
-            let event: [String: Any] = [
-                "role":            "student",
-                "itemId":          tile.id,
-                "section":         tile.section.rawValue,
-                "label":           tile.label,
-                "categoryName":    categoryName    as Any,
-                "subcategoryName": subcategoryName as Any,
-                "occurredAt":      ISO8601DateFormatter().string(from: Date()),
-            ]
-            Task.detached(priority: .background) {
-                await APIClient().logEvent([
-                    "childId": childId,
-                    "events":  [event],
-                ])
+            let now = Date()
+            if TouchConfig.doubleTapTeach, tile.id == lastTapTileId,
+               now.timeIntervalSince(lastTapAt) < Self.doubleTapWindow,
+               tile.displayLabel == nil,   // clues are English taxonomy prose
+               let clues = tile.descriptiveClues?.prefix(3), !clues.isEmpty {
+                lastTapTileId = nil
+                logTap(tile, childId: childId, categoryName: categoryName, subcategoryName: subcategoryName)
+                player?.stop()
+                speech.stopSpeaking(at: .immediate)
+                for clue in clues { await GameAudio.shared.speakAwait(clue, childId: childId) }
+                return
             }
+            lastTapTileId = tile.id
+            lastTapAt = now
+            let busy = (player?.isPlaying == true) || speech.isSpeaking
+            if busy && !TouchConfig.interrupt { return }   // not logged — the tap was ignored
+        }
+
+        // Log the tap (fire-and-forget — UI never waits on analytics).
+        if let childId, !childId.isEmpty {
+            logTap(tile, childId: childId, categoryName: categoryName, subcategoryName: subcategoryName)
         }
 
         // 1) Cached audio file.
@@ -66,6 +78,27 @@ final class TilePlayer {
         }
         // 2) Live TTS via AVSpeechSynthesizer (no network needed).
         speak(tile.label)
+    }
+
+    /// The server expects { events: [{ ... }] }; sending a bare event
+    /// object hits the 400 'events array required' branch silently.
+    private func logTap(_ tile: Tile, childId: String,
+                        categoryName: String?, subcategoryName: String?) {
+        let event: [String: Any] = [
+            "role":            "student",
+            "itemId":          tile.id,
+            "section":         tile.section.rawValue,
+            "label":           tile.label,
+            "categoryName":    categoryName    as Any,
+            "subcategoryName": subcategoryName as Any,
+            "occurredAt":      ISO8601DateFormatter().string(from: Date()),
+        ]
+        Task.detached(priority: .background) {
+            await APIClient().logEvent([
+                "childId": childId,
+                "events":  [event],
+            ])
+        }
     }
 
     private func playFile(at url: URL) throws {

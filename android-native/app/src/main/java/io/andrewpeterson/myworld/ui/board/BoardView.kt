@@ -100,6 +100,7 @@ fun BoardView() {
     LaunchedEffect(Unit) {
         val slug = c.auth.childSlug
         c.displayPrefs.attach(slug)
+        c.access.attach(slug)
         c.board.refresh(slug)
         didInitialLoad = true
         c.live.start(slug)

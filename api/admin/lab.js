@@ -38,10 +38,18 @@ import voices from './_lab-voices.js';
 import publish from './_lab-publish.js';
 import boards from './_lab-boards.js';
 import reports from './_lab-reports.js';
+import translations from './_lab-translations.js';
+import role from './_lab-role.js';
+import demoAudio from './_lab-demo-audio.js';
+import backup from './_lab-backup.js';
+import defaultUpload from './_lab-default-upload.js';
 
 export const config = { maxDuration: 300 };
 
 const HANDLERS = {
+  'backup': backup,
+  'default-upload': defaultUpload,
+  'demo-audio': demoAudio,
   'generate': generate,
   'generate-scene': generateScene,
   'batch-generate': batchGenerate,
@@ -67,6 +75,8 @@ const HANDLERS = {
   'publish': publish,
   'boards': boards,
   'reports': reports,
+  'translations': translations,
+  'role': role,
 };
 
 export default async function handler(req, res) {

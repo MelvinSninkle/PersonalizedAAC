@@ -36,9 +36,17 @@ enum ListenTokenizer {
 
     static func lexicon(from tiles: [Tile]) -> [String: Tile] {
         var map: [String: Tile] = [:]
+        // Labels first — a real "loves" tile beats "love"'s variant — then the
+        // server-expanded matchTerms (inflections + curated synonyms).
         for t in tiles {
             let key = normalize(t.label)
             if !key.isEmpty, map[key] == nil { map[key] = t }
+        }
+        for t in tiles {
+            for v in t.matchTerms ?? [] {
+                let key = normalize(v)
+                if !key.isEmpty, map[key] == nil { map[key] = t }
+            }
         }
         return map
     }
@@ -71,6 +79,9 @@ enum ListenTokenizer {
 struct ListenStripView: View {
     let speech: SpeechListener
     @Environment(BoardStore.self) private var board
+    @Environment(AccessPrefs.self) private var access
+    @Environment(BoardNav.self) private var nav
+    @State private var lastNavKey = ""
 
     private var tokens: [ListenToken] {
         ListenTokenizer.tokenize(speech.words, lexicon: ListenTokenizer.lexicon(from: board.tiles))
@@ -113,6 +124,7 @@ struct ListenStripView: View {
                 .animation(.easeInOut(duration: 0.25), value: speech.words)
             }
             .onChange(of: speech.words.count) { _, _ in
+                maybeRepeatNavigate()
                 guard let last = tokens.last?.id else { return }
                 withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(last, anchor: .trailing) }
             }
@@ -122,6 +134,27 @@ struct ListenStripView: View {
             }
         }
         .frame(height: 92)
+    }
+
+    /// A word matched twice IN A ROW = "show me": open that tile's category,
+    /// flash it yellow (BoardNav drives the section columns). Keyed by the
+    /// pair's stable source-word id so re-emitted partial transcripts don't
+    /// re-trigger. Mirrors the web board's maybeListenNavigate.
+    private func maybeRepeatNavigate() {
+        guard access.listenRepeatNav else { return }
+        let toks = tokens
+        guard toks.count >= 2 else { return }
+        var i = toks.count - 1
+        while i >= 1 {
+            if let a = toks[i].tile, let b = toks[i - 1].tile, a.id == b.id {
+                let key = "\(a.id)@\(toks[i].id)"
+                if key == lastNavKey { return }
+                lastNavKey = key
+                nav.navigate(to: a, board: board)
+                return
+            }
+            i -= 1
+        }
     }
 
     @ViewBuilder

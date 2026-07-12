@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/practice",
+      "destination": "/practice.html"
+    },
+    {
       "source": "/u/:slug",
       "destination": "/app.html"
     },

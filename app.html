@@ -541,6 +541,66 @@
   }
   .tile-square.contain { background-size: contain; }
   .subcat-tile .sq.contain { background-size: contain; }
+
+  /* ===== Access experiments (admin dark-launch) ===== */
+  /* Button navigation (eye trackers): scrollers become fixed pages turned by
+     big paddle buttons. Edit mode keeps normal scrolling for the grown-up. */
+  body.nav-buttons-mode:not(.edit-mode) .tab-strip,
+  body.nav-buttons-mode:not(.edit-mode) .subcat-row,
+  body.nav-buttons-mode:not(.edit-mode) .items-grid { overflow: hidden !important; }
+  .pager-bar { display: none; gap: 10px; margin: 4px 0 6px; flex: 0 0 auto; }
+  body.nav-buttons-mode:not(.edit-mode) .pager-bar.has-overflow { display: flex; }
+  .pager-btn {
+    flex: 1 1 0; min-height: 48px; border-radius: 12px;
+    border: 2px solid #c9d5e8; background: #fff; color: #2b3a55;
+    font-size: 24px; font-weight: 700; cursor: pointer; line-height: 1;
+  }
+  .pager-btn:disabled { opacity: .22; cursor: default; }
+  .pager-btn:not(:disabled):active { background: #e8f0fe; }
+
+  /* Sentence constructor: while composing, the header chrome yields to the
+     strip — background color stays, everything else hides. */
+  #sentence-bar { display: none; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; }
+  body.sentence-active .hdr-center > :not(#sentence-bar) { display: none !important; }
+  body.sentence-active #sentence-bar { display: flex; }
+  #sentence-chips { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+  .sentence-chip {
+    flex: 0 1 92px; min-width: 40px; height: 92px; border-radius: 16px;
+    background: #fff center/cover no-repeat; box-shadow: 0 2px 8px rgba(0,0,0,.14);
+    overflow: hidden; cursor: pointer;
+  }
+  .sentence-chip.is-text {
+    display: flex; align-items: center; justify-content: center; padding: 0 10px;
+    font: 700 18px Fredoka, ui-rounded, system-ui, sans-serif; color: #ad1457; background: #fce4ec;
+  }
+  #sentence-play {
+    flex: 0 0 auto; width: 64px; height: 64px; border-radius: 50%; border: none;
+    background: #2e7d32; color: #fff; font-size: 26px; cursor: pointer;
+  }
+  #sentence-play:active { background: #1b5e20; }
+  .sb-drag-ghost {
+    position: fixed; z-index: 4000; width: 92px; height: 92px; border-radius: 16px;
+    background: #fce4ec center/cover no-repeat; overflow: hidden; pointer-events: none;
+    opacity: .92; box-shadow: 0 8px 24px rgba(0,0,0,.3);
+    display: flex; align-items: center; justify-content: center;
+    font: 700 16px Fredoka, ui-rounded, system-ui, sans-serif; color: #ad1457;
+  }
+  header.sb-drop-hot { outline: 4px solid #66bb6a; outline-offset: -4px; }
+  /* Quick-drag lift: tiles own the touch gesture so a finger-drag can reach
+     the bar (pairs well with button-nav). Long-press lift keeps native
+     scrolling — the hold is the claim. */
+  body.sb-on.sb-lift-drag:not(.edit-mode) .items-grid .tile-wrap { touch-action: none; }
+  .tile-wrap.sb-lifting .tile-square { transform: scale(1.06); transition: transform .15s; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+
+  /* Listening repeat-navigate: found-it flash on the tile. */
+  .tile-wrap.listen-hit .tile-square {
+    outline: 5px solid #ffd400; outline-offset: 2px;
+    animation: listenHitPulse 1s ease-in-out 5;
+  }
+  @keyframes listenHitPulse {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(255, 212, 0, .25); }
+    50%      { box-shadow: 0 0 0 14px rgba(255, 212, 0, .45); }
+  }
   .tile-wrap:active .tile-square {
     transform: scale(0.96);
     box-shadow:
@@ -1090,6 +1150,10 @@
       <div id="listen-tiles"></div>
       <span id="listen-hint">Listening…</span>
     </div>
+    <div id="sentence-bar">
+      <div id="sentence-chips"></div>
+      <button id="sentence-play" aria-label="Play the whole sentence" title="Play the whole sentence">▶</button>
+    </div>
   </div>
   <div class="hdr-right"></div>
 </header>
@@ -1249,6 +1313,14 @@
     <textarea id="item-description" rows="2" placeholder='e.g. "Lives in a field, has four legs, eats grass." Spoken aloud — the child picks the matching tile.' style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font:inherit;box-sizing:border-box;"></textarea>
     <div style="font-size:12px;color:#666;margin-top:4px;">If left blank the game falls back to "Who or what is the [tile name]?"</div>
     <div class="error" id="item-error"></div>
+    <!-- Every picture this tile has ever worn (the album keeps them all) —
+         tap one to put it back. Reverting archives the current picture, so
+         it's always reversible. -->
+    <div id="item-history-row" style="display:none;margin:8px 0 2px;">
+      <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:4px;">Previous pictures <span style="font-weight:400;color:#999;">(tap to bring one back)</span></div>
+      <div id="item-history-strip" style="display:flex;gap:8px;overflow-x:auto;padding:2px;"></div>
+      <div id="item-history-msg" style="font-size:12px;color:#888;margin-top:2px;"></div>
+    </div>
     <div id="item-redraw-row" style="display:none;margin:6px 0 2px;">
       <button class="secondary" id="item-redraw" title="One tap — re-draws this picture in your child's chosen style automatically. The first redo of each tile is free; after that it uses 1 credit. The old picture is archived, never deleted.">✨ Match my child's style</button>
       <span id="item-redraw-note" style="font-size:12px;color:#2e7d32;margin-left:8px;"></span>
@@ -2295,7 +2367,7 @@
       const isActive = cat.id === topAncestorId;
       const tile = makeTile({
         kind: 'c', id: cat.id, imageKey: cat.imageKey, keepAspect: false,
-        label: cat.label, isCategory: true, isActive, forgivingTap: !editMode,
+        label: cat.displayLabel || cat.label, isCategory: true, isActive, forgivingTap: !editMode,
         onClick: () => { activeCategoryId[section] = cat.id; notePlayScope('cat:' + cat.id); renderSection(section); },
         onEdit: () => openCatModal(section, cat),
       });
@@ -2423,7 +2495,7 @@
     items.filter(i => i.categoryId === activeId).forEach(it => {
       const tile = makeTile({
         kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: tvPoster,
-        label: it.label, pinned: it.pinned, forgivingTap: !editMode,
+        label: it.displayLabel || it.label, pinned: it.pinned, forgivingTap: !editMode,
         onClick: () => {
           if (editMode) { openItemModal(section, activeId, it); return; }
           tapSpeak(it, tapCategoryName, tapSubcategoryName);
@@ -2534,7 +2606,7 @@
     items.forEach(it => {
       const tile = makeTile({
         kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: false,
-        label: it.label, pinned: false, forgivingTap: !editMode,
+        label: it.displayLabel || it.label, pinned: false, forgivingTap: !editMode,
         onClick: () => {
           if (editMode) { openItemModal('needs', null, it); return; }
           tapSpeak(it, null, null);   // needs items have no category path
@@ -2576,11 +2648,60 @@
       } catch (_) {}
     });
   }, { capture: true });
+  // Touch controls (parent-set in the dashboard Board tab):
+  //   interrupt      — a new tap cuts off the audio that's still playing.
+  //                    OFF (default): taps during playback are ignored, so a
+  //                    child stimming on one button hears each word complete.
+  //   doubleTapTeach — the SAME tile tapped again within the window plays its
+  //                    teaching facts (descriptive clues, up to three).
+  const TOUCH = { interrupt: false, doubleTapTeach: false };
+  const DOUBLE_TAP_WINDOW_MS = 2500;
+  let _lastTapItemId = null, _lastTapItemAt = 0;
+
+  /// Cut playback loose NOW — pausing + dispatching 'ended' runs playSound's
+  /// own release handler, so `speaking` and the safety timer clean up the
+  /// same way a natural finish does.
+  function stopSpeaking() {
+    try {
+      const player = document.getElementById('audio-player');
+      player.pause();
+      player.dispatchEvent(new Event('ended'));
+    } catch (_) { speaking = false; }
+  }
+
+  /// Double-tap teach: the tile's facts, spoken in order. Uses the game voice
+  /// channel so it can't fight the tile channel's `speaking` bookkeeping.
+  async function playClues(item) {
+    const clues = (item.descriptiveClues || []).filter(Boolean).slice(0, 3);
+    if (speaking) stopSpeaking();
+    for (const clue of clues) {
+      try {
+        const u = await teachAudioURL(clue);
+        if (u) await playAwait(u);
+      } catch (_) {}
+    }
+  }
+
   function tapSpeak(item, categoryName, subcategoryName) {
     const now = Date.now();
     if (now - _lastTapAt < 250) return;   // swallow an accidental double-tap / bounce
     _lastTapAt = now;
-    if (speaking) return;
+    // Same tile again inside the window → its teaching facts (when enabled
+    // and it has any). Logged like a normal tap; a third tap starts fresh.
+    if (TOUCH.doubleTapTeach && item.id === _lastTapItemId
+        && (now - _lastTapItemAt) < DOUBLE_TAP_WINDOW_MS
+        && !item.displayLabel   // clues are English taxonomy prose (E5)
+        && (item.descriptiveClues || []).length) {
+      _lastTapItemId = null; _lastTapItemAt = 0;
+      enqueueEvent(item, categoryName, subcategoryName);
+      playClues(item);
+      return;
+    }
+    _lastTapItemId = item.id; _lastTapItemAt = now;
+    if (speaking) {
+      if (!TOUCH.interrupt) return;
+      stopSpeaking();
+    }
     enqueueEvent(item, categoryName, subcategoryName);
     playSound(item);   // playSound sets and clears `speaking`
   }
@@ -2883,6 +3004,7 @@
       for (const c of (data.categories || [])) {
         catsStore.put({
           id: c.id, section: c.section, label: c.label,
+          displayLabel: c.displayLabel || null,   // translated board language (display + speech)
           parentId: c.parentId, order: c.order,
           imageKey: c.imageKey, keepAspect: !!c.keepAspect,
           kind: c.kind || null,
@@ -2891,6 +3013,8 @@
       for (const it of (data.items || [])) {
         itemsStore.put({
           id: it.id, section: it.section, categoryId: it.categoryId, label: it.label,
+          displayLabel: it.displayLabel || null,
+          matchTerms: Array.isArray(it.matchTerms) ? it.matchTerms : null,
           order: it.order, pinned: !!it.pinned,
           imageKey: it.imageKey, soundKey: it.soundKey, keepAspect: !!it.keepAspect,
           description: it.description || null,                    // PRD §5 auditory-comp prompt
@@ -3164,6 +3288,14 @@
     document.getElementById('item-redraw-row').style.display = (item && item.taxonomySlug) ? 'block' : 'none';
     document.getElementById('item-redraw-note').textContent = '';
 
+    // Past pictures: the tile's archive with one-tap revert (edit mode only,
+    // existing items only — a brand-new tile has no history yet).
+    const histRow = document.getElementById('item-history-row');
+    const histStrip = document.getElementById('item-history-strip');
+    const histMsg = document.getElementById('item-history-msg');
+    histRow.style.display = 'none'; histStrip.innerHTML = ''; histMsg.textContent = '';
+    if (item && item.id) loadItemHistory(item);
+
     // AI-tile section: clear status/preview (the look defaults to board style).
     document.getElementById('item-look-style').checked = true;
     document.getElementById('item-magic-status').textContent = '—';
@@ -3171,6 +3303,46 @@
     mp.style.display = 'none'; mp.removeAttribute('src');
 
     itemModal.classList.add('show');
+  }
+
+  async function loadItemHistory(item) {
+    const histRow = document.getElementById('item-history-row');
+    const histStrip = document.getElementById('item-history-strip');
+    const histMsg = document.getElementById('item-history-msg');
+    try {
+      const r = await apiFetch('/api/items?history=' + encodeURIComponent(item.id));
+      if (!r.ok) return;
+      const d = await r.json();
+      const rows = (d.history || []).filter((h) => h.key && h.key !== d.currentKey);
+      if (!rows.length) return;
+      histRow.style.display = '';
+      for (const h of rows.slice(0, 12)) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.style.cssText = 'flex:0 0 auto;width:64px;height:64px;border-radius:10px;border:2px solid #e5e7eb;background:#fff center/cover no-repeat;cursor:pointer;padding:0;';
+        b.title = 'Bring this picture back' + (h.source ? ' (' + h.source + ')' : '');
+        getMediaURL(h.key).then((u) => { if (u) b.style.backgroundImage = 'url("' + u + '")'; }).catch(() => {});
+        b.addEventListener('click', async () => {
+          if (!confirm('Put this picture back on the tile? The current picture is saved to the album, so you can switch again anytime.')) return;
+          histMsg.textContent = 'Restoring…';
+          try {
+            const rr = await apiFetch('/api/items', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ op: 'revert-image', id: item.id, key: h.key }),
+            });
+            if (!rr.ok) throw new Error((await rr.json().catch(() => ({}))).error || 'revert failed');
+            histMsg.textContent = '✓ Restored';
+            try { await resyncIfChanged(); } catch (_) {}
+            await renderAll();
+            itemModal.classList.remove('show');
+          } catch (err) {
+            histMsg.textContent = '✗ ' + (err.message || err);
+          }
+        });
+        histStrip.appendChild(b);
+      }
+    } catch (_) {}
   }
 
   document.getElementById('item-image').addEventListener('change', (e) => {
@@ -4629,6 +4801,12 @@
       SCHEDULES = Array.isArray(s.schedules) ? s.schedules : [];
       // Favorite-color banner (§1): kidDisplay carries the child's chosen
       // header colors (text color pre-computed server-side by luminance).
+      // Access experiments (admin dark-launch): navigation mode, sentence
+      // constructor, listening repeat-navigate.
+      try { applyAccessSettings(s); } catch (_) {}
+      // Touch controls (ordinary parent settings, no gate).
+      TOUCH.interrupt = !!s.tapInterrupt;
+      TOUCH.doubleTapTeach = !!s.doubleTapTeach;
       const kd = s.kidDisplay;
       if (kd && /^#[0-9a-fA-F]{6}$/.test(String(kd.colorHeaderBg || ''))) {
         document.documentElement.style.setProperty('--hdr-bg', kd.colorHeaderBg);
@@ -5142,9 +5320,11 @@
     // (they're authored easiest-first); description, then a generic question,
     // fill in for tiles without clues.
     if (G.clueQuiz) {
-      const clues = (t.descriptiveClues || []).filter(Boolean);
+      // Clues/descriptions are English taxonomy prose — on a translated
+      // board the prompt is the word itself, in the board's language.
+      const clues = t.displayLabel ? [] : (t.descriptiveClues || []).filter(Boolean);
       const text = clues.length ? clues[Math.min(G.misses || 0, clues.length - 1)]
-                 : (t.description || ('Who or what is the ' + t.label + '?'));
+                 : (t.displayLabel || t.description || ('Who or what is the ' + t.label + '?'));
       const url = await teachAudioURL(text);
       if (url) { const v = gVoice(); v.src = url; v.currentTime = 0; v.play().catch(() => {}); }
       return;
@@ -5273,7 +5453,10 @@
       const it = SLIDE.items[SLIDE.i]; SLIDE.i++;
       const img = document.getElementById('slide-img'), lab = document.getElementById('slide-label');
       const url = await getMediaURL(it.imageKey); if (url && img) img.src = url;
-      if (lab) lab.textContent = SLIDE.labelStyle === 'first_person' ? ('I can see a ' + it.label) : it.label;
+      // Translated boards show the board-language word and skip the English
+      // sentence frame — the frame is English prose, not a translatable label.
+      const word = it.displayLabel || it.label;
+      if (lab) lab.textContent = (SLIDE.labelStyle === 'first_person' && !it.displayLabel) ? ('I can see a ' + it.label) : word;
       if (it.soundKey) { const su = await getMediaURL(it.soundKey); if (su) { const v = gVoice(); v.src = su; v.currentTime = 0; v.play().catch(() => {}); } }
     };
     await showOne();
@@ -5363,10 +5546,14 @@
       // The word first — the tile's recorded audio when it has one, else TTS.
       let wu = null;
       if (it.soundKey) wu = await getMediaURL(it.soundKey);
-      if (!wu) wu = await teachAudioURL(it.label);
+      if (!wu) wu = await teachAudioURL(it.displayLabel || it.label);
+      // Translated boards: the art has no baked caption band, so the word
+      // itself goes in the caption slot for the whole slide.
+      if (it.displayLabel) clueEl.textContent = it.displayLabel;
       if (wu && TEACH.running) await playAwait(wu);
-      // …then every teaching clue, shown while it's spoken.
-      for (const clue of (it.descriptiveClues || [])) {
+      // …then every teaching clue, shown while it's spoken. Clues are English
+      // taxonomy prose — skipped on translated boards.
+      for (const clue of (it.displayLabel ? [] : (it.descriptiveClues || []))) {
         if (!TEACH.running) break;
         clueEl.textContent = clue;
         const cu = await teachAudioURL(clue);
@@ -5521,11 +5708,19 @@
   }
   async function buildListenLexicon() {
     const map = new Map();
+    const all = [];
     for (const s of ['people', 'nouns', 'verbs', 'needs']) {
-      let items = [];
-      try { items = await getAllItems(s); } catch (_) {}
-      for (const it of items) {
-        const key = normalizeListenWord(it.label);
+      try { all.push(...await getAllItems(s)); } catch (_) {}
+    }
+    // Labels first — a real "loves" tile beats "love"'s variant — then the
+    // server-expanded matchTerms (inflections + curated synonyms) from sync.
+    for (const it of all) {
+      const key = normalizeListenWord(it.label);
+      if (key && !map.has(key)) map.set(key, it);
+    }
+    for (const it of all) {
+      for (const v of (it.matchTerms || [])) {
+        const key = normalizeListenWord(v);
         if (key && !map.has(key)) map.set(key, it);
       }
     }
@@ -5542,7 +5737,7 @@
         const phrase = normalizeListenWord(words.slice(i, i + w).join(' '));
         if (lex.has(phrase)) { matched = lex.get(phrase); used = w; break; }
       }
-      if (matched) out.push({ word: matched.label, imageKey: matched.imageKey, soundKey: matched.soundKey });
+      if (matched) out.push({ word: matched.label, imageKey: matched.imageKey, soundKey: matched.soundKey, item: matched });
       else out.push({ word: words[i].replace(/[.,!?;:"()\[\]{}]/g, '') });
       i += used;
     }
@@ -5651,7 +5846,11 @@
       await SR.addListener('partialResults', (data) => {
         const text = (data && data.matches && data.matches[0]) || '';
         if (text.trim()) bumpListenIdle();   // heard something → reset the 2-min timeout
-        if (_listenLex) renderListenStrip(tokenizeForListen(text, _listenLex));
+        if (_listenLex) {
+          const toks = tokenizeForListen(text, _listenLex);
+          renderListenStrip(toks);
+          maybeListenNavigate(toks);
+        }
       });
       // iOS ends a recognition session after a pause / ~1 min — restart while on.
       try {
@@ -6015,6 +6214,283 @@
   });
 
   // On-screen boot status so failures are visible without a console (iPad has none).
+
+  // ===========================================================================
+  // Access experiments (admin dark-launch): button navigation for eye-tracker
+  // users, the sentence constructor, and listening repeat-navigate. The
+  // settings are writable only by admins (server-enforced in child-settings);
+  // the board simply honors whatever was set for this child.
+  // ===========================================================================
+  const ACCESS = { navMode: 'scroll', sentenceBuilder: false, sentenceIdleMin: 1, sentenceLift: 'longpress', listenRepeatNav: true };
+  function applyAccessSettings(s) {
+    ACCESS.navMode = s.navMode === 'buttons' ? 'buttons' : 'scroll';
+    ACCESS.sentenceBuilder = !!s.sentenceBuilder;
+    const m = parseInt(s.sentenceIdleMin, 10);
+    ACCESS.sentenceIdleMin = (Number.isFinite(m) && m >= 1 && m <= 10) ? m : 1;
+    ACCESS.sentenceLift = s.sentenceLift === 'drag' ? 'drag' : 'longpress';
+    ACCESS.listenRepeatNav = s.listenRepeatNav !== false;
+    document.body.classList.toggle('nav-buttons-mode', ACCESS.navMode === 'buttons');
+    document.body.classList.toggle('sb-on', ACCESS.sentenceBuilder);
+    document.body.classList.toggle('sb-lift-drag', ACCESS.sentenceBuilder && ACCESS.sentenceLift === 'drag');
+    if (!ACCESS.sentenceBuilder) sbClear();
+    updateAllPagers();
+  }
+
+  // ---- Button navigation ----------------------------------------------------
+  // Each scroller gets a paddle bar OUTSIDE it (renderSection only rewrites the
+  // scroller's children, so the bar survives re-renders). Paging aligns the
+  // first cut-off tile to the leading edge, so every press shows a whole fresh
+  // screen — never one new tile at a time.
+  const PAGERS = [];
+  function pagerJump(el, axis, dir) {
+    const x = axis === 'x';
+    const rect = el.getBoundingClientRect();
+    const cur = x ? el.scrollLeft : el.scrollTop;
+    const size = x ? el.clientWidth : el.clientHeight;
+    const offs = [...el.children].map((k) => {
+      const r = k.getBoundingClientRect();
+      return x ? { start: r.left - rect.left + el.scrollLeft, end: r.right - rect.left + el.scrollLeft }
+               : { start: r.top - rect.top + el.scrollTop, end: r.bottom - rect.top + el.scrollTop };
+    }).filter((o) => o.end > o.start + 1);
+    if (!offs.length) return;
+    let target;
+    if (dir > 0) {
+      // First tile that doesn't fully fit on the current screen becomes the
+      // first tile of the next screen.
+      const nxt = offs.find((o) => o.end > cur + size - 1);
+      if (!nxt || nxt.start <= cur + 1) target = cur + size;   // one giant child: still move
+      else target = nxt.start;
+    } else {
+      const firstVis = offs.find((o) => o.end > cur + 1) || offs[0];
+      const cand = offs.filter((o) => o.start >= firstVis.start - size && o.start < firstVis.start - 1);
+      target = cand.length ? cand[0].start : 0;
+    }
+    if (x) el.scrollLeft = target; else el.scrollTop = target;
+    updateAllPagers();
+  }
+  function updatePager(p) {
+    const el = p.el, x = p.axis === 'x';
+    const overflow = x ? (el.scrollWidth > el.clientWidth + 4) : (el.scrollHeight > el.clientHeight + 4);
+    p.bar.classList.toggle('has-overflow', overflow);
+    if (!overflow) return;
+    const cur = x ? el.scrollLeft : el.scrollTop;
+    const max = x ? (el.scrollWidth - el.clientWidth) : (el.scrollHeight - el.clientHeight);
+    p.prev.disabled = cur <= 1;
+    p.next.disabled = cur >= max - 1;
+  }
+  function updateAllPagers() { for (const p of PAGERS) { try { updatePager(p); } catch (_) {} } }
+  function initPagers() {
+    const defs = [];
+    for (const s of ['people', 'nouns', 'verbs']) {
+      defs.push({ id: 'tabs-' + s, axis: 'x' }, { id: 'subs-' + s, axis: 'x' }, { id: 'items-' + s, axis: 'y' });
+    }
+    defs.push({ id: 'items-needs', axis: 'x' });
+    for (const d of defs) {
+      const el = document.getElementById(d.id);
+      if (!el) continue;
+      const bar = document.createElement('div');
+      bar.className = 'pager-bar';
+      const mk = (dir, glyph, label) => {
+        const b = document.createElement('button');
+        b.className = 'pager-btn'; b.type = 'button';
+        b.textContent = glyph; b.setAttribute('aria-label', label);
+        b.addEventListener('click', () => pagerJump(el, d.axis, dir));
+        bar.appendChild(b);
+        return b;
+      };
+      const prev = d.axis === 'x' ? mk(-1, '⬅', 'Previous page') : mk(-1, '⬆', 'Page up');
+      const next = d.axis === 'x' ? mk(1, '➡', 'Next page') : mk(1, '⬇', 'Page down');
+      el.insertAdjacentElement('afterend', bar);
+      const p = { el, axis: d.axis, bar, prev, next };
+      PAGERS.push(p);
+      new MutationObserver(() => { try { updatePager(p); } catch (_) {} }).observe(el, { childList: true });
+    }
+    window.addEventListener('resize', updateAllPagers);
+    updateAllPagers();
+  }
+  initPagers();
+
+  // ---- Sentence constructor ---------------------------------------------------
+  // Drag a tile up to the header to stage it (the tile itself stays put on the
+  // board). Staging speaks + logs like a normal tap, so milestones see the
+  // combination. Chips flex-shrink as the bar fills, ▶ plays the whole
+  // sentence, and an idle timer (parent-set, 1–10 min) clears the strip.
+  const SB = { staged: [], timer: null, drag: null };
+  function sbClear() {
+    if (SB.timer) { clearTimeout(SB.timer); SB.timer = null; }
+    SB.staged = [];
+    document.body.classList.remove('sentence-active');
+    const c = document.getElementById('sentence-chips'); if (c) c.innerHTML = '';
+  }
+  function sbResetIdle() {
+    if (SB.timer) clearTimeout(SB.timer);
+    SB.timer = setTimeout(sbClear, ACCESS.sentenceIdleMin * 60000);
+  }
+  async function sbStage(item) {
+    SB.staged.push(item);
+    document.body.classList.add('sentence-active');
+    const wrap = document.getElementById('sentence-chips');
+    const chip = document.createElement('div');
+    if (item.imageKey) {
+      chip.className = 'sentence-chip';
+      try { const u = await getMediaURL(item.imageKey); if (u) chip.style.backgroundImage = `url("${u}")`; } catch (_) {}
+    } else {
+      chip.className = 'sentence-chip is-text';
+      chip.textContent = item.displayLabel || item.label;
+    }
+    chip.title = item.displayLabel || item.label;
+    chip.addEventListener('click', () => {           // tap a staged chip to take it back out
+      const i = SB.staged.indexOf(item);
+      if (i >= 0) SB.staged.splice(i, 1);
+      chip.remove();
+      if (!SB.staged.length) sbClear(); else sbResetIdle();
+    });
+    wrap.appendChild(chip);
+    tapSpeak(item, null, null);
+    sbResetIdle();
+  }
+  async function sbPlayAll() {
+    if (!SB.staged.length) return;
+    sbResetIdle();
+    for (const item of SB.staged.slice()) {
+      try {
+        let u = item.soundKey ? await getMediaURL(item.soundKey) : null;
+        if (!u) u = await teachAudioURL(item.displayLabel || item.label);
+        if (u) await playAwait(u);
+      } catch (_) {}
+    }
+    sbResetIdle();
+  }
+  (function wireSentenceDrag() {
+    const playBtn = document.getElementById('sentence-play');
+    if (playBtn) playBtn.addEventListener('click', sbPlayAll);
+    const LIFT = 22;        // quick-drag: > TAP_TOLERANCE(18) so a lift can never double-fire as a tap
+    const HOLD_MS = 450;    // long-press: hold this long (moving < WIGGLE) to lift
+    const WIGGLE = 10;      // movement during the hold that still counts as holding still
+    function sbLift(d) {
+      d.active = true;
+      const ghost = document.createElement('div');
+      ghost.className = 'sb-drag-ghost';
+      const sq = d.wrap.querySelector('.tile-square');
+      const bg = sq && sq.style.backgroundImage;
+      if (bg) ghost.style.backgroundImage = bg;
+      else ghost.textContent = (d.wrap.querySelector('.tile-label') || {}).textContent || '';
+      document.body.appendChild(ghost);
+      d.ghost = ghost;
+      d.ghost.style.left = (d.lx - 46) + 'px';
+      d.ghost.style.top = (d.ly - 46) + 'px';
+      d.wrap.classList.remove('sb-lifting');
+    }
+    function sbAbortHold(d) {
+      if (d.holdTimer) { clearTimeout(d.holdTimer); d.holdTimer = null; }
+      d.wrap.classList.remove('sb-lifting');
+    }
+    document.addEventListener('pointerdown', (e) => {
+      if (!ACCESS.sentenceBuilder || editMode) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const wrap = e.target.closest && e.target.closest('.items-grid .tile-wrap');
+      if (!wrap || !wrap.dataset.entityId) return;
+      const d = { wrap, sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY,
+                  active: false, ghost: null, pid: e.pointerId, holdTimer: null };
+      SB.drag = d;
+      if (ACCESS.sentenceLift === 'longpress') {
+        wrap.classList.add('sb-lifting');
+        d.holdTimer = setTimeout(() => {
+          d.holdTimer = null;
+          if (SB.drag === d && !d.active) sbLift(d);
+        }, HOLD_MS);
+      }
+    });
+    // While a long-press lift is active, the finger owns the gesture — block
+    // the browser from starting a scroll mid-drag. (Quick-drag mode does this
+    // statically with touch-action: none.)
+    document.addEventListener('touchmove', (e) => {
+      if (SB.drag && SB.drag.active) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('pointermove', (e) => {
+      const d = SB.drag; if (!d || e.pointerId !== d.pid) return;
+      d.lx = e.clientX; d.ly = e.clientY;
+      if (!d.active) {
+        const moved = Math.hypot(e.clientX - d.sx, e.clientY - d.sy);
+        if (ACCESS.sentenceLift === 'longpress') {
+          // Moving during the hold means scrolling or tapping, not lifting.
+          if (moved > WIGGLE) { sbAbortHold(d); SB.drag = null; }
+          return;
+        }
+        if (moved < LIFT) return;
+        sbLift(d);
+      }
+      d.ghost.style.left = (e.clientX - 46) + 'px';
+      d.ghost.style.top = (e.clientY - 46) + 'px';
+      const hdr = document.querySelector('header');
+      if (hdr) hdr.classList.toggle('sb-drop-hot', e.clientY <= hdr.getBoundingClientRect().bottom + 12);
+    });
+    async function finish(e) {
+      const d = SB.drag; if (!d || e.pointerId !== d.pid) return;
+      SB.drag = null;
+      sbAbortHold(d);
+      const hdr = document.querySelector('header');
+      if (hdr) hdr.classList.remove('sb-drop-hot');
+      if (d.ghost) d.ghost.remove();
+      if (!d.active || !hdr) return;
+      if (e.clientY > hdr.getBoundingClientRect().bottom + 12) return;   // not dropped on the bar
+      const id = parseInt(d.wrap.dataset.entityId, 10);
+      const section = d.wrap.dataset.section;
+      try {
+        const item = (await getAllItems(section)).find((i) => i.id === id);
+        if (item) sbStage(item);
+      } catch (_) {}
+    }
+    document.addEventListener('pointerup', finish);
+    document.addEventListener('pointercancel', () => {
+      const d = SB.drag; SB.drag = null;
+      if (d) sbAbortHold(d);
+      if (d && d.ghost) d.ghost.remove();
+      const hdr = document.querySelector('header');
+      if (hdr) hdr.classList.remove('sb-drop-hot');
+    });
+  })();
+
+  // ---- Listening repeat-navigate ---------------------------------------------
+  // A word matched twice IN A ROW in the transcript = "show me" — open that
+  // tile's category, scroll to it, flash it yellow. Keyed by transcript
+  // position so re-emitted partial transcripts don't re-trigger.
+  let _listenNavKey = '', _listenNavAt = 0;
+  function maybeListenNavigate(tokens) {
+    if (!ACCESS.listenRepeatNav) return;
+    for (let i = tokens.length - 1; i >= 1; i--) {
+      const a = tokens[i], b = tokens[i - 1];
+      if (!a.item || !b.item || a.item.id !== b.item.id) continue;
+      const key = a.item.id + '@' + i;
+      if (key === _listenNavKey && Date.now() - _listenNavAt < 15000) return;
+      _listenNavKey = key; _listenNavAt = Date.now();
+      navigateToTile(a.item);
+      return;
+    }
+  }
+  async function navigateToTile(item) {
+    const section = item.section;
+    if (!section) return;
+    try {
+      if (section !== 'needs' && item.categoryId != null) {
+        activeCategoryId[section] = item.categoryId;
+        await renderSection(section);
+      }
+      if (window._phonePick && ['people', 'nouns', 'verbs'].includes(section)) window._phonePick(section);
+      const gridId = section === 'needs' ? 'items-needs' : 'items-' + section;
+      const el = document.querySelector('#' + gridId + ' .tile-wrap[data-entity-id="' + item.id + '"]');
+      if (!el) return;
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      el.classList.add('listen-hit');
+      setTimeout(() => el.classList.remove('listen-hit'), 6000);
+      updateAllPagers();
+    } catch (_) {}
+  }
+
+  // Runtime hooks for the surface-audit stub harness (client parity checks) —
+  // client-side only, nothing here crosses a security boundary.
+  window.__accessHooks = { applyAccessSettings, sbStage, sbClear, navigateToTile, getAllItems, updateAllPagers };
+
   // ---- Phone mode: one section at a time behind tabs -------------------------
   // The tab bar is display:none above 700px, so this is inert on tablets.
   (function () {
@@ -6028,6 +6504,7 @@
         s.classList.toggle('phone-active', s.dataset.section === sec));
     }
     tabs.forEach(b => b.addEventListener('click', () => activate(b.dataset.ptab)));
+    window._phonePick = activate;   // listening repeat-navigate switches sections with this
     let start = 'people';
     try { start = localStorage.getItem(KEY) || 'people'; } catch (_) {}
     activate(start);

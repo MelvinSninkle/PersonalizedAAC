@@ -287,10 +287,12 @@ struct MatchingView: View {
         guard let target else { return }
         switch session.mode {
         case .auditoryComprehension:
+            // Descriptions are English taxonomy prose — translated boards
+            // hear the word itself in the board's language instead.
             let desc = target.description?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let prompt = (desc?.isEmpty == false)
-                ? desc!
-                : "Who or what is the \(target.label)?"
+            let prompt = (target.displayLabel?.isEmpty == false)
+                ? target.display
+                : (desc?.isEmpty == false) ? desc! : "Who or what is the \(target.label)?"
             GameAudio.shared.speak(prompt, childId: auth.childSlug)
         case .clueQuiz:
             GameAudio.shared.speak(cluePrompt(for: target), childId: auth.childSlug)
@@ -304,6 +306,9 @@ struct MatchingView: View {
     /// Tiles without clues fall back to their auditory description, then to
     /// a generic question.
     private func cluePrompt(for target: Tile) -> String {
+        // Clues are English taxonomy prose — on translated boards the prompt
+        // is just the word in the board's language.
+        if let d = target.displayLabel, !d.isEmpty { return d }
         let clues = (target.descriptiveClues ?? [])
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }

@@ -70,11 +70,20 @@ class AppContainer(context: Context) {
     // M11 — onboarding navigation (server owns the step cursor).
     val onboarding = OnboardingCoordinator(api)
 
+    // Access experiments (admin dark-launch): button navigation, sentence
+    // constructor, listening repeat-navigate. Read-only settings + hoisted
+    // board selection + the sentence strip state.
+    val access = io.andrewpeterson.myworld.access.AccessPrefs(api, appScope)
+    val boardNav = io.andrewpeterson.myworld.access.BoardNav(appScope)
+    val sentenceBar = io.andrewpeterson.myworld.access.SentenceBar(appScope, media, gameAudio)
+
     // M12 — Google Play billing (verify-before-consume; Fire → web store).
     val billing = io.andrewpeterson.myworld.billing.BillingClientManager(context, api)
 
     init {
         PlayScope.init(context)
+        // Double-tap teach speaks clues on the game voice channel.
+        tilePlayer.gameAudio = gameAudio
     }
 }
 

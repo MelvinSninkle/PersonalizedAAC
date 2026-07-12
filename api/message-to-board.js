@@ -68,7 +68,26 @@ export default async function handler(req, res) {
     // Pull every tile that has an image (only those can carry the sequence).
     // Includes shared template items the child can see (child_id IS NULL +
     // an active category_shares row), since they're on the board.
-    const items = await db`
+    let items;
+    try {
+      items = await db`
+      WITH RECURSIVE shared_tree AS (
+        SELECT c.id FROM categories c
+        JOIN category_shares cs ON cs.category_id = c.id
+        WHERE cs.child_id = ${childId} AND cs.status = 'active' AND c.child_id IS NULL
+        UNION ALL
+        SELECT c.id FROM categories c
+        JOIN shared_tree t ON c.parent_id = t.id
+        WHERE c.child_id IS NULL
+      )
+      SELECT i.id, i.label, i.image_key, i.sound_key, i.section, t.match_terms
+      FROM items i LEFT JOIN taxonomy t ON t.id = i.taxonomy_slug
+      WHERE i.image_key IS NOT NULL AND (
+        i.child_id = ${childId} OR (i.child_id IS NULL AND i.category_id IN (SELECT id FROM shared_tree))
+      )`;
+    } catch (_) {
+      // Pre-migration deploy: same query without the taxonomy join.
+      items = await db`
       WITH RECURSIVE shared_tree AS (
         SELECT c.id FROM categories c
         JOIN category_shares cs ON cs.category_id = c.id
@@ -83,15 +102,14 @@ export default async function handler(req, res) {
       WHERE image_key IS NOT NULL AND (
         child_id = ${childId} OR (child_id IS NULL AND category_id IN (SELECT id FROM shared_tree))
       )`;
-    // Index by normalized label for O(1) lookup during the greedy match.
-    const byLabel = new Map();
-    for (const it of items) {
-      const n = normalizeWord(it.label);
-      if (!n) continue;
-      // Multiple tiles may share a label (custom + template); keep the first
-      // — sync order isn't meaningful here.
-      if (!byLabel.has(n)) byLabel.set(n, it);
     }
+    // Index labels + expanded match variants (loves/loving/loved → love).
+    // Exact labels always win; variants fill the gaps. Same engine that
+    // /api/sync ships to the device tokenizers — see _lib/word-match.js.
+    const { expandMatchTerms, buildMatchIndex } = await import('./_lib/word-match.js');
+    const byLabel = buildMatchIndex(
+      items.map((it) => ({ ...it, matchTerms: expandMatchTerms(it.label, it.match_terms || []) })),
+      { normalize: normalizeWord });
 
     const words = splitWords(text);
     const tokens = [];

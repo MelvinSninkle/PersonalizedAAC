@@ -265,7 +265,7 @@ export default async function handler(req, res) {
         date: new Date(r.started_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         mode: MODE_LABEL[r.mode] || r.mode,
         category: resolveScope(r.category),
-        result: scored && denom ? `${r.correct_count} / ${denom}` : '—',
+        result: scored && denom ? `${r.correct_count} / ${denom}${denom < 3 ? ' · too short to score' : ''}` : '—',
         length: mins ? `${mins} min` : '—',
         // PRD §3 cutover marker: dashboards can dot-line / footnote pre-v2 rows.
         scoringVersion: Number(r.scoring_version) || 1,
@@ -292,7 +292,10 @@ export default async function handler(req, res) {
       h.items += denom;
       const scored = r.mode === 'self_paced' || r.mode === 'facilitated'
                   || r.mode === 'auditory_comprehension' || r.mode === 'expressive_naming';
-      if (scored && denom) { h.correct += Number(r.correct_count) || 0; h.denom += denom; }
+      // A game abandoned after one or two answers is RECORDED (session +
+      // items counts above) but never enters the accuracy total — a lone
+      // lucky tap isn't 100%, and unanswered slides were never failures.
+      if (scored && denom >= 3) { h.correct += Number(r.correct_count) || 0; h.denom += denom; }
       if ((r.mode === 'learn_slideshow' || r.mode === 'exposure_slideshow') && r.ended_at) {
         h.passiveSecs += Math.max(0, (new Date(r.ended_at) - new Date(r.started_at)) / 1000);
       }

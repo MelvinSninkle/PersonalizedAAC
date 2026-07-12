@@ -97,6 +97,20 @@
     <input id="in-birth" type="date">
     <div style="font-size:11px;color:#666;margin-top:4px;line-height:1.3;">Used to start with vocabulary at the right level — older words stay hidden until they're ready. Never shown publicly.</div>
 
+    <!-- Board language — limited testing: revealed only for admin / language_tester -->
+    <div id="lang-row" style="display:none;">
+      <label style="margin-top:16px;">Board language <span style="font-weight:400;color:#9ca3af;font-size:11px;">(testing)</span></label>
+      <p class="note" style="margin:0 0 8px;">The words on the tiles and the voice that speaks them. Pictures stay the same.</p>
+      <select id="in-lang" style="width:100%;max-width:340px;padding:10px;border:1px solid #f3c6dd;border-radius:10px;font:inherit;">
+        <option value="en">English</option>
+        <option value="zh">中文（简体）· Simplified Chinese</option>
+        <option value="es">Español · Spanish</option>
+        <option value="fr">Français · French</option>
+        <option value="pt">Português (Brasil) · Portuguese</option>
+        <option value="de">Deutsch · German</option>
+      </select>
+    </div>
+
     <label style="margin-top:16px;">Is your child a boy or a girl?</label>
     <p class="note" style="margin:0 0 8px;">Used so the board speaks about your child correctly.
       If your family has specific needs beyond this — or you're ever having a hard time getting an
@@ -203,6 +217,20 @@
     </div>
   </div>
 
+  <style>
+    /* Founder letter + magic gallery (Phase 4) */
+    #magic-wrap { display:flex; gap:14px; align-items:stretch; margin-top:16px; text-align:left; }
+    #founder-letter { flex:1; background:#fff; border:1px solid var(--line); border-radius:14px;
+                      padding:18px 20px; font-size:14.5px; line-height:1.55; }
+    .magic-rail { width:78px; display:flex; flex-direction:column; gap:8px; justify-content:flex-start; }
+    @media (max-width: 900px) { .magic-rail { display:none; } }
+    #magic-strip { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:12px; }
+    .magic-thumb { width:78px; height:78px; border-radius:12px; border:1px solid var(--line);
+                   background:#fff center/cover no-repeat; opacity:0; transform:scale(.8);
+                   animation:magicIn .7s ease forwards; }
+    @keyframes magicIn { to { opacity:1; transform:scale(1); } }
+  </style>
+
   <!-- PHASE 4 — generate board -->
   <div class="panel" id="phase-board" style="display:none;">
     <h3 class="fred">Step 4 · Building the board</h3>
@@ -214,6 +242,35 @@
       </div>
       <div class="note" id="board-count"></div>
     </div>
+
+    <!-- Founder letter + live "magic gallery": each of the child's words
+         appears around the letter the moment its picture finishes rendering
+         server-side (keys from seed-core status → recentImages). -->
+    <div id="magic-wrap">
+      <div class="magic-rail" id="magic-left"></div>
+      <div id="founder-letter">
+        <h3 class="fred" style="font-size:17px;margin:0 0 10px;">A note from Andrew, while the magic happens</h3>
+        <p>Hi — I'm Andrew. My son Fletcher is why this exists. He's bright and funny and
+           has a lot to say, and for a long time we couldn't hear most of it. The boards
+           that were supposed to help him were full of clip-art that looked like nobody's
+           real life — least of all his.</p>
+        <p>Right now, our systems are painting <strong class="magic-child-name">your child</strong>'s
+           words one at a time — you'll see them appear around this letter as each one
+           finishes. They're made just for your child, in the style you chose, so the
+           world on their board looks like the world they actually live in. That's the
+           whole idea, and it's the thing I most wish we'd had on day one.</p>
+        <p>Two honest notes while you wait: the first pictures land in a few minutes, but
+           the full board takes a little while — you can close this page and we'll keep
+           building. And when something isn't right — a picture that misses, a word your
+           child needs that isn't here — tell me directly:
+           <a href="mailto:support@myworldtaptotalk.com">support@myworldtaptotalk.com</a>.
+           I read everything.</p>
+        <p style="margin-bottom:0;">— Andrew Peterson<br>
+           <span class="note" style="font-size:12px;">Founder, My World Tap to Talk — and Fletcher's dad</span></p>
+      </div>
+      <div class="magic-rail" id="magic-right"></div>
+    </div>
+    <div id="magic-strip"></div>
     <div class="center" id="board-done" style="display:none;">
       <div style="font-size:40px;">🎉</div>
       <p class="fred" style="font-size:18px;color:var(--pink-deep);" id="board-done-msg">The board is ready!</p>
@@ -428,7 +485,7 @@
       if (d.voiceId) selectedVoiceId = d.voiceId;
       applyName();
       // Jump to the saved step.
-      if (st.step === 'complete') { showPhase('board'); $('board-busy').style.display = 'none'; $('board-done').style.display = ''; return; }
+      if (st.step === 'complete') { showPhase('board'); $('board-busy').style.display = 'none'; $('board-done').style.display = ''; startMagicWatch(); return; }
       if (st.step === 'seed_core') { showPhase('board'); runSeed(Number(d.seedNextG) || 0, Number(d.seededCount) || 0); return; }
       if (st.step === 'scene_keystone') { showPhase('scene'); if (!restoreScene()) startScene(); return; }
       if (st.step === 'parent_photo') { await loadRelOptions(); childDone = true; markChildDoneUI(); restorePeople(); showPhase('people'); return; }
@@ -524,6 +581,15 @@
       refreshContinue();
     } catch (err) { $('style-msg').textContent = 'Upload failed: ' + (err.message || err); }
   });
+  // Board language row: limited testing — revealed for admin / language_tester.
+  (async () => {
+    try {
+      const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null);
+      const role = me && me.user && me.user.role;
+      if (role === 'admin' || role === 'language_tester') document.getElementById('lang-row').style.display = '';
+    } catch (_) {}
+  })();
+
   // Launch support contact — swap for a real support@ alias when one exists.
   const SUPPORT_EMAIL = 'support@myworldtaptotalk.com';
   const supportLink = document.getElementById('support-link');
@@ -550,7 +616,9 @@
     if (!birthDate) { msg.textContent = 'Please enter your child’s birthday.'; $('in-birth').focus(); return; }
     $('style-continue').disabled = true; $('style-msg').textContent = 'Saving…';
     try {
-      await apiJSON('/api/onboarding/child', { name, birthDate, tier: 'under3', styleGuideId: selectedStyle.id, voiceId: selectedVoiceId, favoriteColor, pronoun: selectedPronoun });
+      const langSel = document.getElementById('in-lang');
+      const language = (document.getElementById('lang-row').style.display !== 'none' && langSel) ? langSel.value : 'en';
+      await apiJSON('/api/onboarding/child', { name, birthDate, tier: 'under3', styleGuideId: selectedStyle.id, voiceId: selectedVoiceId, favoriteColor, pronoun: selectedPronoun, language });
       CHILD_NAME = name; applyName();
       await loadRelOptions();
       showPhase('people');
@@ -571,7 +639,7 @@
     let playingFor = null;
     for (const v of voices) {
       const card = document.createElement('div'); card.className = 'style-card'; card.dataset.id = v.id;
-      const meta = [v.gender, v.accent].filter(Boolean).join(' · ');
+      const meta = [v.gender, v.accent, (v.lang && v.lang !== 'en') ? v.lang.toUpperCase() : null].filter(Boolean).join(' · ');
       card.innerHTML =
         '<div class="lbl" style="font-size:14px;">' + v.name + '</div>' +
         (meta ? '<div style="font-size:11px;color:var(--faint);margin-top:2px;">' + meta + '</div>' : '') +
@@ -820,10 +888,49 @@
     } catch (err) { $('scene-msg').textContent = 'Could not save: ' + (err.message || err); $('scene-approve').disabled = false; $('scene-retry').disabled = false; }
   });
 
+  // ---- PHASE 4: the live magic gallery -------------------------------------
+  // Polls seed status for freshly finished renders and fades each one in
+  // around the founder letter: left rail → right rail → bottom strip.
+  const MAGIC = { timer: null, seen: new Set(), railCap: 7, stripCap: 30 };
+  function magicAdd(img) {
+    const left = $('magic-left'), right = $('magic-right'), strip = $('magic-strip');
+    if (!left || !strip) return;
+    const el = document.createElement('div');
+    el.className = 'magic-thumb';
+    el.title = img.label || '';
+    el.style.backgroundImage = 'url("/api/media?key=' + encodeURIComponent(img.key) + '")';
+    if (left.children.length < MAGIC.railCap) left.appendChild(el);
+    else if (right.children.length < MAGIC.railCap) right.appendChild(el);
+    else if (strip.children.length < MAGIC.stripCap) strip.appendChild(el);
+  }
+  function startMagicWatch() {
+    if (MAGIC.timer) return;
+    const name = CHILD_NAME || '';
+    if (name) document.querySelectorAll('.magic-child-name').forEach((n) => { n.textContent = name; });
+    const tick = async () => {
+      try {
+        const r = await fetch('/api/onboarding/seed-core?childId=' + encodeURIComponent(CHILD_ID),
+                              { credentials: 'same-origin' });
+        if (!r.ok) return;
+        const d = await r.json();
+        const imgs = Array.isArray(d.recentImages) ? d.recentImages.slice().reverse() : [];
+        for (const img of imgs) {
+          if (!img.key || MAGIC.seen.has(img.key)) continue;
+          MAGIC.seen.add(img.key);
+          magicAdd(img);
+        }
+        if (d.active === false && MAGIC.seen.size) { clearInterval(MAGIC.timer); MAGIC.timer = null; }
+      } catch (_) {}
+    };
+    tick();
+    MAGIC.timer = setInterval(tick, 8000);
+  }
+
   // ---- PHASE 4: generate the board (chunked + resumable) ----
   let seedStarted = false;
   async function runSeed(startG = 0, priorPlaced = 0) {
     if (seedStarted) return; seedStarted = true;
+    startMagicWatch();
     $('board-busy').style.display = ''; $('board-done').style.display = 'none';
     let g = startG, placedTotal = priorPlaced, doneTotal = priorPlaced, total = 0, guard = 0;
     try {

@@ -36,9 +36,32 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    if (!['admin', 'parent', 'therapist', 'school_team'].includes(auth.user.role)) { res.status(403).json({ error: 'Not allowed' }); return; }
+    if (!['admin', 'parent', 'therapist', 'school_team', 'language_tester'].includes(auth.user.role)) { res.status(403).json({ error: 'Not allowed' }); return; }
     const b = (typeof req.body === 'object' && req.body) || {};
     const settings = (b.settings && typeof b.settings === 'object') ? b.settings : {};
+    // Board language is in limited testing: only admins and the
+    // language_tester role may CHANGE it. Everyone else's saves silently
+    // keep the current value, so ordinary settings writes never fail.
+    if (!['admin', 'language_tester'].includes(auth.user.role)) {
+      try {
+        const cur = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+        const curLang = (cur && cur.settings && cur.settings.language) || 'en';
+        if ((settings.language || 'en') !== curLang) settings.language = curLang;
+      } catch (_) { delete settings.language; }
+    }
+    // Access experiments (button navigation, sentence constructor, listening
+    // repeat-navigate) are ADMIN-only while dark-launched: non-admin saves
+    // silently keep the current values, so ordinary settings writes never fail.
+    const ACCESS_KEYS = ['navMode', 'sentenceBuilder', 'sentenceIdleMin', 'sentenceLift', 'listenRepeatNav'];
+    if (auth.user.role !== 'admin') {
+      try {
+        const cur = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+        const cs = (cur && cur.settings) || {};
+        for (const k of ACCESS_KEYS) {
+          if (cs[k] === undefined) delete settings[k]; else settings[k] = cs[k];
+        }
+      } catch (_) { for (const k of ACCESS_KEYS) delete settings[k]; }
+    }
     try {
       await db`
         INSERT INTO child_settings (child_id, settings, updated_at)

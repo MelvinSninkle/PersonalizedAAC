@@ -317,6 +317,15 @@
     <div class="stat"><div class="n" id="stat-time">—</div><div class="k">Exposure / slideshow time</div><div class="trend" id="stat-time-t"></div></div>
   </div>
 
+  <!-- MOMENTS — communication milestones detected from the tap stream.
+       Hidden until the first one exists; the panel is a keepsake shelf. -->
+  <div class="section-label" id="moments-label" style="display:none;">✨ Moments</div>
+  <div class="panel" id="moments-panel" style="display:none;">
+    <h2>Firsts worth keeping</h2>
+    <p class="hint">Caught automatically from how <span class="cn">your child</span> uses the board — first word pairs, growing vocabulary. These are yours forever.</p>
+    <div id="moments-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;"></div>
+  </div>
+
   <!-- PLAY REQUEST BANNER -->
   <div id="play-banner" style="display:none; align-items:center; gap:12px; background:#ecfdf5; border:1px solid #6ee7b7; border-radius:14px; padding:13px 16px; margin:18px 0 0;">
     <span style="font-size:22px;">🎮</span>
@@ -581,6 +590,81 @@
     </div>
     <span id="voice-msg" style="font-size:13px;color:var(--muted);display:inline-block;margin-top:8px;"></span>
     <audio id="voice-audio" preload="none" style="display:none;"></audio>
+  </div>
+
+  <!-- BOARD LANGUAGE — display + audio layer; tile identity stays English.
+       Limited testing: revealed only for role admin / language_tester. -->
+  <div class="section-label lang-tester-only" style="display:none;">Language</div>
+  <div class="panel lang-tester-only" id="lang-panel" style="display:none;">
+    <h2>Board language</h2>
+    <p class="hint">The words on the tiles and the voice that speaks them. Pictures stay the same. New tiles use it right away; ask us to refresh existing tiles' audio after a change.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <select id="lang-pick" style="flex:1;min-width:200px;max-width:340px;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;">
+        <option value="en">English</option>
+        <option value="zh">中文（简体）· Simplified Chinese</option>
+        <option value="es">Español · Spanish</option>
+        <option value="fr">Français · French</option>
+        <option value="pt">Português (Brasil) · Portuguese</option>
+        <option value="de">Deutsch · German</option>
+      </select>
+      <button class="btn primary" id="lang-save">Save language</button>
+      <span id="lang-msg" style="font-size:13px;color:var(--muted);"></span>
+    </div>
+  </div>
+
+  <div class="section-label">Touch</div>
+  <div class="panel" id="touch-panel">
+    <h2>Touch controls</h2>
+    <p class="hint">How the board responds to your child's taps while a word is still playing.</p>
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:520px;">
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>New taps interrupt the word that's playing
+          <span class="hint" style="display:block;margin:2px 0 0;">Off (default): each word finishes before the next tap counts — steadier for a child
+          who presses the same button repeatedly. On: every tap responds instantly.</span></span>
+        <input type="checkbox" id="touch-interrupt">
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>Double-tap teaches the word
+          <span class="hint" style="display:block;margin:2px 0 0;">Tapping the same tile twice quickly plays its teaching facts (up to three per word).</span></span>
+        <input type="checkbox" id="touch-doubletap">
+      </label>
+      <div><button class="btn primary" id="touch-save">Save touch controls</button>
+        <span id="touch-msg" class="hint"></span></div>
+    </div>
+  </div>
+
+  <div class="section-label admin-access-only" style="display:none;">Access (admin testing)</div>
+  <div class="panel admin-access-only" id="access-panel" style="display:none;">
+    <h2>Access experiments</h2>
+    <p class="hint">Dark-launched accessibility features — admin-only while in testing.
+      Button navigation replaces every scroll with big page-turn buttons (for eye-tracker
+      users). The sentence constructor lets a child drag tiles up to the top bar and play
+      them together; on touch screens it works best combined with button navigation.</p>
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:520px;">
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Board navigation
+        <select id="acc-nav" style="padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;">
+          <option value="scroll">Scroll (default)</option>
+          <option value="buttons">Buttons (eye tracker)</option>
+        </select>
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Sentence constructor
+        <input type="checkbox" id="acc-sb">
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Sentence tile pick-up
+        <select id="acc-sb-lift" style="padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;">
+          <option value="longpress">Hold, then drag (default — scrolling still works)</option>
+          <option value="drag">Drag right away (eye tracker / mouse)</option>
+        </select>
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Sentence bar clears after (minutes)
+        <input type="number" id="acc-sb-idle" min="1" max="10" step="1" value="1" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;">
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Listening: saying a word twice jumps to its tile
+        <input type="checkbox" id="acc-listen-nav" checked>
+      </label>
+      <div><button class="btn primary" id="acc-save">Save access settings</button>
+        <span id="acc-msg" class="hint"></span></div>
+    </div>
   </div>
 
   <!-- ALBUM -->
@@ -1010,7 +1094,11 @@
       if (!r.ok) return;
       const u = (await r.json()).user;
       // Therapist view + invite/team features are day-two — admin only for now.
+      if (u && (u.role === 'admin' || u.role === 'language_tester')) {
+        document.querySelectorAll('.lang-tester-only').forEach(n => { n.style.display = ''; });
+      }
       if (u && u.role === 'admin') {
+        document.querySelectorAll('.admin-access-only').forEach(n => { n.style.display = ''; });
         const el = document.getElementById('admin-taxonomy'); if (el) el.style.display = '';
         const ts = document.getElementById('therapist-switch'); if (ts) ts.style.display = '';
         document.querySelectorAll('.therapist-only').forEach(n => { n.style.display = ''; });
@@ -1198,6 +1286,34 @@
   const insights = document.getElementById('insights'), restore = document.getElementById('ins-restore');
   document.getElementById('ins-x').addEventListener('click', () => { insights.style.display = 'none'; restore.classList.add('show'); });
   restore.addEventListener('click', () => { insights.style.display = ''; restore.classList.remove('show'); });
+
+  // ---- Moments (communication milestones) ----
+  (async () => {
+    try {
+      const r = await fetch('/api/milestones?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const list = (await r.json()).milestones || [];
+      if (!list.length) return;
+      const ICON = { first_combo: '🗣️', combo: '🧩', chain3: '🔗', words: '📚' };
+      const title = (m) => m.kind === 'words'
+        ? (m.payload.count + ' different words')
+        : ('“' + (m.payload.phrase || '') + '”');
+      const sub = (m) => m.kind === 'first_combo' ? 'First two words together'
+        : m.kind === 'chain3' ? 'First three-word chain'
+        : m.kind === 'combo' ? 'New word pair'
+        : 'Vocabulary milestone';
+      const when = (iso) => { try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (_) { return ''; } };
+      const esc2 = (x) => String(x == null ? '' : x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      document.getElementById('moments-list').innerHTML = list.slice(0, 12).map((m) =>
+        '<div style="border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#fff7fb;">' +
+          '<div style="font-size:22px;">' + (ICON[m.kind] || '⭐') + '</div>' +
+          '<div style="font-weight:700;color:var(--pink-deep);font-size:15px;margin-top:4px;">' + esc2(title(m)) + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:2px;">' + esc2(sub(m)) + ' · ' + esc2(when(m.at)) + '</div>' +
+        '</div>').join('');
+      document.getElementById('moments-label').style.display = '';
+      document.getElementById('moments-panel').style.display = '';
+    } catch (_) { /* moments are a bonus — never block the dashboard */ }
+  })();
 
   // ---- Dashboard tabs: five panes, deep-linkable via #tab-<name> ----
   (function initTabs() {
@@ -2679,6 +2795,54 @@
         saveSettingsToServer('Voice saved ✓ — new tiles use it right away', 'voice-msg');
       });
     })();
+
+    // ---- Board language (childSettings.language → sync displayLabel + seeded audio) ----
+    const langSel = document.getElementById('lang-pick');
+    if (langSel) {
+      if (childSettings.language && [...langSel.options].some((o) => o.value === childSettings.language)) {
+        langSel.value = childSettings.language;
+      }
+      document.getElementById('lang-save').addEventListener('click', () => {
+        childSettings = { ...childSettings, language: langSel.value };
+        saveSettingsToServer('Saved ✓ — the board updates on its next sync', 'lang-msg');
+      });
+    }
+
+    // ---- Touch controls (ordinary parent settings) ----
+    const touchInt = document.getElementById('touch-interrupt');
+    if (touchInt) {
+      touchInt.checked = !!childSettings.tapInterrupt;
+      document.getElementById('touch-doubletap').checked = !!childSettings.doubleTapTeach;
+      document.getElementById('touch-save').addEventListener('click', () => {
+        childSettings = { ...childSettings,
+          tapInterrupt: touchInt.checked,
+          doubleTapTeach: document.getElementById('touch-doubletap').checked,
+        };
+        saveSettingsToServer('Saved ✓ — the board picks it up on its next settings sync', 'touch-msg');
+      });
+    }
+
+    // ---- Access experiments (admin dark-launch; server enforces admin-only) ----
+    const accNav = document.getElementById('acc-nav');
+    if (accNav) {
+      accNav.value = childSettings.navMode === 'buttons' ? 'buttons' : 'scroll';
+      document.getElementById('acc-sb').checked = !!childSettings.sentenceBuilder;
+      document.getElementById('acc-sb-lift').value = childSettings.sentenceLift === 'drag' ? 'drag' : 'longpress';
+      const idle = parseInt(childSettings.sentenceIdleMin, 10);
+      document.getElementById('acc-sb-idle').value = (Number.isFinite(idle) && idle >= 1 && idle <= 10) ? idle : 1;
+      document.getElementById('acc-listen-nav').checked = childSettings.listenRepeatNav !== false;
+      document.getElementById('acc-save').addEventListener('click', () => {
+        const idleV = Math.min(10, Math.max(1, parseInt(document.getElementById('acc-sb-idle').value, 10) || 1));
+        childSettings = { ...childSettings,
+          navMode: accNav.value === 'buttons' ? 'buttons' : 'scroll',
+          sentenceBuilder: document.getElementById('acc-sb').checked,
+          sentenceLift: document.getElementById('acc-sb-lift').value === 'drag' ? 'drag' : 'longpress',
+          sentenceIdleMin: idleV,
+          listenRepeatNav: document.getElementById('acc-listen-nav').checked,
+        };
+        saveSettingsToServer('Saved ✓ — the board picks it up on its next settings sync', 'acc-msg');
+      });
+    }
 
     document.getElementById('banner-save').addEventListener('click', () => {
       const hex = bannerColorEl.value;

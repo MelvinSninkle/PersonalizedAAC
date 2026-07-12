@@ -6,6 +6,8 @@ struct Category: Codable, Identifiable, Hashable {
     let id: Int
     let section: BoardSection
     let label: String
+    /// Board-language translation from /api/sync (nil on English boards).
+    let displayLabel: String?
     let parentId: Int?
     let imageKey: String?
     let imageUrl: String?
@@ -69,4 +71,8 @@ func categoryNameIsPoster(_ label: String) -> Bool {
     // Every other folder center-crops square, no matter what it's called.
     let words = label.lowercased().split { !$0.isLetter }.map(String.init)
     return words.contains("tv") || words.contains("tvs")
+}
+
+extension Category {
+    var display: String { displayLabel ?? label }
 }

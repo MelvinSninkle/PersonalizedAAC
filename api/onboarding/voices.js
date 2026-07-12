@@ -8,7 +8,7 @@
 // shared sampleText so each voice says the same lines.
 import { checkAuth } from '../_lib/auth.js';
 import { sql } from '../_lib/db.js';
-import { listVoices, VOICE_SAMPLE_TEXT } from '../_lib/voices.js';
+import { listVoices, langTester, VOICE_SAMPLE_TEXT } from '../_lib/voices.js';
 
 export const config = { maxDuration: 15 };
 
@@ -18,7 +18,8 @@ export default async function handler(req, res) {
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
 
   // Lab-managed catalog (voices table, seeded from the legacy hardcoded list).
-  const voices = (await listVoices(sql())).map(v => ({ id: v.id, name: v.name, gender: v.gender, accent: v.accent }));
+  const voices = (await listVoices(sql(), { allLangs: langTester(auth.user.role) }))
+    .map(v => ({ id: v.id, name: v.name, gender: v.gender, accent: v.accent, lang: v.lang || 'en' }));
   if (auth.user.role === 'admin' && process.env.ELEVENLABS_VOICE_ID) {
     voices.unshift({ id: process.env.ELEVENLABS_VOICE_ID, name: 'My voice', gender: '', accent: 'Admin default', adminOnly: true });
   }

@@ -909,6 +909,10 @@ Size: {size}.',
     // subcategories order per column; tiles order via taxonomy.sort_order.
     // NULL/absent = the legacy alphabetical order.
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS sort_order INTEGER`;
+    // Curated listening-mode match terms (irregulars, synonyms, regionalisms)
+    // — merged with generated inflections by api/_lib/word-match.js and
+    // shipped pre-expanded on /api/sync as each tile's matchTerms.
+    await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS match_terms TEXT[]`;
     await db`
       CREATE TABLE IF NOT EXISTS default_category_order (
         section     TEXT NOT NULL,
@@ -916,6 +920,43 @@ Size: {size}.',
         parent_norm TEXT NOT NULL DEFAULT '',
         sort_order  INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (section, label_norm, parent_norm)
+      )`;
+    // Communication milestones (first two-word combo, vocabulary marks…) —
+    // detected on /api/events ingestion, deduped by (child, kind, detail_key).
+    await db`
+      CREATE TABLE IF NOT EXISTS milestones (
+        id          BIGSERIAL PRIMARY KEY,
+        child_id    TEXT NOT NULL,
+        kind        TEXT NOT NULL,
+        detail_key  TEXT NOT NULL,
+        payload     JSONB,
+        occurred_at TIMESTAMPTZ NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (child_id, kind, detail_key)
+      )`;
+    await db`CREATE INDEX IF NOT EXISTS milestones_child_idx ON milestones(child_id, occurred_at DESC)`;
+    // Emails pre-authorized for a role BEFORE signup (admin Reports page);
+    // registration applies + consumes the grant. 'admin' never applies.
+    await db`
+      CREATE TABLE IF NOT EXISTS role_grants (
+        email      TEXT PRIMARY KEY,
+        role       TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
+    // Board-content translations (display + audio layer over the canonical
+    // English taxonomy; see api/_lib/i18n.js). Keyed by English label with
+    // optional section/category narrowing for homonyms.
+    await db`
+      CREATE TABLE IF NOT EXISTS label_translations (
+        lang          TEXT NOT NULL,
+        section       TEXT NOT NULL DEFAULT '',
+        category_norm TEXT NOT NULL DEFAULT '',
+        label_norm    TEXT NOT NULL,
+        label         TEXT NOT NULL,
+        pronunciation TEXT,
+        status        TEXT NOT NULL DEFAULT 'machine',
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (lang, section, category_norm, label_norm)
       )`;
     // Board heartbeat: the last time each board pulled /api/sync (admin
     // reports' "is this device in sync" signal). One row per board.
