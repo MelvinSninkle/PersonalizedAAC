@@ -49,6 +49,52 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
 
+  // ── POST op=refresh: parent-facing self-rescue ────────────────────────────
+  // The same repair the admin Build-board tool runs, minus admin: re-arm dead
+  // jobs and re-open done-but-artless renders / silent voices for THIS child,
+  // so a parent whose build stumbled can fix it with one tap instead of
+  // emailing support. Idempotent and spend-free — it only re-queues work the
+  // family was already entitled to; the cron does the rest.
+  {
+    const b = (typeof req.body === 'object' && req.body) || {};
+    if (b.op === 'refresh') {
+      try {
+        const childId = String(b.childId || (req.query && req.query.childId) || '').slice(0, 64).trim();
+        if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
+        if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+        await ensureSeedJobs(db);
+        const rearmed = await db`
+          UPDATE seed_jobs SET status = 'queued', attempts = 0, error = NULL, updated_at = NOW()
+          WHERE child_id = ${childId} AND status = 'failed'
+          RETURNING id`;
+        const reopenedRenders = await db`
+          UPDATE seed_jobs sj SET status = 'queued', attempts = 0, error = NULL, updated_at = NOW()
+          FROM items i
+          WHERE sj.child_id = ${childId} AND sj.kind = 'render' AND sj.status = 'done'
+            AND i.child_id = sj.child_id AND i.taxonomy_slug = sj.taxonomy_id
+            AND (i.image_key IS NULL OR i.image_key = '' OR i.image_key LIKE 'taxonomy-defaults/%')
+          RETURNING sj.id`;
+        const reopenedVoices = await db`
+          UPDATE seed_jobs sj SET status = 'queued', attempts = 0, error = NULL, updated_at = NOW()
+          FROM items i
+          WHERE sj.child_id = ${childId} AND sj.kind = 'voice' AND sj.status = 'done'
+            AND i.child_id = sj.child_id AND i.taxonomy_slug = sj.taxonomy_id
+            AND (i.sound_key IS NULL OR i.sound_key = '')
+          RETURNING sj.id`;
+        const status = await seedStatus(db, childId);
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(200).json({ ok: true, refreshed: true,
+          rearmed: rearmed.length,
+          reopenedRenders: reopenedRenders.length,
+          reopenedVoices: reopenedVoices.length,
+          ...status });
+      } catch (err) {
+        res.status(500).json({ error: 'refresh failed', detail: String(err.message || err) });
+      }
+      return;
+    }
+  }
+
   try {
     const p = await ensureProgress(db, auth.user);
     const childId = p.child_id;

@@ -184,6 +184,11 @@ export default async function handler(req, res) {
   // get a starter wallet + monthly subscription credits — see api/_lib/credits.js.
   {
     const charge = await chargeForGeneration(sql(), auth.user, { credits: COST.nano, reason: 'tile:generate', ref: childId });
+    if (charge.blocked) {
+      res.status(429).json({ error: 'account_paused',
+                             detail: "Image making is paused on this account as a safety measure. Email support@myworldtaptotalk.com and we'll sort it out right away." });
+      return;
+    }
     if (!charge.ok) {
       res.status(402).json({ error: 'not_enough_credits', needed: COST.nano, balance: charge.balance,
                              detail: 'Making a tile image uses 1 credit. Add credits in the store and try again.' });

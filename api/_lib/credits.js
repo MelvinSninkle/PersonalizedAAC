@@ -263,20 +263,59 @@ export async function grantCredits(db, { userId, credits, reason, ref = null }) 
   return creditBalance(db, uid);
 }
 
+// Velocity guard: a runaway device or compromised account is paused before it
+// can drain a wallet. Trailing windows over the ledger itself (no new table):
+//   >= 400 credits spent in the trailing hour   -> spend block
+//   >= 800 credits spent in the trailing day    -> spend block
+//   >= 200 in the hour                          -> flagged for review in Reports
+// A block sets users.spend_blocked_at and STAYS until an admin clears it
+// (Reports -> Spend guard -> Unblock). Admins never hit this: they don't spend
+// unless simulating a tier, and can unblock themselves.
+export const VELOCITY = { hourFlag: 200, hourBlock: 400, dayBlock: 800 };
+
 // Atomic spend: the INSERT only lands when the current SUM covers the cost —
 // one statement, so concurrent requests can't both pass a stale balance check.
-// Returns { ok, balance } — ok:false means insufficient credits (nothing spent).
+// Returns { ok, balance, blocked } — ok:false + blocked:true means the account
+// tripped the velocity guard (nothing spent); plain ok:false is insufficient
+// credits.
 export async function spendCredits(db, { userId, credits, reason, ref = null }) {
   const uid = Number(userId);
   const cost = Math.max(0, Math.floor(credits));
-  if (cost === 0) return { ok: true, balance: await creditBalance(db, uid) };
+  if (cost === 0) return { ok: true, blocked: false, balance: await creditBalance(db, uid) };
+  // Paused account? (velocity guard tripped earlier; admin unblocks in Reports)
+  try {
+    const b = await db`SELECT spend_blocked_at FROM users WHERE id = ${uid} LIMIT 1`;
+    if (b.length && b[0].spend_blocked_at) {
+      return { ok: false, blocked: true, balance: await creditBalance(db, uid) };
+    }
+  } catch (_) { /* pre-migration deploys: no column yet -> no block */ }
   const r = await db`
     INSERT INTO credit_ledger (user_id, delta, reason, ref)
     SELECT ${uid}, ${-cost}, ${reason}, ${ref}
     WHERE (SELECT COALESCE(SUM(delta), 0) FROM credit_ledger WHERE user_id = ${uid}) >= ${cost}
     RETURNING id`;
   const balance = await creditBalance(db, uid);
-  return { ok: r.length > 0, balance };
+  const ok = r.length > 0;
+  if (ok) {
+    // Check velocity AFTER the successful spend — the spend that crosses the
+    // line still lands (the family keeps what they paid for); the NEXT one is
+    // refused. Best-effort: a guard hiccup must never break a purchase.
+    try {
+      const v = await db`
+        SELECT COALESCE(SUM(CASE WHEN created_at > NOW() - INTERVAL '1 hour' THEN -delta ELSE 0 END), 0) AS hour_spend,
+               COALESCE(SUM(-delta), 0) AS day_spend
+        FROM credit_ledger
+        WHERE user_id = ${uid} AND delta < 0 AND created_at > NOW() - INTERVAL '24 hours'`;
+      const hour = Number(v[0].hour_spend), day = Number(v[0].day_spend);
+      if (hour >= VELOCITY.hourBlock || day >= VELOCITY.dayBlock) {
+        await db`UPDATE users SET
+                 spend_blocked_at = NOW(),
+                 spend_block_reason = ${`velocity: ${hour} credits in the last hour, ${day} in 24h`}
+                 WHERE id = ${uid} AND spend_blocked_at IS NULL`;
+      }
+    } catch (_) {}
+  }
+  return { ok, blocked: false, balance };
 }
 
 // Record an external purchase exactly once and grant its credits. Returns

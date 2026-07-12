@@ -98,6 +98,13 @@
     <div class="tablewrap"><table id="t-fulfillment"></table></div>
     <div class="note">OK = spends have matching completed renders (or no spends). CHECK = spent credits but no renders finished in the window (may pre-date it). STUCK = renders still queued. FAILED = renders failed — fix and re-kick from the store/Lab.</div>
   </div>
+
+  <div class="panel">
+    <div class="head"><h2>Spend guard</h2>
+      <span class="sub">velocity safety: ≥400 credits/hr or ≥800/day auto-pauses spending until unblocked here; ≥200/hr is listed for review</span></div>
+    <div class="tablewrap"><table id="t-spendguard"></table></div>
+    <div class="note" id="spendguard-note"></div>
+  </div>
 </main>
 
 <script>
@@ -207,11 +214,41 @@
     URL.revokeObjectURL(a.href);
   }));
 
+  function renderSpendGuard(g) {
+    const rows = [];
+    for (const b of (g.blocked || [])) {
+      rows.push('<tr><td><span class="tag failed">PAUSED</span></td><td>' + esc(b.email || b.id) + '</td><td>' + esc(b.child_slug || '') + '</td>'
+        + '<td>' + esc(b.spend_block_reason || '') + '</td><td>' + Number(b.balance || 0) + '</td>'
+        + '<td><button class="csv" data-unblock="' + b.id + '">Unblock</button></td></tr>');
+    }
+    for (const h of (g.hot || [])) {
+      rows.push('<tr><td><span class="tag check">REVIEW</span></td><td>' + esc(h.email || h.id) + '</td><td>' + esc(h.child_slug || '') + '</td>'
+        + '<td>' + Number(h.hour_spend) + ' credits/hr · ' + Number(h.day_spend) + '/24h</td><td></td>'
+        + '<td><button class="csv" data-block="' + h.id + '">Pause now</button></td></tr>');
+    }
+    $('t-spendguard').innerHTML = '<tr><th>Status</th><th>Account</th><th>Board</th><th>Why</th><th>Balance</th><th></th></tr>'
+      + (rows.join('') || '<tr><td colspan="6" style="color:#9ca3af;">Nothing paused, nobody spending unusually fast. 🎉</td></tr>');
+    $('spendguard-note').textContent = 'Auto-pause thresholds: ' + g.thresholds.hourBlock + ' credits in an hour or ' + g.thresholds.dayBlock + ' in a day. A paused account keeps its board, voices, and existing art — only new image spends wait for you.';
+    document.querySelectorAll('[data-unblock],[data-block]').forEach((btn) => btn.addEventListener('click', async () => {
+      const op = btn.dataset.unblock ? 'unblock' : 'block';
+      const userId = Number(btn.dataset.unblock || btn.dataset.block);
+      btn.disabled = true;
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = 'Bearer ' + token;
+        await fetch('/api/admin/lab?action=spend-guard', { method: 'POST', credentials: 'same-origin', headers,
+          body: JSON.stringify({ op, userId }) });
+        load();
+      } catch (_) { btn.disabled = false; }
+    }));
+  }
+
   async function load() {
     $('chips').innerHTML = '<div class="chip"><b>…</b>loading</div>';
     try {
       DATA = await api('/api/admin/lab?action=reports&days=' + $('days').value);
       render();
+      renderSpendGuard(await api('/api/admin/lab?action=spend-guard'));
     } catch (e) {
       $('chips').innerHTML = '<div class="chip bad"><b>!</b>' + esc(e.message || e) + '</div>';
     }

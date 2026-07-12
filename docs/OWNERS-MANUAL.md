@@ -97,8 +97,15 @@ ACCESS_KEYS gate), set from parent dashboard → Board tab (themed accordions)
 
 Stripe (web) + Google Play billing (Android; verify-before-consume) +
 `credits` for image generation. Reports: admin/reports.html (purchases vs
-fulfillment, logins, sync health). Stripe is in TEST mode until the LLC
-bank account clears — see runbooks/stripe-go-live.md.
+fulfillment, logins, sync health, spend guard). Stripe is in TEST mode until
+the LLC bank account clears — see runbooks/stripe-go-live.md.
+Subscription credits grant on `invoice.paid` with a `stripe_customer_id`
+fallback (an unattributable invoice logs `stripe invoice.paid UNRESOLVED` in
+Vercel — investigate immediately: someone paid and got nothing). Failed
+renewals email the parent; cancellations stamp `users.sub_canceled_at`.
+**Spend guard**: ≥400 credits/hr or ≥800/day auto-pauses an account's spends
+(≥200/hr is flagged for review); unblock in Reports → Spend guard. A paused
+family keeps everything they have — only new spends wait.
 
 ## The pipelines
 

@@ -289,6 +289,7 @@
       <div style="font-size:12px;color:#6b7280;margin-top:2px;">Words show up on the board as each one finishes — you can close this page, it keeps going.</div>
       <div style="height:8px;background:#fce4ec;border-radius:999px;overflow:hidden;margin-top:8px;"><div id="build-bar" style="height:100%;width:0;background:var(--pink);transition:width .5s;"></div></div>
     </div>
+    <button class="btn" id="build-fix" style="display:none;">Fix missing pieces</button>
   </div>
 
   <!-- BULK-IMPORT REVIEW QUEUE — tiles imported in bulk (iOS app or web) land
@@ -1241,6 +1242,19 @@
         if (r.ok) s = await r.json();
       } catch (_) {}
       if (!s || !s.active) {
+        // Dead jobs must not vanish behind a hidden banner — surface them with
+        // a one-tap parent-facing rescue (seed-core op=refresh re-queues
+        // exactly the missing pieces; spend-free, server-gated).
+        const dead = s ? (((s.render && s.render.dead) || 0) + ((s.voice && s.voice.dead) || 0)
+                        + ((s.place && s.place.dead) || 0) + ((s.chip && s.chip.dead) || 0)) : 0;
+        if (dead > 0) {
+          title.textContent = dead + (dead === 1 ? ' piece' : ' pieces') + " of the board didn't finish — tap Fix and we'll redo them (no charge).";
+          if (bar) bar.style.width = '100%';
+          document.getElementById('build-fix').style.display = '';
+          banner.style.display = 'flex';
+          if (timer) { clearInterval(timer); timer = null; }
+          return;
+        }
         banner.style.display = 'none';
         if (timer) { clearInterval(timer); timer = null; }
         return;
@@ -1253,6 +1267,24 @@
       if (bar) bar.style.width = (total ? Math.round(done / total * 100) : 0) + '%';
       banner.style.display = 'flex';
     };
+    const fixBtn = document.getElementById('build-fix');
+    if (fixBtn) fixBtn.addEventListener('click', async () => {
+      fixBtn.disabled = true;
+      title.textContent = 'Restarting the missing pieces…';
+      try {
+        const r = await fetch('/api/onboarding/seed-core?childId=' + encodeURIComponent(slug), {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'refresh', childId: slug }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        fixBtn.style.display = 'none'; fixBtn.disabled = false;
+        if (!timer) timer = setInterval(tick, 12000);
+        await tick();
+      } catch (_) {
+        title.textContent = 'Could not restart — try again in a minute.';
+        fixBtn.disabled = false;
+      }
+    });
     await tick();
     if (banner.style.display !== 'none' && !timer) timer = setInterval(tick, 12000);
   })();

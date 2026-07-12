@@ -16,9 +16,12 @@ Vercel test env. Go live once the LLC's bank account is verified.
 3. Live keys → Vercel PRODUCTION env only:
    - `STRIPE_SECRET_KEY` = sk_live_…
    - Webhook: Developers → Webhooks → add endpoint
-     `https://<domain>/api/stripe-webhook` (same events as test:
-     checkout.session.completed + the subscription lifecycle events),
-     copy the signing secret → `STRIPE_WEBHOOK_SECRET`.
+     `https://<domain>/api/store?action=stripe-webhook` with EXACTLY these
+     events: `checkout.session.completed`, `invoice.paid`,
+     `invoice.payment_failed` (parent gets a friendly update-your-card
+     email), `customer.subscription.deleted` (recorded as
+     `users.sub_canceled_at`). Copy the signing secret →
+     `STRIPE_WEBHOOK_SECRET`.
 4. Redeploy. Buy the cheapest credit pack YOURSELF with a real card; watch
    admin/reports.html purchases-vs-fulfillment turn OK; refund yourself in
    the Stripe dashboard.

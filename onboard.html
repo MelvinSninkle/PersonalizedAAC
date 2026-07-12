@@ -274,6 +274,13 @@
     <div class="center" id="board-done" style="display:none;">
       <div style="font-size:40px;">🎉</div>
       <p class="fred" style="font-size:18px;color:var(--pink-deep);" id="board-done-msg">The board is ready!</p>
+      <!-- Honest outcome: if pieces died or personal renders were skipped,
+           say so — and let the parent fix it themselves with one tap. -->
+      <div id="board-honest" style="display:none;font-size:14px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:10px 14px;margin:10px auto;max-width:460px;text-align:left;">
+        <span id="board-honest-msg"></span>
+        <button class="btn" id="board-refresh" style="display:block;margin:10px auto 0;">Finish the missing pieces</button>
+        <span id="board-refresh-msg" style="display:block;font-size:12px;margin-top:6px;text-align:center;"></span>
+      </div>
       <a class="btn" href="/app.html" id="open-board-link">Open the board</a>
     </div>
 
@@ -919,12 +926,61 @@
           MAGIC.seen.add(img.key);
           magicAdd(img);
         }
-        if (d.active === false && MAGIC.seen.size) { clearInterval(MAGIC.timer); MAGIC.timer = null; }
+        if (d.active === false) {
+          showHonestOutcome(d);
+          if (MAGIC.seen.size) { clearInterval(MAGIC.timer); MAGIC.timer = null; }
+        }
       } catch (_) {}
     };
     tick();
     MAGIC.timer = setInterval(tick, 8000);
   }
+
+  // Honest outcome + self-rescue: "ready!" must not paper over dead jobs or a
+  // free tier's skipped personal renders. The refresh re-queues exactly the
+  // missing work (server-gated, spend-free) — no support email needed.
+  function showHonestOutcome(d) {
+    const box = document.getElementById('board-honest');
+    const msg = document.getElementById('board-honest-msg');
+    const btn = document.getElementById('board-refresh');
+    if (!box || box.dataset.shown) return;
+    const dead = ((d.render && d.render.dead) || 0) + ((d.voice && d.voice.dead) || 0)
+               + ((d.place && d.place.dead) || 0) + ((d.chip && d.chip.dead) || 0);
+    if (dead > 0) {
+      msg.textContent = dead + (dead === 1 ? ' piece' : ' pieces') + " of the board didn't finish — a picture or a word's voice. One tap finishes the missing ones (no charge).";
+      box.dataset.shown = '1';
+      box.style.display = '';
+    } else if (d.render && d.render.total === 0 && d.voice && d.voice.total > 0) {
+      msg.textContent = 'Your board starts with our standard artwork, with every word spoken in the voice you chose. A membership adds pictures drawn just for ' + (CHILD_NAME || 'your child') + ' — you can join any time from the store.';
+      btn.style.display = 'none';
+      box.dataset.shown = '1';
+      box.style.display = '';
+    }
+  }
+  (function wireBoardRefresh() {
+    const btn = document.getElementById('board-refresh');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const m = document.getElementById('board-refresh-msg');
+      btn.disabled = true; m.textContent = 'Restarting the missing pieces…';
+      try {
+        const r = await fetch('/api/onboarding/seed-core?childId=' + encodeURIComponent(CHILD_ID), {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'refresh', childId: CHILD_ID }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        const n = (d.rearmed || 0) + (d.reopenedRenders || 0) + (d.reopenedVoices || 0);
+        m.textContent = n ? ('Back to work on ' + n + ' — they\'ll appear here as they finish.') : 'Everything is already queued — give it a few minutes.';
+        document.getElementById('board-honest').dataset.shown = '';
+        document.getElementById('board-honest').style.display = 'none';
+        if (!MAGIC.timer) startMagicWatch();
+      } catch (e) {
+        m.textContent = 'Could not restart: ' + (e.message || e);
+        btn.disabled = false;
+      }
+    });
+  })();
 
   // ---- PHASE 4: generate the board (chunked + resumable) ----
   let seedStarted = false;
