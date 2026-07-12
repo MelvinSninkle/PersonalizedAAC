@@ -37,6 +37,8 @@ struct Tile: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, section, label
+        case displayLabel
+        case matchTerms
         case categoryId
         case imageKey
         case imageUrl
@@ -60,6 +62,8 @@ struct Tile: Codable, Identifiable, Hashable {
         section = BoardSection(rawValue: sec) ?? .nouns
         categoryId = try c.decodeIfPresent(Int.self, forKey: .categoryId)
         label = try c.decode(String.self, forKey: .label)
+        displayLabel = try c.decodeIfPresent(String.self, forKey: .displayLabel)
+        matchTerms = try c.decodeIfPresent([String].self, forKey: .matchTerms)
         imageKey = try c.decodeIfPresent(String.self, forKey: .imageKey)
         imageUrl = try c.decodeIfPresent(String.self, forKey: .imageUrl)
         soundKey = try c.decodeIfPresent(String.self, forKey: .soundKey)
