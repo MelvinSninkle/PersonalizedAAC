@@ -60,6 +60,12 @@ never a label rewrite.
   aac-prompt-author skill; it owns groundedness/pairing rules.
 - New rows appear automatically in the defaults view (`/admin/defaults`) for
   per-style image generation. Generate or queue images for every active style.
+- Hand-picked imagery can bypass prompts entirely: each tile card's 📤 button
+  uploads an image straight to the default layer (generic
+  `taxonomy.default_image_key`, or that style's `taxonomy_style_defaults` in
+  style mode) via `lab?action=default-upload`. Defaults overlay every
+  replaceable tile at sync; family-personalized art is never touched
+  (surface-audit C6).
 - Non-English boards render with `suppressBakedText` (no text baked into the
   art) — you do NOT author a separate prompt per language.
 

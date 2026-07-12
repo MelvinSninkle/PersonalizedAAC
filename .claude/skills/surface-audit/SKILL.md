@@ -181,7 +181,20 @@ the master prompt.
 with `taxonomy-defaults/` / `style-defaults/`; styled art resolves by
 `taxonomy_slug` (id, not label — survives translation); chips replaceable via
 `isSharedIcon` (empty / category-defaults/ / style-defaults/). A child's own
-image (any other key) must never be swapped.
+image (any other key) must never be swapped. The generic
+`taxonomy.default_image_key` overlays EVERY replaceable tile (the old
+`isDefaultableTile` person-tile carve-out is gone — hand-picked
+group-of-children defaults serve person-y tiles until a family
+personalizes). The admin upload path (`_lab-default-upload.js`) writes ONLY
+the shared default layers (`taxonomy.default_image_key` /
+`taxonomy_style_defaults`) — it must never UPDATE items rows.
+
+**C6b. Image-history revert is key-contained.** `api/items.js`
+`op=revert-image` (canEditContent-gated) accepts ONLY a key already present
+in that tile's own `item_image_history` rows — an arbitrary key in the POST
+must 4xx, or a parent could point their tile at another family's blob. The
+current image is archived (source `revert`) before the swap, so a revert is
+itself revertible. `GET ?history=` is gated by the same ownership check.
 
 **C7. Decode bounds.** Clients decode images at display size, never full-res
 grids (jetsam/OOM): iOS `MediaCache.image(for:maxPixel:)` call sites pass
@@ -257,7 +270,9 @@ expressive naming reinforcement — must use `displayLabel` (iOS/Android
 `.display`, web `it.displayLabel || it.label`), and must gate off the three
 kinds of English-only prose when `displayLabel` is set: sentence frames
 ("I can see a …", "Who or what is the …?"), `descriptive_clues`, and
-`description`. On translated boards the prompt degrades to the word itself
+`description`. This includes double-tap teach (web `tapSpeak`, native
+`TilePlayer.play`) — its clue playback is gated on `displayLabel` being
+unset, same rule as the games. On translated boards the prompt degrades to the word itself
 in the board's language. VERIFY: grep the game views for raw `.label` /
 `${t.label}` / `tile.label` in any string that is spoken or rendered —
 `kid-ios/MyWorld/Views/{Slideshow,Matching,ExpressiveNaming}View.swift`,
@@ -283,9 +298,29 @@ here and in the panel reveal — nothing else should need touching. VERIFY:
 grep child-settings.js for ACCESS_KEYS; confirm a parent-role POST cannot
 change them (stub harness: save with role=parent, read back). Runtime: run
 `python3 tools/surface-audit/stub_server.py &` then
-`node tools/surface-audit/access_smoke.cjs` — 17 checks covering button-nav
-paging/alignment, the sentence-bar drag lifecycle, and repeat-navigate
-highlight must ALL PASS.
+`node tools/surface-audit/access_smoke.cjs` — the full suite (button-nav
+paging/alignment, sentence-bar drag lifecycle, repeat-navigate highlight)
+must ALL PASS.
+
+**E6b. Touch & safety keys are DELIBERATELY parent-writable.**
+`tapInterrupt`, `doubleTapTeach`, `easyClose`, `easyUnlock` are ordinary
+child-settings root keys — do NOT "fix" them into the ACCESS_KEYS gate;
+parents own these decisions. The one guarded flow is `easyUnlock` ENABLE:
+both UIs (app.html Display modal `disp-unlock-yes`, parent.html Safety panel
+`safety-unlock-yes`) must show the strong warning and re-verify the account
+password via `/api/auth/login` before saving `easyUnlock: true`; disabling
+never needs friction. The board's unlock skip additionally requires a
+signed-in editor session (`sessionUser && canEdit()`) — easyUnlock skips the
+password re-prompt, never the login. Native honoring reads TouchConfig
+(AccessFeatures, both platforms): quick-tap on the shared
+LongPressExitButton and lock-long-press straight to edit mode.
+
+**E7. Recorded ≠ scored.** Game sessions with fewer than 3 answers are
+RECORDED (they appear in recent sessions, annotated "too short to score")
+but excluded from the weekly accuracy aggregate (`api/analytics.js`
+`denom >= 3`) and from spike baselines (`api/_lib/spike.js`
+`slides_attempted/item_count >= 3`). An ended-early game must never read as
+a string of misses, and a one-tap game must never read as 100%.
 
 ## F. Store & credits integrity
 
