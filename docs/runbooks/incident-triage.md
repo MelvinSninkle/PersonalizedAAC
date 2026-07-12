@@ -25,6 +25,16 @@ fulfillment) — it exists precisely so you don't guess. Then:
 4. Model-side failures (OpenAI/Gemini quota, content flags) appear in the
    job `error` column and `image_generations` log. Daily cap:
    `IMAGE_GEN_DAILY_LIMIT`.
+5. **"Everything says done but core/verbs tiles are blank"** — the board was
+   wiped or re-placed AFTER a successful build: items came back artless while
+   seed_jobs still read done, and done jobs never re-run (dedup by
+   child+kind+taxonomy). The taxonomy page's Build board now detects this and
+   re-opens done render jobs whose tile has no art (and voice jobs with no
+   audio) — the dialog reports "re-opened N art-less renders". If it reports
+   0 re-opened and the board is still blank, the items' `taxonomy_slug`
+   linkage is the next suspect. Only Needs/Core/Verbs get per-child renders
+   (`isRenderScope`); object tiles show shared defaults via sync, which is
+   why a broken board looks fine EXCEPT core+verbs.
 
 ## "No sound / wrong voice"
 
