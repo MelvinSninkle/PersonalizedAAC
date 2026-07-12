@@ -31,6 +31,7 @@ struct Category: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, section, label
+        case displayLabel
         case parentId
         case imageKey
         case imageUrl
@@ -49,6 +50,7 @@ struct Category: Codable, Identifiable, Hashable {
         let sec = try c.decode(String.self, forKey: .section).lowercased()
         section = BoardSection(rawValue: sec) ?? .nouns
         label = try c.decode(String.self, forKey: .label)
+        displayLabel = try c.decodeIfPresent(String.self, forKey: .displayLabel)
         parentId = try c.decodeIfPresent(Int.self, forKey: .parentId)
         imageKey = try c.decodeIfPresent(String.self, forKey: .imageKey)
         imageUrl = try c.decodeIfPresent(String.self, forKey: .imageUrl)
