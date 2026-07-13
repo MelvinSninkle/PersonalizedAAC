@@ -143,11 +143,11 @@ fun HeaderBar(
                 // pages instead of scrolling and a TAP stages its tile.
                 if (access.sentenceBuilder && access.toolSentence) {
                     Box(
-                        Modifier.size(40.dp)
+                        Modifier.size(36.dp)
                             .background(if (sentenceMode) Color(0xFF66BB6A) else Color.White.copy(alpha = 0.18f), CircleShape)
                             .combinedClickable(onClick = { c.sentenceBar.setMode(!sentenceMode) }, onLongClick = {}),
                         contentAlignment = Alignment.Center,
-                    ) { Text("✏️", fontSize = 18.sp) }
+                    ) { Text("✏️", fontSize = 15.sp) }
                 }
                 Spacer(Modifier.weight(1f))
                 if (editMode) {
@@ -197,11 +197,11 @@ private fun SentenceStripRow() {
         // Quick clear — a mis-tap costs one rebuild; a stuck sentence would
         // cost the whole feature. Deliberately a short tap.
         Box(
-            Modifier.size(46.dp)
+            Modifier.size(60.dp)
                 .background(Color.White.copy(alpha = 0.22f), CircleShape)
                 .clickable { c.sentenceBar.clear() },
             contentAlignment = Alignment.Center,
-        ) { Text("✕", fontSize = 18.sp, color = Color.White) }
+        ) { Text("✕", fontSize = 24.sp, color = Color.White) }
         Spacer(Modifier.width(8.dp))
         Box(
             Modifier.size(60.dp)

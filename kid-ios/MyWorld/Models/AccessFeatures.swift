@@ -38,6 +38,9 @@ final class AccessPrefs {
     var toolTeach = true
     var toolPlay = true
     var toolSentence = true
+    /// Drag-to-bar staging (the ORIGINAL sentence gesture, parent-enabled;
+    /// native apps only — web keeps the pencil).
+    var sentenceDrag = false
 
     var buttonsNav: Bool { navMode == "buttons" }
 
@@ -64,6 +67,7 @@ final class AccessPrefs {
             toolTeach = (s["toolTeach"] as? Bool) ?? true
             toolPlay = (s["toolPlay"] as? Bool) ?? true
             toolSentence = (s["toolSentence"] as? Bool) ?? true
+            sentenceDrag = (s["sentenceDrag"] as? Bool) ?? false
             // Touch + safety controls ride the same settings fetch (root keys too).
             TouchConfig.interrupt = (s["tapInterrupt"] as? Bool) ?? false
             TouchConfig.doubleTapTeach = (s["doubleTapTeach"] as? Bool) ?? false
@@ -168,7 +172,10 @@ final class SentenceBar {
 
     func dragCancel() { drag = nil }
 
+    static let maxWords = 25   // a sentence, not a filibuster
+
     func stage(_ tile: Tile, idleMinutes: Int) {
+        guard staged.count < Self.maxWords else { return }
         staged.append(tile)
         resetIdle(idleMinutes: idleMinutes)
         armModeTimer()
@@ -180,10 +187,18 @@ final class SentenceBar {
     }
 
     func clear() {
+        stopPlayback()   // ✕ mid-sentence must stop the audio too
         idleTask?.cancel(); idleTask = nil
         staged = []
         drag = nil
         armModeTimer()
+    }
+
+    /// Abort ▶ playback: cancel the loop and cut the clip in flight. A second
+    /// ▶ also lands here first, so loops can never stack.
+    func stopPlayback() {
+        playTask?.cancel(); playTask = nil
+        GameAudio.shared.stopSpeech()
     }
 
     func resetIdle(idleMinutes: Int) {
@@ -197,12 +212,16 @@ final class SentenceBar {
 
     /// Play every staged word in order — the tile's recorded clip (the voice
     /// the parent picked) first, TTS fallback. Sequential, like the web ▶.
+    @ObservationIgnored private var playTask: Task<Void, Never>?
+
     func playAll(childId: String, idleMinutes: Int) {
         guard !staged.isEmpty else { return }
+        stopPlayback()   // restart semantics — never two loops at once
         resetIdle(idleMinutes: idleMinutes)
         let list = staged
-        Task {
+        playTask = Task { @MainActor in
             for tile in list {
+                if Task.isCancelled { return }
                 if let key = tile.soundKey, !key.isEmpty,
                    let url = try? await MediaCache.shared.audioFileURL(for: key) {
                     await GameAudio.shared.playFileAwait(url)
@@ -240,9 +259,9 @@ struct SentenceStripView: View {
                 sentence.clear()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(width: 46, height: 46)
+                    .frame(width: 60, height: 60)
                     .background(Circle().fill(Color.white.opacity(0.22)))
             }
             .buttonStyle(.plain)

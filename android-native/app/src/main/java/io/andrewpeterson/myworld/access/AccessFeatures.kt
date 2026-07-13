@@ -51,6 +51,9 @@ data class AccessData(
     val sentenceBuilder: Boolean = false,
     val sentenceIdleMin: Int = 1,              // 1–10 minutes
     val sentenceLift: String = "longpress",    // legacy — the pencil replaced lift gestures
+    // Parent toggle: drag a tile up to the header to stage it — additive to
+    // the pencil, works during normal scroll-mode use (native apps only).
+    val sentenceDrag: Boolean = false,
     val listenRepeatNav: Boolean = true,
     // Header tools, parent-configurable for every family (default ON).
     val toolListen: Boolean = true,
@@ -84,6 +87,7 @@ class AccessPrefs(private val api: ApiClient, private val scope: CoroutineScope)
                 sentenceBuilder = bool("sentenceBuilder") ?: false,
                 sentenceIdleMin = (int("sentenceIdleMin") ?: 1).coerceIn(1, 10),
                 sentenceLift = if (str("sentenceLift") == "drag") "drag" else "longpress",
+                sentenceDrag = bool("sentenceDrag") ?: false,
                 listenRepeatNav = bool("listenRepeatNav") ?: true,
                 toolListen = bool("toolListen") ?: true,
                 toolTeach = bool("toolTeach") ?: true,
@@ -186,6 +190,7 @@ class SentenceBar(
     fun dragEnd() { _drag.value = null }
 
     fun stage(tile: Tile, idleMinutes: Int) {
+        if (_staged.value.size >= MAX_WORDS) return   // a sentence, not a filibuster
         _staged.value = _staged.value + tile
         resetIdle(idleMinutes)
         armModeTimer()
@@ -197,10 +202,19 @@ class SentenceBar(
     }
 
     fun clear() {
+        stopPlayback()   // ✕ mid-sentence must stop the audio too
         idleJob?.cancel(); idleJob = null
         _staged.value = emptyList()
         _drag.value = null
         armModeTimer()
+    }
+
+    /** Abort ▶ playback: cancelling the Job propagates into playFileAwait's
+     *  suspendCancellableCoroutine, whose invokeOnCancellation stops and
+     *  releases the in-flight MediaPlayer. A second ▶ lands here first, so
+     *  loops can never stack. */
+    fun stopPlayback() {
+        playJob?.cancel(); playJob = null
     }
 
     fun resetIdle(idleMinutes: Int) {
@@ -210,11 +224,14 @@ class SentenceBar(
     }
 
     /** Play every staged word in order — recorded clip first, TTS fallback. */
+    private var playJob: Job? = null
+
     fun playAll(childId: String, idleMinutes: Int) {
         val list = _staged.value
         if (list.isEmpty()) return
+        stopPlayback()   // restart semantics — never two loops at once
         resetIdle(idleMinutes)
-        scope.launch {
+        playJob = scope.launch {
             for (t in list) {
                 val f = t.soundKey?.takeIf { it.isNotEmpty() }?.let { media.audioFile(it) }
                 if (f != null && gameAudio.playFileAwait(f)) continue
@@ -222,4 +239,6 @@ class SentenceBar(
             }
         }
     }
+
+    companion object { const val MAX_WORDS = 25 }
 }

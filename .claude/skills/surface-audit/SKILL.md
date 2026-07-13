@@ -306,7 +306,11 @@ must ALL PASS.
 `tapInterrupt`, `doubleTapTeach`, `easyClose`, `easyUnlock`, and the header
 tool visibility keys `toolListen` / `toolTeach` / `toolPlay` /
 `toolSentence` (default true; the ✏️ pencil additionally requires the
-admin-gated `sentenceBuilder`) are ordinary
+admin-gated `sentenceBuilder`), and `sentenceDrag` (default false; NATIVE
+APPS ONLY — drag a tile up to the header to stage it, additive to the
+pencil, also requires `sentenceBuilder`; the web deliberately has no drag
+because it needed `touch-action: none` — nothing may ever disable touch
+scrolling on the web board) are ordinary
 child-settings root keys — do NOT "fix" them into the ACCESS_KEYS gate;
 parents own these decisions. The one guarded flow is `easyUnlock` ENABLE:
 both UIs (app.html Display modal `disp-unlock-yes`, parent.html Safety panel

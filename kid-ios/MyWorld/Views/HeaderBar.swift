@@ -157,6 +157,7 @@ struct HeaderBar: View {
             // friendly join popup instead of a dead toggle (turning OFF is
             // always allowed).
             if !listening && !board.sttAllowed { showSttUpsell = true; return }
+            if !listening { sentence.setMode(false) }   // listening owns the header
             listening.toggle()
         } label: {
             Image(systemName: listening ? "stop.circle.fill" : "mic.circle.fill")
@@ -222,8 +223,8 @@ struct HeaderBar: View {
             sentence.setMode(!sentence.mode)
         } label: {
             Text("✏️")
-                .font(.system(size: 18))
-                .padding(7)
+                .font(.system(size: 15))
+                .padding(6)
                 .background(Circle().fill(sentence.mode ? Color(hex: "#66bb6a") : Color.white.opacity(0.18)))
         }
         .buttonStyle(.plain)
@@ -302,6 +303,7 @@ struct HeaderBar: View {
     /// scope — fewer items just means a shorter quiz, never a scope switch.
     private func startSelfQuiz() {
         guard game.current == nil else { return }
+        sentence.setMode(false)   // a game owns the stage — stop any sentence mid-speech
         game.startLocal(.matching, scope: lastScope(), sample: 10)
     }
 
@@ -309,6 +311,7 @@ struct HeaderBar: View {
     /// word and then all of its taxonomy teaching clues.
     private func startTeachShow() {
         guard game.current == nil else { return }
+        sentence.setMode(false)
         game.startLocal(.teach, scope: lastScope())
     }
 }

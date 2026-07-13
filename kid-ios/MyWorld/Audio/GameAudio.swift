@@ -108,6 +108,13 @@ final class GameAudio {
         } catch { }
     }
 
+    /// Cut the speech channel NOW (sentence ▶ stopped, mode exited, a game or
+    /// listening took the stage). Music and cheers are untouched.
+    func stopSpeech() {
+        speakPlayer?.stop()
+        speakPlayer = nil
+    }
+
     /// Play a downloaded audio file and suspend until it (roughly) finishes —
     /// the sentence bar's ▶ chains staged tiles' recorded clips this way.
     func playFileAwait(_ url: URL) async {

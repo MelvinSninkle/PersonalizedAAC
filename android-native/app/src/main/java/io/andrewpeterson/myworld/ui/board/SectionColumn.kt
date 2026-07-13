@@ -382,6 +382,33 @@ private fun TileGrid(
                                 onDragCancel = { dragId = null },
                             )
                         }
+                        // Drag-to-bar staging (parent-enabled): the original
+                        // sentence-constructor gesture — lift a tile toward
+                        // the header, the drop stages it. Coexists with the
+                        // grid scroll; all staging funnels through onStage so
+                        // the 25-word cap + silent logging apply.
+                        access.sentenceDrag && sentenceOn -> Modifier.pointerInput(tile.id, access.sentenceDrag) {
+                            val start: (Offset) -> Unit = {
+                                dragOrigin = cellRects[tile.id]?.center ?: Offset.Zero
+                                dragPos = dragOrigin
+                                dragId = tile.id
+                                c.sentenceBar.dragUpdate(tile, false)
+                            }
+                            val move: (androidx.compose.ui.input.pointer.PointerInputChange, Offset) -> Unit = { change, amount ->
+                                change.consume()
+                                dragPos += amount
+                                c.sentenceBar.dragUpdate(tile, dragPos.y <= dropZonePx)
+                            }
+                            val end: () -> Unit = {
+                                val hit = dragPos.y <= dropZonePx
+                                dragId = null
+                                c.sentenceBar.dragEnd()
+                                if (hit) onStage(tile)
+                            }
+                            val cancel: () -> Unit = { dragId = null; c.sentenceBar.dragEnd() }
+                            detectDragGestures(onDragStart = start, onDrag = move,
+                                onDragEnd = end, onDragCancel = cancel)
+                        }
                         else -> Modifier
                     }),
             ) {

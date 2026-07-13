@@ -105,6 +105,14 @@ const fails = [];
     && !document.body.classList.contains('sentence-mode')
     && document.querySelectorAll('.sentence-chip').length === 0));
 
+  // ── Regression guard: NOTHING may ever disable touch scrolling on the
+  //    web board. The old drag-lift set touch-action:none on tiles; the
+  //    drag gesture now lives in the native apps only (sentenceDrag). ──
+  await page.evaluate(() => window.__accessHooks.applyAccessSettings({ sentenceBuilder: true, sentenceDrag: true }));
+  ok('no tile ever gets touch-action:none', await page.evaluate(() =>
+    [...document.querySelectorAll('.items-grid .tile-wrap, .needs-strip .tile-wrap')]
+      .every(el => getComputedStyle(el).touchAction !== 'none')));
+
   // ── Feature 3: repeat-navigate core ──
   const nav = await page.evaluate(async () => {
     const items = await window.__accessHooks.getAllItems('nouns');

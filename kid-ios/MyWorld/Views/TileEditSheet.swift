@@ -24,7 +24,8 @@ struct TileEditSheet: View {
 
     @State private var label: String = ""
     @State private var section: BoardSection = .needs
-    @State private var categoryId: Int?
+    @State private var rootId: Int?
+    @State private var subId: Int?
 
     @State private var saving = false
     @State private var errorText: String?
@@ -71,24 +72,8 @@ struct TileEditSheet: View {
                             .foregroundStyle(Color(hex: "#999"))
 
                         field("Where on the board")
-                        Picker("Section", selection: $section) {
-                            ForEach([BoardSection.needs, .people, .nouns, .verbs]) { s in
-                                Text(sectionLabel(s)).tag(s)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .onChange(of: section) { _, _ in categoryId = nil }
-
-                        let folders = folderRows(board, section)
-                        if !folders.isEmpty {
-                            Picker("Folder", selection: $categoryId) {
-                                Text("Top level").tag(Int?.none)
-                                ForEach(folders) { c in
-                                    Text(c.label).tag(Int?.some(c.id))
-                                }
-                            }
-                            .pickerStyle(.menu)
-                        }
+                        PlacementPicker(section: $section, rootId: $rootId, subId: $subId,
+                                        homeSection: job.section, homeCategoryId: job.categoryId)
 
                         if let errorText {
                             Text(errorText).font(.system(size: 14)).foregroundStyle(.red)
@@ -114,9 +99,11 @@ struct TileEditSheet: View {
                 }
             }
             .task {
-                label      = job.label
-                section    = job.section
-                categoryId = job.categoryId
+                label   = job.label
+                section = job.section
+                let home = placementHome(board, categoryId: job.categoryId)
+                rootId = home.root
+                subId  = home.sub
             }
         }
     }
@@ -142,6 +129,13 @@ struct TileEditSheet: View {
     private func save() async {
         let trimmedLabel = label.trimmingCharacters(in: .whitespaces)
         guard !trimmedLabel.isEmpty else { return }
+        // Same rule as the add flow: a column tile only renders inside a leaf
+        // folder, so don't let a save file it somewhere invisible.
+        let effectiveCategory = placementEffectiveCategory(board, section: section, rootId: rootId, subId: subId)
+        if section != .needs && effectiveCategory == nil {
+            errorText = "Pick a folder above — tiles only show up on the board inside a folder."
+            return
+        }
         saving = true
         errorText = nil
         defer { saving = false }
@@ -161,7 +155,7 @@ struct TileEditSheet: View {
                 _ = try await api.updateItem(id: tileId,
                                              label: trimmedLabel,
                                              section: section.rawValue,
-                                             category: .set(categoryId),
+                                             category: .set(effectiveCategory),
                                              soundKey: soundKey,
                                              childId: auth.childSlug)
             } else {
@@ -176,7 +170,7 @@ struct TileEditSheet: View {
                     sKey = try await api.uploadBlob(mp3, kind: "item-sound", ext: "mp3", contentType: "audio/mpeg")
                 }
                 let tile = try await api.createItem(section: section.rawValue,
-                                                    categoryId: categoryId,
+                                                    categoryId: effectiveCategory,
                                                     label: trimmedLabel,
                                                     imageKey: imageKey,
                                                     soundKey: sKey,
@@ -189,7 +183,7 @@ struct TileEditSheet: View {
             // Reflect the edit back onto the tray card.
             job.label = trimmedLabel
             job.section = section
-            job.categoryId = categoryId
+            job.categoryId = effectiveCategory
             job.phase = .done
             job.progress = 1.0
             job.errorText = nil
@@ -208,15 +202,6 @@ struct TileEditSheet: View {
         Text(text.uppercased())
             .font(.system(size: 12, weight: .bold))
             .foregroundStyle(Color(hex: "#999"))
-    }
-
-    private func sectionLabel(_ s: BoardSection) -> String {
-        switch s {
-        case .needs:  return "Needs"
-        case .people: return "People"
-        case .nouns:  return "Nouns"
-        case .verbs:  return "Verbs"
-        }
     }
 
     private func friendly(_ error: Error) -> String {
@@ -263,7 +248,8 @@ struct BoardTileEditSheet: View {
 
     @State private var label = ""
     @State private var section: BoardSection = .nouns
-    @State private var categoryId: Int?
+    @State private var rootId: Int?
+    @State private var subId: Int?
     @State private var keepAspect = false
     @State private var pinned = false
     @State private var descriptionText = ""
@@ -527,25 +513,44 @@ struct BoardTileEditSheet: View {
     private var placementSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             field("Where on the board")
-            Picker("Section", selection: $section) {
-                ForEach([BoardSection.needs, .people, .nouns, .verbs]) { s in
-                    Text(sectionLabel(s)).tag(s)
+            PlacementPicker(section: $section, rootId: $rootId, subId: $subId,
+                            homeSection: tile.section, homeCategoryId: tile.categoryId)
+            if placementChanged {
+                if placementReady {
+                    Text("Moves to \(placementName()) when you save.")
+                        .font(.system(size: 12)).foregroundStyle(Color(hex: "#2e7d32"))
+                } else {
+                    Text("Pick a folder above to finish the move — tiles only show on the board inside a folder. (Selecting the tile's own spot again keeps it where it is.)")
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(Color(hex: "#b45309"))
                 }
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: section) { _, _ in categoryId = nil }
-
-            let folders = folderRows(board, section)
-            if !folders.isEmpty {
-                Picker("Folder", selection: $categoryId) {
-                    Text("Top level").tag(Int?.none)
-                    ForEach(folders) { c in
-                        Text(c.label).tag(Int?.some(c.id))
-                    }
-                }
-                .pickerStyle(.menu)
             }
         }
+    }
+
+    /// The tile's current home resolved into the two-level picker.
+    private var placementHomeIds: (root: Int?, sub: Int?) {
+        placementHome(board, categoryId: tile.categoryId)
+    }
+    /// True only when the parent actually moved something in the picker —
+    /// an untouched edit must NEVER re-file the tile.
+    private var placementChanged: Bool {
+        section != tile.section || rootId != placementHomeIds.root || subId != placementHomeIds.sub
+    }
+    private var placementReady: Bool {
+        section == .needs
+            || placementEffectiveCategory(board, section: section, rootId: rootId, subId: subId) != nil
+    }
+
+    private func placementName() -> String {
+        var parts = [placementSectionTitle(section)]
+        if section != .needs, let rootId,
+           let root = board.roots(in: section).first(where: { $0.id == rootId }) {
+            parts.append(root.label)
+            if let subId, let sub = board.children(of: root).first(where: { $0.id == subId }) {
+                parts.append(sub.label)
+            }
+        }
+        return parts.joined(separator: " › ")
     }
 
     private var pinSection: some View {
@@ -584,7 +589,9 @@ struct BoardTileEditSheet: View {
     private func seed() {
         label          = tile.label
         section        = tile.section
-        categoryId     = tile.categoryId
+        let home = placementHome(board, categoryId: tile.categoryId)
+        rootId         = home.root
+        subId          = home.sub
         keepAspect     = tile.keepAspect
         pinned         = tile.pinned
         descriptionText = tile.description ?? ""
@@ -670,6 +677,10 @@ struct BoardTileEditSheet: View {
     private func save() async {
         let newLabel = label.trimmingCharacters(in: .whitespaces)
         guard !newLabel.isEmpty else { return }
+        if placementChanged && !placementReady {
+            errorText = "Pick a folder above to finish the move — tiles only show on the board inside a folder."
+            return
+        }
         saving = true; errorText = nil
         defer { saving = false }
         do {
@@ -689,8 +700,13 @@ struct BoardTileEditSheet: View {
             }
 
             let sectionChanged = section != tile.section
-            let category: APIClient.CategoryUpdate =
-                (sectionChanged || categoryId != tile.categoryId) ? .set(categoryId) : .unchanged
+            // Placement is sent ONLY when the parent actually moved the tile in
+            // the picker. The old menu picker nil-ed the folder on open (its
+            // section onChange fired while seeding), so every save of a
+            // non-Nouns tile silently re-filed it to the top level.
+            let category: APIClient.CategoryUpdate = placementChanged
+                ? .set(placementEffectiveCategory(board, section: section, rootId: rootId, subId: subId))
+                : .unchanged
             let descTrimmed = descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
             let descChanged = descTrimmed != (tile.description ?? "")
 
@@ -828,15 +844,6 @@ struct BoardTileEditSheet: View {
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#ff1493"), lineWidth: filled ? 0 : 1.5))
     }
 
-    private func sectionLabel(_ s: BoardSection) -> String {
-        switch s {
-        case .needs:  return "Needs"
-        case .people: return "People"
-        case .nouns:  return "Nouns"
-        case .verbs:  return "Verbs"
-        }
-    }
-
     private func friendly(_ error: Error) -> String {
         if let api = error as? APIError {
             switch api {
@@ -856,28 +863,156 @@ struct BoardTileEditSheet: View {
 }
 
 
-// MARK: -- Folder picker rows
+// MARK: -- Placement picker (shared by both edit sheets)
 
-/// Rows for the placement Folder pickers: top-level categories PLUS their
-/// subcategories (indented). Tiles usually live IN a subcategory (the board
-/// build places them there), so a roots-only picker had no tag matching the
-/// tile's categoryId — Xcode's "selection Optional(N) is invalid" warning,
-/// with undefined selection behavior (and a save could silently re-file the
-/// tile). Including the subs makes every real categoryId a valid tag.
-private struct FolderRow: Identifiable {
-    let id: Int
-    let label: String
+/// Where a tile's category sits in the two-level picker: its root chip, and
+/// the sub chip when the tile lives in a sub-folder.
+private func placementHome(_ board: BoardStore, categoryId: Int?) -> (root: Int?, sub: Int?) {
+    guard let cid = categoryId,
+          let cat = board.categories.first(where: { $0.id == cid }) else { return (nil, nil) }
+    if let parent = cat.parentId { return (parent, cid) }
+    return (cid, nil)
 }
 
-private func folderRows(_ board: BoardStore, _ section: BoardSection) -> [FolderRow] {
-    var out: [FolderRow] = []
-    for root in board.roots(in: section) {
-        out.append(FolderRow(id: root.id, label: root.label))
-        for sub in board.children(of: root) {
-            out.append(FolderRow(id: sub.id, label: "— " + sub.label))
+/// The folder a save would file the tile under — AddTileView's
+/// destinationCategoryId rule: the flat Bottom Row takes no folder; a root
+/// that holds sub-folders resolves to the picked sub (tiles only render
+/// inside leaf folders). nil for a column means "not a real spot yet".
+private func placementEffectiveCategory(_ board: BoardStore, section: BoardSection,
+                                        rootId: Int?, subId: Int?) -> Int? {
+    if section == .needs { return nil }
+    guard let rootId,
+          let root = board.roots(in: section).first(where: { $0.id == rootId }) else { return nil }
+    return board.children(of: root).isEmpty ? rootId : subId
+}
+
+/// Board-position names — parents think in "where on the board", not the
+/// sections' internal vocabulary (same wording as the Add-tiles flow).
+private func placementSectionTitle(_ s: BoardSection) -> String {
+    switch s {
+    case .needs:  return "Bottom Row"
+    case .people: return "Left Column"
+    case .nouns:  return "Middle Column"
+    case .verbs:  return "Right Column"
+    }
+}
+
+/// The Add-tiles destination card, reused by the edit sheets: one selectable
+/// row per board region, then folder rails wearing each folder's REAL tile
+/// art (FolderChip, AddTileView.swift). Selection changes only through taps —
+/// no onChange resets — and tapping the tile's own section back restores its
+/// original folder, so the picker can never silently re-file a tile.
+private struct PlacementPicker: View {
+    @Environment(BoardStore.self) private var board
+    @Binding var section: BoardSection
+    @Binding var rootId: Int?
+    @Binding var subId: Int?
+    /// The tile's current home — re-selecting this section re-seeds its folder.
+    let homeSection: BoardSection
+    let homeCategoryId: Int?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(spacing: 8) {
+                ForEach([BoardSection.needs, .people, .nouns, .verbs]) { s in
+                    sectionRow(s)
+                }
+            }
+            if section != .needs {
+                let roots = board.roots(in: section)
+                if roots.isEmpty {
+                    Text("This column has no folders yet — add one on the board first. Tiles only show up inside a folder.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: "#b45309"))
+                } else {
+                    caption("Which folder?")
+                    rail(roots, selectedId: rootId) { rootId = $0; subId = nil }
+                    if let root = roots.first(where: { $0.id == rootId }) {
+                        let subs = board.children(of: root)
+                        if !subs.isEmpty {
+                            caption("Which folder inside \(root.label)?")
+                            rail(subs, selectedId: subId) { subId = $0 }
+                        }
+                    }
+                }
+            }
         }
     }
-    return out
+
+    private func sectionRow(_ s: BoardSection) -> some View {
+        let selected = section == s
+        return Button {
+            guard section != s else { return }
+            section = s
+            // Coming home restores the tile's real folder; another column
+            // starts blank so the parent picks a real destination.
+            let home = placementHome(board, categoryId: s == homeSection ? homeCategoryId : nil)
+            rootId = home.root
+            subId  = home.sub
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: glyph(s))
+                    .font(.system(size: 18))
+                    .foregroundStyle(Color(hex: "#ad1457"))
+                    .frame(width: 26)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(placementSectionTitle(s))
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Color(hex: "#333"))
+                    Text(subtitle(s))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20))
+                    .foregroundStyle(selected ? Color(hex: "#ff1493") : Color(hex: "#e0c3d2"))
+            }
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(Color(hex: s.bandHex).opacity(selected ? 1 : 0.35))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12)
+                .stroke(selected ? Color(hex: "#ff1493") : .clear, lineWidth: 2))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// A horizontal, ordered rail of folder chips — the same order the child
+    /// sees on the board — each wearing the folder's own tile art.
+    private func rail(_ folders: [Category], selectedId: Int?, pick: @escaping (Int) -> Void) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(folders) { f in
+                    FolderChip(category: f, selected: f.id == selectedId) { pick(f.id) }
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(Color(hex: "#999"))
+    }
+
+    private func subtitle(_ s: BoardSection) -> String {
+        switch s {
+        case .needs:  return "Core words — always visible along the bottom"
+        case .people: return "People"
+        case .nouns:  return "Gestalts, nouns & adjectives"
+        case .verbs:  return "Verbs"
+        }
+    }
+
+    private func glyph(_ s: BoardSection) -> String {
+        switch s {
+        case .needs:  return "rectangle.bottomthird.inset.filled"
+        case .people: return "rectangle.lefthalf.inset.filled"
+        case .nouns:  return "rectangle.center.inset.filled"
+        case .verbs:  return "rectangle.righthalf.inset.filled"
+        }
+    }
 }
 
 

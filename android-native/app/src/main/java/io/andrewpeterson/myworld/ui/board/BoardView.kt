@@ -73,6 +73,7 @@ fun BoardView() {
 
     fun toggleListening() {
         if (listening) { listening = false; return }
+        c.sentenceBar.setMode(false)   // listening owns the header — stop any sentence mid-speech
         if (!c.board.sttAllowed) { showSttUpsell = true; return }
         if (!c.speechListener.available) { showSttUnavailable = true; return }
         if (!c.speechListener.hasPermission) {
@@ -148,12 +149,14 @@ fun BoardView() {
 
     // Header Play/Teach: quiz or teach the last-pressed scope (10 sampled).
     fun startSelfQuiz() {
+        c.sentenceBar.setMode(false)   // a game owns the stage — stop any sentence mid-speech
         val scope = io.andrewpeterson.myworld.game.PlayScope.recall(c.auth.childSlug) ?: "all"
         val playable = c.board.tilesForScope(scope).count { !it.imageKey.isNullOrEmpty() }
         val useScope = if (playable >= 2) scope else "all"
         c.game.startLocal(GameController.Mode.Matching, scope = useScope, choices = 3, sample = 10)
     }
     fun startTeachShow() {
+        c.sentenceBar.setMode(false)
         val scope = io.andrewpeterson.myworld.game.PlayScope.recall(c.auth.childSlug) ?: "all"
         val playable = c.board.tilesForScope(scope).count { !it.imageKey.isNullOrEmpty() }
         val useScope = if (playable >= 1) scope else "all"
