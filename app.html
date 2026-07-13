@@ -1319,6 +1319,10 @@
     <textarea id="item-description" rows="2" placeholder='e.g. "Lives in a field, has four legs, eats grass." Spoken aloud — the child picks the matching tile.' style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font:inherit;box-sizing:border-box;"></textarea>
     <div style="font-size:12px;color:#666;margin-top:4px;">If left blank the game falls back to "Who or what is the [tile name]?"</div>
     <div class="error" id="item-error"></div>
+    <div id="item-frame-row" style="display:none;margin:6px 0 2px;">
+      <button class="secondary" id="item-frame" title="Drag the photo inside a tile-shaped frame to pick exactly what shows. The old picture is archived, never deleted.">🖼 Adjust framing</button>
+      <span id="item-frame-note" style="font-size:12px;color:#2e7d32;margin-left:8px;"></span>
+    </div>
     <!-- Every picture this tile has ever worn (the album keeps them all) —
          tap one to put it back. Reverting archives the current picture, so
          it's always reversible. -->
@@ -1426,6 +1430,29 @@
     <div class="button-row">
       <button class="secondary" id="bulk-cancel">Cancel</button>
       <button class="primary" id="bulk-save">Create Category & Items</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="crop-modal">
+  <div class="modal" style="max-width:440px;">
+    <h3>Adjust framing</h3>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">Drag the photo to choose what shows on the tile; zoom to get closer.
+      Everything outside the square is trimmed. The current picture is archived — Previous pictures brings it back any time.</div>
+    <div id="crop-stage" style="position:relative;width:100%;aspect-ratio:1/1;overflow:hidden;border-radius:12px;background:#111;touch-action:none;cursor:grab;">
+      <img id="crop-img" alt="" draggable="false" style="position:absolute;left:0;top:0;max-width:none;user-select:none;-webkit-user-drag:none;pointer-events:none;">
+      <div style="position:absolute;inset:0;pointer-events:none;border:2px solid rgba(255,255,255,.9);border-radius:12px;"></div>
+      <div style="position:absolute;left:33.33%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.35);pointer-events:none;"></div>
+      <div style="position:absolute;left:66.66%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.35);pointer-events:none;"></div>
+      <div style="position:absolute;top:33.33%;left:0;right:0;height:1px;background:rgba(255,255,255,.35);pointer-events:none;"></div>
+      <div style="position:absolute;top:66.66%;left:0;right:0;height:1px;background:rgba(255,255,255,.35);pointer-events:none;"></div>
+    </div>
+    <label for="crop-zoom" style="margin-top:12px;">Zoom</label>
+    <input type="range" id="crop-zoom" min="100" max="300" value="100" style="width:100%;">
+    <div class="error" id="crop-error"></div>
+    <div class="button-row">
+      <button class="secondary" id="crop-cancel">Cancel</button>
+      <button class="primary" id="crop-save">Use this framing</button>
     </div>
   </div>
 </div>
@@ -3327,6 +3354,8 @@
     // server re-renders them in the child's style (first redo free, then 1 credit).
     document.getElementById('item-redraw-row').style.display = (item && item.taxonomySlug) ? 'block' : 'none';
     document.getElementById('item-redraw-note').textContent = '';
+    document.getElementById('item-frame-row').style.display = (item && item.id && item.imageKey) ? 'block' : 'none';
+    document.getElementById('item-frame-note').textContent = '';
 
     // Past pictures: the tile's archive with one-tap revert (edit mode only,
     // existing items only — a brand-new tile has no history yet).
@@ -3525,6 +3554,181 @@
 
   document.getElementById('item-cancel').addEventListener('click', () => itemModal.classList.remove('show'));
 
+  // ---- Framing tools ---------------------------------------------------------
+  // The board's #1 presentation complaint: photos that aren't tile-shaped.
+  // Both tools BAKE a standard square into the stored image itself, so every
+  // surface — web, iOS, Android, the album, the games — renders the identical
+  // square with zero per-platform crop logic, and the server archives the
+  // prior picture on every swap (Previous pictures is the undo button).
+  //   1. squareCropBlob(): applied to uploads (unless "keep original ratio"
+  //      is checked — movie posters). A CONSERVATIVE uniform-border trim —
+  //      it only ever eats flat bars of one color, never guesses at content —
+  //      then a center square crop.
+  //   2. The "Adjust framing" overlay: drag/zoom the current picture inside a
+  //      tile-shaped frame and save exactly that square.
+
+  async function squareCropBlob(file) {
+    try {
+      if (!(file instanceof Blob) || !(file.type || '').startsWith('image/')) return file;
+      if (file.type === 'image/gif' || file.type === 'image/svg+xml') return file;
+      let bmp;
+      try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+      catch (_) { bmp = await createImageBitmap(file); }
+      const W = bmp.width, H = bmp.height;
+      if (!W || !H) return file;
+      // Border scan on a small analysis copy (fast; maps back within ~1%).
+      const s = Math.min(1, 160 / Math.max(W, H));
+      const aw = Math.max(2, Math.round(W * s)), ah = Math.max(2, Math.round(H * s));
+      const ac = document.createElement('canvas'); ac.width = aw; ac.height = ah;
+      const actx = ac.getContext('2d', { willReadFrequently: true });
+      actx.drawImage(bmp, 0, 0, aw, ah);
+      const d = actx.getImageData(0, 0, aw, ah).data;
+      const at = (x, y) => { const i = (y * aw + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+      // A "border line" is flat (every pixel near the line's own mean) AND the
+      // same color as the outermost line — so only uniform bars ever trim.
+      const flatLine = (horiz, idx, ref) => {
+        const n = horiz ? aw : ah;
+        const get = (j) => (horiz ? at(j, idx) : at(idx, j));
+        let r = 0, g = 0, b = 0;
+        for (let j = 0; j < n; j++) { const q = get(j); r += q[0]; g += q[1]; b += q[2]; }
+        const mean = [r / n, g / n, b / n];
+        let off = 0;
+        for (let j = 0; j < n; j++) {
+          const q = get(j);
+          if (Math.abs(q[0] - mean[0]) > 14 || Math.abs(q[1] - mean[1]) > 14 || Math.abs(q[2] - mean[2]) > 14) off++;
+        }
+        if (off > n * 0.03) return null;
+        if (ref && (Math.abs(mean[0] - ref[0]) > 22 || Math.abs(mean[1] - ref[1]) > 22 || Math.abs(mean[2] - ref[2]) > 22)) return null;
+        return mean;
+      };
+      const walk = (horiz, from, dir, cap) => {
+        let ref = null, k = 0;
+        for (let i = 0; i < cap; i++) {
+          const m = flatLine(horiz, from + dir * i, ref);
+          if (!m) break;
+          ref = ref || m; k++;
+        }
+        return k;
+      };
+      const capY = Math.floor(ah * 0.25), capX = Math.floor(aw * 0.25);
+      const top = walk(true, 0, 1, capY),   bot = walk(true, ah - 1, -1, capY);
+      const left = walk(false, 0, 1, capX), right = walk(false, aw - 1, -1, capX);
+      const inv = 1 / s;
+      let x0 = Math.round(left * inv), y0 = Math.round(top * inv);
+      let w = W - x0 - Math.round(right * inv), h = H - y0 - Math.round(bot * inv);
+      if (w < W * 0.4 || h < H * 0.4) { x0 = 0; y0 = 0; w = W; h = H; }   // scan went wild — keep the full frame
+      const side = Math.min(w, h);
+      x0 += Math.floor((w - side) / 2);
+      y0 += Math.floor((h - side) / 2);
+      // Square already and nothing trimmed? Keep the original bytes.
+      if (!top && !bot && !left && !right && Math.abs(W - H) <= Math.round(Math.max(W, H) * 0.02)) {
+        if (bmp.close) bmp.close(); return file;
+      }
+      const out = Math.max(64, Math.min(1024, side));
+      const c = document.createElement('canvas'); c.width = out; c.height = out;
+      c.getContext('2d').drawImage(bmp, x0, y0, side, side, 0, 0, out, out);
+      if (bmp.close) bmp.close();
+      const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9));
+      return blob || file;
+    } catch (_) { return file; }
+  }
+
+  // The reframe overlay: pan with one finger/pointer, zoom with the slider.
+  // The math anchors on (base·z) = natural px → stage px, so the saved square
+  // is EXACTLY what the frame shows — the tile and the preview can't drift.
+  const CROP = { item: null, w: 0, h: 0, base: 1, z: 1, ox: 0, oy: 0, S: 0 };
+  const cropModal = document.getElementById('crop-modal');
+  function cropClamp() {
+    const dw = CROP.w * CROP.base * CROP.z, dh = CROP.h * CROP.base * CROP.z;
+    CROP.ox = Math.min(0, Math.max(CROP.S - dw, CROP.ox));
+    CROP.oy = Math.min(0, Math.max(CROP.S - dh, CROP.oy));
+  }
+  function cropRender() {
+    const img = document.getElementById('crop-img');
+    img.style.width = (CROP.w * CROP.base * CROP.z) + 'px';
+    img.style.height = (CROP.h * CROP.base * CROP.z) + 'px';
+    img.style.left = CROP.ox + 'px';
+    img.style.top = CROP.oy + 'px';
+  }
+  async function openCropModal(item) {
+    document.getElementById('crop-error').textContent = '';
+    const url = await getMediaURL(item.imageKey);
+    if (!url) { document.getElementById('item-frame-note').textContent = 'Could not load the picture.'; return; }
+    const img = document.getElementById('crop-img');
+    try {
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    } catch (_) { document.getElementById('item-frame-note').textContent = 'Could not load the picture.'; return; }
+    CROP.item = item;
+    CROP.w = img.naturalWidth; CROP.h = img.naturalHeight;
+    cropModal.classList.add('show');
+    const stage = document.getElementById('crop-stage');
+    CROP.S = stage.clientWidth;
+    CROP.base = CROP.S / Math.min(CROP.w, CROP.h);   // min zoom = cover: the square is always filled
+    CROP.z = 1;
+    document.getElementById('crop-zoom').value = '100';
+    CROP.ox = (CROP.S - CROP.w * CROP.base) / 2;     // start centered (what CSS cover shows today)
+    CROP.oy = (CROP.S - CROP.h * CROP.base) / 2;
+    cropClamp(); cropRender();
+  }
+  (function wireCrop() {
+    const stage = document.getElementById('crop-stage');
+    let drag = null;
+    stage.addEventListener('pointerdown', (e) => {
+      drag = { pid: e.pointerId, x: e.clientX, y: e.clientY, ox: CROP.ox, oy: CROP.oy };
+      try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+      stage.style.cursor = 'grabbing';
+    });
+    stage.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.pid) return;
+      CROP.ox = drag.ox + (e.clientX - drag.x);
+      CROP.oy = drag.oy + (e.clientY - drag.y);
+      cropClamp(); cropRender();
+    });
+    const endDrag = () => { drag = null; stage.style.cursor = 'grab'; };
+    stage.addEventListener('pointerup', endDrag);
+    stage.addEventListener('pointercancel', endDrag);
+    document.getElementById('crop-zoom').addEventListener('input', (e) => {
+      const zNew = Math.max(1, Number(e.target.value) / 100);
+      // Keep the frame's center pointing at the same spot in the photo.
+      const cx = (CROP.S / 2 - CROP.ox) / (CROP.base * CROP.z);
+      const cy = (CROP.S / 2 - CROP.oy) / (CROP.base * CROP.z);
+      CROP.z = zNew;
+      CROP.ox = CROP.S / 2 - cx * CROP.base * CROP.z;
+      CROP.oy = CROP.S / 2 - cy * CROP.base * CROP.z;
+      cropClamp(); cropRender();
+    });
+    document.getElementById('crop-cancel').addEventListener('click', () => cropModal.classList.remove('show'));
+    document.getElementById('item-frame').addEventListener('click', () => {
+      if (editingItem && editingItem.imageKey) openCropModal(editingItem);
+    });
+    document.getElementById('crop-save').addEventListener('click', async () => {
+      const item = CROP.item; if (!item) return;
+      const btn = document.getElementById('crop-save');
+      const err = document.getElementById('crop-error');
+      btn.disabled = true; err.textContent = '';
+      const prev = btn.textContent; btn.textContent = 'Saving…';
+      try {
+        const img = document.getElementById('crop-img');
+        const scale = CROP.base * CROP.z;
+        const sx = -CROP.ox / scale, sy = -CROP.oy / scale, side = CROP.S / scale;
+        const out = Math.max(256, Math.min(1024, Math.round(side)));
+        const c = document.createElement('canvas'); c.width = out; c.height = out;
+        c.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, out, out);
+        const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9));
+        if (!blob) throw new Error('could not render the crop');
+        // keepAspect off — the whole point is a filled square tile.
+        const saved = await serverUpdateItem(item, { image: blob, keepAspect: false });
+        document.getElementById('item-keep-aspect').checked = false;
+        cropModal.classList.remove('show');
+        document.getElementById('item-frame-note').textContent = 'Framed ✓ — the old picture is in Previous pictures.';
+        if (saved) { editingItem = saved; loadItemHistory(saved); }
+        await renderAll();
+      } catch (e) {
+        err.textContent = 'Could not save: ' + (e.message || e);
+      } finally { btn.disabled = false; btn.textContent = prev; }
+    });
+  })();
+
   document.getElementById('item-save').addEventListener('click', async () => {
     const label = document.getElementById('item-label').value.trim();
     const pinned = document.getElementById('item-pin').checked;
@@ -3542,10 +3746,15 @@
     saveBtn.textContent = 'Saving…';
 
     try {
+      // Auto-framing: uploads become standard squares (conservative border
+      // trim + center crop) unless the parent asked to keep the original
+      // ratio (posters). "Adjust framing" afterwards picks a different crop.
+      let image = pendingImage;
+      if (image && !keepAspect) image = await squareCropBlob(image);
       if (editingItem) {
         await serverUpdateItem(editingItem, {
           label,
-          image: pendingImage,
+          image,
           sound: pendingSound,
           keepAspect,
           description,
@@ -3556,7 +3765,7 @@
           section: editingItemSection,
           categoryId: editingItemCategoryId,
           label,
-          image: pendingImage,
+          image,
           sound: pendingSound,
           keepAspect,
           description,
