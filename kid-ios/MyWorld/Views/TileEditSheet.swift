@@ -617,6 +617,26 @@ struct BoardTileEditSheet: View {
 
     private func usePhotoAsIs() {
         guard let photo = newPhoto else { return }
+        // Plain CENTER square crop, matching the web upload path — no
+        // automatic blank-space trimming of any kind. Adjust framing picks
+        // any other square.
+        if let img = UIImage(data: photo), abs(img.size.width - img.size.height) > 1 {
+            let side = min(img.size.width, img.size.height)
+            let x = ((img.size.width - side) / 2).rounded(.down)
+            let y = ((img.size.height - side) / 2).rounded(.down)
+            let out = min(1024, side)
+            let fmt = UIGraphicsImageRendererFormat(); fmt.scale = 1
+            let k = out / side
+            let squared = UIGraphicsImageRenderer(size: CGSize(width: out, height: out), format: fmt).image { _ in
+                img.draw(in: CGRect(x: -x * k, y: -y * k,
+                                    width: img.size.width * k, height: img.size.height * k))
+            }
+            if let data = squared.jpegData(compressionQuality: 0.9) {
+                stagedImage = data; stagedImageExt = "jpg"; stagedImageCT = "image/jpeg"
+                newPhoto = nil
+                return
+            }
+        }
         stagedImage = photo; stagedImageExt = "jpg"; stagedImageCT = "image/jpeg"
         newPhoto = nil
     }

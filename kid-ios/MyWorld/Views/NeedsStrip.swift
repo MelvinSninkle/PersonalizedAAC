@@ -121,7 +121,7 @@ struct NeedsStrip: View {
     }
 
     private func longpressLift(_ tile: Tile) -> some Gesture {
-        LongPressGesture(minimumDuration: 0.45)
+        LongPressGesture(minimumDuration: 1.0)
             .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("board")))
             .onChanged { value in
                 if case .second(true, let drag) = value, let drag {

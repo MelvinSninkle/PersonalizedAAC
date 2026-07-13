@@ -41,6 +41,7 @@ import io.andrewpeterson.myworld.ui.theme.hexColor
 fun BoardView() {
     val c = LocalAppContainer.current
     val prefs by c.displayPrefs.data.collectAsState()
+    val access by c.access.data.collectAsState()
     val tiles by c.board.tiles.collectAsState()
     val loading by c.board.loading.collectAsState()
 
@@ -159,6 +160,22 @@ fun BoardView() {
         c.game.startLocal(GameController.Mode.Teach, scope = useScope)
     }
 
+    // Sentence-builder long-press-to-lift: a FULL second (system default is
+    // ~400ms, which read a slow scroll start as a lift and broke scrolling
+    // for the child). Extending the ViewConfiguration for the board subtree
+    // slows every long-press affordance below (lift, edit drag, room open) —
+    // deliberate: slower long-presses are uniformly safer for kids' motor
+    // patterns while the builder is on.
+    val sysVc = androidx.compose.ui.platform.LocalViewConfiguration.current
+    val slowLongPress = remember(sysVc) {
+        object : androidx.compose.ui.platform.ViewConfiguration by sysVc {
+            override val longPressTimeoutMillis: Long get() = 1000L
+        }
+    }
+    val boardVc = if (access.sentenceBuilder && access.sentenceLift == "longpress" && !editMode) slowLongPress else sysVc
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalViewConfiguration provides boardVc
+    ) {
     Column(Modifier.fillMaxSize().background(hexColor("#fff7fb"))) {
         HeaderBar(
             editMode = editMode,
@@ -223,6 +240,7 @@ fun BoardView() {
             }
         }
     }
+    }   // CompositionLocalProvider (slow long-press while sentence builder is on)
 
     openRoom?.let { room ->
         androidx.compose.ui.window.Dialog(

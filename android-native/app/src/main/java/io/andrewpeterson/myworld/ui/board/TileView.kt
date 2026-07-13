@@ -78,7 +78,7 @@ fun TileView(
         val key = tile.imageKey
         value = if (key.isNullOrEmpty()) null else withContext(Dispatchers.Default) {
             val bmp = c.media.bitmap(key, maxDim = 640)
-            if (bmp == null || posterMode) bmp else bmp.trimmingFlatBorders()
+            bmp   // no auto-trim, ever — parents frame; heuristics don't
         }
     }
 
@@ -170,48 +170,4 @@ private fun Modifier.dashedBorder(color: Color): Modifier = this.then(
     // matters more than simplicity.)
 )
 
-/**
- * Crops uniform "letterbox" margins baked INTO generated art — port of the
- * iOS `UIImage.trimmingFlatBorders(tolerance:)` sampled edge scan. The tile
- * frame is already square; this makes the PIXELS earn it. Caption bands
- * survive (text isn't a flat border). Returns the receiver when nothing
- * meaningful to trim.
- */
-fun Bitmap.trimmingFlatBorders(tolerance: Int = 18): Bitmap {
-    val w = width; val h = height
-    if (w <= 16 || h <= 16) return this
-    val pixels = IntArray(w * h)
-    try { getPixels(pixels, 0, w, 0, 0, w, h) } catch (_: Exception) { return this }
-
-    fun r(p: Int) = (p shr 16) and 0xFF
-    fun g(p: Int) = (p shr 8) and 0xFF
-    fun b(p: Int) = p and 0xFF
-    val corner = pixels[1 * w + 1]
-    fun matches(p: Int): Boolean =
-        kotlin.math.abs(r(p) - r(corner)) <= tolerance &&
-        kotlin.math.abs(g(p) - g(corner)) <= tolerance &&
-        kotlin.math.abs(b(p) - b(corner)) <= tolerance
-
-    val stepX = maxOf(1, w / 48); val stepY = maxOf(1, h / 48)
-    fun rowFlat(y: Int): Boolean {
-        var x = 0
-        while (x < w) { if (!matches(pixels[y * w + x])) return false; x += stepX }
-        return true
-    }
-    fun colFlat(x: Int): Boolean {
-        var y = 0
-        while (y < h) { if (!matches(pixels[y * w + x])) return false; y += stepY }
-        return true
-    }
-
-    var top = 0; var bottom = h - 1; var left = 0; var right = w - 1
-    while (top < bottom && rowFlat(top)) top++
-    while (bottom > top && rowFlat(bottom)) bottom--
-    while (left < right && colFlat(left)) left++
-    while (right > left && colFlat(right)) right--
-
-    val nw = right - left + 1; val nh = bottom - top + 1
-    // Bail on degenerate trims; skip cosmetic ones (< ~2% each way).
-    if (nw <= w / 3 || nh <= h / 3 || (w - nw <= w / 50 && h - nh <= h / 50)) return this
-    return try { Bitmap.createBitmap(this, left, top, nw, nh) } catch (_: Exception) { this }
 }

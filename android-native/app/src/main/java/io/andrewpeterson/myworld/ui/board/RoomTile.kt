@@ -59,7 +59,7 @@ fun RoomTileView(
     val image by produceState<Bitmap?>(initialValue = null, room.imageKey) {
         val key = room.imageKey
         value = if (key.isNullOrEmpty()) null else withContext(Dispatchers.Default) {
-            c.media.bitmap(key, maxDim = 640)?.trimmingFlatBorders()
+            c.media.bitmap(key, maxDim = 640)
         }
     }
 
