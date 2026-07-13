@@ -3578,6 +3578,21 @@
     const el = document.getElementById('org-tree'); if (!el) return;
     el.innerHTML = '<div class="org-grid">' + ORG_SECTIONS.map(sec => {
       const tops = ORG_CATS.filter(c => c.section === sec && c.parentId == null).sort(orgByOrder);
+      // Rescue rail: a column tile filed in NO folder (or under a folder that
+      // was deleted) renders nowhere on the board — it exists but the child
+      // can't see it. Surface those so a parent drags each one back into a
+      // folder instead of concluding it was deleted.
+      const orgCatIds = new Set(ORG_CATS.map(c => c.id));
+      const lost = ORG_ITEMS.filter(i => i.section === sec && (i.categoryId == null || !orgCatIds.has(i.categoryId))).sort(orgByOrder);
+      const lostBlock = !lost.length ? '' :
+        '<div style="border:1.5px dashed #f59e0b;background:#fffbeb;border-radius:10px;padding:6px 8px;margin:8px 0;">' +
+          '<div style="font-size:12px;font-weight:700;color:#b45309;margin-bottom:2px;">⚠️ ' + lost.length + ' lost tile' + (lost.length === 1 ? '' : 's') + ' — not in any folder, so the board can\'t show ' + (lost.length === 1 ? 'it' : 'them') + '. Drag each one into a folder below.</div>' +
+          lost.map(i =>
+            '<div class="org-drag-row" data-type="item" data-id="' + i.id + '" data-cat="">' +
+              '<span class="org-grip">⠿</span>' + orgThumb(i.imageKey) +
+              '<span style="flex:1;font-size:14px;">' + schEsc(i.label) + '</span>' + orgBtns('item', i.id) +
+            '</div>').join('') +
+        '</div>';
       const body = tops.length ? tops.map(cat => {
         const subs = ORG_CATS.filter(c => c.parentId === cat.id).sort(orgByOrder);
         const collapsed = orgCollapsed.has(cat.id);
@@ -3603,7 +3618,7 @@
           '</div>' +
           '</div>';
       }).join('') : '<div style="font-size:12px;color:var(--faint);padding:6px 0;">No categories.</div>';
-      return '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden;"><div style="padding:10px 14px;background:#fff0f6;font-weight:700;color:var(--pink-deep);text-transform:uppercase;font-size:13px;display:flex;justify-content:space-between;align-items:center;">' + sec + '<button class="btn" data-org="add-cat" data-section="' + sec + '">+ Category</button></div><div style="padding:6px 14px;">' + body + '</div></div>';
+      return '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden;"><div style="padding:10px 14px;background:#fff0f6;font-weight:700;color:var(--pink-deep);text-transform:uppercase;font-size:13px;display:flex;justify-content:space-between;align-items:center;">' + sec + '<button class="btn" data-org="add-cat" data-section="' + sec + '">+ Category</button></div><div style="padding:6px 14px;">' + lostBlock + body + '</div></div>';
     }).join('') + '</div>';
     orgSyncCollapseLabel();
   }

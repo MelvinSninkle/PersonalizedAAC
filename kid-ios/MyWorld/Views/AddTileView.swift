@@ -519,8 +519,10 @@ struct AddTileView: View {
 }
 
 /// One folder in the destination rail: the folder's own tile art (async via
-/// MediaCache) over its name, with a pink ring when selected.
-private struct FolderChip: View {
+/// MediaCache) over its name, with a pink ring when selected. Shared with the
+/// edit sheets' PlacementPicker (TileEditSheet.swift) — same look everywhere
+/// a parent picks a folder.
+struct FolderChip: View {
     let category: Category
     let selected: Bool
     let action: () -> Void
