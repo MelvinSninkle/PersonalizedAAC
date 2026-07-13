@@ -592,10 +592,9 @@
   }
   header.sb-drop-hot { outline: 4px solid #66bb6a; outline-offset: -4px; }
   body.sentence-mode #sentence-btn { background: #66bb6a; box-shadow: 0 0 0 3px rgba(102,187,106,.4); }
-  /* Quick-drag lift: tiles own the touch gesture so a finger-drag can reach
-     the bar (pairs well with button-nav). Long-press lift keeps native
-     scrolling — the hold is the claim. */
-  body.sb-on.sb-lift-drag:not(.edit-mode) .items-grid .tile-wrap { touch-action: none; }
+  /* NOTHING may ever disable touch scrolling on the web board — the drag
+     staging experience is native-app only (see sentenceDrag); web sentences
+     use the ✏️ pencil. The CI smoke suite asserts this stays true. */
   .tile-wrap.sb-lifting .tile-square { transform: scale(1.06); transition: transform .15s; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
   /* Hold-to-stage confirmation: the tile pops and glows green for a beat —
      the word just flew to the sentence bar without leaving its spot. */

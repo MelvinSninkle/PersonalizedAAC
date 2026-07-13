@@ -703,6 +703,10 @@
         <span>✏️ Sentence builder <span class="hint" style="display:block;margin:2px 0 0;">Tap the pencil, then tap words to build a sentence the board speaks. (Shows only while the sentence builder is enabled for this child.)</span></span>
         <input type="checkbox" id="tool-sentence">
       </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>✋ Drag words to the sentence bar <span class="hint" style="display:block;margin:2px 0 0;">iPad &amp; Android app: drag any tile up to the top bar to add it — scrolling keeps working. The original, invisible way to build sentences. (Needs the sentence builder enabled.)</span></span>
+        <input type="checkbox" id="tool-sentence-drag">
+      </label>
       <div><button class="btn primary" id="tools-save">Save board tools</button>
         <span id="tools-msg" class="hint"></span></div>
     </div>
@@ -2991,12 +2995,14 @@
       document.getElementById('tool-teach').checked = childSettings.toolTeach !== false;
       document.getElementById('tool-play').checked = childSettings.toolPlay !== false;
       document.getElementById('tool-sentence').checked = childSettings.toolSentence !== false;
+      document.getElementById('tool-sentence-drag').checked = !!childSettings.sentenceDrag;
       document.getElementById('tools-save').addEventListener('click', () => {
         childSettings = { ...childSettings,
           toolListen: toolListen.checked,
           toolTeach: document.getElementById('tool-teach').checked,
           toolPlay: document.getElementById('tool-play').checked,
           toolSentence: document.getElementById('tool-sentence').checked,
+          sentenceDrag: document.getElementById('tool-sentence-drag').checked,
         };
         saveSettingsToServer('Saved ✓ — the board picks it up on its next settings sync', 'tools-msg');
       });

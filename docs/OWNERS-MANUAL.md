@@ -92,6 +92,12 @@ ACCESS_KEYS gate), set from parent dashboard → Board tab (themed accordions)
 - `easyUnlock` — the board lock opens edit mode without the password.
   ENABLING re-verifies the account password behind a strong warning (both
   UIs); disabling is friction-free. See surface-audit E6b before touching.
+- `toolListen` / `toolTeach` / `toolPlay` / `toolSentence` — header tool
+  visibility per child (Board → Board tools; default ON).
+- `sentenceDrag` — drag a tile up to the header bar to stage it (default
+  OFF; **native apps only** — web keeps the pencil, because the web gesture
+  required killing touch scroll). Additive to the pencil and needs the
+  admin-gated `sentenceBuilder`; works during normal scroll-mode use.
 
 ## Money
 

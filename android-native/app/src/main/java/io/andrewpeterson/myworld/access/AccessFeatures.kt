@@ -51,6 +51,9 @@ data class AccessData(
     val sentenceBuilder: Boolean = false,
     val sentenceIdleMin: Int = 1,              // 1–10 minutes
     val sentenceLift: String = "longpress",    // legacy — the pencil replaced lift gestures
+    // Parent toggle: drag a tile up to the header to stage it — additive to
+    // the pencil, works during normal scroll-mode use (native apps only).
+    val sentenceDrag: Boolean = false,
     val listenRepeatNav: Boolean = true,
     // Header tools, parent-configurable for every family (default ON).
     val toolListen: Boolean = true,
@@ -84,6 +87,7 @@ class AccessPrefs(private val api: ApiClient, private val scope: CoroutineScope)
                 sentenceBuilder = bool("sentenceBuilder") ?: false,
                 sentenceIdleMin = (int("sentenceIdleMin") ?: 1).coerceIn(1, 10),
                 sentenceLift = if (str("sentenceLift") == "drag") "drag" else "longpress",
+                sentenceDrag = bool("sentenceDrag") ?: false,
                 listenRepeatNav = bool("listenRepeatNav") ?: true,
                 toolListen = bool("toolListen") ?: true,
                 toolTeach = bool("toolTeach") ?: true,

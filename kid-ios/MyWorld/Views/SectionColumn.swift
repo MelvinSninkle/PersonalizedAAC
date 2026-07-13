@@ -195,7 +195,13 @@ struct SectionColumn: View {
     /// editable and re-locking left pencil badges behind. A fresh identity
     /// per lock state forces every cell to rebuild. scrollTo() must use the
     /// same key.
-    private func cellKey(_ tileId: Int) -> String { "\(tileId)-\(editMode ? "e" : "p")" }
+    private func cellKey(_ tileId: Int) -> String {
+        "\(tileId)-\(editMode ? "e" : "p")-\(dragStaging ? "d" : "n")"
+    }
+
+    /// Drag-to-bar staging enabled (the original sentence gesture, restored
+    /// behind the parent-set `sentenceDrag`; coexists with the ✏️ pencil).
+    private var dragStaging: Bool { access.sentenceDrag && access.sentenceBuilder && !editMode }
 
     /// One grid cell: the tile, the edit-mode drag plumbing, the transient
     /// listen-navigate highlight, and (when the sentence constructor is on)
@@ -224,7 +230,28 @@ struct SectionColumn: View {
             .dropDestination(for: String.self) { items, _ in
                 handleTileDrop(items, onto: tile)
             }
-        base
+        if dragStaging {
+            base.simultaneousGesture(quickLift(tile))
+        } else {
+            base
+        }
+    }
+
+    /// The ORIGINAL sentence gesture: lift on first movement (24pt), the
+    /// ghost follows in the shared "board" space, drop on the header bar to
+    /// stage. Runs as a simultaneousGesture so scrolling keeps working — the
+    /// scroll pan and the lift coexist, which is why it feels invisible.
+    private func quickLift(_ tile: Tile) -> some Gesture {
+        DragGesture(minimumDistance: 24, coordinateSpace: .named("board"))
+            .onChanged { sentence.dragUpdate(tile, at: $0.location) }
+            .onEnded { if sentence.dragEnd(at: $0.location) { stageTile(tile) } }
+    }
+
+    private func stageTile(_ tile: Tile) {
+        sentence.stage(tile, idleMinutes: access.sentenceIdleMin)
+        TilePlayer.shared.logOnly(tile, childId: auth.childSlug,
+                                  categoryName: activeCategoryName,
+                                  subcategoryName: activeSubcategoryName)
     }
 
     private var normalTilesGrid: some View {

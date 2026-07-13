@@ -115,8 +115,26 @@ struct NeedsStrip: View {
                             },
                             editMode: editMode, onEdit: onEditTile)
             .frame(width: tileSize)
-            .id("\(tile.id)-\(editMode ? "e" : "p")")
-        base
+            .id("\(tile.id)-\(editMode ? "e" : "p")-\(dragStaging ? "d" : "n")")
+        if dragStaging {
+            base.simultaneousGesture(quickLift(tile))
+        } else {
+            base
+        }
+    }
+
+    private var dragStaging: Bool { access.sentenceDrag && access.sentenceBuilder && !editMode }
+
+    /// See SectionColumn.quickLift — the original drag-to-bar stage gesture.
+    private func quickLift(_ tile: Tile) -> some Gesture {
+        DragGesture(minimumDistance: 24, coordinateSpace: .named("board"))
+            .onChanged { sentence.dragUpdate(tile, at: $0.location) }
+            .onEnded { if sentence.dragEnd(at: $0.location) { stageTile(tile) } }
+    }
+
+    private func stageTile(_ tile: Tile) {
+        sentence.stage(tile, idleMinutes: access.sentenceIdleMin)
+        TilePlayer.shared.logOnly(tile, childId: auth.childSlug, categoryName: "Needs")
     }
 
     private func stripPaddle(_ icon: String, disabled: Bool, action: @escaping () -> Void) -> some View {

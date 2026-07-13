@@ -38,6 +38,9 @@ final class AccessPrefs {
     var toolTeach = true
     var toolPlay = true
     var toolSentence = true
+    /// Drag-to-bar staging (the ORIGINAL sentence gesture, parent-enabled;
+    /// native apps only — web keeps the pencil).
+    var sentenceDrag = false
 
     var buttonsNav: Bool { navMode == "buttons" }
 
@@ -64,6 +67,7 @@ final class AccessPrefs {
             toolTeach = (s["toolTeach"] as? Bool) ?? true
             toolPlay = (s["toolPlay"] as? Bool) ?? true
             toolSentence = (s["toolSentence"] as? Bool) ?? true
+            sentenceDrag = (s["sentenceDrag"] as? Bool) ?? false
             // Touch + safety controls ride the same settings fetch (root keys too).
             TouchConfig.interrupt = (s["tapInterrupt"] as? Bool) ?? false
             TouchConfig.doubleTapTeach = (s["doubleTapTeach"] as? Bool) ?? false
