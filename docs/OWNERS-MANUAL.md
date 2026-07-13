@@ -74,15 +74,38 @@ endpoints reading new columns carry pre-migration fallback queries.
   import. Non-English art renders with no baked text.
 - **Access experiments** (parent dashboard → Access panel, admin-only):
   `navMode` buttons paging (eye tracker), `sentenceBuilder` (+`sentenceLift`
-  hold/drag, `sentenceIdleMin`), `listenRepeatNav` (say a word twice → board
-  jumps to the tile). Implemented on web + iOS + Android.
+  hold/drag, `sentenceIdleMin`; staging is silent — ▶ speaks, ✕ clears),
+  `listenRepeatNav` (say a word twice → board jumps to the tile).
+  Implemented on web + iOS + Android.
+
+## Parent-set controls (NOT dark-launched — every parent has these)
+
+All synced child settings (root keys, deliberately outside the admin
+ACCESS_KEYS gate), set from parent dashboard → Board tab (themed accordions)
+→ Touch & safety; the kid apps pick them up on launch/refresh:
+
+- `tapInterrupt` — a tap during playback cuts the word off (default OFF so a
+  stimming child hears each word complete).
+- `doubleTapTeach` — same tile twice within 2.5s speaks its teaching facts
+  (English boards only; clues are English prose).
+- `easyClose` — game ✕ closes on a quick tap instead of the 1.2s hold.
+- `easyUnlock` — the board lock opens edit mode without the password.
+  ENABLING re-verifies the account password behind a strong warning (both
+  UIs); disabling is friction-free. See surface-audit E6b before touching.
 
 ## Money
 
 Stripe (web) + Google Play billing (Android; verify-before-consume) +
 `credits` for image generation. Reports: admin/reports.html (purchases vs
-fulfillment, logins, sync health). Stripe is in TEST mode until the LLC
-bank account clears — see runbooks/stripe-go-live.md.
+fulfillment, logins, sync health, spend guard). Stripe is in TEST mode until
+the LLC bank account clears — see runbooks/stripe-go-live.md.
+Subscription credits grant on `invoice.paid` with a `stripe_customer_id`
+fallback (an unattributable invoice logs `stripe invoice.paid UNRESOLVED` in
+Vercel — investigate immediately: someone paid and got nothing). Failed
+renewals email the parent; cancellations stamp `users.sub_canceled_at`.
+**Spend guard**: ≥400 credits/hr or ≥800/day auto-pauses an account's spends
+(≥200/hr is flagged for review); unblock in Reports → Spend guard. A paused
+family keeps everything they have — only new spends wait.
 
 ## The pipelines
 
@@ -92,6 +115,14 @@ bank account clears — see runbooks/stripe-go-live.md.
   "magic gallery"). Stuck builds: Lab tools re-arm dead jobs.
 - **Image generation**: `buildPortraitPrompt`/`renderTaxonomyTile` — single
   prompt source; style guides + child anchor photo; `IMAGE_GEN_DAILY_LIMIT`.
+  Curated defaults can bypass prompts: defaults view 📤 → `default-upload`
+  lab action (writes ONLY the shared default layers; sync overlays every
+  replaceable tile, never family art). Every image swap archives the old key
+  to `item_image_history`; the tile editor's "Previous pictures" strip
+  reverts from it (keys contained to the tile's own history).
+- **Game scoring**: sessions need ≥3 answers to enter weekly accuracy or
+  spike baselines; shorter ones are recorded but annotated "too short to
+  score" (analytics.js / spike.js).
 - **Audio**: recorded clip per tile (child's chosen voice) with shared
   render cache; runtime TTS through `/api/tts` (triple-guarded).
 - **Milestones**: detected inline on `/api/events` (pivot-grammar frames);
@@ -121,13 +152,14 @@ bank account clears — see runbooks/stripe-go-live.md.
 - runbooks/stripe-go-live.md — test → live.
 - runbooks/backup-restore.md — dumps, blob inventory, restores.
 
-## Known open items (as of 2026-07-11)
+## Known open items (as of 2026-07-12)
 
 - `[BUSINESS ADDRESS]` placeholder in privacy.html — needs the LLC address.
 - Domain flip pending myworldtaptotalk.com being attached to Vercel.
 - Stripe live keys pending LLC bank approval.
-- Native access features + language pickers await a human test pass
-  (mechanically verified only).
+- iOS build verified on-device 2026-07-12 (access features + touch controls
+  exercised on the web board); the Android build and the native language
+  pickers still await a human test pass (mechanically verified only).
 - Founder letter in onboard.html Phase 4 is a draft in Andrew's voice —
   edit freely; the support email link is live.
 - Demo audio for /practice must be built once: Lab → `action=demo-audio`

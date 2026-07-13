@@ -141,6 +141,14 @@ export default async function handler(req, res) {
         const { applyRoleGrant } = await import('../_lib/role-grants.js');
         row = await applyRoleGrant(db, row);
       } catch (_) {}
+      // Invite perks (comped tier + starting credits) — same as the web
+      // signup path. Web SIWA carries the signed mw_invite cookie; the
+      // native app has no browser cookie, so it may pass the typed code
+      // in the body as `inviteCode`.
+      try {
+        const { applyInvitePerks } = await import('../_lib/invite-perks.js');
+        await applyInvitePerks(db, Number(row.id), req, b.inviteCode);
+      } catch (_) {}
     }
 
     const exp = Date.now() + SESSION_MAX_AGE * 1000;

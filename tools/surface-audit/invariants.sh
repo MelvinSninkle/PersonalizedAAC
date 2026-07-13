@@ -43,6 +43,24 @@ grep -q "ACCESS_KEYS = \['navMode', 'sentenceBuilder', 'sentenceIdleMin', 'sente
   && pass "E6 access keys admin-gated" \
   || fail "E6 ACCESS_KEYS gate changed in child-settings.js"
 
+# ── E6b: easyUnlock enable stays password-guarded in both UIs ────────────────
+# The touch/safety keys are deliberately parent-writable (NOT in ACCESS_KEYS);
+# the invariant is that ENABLING password-free unlock re-verifies the account
+# password. If either confirm handler or its /api/auth/login call vanishes,
+# the warning flow was probably gutted.
+for f in app.html parent.html; do
+  if grep -q "unlock-yes" "$f" && grep -q "/api/auth/login" "$f"; then
+    pass "E6b easyUnlock password-confirm present in $f"
+  else
+    fail "E6b easyUnlock enable flow missing password verify in $f"
+  fi
+done
+
+# ── C6b: revert-image only restores keys from the tile's own history ─────────
+grep -q "item_image_history" api/items.js \
+  && pass "C6b revert-image checks item_image_history" \
+  || fail "C6b items.js revert-image lost its history-containment check"
+
 # ── E1: board language stays tester-gated ────────────────────────────────────
 grep -q "language_tester" api/child-settings.js && pass "E1 language tester gate present" \
   || fail "E1 language gate missing from child-settings.js"

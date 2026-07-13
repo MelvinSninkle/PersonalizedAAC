@@ -39,6 +39,11 @@ import kotlinx.serialization.json.intOrNull
 object TouchConfig {
     @Volatile var interrupt = false
     @Volatile var doubleTapTeach = false
+    // Safety controls (synced, for older/capable kids):
+    //   easyClose  — game ✕ closes on a quick tap instead of the long-press.
+    //   easyUnlock — the lock opens edit mode without the unlock sheet.
+    @Volatile var easyClose = false
+    @Volatile var easyUnlock = false
 }
 
 data class AccessData(
@@ -76,9 +81,11 @@ class AccessPrefs(private val api: ApiClient, private val scope: CoroutineScope)
                 sentenceLift = if (str("sentenceLift") == "drag") "drag" else "longpress",
                 listenRepeatNav = bool("listenRepeatNav") ?: true,
             )
-            // Touch controls ride the same settings fetch (root keys too).
+            // Touch + safety controls ride the same settings fetch (root keys too).
             TouchConfig.interrupt = bool("tapInterrupt") ?: false
             TouchConfig.doubleTapTeach = bool("doubleTapTeach") ?: false
+            TouchConfig.easyClose = bool("easyClose") ?: false
+            TouchConfig.easyUnlock = bool("easyUnlock") ?: false
         }
     }
 }

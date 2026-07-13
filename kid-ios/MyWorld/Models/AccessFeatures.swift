@@ -18,6 +18,11 @@ import Observation
 enum TouchConfig {
     @MainActor static var interrupt = false
     @MainActor static var doubleTapTeach = false
+    // Safety controls (synced, for older/capable kids):
+    //   easyClose  — game ✕ closes on a quick tap instead of the 0.7s hold.
+    //   easyUnlock — the lock opens edit mode without the unlock sheet.
+    @MainActor static var easyClose = false
+    @MainActor static var easyUnlock = false
 }
 
 /// The five access keys, defaulted to the shipped behavior.
@@ -50,9 +55,11 @@ final class AccessPrefs {
             sentenceIdleMin = (1...10).contains(m) ? m : 1
             sentenceLift = (s["sentenceLift"] as? String) == "drag" ? "drag" : "longpress"
             listenRepeatNav = (s["listenRepeatNav"] as? Bool) ?? true
-            // Touch controls ride the same settings fetch (root keys too).
+            // Touch + safety controls ride the same settings fetch (root keys too).
             TouchConfig.interrupt = (s["tapInterrupt"] as? Bool) ?? false
             TouchConfig.doubleTapTeach = (s["doubleTapTeach"] as? Bool) ?? false
+            TouchConfig.easyClose = (s["easyClose"] as? Bool) ?? false
+            TouchConfig.easyUnlock = (s["easyUnlock"] as? Bool) ?? false
         }
     }
 }
@@ -194,6 +201,18 @@ struct SentenceStripView: View {
                 }
                 .padding(.leading, 10)
             }
+            // Quick clear — a mis-tap costs one rebuild; a stuck sentence
+            // would cost the whole feature. Deliberately a short tap.
+            Button {
+                sentence.clear()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 46, height: 46)
+                    .background(Circle().fill(Color.white.opacity(0.22)))
+            }
+            .buttonStyle(.plain)
             Button {
                 sentence.playAll(childId: auth.childSlug, idleMinutes: access.sentenceIdleMin)
             } label: {

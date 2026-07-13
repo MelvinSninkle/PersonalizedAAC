@@ -39,7 +39,14 @@ fun LongPressExitButton(
             .size(50.dp)
             .background(background, CircleShape)
             .combinedClickable(
-                onClick = { /* deliberate no-op — tap must never exit */ },
+                onClick = {
+                    // Quick-tap close is a synced safety setting for older
+                    // kids; default keeps the tap a deliberate no-op.
+                    if (io.andrewpeterson.myworld.access.TouchConfig.easyClose) {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onExit()
+                    }
+                },
                 onLongClick = {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onExit()

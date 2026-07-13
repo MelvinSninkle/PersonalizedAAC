@@ -578,6 +578,11 @@
     background: #2e7d32; color: #fff; font-size: 26px; cursor: pointer;
   }
   #sentence-play:active { background: #1b5e20; }
+  #sentence-clear {
+    flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,.22); color: #fff; font-size: 20px; cursor: pointer;
+  }
+  #sentence-clear:active { background: rgba(0,0,0,.18); }
   .sb-drag-ghost {
     position: fixed; z-index: 4000; width: 92px; height: 92px; border-radius: 16px;
     background: #fce4ec center/cover no-repeat; overflow: hidden; pointer-events: none;
@@ -1152,6 +1157,7 @@
     </div>
     <div id="sentence-bar">
       <div id="sentence-chips"></div>
+      <button id="sentence-clear" aria-label="Clear the sentence" title="Clear the sentence">✕</button>
       <button id="sentence-play" aria-label="Play the whole sentence" title="Play the whole sentence">▶</button>
     </div>
   </div>
@@ -1474,6 +1480,29 @@
       <option value="parent">Parent dashboard</option>
       <option value="therapist" id="opt-therapist-view">Therapist view</option>
     </select>
+    <label style="margin-top:18px;">Buttons &amp; safety</label>
+    <div style="font-size:12px;color:#666;margin:4px 0 2px;">Unlike the settings above, these follow the child — they apply on every device this board is used on.</div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-easy-close">
+      <label for="disp-easy-close">Close buttons work with a quick tap
+        <span style="display:block;font-size:12px;color:#666;">Normally the game ✕ needs a 1-second hold so a child can't quit by accident.</span></label>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-easy-unlock">
+      <label for="disp-easy-unlock">Unlock editing without a password
+        <span style="display:block;font-size:12px;color:#666;">For older, more capable kids who edit their own board.</span></label>
+    </div>
+    <div id="disp-unlock-confirm" style="display:none;border:2px solid #f59e0b;background:#fffbeb;border-radius:10px;padding:10px 12px;margin-top:8px;">
+      <div style="font-size:13px;color:#92400e;font-weight:700;">⚠️ Are you sure?</div>
+      <div style="font-size:12px;color:#92400e;margin:4px 0 8px;">Anyone holding this device — including your child — will be able to open
+        edit mode, change or delete tiles, and reach the parent dashboard. Enter your password once to confirm you're removing it on purpose.</div>
+      <input type="password" id="disp-unlock-pass" autocomplete="current-password" placeholder="Your password" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;box-sizing:border-box;">
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="primary" id="disp-unlock-yes" style="flex:1;">Remove the password</button>
+        <button class="secondary" id="disp-unlock-no">Cancel</button>
+      </div>
+      <div id="disp-unlock-msg" style="font-size:12px;color:#c0392b;margin-top:6px;"></div>
+    </div>
     <div id="disp-account" style="margin-top:18px;border-top:1px solid #eee;padding-top:14px;display:none;">
       <label>Account &amp; password</label>
       <div style="font-size:12px;color:#666;margin:4px 0 8px;">Signed in as <strong id="disp-acct-email">…</strong></div>
@@ -2655,6 +2684,14 @@
   //   doubleTapTeach — the SAME tile tapped again within the window plays its
   //                    teaching facts (descriptive clues, up to three).
   const TOUCH = { interrupt: false, doubleTapTeach: false };
+  // Safety controls — SYNCED child settings (they're facts about the child,
+  // not the device): a capable kid gets quick-tap ✕ and password-free unlock
+  // on every screen he uses. Parent-writable; set from the parent dashboard
+  // (Board → Touch & safety) or this board's Display modal.
+  //   easyClose  — game ✕ closes on a quick tap instead of the 1.2s hold.
+  //   easyUnlock — the lock opens edit mode without the account password.
+  //                Enabling requires the password ONCE plus a strong warning.
+  const SAFETY = { easyClose: false, easyUnlock: false };
   const DOUBLE_TAP_WINDOW_MS = 2500;
   let _lastTapItemId = null, _lastTapItemAt = 0;
 
@@ -2816,6 +2853,9 @@
       setTimeout(() => { if (!editMode) ms.textContent = ''; }, 2500);
       return;
     }
+    // Password-free unlock (synced safety setting): the account owner
+    // already proved ownership with their password when they enabled it.
+    if (SAFETY.easyUnlock && sessionUser && canEdit()) { setEditMode(true); return; }
     // Editor role → re-enter the account password (still guards against a kid
     // sliding into edit mode). No session at all → fall back to the admin token.
     loginMode = sessionUser ? 'password' : 'token';
@@ -4250,6 +4290,11 @@
     }
     const hb = document.getElementById('disp-color-header-bg');     if (hb) hb.value = display.headerColors.bg;
     const ht = document.getElementById('disp-color-header-text');   if (ht) ht.value = display.headerColors.text;
+    document.getElementById('disp-easy-close').checked = SAFETY.easyClose;
+    document.getElementById('disp-easy-unlock').checked = SAFETY.easyUnlock;
+    document.getElementById('disp-unlock-confirm').style.display = 'none';
+    document.getElementById('disp-unlock-pass').value = '';
+    document.getElementById('disp-unlock-msg').textContent = '';
     // Account section — only for a signed-in account (not the kid's open board).
     const acct = document.getElementById('disp-account');
     if (acct) {
@@ -4314,6 +4359,80 @@
     });
   })();
   function commitDisplay() { saveDisplay(); applyDisplay(); }
+  // Buttons & safety: quick-tap close is a plain toggle; password-free unlock
+  // demands the account password ONCE (with a big warning) before it sticks —
+  // proof it's the parent waiving the gate, not whoever found the modal open.
+  // Both are SYNCED child settings: read-merge-write so we never clobber the
+  // rest of the blob (voice, schedules, touch controls…).
+  async function saveSafety(patch) {
+    const url = '/api/child-settings?childId=' + encodeURIComponent(CHILD_ID);
+    const r = await apiFetch(url);
+    if (!r.ok) throw new Error('load ' + r.status);
+    const cur = (await r.json()).settings || {};
+    const next = { ...cur, ...patch };
+    const w = await apiFetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: next }),
+    });
+    if (!w.ok) throw new Error('save ' + w.status);
+    SAFETY.easyClose = !!next.easyClose;
+    SAFETY.easyUnlock = !!next.easyUnlock;
+  }
+  (function wireSafetyToggles() {
+    const closeCb = document.getElementById('disp-easy-close');
+    closeCb.addEventListener('change', async () => {
+      const want = closeCb.checked;
+      try { await saveSafety({ easyClose: want }); }
+      catch (_) { closeCb.checked = SAFETY.easyClose; }   // offline / no permission — revert
+    });
+    const unlockCb = document.getElementById('disp-easy-unlock');
+    const box = document.getElementById('disp-unlock-confirm');
+    const msg = document.getElementById('disp-unlock-msg');
+    unlockCb.addEventListener('change', async () => {
+      if (!unlockCb.checked) {                       // restoring the password never needs friction
+        try { await saveSafety({ easyUnlock: false }); }
+        catch (_) { unlockCb.checked = SAFETY.easyUnlock; }
+        box.style.display = 'none';
+        return;
+      }
+      unlockCb.checked = false;                      // not real until the password confirms it
+      if (!sessionUser || !sessionUser.email) {
+        box.style.display = '';
+        msg.textContent = 'Sign in on this device first — this needs your account password.';
+        return;
+      }
+      msg.textContent = '';
+      document.getElementById('disp-unlock-pass').value = '';
+      box.style.display = '';
+    });
+    document.getElementById('disp-unlock-no').addEventListener('click', () => {
+      box.style.display = 'none';
+      unlockCb.checked = display.easyUnlock;
+    });
+    document.getElementById('disp-unlock-yes').addEventListener('click', async () => {
+      const p = document.getElementById('disp-unlock-pass').value;
+      if (!sessionUser || !sessionUser.email) { msg.textContent = 'Sign in on this device first.'; return; }
+      if (!p) { msg.textContent = 'Password required.'; return; }
+      const btn = document.getElementById('disp-unlock-yes');
+      btn.disabled = true; msg.textContent = '';
+      try {
+        const r = await fetch('/api/auth/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: sessionUser.email, password: p }),
+        });
+        if (r.status === 401) { msg.textContent = 'Incorrect password.'; return; }
+        if (!r.ok) { msg.textContent = 'Server error: ' + r.status; return; }
+        await saveSafety({ easyUnlock: true });
+        unlockCb.checked = true;
+        box.style.display = 'none';
+      } catch (err) {
+        msg.textContent = 'Could not verify: ' + (err.message || err);
+      } finally {
+        btn.disabled = false;
+        document.getElementById('disp-unlock-pass').value = '';
+      }
+    });
+  })();
   document.getElementById('display-btn').addEventListener('click', openDisplayModal);
   // Quick switch to the parent / therapist dashboards for the current child.
   // The signed-in session carries over; role-based access is enforced server-side.
@@ -4807,6 +4926,8 @@
       // Touch controls (ordinary parent settings, no gate).
       TOUCH.interrupt = !!s.tapInterrupt;
       TOUCH.doubleTapTeach = !!s.doubleTapTeach;
+      SAFETY.easyClose = !!s.easyClose;
+      SAFETY.easyUnlock = !!s.easyUnlock;
       const kd = s.kidDisplay;
       if (kd && /^#[0-9a-fA-F]{6}$/.test(String(kd.colorHeaderBg || ''))) {
         document.documentElement.style.setProperty('--hdr-bg', kd.colorHeaderBg);
@@ -6168,7 +6289,8 @@
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     exitPid = e.pointerId;
     try { exitBtn.setPointerCapture(exitPid); } catch (_) {}
-    exitTimer = setTimeout(stopGame, 1200);
+    // Quick-tap close (synced safety setting) skips the child-proofing hold.
+    exitTimer = setTimeout(stopGame, SAFETY.easyClose ? 0 : 1200);
   }
   function cancelExit() {
     if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; }
@@ -6312,9 +6434,10 @@
 
   // ---- Sentence constructor ---------------------------------------------------
   // Drag a tile up to the header to stage it (the tile itself stays put on the
-  // board). Staging speaks + logs like a normal tap, so milestones see the
-  // combination. Chips flex-shrink as the bar fills, ▶ plays the whole
-  // sentence, and an idle timer (parent-set, 1–10 min) clears the strip.
+  // board). Staging logs like a normal tap (milestones see the combination)
+  // but stays SILENT — the child is composing, not speaking; ▶ says the whole
+  // sentence. ✕ clears instantly; the idle timer (parent-set, 1–10 min) is
+  // the fallback. Chips flex-shrink as the bar fills.
   const SB = { staged: [], timer: null, drag: null };
   function sbClear() {
     if (SB.timer) { clearTimeout(SB.timer); SB.timer = null; }
@@ -6346,7 +6469,7 @@
       if (!SB.staged.length) sbClear(); else sbResetIdle();
     });
     wrap.appendChild(chip);
-    tapSpeak(item, null, null);
+    enqueueEvent(item, null, null);   // logged, not spoken — ▶ does the talking
     sbResetIdle();
   }
   async function sbPlayAll() {
@@ -6364,6 +6487,8 @@
   (function wireSentenceDrag() {
     const playBtn = document.getElementById('sentence-play');
     if (playBtn) playBtn.addEventListener('click', sbPlayAll);
+    const clearBtn = document.getElementById('sentence-clear');
+    if (clearBtn) clearBtn.addEventListener('click', sbClear);   // deliberate short tap — a mis-tap costs one rebuild, a stuck sentence costs the feature
     const LIFT = 22;        // quick-drag: > TAP_TOLERANCE(18) so a lift can never double-fire as a tap
     const HOLD_MS = 450;    // long-press: hold this long (moving < WIGGLE) to lift
     const WIGGLE = 10;      // movement during the hold that still counts as holding still

@@ -18,6 +18,7 @@ import { hashPassword } from '../_lib/password.js';
 import { signSession, serializeCookie, verifySession, SESSION_MAX_AGE } from '../../lib/session.js';
 import { sendEmail, emailConfigured, escapeHtml } from '../_lib/email.js';
 import { randomUUID } from 'node:crypto';
+import { applyInvitePerks } from '../_lib/invite-perks.js';
 
 // 'school_team' = teacher / aide / school SLP. Peer of therapist for content
 // ownership and canEditContent; presented separately in the parent's roster.
@@ -157,44 +158,7 @@ export default async function handler(req, res) {
       // tier + starting credits — so the family never stalls at their first
       // image generation. Creation-time only (existing logins get nothing);
       // best-effort — a perk failure never blocks the signup itself.
-      try {
-        const sec = process.env.SESSION_SECRET;
-        const cookies = Object.fromEntries(String(req.headers.cookie || '')
-          .split(/;\s*/).filter(Boolean)
-          .map((p) => { const i = p.indexOf('='); return i < 0 ? [p, ''] : [p.slice(0, i), p.slice(i + 1)]; }));
-        const inv = (sec && cookies.mw_invite) ? await verifySession(cookies.mw_invite, sec) : null;
-        const invCode = inv && inv.inv && typeof inv.code === 'string' ? inv.code.toLowerCase() : '';
-        if (invCode) {
-          // Attribution first — every signup records which code let it in.
-          try {
-            await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_code TEXT`;
-            await db`UPDATE users SET invite_code = ${invCode} WHERE id = ${user.id}`;
-          } catch (_) {}
-          const perkRows = await db`
-            SELECT grant_credits, grant_tier, grant_tier_days
-            FROM invite_codes WHERE lower(code) = ${invCode} AND active = TRUE LIMIT 1`;
-          const perk = perkRows[0];
-          if (perk) {
-            if (Number(perk.grant_credits) > 0) {
-              const { ensureCredits, grantCredits } = await import('../_lib/credits.js');
-              await ensureCredits(db);
-              await grantCredits(db, { userId: Number(user.id),
-                credits: Number(perk.grant_credits), reason: 'invite:' + invCode });
-            }
-            if (perk.grant_tier) {
-              const days = Number(perk.grant_tier_days) > 0 ? Number(perk.grant_tier_days) : null;
-              const expiresAt = days ? new Date(Date.now() + days * 86400000).toISOString() : null;
-              try {
-                await db`UPDATE users SET sub_override = ${perk.grant_tier},
-                         sub_override_expires = ${expiresAt} WHERE id = ${user.id}`;
-              } catch (_) {
-                // Pre-expiry-column deploys: comp forever rather than not at all.
-                await db`UPDATE users SET sub_override = ${perk.grant_tier} WHERE id = ${user.id}`;
-              }
-            }
-          }
-        }
-      } catch (_) { /* perks are additive — never block the signup */ }
+      await applyInvitePerks(db, Number(user.id), req);
 
       // Drop a session cookie so they walk straight into /onboard signed in.
       const secret = process.env.SESSION_SECRET;

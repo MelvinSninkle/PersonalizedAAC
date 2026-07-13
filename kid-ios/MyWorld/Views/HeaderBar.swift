@@ -31,6 +31,44 @@ struct HeaderBar: View {
     private var hex: String { prefs.colorHeaderText }
 
     var body: some View {
+        VStack(spacing: 0) {
+            mainRow
+            // Edit mode: the parent toolbar gets its own row under the title
+            // row — the pills were crowding the title (and the iPad camera
+            // strip) when they all shared one line. The pink background grows
+            // with the header, so both rows read as one bar.
+            if editMode && !listening && !sentence.active {
+                HStack(spacing: 8) {
+                    Spacer()
+                    editToolbar
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 7)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: listening)
+        .animation(.easeInOut(duration: 0.2), value: sentence.active)
+        .animation(.easeInOut(duration: 0.2), value: editMode)
+        .background(Color(hex: prefs.colorHeaderBg))
+        // Drop-target glow while a lifted tile hovers over the bar.
+        .overlay(Rectangle().stroke(Color(hex: "#66bb6a"),
+                                    lineWidth: sentence.drag?.overHeader == true ? 4 : 0))
+        .onTapGesture(count: 3) {
+            // Hidden gesture: triple-tap the bar to open settings (sign out,
+            // clear cache). Long-press the lock for edit mode.
+            showSettings = true
+        }
+        .sheet(isPresented: $showUnlock) {
+            UnlockSheet { editMode = true }
+        }
+        // Full-screen (not a form sheet) so the board + its header don't bleed
+        // through behind the add UI on iPad.
+        .fullScreenCover(isPresented: $showAddTile) {
+            AddTileView { showAddTile = false }
+        }
+    }
+
+    private var mainRow: some View {
         ZStack {
             // Centered content: the branded title, or — while listening — the
             // live one-tile-high strip that takes over the branding spot.
@@ -68,25 +106,6 @@ struct HeaderBar: View {
             }
         }
         .frame(height: (listening || sentence.active) ? 104 : 48)
-        .animation(.easeInOut(duration: 0.2), value: listening)
-        .animation(.easeInOut(duration: 0.2), value: sentence.active)
-        .background(Color(hex: prefs.colorHeaderBg))
-        // Drop-target glow while a lifted tile hovers over the bar.
-        .overlay(Rectangle().stroke(Color(hex: "#66bb6a"),
-                                    lineWidth: sentence.drag?.overHeader == true ? 4 : 0))
-        .onTapGesture(count: 3) {
-            // Hidden gesture: triple-tap the bar to open settings (sign out,
-            // clear cache). Long-press the lock for edit mode.
-            showSettings = true
-        }
-        .sheet(isPresented: $showUnlock) {
-            UnlockSheet { editMode = true }
-        }
-        // Full-screen (not a form sheet) so the board + its header don't bleed
-        // through behind the add UI on iPad.
-        .fullScreenCover(isPresented: $showAddTile) {
-            AddTileView { showAddTile = false }
-        }
     }
 
     // MARK: -- Left: the lock icon
@@ -110,7 +129,10 @@ struct HeaderBar: View {
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.7)
                 .onEnded { _ in
-                    if !editMode { showUnlock = true }
+                    guard !editMode else { return }
+                    // Password-free unlock (synced safety setting): the parent
+                    // proved ownership with their password when enabling it.
+                    if TouchConfig.easyUnlock { editMode = true } else { showUnlock = true }
                 }
         )
     }
@@ -148,31 +170,6 @@ struct HeaderBar: View {
     @ViewBuilder
     private var trailingControls: some View {
         HStack(spacing: 8) {
-            if editMode {
-                // Adding tiles now happens from the dashed "+ Add tile" cells in
-                // the board grid (discoverable, pre-set to the section you're
-                // looking at). The header only surfaces a live render-status pill
-                // while photos are still processing — tap it to open the tray and
-                // watch progress / fix any that stumbled. Tiles finish + land on
-                // the board even if this is dismissed.
-                let rendering = addQueue.jobs.filter { $0.phase == .working }.count
-                if rendering > 0 {
-                    pillButton("⏳ \(rendering) rendering") { showAddTile = true }
-                }
-                pillButton("⚙ Display")  { showDisplay = true }
-                // Switch THIS device to the native parent app. Lives in edit
-                // mode (reached by long-pressing the lock) so it's discoverable
-                // for a parent but unreachable for the child. The role persists,
-                // so the device stays in parent mode until switched back.
-                pillButton("🧑 Parent app") {
-                    editMode = false
-                    mode.role = .parent
-                }
-                if let slug = auth.user?.slug {
-                    pillLink(label: "🩺 Therapist",
-                             url: URL(string: "https://aac.andrewpeterson.io/therapist/\(slug)")!)
-                }
-            }
             // Hidden while the listening strip owns the header (mirrors the
             // web, which hides the play button in listening mode) — the wide
             // strip needs the room.
@@ -180,6 +177,35 @@ struct HeaderBar: View {
                 teachMeButton
                 playWithMeButton
             }
+        }
+    }
+
+    // The parent tools shown while unlocked — rendered on the header's second
+    // row (see body) so they never fight the title for space.
+    @ViewBuilder
+    private var editToolbar: some View {
+        // Adding tiles now happens from the dashed "+ Add tile" cells in
+        // the board grid (discoverable, pre-set to the section you're
+        // looking at). The header only surfaces a live render-status pill
+        // while photos are still processing — tap it to open the tray and
+        // watch progress / fix any that stumbled. Tiles finish + land on
+        // the board even if this is dismissed.
+        let rendering = addQueue.jobs.filter { $0.phase == .working }.count
+        if rendering > 0 {
+            pillButton("⏳ \(rendering) rendering") { showAddTile = true }
+        }
+        pillButton("⚙ Display")  { showDisplay = true }
+        // Switch THIS device to the native parent app. Lives in edit
+        // mode (reached by long-pressing the lock) so it's discoverable
+        // for a parent but unreachable for the child. The role persists,
+        // so the device stays in parent mode until switched back.
+        pillButton("🧑 Parent app") {
+            editMode = false
+            mode.role = .parent
+        }
+        if let slug = auth.user?.slug {
+            pillLink(label: "🩺 Therapist",
+                     url: URL(string: "https://aac.andrewpeterson.io/therapist/\(slug)")!)
         }
     }
 

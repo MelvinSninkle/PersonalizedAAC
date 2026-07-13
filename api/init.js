@@ -1006,6 +1006,13 @@ Size: {size}.',
     await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_user_id TEXT UNIQUE`;
     await db`CREATE INDEX IF NOT EXISTS users_apple_idx ON users(apple_user_id) WHERE apple_user_id IS NOT NULL`;
 
+    // Credit velocity guard (see spendCredits in _lib/credits.js): tripping
+    // 400/hr or 800/day pauses all spends until an admin clears the flag in
+    // Reports → Spend guard. sub_canceled_at records Stripe cancellations.
+    await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS spend_blocked_at TIMESTAMPTZ`;
+    await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS spend_block_reason TEXT`;
+    await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_canceled_at TIMESTAMPTZ`;
+
     // Onboarding progress — durable per-account, so a parent who starts on
     // the web and finishes on the phone (or vice versa) picks up exactly
     // where they left off. step values are the ordered flow keys:

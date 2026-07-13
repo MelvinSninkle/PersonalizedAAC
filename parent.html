@@ -232,6 +232,17 @@
   .rb-step { display:flex; align-items:center; justify-content:space-between; gap:8px; background:#fff7fb; border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:6px; font-size:14px; }
   .rb-step button { border:none; background:transparent; color:var(--faint); font-size:15px; cursor:pointer; padding:2px 6px; }
   .hint { color:var(--muted); font-size:12.5px; line-height:1.45; }
+  /* Board-tab accordions: themed groups, collapsed by default so the tab
+     reads as a table of contents instead of a wall of panels. */
+  details.acc { margin-top:16px; border:1px solid var(--line); border-radius:16px; background:#fff; overflow:hidden; }
+  details.acc > summary { cursor:pointer; list-style:none; padding:16px 18px; font-family:'Fredoka', system-ui; font-weight:600; font-size:16px; color:var(--ink); user-select:none; }
+  details.acc > summary::-webkit-details-marker { display:none; }
+  details.acc > summary::after { content:'▸'; float:right; color:var(--faint); transition:transform .15s ease; }
+  details.acc[open] > summary::after { transform:rotate(90deg); }
+  details.acc > summary:hover { background:#fff7fb; }
+  details.acc > *:not(summary) { margin-left:14px; margin-right:14px; }
+  details.acc > .section-label:first-of-type { margin-top:4px; }
+  details.acc > .panel:last-child { margin-bottom:14px; }
 </style>
 </head>
 <body>
@@ -278,6 +289,7 @@
       <div style="font-size:12px;color:#6b7280;margin-top:2px;">Words show up on the board as each one finishes — you can close this page, it keeps going.</div>
       <div style="height:8px;background:#fce4ec;border-radius:999px;overflow:hidden;margin-top:8px;"><div id="build-bar" style="height:100%;width:0;background:var(--pink);transition:width .5s;"></div></div>
     </div>
+    <button class="btn" id="build-fix" style="display:none;">Fix missing pieces</button>
   </div>
 
   <!-- BULK-IMPORT REVIEW QUEUE — tiles imported in bulk (iOS app or web) land
@@ -516,6 +528,7 @@
 
   </div>
   <div class="tab-pane" id="tab-board">
+  <details class="acc"><summary>📚 Words &amp; look</summary>
   <!-- AGE BAND -->
   <div class="section-label">What's on the board</div>
   <div class="panel" id="age-panel">
@@ -576,6 +589,8 @@
     </div>
   </div>
 
+  </details>
+  <details class="acc"><summary>🔊 Voice &amp; language</summary>
   <!-- BOARD VOICE (change = coming soon) -->
   <div class="section-label">Voice</div>
   <div class="panel" id="voice-panel">
@@ -612,6 +627,8 @@
     </div>
   </div>
 
+  </details>
+  <details class="acc"><summary>✋ Touch &amp; safety</summary>
   <div class="section-label">Touch</div>
   <div class="panel" id="touch-panel">
     <h2>Touch controls</h2>
@@ -633,6 +650,38 @@
     </div>
   </div>
 
+  <div class="section-label">Safety</div>
+  <div class="panel" id="safety-panel">
+    <h2>Safety controls</h2>
+    <p class="hint">For older, more capable kids. These follow <span class="cn">your child</span> — they apply on every device this board is used on.</p>
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:520px;">
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>Games close with a quick tap
+          <span class="hint" style="display:block;margin:2px 0 0;">Normally the game ✕ needs a 1-second hold so a child can't quit by accident.</span></span>
+        <input type="checkbox" id="safety-easyclose">
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>Unlock editing without a password
+          <span class="hint" style="display:block;margin:2px 0 0;">The board's lock opens edit mode directly — no password prompt.</span></span>
+        <input type="checkbox" id="safety-easyunlock">
+      </label>
+      <div id="safety-unlock-confirm" style="display:none;border:2px solid #f59e0b;background:#fffbeb;border-radius:10px;padding:10px 12px;">
+        <div style="font-size:13px;color:#92400e;font-weight:700;">⚠️ Are you sure?</div>
+        <div style="font-size:12px;color:#92400e;margin:4px 0 8px;">Anyone holding the tablet — including <span class="cn">your child</span> — will be able to open
+          edit mode, change or delete tiles, and reach this dashboard. Enter your password once to confirm you're removing it on purpose.</div>
+        <input type="password" id="safety-unlock-pass" autocomplete="current-password" placeholder="Your password" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit;box-sizing:border-box;">
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn primary" id="safety-unlock-yes" style="flex:1;">Remove the password</button>
+          <button class="btn ghost" id="safety-unlock-no">Cancel</button>
+        </div>
+        <div id="safety-unlock-msg" style="font-size:12px;color:#c0392b;margin-top:6px;"></div>
+      </div>
+      <span id="safety-msg" class="hint"></span>
+    </div>
+  </div>
+
+  </details>
+  <details class="acc admin-access-only" style="display:none;"><summary>🧪 Access experiments (admin)</summary>
   <div class="section-label admin-access-only" style="display:none;">Access (admin testing)</div>
   <div class="panel admin-access-only" id="access-panel" style="display:none;">
     <h2>Access experiments</h2>
@@ -668,6 +717,8 @@
   </div>
 
   <!-- ALBUM -->
+  </details>
+  <details class="acc"><summary>🖼 Picture album</summary>
   <div class="section-label">Picture album</div>
   <div class="panel" id="album-panel">
     <h2>Pictures your board has held <span id="album-count" style="font-weight:400;color:#6b7280;font-size:14px;"></span></h2>
@@ -682,6 +733,8 @@
   </div>
 
   <!-- ORGANIZE -->
+  </details>
+  <details class="acc"><summary>🗂 Organize &amp; people</summary>
   <div class="section-label">Organize the board</div>
   <div class="panel">
     <h2>Categories &amp; tiles</h2>
@@ -738,6 +791,7 @@
     </div>
   </div>
 
+  </details>
   </div>
   <div class="tab-pane" id="tab-routines">
   <!-- DAILY SCHEDULE -->
@@ -1188,6 +1242,19 @@
         if (r.ok) s = await r.json();
       } catch (_) {}
       if (!s || !s.active) {
+        // Dead jobs must not vanish behind a hidden banner — surface them with
+        // a one-tap parent-facing rescue (seed-core op=refresh re-queues
+        // exactly the missing pieces; spend-free, server-gated).
+        const dead = s ? (((s.render && s.render.dead) || 0) + ((s.voice && s.voice.dead) || 0)
+                        + ((s.place && s.place.dead) || 0) + ((s.chip && s.chip.dead) || 0)) : 0;
+        if (dead > 0) {
+          title.textContent = dead + (dead === 1 ? ' piece' : ' pieces') + " of the board didn't finish — tap Fix and we'll redo them (no charge).";
+          if (bar) bar.style.width = '100%';
+          document.getElementById('build-fix').style.display = '';
+          banner.style.display = 'flex';
+          if (timer) { clearInterval(timer); timer = null; }
+          return;
+        }
         banner.style.display = 'none';
         if (timer) { clearInterval(timer); timer = null; }
         return;
@@ -1200,6 +1267,24 @@
       if (bar) bar.style.width = (total ? Math.round(done / total * 100) : 0) + '%';
       banner.style.display = 'flex';
     };
+    const fixBtn = document.getElementById('build-fix');
+    if (fixBtn) fixBtn.addEventListener('click', async () => {
+      fixBtn.disabled = true;
+      title.textContent = 'Restarting the missing pieces…';
+      try {
+        const r = await fetch('/api/onboarding/seed-core?childId=' + encodeURIComponent(slug), {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'refresh', childId: slug }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        fixBtn.style.display = 'none'; fixBtn.disabled = false;
+        if (!timer) timer = setInterval(tick, 12000);
+        await tick();
+      } catch (_) {
+        title.textContent = 'Could not restart — try again in a minute.';
+        fixBtn.disabled = false;
+      }
+    });
     await tick();
     if (banner.style.display !== 'none' && !timer) timer = setInterval(tick, 12000);
   })();
@@ -2819,6 +2904,63 @@
           doubleTapTeach: document.getElementById('touch-doubletap').checked,
         };
         saveSettingsToServer('Saved ✓ — the board picks it up on its next settings sync', 'touch-msg');
+      });
+    }
+
+    // ---- Safety controls (synced per child; easyUnlock demands the account
+    //      password ONCE with a big warning — proof it's the account owner
+    //      waiving the gate, not whoever found the dashboard open) ----
+    const seClose = document.getElementById('safety-easyclose');
+    if (seClose) {
+      const seUnlock = document.getElementById('safety-easyunlock');
+      const seBox = document.getElementById('safety-unlock-confirm');
+      const seMsg = document.getElementById('safety-unlock-msg');
+      seClose.checked = !!childSettings.easyClose;
+      seUnlock.checked = !!childSettings.easyUnlock;
+      seClose.addEventListener('change', () => {
+        childSettings = { ...childSettings, easyClose: seClose.checked };
+        saveSettingsToServer('Saved ✓ — applies on the next settings sync', 'safety-msg');
+      });
+      seUnlock.addEventListener('change', () => {
+        if (!seUnlock.checked) {                 // restoring the password never needs friction
+          childSettings = { ...childSettings, easyUnlock: false };
+          saveSettingsToServer('Password protection restored ✓', 'safety-msg');
+          seBox.style.display = 'none';
+          return;
+        }
+        seUnlock.checked = false;                // not real until the password confirms it
+        seMsg.textContent = '';
+        document.getElementById('safety-unlock-pass').value = '';
+        seBox.style.display = '';
+      });
+      document.getElementById('safety-unlock-no').addEventListener('click', () => {
+        seBox.style.display = 'none';
+        seUnlock.checked = !!childSettings.easyUnlock;
+      });
+      document.getElementById('safety-unlock-yes').addEventListener('click', async () => {
+        const p = document.getElementById('safety-unlock-pass').value;
+        if (!p) { seMsg.textContent = 'Password required.'; return; }
+        const btn = document.getElementById('safety-unlock-yes');
+        btn.disabled = true; seMsg.textContent = '';
+        try {
+          let email = '';
+          try {
+            const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null);
+            email = (me && me.user && me.user.email) || '';
+          } catch (_) {}
+          if (!email) { seMsg.textContent = 'Could not confirm your account — sign in again and retry.'; return; }
+          const r = await fetch('/api/auth/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password: p }),
+          });
+          if (r.status === 401) { seMsg.textContent = 'Incorrect password.'; return; }
+          if (!r.ok) { seMsg.textContent = 'Server error: ' + r.status; return; }
+          childSettings = { ...childSettings, easyUnlock: true };
+          await saveSettingsToServer('Password removed for this board ✓', 'safety-msg');
+          seUnlock.checked = true;
+          seBox.style.display = 'none';
+        } catch (err) { seMsg.textContent = 'Could not verify: ' + (err.message || err); }
+        finally { btn.disabled = false; document.getElementById('safety-unlock-pass').value = ''; }
       });
     }
 

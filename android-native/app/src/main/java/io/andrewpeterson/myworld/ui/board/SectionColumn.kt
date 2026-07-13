@@ -133,6 +133,16 @@ fun SectionColumn(
         )
     }
 
+    // Staging logs like a tap (milestones see the combo) but stays SILENT —
+    // the child is composing, not speaking; ▶ says the sentence.
+    fun logStage(t: Tile, fallbackCategory: String? = null) {
+        c.tilePlayer.logOnly(
+            t, childId = c.auth.childSlug,
+            categoryName = fallbackCategory ?: activeCategoryName,
+            subcategoryName = activeSubcategoryName,
+        )
+    }
+
     Column(
         Modifier.fillMaxSize().background(hexColor(c.displayPrefs.color(section)).copy(alpha = 0.7f)),
     ) {
@@ -178,7 +188,7 @@ fun SectionColumn(
                     page = gridPage, onSetPage = { gridPage = it },
                     onStage = { t ->
                         c.sentenceBar.stage(t, access.sentenceIdleMin)
-                        playWithLogging(t, effectiveCategory.label)
+                        logStage(t, effectiveCategory.label)
                     })
             } else {
                 LazyVerticalGrid(
@@ -217,7 +227,7 @@ fun SectionColumn(
                 page = gridPage, onSetPage = { gridPage = it },
                 onStage = { t ->
                     c.sentenceBar.stage(t, access.sentenceIdleMin)
-                    playWithLogging(t)
+                    logStage(t)
                 })
         }
     }

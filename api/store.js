@@ -20,6 +20,10 @@
 // one wallet spendable on either surface. Spending credits on renders is not a
 // purchase and needs no IAP.
 import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
+
+// Velocity-guard pause (spendCredits blocked:true) — friendly, support-routed.
+const PAUSED_MSG = 'Image making is paused on this account as a safety measure. '
+  + "Email support@myworldtaptotalk.com and we'll sort it out right away.";
 import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
@@ -283,6 +287,7 @@ async function checkout(req, res, db, auth, uid, body) {
   const isAdmin = auth.user.role === 'admin';
   if (!isAdmin) {
     const s = await spendCredits(db, { userId: uid, credits: cost, reason: bundle ? 'store:bundle' : 'store:words', ref: childId });
+    if (s.blocked) { res.status(429).json({ error: 'account_paused', detail: PAUSED_MSG }); return; }
     if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: cost, balance: s.balance }); return; }
   }
 
@@ -425,6 +430,7 @@ async function personalizeAll(req, res, db, auth, uid, body) {
   const isAdmin = auth.user.role === 'admin';
   if (!isAdmin) {
     const s = await spendCredits(db, { userId: uid, credits: cost, reason: 'store:personalize_all', ref: childId });
+    if (s.blocked) { res.status(429).json({ error: 'account_paused', detail: PAUSED_MSG }); return; }
     if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: cost, balance: s.balance }); return; }
   }
   await ensureSeedJobs(db);
@@ -472,6 +478,7 @@ async function personalizeCategory(req, res, db, auth, uid, body) {
   if (!isAdmin) {
     const s = await spendCredits(db, { userId: uid, credits: cost,
       reason: 'store:personalize_category', ref: childId + ':' + categoryId });
+    if (s.blocked) { res.status(429).json({ error: 'account_paused', detail: PAUSED_MSG }); return; }
     if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: cost, balance: s.balance }); return; }
   }
   for (const r of remaining) await enqueueRenderJob(db, childId, r.taxonomy_slug, { force: true });
@@ -577,6 +584,7 @@ async function regenWith(req, res, db, auth, uid, body) {
   const isAdmin = auth.user.role === 'admin';
   if (!isAdmin) {
     const s = await spendCredits(db, { userId: uid, credits: cost, reason: 'store:regen-with', ref: childId });
+    if (s.blocked) { res.status(429).json({ error: 'account_paused', detail: PAUSED_MSG }); return; }
     if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: cost, balance: s.balance }); return; }
   }
   await ensureSeedJobs(db);
@@ -610,6 +618,7 @@ async function retryTile(req, res, db, auth, uid, body) {
     await db`UPDATE items SET free_retry_used = TRUE, updated_at = NOW() WHERE id = ${item.id}`;
   } else if (!isAdmin) {
     const s = await spendCredits(db, { userId: uid, credits: COST.nano, reason: 'store:retry', ref: String(itemId) });
+    if (s.blocked) { res.status(429).json({ error: 'account_paused', detail: PAUSED_MSG }); return; }
     if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: COST.nano, balance: s.balance }); return; }
     charged = COST.nano;
   }
@@ -643,6 +652,7 @@ async function rebuild(req, res, db, auth, uid, body) {
   const isAdmin = auth.user.role === 'admin';
   if (!isAdmin) {
     const s = await spendCredits(db, { userId: uid, credits: cost, reason: 'store:rebuild', ref: childId });
+    if (s.blocked) { res.status(429).json({ error: 'account_paused', detail: PAUSED_MSG }); return; }
     if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: cost, balance: s.balance }); return; }
   }
   await ensureSeedJobs(db);
@@ -890,7 +900,17 @@ async function stripeWebhook(req, res, db, raw) {
     } else if (event.type === 'invoice.paid') {
       const inv = event.data.object;
       const meta = (inv.subscription_details && inv.subscription_details.metadata) || inv.metadata || {};
-      const uid = Number(meta.userId) || null;
+      let uid = Number(meta.userId) || null;
+      // The metadata tag written at checkout is best-effort and async — if it
+      // failed or this first invoice raced it, fall back to the Stripe
+      // customer id saved at checkout.session.completed. A subscriber must
+      // never pay and silently receive nothing.
+      if (!uid && inv.customer) {
+        try {
+          const r = await db`SELECT id FROM users WHERE stripe_customer_id = ${String(inv.customer)} LIMIT 1`;
+          uid = r.length ? Number(r[0].id) : null;
+        } catch (_) {}
+      }
       if (uid) {
         // The tier comes from the subscription's metadata sku (tagged at
         // checkout); older subs without one are the original Plus.
@@ -898,7 +918,41 @@ async function stripeWebhook(req, res, db, raw) {
         await recordPurchase(db, { userId: uid, platform: 'stripe', productId: sub.sku,
                                    credits: sub.creditsPerPeriod,
                                    amountCents: inv.amount_paid || null, externalId: 'stripe:' + inv.id });
+      } else {
+        // Surfaced in Vercel logs — an invoice we could not attribute means a
+        // paying subscriber got no credits. Investigate via the Stripe
+        // dashboard (customer id below) and grant manually if needed.
+        console.error('stripe invoice.paid UNRESOLVED: customer', inv.customer, 'invoice', inv.id);
       }
+    } else if (event.type === 'invoice.payment_failed') {
+      // Failed renewal: tell the parent (Stripe retries on its own smart
+      // schedule, so this is a nudge, not a cutoff). Entitlement is untouched
+      // here — activeSubscription's 35-day window is the grace period.
+      const inv = event.data.object;
+      try {
+        const r = await db`SELECT id, email FROM users WHERE stripe_customer_id = ${String(inv.customer || '')} LIMIT 1`;
+        const u = r[0];
+        const { sendEmail, emailConfigured } = await import('./_lib/email.js');
+        if (u && u.email && emailConfigured()) {
+          await sendEmail({
+            to: u.email,
+            subject: "My World — your payment didn't go through",
+            text: 'Hi — a membership payment for My World: Tap to Talk did not go through. ' +
+                  'Your board keeps working while the card retries automatically. ' +
+                  'To update your payment method, open the parent dashboard -> Credits & Store -> Manage billing. ' +
+                  'Questions? Just reply, or email support@myworldtaptotalk.com.',
+          });
+        }
+      } catch (_) {}
+    } else if (event.type === 'customer.subscription.deleted') {
+      // Record the cancellation for visibility (reports / support). Access
+      // still lapses via the 35-day activeSubscription window — no abrupt
+      // cutoff for the child mid-period.
+      const sub = event.data.object;
+      try {
+        await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_canceled_at TIMESTAMPTZ`;
+        await db`UPDATE users SET sub_canceled_at = NOW() WHERE stripe_customer_id = ${String(sub.customer || '')}`;
+      } catch (_) {}
     }
     res.status(200).json({ received: true });
   } catch (err) {
