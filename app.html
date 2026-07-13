@@ -3561,9 +3561,10 @@
   // square with zero per-platform crop logic, and the server archives the
   // prior picture on every swap (Previous pictures is the undo button).
   //   1. squareCropBlob(): applied to uploads (unless "keep original ratio"
-  //      is checked — movie posters). A CONSERVATIVE uniform-border trim —
-  //      it only ever eats flat bars of one color, never guesses at content —
-  //      then a center square crop.
+  //      is checked — movie posters). A plain CENTER SQUARE crop and nothing
+  //      else — NO automatic blank-space/border removal of any kind. Auto
+  //      trimming was the board's most-complained-about behavior; framing
+  //      decisions belong to the parent (tool 2), not a heuristic.
   //   2. The "Adjust framing" overlay: drag/zoom the current picture inside a
   //      tile-shaped frame and save exactly that square.
 
@@ -3576,54 +3577,13 @@
       catch (_) { bmp = await createImageBitmap(file); }
       const W = bmp.width, H = bmp.height;
       if (!W || !H) return file;
-      // Border scan on a small analysis copy (fast; maps back within ~1%).
-      const s = Math.min(1, 160 / Math.max(W, H));
-      const aw = Math.max(2, Math.round(W * s)), ah = Math.max(2, Math.round(H * s));
-      const ac = document.createElement('canvas'); ac.width = aw; ac.height = ah;
-      const actx = ac.getContext('2d', { willReadFrequently: true });
-      actx.drawImage(bmp, 0, 0, aw, ah);
-      const d = actx.getImageData(0, 0, aw, ah).data;
-      const at = (x, y) => { const i = (y * aw + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
-      // A "border line" is flat (every pixel near the line's own mean) AND the
-      // same color as the outermost line — so only uniform bars ever trim.
-      const flatLine = (horiz, idx, ref) => {
-        const n = horiz ? aw : ah;
-        const get = (j) => (horiz ? at(j, idx) : at(idx, j));
-        let r = 0, g = 0, b = 0;
-        for (let j = 0; j < n; j++) { const q = get(j); r += q[0]; g += q[1]; b += q[2]; }
-        const mean = [r / n, g / n, b / n];
-        let off = 0;
-        for (let j = 0; j < n; j++) {
-          const q = get(j);
-          if (Math.abs(q[0] - mean[0]) > 14 || Math.abs(q[1] - mean[1]) > 14 || Math.abs(q[2] - mean[2]) > 14) off++;
-        }
-        if (off > n * 0.03) return null;
-        if (ref && (Math.abs(mean[0] - ref[0]) > 22 || Math.abs(mean[1] - ref[1]) > 22 || Math.abs(mean[2] - ref[2]) > 22)) return null;
-        return mean;
-      };
-      const walk = (horiz, from, dir, cap) => {
-        let ref = null, k = 0;
-        for (let i = 0; i < cap; i++) {
-          const m = flatLine(horiz, from + dir * i, ref);
-          if (!m) break;
-          ref = ref || m; k++;
-        }
-        return k;
-      };
-      const capY = Math.floor(ah * 0.25), capX = Math.floor(aw * 0.25);
-      const top = walk(true, 0, 1, capY),   bot = walk(true, ah - 1, -1, capY);
-      const left = walk(false, 0, 1, capX), right = walk(false, aw - 1, -1, capX);
-      const inv = 1 / s;
-      let x0 = Math.round(left * inv), y0 = Math.round(top * inv);
-      let w = W - x0 - Math.round(right * inv), h = H - y0 - Math.round(bot * inv);
-      if (w < W * 0.4 || h < H * 0.4) { x0 = 0; y0 = 0; w = W; h = H; }   // scan went wild — keep the full frame
-      const side = Math.min(w, h);
-      x0 += Math.floor((w - side) / 2);
-      y0 += Math.floor((h - side) / 2);
-      // Square already and nothing trimmed? Keep the original bytes.
-      if (!top && !bot && !left && !right && Math.abs(W - H) <= Math.round(Math.max(W, H) * 0.02)) {
+      // Square already? Keep the original bytes untouched.
+      if (Math.abs(W - H) <= Math.round(Math.max(W, H) * 0.02)) {
         if (bmp.close) bmp.close(); return file;
       }
+      const side = Math.min(W, H);
+      const x0 = Math.floor((W - side) / 2);
+      const y0 = Math.floor((H - side) / 2);
       const out = Math.max(64, Math.min(1024, side));
       const c = document.createElement('canvas'); c.width = out; c.height = out;
       c.getContext('2d').drawImage(bmp, x0, y0, side, side, 0, 0, out, out);
@@ -3746,9 +3706,9 @@
     saveBtn.textContent = 'Saving…';
 
     try {
-      // Auto-framing: uploads become standard squares (conservative border
-      // trim + center crop) unless the parent asked to keep the original
-      // ratio (posters). "Adjust framing" afterwards picks a different crop.
+      // Auto-framing: uploads become standard squares (plain CENTER crop,
+      // no automatic blank-space trimming) unless the parent asked to keep
+      // the original ratio (posters). "Adjust framing" picks any other crop.
       let image = pendingImage;
       if (image && !keepAspect) image = await squareCropBlob(image);
       if (editingItem) {
