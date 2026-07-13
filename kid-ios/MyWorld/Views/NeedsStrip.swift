@@ -91,6 +91,9 @@ struct NeedsStrip: View {
 
     /// One Needs tile with the sentence-constructor lift attached when it's on
     /// — the core words (more, eat, all done) belong in built sentences too.
+    /// The explicit identity includes the lock state for the same reason as
+    /// SectionColumn.cellKey: the conditional wrappers change the cell's
+    /// structure on lock/unlock and lazy reuse left stale pencil badges.
     @ViewBuilder
     private func needsCell(_ tile: Tile) -> some View {
         let base = TileView(tile: tile,
@@ -105,6 +108,7 @@ struct NeedsStrip: View {
                             },
                             editMode: editMode, onEdit: onEditTile)
             .frame(width: tileSize)
+            .id("\(tile.id)-\(editMode ? "e" : "p")")
         if access.sentenceBuilder && !editMode {
             if access.sentenceLift == "drag" {
                 base.simultaneousGesture(quickLift(tile))
