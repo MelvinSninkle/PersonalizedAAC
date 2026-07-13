@@ -65,22 +65,14 @@ const fails = [];
   });
   ok('page aligns to tile boundary', aligned === true);
 
-  // ── Feature 2: sentence constructor — real mouse drag to the header ──
-  const tile = page.locator('.items-grid .tile-wrap').first();
-  const tb = await tile.boundingBox();
-  const hb = await page.locator('header').boundingBox();
-  await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2);
-  await page.mouse.down();
-  for (let i = 1; i <= 8; i++) {
-    await page.mouse.move(
-      tb.x + tb.width / 2 + (hb.x + hb.width / 2 - tb.x - tb.width / 2) * i / 8,
-      tb.y + tb.height / 2 + (hb.y + hb.height / 2 - tb.y - tb.height / 2) * i / 8);
-  }
-  const hotDuringDrag = await page.evaluate(() => document.querySelector('header').classList.contains('sb-drop-hot'));
-  await page.mouse.up();
-  ok('header highlights during drag', hotDuringDrag);
+  // ── Feature 2: sentence bar chrome (staged programmatically; staging is
+  //    a tap in pencil mode now — the drag flow is gone by design) ──
+  await page.evaluate(async () => {
+    const items = await window.__accessHooks.getAllItems('nouns');
+    window.__accessHooks.sbStage(items[0]);
+  });
   await page.waitForTimeout(400);
-  ok('chip staged after drop', await page.evaluate(() => document.querySelectorAll('.sentence-chip').length) === 1);
+  ok('chip staged', await page.evaluate(() => document.querySelectorAll('.sentence-chip').length) === 1);
   ok('body.sentence-active (chrome hidden)', await page.evaluate(() => document.body.classList.contains('sentence-active')));
   ok('header title hidden while composing', await page.evaluate(() => {
     const h1 = document.querySelector('.hdr-center h1');
@@ -90,42 +82,28 @@ const fails = [];
     const b = document.getElementById('sentence-play');
     return b && b.offsetParent !== null;
   }));
-  ok('tile still on the board after drag', await page.evaluate(() => document.querySelectorAll('.items-grid .tile-wrap').length > 3));
+  ok('tile still on the board after staging', await page.evaluate(() => document.querySelectorAll('.items-grid .tile-wrap').length > 3));
   // chip tap removes it and empties the bar back to normal chrome
   await page.locator('.sentence-chip').first().click();
   await page.waitForTimeout(200);
   ok('chip tap removes + restores header', await page.evaluate(() =>
     !document.body.classList.contains('sentence-active') && document.querySelectorAll('.sentence-chip').length === 0));
 
-  // ── Feature 2b: long-press lift (the default) ──
-  await page.evaluate(() => window.__accessHooks.applyAccessSettings({ sentenceBuilder: true, sentenceLift: 'longpress' }));
-  ok('longpress mode leaves touch-action alone', await page.evaluate(() =>
-    !document.body.classList.contains('sb-lift-drag')));
+  // ── Feature 2b: sentence MODE (the pencil) — modal, not gestural ──
+  await page.evaluate(() => window.__accessHooks.applyAccessSettings({ sentenceBuilder: true }));
+  await page.evaluate(() => window.__accessHooks.sbSetMode(true));
+  ok('pencil mode forces button navigation', await page.evaluate(() =>
+    document.body.classList.contains('nav-buttons-mode') && document.body.classList.contains('sentence-mode')));
   const tile2 = page.locator('.items-grid .tile-wrap').first();
-  const t2 = await tile2.boundingBox();
-  const h2 = await page.locator('header').boundingBox();
-  // movement — at any speed — must NEVER stage or produce a ghost: the
-  // scroll owns the touch (the child's finger is usually on a tile).
-  await page.mouse.move(t2.x + 20, t2.y + 20);
-  await page.mouse.down();
-  await page.mouse.move(t2.x + 20, t2.y - 60);
-  await page.waitForTimeout(1200);   // even past the hold window, movement cancelled it
-  const movedGhost = await page.evaluate(() => !!document.querySelector('.sb-drag-ghost'));
-  const movedStaged = await page.evaluate(() => document.querySelectorAll('.sentence-chip').length);
-  await page.mouse.up();
-  ok('longpress: movement never stages (scroll wins)', movedGhost === false && movedStaged === 0);
-  // a stationary FULL-SECOND hold stages the tile in place — no drag at all
-  await page.mouse.move(t2.x + 20, t2.y + 20);
-  await page.mouse.down();
-  await page.waitForTimeout(1400);
-  await page.mouse.up();
+  await tile2.click();
   await page.waitForTimeout(300);
-  ok('longpress: 1s stationary hold stages in place', await page.evaluate(() =>
-    document.querySelectorAll('.sentence-chip').length) === 1);
-  ok('longpress: hold produced no drag ghost', await page.evaluate(() =>
-    !document.querySelector('.sb-drag-ghost')));
-  await page.evaluate(() => window.__accessHooks.sbClear());
-  void h2;
+  ok('sentence mode: a tap stages the tile silently', await page.evaluate(() =>
+    document.querySelectorAll('.sentence-chip').length === 1));
+  await page.evaluate(() => window.__accessHooks.sbSetMode(false));
+  ok('pencil off restores scroll nav + clears the bar', await page.evaluate(() =>
+    !document.body.classList.contains('nav-buttons-mode')
+    && !document.body.classList.contains('sentence-mode')
+    && document.querySelectorAll('.sentence-chip').length === 0));
 
   // ── Feature 3: repeat-navigate core ──
   const nav = await page.evaluate(async () => {

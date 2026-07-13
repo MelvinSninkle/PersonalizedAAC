@@ -31,8 +31,13 @@ final class AccessPrefs {
     var navMode: String = "scroll"            // "scroll" | "buttons"
     var sentenceBuilder: Bool = false
     var sentenceIdleMin: Int = 1              // 1–10 minutes
-    var sentenceLift: String = "longpress"    // "longpress" | "drag"
+    var sentenceLift: String = "longpress"    // legacy — the pencil replaced lift gestures
     var listenRepeatNav: Bool = true
+    // Header tools, parent-configurable for every family (default ON).
+    var toolListen = true
+    var toolTeach = true
+    var toolPlay = true
+    var toolSentence = true
 
     var buttonsNav: Bool { navMode == "buttons" }
 
@@ -55,6 +60,10 @@ final class AccessPrefs {
             sentenceIdleMin = (1...10).contains(m) ? m : 1
             sentenceLift = (s["sentenceLift"] as? String) == "drag" ? "drag" : "longpress"
             listenRepeatNav = (s["listenRepeatNav"] as? Bool) ?? true
+            toolListen = (s["toolListen"] as? Bool) ?? true
+            toolTeach = (s["toolTeach"] as? Bool) ?? true
+            toolPlay = (s["toolPlay"] as? Bool) ?? true
+            toolSentence = (s["toolSentence"] as? Bool) ?? true
             // Touch + safety controls ride the same settings fetch (root keys too).
             TouchConfig.interrupt = (s["tapInterrupt"] as? Bool) ?? false
             TouchConfig.doubleTapTeach = (s["doubleTapTeach"] as? Bool) ?? false
@@ -117,8 +126,30 @@ final class SentenceBar {
     var staged: [Tile] = []
     var drag: Drag?
     var active: Bool { !staged.isEmpty }
+    /// Sentence MODE — owned by the header pencil. While on, the board runs
+    /// button navigation (nothing to fight) and a TAP stages its tile. Turns
+    /// itself off after 60s if no sentence gets started.
+    var mode = false
 
     @ObservationIgnored private var idleTask: Task<Void, Never>?
+    @ObservationIgnored private var modeTask: Task<Void, Never>?
+
+    func setMode(_ on: Bool) {
+        mode = on
+        if !on { clear() }
+        armModeTimer()
+    }
+
+    /// The 60-second "nothing started" window: runs whenever the mode is on
+    /// with an empty bar; staging cancels it, clearing re-arms it.
+    func armModeTimer() {
+        modeTask?.cancel(); modeTask = nil
+        guard mode, staged.isEmpty else { return }
+        modeTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+            if !Task.isCancelled, mode, staged.isEmpty { setMode(false) }
+        }
+    }
 
     /// Header drop zone in the "board" coordinate space: the bar itself (104pt
     /// when composing / 48 idle) plus slack so a child needn't be pixel-exact.
@@ -140,18 +171,7 @@ final class SentenceBar {
     func stage(_ tile: Tile, idleMinutes: Int) {
         staged.append(tile)
         resetIdle(idleMinutes: idleMinutes)
-    }
-
-    // Hold-to-stage handoff: after a 1s hold stages a tile, the finger lift
-    // that follows may also land as a Button tap — that release must not
-    // speak/log a second time. The staging path notes the tile; the tap path
-    // consumes the note and skips itself once.
-    @ObservationIgnored private var justStaged: (id: Int, at: Date)?
-    func noteJustStaged(_ id: Int) { justStaged = (id, Date()) }
-    func consumeJustStaged(_ id: Int) -> Bool {
-        guard let j = justStaged, j.id == id, Date().timeIntervalSince(j.at) < 1.5 else { return false }
-        justStaged = nil
-        return true
+        armModeTimer()
     }
 
     func remove(_ tile: Tile, idleMinutes: Int) {
@@ -163,6 +183,7 @@ final class SentenceBar {
         idleTask?.cancel(); idleTask = nil
         staged = []
         drag = nil
+        armModeTimer()
     }
 
     func resetIdle(idleMinutes: Int) {

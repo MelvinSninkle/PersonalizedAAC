@@ -50,8 +50,13 @@ data class AccessData(
     val navMode: String = "scroll",            // "scroll" | "buttons"
     val sentenceBuilder: Boolean = false,
     val sentenceIdleMin: Int = 1,              // 1–10 minutes
-    val sentenceLift: String = "longpress",    // "longpress" | "drag"
+    val sentenceLift: String = "longpress",    // legacy — the pencil replaced lift gestures
     val listenRepeatNav: Boolean = true,
+    // Header tools, parent-configurable for every family (default ON).
+    val toolListen: Boolean = true,
+    val toolTeach: Boolean = true,
+    val toolPlay: Boolean = true,
+    val toolSentence: Boolean = true,
 ) {
     val buttonsNav: Boolean get() = navMode == "buttons"
 }
@@ -80,6 +85,10 @@ class AccessPrefs(private val api: ApiClient, private val scope: CoroutineScope)
                 sentenceIdleMin = (int("sentenceIdleMin") ?: 1).coerceIn(1, 10),
                 sentenceLift = if (str("sentenceLift") == "drag") "drag" else "longpress",
                 listenRepeatNav = bool("listenRepeatNav") ?: true,
+                toolListen = bool("toolListen") ?: true,
+                toolTeach = bool("toolTeach") ?: true,
+                toolPlay = bool("toolPlay") ?: true,
+                toolSentence = bool("toolSentence") ?: true,
             )
             // Touch + safety controls ride the same settings fetch (root keys too).
             TouchConfig.interrupt = bool("tapInterrupt") ?: false
@@ -148,7 +157,30 @@ class SentenceBar(
     val staged: StateFlow<List<Tile>> = _staged
     private val _drag = MutableStateFlow<Drag?>(null)
     val drag: StateFlow<Drag?> = _drag
+    /** Sentence MODE — owned by the header pencil. While on, the board runs
+     *  button navigation and a TAP stages its tile. Turns itself off after
+     *  60s if no sentence gets started. */
+    private val _mode = MutableStateFlow(false)
+    val mode: StateFlow<Boolean> = _mode
     private var idleJob: Job? = null
+    private var modeJob: Job? = null
+
+    fun setMode(on: Boolean) {
+        _mode.value = on
+        if (!on) clear()
+        armModeTimer()
+    }
+
+    /** The 60-second "nothing started" window: runs whenever the mode is on
+     *  with an empty bar; staging cancels it, clearing re-arms it. */
+    private fun armModeTimer() {
+        modeJob?.cancel(); modeJob = null
+        if (!_mode.value || _staged.value.isNotEmpty()) return
+        modeJob = scope.launch {
+            delay(60_000)
+            if (_mode.value && _staged.value.isEmpty()) setMode(false)
+        }
+    }
 
     fun dragUpdate(tile: Tile, overHeader: Boolean) { _drag.value = Drag(tile, overHeader) }
     fun dragEnd() { _drag.value = null }
@@ -156,18 +188,7 @@ class SentenceBar(
     fun stage(tile: Tile, idleMinutes: Int) {
         _staged.value = _staged.value + tile
         resetIdle(idleMinutes)
-    }
-
-    // Hold-to-stage handoff: after a 1s hold stages a tile, the finger lift
-    // may also land as the tile's onClick — that release must not speak/log
-    // a second time. The staging path notes the tile; the tap path consumes.
-    @Volatile private var justStagedId: Int = -1
-    @Volatile private var justStagedAt: Long = 0
-    fun noteJustStaged(id: Int) { justStagedId = id; justStagedAt = System.currentTimeMillis() }
-    fun consumeJustStaged(id: Int): Boolean {
-        val hit = justStagedId == id && System.currentTimeMillis() - justStagedAt < 1500
-        if (hit) justStagedId = -1
-        return hit
+        armModeTimer()
     }
 
     fun removeAt(index: Int, idleMinutes: Int) {
@@ -179,6 +200,7 @@ class SentenceBar(
         idleJob?.cancel(); idleJob = null
         _staged.value = emptyList()
         _drag.value = null
+        armModeTimer()
     }
 
     fun resetIdle(idleMinutes: Int) {

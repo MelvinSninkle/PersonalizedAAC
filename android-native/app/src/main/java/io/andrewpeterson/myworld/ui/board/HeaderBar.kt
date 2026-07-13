@@ -68,6 +68,8 @@ fun HeaderBar(
     val staged by c.sentenceBar.staged.collectAsState()
     val sentenceDrag by c.sentenceBar.drag.collectAsState()
     val sentenceActive = staged.isNotEmpty()
+    val sentenceMode by c.sentenceBar.mode.collectAsState()
+    val access by c.access.data.collectAsState()
 
     // Hidden gesture: triple-tap the bar opens settings (sign out, cache).
     var taps by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0L to 0) }
@@ -129,20 +131,34 @@ fun HeaderBar(
                     Text(if (editMode) "🔓" else "🔒", fontSize = 17.sp,
                         color = textColor.copy(alpha = if (editMode) 1f else 0.55f))
                 }
-                Box(
-                    Modifier.size(44.dp).combinedClickable(onClick = onListenTap, onLongClick = {}),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("🎙", fontSize = 20.sp, color = textColor.copy(alpha = 0.9f))
+                if (access.toolListen) {
+                    Box(
+                        Modifier.size(44.dp).combinedClickable(onClick = onListenTap, onLongClick = {}),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("🎙", fontSize = 20.sp, color = textColor.copy(alpha = 0.9f))
+                    }
+                }
+                // ✏️ Sentence mode: modal, owned here — while on, the board
+                // pages instead of scrolling and a TAP stages its tile.
+                if (access.sentenceBuilder && access.toolSentence) {
+                    Box(
+                        Modifier.size(40.dp)
+                            .background(if (sentenceMode) Color(0xFF66BB6A) else Color.White.copy(alpha = 0.18f), CircleShape)
+                            .combinedClickable(onClick = { c.sentenceBar.setMode(!sentenceMode) }, onLongClick = {}),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("✏️", fontSize = 18.sp) }
                 }
                 Spacer(Modifier.weight(1f))
                 if (editMode) {
                     HeaderRound("⚙", onShowDisplay)
                     Spacer(Modifier.width(8.dp))
                 }
-                HeaderRound("📖", onTeachTap)
-                Spacer(Modifier.width(8.dp))
-                HeaderRound("🙋", onPlayTap)
+                if (access.toolTeach) {
+                    HeaderRound("📖", onTeachTap)
+                    Spacer(Modifier.width(8.dp))
+                }
+                if (access.toolPlay) HeaderRound("🙋", onPlayTap)
             }
         }
     }

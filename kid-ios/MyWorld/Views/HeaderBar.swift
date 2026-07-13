@@ -17,6 +17,7 @@ struct HeaderBar: View {
     @Environment(BoardStore.self) private var board
     @Environment(GameController.self) private var game
     @Environment(SentenceBar.self) private var sentence
+    @Environment(AccessPrefs.self) private var access
 
     @Binding var editMode: Bool
     @Binding var showDisplay: Bool
@@ -97,8 +98,15 @@ struct HeaderBar: View {
                     // too — only the stop button remains, with room to breathe,
                     // so the controls never crowd the live tiles.
                     if !listening { lockButton }
-                    listenButton
-                        .padding(.trailing, listening ? 6 : 0)
+                    if access.toolListen {
+                        listenButton
+                            .padding(.trailing, listening ? 6 : 0)
+                    }
+                    // ✏️ Sentence mode: modal, owned here — while on, the board
+                    // pages instead of scrolling and a TAP stages its tile.
+                    if !listening && access.sentenceBuilder && access.toolSentence {
+                        sentenceModeButton
+                    }
                     Spacer()
                     trailingControls
                 }
@@ -174,8 +182,8 @@ struct HeaderBar: View {
             // web, which hides the play button in listening mode) — the wide
             // strip needs the room.
             if !listening {
-                teachMeButton
-                playWithMeButton
+                if access.toolTeach { teachMeButton }
+                if access.toolPlay { playWithMeButton }
             }
         }
     }
@@ -207,6 +215,18 @@ struct HeaderBar: View {
             pillLink(label: "🩺 Therapist",
                      url: URL(string: "https://aac.andrewpeterson.io/therapist/\(slug)")!)
         }
+    }
+
+    private var sentenceModeButton: some View {
+        Button {
+            sentence.setMode(!sentence.mode)
+        } label: {
+            Text("✏️")
+                .font(.system(size: 18))
+                .padding(7)
+                .background(Circle().fill(sentence.mode ? Color(hex: "#66bb6a") : Color.white.opacity(0.18)))
+        }
+        .buttonStyle(.plain)
     }
 
     private var teachMeButton: some View {

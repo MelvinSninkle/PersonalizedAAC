@@ -125,8 +125,19 @@ fun SectionColumn(
         ?: roots.firstOrNull()?.label
     val activeSubcategoryName = selectedSubcategoryId?.let { id -> cats.firstOrNull { it.id == id }?.label }
 
+    val sentenceMode by c.sentenceBar.mode.collectAsState()
+
     fun playWithLogging(t: Tile, fallbackCategory: String? = null) {
-        if (c.sentenceBar.consumeJustStaged(t.id)) return   // hold already staged this touch
+        // Sentence mode (the pencil): a tap IS the stage — silent; ▶ speaks.
+        if (sentenceMode && !editMode) {
+            c.sentenceBar.stage(t, access.sentenceIdleMin)
+            c.tilePlayer.logOnly(
+                t, childId = c.auth.childSlug,
+                categoryName = fallbackCategory ?: activeCategoryName,
+                subcategoryName = activeSubcategoryName,
+            )
+            return
+        }
         c.tilePlayer.play(
             t, childId = c.auth.childSlug,
             categoryName = fallbackCategory ?: activeCategoryName,
@@ -154,7 +165,7 @@ fun SectionColumn(
         }
 
         CategoryTabStrip(roots, selectedCategoryId, prefs.hideLabels,
-            paged = access.buttonsNav && !editMode,
+            paged = (access.buttonsNav || sentenceMode) && !editMode,
             onChipBounds = if (editMode) ({ id, r -> chipRects[id] = r }) else null) { id ->
             c.boardNav.setCategory(section, id)
             // Every REAL chip press is remembered as the header Play/Teach scope.
@@ -163,7 +174,7 @@ fun SectionColumn(
 
         if (activeCategory != null && subs.isNotEmpty()) {
             SubcategoryStrip(subs, selectedSubcategoryId ?: subs.first().id, prefs.hideLabels,
-                paged = access.buttonsNav && !editMode,
+                paged = (access.buttonsNav || sentenceMode) && !editMode,
                 onChipBounds = if (editMode) ({ id, r -> chipRects[id] = r }) else null) { id ->
                 c.boardNav.setSubcategory(section, id)
                 io.andrewpeterson.myworld.game.PlayScope.note("cat:$id", c.auth.childSlug)
@@ -370,44 +381,6 @@ private fun TileGrid(
                                 onDragEnd = { completeDrag() },
                                 onDragCancel = { dragId = null },
                             )
-                        }
-                        // Sentence constructor pick-up. Long-press (default)
-                        // is HOLD-TO-STAGE: a stationary 1s hold (the board
-                        // subtree runs an extended longPressTimeout) stages
-                        // the tile in place — NO drag, so nothing competes
-                        // with the scroll and any movement cancels the hold.
-                        // Quick-drag (eye tracker / mouse rigs) keeps the
-                        // lift-and-drop-on-the-bar flow.
-                        sentenceOn -> Modifier.pointerInput(tile.id, access.sentenceLift) {
-                            if (access.sentenceLift == "drag") {
-                                val start: (Offset) -> Unit = {
-                                    dragOrigin = cellRects[tile.id]?.center ?: Offset.Zero
-                                    dragPos = dragOrigin
-                                    dragId = tile.id
-                                    c.sentenceBar.dragUpdate(tile, false)
-                                }
-                                val move: (androidx.compose.ui.input.pointer.PointerInputChange, Offset) -> Unit = { change, amount ->
-                                    change.consume()
-                                    dragPos += amount
-                                    c.sentenceBar.dragUpdate(tile, dragPos.y <= dropZonePx)
-                                }
-                                val end: () -> Unit = {
-                                    val hit = dragPos.y <= dropZonePx
-                                    dragId = null
-                                    c.sentenceBar.dragEnd()
-                                    if (hit) onStage(tile)
-                                }
-                                val cancel: () -> Unit = { dragId = null; c.sentenceBar.dragEnd() }
-                                detectDragGestures(onDragStart = start, onDrag = move,
-                                    onDragEnd = end, onDragCancel = cancel)
-                            } else {
-                                androidx.compose.foundation.gestures.detectTapGestures(
-                                    onLongPress = {
-                                        c.sentenceBar.noteJustStaged(tile.id)
-                                        onStage(tile)
-                                    },
-                                )
-                            }
                         }
                         else -> Modifier
                     }),

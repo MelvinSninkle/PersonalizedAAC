@@ -302,8 +302,11 @@ change them (stub harness: save with role=parent, read back). Runtime: run
 paging/alignment, sentence-bar drag lifecycle, repeat-navigate highlight)
 must ALL PASS.
 
-**E6b. Touch & safety keys are DELIBERATELY parent-writable.**
-`tapInterrupt`, `doubleTapTeach`, `easyClose`, `easyUnlock` are ordinary
+**E6b. Touch, safety & tool keys are DELIBERATELY parent-writable.**
+`tapInterrupt`, `doubleTapTeach`, `easyClose`, `easyUnlock`, and the header
+tool visibility keys `toolListen` / `toolTeach` / `toolPlay` /
+`toolSentence` (default true; the ✏️ pencil additionally requires the
+admin-gated `sentenceBuilder`) are ordinary
 child-settings root keys — do NOT "fix" them into the ACCESS_KEYS gate;
 parents own these decisions. The one guarded flow is `easyUnlock` ENABLE:
 both UIs (app.html Display modal `disp-unlock-yes`, parent.html Safety panel

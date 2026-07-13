@@ -58,7 +58,14 @@ struct SectionColumn: View {
         return board.categories.first(where: { $0.id == subId })?.label
     }
     private func playWithLogging(_ t: Tile, fallbackCategory: String? = nil) {
-        if sentence.consumeJustStaged(t.id) { return }   // hold already staged this touch
+        // Sentence mode (the pencil): a tap IS the stage — silent; ▶ speaks.
+        if sentence.mode && !editMode {
+            sentence.stage(t, idleMinutes: access.sentenceIdleMin)
+            TilePlayer.shared.logOnly(t, childId: auth.childSlug,
+                                      categoryName: fallbackCategory ?? activeCategoryName,
+                                      subcategoryName: activeSubcategoryName)
+            return
+        }
         Task {
             await TilePlayer.shared.play(
                 t,
@@ -86,14 +93,14 @@ struct SectionColumn: View {
             CategoryTabStrip(categories: cats,
                              selectedId: noting(catBinding),
                              hideLabels: prefs.hideLabels,
-                             paged: access.buttonsNav && !editMode,
+                             paged: (access.buttonsNav || sentence.mode) && !editMode,
                              onDropTile: chipDropHandler)
 
             if let cat = activeCategory(in: cats), !board.children(of: cat).isEmpty {
                 SubcategoryStrip(subcategories: board.children(of: cat),
                                  selectedId: noting(subBinding),
                                  hideLabels: prefs.hideLabels,
-                                 paged: access.buttonsNav && !editMode,
+                                 paged: (access.buttonsNav || sentence.mode) && !editMode,
                                  onDropTile: chipDropHandler)
             }
 
@@ -111,7 +118,7 @@ struct SectionColumn: View {
         // Listening repeat-navigate landed on a tile in THIS column: jump the
         // paged grid to its page (scroll mode scrolls inside normalTilesGrid).
         .onChange(of: nav.highlight) { _, h in
-            guard let h, h.section == section, access.buttonsNav, !editMode else { return }
+            guard let h, h.section == section, access.buttonsNav || sentence.mode, !editMode else { return }
             let tiles = effectiveCategory.map { board.tiles(in: $0) } ?? []
             if let idx = tiles.firstIndex(where: { $0.id == h.tileId }) {
                 gridPage = idx / max(1, tilesPerPage)
@@ -217,50 +224,7 @@ struct SectionColumn: View {
             .dropDestination(for: String.self) { items, _ in
                 handleTileDrop(items, onto: tile)
             }
-        if access.sentenceBuilder && !editMode {
-            if access.sentenceLift == "drag" {
-                base.simultaneousGesture(quickLift(tile))
-            } else {
-                base.simultaneousGesture(holdToStage(tile))
-            }
-        } else {
-            base
-        }
-    }
-
-    // MARK: -- Sentence constructor lift (both pick-up styles; see web parity)
-
-    /// Default: HOLD-TO-STAGE — a full-second stationary hold stages the tile
-    /// right where it sits; no drag at all. This is a hard requirement from
-    /// real-child testing: the child's finger is usually ON a tile when a
-    /// scroll starts, so nothing may compete with the pan. A plain
-    /// LongPressGesture fails on any movement (>10pt) and the scroll owns the
-    /// touch from its first pixel; the old sequenced hold-then-drag
-    /// arbitrated against the pan and broke scrolling outright.
-    private func holdToStage(_ tile: Tile) -> some Gesture {
-        LongPressGesture(minimumDuration: 1.0)
-            .onEnded { _ in
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                sentence.noteJustStaged(tile.id)   // the release-tap must not re-fire
-                stageTile(tile)
-            }
-    }
-
-    /// Eye-tracker / mouse rigs: lift on first movement, no hold.
-    private func quickLift(_ tile: Tile) -> some Gesture {
-        DragGesture(minimumDistance: 24, coordinateSpace: .named("board"))
-            .onChanged { sentence.dragUpdate(tile, at: $0.location) }
-            .onEnded { if sentence.dragEnd(at: $0.location) { stageTile(tile) } }
-    }
-
-    /// Staging logs like a normal tap (milestones see the combo) but stays
-    /// SILENT — the child is composing, not speaking; ▶ says the sentence.
-    /// The tile itself stays on the board — the chip is a copy.
-    private func stageTile(_ tile: Tile) {
-        sentence.stage(tile, idleMinutes: access.sentenceIdleMin)
-        TilePlayer.shared.logOnly(tile, childId: auth.childSlug,
-                                  categoryName: activeCategoryName,
-                                  subcategoryName: activeSubcategoryName)
+        base
     }
 
     private var normalTilesGrid: some View {
@@ -271,7 +235,7 @@ struct SectionColumn: View {
         // Button navigation replaces scrolling with whole-page turns: only
         // full tiles render on a page, so the tile that WOULD have been cut
         // off is exactly the first tile of the next page.
-        if access.buttonsNav && !editMode {
+        if (access.buttonsNav || sentence.mode) && !editMode {
             return AnyView(pagedGrid(tiles: tiles, cols: cols, gridCols: gridCols))
         }
         return AnyView(ScrollViewReader { proxy in
