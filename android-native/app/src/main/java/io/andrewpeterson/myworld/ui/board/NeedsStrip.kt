@@ -62,66 +62,25 @@ fun NeedsStrip(
     val dropZonePx = with(LocalDensity.current) { 140.dp.toPx() }
     var page by remember { mutableStateOf(0) }
 
-    // Sentence lift float state (same pattern as the tile grid's edit drag).
-    var dragId by remember { mutableStateOf<Int?>(null) }
-    var dragOrigin by remember { mutableStateOf(Offset.Zero) }
-    var dragPos by remember { mutableStateOf(Offset.Zero) }
-    val cellCenters = remember { mutableMapOf<Int, Offset>() }
+
+    val sentenceMode by c.sentenceBar.mode.collectAsState()
 
     fun tap(t: Tile) {
+        // Sentence mode (the pencil): a tap IS the stage — silent; ▶ speaks.
+        if (sentenceMode && !editMode) {
+            c.sentenceBar.stage(t, access.sentenceIdleMin)
+            c.tilePlayer.logOnly(t, childId = c.auth.childSlug, categoryName = "Needs")
+            return
+        }
         c.tilePlayer.play(t, childId = c.auth.childSlug, categoryName = "Needs")
     }
 
     val needsCell: @Composable (Tile) -> Unit = { tile ->
-        val sentenceOn = access.sentenceBuilder && !editMode
-        Box(
-            Modifier
-                .onGloballyPositioned { if (dragId != tile.id) cellCenters[tile.id] = it.boundsInRoot().center }
-                .graphicsLayer {
-                    if (dragId == tile.id) {
-                        translationX = dragPos.x - dragOrigin.x
-                        translationY = dragPos.y - dragOrigin.y
-                        scaleX = 1.06f; scaleY = 1.06f; alpha = 0.85f
-                    }
-                }
-                .then(if (sentenceOn) Modifier.pointerInput(tile.id, access.sentenceLift) {
-                    val start: (Offset) -> Unit = {
-                        dragOrigin = cellCenters[tile.id] ?: Offset.Zero
-                        dragPos = dragOrigin
-                        dragId = tile.id
-                        c.sentenceBar.dragUpdate(tile, false)
-                    }
-                    val move: (androidx.compose.ui.input.pointer.PointerInputChange, Offset) -> Unit = { change, amount ->
-                        change.consume()
-                        dragPos += amount
-                        c.sentenceBar.dragUpdate(tile, dragPos.y <= dropZonePx)
-                    }
-                    val end: () -> Unit = {
-                        val hit = dragPos.y <= dropZonePx
-                        dragId = null
-                        c.sentenceBar.dragEnd()
-                        if (hit) {
-                            c.sentenceBar.stage(tile, access.sentenceIdleMin)
-                            // Logged, not spoken — ▶ says the sentence.
-                            c.tilePlayer.logOnly(tile, childId = c.auth.childSlug, categoryName = "Needs")
-                        }
-                    }
-                    val cancel: () -> Unit = { dragId = null; c.sentenceBar.dragEnd() }
-                    if (access.sentenceLift == "drag") {
-                        detectDragGestures(onDragStart = start, onDrag = move,
-                            onDragEnd = end, onDragCancel = cancel)
-                    } else {
-                        detectDragGesturesAfterLongPress(onDragStart = start, onDrag = move,
-                            onDragEnd = end, onDragCancel = cancel)
-                    }
-                } else Modifier),
-        ) {
-            TileView(tile, tileSize, prefs.hideLabels, onTap = { tap(it) },
-                editMode = editMode, onEdit = onEditTile)
-        }
+        TileView(tile, tileSize, prefs.hideLabels, onTap = { tap(it) },
+            editMode = editMode, onEdit = onEditTile)
     }
 
-    if (access.buttonsNav && !editMode) {
+    if ((access.buttonsNav || sentenceMode) && !editMode) {
         // Button navigation: whole-page turns instead of a sideways scroll.
         BoxWithConstraints(
             Modifier.fillMaxWidth().height(stripHeight).background(hexColor(prefs.colorNeeds)),

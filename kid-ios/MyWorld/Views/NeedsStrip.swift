@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The "Needs" section in the web app renders as a single horizontal strip
 /// across the bottom of the board — the most-used words (yes, no, hi, eat,
@@ -44,7 +45,7 @@ struct NeedsStrip: View {
         // "+ Add tile" cell is reachable even before any Needs tiles exist.
         if tiles.isEmpty && !editMode {
             EmptyView()
-        } else if access.buttonsNav && !editMode {
+        } else if (access.buttonsNav || sentence.mode) && !editMode {
             // Button navigation: whole-page turns instead of a sideways scroll.
             GeometryReader { geo in
                 let per = max(1, Int((geo.size.width - 108) / (tileSize + BoardMetrics.tileGap)))
@@ -98,6 +99,12 @@ struct NeedsStrip: View {
     private func needsCell(_ tile: Tile) -> some View {
         let base = TileView(tile: tile,
                             onTap: { t in
+                                // Sentence mode: a tap IS the stage — silent.
+                                if sentence.mode && !editMode {
+                                    sentence.stage(t, idleMinutes: access.sentenceIdleMin)
+                                    TilePlayer.shared.logOnly(t, childId: auth.childSlug, categoryName: "Needs")
+                                    return
+                                }
                                 Task {
                                     await TilePlayer.shared.play(
                                         t,
@@ -109,44 +116,7 @@ struct NeedsStrip: View {
                             editMode: editMode, onEdit: onEditTile)
             .frame(width: tileSize)
             .id("\(tile.id)-\(editMode ? "e" : "p")")
-        if access.sentenceBuilder && !editMode {
-            if access.sentenceLift == "drag" {
-                base.simultaneousGesture(quickLift(tile))
-            } else {
-                base.simultaneousGesture(longpressLift(tile))
-            }
-        } else {
-            base
-        }
-    }
-
-    private func longpressLift(_ tile: Tile) -> some Gesture {
-        LongPressGesture(minimumDuration: 1.0)
-            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("board")))
-            .onChanged { value in
-                if case .second(true, let drag) = value, let drag {
-                    sentence.dragUpdate(tile, at: drag.location)
-                }
-            }
-            .onEnded { value in
-                if case .second(true, let drag) = value, let drag {
-                    if sentence.dragEnd(at: drag.location) { stageTile(tile) }
-                } else {
-                    sentence.dragCancel()
-                }
-            }
-    }
-
-    private func quickLift(_ tile: Tile) -> some Gesture {
-        DragGesture(minimumDistance: 24, coordinateSpace: .named("board"))
-            .onChanged { sentence.dragUpdate(tile, at: $0.location) }
-            .onEnded { if sentence.dragEnd(at: $0.location) { stageTile(tile) } }
-    }
-
-    private func stageTile(_ tile: Tile) {
-        sentence.stage(tile, idleMinutes: access.sentenceIdleMin)
-        // Logged, not spoken — staging is composing; ▶ says the sentence.
-        TilePlayer.shared.logOnly(tile, childId: auth.childSlug, categoryName: "Needs")
+        base
     }
 
     private func stripPaddle(_ icon: String, disabled: Bool, action: @escaping () -> Void) -> some View {

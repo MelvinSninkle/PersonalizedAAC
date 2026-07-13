@@ -591,11 +591,20 @@
     font: 700 16px Fredoka, ui-rounded, system-ui, sans-serif; color: #ad1457;
   }
   header.sb-drop-hot { outline: 4px solid #66bb6a; outline-offset: -4px; }
+  body.sentence-mode #sentence-btn { background: #66bb6a; box-shadow: 0 0 0 3px rgba(102,187,106,.4); }
   /* Quick-drag lift: tiles own the touch gesture so a finger-drag can reach
      the bar (pairs well with button-nav). Long-press lift keeps native
      scrolling — the hold is the claim. */
   body.sb-on.sb-lift-drag:not(.edit-mode) .items-grid .tile-wrap { touch-action: none; }
   .tile-wrap.sb-lifting .tile-square { transform: scale(1.06); transition: transform .15s; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+  /* Hold-to-stage confirmation: the tile pops and glows green for a beat —
+     the word just flew to the sentence bar without leaving its spot. */
+  @keyframes sbStagedPop {
+    0% { transform: scale(1.06); box-shadow: 0 0 0 3px #66bb6a; }
+    45% { transform: scale(1.14); box-shadow: 0 0 0 6px #66bb6a; }
+    100% { transform: scale(1); box-shadow: none; }
+  }
+  .tile-wrap.sb-staged-pop .tile-square { animation: sbStagedPop .5s ease-out; }
 
   /* Listening repeat-navigate: found-it flash on the tile. */
   .tile-wrap.listen-hit .tile-square {
@@ -1145,6 +1154,7 @@
   <div class="hdr-center">
     <button id="login-btn" aria-label="Login" title="Login">🔒</button>
     <button id="listen-btn" class="btn-listen" aria-label="Listen" title="Listen — turn spoken words into picture tiles">🎙️</button>
+    <button id="sentence-btn" class="btn-listen" style="display:none;" aria-label="Build a sentence" title="Build a sentence — tap words to add them, ▶ speaks the whole thing">✏️</button>
     <h1>
       <img class="hdr-icon" src="/icons/myworld-globe.png" alt="">
       <span class="cwt">My World</span>
@@ -2719,6 +2729,17 @@
   //   easyUnlock — the lock opens edit mode without the account password.
   //                Enabling requires the password ONCE plus a strong warning.
   const SAFETY = { easyClose: false, easyUnlock: false };
+  // Header tools are parent-configurable for every family (synced child
+  // settings, default ON): a parent can hide listen / teach / play / the
+  // sentence pencil per child. The lock is not optional — parents need it.
+  const TOOLS = { listen: true, teach: true, play: true, sentence: true };
+  function applyTools() {
+    const set = (id, on) => { const b = document.getElementById(id); if (b) b.style.display = on ? '' : 'none'; };
+    set('listen-btn', TOOLS.listen);
+    set('teach-btn', TOOLS.teach);
+    set('play-request-btn', TOOLS.play);
+    set('sentence-btn', TOOLS.sentence && ACCESS.sentenceBuilder);
+  }
   const DOUBLE_TAP_WINDOW_MS = 2500;
   let _lastTapItemId = null, _lastTapItemAt = 0;
 
@@ -2750,6 +2771,9 @@
     const now = Date.now();
     if (now - _lastTapAt < 250) return;   // swallow an accidental double-tap / bounce
     _lastTapAt = now;
+    // Sentence mode (the pencil): a tap IS the stage — silent, logged by
+    // sbStage. Speaking waits for ▶.
+    if (SB.mode) { sbStage(item); return; }
     // Same tile again inside the window → its teaching facts (when enabled
     // and it has any). Logged like a normal tap; a third tap starts fresh.
     if (TOUCH.doubleTapTeach && item.id === _lastTapItemId
@@ -5097,6 +5121,11 @@
       TOUCH.doubleTapTeach = !!s.doubleTapTeach;
       SAFETY.easyClose = !!s.easyClose;
       SAFETY.easyUnlock = !!s.easyUnlock;
+      TOOLS.listen = s.toolListen !== false;
+      TOOLS.teach = s.toolTeach !== false;
+      TOOLS.play = s.toolPlay !== false;
+      TOOLS.sentence = s.toolSentence !== false;
+      applyTools();
       const kd = s.kidDisplay;
       if (kd && /^#[0-9a-fA-F]{6}$/.test(String(kd.colorHeaderBg || ''))) {
         document.documentElement.style.setProperty('--hdr-bg', kd.colorHeaderBg);
@@ -6520,10 +6549,10 @@
     ACCESS.sentenceIdleMin = (Number.isFinite(m) && m >= 1 && m <= 10) ? m : 1;
     ACCESS.sentenceLift = s.sentenceLift === 'drag' ? 'drag' : 'longpress';
     ACCESS.listenRepeatNav = s.listenRepeatNav !== false;
-    document.body.classList.toggle('nav-buttons-mode', ACCESS.navMode === 'buttons');
+    document.body.classList.toggle('nav-buttons-mode', ACCESS.navMode === 'buttons' || SB.mode);
     document.body.classList.toggle('sb-on', ACCESS.sentenceBuilder);
-    document.body.classList.toggle('sb-lift-drag', ACCESS.sentenceBuilder && ACCESS.sentenceLift === 'drag');
-    if (!ACCESS.sentenceBuilder) sbClear();
+    if (!ACCESS.sentenceBuilder) sbSetMode(false);
+    applyTools();
     updateAllPagers();
   }
 
@@ -6602,17 +6631,35 @@
   initPagers();
 
   // ---- Sentence constructor ---------------------------------------------------
-  // Drag a tile up to the header to stage it (the tile itself stays put on the
-  // board). Staging logs like a normal tap (milestones see the combination)
-  // but stays SILENT — the child is composing, not speaking; ▶ says the whole
-  // sentence. ✕ clears instantly; the idle timer (parent-set, 1–10 min) is
-  // the fallback. Chips flex-shrink as the bar fills.
-  const SB = { staged: [], timer: null, drag: null };
+  // MODAL, not gestural (the pencil ✏️ in the header owns it): while sentence
+  // mode is on, the board runs BUTTON navigation — so staging can be a plain
+  // TAP and never fights scrolling — and every tap stages its tile silently
+  // (▶ says the sentence, ✕ clears). The mode turns itself off after 60s if
+  // no sentence gets started; the idle timer (parent-set, 1–10 min) still
+  // clears a bar that was left mid-sentence.
+  const SB = { staged: [], timer: null, drag: null, mode: false, modeTimer: null };
+  function sbSetMode(on) {
+    SB.mode = !!on && ACCESS.sentenceBuilder;
+    document.body.classList.toggle('sentence-mode', SB.mode);
+    document.body.classList.toggle('nav-buttons-mode', ACCESS.navMode === 'buttons' || SB.mode);
+    if (!SB.mode) sbClear();
+    sbArmModeTimer();
+    updateAllPagers();
+  }
+  // 60-second "nothing started" window: runs whenever the mode is on with an
+  // empty bar; staging cancels it, clearing re-arms it.
+  function sbArmModeTimer() {
+    if (SB.modeTimer) { clearTimeout(SB.modeTimer); SB.modeTimer = null; }
+    if (SB.mode && !SB.staged.length) {
+      SB.modeTimer = setTimeout(() => { if (SB.mode && !SB.staged.length) sbSetMode(false); }, 60000);
+    }
+  }
   function sbClear() {
     if (SB.timer) { clearTimeout(SB.timer); SB.timer = null; }
     SB.staged = [];
     document.body.classList.remove('sentence-active');
     const c = document.getElementById('sentence-chips'); if (c) c.innerHTML = '';
+    if (typeof sbArmModeTimer === 'function') sbArmModeTimer();
   }
   function sbResetIdle() {
     if (SB.timer) clearTimeout(SB.timer);
@@ -6640,6 +6687,7 @@
     wrap.appendChild(chip);
     enqueueEvent(item, null, null);   // logged, not spoken — ▶ does the talking
     sbResetIdle();
+    sbArmModeTimer();
   }
   async function sbPlayAll() {
     if (!SB.staged.length) return;
@@ -6653,96 +6701,13 @@
     }
     sbResetIdle();
   }
-  (function wireSentenceDrag() {
+  (function wireSentenceButtons() {
     const playBtn = document.getElementById('sentence-play');
     if (playBtn) playBtn.addEventListener('click', sbPlayAll);
     const clearBtn = document.getElementById('sentence-clear');
     if (clearBtn) clearBtn.addEventListener('click', sbClear);   // deliberate short tap — a mis-tap costs one rebuild, a stuck sentence costs the feature
-    const LIFT = 22;        // quick-drag: > TAP_TOLERANCE(18) so a lift can never double-fire as a tap
-    const HOLD_MS = 1000;   // long-press: a FULL second (up from 450ms) — real-child testing: a slow scroll start read as a lift and broke scrolling
-    const WIGGLE = 10;      // movement during the hold that still counts as holding still
-    function sbLift(d) {
-      d.active = true;
-      const ghost = document.createElement('div');
-      ghost.className = 'sb-drag-ghost';
-      const sq = d.wrap.querySelector('.tile-square');
-      const bg = sq && sq.style.backgroundImage;
-      if (bg) ghost.style.backgroundImage = bg;
-      else ghost.textContent = (d.wrap.querySelector('.tile-label') || {}).textContent || '';
-      document.body.appendChild(ghost);
-      d.ghost = ghost;
-      d.ghost.style.left = (d.lx - 46) + 'px';
-      d.ghost.style.top = (d.ly - 46) + 'px';
-      d.wrap.classList.remove('sb-lifting');
-    }
-    function sbAbortHold(d) {
-      if (d.holdTimer) { clearTimeout(d.holdTimer); d.holdTimer = null; }
-      d.wrap.classList.remove('sb-lifting');
-    }
-    document.addEventListener('pointerdown', (e) => {
-      if (!ACCESS.sentenceBuilder || editMode) return;
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
-      const wrap = e.target.closest && e.target.closest('.items-grid .tile-wrap');
-      if (!wrap || !wrap.dataset.entityId) return;
-      const d = { wrap, sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY,
-                  active: false, ghost: null, pid: e.pointerId, holdTimer: null };
-      SB.drag = d;
-      if (ACCESS.sentenceLift === 'longpress') {
-        wrap.classList.add('sb-lifting');
-        d.holdTimer = setTimeout(() => {
-          d.holdTimer = null;
-          if (SB.drag === d && !d.active) sbLift(d);
-        }, HOLD_MS);
-      }
-    });
-    // While a long-press lift is active, the finger owns the gesture — block
-    // the browser from starting a scroll mid-drag. (Quick-drag mode does this
-    // statically with touch-action: none.)
-    document.addEventListener('touchmove', (e) => {
-      if (SB.drag && SB.drag.active) e.preventDefault();
-    }, { passive: false });
-    document.addEventListener('pointermove', (e) => {
-      const d = SB.drag; if (!d || e.pointerId !== d.pid) return;
-      d.lx = e.clientX; d.ly = e.clientY;
-      if (!d.active) {
-        const moved = Math.hypot(e.clientX - d.sx, e.clientY - d.sy);
-        if (ACCESS.sentenceLift === 'longpress') {
-          // Moving during the hold means scrolling or tapping, not lifting.
-          if (moved > WIGGLE) { sbAbortHold(d); SB.drag = null; }
-          return;
-        }
-        if (moved < LIFT) return;
-        sbLift(d);
-      }
-      d.ghost.style.left = (e.clientX - 46) + 'px';
-      d.ghost.style.top = (e.clientY - 46) + 'px';
-      const hdr = document.querySelector('header');
-      if (hdr) hdr.classList.toggle('sb-drop-hot', e.clientY <= hdr.getBoundingClientRect().bottom + 12);
-    });
-    async function finish(e) {
-      const d = SB.drag; if (!d || e.pointerId !== d.pid) return;
-      SB.drag = null;
-      sbAbortHold(d);
-      const hdr = document.querySelector('header');
-      if (hdr) hdr.classList.remove('sb-drop-hot');
-      if (d.ghost) d.ghost.remove();
-      if (!d.active || !hdr) return;
-      if (e.clientY > hdr.getBoundingClientRect().bottom + 12) return;   // not dropped on the bar
-      const id = parseInt(d.wrap.dataset.entityId, 10);
-      const section = d.wrap.dataset.section;
-      try {
-        const item = (await getAllItems(section)).find((i) => i.id === id);
-        if (item) sbStage(item);
-      } catch (_) {}
-    }
-    document.addEventListener('pointerup', finish);
-    document.addEventListener('pointercancel', () => {
-      const d = SB.drag; SB.drag = null;
-      if (d) sbAbortHold(d);
-      if (d && d.ghost) d.ghost.remove();
-      const hdr = document.querySelector('header');
-      if (hdr) hdr.classList.remove('sb-drop-hot');
-    });
+    const modeBtn = document.getElementById('sentence-btn');
+    if (modeBtn) modeBtn.addEventListener('click', () => sbSetMode(!SB.mode));
   })();
 
   // ---- Listening repeat-navigate ---------------------------------------------
@@ -6783,7 +6748,7 @@
 
   // Runtime hooks for the surface-audit stub harness (client parity checks) —
   // client-side only, nothing here crosses a security boundary.
-  window.__accessHooks = { applyAccessSettings, sbStage, sbClear, navigateToTile, getAllItems, updateAllPagers };
+  window.__accessHooks = { applyAccessSettings, sbStage, sbClear, sbSetMode, navigateToTile, getAllItems, updateAllPagers };
 
   // ---- Phone mode: one section at a time behind tabs -------------------------
   // The tab bar is display:none above 700px, so this is inert on tablets.

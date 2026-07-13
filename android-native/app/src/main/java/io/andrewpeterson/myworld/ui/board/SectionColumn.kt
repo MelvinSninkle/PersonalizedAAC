@@ -125,7 +125,19 @@ fun SectionColumn(
         ?: roots.firstOrNull()?.label
     val activeSubcategoryName = selectedSubcategoryId?.let { id -> cats.firstOrNull { it.id == id }?.label }
 
+    val sentenceMode by c.sentenceBar.mode.collectAsState()
+
     fun playWithLogging(t: Tile, fallbackCategory: String? = null) {
+        // Sentence mode (the pencil): a tap IS the stage — silent; ▶ speaks.
+        if (sentenceMode && !editMode) {
+            c.sentenceBar.stage(t, access.sentenceIdleMin)
+            c.tilePlayer.logOnly(
+                t, childId = c.auth.childSlug,
+                categoryName = fallbackCategory ?: activeCategoryName,
+                subcategoryName = activeSubcategoryName,
+            )
+            return
+        }
         c.tilePlayer.play(
             t, childId = c.auth.childSlug,
             categoryName = fallbackCategory ?: activeCategoryName,
@@ -153,7 +165,7 @@ fun SectionColumn(
         }
 
         CategoryTabStrip(roots, selectedCategoryId, prefs.hideLabels,
-            paged = access.buttonsNav && !editMode,
+            paged = (access.buttonsNav || sentenceMode) && !editMode,
             onChipBounds = if (editMode) ({ id, r -> chipRects[id] = r }) else null) { id ->
             c.boardNav.setCategory(section, id)
             // Every REAL chip press is remembered as the header Play/Teach scope.
@@ -162,7 +174,7 @@ fun SectionColumn(
 
         if (activeCategory != null && subs.isNotEmpty()) {
             SubcategoryStrip(subs, selectedSubcategoryId ?: subs.first().id, prefs.hideLabels,
-                paged = access.buttonsNav && !editMode,
+                paged = (access.buttonsNav || sentenceMode) && !editMode,
                 onChipBounds = if (editMode) ({ id, r -> chipRects[id] = r }) else null) { id ->
                 c.boardNav.setSubcategory(section, id)
                 io.andrewpeterson.myworld.game.PlayScope.note("cat:$id", c.auth.childSlug)
@@ -369,37 +381,6 @@ private fun TileGrid(
                                 onDragEnd = { completeDrag() },
                                 onDragCancel = { dragId = null },
                             )
-                        }
-                        // Sentence constructor: lift a COPY up to the header
-                        // bar. Long-press (default) keeps normal scrolling —
-                        // the hold is the gesture claim; quick-drag lifts on
-                        // first movement (eye tracker / mouse rigs).
-                        sentenceOn -> Modifier.pointerInput(tile.id, access.sentenceLift) {
-                            val start: (Offset) -> Unit = {
-                                dragOrigin = cellRects[tile.id]?.center ?: Offset.Zero
-                                dragPos = dragOrigin
-                                dragId = tile.id
-                                c.sentenceBar.dragUpdate(tile, false)
-                            }
-                            val move: (androidx.compose.ui.input.pointer.PointerInputChange, Offset) -> Unit = { change, amount ->
-                                change.consume()
-                                dragPos += amount
-                                c.sentenceBar.dragUpdate(tile, dragPos.y <= dropZonePx)
-                            }
-                            val end: () -> Unit = {
-                                val hit = dragPos.y <= dropZonePx
-                                dragId = null
-                                c.sentenceBar.dragEnd()
-                                if (hit) onStage(tile)
-                            }
-                            val cancel: () -> Unit = { dragId = null; c.sentenceBar.dragEnd() }
-                            if (access.sentenceLift == "drag") {
-                                detectDragGestures(onDragStart = start, onDrag = move,
-                                    onDragEnd = end, onDragCancel = cancel)
-                            } else {
-                                detectDragGesturesAfterLongPress(onDragStart = start, onDrag = move,
-                                    onDragEnd = end, onDragCancel = cancel)
-                            }
                         }
                         else -> Modifier
                     }),

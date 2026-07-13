@@ -113,11 +113,6 @@ struct BoardView: View {
         // Shared space for the sentence-lift gesture: tiles report drag points
         // here, and the header drop zone is y ≤ SentenceBar.dropZoneMaxY.
         .coordinateSpace(name: "board")
-        .overlay {
-            if let d = sentence.drag {
-                SentenceDragGhost(tile: d.tile).position(d.point)
-            }
-        }
         .overlay { emptyBoardOverlay }
         .overlay(alignment: .top) { scheduledPromptOverlay }
         .overlay(alignment: .top) { autoTeachOverlay }

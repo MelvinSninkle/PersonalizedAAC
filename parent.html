@@ -682,6 +682,32 @@
 
   </details>
   <details class="acc admin-access-only" style="display:none;"><summary>🧪 Access experiments (admin)</summary>
+  <div class="section-label">Board tools</div>
+  <div class="panel" id="tools-panel">
+    <h2>Buttons on the board's top bar</h2>
+    <p class="hint">Choose which tools <span class="cn">your child</span> can reach. Applies on every device this board is used on. The lock is always there — that one's yours.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;max-width:520px;">
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>🎙 Listening mode <span class="hint" style="display:block;margin:2px 0 0;">Spoken words appear as tiles in the top bar.</span></span>
+        <input type="checkbox" id="tool-listen">
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>📖 Teach me <span class="hint" style="display:block;margin:2px 0 0;">A teaching slideshow of what they were just looking at.</span></span>
+        <input type="checkbox" id="tool-teach">
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>🙋 Play with me <span class="hint" style="display:block;margin:2px 0 0;">A quick matching game about the words on screen.</span></span>
+        <input type="checkbox" id="tool-play">
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>✏️ Sentence builder <span class="hint" style="display:block;margin:2px 0 0;">Tap the pencil, then tap words to build a sentence the board speaks. (Shows only while the sentence builder is enabled for this child.)</span></span>
+        <input type="checkbox" id="tool-sentence">
+      </label>
+      <div><button class="btn primary" id="tools-save">Save board tools</button>
+        <span id="tools-msg" class="hint"></span></div>
+    </div>
+  </div>
+
   <div class="section-label admin-access-only" style="display:none;">Access (admin testing)</div>
   <div class="panel admin-access-only" id="access-panel" style="display:none;">
     <h2>Access experiments</h2>
@@ -698,12 +724,6 @@
       </label>
       <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Sentence constructor
         <input type="checkbox" id="acc-sb">
-      </label>
-      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Sentence tile pick-up
-        <select id="acc-sb-lift" style="padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;">
-          <option value="longpress">Hold, then drag (default — scrolling still works)</option>
-          <option value="drag">Drag right away (eye tracker / mouse)</option>
-        </select>
       </label>
       <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">Sentence bar clears after (minutes)
         <input type="number" id="acc-sb-idle" min="1" max="10" step="1" value="1" style="width:80px;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;">
@@ -2964,12 +2984,29 @@
       });
     }
 
+    // ---- Board tools (parent-writable header buttons; synced per child) ----
+    const toolListen = document.getElementById('tool-listen');
+    if (toolListen) {
+      toolListen.checked = childSettings.toolListen !== false;
+      document.getElementById('tool-teach').checked = childSettings.toolTeach !== false;
+      document.getElementById('tool-play').checked = childSettings.toolPlay !== false;
+      document.getElementById('tool-sentence').checked = childSettings.toolSentence !== false;
+      document.getElementById('tools-save').addEventListener('click', () => {
+        childSettings = { ...childSettings,
+          toolListen: toolListen.checked,
+          toolTeach: document.getElementById('tool-teach').checked,
+          toolPlay: document.getElementById('tool-play').checked,
+          toolSentence: document.getElementById('tool-sentence').checked,
+        };
+        saveSettingsToServer('Saved ✓ — the board picks it up on its next settings sync', 'tools-msg');
+      });
+    }
+
     // ---- Access experiments (admin dark-launch; server enforces admin-only) ----
     const accNav = document.getElementById('acc-nav');
     if (accNav) {
       accNav.value = childSettings.navMode === 'buttons' ? 'buttons' : 'scroll';
       document.getElementById('acc-sb').checked = !!childSettings.sentenceBuilder;
-      document.getElementById('acc-sb-lift').value = childSettings.sentenceLift === 'drag' ? 'drag' : 'longpress';
       const idle = parseInt(childSettings.sentenceIdleMin, 10);
       document.getElementById('acc-sb-idle').value = (Number.isFinite(idle) && idle >= 1 && idle <= 10) ? idle : 1;
       document.getElementById('acc-listen-nav').checked = childSettings.listenRepeatNav !== false;
@@ -2978,7 +3015,6 @@
         childSettings = { ...childSettings,
           navMode: accNav.value === 'buttons' ? 'buttons' : 'scroll',
           sentenceBuilder: document.getElementById('acc-sb').checked,
-          sentenceLift: document.getElementById('acc-sb-lift').value === 'drag' ? 'drag' : 'longpress',
           sentenceIdleMin: idleV,
           listenRepeatNav: document.getElementById('acc-listen-nav').checked,
         };
