@@ -579,8 +579,8 @@
   }
   #sentence-play:active { background: #1b5e20; }
   #sentence-clear {
-    flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%; border: none;
-    background: rgba(255,255,255,.22); color: #fff; font-size: 20px; cursor: pointer;
+    flex: 0 0 auto; width: 64px; height: 64px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,.22); color: #fff; font-size: 26px; cursor: pointer;
   }
   #sentence-clear:active { background: rgba(0,0,0,.18); }
   .sb-drag-ghost {
@@ -6196,6 +6196,7 @@
     }
     if (on === _listening) return;
     _listening = on;
+    if (on) sbSetMode(false);   // listening owns the header — stop any sentence mid-speech
     document.body.classList.toggle('listening', on);
     const lb = document.getElementById('listen-btn');
     if (lb) { lb.classList.toggle('on', on); lb.textContent = on ? '⏹️' : '🎙️'; lb.title = on ? 'Stop listening' : 'Listen — turn spoken words into picture tiles'; }
@@ -6327,6 +6328,7 @@
 
   async function startFromCmd(cmd) {
     if (G.running || SLIDE.running || TEACH.running || ROUTINE.active) return;   // one activity at a time
+    sbSetMode(false);   // a game owns the stage — stop any sentence mid-speech
     if (Array.isArray(cmd.steps) && cmd.steps.length) { runRoutine(cmd.steps); return; }
     const mode = cmd.mode || 'facilitated';        // back-compat: therapist sends no mode → facilitated
     const range = (cmd.from || cmd.to) ? { from: cmd.from || 0, to: cmd.to || 0 } : null;
@@ -6655,6 +6657,7 @@
     }
   }
   function sbClear() {
+    sbStopPlayback();
     if (SB.timer) { clearTimeout(SB.timer); SB.timer = null; }
     SB.staged = [];
     document.body.classList.remove('sentence-active');
@@ -6665,7 +6668,9 @@
     if (SB.timer) clearTimeout(SB.timer);
     SB.timer = setTimeout(sbClear, ACCESS.sentenceIdleMin * 60000);
   }
+  const SB_MAX_WORDS = 25;   // a sentence, not a filibuster
   async function sbStage(item) {
+    if (SB.staged.length >= SB_MAX_WORDS) return;
     SB.staged.push(item);
     document.body.classList.add('sentence-active');
     const wrap = document.getElementById('sentence-chips');
@@ -6689,14 +6694,24 @@
     sbResetIdle();
     sbArmModeTimer();
   }
+  // Playback carries a generation token: ✕, pencil-off, listening, and games
+  // all bump it, which aborts the loop AND a second ▶ can never stack a
+  // parallel loop on top (the corn-on-the-cob incident).
+  let _sbPlayGen = 0;
+  function sbStopPlayback() {
+    _sbPlayGen++;
+    try { const v = gVoice(); v.pause(); v.dispatchEvent(new Event('ended')); } catch (_) {}
+  }
   async function sbPlayAll() {
     if (!SB.staged.length) return;
+    const gen = ++_sbPlayGen;
     sbResetIdle();
     for (const item of SB.staged.slice()) {
+      if (gen !== _sbPlayGen) return;   // stopped or restarted
       try {
         let u = item.soundKey ? await getMediaURL(item.soundKey) : null;
         if (!u) u = await teachAudioURL(item.displayLabel || item.label);
-        if (u) await playAwait(u);
+        if (u && gen === _sbPlayGen) await playAwait(u);
       } catch (_) {}
     }
     sbResetIdle();
