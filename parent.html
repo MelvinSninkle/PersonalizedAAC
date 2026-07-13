@@ -574,6 +574,18 @@
         </div>
       </div>
     </div>
+    <!-- The exact reference images attached to every generation -->
+    <div class="section-label" style="margin-top:18px;">The reference pictures behind new art</div>
+    <p class="hint">Every new picture is drawn while looking at these. Portraits of people lean on the people reference; everything else leans on the objects reference (each falls back to the main style when not set). Upload your own to steer the look — it applies to pictures made from now on; existing tiles keep theirs, and any tile can be remade from its editor.</p>
+    <div id="style-refs" style="display:flex;gap:14px;flex-wrap:wrap;"></div>
+    <input type="file" id="style-ref-file" accept="image/*" style="display:none;">
+    <div id="style-refs-msg" style="font-size:13px;color:#6b7280;margin-top:6px;"></div>
+
+    <!-- Switch to another built-in style -->
+    <div class="section-label" style="margin-top:18px;">Switch to another style</div>
+    <p class="hint">Pick a different built-in look. New pictures use it right away — tiles already on the board don't change.</p>
+    <div id="style-choices" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:6px;"></div>
+
     <!-- Draft preview (approve before it replaces the anchor) -->
     <div id="style-draft" style="display:none;margin-top:16px;padding:14px;border-radius:14px;background:#fdf4ff;border:1px solid #f3c6da;">
       <div style="font-weight:700;color:#9d174d;margin-bottom:8px;">New take — keep it?</div>
@@ -1692,23 +1704,117 @@
   })();
   loadAnalytics();
 
-  // ---- Art style: show the family's current board style ----
+  // ---- Art style: current style, the exact reference images, switcher, uploads ----
+  const STYLE_REF_CARDS = [
+    { kind: 'main',   title: '🎨 Main style',         hint: 'Attached to every new picture.' },
+    { kind: 'person', title: '🧑 People & portraits', hint: 'Guides portraits of people.' },
+    { kind: 'stuff',  title: '🧸 Objects & scenes',   hint: 'Guides everything that isn\'t a person.' },
+  ];
+  let styleUploadKind = null;
+  function styleRefsMsg(t) { const el = document.getElementById('style-refs-msg'); if (el) el.textContent = t || ''; }
+  function renderStyleRefs(guide) {
+    const wrap = document.getElementById('style-refs'); if (!wrap) return;
+    wrap.innerHTML = STYLE_REF_CARDS.map(c => {
+      const url = guide && guide.refs ? guide.refs[c.kind] : null;
+      const img = url
+        ? '<img src="' + url + '&t=' + Date.now() + '" alt="" style="width:120px;height:120px;object-fit:cover;border-radius:12px;border:2px solid var(--line);background:#fff7fb;">'
+        : '<div style="width:120px;height:120px;border-radius:12px;border:2px dashed var(--line);display:flex;align-items:center;justify-content:center;font-size:11px;color:#9ca3af;text-align:center;padding:6px;box-sizing:border-box;">Uses the main style picture</div>';
+      return '<div style="display:flex;flex-direction:column;gap:6px;align-items:center;">' + img +
+        '<div style="font-size:13px;font-weight:700;color:var(--ink);">' + c.title + '</div>' +
+        '<div style="font-size:11px;color:#9ca3af;max-width:130px;text-align:center;">' + c.hint + '</div>' +
+        '<button class="btn ghost" data-style-upload="' + c.kind + '" style="font-size:12px;">⬆ Upload your own</button>' +
+        '</div>';
+    }).join('');
+  }
+  function renderStyleChoices(d) {
+    const wrap = document.getElementById('style-choices'); if (!wrap) return;
+    const curId = d.styleGuide ? d.styleGuide.id : null;
+    const cards = (d.styles || []).map(s => {
+      const current = s.id === curId;
+      return '<div style="flex:0 0 auto;width:150px;display:flex;flex-direction:column;gap:6px;">' +
+        '<img src="' + s.previewUrl + '" alt="" loading="lazy" style="width:150px;height:150px;object-fit:cover;border-radius:12px;border:2px solid ' + (current ? 'var(--pink)' : 'var(--line)') + ';background:#fff7fb;">' +
+        '<div style="font-size:13px;font-weight:700;color:var(--ink);">' + schEsc(s.label || '') + '</div>' +
+        (current
+          ? '<span style="font-size:12px;color:var(--pink-deep);font-weight:700;">✓ Current style</span>'
+          : '<button class="btn ghost" data-style-set="' + s.id + '" data-style-label="' + schEsc(s.label || '') + '" style="font-size:12px;">Use this style</button>') +
+        '</div>';
+    });
+    // The family's own guide (custom uploads / regenerated style) leads the
+    // rail so hopping back after trying a template is one tap.
+    if (d.styleGuide && d.styleGuide.source === 'family') {
+      cards.unshift('<div style="flex:0 0 auto;width:150px;display:flex;flex-direction:column;gap:6px;">' +
+        '<img src="' + (d.styleGuide.imageUrl || '') + '&t=' + Date.now() + '" alt="" style="width:150px;height:150px;object-fit:cover;border-radius:12px;border:2px solid var(--pink);background:#fff7fb;">' +
+        '<div style="font-size:13px;font-weight:700;color:var(--ink);">' + schEsc(d.styleGuide.label || 'Your family style') + '</div>' +
+        '<span style="font-size:12px;color:var(--pink-deep);font-weight:700;">✓ Current style</span>' +
+        '</div>');
+    }
+    wrap.innerHTML = cards.join('') || '<div style="font-size:13px;color:#9ca3af;">No built-in styles available yet.</div>';
+  }
   async function loadStyle() {
     try {
       const r = await fetch('/api/parent/style?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
       if (!r.ok) return;
-      const { styleGuide } = await r.json();
-      if (!styleGuide) return; // no style yet — leave the panel hidden
+      const d = await r.json();
+      const styleGuide = d.styleGuide;
+      if (!styleGuide && !(d.styles || []).length) return; // nothing to show — leave hidden
       const img = document.getElementById('style-panel-img');
-      if (styleGuide.imageUrl) { img.src = styleGuide.imageUrl; } else { img.style.display = 'none'; }
-      document.getElementById('style-panel-label').textContent = styleGuide.label || 'Your style';
-      document.getElementById('style-panel-desc').textContent = styleGuide.description || '';
-      document.getElementById('style-panel-source').textContent =
-        styleGuide.source === 'family' ? 'Generated for your family from your onboarding.' : 'A built-in style template.';
+      if (styleGuide && styleGuide.imageUrl) { img.src = styleGuide.imageUrl + '&t=' + Date.now(); img.style.display = ''; }
+      else { img.style.display = 'none'; }
+      document.getElementById('style-panel-label').textContent = styleGuide ? (styleGuide.label || 'Your style') : 'No style chosen yet';
+      document.getElementById('style-panel-desc').textContent = styleGuide ? (styleGuide.description || '') : 'Pick a built-in style below — every new picture will be drawn to match it.';
+      document.getElementById('style-panel-source').textContent = !styleGuide ? ''
+        : styleGuide.source === 'family' ? 'Your family\'s own style — from your onboarding, regeneration, or uploads.' : 'A built-in style template.';
+      renderStyleRefs(styleGuide);
+      renderStyleChoices(d);
       document.getElementById('style-panel').style.display = '';
     } catch (_) { /* leave hidden */ }
   }
   loadStyle();
+
+  // Ref uploads + style switching (delegated so re-renders keep working).
+  (function () {
+    const panel = document.getElementById('style-panel');
+    const file = document.getElementById('style-ref-file');
+    if (!panel || !file) return;
+    panel.addEventListener('click', async (e) => {
+      const up = e.target.closest('[data-style-upload]');
+      if (up) { styleUploadKind = up.dataset.styleUpload; file.value = ''; file.click(); return; }
+      const set = e.target.closest('[data-style-set]');
+      if (set) {
+        const label = set.dataset.styleLabel || 'this style';
+        if (!confirm('Draw new pictures in "' + label + '"?\n\nTiles already on the board keep their current pictures — you can remake any tile from its editor.')) return;
+        set.disabled = true;
+        try {
+          const r = await fetch('/api/parent/style?childId=' + encodeURIComponent(slug), {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'set', styleGuideId: Number(set.dataset.styleSet) }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+          styleRefsMsg('Style switched — new pictures use it from now on.');
+          await loadStyle();
+        } catch (err) { styleRefsMsg('Could not switch: ' + (err.message || err)); set.disabled = false; }
+      }
+    });
+    file.addEventListener('change', async () => {
+      const f = file.files && file.files[0];
+      const kind = styleUploadKind;
+      if (!f || !kind) return;
+      styleRefsMsg('Uploading…');
+      try {
+        const blob = await downscale(f, 1024, 0.9);
+        const key = await tileUpload(blob, 'styleref', 'jpg', blob.type || 'image/jpeg');
+        const r = await fetch('/api/parent/style?childId=' + encodeURIComponent(slug), {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'upload', kind, blobKey: key }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        styleRefsMsg('Saved — pictures made from now on follow your reference.');
+        await loadStyle();
+      } catch (err) { styleRefsMsg('Could not save: ' + (err.message || err)); }
+    });
+  })();
 
   // ---- Regenerate the family style (draft → approve) ----
   let styleDraftKey = null;

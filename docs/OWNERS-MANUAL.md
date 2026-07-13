@@ -121,6 +121,11 @@ family keeps everything they have — only new spends wait.
   "magic gallery"). Stuck builds: Lab tools re-arm dead jobs.
 - **Image generation**: `buildPortraitPrompt`/`renderTaxonomyTile` — single
   prompt source; style guides + child anchor photo; `IMAGE_GEN_DAILY_LIMIT`.
+  Each style carries up to three reference images (main anchor `blob_key`,
+  people `person_ref_key`, objects `stuff_ref_key`); renders attach the
+  subject-matched one automatically. Parents see/switch/replace them in
+  dashboard → Art style (`/api/parent/style`; uploads fork a child-scoped
+  "Your family style" row — public template rows are never edited).
   Curated defaults can bypass prompts: defaults view 📤 → `default-upload`
   lab action (writes ONLY the shared default layers; sync overlays every
   replaceable tile, never family art). Every image swap archives the old key

@@ -260,7 +260,18 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
   // Per-style WORLD references (the Lab's "stuff" scene for an offered style):
   // more of the same art style, so materials/objects render consistently —
   // unlike related-tile refs below, these must NOT force scene matching.
-  for (const key of (worldRefKeys || [])) {
+  // The style's subject-matched reference rides along automatically: person
+  // tiles lean on the "person drawn in this style" exemplar, everything else
+  // on the "stuff" scene — the same anchors the Lab uses for the default
+  // boards, honored for family renders too (parents can see and replace them
+  // in the parent dashboard's Art style panel).
+  const kindRefKey = (usePerson
+    ? (styleGuide && styleGuide.person_ref_key)
+    : (styleGuide && styleGuide.stuff_ref_key)) || null;
+  const allWorldRefs = (kindRefKey && !(worldRefKeys || []).includes(kindRefKey))
+    ? [kindRefKey, ...(worldRefKeys || [])]
+    : (worldRefKeys || []);
+  for (const key of allWorldRefs) {
     try {
       const bytes = await readBlobBytes(key);
       images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
