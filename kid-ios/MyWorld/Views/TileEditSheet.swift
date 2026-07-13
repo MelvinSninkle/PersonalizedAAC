@@ -293,6 +293,10 @@ struct BoardTileEditSheet: View {
     @State private var redrawGuidance = ""
     @State private var redrawGuidanceError: String?
     @State private var libraryItem: PhotosPickerItem?
+    // Adjust framing: drag/zoom the picture inside a tile-shaped square and
+    // bake exactly that square (the old picture is archived server-side).
+    @State private var showFraming = false
+    @State private var framingSource: UIImage?
     @State private var saving = false
     @State private var errorText: String?
     @State private var showDeleteConfirm = false
@@ -347,6 +351,19 @@ struct BoardTileEditSheet: View {
                 .ignoresSafeArea()
             }
             .sheet(isPresented: $showRedrawSheet) { redrawSheet }
+            .sheet(isPresented: $showFraming) {
+                if let src = framingSource {
+                    FramingSheet(source: src) { baked in
+                        if let data = baked.jpegData(compressionQuality: 0.9) {
+                            stagedImage = data
+                            stagedImageExt = "jpg"
+                            stagedImageCT = "image/jpeg"
+                            newPhoto = nil
+                            keepAspect = false   // the whole point is a filled square tile
+                        }
+                    }
+                }
+            }
             .photosPicker(isPresented: $showLibrary, selection: $libraryItem, matching: .images)
             .onChange(of: libraryItem) { _, item in
                 guard let item else { return }
@@ -373,24 +390,31 @@ struct BoardTileEditSheet: View {
     private var imageSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             field("Picture")
-            ZStack {
-                RoundedRectangle(cornerRadius: 16).fill(Color.white)
-                if let staged = stagedImage, let img = UIImage(data: staged) {
-                    Image(uiImage: img).resizable()
-                        .aspectRatio(contentMode: keepAspect ? .fit : .fill)
-                } else if let np = newPhoto, let img = UIImage(data: np) {
-                    Image(uiImage: img).resizable().aspectRatio(contentMode: .fit)
-                } else if let cur = currentImage {
-                    Image(uiImage: cur).resizable()
-                        .aspectRatio(contentMode: keepAspect ? .fit : .fill)
-                } else {
-                    Image(systemName: "photo").font(.largeTitle).foregroundStyle(.tertiary)
+            // TILE-SHAPED preview: a square, exactly like the board renders,
+            // so what you see here is what the tile shows (the old wide box
+            // made crop/no-crop look broken — it previewed a shape no tile
+            // ever has).
+            HStack {
+                Spacer(minLength: 0)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16).fill(Color.white)
+                    if let staged = stagedImage, let img = UIImage(data: staged) {
+                        Image(uiImage: img).resizable()
+                            .aspectRatio(contentMode: keepAspect ? .fit : .fill)
+                    } else if let np = newPhoto, let img = UIImage(data: np) {
+                        Image(uiImage: img).resizable().aspectRatio(contentMode: .fit)
+                    } else if let cur = currentImage {
+                        Image(uiImage: cur).resizable()
+                            .aspectRatio(contentMode: keepAspect ? .fit : .fill)
+                    } else {
+                        Image(systemName: "photo").font(.largeTitle).foregroundStyle(.tertiary)
+                    }
                 }
+                .frame(width: 200, height: 200)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.black.opacity(0.08)))
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 200)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.black.opacity(0.08)))
 
             if newPhoto != nil {
                 // A new photo is waiting — pick how to turn it into the tile.
@@ -440,6 +464,16 @@ struct BoardTileEditSheet: View {
             Toggle("Keep original ratio (don't crop)", isOn: $keepAspect)
                 .font(.system(size: 14))
                 .tint(Color(hex: "#ff1493"))
+
+            if stagedImage != nil || currentImage != nil {
+                Button {
+                    framingSource = stagedImage.flatMap(UIImage.init(data:)) ?? currentImage
+                    if framingSource != nil { showFraming = true }
+                } label: { pill("Adjust framing", filled: false, icon: "crop") }
+                .buttonStyle(.plain)
+                Text("Drag the photo inside a tile-shaped frame to pick exactly what shows. The old picture stays in the album.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -824,4 +858,111 @@ private func folderRows(_ board: BoardStore, _ section: BoardSection) -> [Folder
         }
     }
     return out
+}
+
+
+/// Drag/zoom the picture inside a tile-shaped square and bake EXACTLY that
+/// square — the native twin of the web board's "Adjust framing" overlay. The
+/// math anchors on one scale factor (photo pt → stage pt), so the saved
+/// square is precisely what the frame showed; min zoom = cover, so the tile
+/// is always filled. Lives in this already-tracked file so it builds without
+/// re-running xcodegen.
+private struct FramingSheet: View {
+    let source: UIImage
+    let onUse: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private let stage: CGFloat = 300
+    @State private var zoom: CGFloat = 1
+    @State private var ox: CGFloat = 0     // photo top-left relative to the frame (always ≤ 0)
+    @State private var oy: CGFloat = 0
+    @State private var dragStart: CGPoint?
+
+    private var base: CGFloat { stage / max(1, min(source.size.width, source.size.height)) }
+
+    private func clamp() {
+        let dw = source.size.width * base * zoom
+        let dh = source.size.height * base * zoom
+        ox = min(0, max(stage - dw, ox))
+        oy = min(0, max(stage - dh, oy))
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 14) {
+                Text("Drag the photo to choose what shows on the tile; zoom to get closer. The old picture stays in the album.")
+                    .font(.system(size: 13)).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center).padding(.horizontal, 24)
+                ZStack(alignment: .topLeading) {
+                    Image(uiImage: source)
+                        .resizable()
+                        .frame(width: source.size.width * base * zoom,
+                               height: source.size.height * base * zoom)
+                        .offset(x: ox, y: oy)
+                }
+                .frame(width: stage, height: stage, alignment: .topLeading)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: "#ff1493").opacity(0.7), lineWidth: 2))
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture()
+                        .onChanged { v in
+                            if dragStart == nil { dragStart = CGPoint(x: ox, y: oy) }
+                            ox = (dragStart?.x ?? 0) + v.translation.width
+                            oy = (dragStart?.y ?? 0) + v.translation.height
+                            clamp()
+                        }
+                        .onEnded { _ in dragStart = nil }
+                )
+                HStack(spacing: 10) {
+                    Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
+                    Slider(value: Binding(
+                        get: { zoom },
+                        set: { z in
+                            // Keep the frame's center pointing at the same spot.
+                            let cx = (stage / 2 - ox) / (base * zoom)
+                            let cy = (stage / 2 - oy) / (base * zoom)
+                            zoom = min(3, max(1, z))
+                            ox = stage / 2 - cx * base * zoom
+                            oy = stage / 2 - cy * base * zoom
+                            clamp()
+                        }), in: 1...3)
+                    Image(systemName: "plus.magnifyingglass").foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 28)
+                Spacer()
+            }
+            .padding(.top, 18)
+            .navigationTitle("Adjust framing")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Use this framing") { onUse(baked()); dismiss() }
+                }
+            }
+            .onAppear {
+                ox = (stage - source.size.width * base) / 2   // start centered — what cover shows today
+                oy = (stage - source.size.height * base) / 2
+                clamp()
+            }
+        }
+    }
+
+    /// Render exactly the framed square. scale maps photo pt → stage pt; the
+    /// crop rect is the stage square seen through that scale.
+    private func baked() -> UIImage {
+        let scale = base * zoom
+        let side = stage / scale
+        let out = max(256, min(1024, side.rounded()))
+        let k = out / side
+        let fmt = UIGraphicsImageRendererFormat()
+        fmt.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: out, height: out), format: fmt)
+        return renderer.image { _ in
+            source.draw(in: CGRect(x: ox / scale * k, y: oy / scale * k,
+                                   width: source.size.width * k,
+                                   height: source.size.height * k))
+        }
+    }
 }

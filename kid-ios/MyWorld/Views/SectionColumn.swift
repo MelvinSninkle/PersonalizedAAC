@@ -179,6 +179,15 @@ struct SectionColumn: View {
         }
     }
 
+    /// Cell identity INCLUDES the lock state. The conditional wrappers below
+    /// (draggableIf + the sentence-lift gesture branch) change a cell's
+    /// structure when the board locks/unlocks, and the lazy grid was reusing
+    /// stale cells across that flip — unlocking marked only some tiles
+    /// editable and re-locking left pencil badges behind. A fresh identity
+    /// per lock state forces every cell to rebuild. scrollTo() must use the
+    /// same key.
+    private func cellKey(_ tileId: Int) -> String { "\(tileId)-\(editMode ? "e" : "p")" }
+
     /// One grid cell: the tile, the edit-mode drag plumbing, the transient
     /// listen-navigate highlight, and (when the sentence constructor is on)
     /// the lift gesture that carries a copy up to the header bar.
@@ -195,7 +204,7 @@ struct SectionColumn: View {
                         .shadow(color: Color(hex: "#ffd400").opacity(0.6), radius: 8)
                 }
             }
-            .id(tile.id)
+            .id(cellKey(tile.id))
             // Unlocked-board drag: long-press-drag a tile onto another
             // tile to reorder, or onto a category/subcategory chip to
             // move it there. The payload carries the section so a tile
@@ -292,7 +301,7 @@ struct SectionColumn: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onChange(of: nav.highlight) { _, h in
                 guard let h, h.section == section else { return }
-                withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(h.tileId, anchor: .center) }
+                withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(cellKey(h.tileId), anchor: .center) }
             }
         })
     }
