@@ -104,28 +104,28 @@ const fails = [];
   const tile2 = page.locator('.items-grid .tile-wrap').first();
   const t2 = await tile2.boundingBox();
   const h2 = await page.locator('header').boundingBox();
-  // quick move without holding must NOT lift (that's a scroll/tap)
+  // movement — at any speed — must NEVER stage or produce a ghost: the
+  // scroll owns the touch (the child's finger is usually on a tile).
   await page.mouse.move(t2.x + 20, t2.y + 20);
   await page.mouse.down();
   await page.mouse.move(t2.x + 20, t2.y - 60);
-  const liftedEarly = await page.evaluate(() => !!document.querySelector('.sb-drag-ghost'));
+  await page.waitForTimeout(1200);   // even past the hold window, movement cancelled it
+  const movedGhost = await page.evaluate(() => !!document.querySelector('.sb-drag-ghost'));
+  const movedStaged = await page.evaluate(() => document.querySelectorAll('.sentence-chip').length);
   await page.mouse.up();
-  ok('longpress: quick move does not lift', liftedEarly === false);
-  // hold past HOLD_MS (a full second — kid-scroll safety), then drag → stages
+  ok('longpress: movement never stages (scroll wins)', movedGhost === false && movedStaged === 0);
+  // a stationary FULL-SECOND hold stages the tile in place — no drag at all
   await page.mouse.move(t2.x + 20, t2.y + 20);
   await page.mouse.down();
-  await page.waitForTimeout(1200);
-  const liftedAfterHold = await page.evaluate(() => !!document.querySelector('.sb-drag-ghost'));
-  for (let i = 1; i <= 6; i++) {
-    await page.mouse.move(t2.x + 20 + (h2.x + h2.width / 2 - t2.x - 20) * i / 6,
-                          t2.y + 20 + (h2.y + h2.height / 2 - t2.y - 20) * i / 6);
-  }
+  await page.waitForTimeout(1400);
   await page.mouse.up();
-  await page.waitForTimeout(400);
-  ok('longpress: hold lifts the tile', liftedAfterHold === true);
-  ok('longpress: drop on bar stages a chip', await page.evaluate(() =>
+  await page.waitForTimeout(300);
+  ok('longpress: 1s stationary hold stages in place', await page.evaluate(() =>
     document.querySelectorAll('.sentence-chip').length) === 1);
+  ok('longpress: hold produced no drag ghost', await page.evaluate(() =>
+    !document.querySelector('.sb-drag-ghost')));
   await page.evaluate(() => window.__accessHooks.sbClear());
+  void h2;
 
   // ── Feature 3: repeat-navigate core ──
   const nav = await page.evaluate(async () => {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The "Needs" section in the web app renders as a single horizontal strip
 /// across the bottom of the board — the most-used words (yes, no, hi, eat,
@@ -98,6 +99,7 @@ struct NeedsStrip: View {
     private func needsCell(_ tile: Tile) -> some View {
         let base = TileView(tile: tile,
                             onTap: { t in
+                                if sentence.consumeJustStaged(t.id) { return }
                                 Task {
                                     await TilePlayer.shared.play(
                                         t,
@@ -113,27 +115,21 @@ struct NeedsStrip: View {
             if access.sentenceLift == "drag" {
                 base.simultaneousGesture(quickLift(tile))
             } else {
-                base.simultaneousGesture(longpressLift(tile))
+                base.simultaneousGesture(holdToStage(tile))
             }
         } else {
             base
         }
     }
 
-    private func longpressLift(_ tile: Tile) -> some Gesture {
+    /// Hold-to-stage (see SectionColumn.holdToStage): stationary 1s hold
+    /// stages in place; any movement fails the press and the scroll wins.
+    private func holdToStage(_ tile: Tile) -> some Gesture {
         LongPressGesture(minimumDuration: 1.0)
-            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("board")))
-            .onChanged { value in
-                if case .second(true, let drag) = value, let drag {
-                    sentence.dragUpdate(tile, at: drag.location)
-                }
-            }
-            .onEnded { value in
-                if case .second(true, let drag) = value, let drag {
-                    if sentence.dragEnd(at: drag.location) { stageTile(tile) }
-                } else {
-                    sentence.dragCancel()
-                }
+            .onEnded { _ in
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                sentence.noteJustStaged(tile.id)
+                stageTile(tile)
             }
     }
 

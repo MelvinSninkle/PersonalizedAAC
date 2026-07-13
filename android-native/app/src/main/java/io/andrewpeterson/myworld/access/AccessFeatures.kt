@@ -158,6 +158,18 @@ class SentenceBar(
         resetIdle(idleMinutes)
     }
 
+    // Hold-to-stage handoff: after a 1s hold stages a tile, the finger lift
+    // may also land as the tile's onClick — that release must not speak/log
+    // a second time. The staging path notes the tile; the tap path consumes.
+    @Volatile private var justStagedId: Int = -1
+    @Volatile private var justStagedAt: Long = 0
+    fun noteJustStaged(id: Int) { justStagedId = id; justStagedAt = System.currentTimeMillis() }
+    fun consumeJustStaged(id: Int): Boolean {
+        val hit = justStagedId == id && System.currentTimeMillis() - justStagedAt < 1500
+        if (hit) justStagedId = -1
+        return hit
+    }
+
     fun removeAt(index: Int, idleMinutes: Int) {
         _staged.value = _staged.value.toMutableList().also { if (index in it.indices) it.removeAt(index) }
         if (_staged.value.isEmpty()) clear() else resetIdle(idleMinutes)

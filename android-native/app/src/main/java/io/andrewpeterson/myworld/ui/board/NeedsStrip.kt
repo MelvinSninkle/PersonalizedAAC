@@ -69,6 +69,7 @@ fun NeedsStrip(
     val cellCenters = remember { mutableMapOf<Int, Offset>() }
 
     fun tap(t: Tile) {
+        if (c.sentenceBar.consumeJustStaged(t.id)) return   // hold already staged this touch
         c.tilePlayer.play(t, childId = c.auth.childSlug, categoryName = "Needs")
     }
 
@@ -85,34 +86,41 @@ fun NeedsStrip(
                     }
                 }
                 .then(if (sentenceOn) Modifier.pointerInput(tile.id, access.sentenceLift) {
-                    val start: (Offset) -> Unit = {
-                        dragOrigin = cellCenters[tile.id] ?: Offset.Zero
-                        dragPos = dragOrigin
-                        dragId = tile.id
-                        c.sentenceBar.dragUpdate(tile, false)
-                    }
-                    val move: (androidx.compose.ui.input.pointer.PointerInputChange, Offset) -> Unit = { change, amount ->
-                        change.consume()
-                        dragPos += amount
-                        c.sentenceBar.dragUpdate(tile, dragPos.y <= dropZonePx)
-                    }
-                    val end: () -> Unit = {
-                        val hit = dragPos.y <= dropZonePx
-                        dragId = null
-                        c.sentenceBar.dragEnd()
-                        if (hit) {
-                            c.sentenceBar.stage(tile, access.sentenceIdleMin)
-                            // Logged, not spoken — ▶ says the sentence.
-                            c.tilePlayer.logOnly(tile, childId = c.auth.childSlug, categoryName = "Needs")
-                        }
-                    }
-                    val cancel: () -> Unit = { dragId = null; c.sentenceBar.dragEnd() }
                     if (access.sentenceLift == "drag") {
+                        val start: (Offset) -> Unit = {
+                            dragOrigin = cellCenters[tile.id] ?: Offset.Zero
+                            dragPos = dragOrigin
+                            dragId = tile.id
+                            c.sentenceBar.dragUpdate(tile, false)
+                        }
+                        val move: (androidx.compose.ui.input.pointer.PointerInputChange, Offset) -> Unit = { change, amount ->
+                            change.consume()
+                            dragPos += amount
+                            c.sentenceBar.dragUpdate(tile, dragPos.y <= dropZonePx)
+                        }
+                        val end: () -> Unit = {
+                            val hit = dragPos.y <= dropZonePx
+                            dragId = null
+                            c.sentenceBar.dragEnd()
+                            if (hit) {
+                                c.sentenceBar.stage(tile, access.sentenceIdleMin)
+                                // Logged, not spoken — ▶ says the sentence.
+                                c.tilePlayer.logOnly(tile, childId = c.auth.childSlug, categoryName = "Needs")
+                            }
+                        }
+                        val cancel: () -> Unit = { dragId = null; c.sentenceBar.dragEnd() }
                         detectDragGestures(onDragStart = start, onDrag = move,
                             onDragEnd = end, onDragCancel = cancel)
                     } else {
-                        detectDragGesturesAfterLongPress(onDragStart = start, onDrag = move,
-                            onDragEnd = end, onDragCancel = cancel)
+                        // Hold-to-stage: stationary 1s hold stages in place;
+                        // movement cancels and the scroll owns the touch.
+                        androidx.compose.foundation.gestures.detectTapGestures(
+                            onLongPress = {
+                                c.sentenceBar.noteJustStaged(tile.id)
+                                c.sentenceBar.stage(tile, access.sentenceIdleMin)
+                                c.tilePlayer.logOnly(tile, childId = c.auth.childSlug, categoryName = "Needs")
+                            },
+                        )
                     }
                 } else Modifier),
         ) {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// One of the three main columns (People / Nouns / Verbs). Holds its own
 /// selection state — no navigation drill-in. Layout: title → category tab
@@ -57,6 +58,7 @@ struct SectionColumn: View {
         return board.categories.first(where: { $0.id == subId })?.label
     }
     private func playWithLogging(_ t: Tile, fallbackCategory: String? = nil) {
+        if sentence.consumeJustStaged(t.id) { return }   // hold already staged this touch
         Task {
             await TilePlayer.shared.play(
                 t,
@@ -219,7 +221,7 @@ struct SectionColumn: View {
             if access.sentenceLift == "drag" {
                 base.simultaneousGesture(quickLift(tile))
             } else {
-                base.simultaneousGesture(longpressLift(tile))
+                base.simultaneousGesture(holdToStage(tile))
             }
         } else {
             base
@@ -228,24 +230,19 @@ struct SectionColumn: View {
 
     // MARK: -- Sentence constructor lift (both pick-up styles; see web parity)
 
-    /// Default: hold a FULL SECOND to lift, then drag to the bar — normal taps
-    /// and panning keep working because the hold is the claim. 1.0s (up from
-    /// 0.45) after real-child testing: a slow scroll start read as a lift and
-    /// broke scrolling for the child the feature is for.
-    private func longpressLift(_ tile: Tile) -> some Gesture {
+    /// Default: HOLD-TO-STAGE — a full-second stationary hold stages the tile
+    /// right where it sits; no drag at all. This is a hard requirement from
+    /// real-child testing: the child's finger is usually ON a tile when a
+    /// scroll starts, so nothing may compete with the pan. A plain
+    /// LongPressGesture fails on any movement (>10pt) and the scroll owns the
+    /// touch from its first pixel; the old sequenced hold-then-drag
+    /// arbitrated against the pan and broke scrolling outright.
+    private func holdToStage(_ tile: Tile) -> some Gesture {
         LongPressGesture(minimumDuration: 1.0)
-            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("board")))
-            .onChanged { value in
-                if case .second(true, let drag) = value, let drag {
-                    sentence.dragUpdate(tile, at: drag.location)
-                }
-            }
-            .onEnded { value in
-                if case .second(true, let drag) = value, let drag {
-                    if sentence.dragEnd(at: drag.location) { stageTile(tile) }
-                } else {
-                    sentence.dragCancel()
-                }
+            .onEnded { _ in
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                sentence.noteJustStaged(tile.id)   // the release-tap must not re-fire
+                stageTile(tile)
             }
     }
 

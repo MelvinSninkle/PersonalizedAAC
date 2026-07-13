@@ -142,6 +142,18 @@ final class SentenceBar {
         resetIdle(idleMinutes: idleMinutes)
     }
 
+    // Hold-to-stage handoff: after a 1s hold stages a tile, the finger lift
+    // that follows may also land as a Button tap — that release must not
+    // speak/log a second time. The staging path notes the tile; the tap path
+    // consumes the note and skips itself once.
+    @ObservationIgnored private var justStaged: (id: Int, at: Date)?
+    func noteJustStaged(_ id: Int) { justStaged = (id, Date()) }
+    func consumeJustStaged(_ id: Int) -> Bool {
+        guard let j = justStaged, j.id == id, Date().timeIntervalSince(j.at) < 1.5 else { return false }
+        justStaged = nil
+        return true
+    }
+
     func remove(_ tile: Tile, idleMinutes: Int) {
         if let i = staged.firstIndex(where: { $0.id == tile.id }) { staged.remove(at: i) }
         if staged.isEmpty { clear() } else { resetIdle(idleMinutes: idleMinutes) }

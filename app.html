@@ -596,6 +596,14 @@
      scrolling — the hold is the claim. */
   body.sb-on.sb-lift-drag:not(.edit-mode) .items-grid .tile-wrap { touch-action: none; }
   .tile-wrap.sb-lifting .tile-square { transform: scale(1.06); transition: transform .15s; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+  /* Hold-to-stage confirmation: the tile pops and glows green for a beat —
+     the word just flew to the sentence bar without leaving its spot. */
+  @keyframes sbStagedPop {
+    0% { transform: scale(1.06); box-shadow: 0 0 0 3px #66bb6a; }
+    45% { transform: scale(1.14); box-shadow: 0 0 0 6px #66bb6a; }
+    100% { transform: scale(1); box-shadow: none; }
+  }
+  .tile-wrap.sb-staged-pop .tile-square { animation: sbStagedPop .5s ease-out; }
 
   /* Listening repeat-navigate: found-it flash on the tile. */
   .tile-wrap.listen-hit .tile-square {
@@ -2719,6 +2727,9 @@
   //   easyUnlock — the lock opens edit mode without the account password.
   //                Enabling requires the password ONCE plus a strong warning.
   const SAFETY = { easyClose: false, easyUnlock: false };
+  // Hold-to-stage handoff: when a 1s hold just staged this tile, the finger
+  // lift that follows must not ALSO fire a spoken tap (stage already logged).
+  let _justStagedSentence = null;
   const DOUBLE_TAP_WINDOW_MS = 2500;
   let _lastTapItemId = null, _lastTapItemAt = 0;
 
@@ -2749,6 +2760,11 @@
   function tapSpeak(item, categoryName, subcategoryName) {
     const now = Date.now();
     if (now - _lastTapAt < 250) return;   // swallow an accidental double-tap / bounce
+    if (_justStagedSentence && item.id === _justStagedSentence.id
+        && (now - _justStagedSentence.at) < 800) {
+      _justStagedSentence = null;         // the 1s hold already staged + logged this touch
+      return;
+    }
     _lastTapAt = now;
     // Same tile again inside the window → its teaching facts (when enabled
     // and it has any). Logged like a normal tap; a third tap starts fresh.
@@ -6653,6 +6669,10 @@
     }
     sbResetIdle();
   }
+  // Two pick-up styles:
+  //   longpress (default) — HOLD 1s to stage in place; zero scroll competition.
+  //   drag (eye-tracker rigs) — lift on movement and drop on the header bar;
+  //   scrolling is sacrificed deliberately (touch-action: none).
   (function wireSentenceDrag() {
     const playBtn = document.getElementById('sentence-play');
     if (playBtn) playBtn.addEventListener('click', sbPlayAll);
@@ -6688,10 +6708,25 @@
                   active: false, ghost: null, pid: e.pointerId, holdTimer: null };
       SB.drag = d;
       if (ACCESS.sentenceLift === 'longpress') {
+        // HOLD-TO-STAGE, no drag: a full-second stationary hold stages the
+        // tile right where it sits. Nothing competes with the scroll pan —
+        // any movement (pointermove below) cancels the timer and the scroll
+        // owns the touch from its first pixel. This is a hard requirement:
+        // the child's finger is USUALLY on a tile when they start scrolling.
         wrap.classList.add('sb-lifting');
-        d.holdTimer = setTimeout(() => {
+        d.holdTimer = setTimeout(async () => {
           d.holdTimer = null;
-          if (SB.drag === d && !d.active) sbLift(d);
+          if (SB.drag !== d || d.active) return;
+          SB.drag = null;
+          d.wrap.classList.remove('sb-lifting');
+          d.wrap.classList.add('sb-staged-pop');
+          setTimeout(() => d.wrap.classList.remove('sb-staged-pop'), 500);
+          const id = parseInt(d.wrap.dataset.entityId, 10);
+          _justStagedSentence = { id, at: Date.now() };   // release-tap must not re-fire
+          try {
+            const item = (await getAllItems(d.wrap.dataset.section)).find((i) => i.id === id);
+            if (item) sbStage(item);
+          } catch (_) {}
         }, HOLD_MS);
       }
     });
