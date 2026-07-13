@@ -169,6 +169,10 @@ family on that style — it must never be a real family member the operator
 didn't intend to share (this happened: a tester's board rendered the
 operator's family). Code can't enforce this; the audit reports which styles
 have person refs (`admin/lab` style cards) and flags it for human review.
+Since the style-reference gallery, `renderTaxonomyTile` auto-attaches the
+subject-matched ref (person tiles → `person_ref_key`, everything else →
+`stuff_ref_key`) on FAMILY renders too — so a bad public person ref now
+reaches every family on that style, raising the stakes on this review.
 
 **C5. Non-English boards bake NO text into art.** `renderTaxonomyTile`
 appends a hard no-text override when `suppressBakedText` (seed passes
@@ -201,6 +205,23 @@ grids (jetsam/OOM): iOS `MediaCache.image(for:maxPixel:)` call sites pass
 explicit sizes; Android `MediaCache.bitmap(key, maxDim)` likewise; web store/
 album imgs are `loading="lazy"` and folder lists render collapsed. New image
 grids must follow suit.
+
+**C8. Every image add asks keep-vs-restyle; per-image style picking is
+banned.** Every family surface that takes a photo (tile adds, tile editors,
+bulk category add, category icons, person/family portraits — web, iOS,
+Android) presents exactly two choices: "keep my exact photo" (free, the
+`raw` path) or "restyle to the child's SAVED board style" (the default on
+styled tiers; free tier locks to exact + upsell). There is NO per-image art
+style or model picker anywhere — mixed styles broke the board's visual
+consistency; changing the style is a deliberate act in the parent
+dashboard's Art style panel only. Server side, `?styleGuideId=` and
+`?model=` on `/api/generate-image` and `/api/tile-jobs` are honored for
+ADMIN callers only (Lab tooling); the `style` text param is a weak prompt
+nudge and family callers send a fixed neutral phrase. VERIFY:
+`invariants.sh` C8 greps (no `bulk-style` select in app.html, no
+`ForEach(ArtStyle/ImageModel.allCases)` in the iOS tile editor, no
+`localStorage aacStyle` reads in parent.html) plus code review of any new
+capture surface.
 
 ## D. Admin containment
 

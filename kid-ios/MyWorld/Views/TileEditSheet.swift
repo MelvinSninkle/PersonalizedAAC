@@ -261,8 +261,6 @@ struct BoardTileEditSheet: View {
     @State private var stagedImage: Data?
     @State private var stagedImageExt = "png"
     @State private var stagedImageCT  = "image/png"
-    @State private var style: ArtStyle = .threeD
-    @State private var model: ImageModel = .nanoBanana
     @State private var generating = false
 
     // Voice staging — a re-recorded clip to upload on save.
@@ -403,11 +401,14 @@ struct BoardTileEditSheet: View {
             }
 
             if newPhoto != nil {
-                // A new photo is waiting — pick how to turn it into the tile.
-                artControls
+                // A new photo is waiting — the ONE choice every image add
+                // gets: restyle to the board's saved art style, or keep the
+                // photo exactly as taken. No per-tile style or model picking;
+                // changing the style is a deliberate act in the parent
+                // dashboard's Art style panel.
                 HStack(spacing: 10) {
                     Button { Task { await generateArt() } } label: {
-                        pill(generating ? "Generating…" : "Generate art", filled: true)
+                        pill(generating ? "Generating…" : "Draw in board style", filled: true)
                     }
                     .buttonStyle(.plain).disabled(generating)
                     Button { usePhotoAsIs() } label: {
@@ -415,6 +416,8 @@ struct BoardTileEditSheet: View {
                     }
                     .buttonStyle(.plain).disabled(generating)
                 }
+                Text("Drawn to match the board's art style, so the new picture fits the rest of the tiles.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
             } else {
                 HStack(spacing: 10) {
                     Button { showCamera = true } label: { pill("Take photo", filled: false, icon: "camera.fill") }
@@ -459,17 +462,6 @@ struct BoardTileEditSheet: View {
                 .buttonStyle(.plain)
                 Text("Drag the photo inside a tile-shaped frame to pick exactly what shows. The old picture stays in the album.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var artControls: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                Menu { ForEach(ArtStyle.allCases) { s in Button(s.label) { style = s } } }
-                    label: { chip("paintpalette", style.label) }
-                Menu { ForEach(ImageModel.allCases) { m in Button(m.label) { model = m } } }
-                    label: { chip("wand.and.stars", model.label) }
             }
         }
     }
@@ -609,10 +601,13 @@ struct BoardTileEditSheet: View {
         errorText = nil
         defer { generating = false }
         do {
+            // Fixed neutral style text — the server attaches the child's
+            // saved house-style image and routes the model itself. Per-tile
+            // style/model picking is deliberately gone (surface-audit C7).
             let png = try await api.generateImage(photoJPEG: photo,
                                                   label: label.trimmingCharacters(in: .whitespaces),
-                                                  style: style.prompt,
-                                                  model: model.apiValue,
+                                                  style: "picture drawn in the board's art style",
+                                                  model: "",
                                                   bg: "",
                                                   childId: auth.childSlug)
             stagedImage = png; stagedImageExt = "png"; stagedImageCT = "image/png"

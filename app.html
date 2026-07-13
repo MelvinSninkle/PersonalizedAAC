@@ -1360,6 +1360,14 @@
     <label for="cat-image">Category Image</label>
     <input type="file" id="cat-image" accept="image/*">
     <div class="file-status" id="cat-image-status">No image selected</div>
+    <!-- Same keep-vs-restyle ask as every other image add (surface-audit C7):
+         default = drawn to match the BOARD's saved art style. -->
+    <div style="display:flex;gap:8px;margin:6px 0 2px;">
+      <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
+        <input type="radio" name="cat-look" id="cat-look-style" checked style="width:auto;margin:0;">Board art style</label>
+      <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
+        <input type="radio" name="cat-look" id="cat-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
+    </div>
     <div class="checkbox-row">
       <input type="checkbox" id="cat-keep-aspect">
       <label for="cat-keep-aspect">Keep original image ratio (don't crop)</label>
@@ -1399,18 +1407,20 @@
     </div>
     <input type="file" id="bulk-folder-input" accept="image/*" webkitdirectory directory style="display:none;">
     <div style="font-size:12px;color:#888;margin-top:6px;">Click ★ on a row to use that image as the category icon (defaults to the first image).</div>
+    <!-- Same keep-vs-restyle ask as every other image add — the restyle is
+         always the BOARD's saved art style (server-resolved house style);
+         the old per-batch art-style dropdown is gone on purpose (mixed
+         styles broke the board's visual consistency; surface-audit C7). -->
     <div style="margin-top:10px;border:1px solid #f3c6dd;background:#fff5fa;border-radius:10px;padding:10px;">
-      <label for="bulk-style" style="margin-top:0;font-weight:700;color:#ad1457;">✨ AI art style</label>
-      <select id="bulk-style" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
-        <option value="Pixar-style 3D animated render">3D Animated</option>
-        <option value="flat picture-book illustration">Picture Book</option>
-        <option value="soft watercolor illustration">Watercolor</option>
-        <option value="gentle soft storybook illustration">Soft Storybook</option>
-        <option value="needle-felted wool craft">Felted</option>
-        <option value="">Keep original photos (just name them)</option>
-      </select>
+      <div style="font-weight:700;color:#ad1457;">✨ How should the pictures look?</div>
+      <div style="display:flex;gap:8px;margin:8px 0 2px;">
+        <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
+          <input type="radio" name="bulk-look" id="bulk-look-style" checked style="width:auto;margin:0;">Board art style</label>
+        <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
+          <input type="radio" name="bulk-look" id="bulk-look-raw" style="width:auto;margin:0;">Keep original photos — free</label>
+      </div>
       <button type="button" id="bulk-ai" style="margin-top:8px;width:100%;padding:11px;border:none;border-radius:8px;background:#ff1493;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">✨ AI: name, pronounce &amp; make art for all</button>
-      <div style="font-size:12px;color:#888;margin-top:6px;">Fills each name + pronunciation automatically and (unless "keep original") turns the photos into art. You can still edit anything before saving.</div>
+      <div style="font-size:12px;color:#888;margin-top:6px;">Fills each name + pronunciation automatically and (unless "keep original") redraws the photos to match the board. You can still edit anything before saving.</div>
     </div>
     <div class="checkbox-row" style="margin-top:10px;">
       <input type="checkbox" id="bulk-tts" checked>
@@ -3832,6 +3842,7 @@
     document.getElementById('cat-kind').value = cat?.kind || '';
     document.getElementById('cat-apply-items').checked = false;
     document.getElementById('cat-apply-items-row').style.display = cat ? 'flex' : 'none';
+    document.getElementById('cat-look-style').checked = true;   // re-default every open
     const cist = document.getElementById('cat-image-status');
     cist.textContent = cat?.imageKey ? 'Current image will be kept' : 'No image selected';
     cist.className = 'file-status' + (cat?.imageKey ? ' has-file' : '');
@@ -3868,6 +3879,25 @@
     saveBtn.textContent = 'Saving…';
 
     try {
+      // A new photo defaults to the BOARD's saved art style, like every other
+      // image add. 402 (free tier) falls back to the exact photo + upsell.
+      if (pendingCatImage && document.getElementById('cat-look-style').checked) {
+        saveBtn.textContent = 'Drawing…';
+        try {
+          const photo = await compressImage(pendingCatImage);
+          const ir = await apiFetch('/api/generate-image?label=' + encodeURIComponent(label)
+            + '&style=' + encodeURIComponent("picture drawn in the board's art style")
+            + '&childId=' + encodeURIComponent(CHILD_ID),
+            { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: photo });
+          if (ir.ok) {
+            pendingCatImage = await ir.blob();
+          } else if (ir.status === 402 && /needs_subscription/.test(await ir.text())) {
+            showMembershipUpsell('Styled pictures are a membership feature',
+              'Your photo was used as-is (free on every plan). Drawing it in your child’s art style is part of My World memberships, from $4.99/month.');
+          }
+        } catch (_) { /* generation hiccup → keep the exact photo */ }
+        saveBtn.textContent = 'Saving…';
+      }
       if (editingCat) {
         await serverUpdateCategory(editingCat, {
           label,
@@ -4062,8 +4092,9 @@
     document.getElementById('bulk-tts').checked = true;
     document.getElementById('bulk-emotion').value = 'default';
     document.getElementById('bulk-keep-aspect').checked = false;
-    const ss = localStorage.getItem('aacStyle');
-    if (ss) { const styleSel = document.getElementById('bulk-style'); for (const o of styleSel.options) { if (o.value === ss) { styleSel.value = ss; break; } } }
+    // Every open re-defaults to the board's art style — the same rule as
+    // every other image add (keep exact photo is the explicit opt-out).
+    document.getElementById('bulk-look-style').checked = true;
     document.getElementById('bulk-progress').textContent = '';
     document.getElementById('bulk-error').textContent = '';
     renderBulkList();
@@ -4107,7 +4138,10 @@
     const btn = document.getElementById('bulk-ai');
     errEl.textContent = '';
     if (!bulkItems.length) { errEl.textContent = 'Add some photos first.'; return; }
-    const style = document.getElementById('bulk-style').value;
+    // Restyle = the BOARD's saved house style: the server attaches the
+    // child's style-guide image; this text is only a neutral prompt nudge.
+    const style = document.getElementById('bulk-look-raw').checked
+      ? '' : 'picture drawn in the board\'s art style';
     btn.disabled = true; const prev = btn.textContent;
     let stylingGated = false;
     for (let i = 0; i < bulkItems.length; i++) {

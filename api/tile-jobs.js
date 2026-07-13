@@ -130,6 +130,10 @@ export default async function handler(req, res) {
     // age-ambiguous relationships (the relationship itself wins when it can).
     const ageGroupQ = qs(req, 'ageGroup');
     const ageGroup = (ageGroupQ === 'adult' || ageGroupQ === 'child') ? ageGroupQ : null;
+    // styleGuideId + model overrides are ADMIN ONLY (Lab tooling). Family
+    // renders always anchor on the child's saved house style and the routed
+    // default model — per-image style/model picking is banned (C7).
+    const isAdmin = auth.user.role === 'admin';
     const rows = await db`
       INSERT INTO tile_jobs
         (child_id, actor_email, status, source_key, source_content_type, label, detail, section,
@@ -138,8 +142,8 @@ export default async function handler(req, res) {
         (${childId}, ${auth.user.email || null}, 'queued', ${sourceKey}, ${contentType},
          ${qs(req, 'label').slice(0, 80) || null}, ${qs(req, 'detail').slice(0, 200) || null},
          ${qs(req, 'section') || null}, ${qint(req, 'categoryId')},
-         ${qs(req, 'style').slice(0, 80) || null}, ${qint(req, 'styleGuideId')},
-         ${qs(req, 'model').slice(0, 60) || null}, ${qs(req, 'bg').slice(0, 16) || null},
+         ${qs(req, 'style').slice(0, 80) || null}, ${isAdmin ? qint(req, 'styleGuideId') : null},
+         ${isAdmin ? (qs(req, 'model').slice(0, 60) || null) : null}, ${qs(req, 'bg').slice(0, 16) || null},
          ${qbool(req, 'keepAspect')}, ${qbool(req, 'needsReview')}, ${qs(req, 'emotion') || 'default'},
          ${qs(req, 'relationship').slice(0, 40) || null}, ${qbool(req, 'raw')}, ${ageGroup})
       RETURNING id`;

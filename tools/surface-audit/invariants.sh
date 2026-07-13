@@ -70,6 +70,17 @@ MISSING=$(grep -rLn "requireAdmin" api/admin/_lab-*.js | head -5)
 if [ -z "$MISSING" ]; then pass "D all _lab-* handlers requireAdmin"; else
   fail "D lab handlers missing requireAdmin:"; echo "$MISSING" | sed 's/^/  /'; fi
 
+# ── C8: no per-image style/model picking on any family surface ───────────────
+# Every image add asks keep-vs-restyle to the SAVED board style; the only
+# place to change a style is the dashboard's Art style panel. These are the
+# pickers we ripped out — a reappearance means the rule regressed.
+C8=0
+grep -q 'id="bulk-style"' app.html && { fail "C8 app.html bulk-style dropdown is back"; C8=1; }
+grep -q "ForEach(ArtStyle.allCases)" kid-ios/MyWorld/Views/TileEditSheet.swift && { fail "C8 iOS tile editor ArtStyle picker is back"; C8=1; }
+grep -q "ForEach(ImageModel.allCases)" kid-ios/MyWorld/Views/TileEditSheet.swift && { fail "C8 iOS tile editor ImageModel picker is back"; C8=1; }
+grep -q "localStorage.getItem('aacStyle')" parent.html && { fail "C8 parent.html reads the stale localStorage aacStyle string"; C8=1; }
+[ "$C8" -eq 0 ] && pass "C8 no per-image style/model pickers"
+
 # ── Vercel function ceiling (~100 routed functions) ──────────────────────────
 COUNT=$(find api -name '*.js' ! -name '_*' ! -path 'api/_lib/*' | wc -l)
 echo "INFO: routed Vercel functions: $COUNT / 100"
