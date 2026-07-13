@@ -6659,7 +6659,7 @@
     const clearBtn = document.getElementById('sentence-clear');
     if (clearBtn) clearBtn.addEventListener('click', sbClear);   // deliberate short tap — a mis-tap costs one rebuild, a stuck sentence costs the feature
     const LIFT = 22;        // quick-drag: > TAP_TOLERANCE(18) so a lift can never double-fire as a tap
-    const HOLD_MS = 450;    // long-press: hold this long (moving < WIGGLE) to lift
+    const HOLD_MS = 1000;   // long-press: a FULL second (up from 450ms) — real-child testing: a slow scroll start read as a lift and broke scrolling
     const WIGGLE = 10;      // movement during the hold that still counts as holding still
     function sbLift(d) {
       d.active = true;

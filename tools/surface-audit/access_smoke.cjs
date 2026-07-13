@@ -111,10 +111,10 @@ const fails = [];
   const liftedEarly = await page.evaluate(() => !!document.querySelector('.sb-drag-ghost'));
   await page.mouse.up();
   ok('longpress: quick move does not lift', liftedEarly === false);
-  // hold 600ms, then drag to the header → stages
+  // hold past HOLD_MS (a full second — kid-scroll safety), then drag → stages
   await page.mouse.move(t2.x + 20, t2.y + 20);
   await page.mouse.down();
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(1200);
   const liftedAfterHold = await page.evaluate(() => !!document.querySelector('.sb-drag-ghost'));
   for (let i = 1; i <= 6; i++) {
     await page.mouse.move(t2.x + 20 + (h2.x + h2.width / 2 - t2.x - 20) * i / 6,

@@ -228,10 +228,12 @@ struct SectionColumn: View {
 
     // MARK: -- Sentence constructor lift (both pick-up styles; see web parity)
 
-    /// Default: hold ~0.45s to lift, then drag to the bar — normal taps and
-    /// (scroll-mode) panning keep working because the hold is the claim.
+    /// Default: hold a FULL SECOND to lift, then drag to the bar — normal taps
+    /// and panning keep working because the hold is the claim. 1.0s (up from
+    /// 0.45) after real-child testing: a slow scroll start read as a lift and
+    /// broke scrolling for the child the feature is for.
     private func longpressLift(_ tile: Tile) -> some Gesture {
-        LongPressGesture(minimumDuration: 0.45)
+        LongPressGesture(minimumDuration: 1.0)
             .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("board")))
             .onChanged { value in
                 if case .second(true, let drag) = value, let drag {

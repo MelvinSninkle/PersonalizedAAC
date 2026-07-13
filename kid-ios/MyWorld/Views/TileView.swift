@@ -100,65 +100,12 @@ struct TileView: View {
     private func loadImage() async {
         guard let key = tile.imageKey, !key.isEmpty else { return }
         if let img = await MediaCache.shared.image(for: key, maxPixel: 640) {
-            // GUILLOTINE RULE: trim baked-in margins, then the view center-
-            // crops to fill the square. Sole exception: the TV folder keeps
-            // its posters untouched.
-            let display = posterMode ? img : img.trimmingFlatBorders()
-            await MainActor.run { self.image = display }
+            // NO automatic pixel trimming — auto blank-space removal was the
+            // board's most-complained-about behavior and is deliberately gone.
+            // The square frame center-crops (fill); Adjust framing is the
+            // parent's tool for anything beyond that.
+            await MainActor.run { self.image = img }
         }
-    }
-}
-
-// MARK: -- Display-crop for baked-in margins
-
-extension UIImage {
-    /// Crops away uniform "letterbox" margins baked INTO generated art (a
-    /// subject drawn on a white/flat card, or an old non-square render saved
-    /// with side bars). The tile frame is already square — this makes the
-    /// PIXELS earn it. Caption bands survive (text isn't a flat border).
-    /// Cheap sampled edge scan; returns self when nothing meaningful to trim.
-    func trimmingFlatBorders(tolerance: Int = 18) -> UIImage {
-        guard let cg = cgImage else { return self }
-        let w = cg.width, h = cg.height
-        guard w > 16, h > 16,
-              let data = cg.dataProvider?.data,
-              let ptr = CFDataGetBytePtr(data) else { return self }
-        let bpr = cg.bytesPerRow
-        let bpp = cg.bitsPerPixel / 8
-        guard bpp >= 3 else { return self }
-
-        func px(_ x: Int, _ y: Int) -> (Int, Int, Int) {
-            let o = y * bpr + x * bpp
-            return (Int(ptr[o]), Int(ptr[o + 1]), Int(ptr[o + 2]))
-        }
-        let corner = px(1, 1)
-        func matches(_ p: (Int, Int, Int)) -> Bool {
-            abs(p.0 - corner.0) <= tolerance && abs(p.1 - corner.1) <= tolerance && abs(p.2 - corner.2) <= tolerance
-        }
-        let stepX = max(1, w / 48), stepY = max(1, h / 48)
-        func rowFlat(_ y: Int) -> Bool {
-            var x = 0
-            while x < w { if !matches(px(x, y)) { return false }; x += stepX }
-            return true
-        }
-        func colFlat(_ x: Int) -> Bool {
-            var y = 0
-            while y < h { if !matches(px(x, y)) { return false }; y += stepY }
-            return true
-        }
-
-        var top = 0, bottom = h - 1, left = 0, right = w - 1
-        while top < bottom && rowFlat(top) { top += 1 }
-        while bottom > top && rowFlat(bottom) { bottom -= 1 }
-        while left < right && colFlat(left) { left += 1 }
-        while right > left && colFlat(right) { right -= 1 }
-
-        let nw = right - left + 1, nh = bottom - top + 1
-        // Bail on degenerate results (a near-blank image would trim to nothing)
-        // and skip the work when the trim is cosmetic (< ~2% each way).
-        guard nw > w / 3, nh > h / 3, (w - nw > w / 50 || h - nh > h / 50) else { return self }
-        guard let cropped = cg.cropping(to: CGRect(x: left, y: top, width: nw, height: nh)) else { return self }
-        return UIImage(cgImage: cropped, scale: scale, orientation: imageOrientation)
     }
 }
 
