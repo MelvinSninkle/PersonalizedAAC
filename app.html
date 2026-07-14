@@ -186,6 +186,7 @@
   .listen-chip { flex: 0 0 auto; height: 92px; width: 92px; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.14); overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .listen-chip img { width: 100%; height: 100%; object-fit: cover; }
   .listen-chip.is-text { width: auto; min-width: 60px; padding: 0 14px; font-family: Fredoka, ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: 22px; color: #ad1457; background: #fce4ec; cursor: default; }
+  .listen-chip.is-text.masked { font-style: italic; opacity: .7; }
   #listen-hint { flex: 0 0 auto; font-size: 13px; color: #fff; opacity: .85; white-space: nowrap; }
   @media (max-width: 820px) { .listen-chip { height: 70px; width: 70px; } }
   header button:hover { background: #880e4f; }
@@ -1532,6 +1533,16 @@
         <button class="secondary" id="disp-unlock-no">Cancel</button>
       </div>
       <div id="disp-unlock-msg" style="font-size:12px;color:#c0392b;margin-top:6px;"></div>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-listen-censor">
+      <label for="disp-listen-censor">Hide bad words in Listening
+        <span style="display:block;font-size:12px;color:#666;">Curse words and slurs someone says nearby show as "Bad Word" instead of the word itself.</span></label>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-listen-tiles">
+      <label for="disp-listen-tiles">Listening shows only words with tiles
+        <span style="display:block;font-size:12px;color:#666;">Spoken words that aren't on the board don't appear at all.</span></label>
     </div>
     <div id="disp-account" style="margin-top:18px;border-top:1px solid #eee;padding-top:14px;display:none;">
       <label>Account &amp; password</label>
@@ -3002,6 +3013,20 @@
     try { localStorage.setItem('aacEntitlement', JSON.stringify(ENT)); } catch (_) {}
   }
   function entAllows(feature) { return !ENT || ENT[feature] !== false; }
+  // ── Listening display filter (from /api/sync — invariant E8) ─────────────
+  // Server-owned blocklist (api/_lib/bad-words.js): listed words render as
+  // the pill "Bad Word" in the listening strip. Persisted so an offline
+  // board keeps the last-known list. censor defaults ON; tilesOnly hides
+  // every non-tile word (parent settings, synced like tapInterrupt).
+  const LISTEN = {
+    censor: true, tilesOnly: false,
+    blocklist: new Set((() => { try { return JSON.parse(localStorage.getItem('aacListenBlocklist') || '[]'); } catch (_) { return []; } })()),
+  };
+  function noteListenBlocklist(data) {
+    if (!data || !Array.isArray(data.listenBlocklist) || !data.listenBlocklist.length) return;
+    LISTEN.blocklist = new Set(data.listenBlocklist);
+    try { localStorage.setItem('aacListenBlocklist', JSON.stringify(data.listenBlocklist)); } catch (_) {}
+  }
   function showMembershipUpsell(title, msg) {
     let o = document.getElementById('upsell-overlay');
     if (!o) {
@@ -3075,6 +3100,7 @@
 
   async function hydrateFromServer(data) {
     noteEntitlement(data);
+    noteListenBlocklist(data);
     // Clear + write the whole server snapshot in ONE transaction. Writing each
     // tile as its own transaction floods iOS Safari's IndexedDB and can stall
     // or abort, leaving the board blank — especially on a fresh device with no
@@ -3166,6 +3192,7 @@
       if (!r.ok) return;
       const data = await r.json();
       noteEntitlement(data);   // tier flags refresh even when the board itself is unchanged
+      noteListenBlocklist(data);
       if (!(data.categories || []).length && !(data.items || []).length) return;   // never wipe to empty
       const sig = structSig(data);
       if (sig === _lastSig) { precacheAllMedia(); return; }   // unchanged → just keep media warm (retries failures)
@@ -4477,6 +4504,8 @@
     const ht = document.getElementById('disp-color-header-text');   if (ht) ht.value = display.headerColors.text;
     document.getElementById('disp-easy-close').checked = SAFETY.easyClose;
     document.getElementById('disp-easy-unlock').checked = SAFETY.easyUnlock;
+    document.getElementById('disp-listen-censor').checked = LISTEN.censor;
+    document.getElementById('disp-listen-tiles').checked = LISTEN.tilesOnly;
     document.getElementById('disp-unlock-confirm').style.display = 'none';
     document.getElementById('disp-unlock-pass').value = '';
     document.getElementById('disp-unlock-msg').textContent = '';
@@ -4562,6 +4591,8 @@
     if (!w.ok) throw new Error('save ' + w.status);
     SAFETY.easyClose = !!next.easyClose;
     SAFETY.easyUnlock = !!next.easyUnlock;
+    LISTEN.censor = next.listenCensor !== false;
+    LISTEN.tilesOnly = !!next.listenTilesOnly;
   }
   (function wireSafetyToggles() {
     const closeCb = document.getElementById('disp-easy-close');
@@ -4569,6 +4600,17 @@
       const want = closeCb.checked;
       try { await saveSafety({ easyClose: want }); }
       catch (_) { closeCb.checked = SAFETY.easyClose; }   // offline / no permission — revert
+    });
+    // Listening filter toggles (E8) — plain settings, no confirm friction.
+    const censorCb = document.getElementById('disp-listen-censor');
+    censorCb.addEventListener('change', async () => {
+      try { await saveSafety({ listenCensor: censorCb.checked }); }
+      catch (_) { censorCb.checked = LISTEN.censor; }
+    });
+    const tilesOnlyCb = document.getElementById('disp-listen-tiles');
+    tilesOnlyCb.addEventListener('change', async () => {
+      try { await saveSafety({ listenTilesOnly: tilesOnlyCb.checked }); }
+      catch (_) { tilesOnlyCb.checked = LISTEN.tilesOnly; }
     });
     const unlockCb = document.getElementById('disp-easy-unlock');
     const box = document.getElementById('disp-unlock-confirm');
@@ -5117,6 +5159,9 @@
       TOOLS.teach = s.toolTeach !== false;
       TOOLS.play = s.toolPlay !== false;
       TOOLS.sentence = s.toolSentence !== false;
+      // Listening display filter (E8): masking defaults ON.
+      LISTEN.censor = s.listenCensor !== false;
+      LISTEN.tilesOnly = !!s.listenTilesOnly;
       applyTools();
       const kd = s.kidDisplay;
       if (kd && /^#[0-9a-fA-F]{6}$/.test(String(kd.colorHeaderBg || ''))) {
@@ -6049,7 +6094,12 @@
         if (lex.has(phrase)) { matched = lex.get(phrase); used = w; break; }
       }
       if (matched) out.push({ word: matched.label, imageKey: matched.imageKey, soundKey: matched.soundKey, item: matched });
-      else out.push({ word: words[i].replace(/[.,!?;:"()\[\]{}]/g, '') });
+      else if (!LISTEN.tilesOnly) {
+        // Display filter (E8): blocklisted words never render as themselves.
+        const raw = words[i].replace(/[.,!?;:"()\[\]{}]/g, '');
+        if (LISTEN.censor && LISTEN.blocklist.has(normalizeListenWord(raw))) out.push({ word: 'Bad Word', masked: true });
+        else out.push({ word: raw });
+      }
       i += used;
     }
     return out;
@@ -6060,7 +6110,7 @@
     wrap.innerHTML = '';
     for (const t of tokens) {
       const chip = document.createElement('div');
-      chip.className = 'listen-chip' + (t.imageKey ? '' : ' is-text');
+      chip.className = 'listen-chip' + (t.imageKey ? '' : ' is-text') + (t.masked ? ' masked' : '');
       if (t.imageKey) {
         const img = document.createElement('img');
         img.alt = t.word || '';
@@ -6755,7 +6805,15 @@
 
   // Runtime hooks for the surface-audit stub harness (client parity checks) —
   // client-side only, nothing here crosses a security boundary.
-  window.__accessHooks = { applyAccessSettings, sbStage, sbClear, sbSetMode, navigateToTile, getAllItems, updateAllPagers };
+  window.__accessHooks = { applyAccessSettings, sbStage, sbClear, sbSetMode, navigateToTile, getAllItems, updateAllPagers,
+    // Listening filter test hooks (E8): feed a fake transcript through the
+    // real tokenizer, and drive the filter prefs/blocklist directly.
+    listenTokens: async (text) => tokenizeForListen(text, _listenLex || (_listenLex = await buildListenLexicon())),
+    setListenPrefs: (p) => {
+      if (p && 'censor' in p) LISTEN.censor = !!p.censor;
+      if (p && 'tilesOnly' in p) LISTEN.tilesOnly = !!p.tilesOnly;
+      if (p && Array.isArray(p.blocklist)) LISTEN.blocklist = new Set(p.blocklist);
+    } };
 
   // ---- Phone mode: one section at a time behind tabs -------------------------
   // The tab bar is display:none above 700px, so this is inert on tablets.

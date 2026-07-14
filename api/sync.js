@@ -13,6 +13,7 @@ import { sql, rowToCategory, rowToItem } from './_lib/db.js';
 import { canAccessChild } from './_lib/access.js';
 import { bandForBirthDate, tileFitsAge, higherBand } from './_lib/age-band.js';
 import { isDefaultableTile } from './_lib/onboarding-render.js';
+import { BAD_WORDS } from './_lib/bad-words.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -260,6 +261,10 @@ export default async function handler(req, res) {
       items: outItems.map(rowToItem),
       ageFilter: { applied: !!appliedBand, band: appliedBand, hiddenCount: items.length - outItems.length },
       entitlement: entitlementOut,
+      // Listening-mode display filter (E8): words on this list render as
+      // "Bad Word" on the child's screen. Server-owned like match terms —
+      // extend _lib/bad-words.js and every device updates on next sync.
+      listenBlocklist: BAD_WORDS,
     });
   } catch (err) {
     res.status(500).json({ error: 'Sync failed', detail: String(err.message || err) });
