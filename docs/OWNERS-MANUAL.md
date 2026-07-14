@@ -138,6 +138,10 @@ family keeps everything they have — only new spends wait.
   replaceable tile, never family art). Every image swap archives the old key
   to `item_image_history`; the tile editor's "Previous pictures" strip
   reverts from it (keys contained to the tile's own history).
+  Tile shape: family surfaces always produce square tiles (Adjust framing
+  picks the crop) — the old keep-original-ratio toggle is retired. The
+  stored `keep_aspect` flag still renders uncropped on all three apps and
+  stays settable via Lab's ⬜ Square-tiles tool (TV/movie posters).
 - **Game scoring**: sessions need ≥3 answers to enter weekly accuracy or
   spike baselines; shorter ones are recorded but annotated "too short to
   score" (analytics.js / spike.js).

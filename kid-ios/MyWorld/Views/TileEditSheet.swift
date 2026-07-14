@@ -450,10 +450,6 @@ struct BoardTileEditSheet: View {
                 }
             }
 
-            Toggle("Keep original ratio (don't crop)", isOn: $keepAspect)
-                .font(.system(size: 14))
-                .tint(Color(hex: "#ff1493"))
-
             if stagedImage != nil || currentImage != nil {
                 Button {
                     framingSource = stagedImage.flatMap(UIImage.init(data:)) ?? currentImage
@@ -493,7 +489,7 @@ struct BoardTileEditSheet: View {
                     ForEach(emotions, id: \.self) { e in
                         Button(e.capitalized) { emotion = e }
                     }
-                } label: { chip("waveform", emotion.capitalized) }
+                } label: { menuPill("waveform", emotion.capitalized) }
                 Button { Task { await revoice() } } label: {
                     pill(stagedSound == nil ? "Re-record voice" : "Voice updated ✓", filled: false, icon: "mic.fill")
                 }
@@ -565,9 +561,9 @@ struct BoardTileEditSheet: View {
     private var deleteButton: some View {
         Button(role: .destructive) { showDeleteConfirm = true } label: {
             Label("Delete tile", systemImage: "trash")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+                .padding(.vertical, 11)
                 .background(Color.red.opacity(0.1))
                 .foregroundStyle(.red)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -812,17 +808,21 @@ struct BoardTileEditSheet: View {
             .foregroundStyle(Color(hex: "#999"))
     }
 
-    private func chip(_ icon: String, _ text: String) -> some View {
+    // A Menu label shaped exactly like an outline pill (same font, height,
+    // corner, stroke) so the voice picker matches the button beside it.
+    private func menuPill(_ icon: String, _ text: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
             Text(text).lineLimit(1)
-            Image(systemName: "chevron.down").font(.system(size: 10))
+            Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
         }
         .font(.system(size: 14, weight: .semibold))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 11)
         .foregroundStyle(Color(hex: "#ad1457"))
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(Color(hex: "#fce4ef"))
-        .clipShape(Capsule())
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#ff1493"), lineWidth: 1.5))
     }
 
     private func pill(_ text: String, filled: Bool, icon: String? = nil) -> some View {

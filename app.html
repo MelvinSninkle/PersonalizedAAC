@@ -1316,10 +1316,6 @@
       </div>
       <button type="button" class="secondary" id="item-generate" style="margin:0;padding:10px 16px;border-radius:6px;background:#e0e3e8;color:#333;border:none;font-weight:600;cursor:pointer;">Generate audio</button>
     </div>
-    <div class="checkbox-row">
-      <input type="checkbox" id="item-keep-aspect">
-      <label for="item-keep-aspect">Keep original image ratio (don't crop)</label>
-    </div>
     <div class="checkbox-row" id="pin-row" style="display:none;">
       <input type="checkbox" id="item-pin">
       <label for="item-pin">Pin to top (e.g. for <span class="cn">your child</span>)</label>
@@ -1367,14 +1363,6 @@
         <input type="radio" name="cat-look" id="cat-look-style" checked style="width:auto;margin:0;">Board art style</label>
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
         <input type="radio" name="cat-look" id="cat-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
-    </div>
-    <div class="checkbox-row">
-      <input type="checkbox" id="cat-keep-aspect">
-      <label for="cat-keep-aspect">Keep original image ratio (don't crop)</label>
-    </div>
-    <div class="checkbox-row" id="cat-apply-items-row" style="display:none;">
-      <input type="checkbox" id="cat-apply-items">
-      <label for="cat-apply-items">Also apply this ratio setting to every item &amp; subcategory inside</label>
     </div>
     <label for="cat-kind">Category type</label>
     <select id="cat-kind" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font-size:15px;">
@@ -1436,10 +1424,6 @@
         <option value="calm">Calm</option>
         <option value="whisper">Whisper</option>
       </select>
-    </div>
-    <div class="checkbox-row">
-      <input type="checkbox" id="bulk-keep-aspect">
-      <label for="bulk-keep-aspect">Keep original image ratio for category + all items</label>
     </div>
     <div class="bulk-list" id="bulk-list">
       <div class="bulk-empty">No images selected yet</div>
@@ -3371,7 +3355,6 @@
     // Pre-fill phrase with current label so regeneration is a 1-edit flow
     document.getElementById('item-phrase').value = item?.label || '';
     document.getElementById('item-emotion').value = 'default';
-    document.getElementById('item-keep-aspect').checked = !!item?.keepAspect;
     document.getElementById('item-description').value = item?.description || '';
     const ist = document.getElementById('item-image-status');
     ist.textContent = item?.imageKey ? 'Current image will be kept' : 'No image selected';
@@ -3711,7 +3694,6 @@
         if (!blob) throw new Error('could not render the crop');
         // keepAspect off — the whole point is a filled square tile.
         const saved = await serverUpdateItem(item, { image: blob, keepAspect: false });
-        document.getElementById('item-keep-aspect').checked = false;
         cropModal.classList.remove('show');
         document.getElementById('item-frame-note').textContent = 'Framed ✓ — the old picture is in Previous pictures.';
         if (saved) { editingItem = saved; loadItemHistory(saved); }
@@ -3725,7 +3707,6 @@
   document.getElementById('item-save').addEventListener('click', async () => {
     const label = document.getElementById('item-label').value.trim();
     const pinned = document.getElementById('item-pin').checked;
-    const keepAspect = document.getElementById('item-keep-aspect').checked;
     const description = document.getElementById('item-description').value.trim();   // PRD §5
     const errEl = document.getElementById('item-error');
     errEl.textContent = '';
@@ -3740,16 +3721,17 @@
 
     try {
       // Auto-framing: uploads become standard squares (plain CENTER crop,
-      // no automatic blank-space trimming) unless the parent asked to keep
-      // the original ratio (posters). "Adjust framing" picks any other crop.
+      // no automatic blank-space trimming); "Adjust framing" picks any other
+      // crop. The old keep-original-ratio control is retired — omitting
+      // keepAspect on update preserves whatever the tile already has
+      // (admin's Lab tools still set it for TV/movie posters).
       let image = pendingImage;
-      if (image && !keepAspect) image = await squareCropBlob(image);
+      if (image) image = await squareCropBlob(image);
       if (editingItem) {
         await serverUpdateItem(editingItem, {
           label,
           image,
           sound: pendingSound,
-          keepAspect,
           description,
           pinned: editingItemSection === 'people' ? pinned : undefined,
         });
@@ -3760,7 +3742,6 @@
           label,
           image,
           sound: pendingSound,
-          keepAspect,
           description,
           order: Date.now(),
           pinned: editingItemSection === 'people' ? pinned : false,
@@ -3838,10 +3819,7 @@
     document.getElementById('cat-modal-title').textContent = title;
     document.getElementById('cat-label').value = cat?.label || '';
     document.getElementById('cat-image').value = '';
-    document.getElementById('cat-keep-aspect').checked = !!cat?.keepAspect;
     document.getElementById('cat-kind').value = cat?.kind || '';
-    document.getElementById('cat-apply-items').checked = false;
-    document.getElementById('cat-apply-items-row').style.display = cat ? 'flex' : 'none';
     document.getElementById('cat-look-style').checked = true;   // re-default every open
     const cist = document.getElementById('cat-image-status');
     cist.textContent = cat?.imageKey ? 'Current image will be kept' : 'No image selected';
@@ -3866,7 +3844,6 @@
 
   document.getElementById('cat-save').addEventListener('click', async () => {
     const label = document.getElementById('cat-label').value.trim();
-    const keepAspect = document.getElementById('cat-keep-aspect').checked;
     const kind = document.getElementById('cat-kind').value || null;
     const errEl = document.getElementById('cat-error');
     errEl.textContent = '';
@@ -3898,34 +3875,20 @@
         } catch (_) { /* generation hiccup → keep the exact photo */ }
         saveBtn.textContent = 'Saving…';
       }
+      // Ratio control retired: omitting keepAspect preserves the stored
+      // value on update; new categories default to square (false).
       if (editingCat) {
         await serverUpdateCategory(editingCat, {
           label,
           image: pendingCatImage,
-          keepAspect,
           kind,
         });
-        if (document.getElementById('cat-apply-items').checked) {
-          saveBtn.textContent = 'Applying…';
-          const allCats = await getAllCats(editingCatSection);
-          const subtree = new Set(descendantCatIds(allCats, editingCat.id));
-          for (const c of allCats) {
-            if (subtree.has(c.id) && c.id !== editingCat.id && !!c.keepAspect !== keepAspect) {
-              await serverUpdateCategory(c, { keepAspect });
-            }
-          }
-          const items = (await getAllItems(editingCatSection)).filter(i => subtree.has(i.categoryId));
-          for (const it of items) {
-            if (!!it.keepAspect !== keepAspect) await serverUpdateItem(it, { keepAspect });
-          }
-        }
       } else {
         const saved = await serverCreateCategory({
           section: editingCatSection,
           label,
           parentId: editingCatParentId,
           image: pendingCatImage,
-          keepAspect,
           kind,
           order: Date.now(),
         });
@@ -4091,7 +4054,6 @@
     document.getElementById('bulk-folder-input').value = '';
     document.getElementById('bulk-tts').checked = true;
     document.getElementById('bulk-emotion').value = 'default';
-    document.getElementById('bulk-keep-aspect').checked = false;
     // Every open re-defaults to the board's art style — the same rule as
     // every other image add (keep exact photo is the explicit opt-out).
     document.getElementById('bulk-look-style').checked = true;
@@ -4176,7 +4138,6 @@
     const label = document.getElementById('bulk-cat-label').value.trim();
     const useTts = document.getElementById('bulk-tts').checked;
     const emotion = document.getElementById('bulk-emotion').value;
-    const keepAspect = document.getElementById('bulk-keep-aspect').checked;
     const errEl = document.getElementById('bulk-error');
     const progEl = document.getElementById('bulk-progress');
     const saveBtn = document.getElementById('bulk-save');
@@ -4202,7 +4163,6 @@
         label,
         parentId: bulkParentId,
         image: catImage,
-        keepAspect,
         order: Date.now(),
       });
       newCatId = savedCat.id;
@@ -4242,7 +4202,6 @@
           label: it.label.trim(),
           image: it.file,
           sound: sound || undefined,
-          keepAspect,
           order: Date.now() + i,
         });
       } catch (err) {
