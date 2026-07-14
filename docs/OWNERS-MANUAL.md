@@ -6,7 +6,10 @@ the original build context. Detailed how-tos live in `docs/runbooks/`;
 mechanical safety invariants live in `.claude/skills/surface-audit/SKILL.md`
 (and run as CI, see below). Content/vocabulary conventions live in
 `.claude/skills/update-taxonomy/SKILL.md` and
-`.claude/skills/aac-prompt-author/SKILL.md`.
+`.claude/skills/aac-prompt-author/SKILL.md`. The release walk-order
+(pre-merge gate → deploy → production smoke → TestFlight/Play + launch
+gates) is `.claude/skills/release/SKILL.md`; conventions for any new or
+changed server route are `.claude/skills/new-endpoint/SKILL.md`.
 
 ## What this product is
 

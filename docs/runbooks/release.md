@@ -1,5 +1,10 @@
 # Releasing: web, iOS, Android
 
+> The step-by-step walk-order (pre-merge gate, production smoke, one-time
+> launch gates) lives in the `release` skill
+> (`.claude/skills/release/SKILL.md`); this runbook holds the reference
+> detail it points into.
+
 ## Web (Vercel)
 
 Merging to `main` deploys automatically (Vercel Git integration). Before
