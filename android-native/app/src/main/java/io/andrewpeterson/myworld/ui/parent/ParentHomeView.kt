@@ -40,7 +40,9 @@ import io.andrewpeterson.myworld.model.prettyChildName
 import io.andrewpeterson.myworld.net.advanceBand
 import io.andrewpeterson.myworld.net.bandStatus
 import io.andrewpeterson.myworld.net.changePassword
+import io.andrewpeterson.myworld.net.childSettings
 import io.andrewpeterson.myworld.net.deleteAccount
+import io.andrewpeterson.myworld.net.saveChildSettingsKey
 import io.andrewpeterson.myworld.ui.theme.Brand
 import io.andrewpeterson.myworld.ui.theme.hexColor
 import kotlinx.coroutines.launch
@@ -207,9 +209,29 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
     var curPw by remember { mutableStateOf("") }
     var newPw by remember { mutableStateOf("") }
     var pwMsg by remember { mutableStateOf<String?>(null) }
+    // Listening display filter (E8) — synced child settings, editable here
+    // so a parent can flip them right on the device. Seeded below; the
+    // loaded flag keeps the seed from firing the save callbacks.
+    var listenCensor by remember { mutableStateOf(true) }
+    var listenTilesOnly by remember { mutableStateOf(false) }
+    var listenLoaded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         band = try { c.api.bandStatus(c.auth.childSlug) } catch (_: Exception) { null }
+        val s = c.api.childSettings(c.auth.childSlug)
+        fun bool(k: String) = (s[k] as? kotlinx.serialization.json.JsonPrimitive)
+            ?.let { it.content == "true" }
+        listenCensor = bool("listenCensor") ?: true
+        listenTilesOnly = bool("listenTilesOnly") ?: false
+        listenLoaded = true
+    }
+    fun saveListen(key: String, value: Boolean) {
+        if (!listenLoaded) return
+        scope.launch {
+            c.api.saveChildSettingsKey(c.auth.childSlug, key,
+                kotlinx.serialization.json.JsonPrimitive(value))
+            c.access.refresh()   // the board applies it without a relaunch
+        }
     }
     fun openUrl(url: String) {
         try {
@@ -260,6 +282,29 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
                 }
                 advanceMsg?.let { Text(it, fontSize = 12.sp, color = Brand.muted) }
             }
+
+            Spacer(Modifier.height(14.dp))
+            Text("LISTENING", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Hide bad words", fontSize = 14.sp, color = Brand.ink, modifier = Modifier.weight(1f))
+                androidx.compose.material3.Switch(checked = listenCensor, onCheckedChange = {
+                    listenCensor = it; saveListen("listenCensor", it)
+                })
+            }
+            Text(
+                "Curse words and slurs someone says nearby show as “Bad Word” in the listening bar instead of the word itself.",
+                fontSize = 12.sp, color = Brand.muted,
+            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Only show words with tiles", fontSize = 14.sp, color = Brand.ink, modifier = Modifier.weight(1f))
+                androidx.compose.material3.Switch(checked = listenTilesOnly, onCheckedChange = {
+                    listenTilesOnly = it; saveListen("listenTilesOnly", it)
+                })
+            }
+            Text(
+                "Spoken words that aren't on the board don't appear at all.",
+                fontSize = 12.sp, color = Brand.muted,
+            )
 
             Spacer(Modifier.height(14.dp))
             Text("THIS DEVICE", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)

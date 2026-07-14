@@ -8,6 +8,8 @@ struct ListenToken: Identifiable {
     let word: String
     let tile: Tile?
     let at: Date
+    /// Display filter (E8): a blocklisted word, shown as the pill "Bad Word".
+    var masked = false
 }
 
 /// Greedy-longest tokenizer — the SAME rule as `api/message-to-board.js`: try the
@@ -51,7 +53,9 @@ enum ListenTokenizer {
         return map
     }
 
-    static func tokenize(_ words: [TimedWord], lexicon: [String: Tile]) -> [ListenToken] {
+    static func tokenize(_ words: [TimedWord], lexicon: [String: Tile],
+                         censor: Bool = true, tilesOnly: Bool = false,
+                         blocklist: Set<String> = []) -> [ListenToken] {
         var out: [ListenToken] = []
         var i = 0
         while i < words.count {
@@ -66,7 +70,18 @@ enum ListenTokenizer {
             let src = Array(words[i..<(i + used)])
             let id = src.first?.id ?? i
             let at = src.map { $0.at }.max() ?? Date()
-            out.append(ListenToken(id: id, word: matched?.label ?? normalize(words[i].text), tile: matched, at: at))
+            if let matched {
+                out.append(ListenToken(id: id, word: matched.label, tile: matched, at: at))
+            } else if !tilesOnly {
+                // Display filter (E8): a blocklisted word never renders as
+                // itself; tilesOnly hides every non-tile word outright.
+                let norm = normalize(words[i].text)
+                if censor && blocklist.contains(norm) {
+                    out.append(ListenToken(id: id, word: "Bad Word", tile: nil, at: at, masked: true))
+                } else {
+                    out.append(ListenToken(id: id, word: norm, tile: nil, at: at))
+                }
+            }
             i += used
         }
         return out
@@ -84,7 +99,9 @@ struct ListenStripView: View {
     @State private var lastNavKey = ""
 
     private var tokens: [ListenToken] {
-        ListenTokenizer.tokenize(speech.words, lexicon: ListenTokenizer.lexicon(from: board.tiles))
+        ListenTokenizer.tokenize(speech.words, lexicon: ListenTokenizer.lexicon(from: board.tiles),
+                                 censor: access.listenCensor, tilesOnly: access.listenTilesOnly,
+                                 blocklist: board.listenBlocklist)
     }
 
     var body: some View {
@@ -164,7 +181,8 @@ struct ListenStripView: View {
         } else {
             Text(tok.word)
                 .font(.system(size: 20, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(hex: "#ad1457"))
+                .italic(tok.masked)
+                .foregroundStyle(Color(hex: "#ad1457").opacity(tok.masked ? 0.7 : 1))
                 .padding(.horizontal, 12)
                 .frame(height: 76)
                 .background(Color(hex: "#fce4ec"), in: RoundedRectangle(cornerRadius: 14))

@@ -53,6 +53,9 @@ struct APIClient {
         let categories: [Category]
         let items: [Tile]
         var entitlement: Entitlement? = nil
+        /// Listening display filter (E8): server-owned bad-word list; words
+        /// on it render as "Bad Word" in the listening strip.
+        var listenBlocklist: [String]? = nil
     }
 
     /// POST /api/auth/login — captures the Set-Cookie session.
@@ -533,6 +536,21 @@ struct APIClient {
         let p = path.hasPrefix("/") ? path : "/" + path
         guard let (data, _) = try? await request(method: "GET", path: p, body: nil) else { return nil }
         return data
+    }
+
+    /// Merge-safe write of arbitrary root settings keys (parent toggles like
+    /// listenCensor): read the current blob, overlay the patch, write it all
+    /// back. The server clamps admin-gated keys for non-admins regardless.
+    func updateChildSettings(childId: String, patch: [String: Any]) async -> Bool {
+        var settings = await childSettings(childId: childId)
+        for (k, v) in patch { settings[k] = v }
+        guard let body = try? JSONSerialization.data(withJSONObject: ["settings": settings]) else { return false }
+        let ok = (try? await request(
+            method: "POST",
+            path: "/api/child-settings?childId=\(percentEscape(childId))",
+            body: body, contentType: "application/json"
+        )) != nil
+        return ok
     }
 
     /// Merge-safe write of display prefs: read the current settings blob, set

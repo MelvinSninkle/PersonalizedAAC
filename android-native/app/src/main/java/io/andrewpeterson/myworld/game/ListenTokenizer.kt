@@ -9,6 +9,8 @@ data class ListenToken(
     val word: String,
     val tile: Tile?,
     val at: Long,
+    /** Display filter (E8): a blocklisted word, shown as the pill "Bad Word". */
+    val masked: Boolean = false,
 )
 
 /**
@@ -52,7 +54,11 @@ object ListenTokenizer {
         return map
     }
 
-    fun tokenize(words: List<TimedWord>, lexicon: Map<String, Tile>): List<ListenToken> {
+    fun tokenize(
+        words: List<TimedWord>, lexicon: Map<String, Tile>,
+        censor: Boolean = true, tilesOnly: Boolean = false,
+        blocklist: Set<String> = emptySet(),
+    ): List<ListenToken> {
         val out = mutableListOf<ListenToken>()
         var i = 0
         while (i < words.size) {
@@ -66,12 +72,20 @@ object ListenTokenizer {
                 w -= 1
             }
             val src = words.subList(i, i + used)
-            out.add(ListenToken(
-                id = src.first().id,
-                word = matched?.label ?: normalize(words[i].text),
-                tile = matched,
-                at = src.maxOf { it.at },
-            ))
+            val id = src.first().id
+            val at = src.maxOf { it.at }
+            if (matched != null) {
+                out.add(ListenToken(id = id, word = matched.label, tile = matched, at = at))
+            } else if (!tilesOnly) {
+                // Display filter (E8): a blocklisted word never renders as
+                // itself; tilesOnly hides every non-tile word outright.
+                val norm = normalize(words[i].text)
+                if (censor && norm in blocklist) {
+                    out.add(ListenToken(id = id, word = "Bad Word", tile = null, at = at, masked = true))
+                } else {
+                    out.add(ListenToken(id = id, word = norm, tile = null, at = at))
+                }
+            }
             i += used
         }
         return out

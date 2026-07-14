@@ -52,9 +52,14 @@ fun ListenStripView() {
     val status by c.speechListener.status.collectAsState()
     val tiles by c.board.tiles.collectAsState()
 
-    val tokens = ListenTokenizer.tokenize(words, ListenTokenizer.lexicon(tiles))
-    val listState = rememberLazyListState()
     val access by c.access.data.collectAsState()
+    val blocklist by c.board.listenBlocklist.collectAsState()
+    val tokens = ListenTokenizer.tokenize(
+        words, ListenTokenizer.lexicon(tiles),
+        censor = access.listenCensor, tilesOnly = access.listenTilesOnly,
+        blocklist = blocklist,
+    )
+    val listState = rememberLazyListState()
 
     // A word matched twice IN A ROW = "show me": open that tile's category and
     // flash it (BoardNav drives the section columns). Keyed by the pair's
@@ -102,7 +107,8 @@ fun ListenStripView() {
                     if (tile != null) ListenTileChip(tile)
                     else Text(
                         tok.word, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                        color = Brand.pinkDeep,
+                        fontStyle = if (tok.masked) androidx.compose.ui.text.font.FontStyle.Italic else null,
+                        color = if (tok.masked) Brand.pinkDeep.copy(alpha = 0.7f) else Brand.pinkDeep,
                         modifier = Modifier
                             .background(hexColor("#fce4ec"), RoundedCornerShape(14.dp))
                             .padding(horizontal = 12.dp, vertical = 22.dp),

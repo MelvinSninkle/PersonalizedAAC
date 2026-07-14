@@ -243,9 +243,17 @@ struct ParentHomeView: View {
 struct ParentSettingsView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(DeviceMode.self)  private var mode
+    @Environment(AccessPrefs.self) private var access
     @Environment(\.dismiss) private var dismiss
 
     @State private var band: APIClient.BandStatus?
+    // Listening display filter (E8) — synced child settings, editable here
+    // so a parent can flip them right on the device. Seeded in .task;
+    // `listenLoaded` keeps the seed from firing the save onChange.
+    @State private var listenCensor = true
+    @State private var listenTilesOnly = false
+    @State private var listenLoaded = false
+    @State private var listenMsg: String?
     @State private var advancing = false
     @State private var advanceMsg: String?
     @State private var squaring = false
@@ -288,6 +296,17 @@ struct ParentSettingsView: View {
                     } else {
                         Text("Loading…").foregroundStyle(.secondary)
                     }
+                }
+                Section("Listening") {
+                    Toggle("Hide bad words", isOn: $listenCensor)
+                        .onChange(of: listenCensor) { _, v in saveListen(["listenCensor": v]) }
+                    Text("Curse words and slurs someone says nearby show as \u{201C}Bad Word\u{201D} in the listening bar instead of the word itself.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Toggle("Only show words with tiles", isOn: $listenTilesOnly)
+                        .onChange(of: listenTilesOnly) { _, v in saveListen(["listenTilesOnly": v]) }
+                    Text("Spoken words that aren't on the board don't appear at all.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if let listenMsg { Text(listenMsg).font(.footnote).foregroundStyle(.red) }
                 }
                 // Admin-only rescue for older boards with stray aspect flags —
                 // new boards are always square, so parents never need this.
@@ -352,7 +371,13 @@ struct ParentSettingsView: View {
             }
             .navigationTitle("Settings")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
-            .task { band = try? await api.bandStatus(childId: auth.childSlug) }
+            .task {
+                band = try? await api.bandStatus(childId: auth.childSlug)
+                let s = await api.childSettings(childId: auth.childSlug)
+                listenCensor = (s["listenCensor"] as? Bool) ?? true
+                listenTilesOnly = (s["listenTilesOnly"] as? Bool) ?? false
+                listenLoaded = true
+            }
             .alert("Change password", isPresented: $showChangePw) {
                 SecureField("Current password", text: $curPw)
                 SecureField("New password (8+ characters)", text: $newPw)
@@ -410,6 +435,25 @@ struct ParentSettingsView: View {
             deleteError = "Couldn't delete: \(error.localizedDescription)"
         }
         deleteText = ""
+    }
+
+    /// Merge-write one listening toggle; on failure re-seed from the server
+    /// so the switch snaps back to the truth instead of lying.
+    private func saveListen(_ patch: [String: Any]) {
+        guard listenLoaded else { return }
+        Task {
+            if await api.updateChildSettings(childId: auth.childSlug, patch: patch) {
+                listenMsg = nil
+                access.refresh()   // the board applies it without a relaunch
+            } else {
+                listenMsg = "Couldn't save — check your connection."
+                let s = await api.childSettings(childId: auth.childSlug)
+                listenLoaded = false
+                listenCensor = (s["listenCensor"] as? Bool) ?? true
+                listenTilesOnly = (s["listenTilesOnly"] as? Bool) ?? false
+                listenLoaded = true
+            }
+        }
     }
 
     private var webDashboardURL: URL {
