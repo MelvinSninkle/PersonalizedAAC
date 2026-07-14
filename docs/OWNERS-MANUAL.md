@@ -101,6 +101,13 @@ ACCESS_KEYS gate), set from parent dashboard → Board tab (themed accordions)
   OFF; **native apps only** — web keeps the pencil, because the web gesture
   required killing touch scroll). Additive to the pencil and needs the
   admin-gated `sentenceBuilder`; works during normal scroll-mode use.
+- `listenCensor` — listening mode shows "Bad Word" instead of curse words
+  and slurs said near the device (default ON; the blocklist lives
+  server-side in `api/_lib/bad-words.js` and ships via /api/sync, so
+  additions need no app release). `listenTilesOnly` (default OFF) hides
+  every spoken word that has no tile. Both editable in the dashboard,
+  the web board's Display modal, AND the native parent Settings screens
+  (the first parent-editable settings on native). See surface-audit E8.
 
 ## Money
 

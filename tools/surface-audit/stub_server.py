@@ -71,7 +71,10 @@ class H(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         if u.path.startswith('/api/sync'):
-            return self.send_json({'categories': CATS, 'items': ITEMS})
+            # listenBlocklist: mild stand-ins for the real bad-words list so
+            # the smoke can assert masking without profanity in the repo tests.
+            return self.send_json({'categories': CATS, 'items': ITEMS,
+                                   'listenBlocklist': ['damn', 'heck']})
         if u.path.startswith('/api/media'):
             key = parse_qs(u.query).get('key', ['x'])[0]
             body = png_solid(color_for(key))

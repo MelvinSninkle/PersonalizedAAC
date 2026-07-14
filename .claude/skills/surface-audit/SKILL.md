@@ -331,7 +331,9 @@ admin-gated `sentenceBuilder`), and `sentenceDrag` (default false; NATIVE
 APPS ONLY — drag a tile up to the header to stage it, additive to the
 pencil, also requires `sentenceBuilder`; the web deliberately has no drag
 because it needed `touch-action: none` — nothing may ever disable touch
-scrolling on the web board) are ordinary
+scrolling on the web board), and the listening display filter
+`listenCensor` (default TRUE) / `listenTilesOnly` (default false — see E8)
+are ordinary
 child-settings root keys — do NOT "fix" them into the ACCESS_KEYS gate;
 parents own these decisions. The one guarded flow is `easyUnlock` ENABLE:
 both UIs (app.html Display modal `disp-unlock-yes`, parent.html Safety panel
@@ -349,6 +351,29 @@ but excluded from the weekly accuracy aggregate (`api/analytics.js`
 `denom >= 3`) and from spike baselines (`api/_lib/spike.js`
 `slides_attempted/item_count >= 3`). An ended-early game must never read as
 a string of misses, and a one-tap game must never read as 100%.
+
+**E8. Listening never renders a bad word — masking defaults ON.**
+Listening mode captions everything said near the device onto a child's
+screen. Words on the server-owned blocklist (`api/_lib/bad-words.js`,
+shipped to all three clients as `/api/sync` → `listenBlocklist`, cached
+for offline) render as the pill **"Bad Word"** instead; the parent-writable
+`listenCensor` key defaults TRUE on every client (`!== false` on web,
+`?? true` iOS, `?: true` Android) and `listenTilesOnly` (default false)
+hides every non-tile word outright. The filter lives at each client's
+tokenizer (web `tokenizeForListen`, iOS/Android `ListenTokenizer.tokenize`)
+so chips, text pills, and repeat-navigate all see the filtered stream.
+Rules: the blocklist is edited ONLY server-side (match-terms doctrine —
+never port word lists or matching rules into a client); entries are
+single normalized lowercase tokens (exact match, no substrings — so no
+Scunthorpe false positives, but variants need their own entries); the
+default must never flip to off. Verify: `invariants.sh` E8 greps the
+default-ON pattern on all three clients + the sync ship line;
+`access_smoke.cjs` drives masking / tiles-only / censor-off through the
+real web tokenizer via the `listenTokens` + `setListenPrefs` hooks.
+Parents edit both toggles in FOUR places: parent.html Touch & safety,
+app.html Display modal, and the native parent Settings screens (the first
+parent-editable settings on native — iOS `updateChildSettings`, Android
+`saveChildSettingsKey`).
 
 ## F. Store & credits integrity
 
