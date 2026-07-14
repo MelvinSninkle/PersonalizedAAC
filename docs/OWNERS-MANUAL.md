@@ -126,6 +126,10 @@ family keeps everything they have — only new spends wait.
   subject-matched one automatically. Parents see/switch/replace them in
   dashboard → Art style (`/api/parent/style`; uploads fork a child-scoped
   "Your family style" row — public template rows are never edited).
+  Every image-add surface asks keep-exact-photo vs draw-in-board-style
+  (default: board style; free tier locks to exact) — NO per-image style or
+  model pickers exist, and `?styleGuideId=`/`?model=` overrides on
+  generate-image + tile-jobs are admin-only. See surface-audit C8.
   Curated defaults can bypass prompts: defaults view 📤 → `default-upload`
   lab action (writes ONLY the shared default layers; sync overlays every
   replaceable tile, never family art). Every image swap archives the old key

@@ -561,10 +561,15 @@ private struct PersonEditorSheet: View {
     let onDone: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(BoardStore.self) private var board
 
     @State private var name: String
     @State private var relationship: String
     @State private var capturedJPEG: Data?
+    /// Keep the exact photo instead of drawing the portrait in the board's
+    /// art style. Default OFF (restyle) — matching the board is the norm;
+    /// free tier is locked ON (styling is a membership perk; as-is is free).
+    @State private var useAsIs = false
     @State private var showCamera = false
     @State private var showLibrary = false
     @State private var libraryItem: PhotosPickerItem?
@@ -684,8 +689,29 @@ private struct PersonEditorSheet: View {
             Text(isNew ? "A clear head-and-shoulders photo works best. Only upload someone who's given you permission — it's used solely to draw their tile."
                        : "Pick a new photo to replace their portrait, or leave it.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
+
+            // The same keep-vs-restyle ask every image add gets. Default =
+            // drawn in the board's art style so the person matches the board.
+            if capturedJPEG != nil {
+                Toggle(isOn: $useAsIs) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Use my photo as-is")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text(useAsIs ? "The photo itself becomes the tile — free."
+                                     : "Drawn as a portrait in the board's art style.")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
+                }
+                .tint(Color(hex: "#ff1493"))
+                .disabled(!board.stylingAllowed)
+                if !board.stylingAllowed {
+                    Text("Styled portraits are part of My World memberships — the exact photo (free) is used on the free plan.")
+                        .font(.system(size: 11)).foregroundStyle(Color(hex: "#ad1457"))
+                }
+            }
         }
         .frame(maxWidth: .infinity)
+        .task { if !board.stylingAllowed { useAsIs = true } }
     }
 
     private func photoBtn(_ text: String, _ icon: String) -> some View {
@@ -717,13 +743,15 @@ private struct PersonEditorSheet: View {
             //    model is sent on purpose: the server routes people through the
             //    SAME keystone-portrait pipeline as the Portrait Lab (style
             //    guide attached, likeness prompt, best likeness model).
+            //    "Use my photo as-is" rides the raw path — no restyle, free.
             if let jpeg = capturedJPEG {
                 _ = try await api.createTileJob(
                     photoJPEG: jpeg, label: trimmed, detail: "", section: "people",
                     categoryId: nil, style: ArtStyle.soft.prompt, styleGuideId: nil,
                     model: "", bg: "pink", keepAspect: false,
                     needsReview: false, emotion: "default", childId: childId,
-                    relationship: draft.isSelf ? nil : relationship)
+                    relationship: draft.isSelf ? nil : relationship,
+                    raw: useAsIs)
             }
             dismiss(); onDone()
         } catch {

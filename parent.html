@@ -1051,6 +1051,14 @@
          instead of forcing the camera. Off-screen 1×1 (not display:none) keeps the
          synthetic .click() reliable on iOS Safari — same fix as app.html. -->
     <input type="file" id="family-photo" accept="image/*" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
+    <!-- Same keep-vs-restyle ask as every other image add (surface-audit C7):
+         default = drawn as a portrait in the BOARD's saved art style. -->
+    <div style="display:flex;gap:8px;margin:0 0 12px;">
+      <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
+        <input type="radio" name="family-look" id="family-look-style" checked style="width:auto;margin:0;">Board art style</label>
+      <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
+        <input type="radio" name="family-look" id="family-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
+    </div>
     <div id="family-picker"></div>
     <div class="foot">
       <button class="btn" id="family-delete" style="color:#dc2626;margin-right:auto;display:none;">Remove</button>
@@ -2424,6 +2432,33 @@
       const photo = await downscale(file, 1024, 0.85);
       const raw = document.getElementById('tile-look-raw').checked;
       const label = document.getElementById('tile-label').value.trim();
+      // Categories: /api/tile-jobs makes ITEMS, so a folder icon takes the
+      // direct path instead — same keep-vs-restyle choice, the styled photo
+      // is drawn in the BOARD's saved art style and staged for Save.
+      if (tileTarget.kind !== 'item') {
+        if (raw) {
+          tilePendingImage = photo; tileShowPreview(photo);
+          statusEl.textContent = 'Photo ready ✓ — tap Save to apply.';
+        } else {
+          statusEl.textContent = '🎨 Drawing it to match the board…';
+          const ir = await fetch('/api/generate-image?label=' + encodeURIComponent(label)
+            + '&style=' + encodeURIComponent("picture drawn in the board's art style")
+            + '&childId=' + encodeURIComponent(slug),
+            { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
+          if (ir.ok) {
+            tilePendingImage = await ir.blob(); tileShowPreview(tilePendingImage);
+            statusEl.textContent = 'Picture ready ✓ — tap Save to apply.';
+          } else if (ir.status === 402 && /needs_subscription/.test(await ir.text())) {
+            tilePendingImage = photo; tileShowPreview(photo);
+            statusEl.textContent = 'Photo kept as-is (free) — styled pictures are a membership perk.';
+          } else {
+            tilePendingImage = photo; tileShowPreview(photo);
+            statusEl.textContent = 'Drawing didn’t work — photo kept as-is. Save to apply.';
+          }
+        }
+        btn.disabled = false; btn.textContent = pv;
+        return;
+      }
       statusEl.textContent = '📤 Saving the photo…';
       const qs = '/api/tile-jobs?childId=' + encodeURIComponent(slug)
         + '&section=' + encodeURIComponent(tileTarget.section)
@@ -2840,6 +2875,7 @@
     async function open(person) {
       editing = person || null;
       photoFile = null;
+      document.getElementById('family-look-style').checked = true;   // re-default every open
       document.getElementById('family-modal-title').textContent = person ? 'Edit family member' : 'Add family member';
       document.getElementById('family-delete').style.display = person ? '' : 'none';
       thumb.innerHTML = (person && person.reference_key)
@@ -2880,12 +2916,29 @@
       if (!v || !v.displayName) { mmsg.textContent = 'Add a name first.'; return; }
       const saveBtn = document.getElementById('family-save'); saveBtn.disabled = true;
       try {
-        if (photoFile) {
-          // New/changed photo → stylize + (re)make the tile + person via the onboarding endpoint.
-          mmsg.textContent = 'Making ' + v.displayName + ' in your style… (about 30 seconds)';
-          let style = ''; try { style = localStorage.getItem('aacStyle') || ''; } catch (_) {}
+        if (photoFile && document.getElementById('family-look-raw').checked) {
+          // Exact photo → upsert the person, then the free raw tile pipeline
+          // (photo as-is, no restyle — same path the apps use).
+          mmsg.textContent = 'Adding ' + v.displayName + '’s photo to the board…';
+          const pbody = { childId: slug, displayName: v.displayName, relationship: v.relationship, side: v.side, pronoun: v.pronoun, birthOrder: v.birthOrder, givenName: v.givenName, ageGroup: v.ageGroup };
+          if (editing) pbody.id = editing.id;
+          const pr = await fetch('/api/persons', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(pbody) });
+          if (!pr.ok) { const d = await pr.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + pr.status)); }
           const blob = await downscale(photoFile);
-          const qs = '?childId=' + encodeURIComponent(slug) + (style ? '&style=' + encodeURIComponent(style) : '') +
+          const jr = await fetch('/api/tile-jobs?childId=' + encodeURIComponent(slug)
+            + '&section=people&raw=1&emotion=default'
+            + '&label=' + encodeURIComponent(v.displayName)
+            + (v.relationship && v.relationship !== 'self' ? '&relationship=' + encodeURIComponent(v.relationship) : ''),
+            { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: blob });
+          if (!jr.ok) { const d = await jr.text(); throw new Error(d.slice(0, 200)); }
+        } else if (photoFile) {
+          // New/changed photo → portrait drawn in the BOARD's saved art style
+          // via the onboarding endpoint. No client style param: the server
+          // resolves the child's house style itself (the old localStorage
+          // 'aacStyle' string could silently fight the saved style guide).
+          mmsg.textContent = 'Making ' + v.displayName + ' in your style… (about 30 seconds)';
+          const blob = await downscale(photoFile);
+          const qs = '?childId=' + encodeURIComponent(slug) +
             '&role=parent&name=' + encodeURIComponent(v.displayName) +
             '&relationship=' + encodeURIComponent(v.relationship) +
             (v.side ? '&side=' + encodeURIComponent(v.side) : '') +

@@ -128,8 +128,12 @@ export default async function handler(req, res) {
   // info" step before generation — e.g. "the blue cup with dinosaurs". Steers
   // the illustration without polluting the spoken label.
   const detail = String((req.query && req.query.detail) || '').slice(0, 200).trim();
-  // Per-request model override from the UI; falls back to the default.
-  const reqModel = String((req.query && req.query.model) || '').trim();
+  // Per-request model override — ADMIN ONLY (Lab tooling). Family callers
+  // always get the routed default: per-image model picking is banned
+  // (surface-audit C7), and honoring it let old app builds fight the board's
+  // saved style.
+  const reqModel = auth.user.role === 'admin'
+    ? String((req.query && req.query.model) || '').trim() : '';
   const model = reqModel === 'nano-banana' ? geminiDefaultModel()
     : ALLOWED_MODELS.includes(reqModel) ? reqModel
     : isGeminiModel(reqModel) ? reqModel
@@ -216,13 +220,15 @@ export default async function handler(req, res) {
   // generation so tiles match the board. Replaces the old `reference_images`
   // pull, which fed the child's OWN photos as a "style guide" (inconsistent —
   // a photo has no art style — and not even populated by the current
-  // onboarding, which writes to `persons`). An explicit ?styleGuideId= overrides
-  // the child's saved house style.
+  // onboarding, which writes to `persons`). An explicit ?styleGuideId= is
+  // honored for ADMINS only (Lab tooling) — a family render always anchors on
+  // the child's saved house style (surface-audit C7).
   let refKeys = [];
   let styleBuf = null;
   try {
     const db = sql();
-    const sgParam = parseInt((req.query && req.query.styleGuideId) || '', 10);
+    const sgParam = auth.user.role === 'admin'
+      ? parseInt((req.query && req.query.styleGuideId) || '', 10) : NaN;
     const sgId = Number.isFinite(sgParam) ? sgParam : await loadChildStyleGuideId(db, childId);
     const sg = await loadStyleGuide(db, sgId);
     if (sg && sg.image) { styleBuf = sg.image; refKeys = sg.blob_key ? [sg.blob_key] : []; }

@@ -212,6 +212,10 @@ private fun PersonEditorDialog(draft: PersonDraft, onDone: () -> Unit) {
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val isNew = draft.personId == null
+    // The same keep-vs-restyle ask every image add gets. Default OFF =
+    // portrait drawn in the board's art style; free tier locked to as-is.
+    val stylingAllowed = c.board.stylingAllowed
+    var useAsIs by remember { mutableStateOf(!stylingAllowed) }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -238,7 +242,7 @@ private fun PersonEditorDialog(draft: PersonDraft, onDone: () -> Unit) {
                 jpeg?.let { bytes ->
                     c.api.createTileJob(
                         childId = c.auth.childSlug, jpeg = bytes, label = trimmed,
-                        detail = "", section = "people", categoryId = null, raw = false,
+                        detail = "", section = "people", categoryId = null, raw = useAsIs,
                         relationship = if (draft.isSelf) null else relationship,
                     )
                 }
@@ -290,6 +294,25 @@ private fun PersonEditorDialog(draft: PersonDraft, onDone: () -> Unit) {
                 else "Pick a new photo to replace their portrait, or leave it.",
                 fontSize = 12.sp, color = Brand.muted,
             )
+
+            if (jpeg != null) {
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Use my photo as-is", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Brand.ink)
+                        Text(if (useAsIs) "The photo itself becomes the tile — free."
+                             else "Drawn as a portrait in the board's art style.",
+                            fontSize = 12.sp, color = Brand.muted)
+                    }
+                    Switch(checked = useAsIs, onCheckedChange = { if (stylingAllowed) useAsIs = it },
+                        enabled = stylingAllowed,
+                        colors = SwitchDefaults.colors(checkedTrackColor = Brand.pink))
+                }
+                if (!stylingAllowed) {
+                    Text("Styled portraits are part of My World memberships — the exact photo (free) is used on the free plan.",
+                        fontSize = 12.sp, color = Brand.pinkDeep)
+                }
+            }
 
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(value = name, onValueChange = { name = it },
