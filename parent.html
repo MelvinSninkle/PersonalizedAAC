@@ -1066,7 +1066,7 @@
          default = drawn as a portrait in the BOARD's saved art style. -->
     <div style="display:flex;gap:8px;margin:0 0 12px;">
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-        <input type="radio" name="family-look" id="family-look-style" checked style="width:auto;margin:0;">Board art style</label>
+        <input type="radio" name="family-look" id="family-look-style" checked style="width:auto;margin:0;">Board art style — ⭐5 portrait</label>
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
         <input type="radio" name="family-look" id="family-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
     </div>
@@ -1149,7 +1149,7 @@
            every styled tile renders in the BOARD's saved house style. -->
       <div style="display:flex;gap:8px;margin:0 0 8px;">
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="tile-look" id="tile-look-style" checked style="width:auto;margin:0;">Board art style</label>
+          <input type="radio" name="tile-look" id="tile-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1</label>
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
           <input type="radio" name="tile-look" id="tile-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
       </div>
@@ -1381,12 +1381,28 @@
   document.getElementById('to-therapist').href = '/therapist/' + encodeURIComponent(slug);
   // Word Store link + live credit balance chip.
   const storeLink = document.getElementById('store-link');
+  // Live balance chip beside the Word Store link — refreshed after every
+  // in-page spend so it never lies (also used by the confirm-before-spend
+  // dialogs). Returns the balance (or null offline).
+  async function refreshStoreBalance() {
+    try {
+      const r = await fetch('/api/store?action=catalog&childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      const d = r.ok ? await r.json() : null;
+      if (d && typeof d.balance === 'number') {
+        const el = document.getElementById('store-balance');
+        if (el) el.textContent = '⭐' + d.balance;
+        return d.balance;
+      }
+    } catch (_) {}
+    return null;
+  }
+  async function pdConfirmSpend(cost, what) {
+    const bal = await refreshStoreBalance();
+    return confirm(what + ' uses ⭐' + cost + (bal == null ? '' : ' — you have ⭐' + bal) + '. Continue?');
+  }
   if (storeLink) {
     storeLink.href = '/store.html?child=' + encodeURIComponent(slug);
-    fetch('/api/store?action=catalog&childId=' + encodeURIComponent(slug), { credentials: 'same-origin' })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && typeof d.balance === 'number') document.getElementById('store-balance').textContent = '⭐' + d.balance; })
-      .catch(() => {});
+    refreshStoreBalance();
   }
   // Re-open the per-device "who uses this device?" chooser on the board.
   const deviceDefaultLink = document.getElementById('device-default');
@@ -1901,6 +1917,7 @@
         return;
       }
       styleRegenMsg(`Rebuilding ${d.queued} pictures in the new style — they refresh over the next while. ✨`);
+      refreshStoreBalance();
     } catch (_) { /* the offer is best-effort; the store always has the rebuild */ }
   }
 
@@ -2440,6 +2457,11 @@
     try {
       const photo = await downscale(file, 1024, 0.85);
       const raw = document.getElementById('tile-look-raw').checked;
+      if (!raw && !(await pdConfirmSpend(1, 'Drawing this photo in the board’s art style'))) {
+        statusEl.textContent = '—';
+        btn.disabled = false; btn.textContent = pv;
+        return;
+      }
       const label = document.getElementById('tile-label').value.trim();
       // Categories: /api/tile-jobs makes ITEMS, so a folder icon takes the
       // direct path instead — same keep-vs-restyle choice, the styled photo
@@ -2946,6 +2968,11 @@
           // via the onboarding endpoint. No client style param: the server
           // resolves the child's house style itself (the old localStorage
           // 'aacStyle' string could silently fight the saved style guide).
+          if (!(await pdConfirmSpend(5, 'A family portrait drawn in the board’s style'))) {
+            mmsg.textContent = 'Not drawn — pick "My exact photo" for a free add, or Save again to confirm.';
+            saveBtn.disabled = false;
+            return;
+          }
           mmsg.textContent = 'Making ' + v.displayName + ' in your style… (about 30 seconds)';
           const blob = await downscale(photoFile);
           const qs = '?childId=' + encodeURIComponent(slug) +
@@ -2966,6 +2993,7 @@
           if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
         }
         close(); load();
+        refreshStoreBalance();
       } catch (err) { mmsg.textContent = 'Could not save: ' + (err.message || err); }
       finally { saveBtn.disabled = false; }
     });

@@ -1278,7 +1278,7 @@
       <div style="font-size:12px;color:#666;margin-bottom:8px;">Snap a photo — we'll name it, draw it to match the board, add the voice, and put it on the board automatically. Naming it above first is optional.</div>
       <div style="display:flex;gap:8px;margin:6px 0 2px;">
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="item-look" id="item-look-style" checked style="width:auto;margin:0;">Board art style</label>
+          <input type="radio" name="item-look" id="item-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1</label>
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
           <input type="radio" name="item-look" id="item-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
       </div>
@@ -1361,7 +1361,7 @@
          default = drawn to match the BOARD's saved art style. -->
     <div style="display:flex;gap:8px;margin:6px 0 2px;">
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-        <input type="radio" name="cat-look" id="cat-look-style" checked style="width:auto;margin:0;">Board art style</label>
+        <input type="radio" name="cat-look" id="cat-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1</label>
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
         <input type="radio" name="cat-look" id="cat-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
     </div>
@@ -1404,7 +1404,7 @@
       <div style="font-weight:700;color:#ad1457;">✨ How should the pictures look?</div>
       <div style="display:flex;gap:8px;margin:8px 0 2px;">
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="bulk-look" id="bulk-look-style" checked style="width:auto;margin:0;">Board art style</label>
+          <input type="radio" name="bulk-look" id="bulk-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1 each</label>
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
           <input type="radio" name="bulk-look" id="bulk-look-raw" style="width:auto;margin:0;">Keep original photos — free</label>
       </div>
@@ -3027,6 +3027,17 @@
     LISTEN.blocklist = new Set(data.listenBlocklist);
     try { localStorage.setItem('aacListenBlocklist', JSON.stringify(data.listenBlocklist)); } catch (_) {}
   }
+  // ── The confirm-before-spend rule ─────────────────────────────────────────
+  // Anything about to spend credits says so FIRST, with the live balance.
+  // The server still enforces (402s stay the backstop); this is honesty UX.
+  async function confirmSpend(cost, what) {
+    let bal = null;
+    try {
+      const r = await apiFetch('/api/store?action=catalog&childId=' + encodeURIComponent(CHILD_ID));
+      if (r.ok) bal = (await r.json()).balance;
+    } catch (_) {}
+    return confirm(what + ' uses ⭐' + cost + (bal == null ? '' : ' — you have ⭐' + bal) + '. Continue?');
+  }
   function showMembershipUpsell(title, msg) {
     let o = document.getElementById('upsell-overlay');
     if (!o) {
@@ -3543,6 +3554,11 @@
     try {
       const photo = await compressImage(file);
       const raw = document.getElementById('item-look-raw').checked;
+      if (!raw && !(await confirmSpend(1, 'Drawing this photo in the board’s art style'))) {
+        statusEl.textContent = '—';
+        btn.disabled = false; btn.textContent = prevText;
+        return;
+      }
       const label = document.getElementById('item-label').value.trim();
       statusEl.textContent = '📤 Saving the photo…';
       let qs = '/api/tile-jobs?childId=' + encodeURIComponent(CHILD_ID)
@@ -3886,6 +3902,11 @@
       // A new photo defaults to the BOARD's saved art style, like every other
       // image add. 402 (free tier) falls back to the exact photo + upsell.
       if (pendingCatImage && document.getElementById('cat-look-style').checked) {
+        if (!(await confirmSpend(1, 'Drawing the folder picture in the board’s art style'))) {
+          errEl.textContent = 'Not drawn — pick "My exact photo" for a free add, or save again to confirm.';
+          saveBtn.disabled = false; saveBtn.textContent = prev;
+          return;
+        }
         saveBtn.textContent = 'Drawing…';
         try {
           const photo = await compressImage(pendingCatImage);
@@ -4131,6 +4152,7 @@
     // child's style-guide image; this text is only a neutral prompt nudge.
     const style = document.getElementById('bulk-look-raw').checked
       ? '' : 'picture drawn in the board\'s art style';
+    if (style && !(await confirmSpend(bulkItems.length, 'Drawing ' + bulkItems.length + ' photo' + (bulkItems.length === 1 ? '' : 's') + ' in the board’s art style'))) return;
     btn.disabled = true; const prev = btn.textContent;
     let stylingGated = false;
     for (let i = 0; i < bulkItems.length; i++) {

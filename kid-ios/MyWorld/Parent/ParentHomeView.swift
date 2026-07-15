@@ -20,6 +20,9 @@ struct ParentHomeView: View {
     @State private var showFacilitator = false
     /// Board-build progress (server-side seed jobs still rendering).
     @State private var buildStatus: APIClient.SeedStatus?
+    /// Live credit balance for the Credits & Store card's yellow badge —
+    /// the parent always knows what they have before they spend.
+    @State private var creditBalance: Int?
 
     private let columns = [GridItem(.adaptive(minimum: 160), spacing: 14)]
 
@@ -32,7 +35,8 @@ struct ParentHomeView: View {
                     LazyVGrid(columns: columns, spacing: 14) {
                         navCard(icon: "star.fill", tint: "#f59e0b",
                                 title: "Credits & Store",
-                                subtitle: "Credits, packs & the word shop") { StoreView() }
+                                subtitle: "Credits, packs & the word shop",
+                                badge: creditBalance.map { "⭐ \($0)" }) { StoreView() }
 
                         homeCard(icon: "camera.fill", tint: "#ff1493",
                                  title: "Add a tile",
@@ -122,6 +126,7 @@ struct ParentHomeView: View {
                 parentLive.start(childId: auth.childSlug)
                 // Real child name for the title + board-build progress banner.
                 ChildNames.shared.refresh(auth.childSlug)
+                creditBalance = try? await APIClient().storeBalance()
                 await watchBuildProgress()
             }
             // PRD: when a facilitated game session starts on the iPad — from
@@ -212,12 +217,13 @@ struct ParentHomeView: View {
     }
 
     private func navCard<D: View>(icon: String, tint: String, title: String, subtitle: String,
+                                  badge: String? = nil,
                                   @ViewBuilder destination: @escaping () -> D) -> some View {
-        NavigationLink { destination() } label: { cardLabel(icon: icon, tint: tint, title: title, subtitle: subtitle) }
+        NavigationLink { destination() } label: { cardLabel(icon: icon, tint: tint, title: title, subtitle: subtitle, badge: badge) }
             .buttonStyle(.plain)
     }
 
-    private func cardLabel(icon: String, tint: String, title: String, subtitle: String) -> some View {
+    private func cardLabel(icon: String, tint: String, title: String, subtitle: String, badge: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 26))
@@ -234,6 +240,16 @@ struct ParentHomeView: View {
         .padding(14)
         .background(.white, in: RoundedRectangle(cornerRadius: 18))
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(hex: "#f3c6da"), lineWidth: 1))
+        .overlay(alignment: .topTrailing) {
+            if let badge {
+                Text(badge)
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Color(hex: "#92400e"))
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(Color(hex: "#fde68a"), in: Capsule())
+                    .padding(8)
+            }
+        }
     }
 }
 
@@ -614,6 +630,7 @@ private struct PersonEditorSheet: View {
     /// art style. Default OFF (restyle) — matching the board is the norm;
     /// free tier is locked ON (styling is a membership perk; as-is is free).
     @State private var useAsIs = false
+    @State private var confirmPortrait = false
     @State private var showCamera = false
     @State private var showLibrary = false
     @State private var libraryItem: PhotosPickerItem?
@@ -684,12 +701,23 @@ private struct PersonEditorSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     if saving { ProgressView() }
                     else {
-                        Button("Save") { Task { await save() } }
-                            .font(.system(size: 16, weight: .bold))
-                            .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty
-                                      || (isNew && capturedJPEG == nil))
+                        Button("Save") {
+                            // Confirm-before-spend: a styled family portrait
+                            // is the ⭐5 keystone render; as-is stays free.
+                            if capturedJPEG != nil && !useAsIs { confirmPortrait = true }
+                            else { Task { await save() } }
+                        }
+                        .font(.system(size: 16, weight: .bold))
+                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty
+                                  || (isNew && capturedJPEG == nil))
                     }
                 }
+            }
+            .alert("Use ⭐5?", isPresented: $confirmPortrait) {
+                Button("OK") { Task { await save() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("A family portrait drawn in the board's style uses ⭐5 (our best likeness model). \u{201C}Use my photo as-is\u{201D} is free.")
             }
             .sheet(isPresented: $showCamera) {
                 CameraPicker { data in
@@ -742,7 +770,7 @@ private struct PersonEditorSheet: View {
                         Text("Use my photo as-is")
                             .font(.system(size: 14, weight: .semibold))
                         Text(useAsIs ? "The photo itself becomes the tile — free."
-                                     : "Drawn as a portrait in the board's art style.")
+                                     : "Drawn as a portrait in the board's art style — ⭐5.")
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                 }

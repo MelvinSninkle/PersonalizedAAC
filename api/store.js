@@ -89,6 +89,7 @@ export default async function handler(req, res) {
       case 'free-board':     return freeBoard(req, res, db, auth, body);
       case 'personalize-all': return personalizeAll(req, res, db, auth, uid, body);
       case 'personalize-category': return personalizeCategory(req, res, db, auth, uid, body);
+      case 'personalize-status': return personalizeStatus(req, res, db, auth, uid);
       case 'impact':         return impact(req, res, db, auth);
       case 'adopt-image':    return adoptImage(req, res, db, auth);
       case 'regen-with':     return regenWith(req, res, db, auth, uid, body);
@@ -135,6 +136,7 @@ async function catalog(req, res, db, auth, uid) {
   res.status(200).json({
     ok: true,
     balance: uid ? await creditBalance(db, uid) : 0,
+    costs: COST,   // per-spend price facts — clients never hardcode these
     creditCents: CREDIT_CENTS,
     packs: PACKS.map(({ sku, credits, cents, label, appleProductId, googleProductId }) => ({ sku, credits, cents, label, appleProductId, googleProductId })),
     subscription: SUBSCRIPTION,           // legacy field (= Plus)
@@ -486,6 +488,40 @@ async function personalizeCategory(req, res, db, auth, uid, body) {
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${remaining.length} picture${remaining.length === 1 ? '' : 's'} queued — they land over the next few minutes.` });
   drainRenderJobs(db, childId, 3).catch(() => {});
+}
+
+// ── Per-folder personalization status — one call for every "⭐N to finish"
+//    badge: how many taxonomy-linked tiles in each board folder still wear
+//    the shared default, and the bundle price to finish that folder. ───────
+async function personalizeStatus(req, res, db, auth, uid) {
+  const childId = String((req.query && req.query.childId) || '').slice(0, 64);
+  if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+  await ensureSeedJobs(db);
+  const [rows, cats, currentGuide] = await Promise.all([
+    db`SELECT id, category_id, taxonomy_slug, image_key, styled_style_id FROM items
+       WHERE child_id = ${childId} AND taxonomy_slug IS NOT NULL`,
+    db`SELECT id, section, label FROM categories WHERE child_id = ${childId}`,
+    loadChildStyleGuideId(db, childId),
+  ]);
+  const byCat = new Map();
+  for (const r of rows) {
+    const k = r.category_id == null ? 0 : Number(r.category_id);
+    if (!byCat.has(k)) byCat.set(k, { total: 0, remaining: 0 });
+    const g = byCat.get(k);
+    g.total++;
+    if (needsStyling(r, currentGuide)) g.remaining++;
+  }
+  const catMeta = new Map(cats.map((c) => [Number(c.id), c]));
+  const folders = [...byCat.entries()].map(([cid, g]) => ({
+    categoryId: cid || null,
+    section: cid ? (catMeta.get(cid)?.section || null) : 'needs',
+    label: cid ? (catMeta.get(cid)?.label || '') : 'Needs',
+    total: g.total, remaining: g.remaining,
+    cost: g.remaining ? bundleQuote(g.remaining) : 0,
+  }));
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(200).json({ ok: true, balance: uid ? await creditBalance(db, uid) : null, costs: COST, folders });
 }
 
 // ── Contextual magic: "your new fork appears in these pictures" ─────────────

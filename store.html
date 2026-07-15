@@ -85,6 +85,8 @@
     <button class="btn secondary" id="redeem-btn">Redeem</button>
   </div>
 
+  <div id="personalize" style="display:none;margin:0 0 18px;"></div>
+
   <div id="addons" style="display:none;margin:0 0 18px;"></div>
 
   <div class="filters">
@@ -280,6 +282,8 @@
   document.getElementById('cart-clear').addEventListener('click', () => { CART.clear(); renderShop(); renderCart(); });
   document.getElementById('cart-buy').addEventListener('click', async () => {
     const btn = document.getElementById('cart-buy');
+    // Confirm-before-spend rule: every purchase states its cost + balance first.
+    if (!confirm(`Buy ${CART.size} word${CART.size === 1 ? '' : 's'} for ⭐${CART.size}? You have ⭐${CATALOG ? CATALOG.balance : '…'}.`)) return;
     btn.disabled = true;
     try {
       const d = await api('/api/store?action=checkout', { method: 'POST',
@@ -307,6 +311,41 @@
     document.getElementById('shop-note').textContent = `${TILES.length} words · ⭐1 each, drawn in your child's style`;
     renderAddons();
     renderShop();
+  }
+
+  // ── Personalization status: "⭐N to finish" per folder + finish buttons.
+  //    One server call (personalize-status) powers every badge; the buy goes
+  //    through personalize-category with the confirm-before-spend rule. ─────
+  async function loadPersonalize() {
+    const el = document.getElementById('personalize');
+    let d;
+    try { d = await api('/api/store?action=personalize-status&childId=' + encodeURIComponent(CHILD)); }
+    catch (_) { el.style.display = 'none'; return; }
+    const todo = (d.folders || []).filter((f) => f.remaining > 0);
+    if (!todo.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = '';
+    let html = '<div class="group-title">✨ Personalize your board <span style="font-weight:400;color:var(--muted);font-size:12px;">— folders still wearing the shared pictures, and what finishing each costs</span></div>';
+    for (const f of todo) {
+      html += `<div style="display:flex;align-items:center;gap:12px;background:#fff;border:2px solid var(--line);border-radius:14px;padding:10px 14px;margin:8px 0;">
+        <div style="flex:1;"><b>${esc(f.label)}</b>
+          <span style="display:block;font-size:12px;color:var(--muted);">${esc(f.section || '')} · ${f.remaining} of ${f.total} still classic art</span></div>
+        <span style="background:#fef3c7;color:#92400e;font-weight:800;border-radius:999px;padding:4px 12px;font-size:13px;">⭐${f.cost} to finish</span>
+        <button class="btn" data-personalize="${f.categoryId ?? ''}" data-cost="${f.cost}" data-n="${f.remaining}" ${f.categoryId == null ? 'disabled title="Needs tiles personalize one by one"' : ''}>✨ Finish</button>
+      </div>`;
+    }
+    el.innerHTML = html;
+    el.querySelectorAll('button[data-personalize]').forEach((b) => b.addEventListener('click', async () => {
+      const categoryId = Number(b.dataset.personalize);
+      if (!categoryId) return;
+      if (!confirm(`Personalize ${b.dataset.n} picture${b.dataset.n === '1' ? '' : 's'} in this folder for ⭐${b.dataset.cost}? You have ⭐${CATALOG ? CATALOG.balance : '…'}.`)) return;
+      b.disabled = true;
+      try {
+        const d2 = await api('/api/store?action=personalize-category', { method: 'POST',
+          body: JSON.stringify({ childId: CHILD, categoryId }) });
+        toast(d2.note || 'Personalizing!');
+        await Promise.all([loadCatalog(), loadPersonalize(), loadShop()]);
+      } catch (e) { handleSpendError(e); b.disabled = false; }
+    }));
   }
 
   // ── Add-on boards: whole extra boards, free to add with the shared
@@ -371,7 +410,7 @@
   (async () => {
     if (!CHILD) { document.getElementById('shop').innerHTML = '<div class="empty">Open the store from your parent dashboard.</div>'; return; }
     if (params.get('paid')) toast('Payment received — your credits are ready! ⭐');
-    try { await Promise.all([loadCatalog(), loadShop()]); }
+    try { await Promise.all([loadCatalog(), loadShop(), loadPersonalize()]); }
     catch (e) { document.getElementById('shop').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
   })();
 </script>

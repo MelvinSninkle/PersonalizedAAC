@@ -88,6 +88,11 @@ fun AddTileView(
         }
     }
 
+    // Confirm-before-spend: a styled render states its cost first (people =
+    // the ⭐5 keystone portrait, everything else ⭐1). Server-enforced too.
+    val styledCost = if (defaultSection == io.andrewpeterson.myworld.model.BoardSection.PEOPLE) 5 else 1
+    var confirmSpend by remember { mutableStateOf(false) }
+
     fun submit() {
         val bytes = jpeg ?: return
         if (busy) return
@@ -180,7 +185,7 @@ fun AddTileView(
 
             Spacer(Modifier.height(16.dp))
             Button(
-                onClick = { submit() },
+                onClick = { if (useAsIs) submit() else confirmSpend = true },
                 enabled = jpeg != null && !busy,
                 colors = ButtonDefaults.buttonColors(containerColor = Brand.pink),
                 modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -189,9 +194,18 @@ fun AddTileView(
                     when {
                         busy -> "Uploading…"
                         useAsIs -> "Add photo"
-                        else -> "Generate tile"
+                        else -> "Generate tile · ⭐$styledCost"
                     },
                     fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                )
+            }
+            if (confirmSpend) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { confirmSpend = false },
+                    title = { Text("Use ⭐$styledCost?") },
+                    text = { Text("Drawing this in the board's art style uses ⭐$styledCost. “Use my photo as-is” is free.") },
+                    confirmButton = { TextButton(onClick = { confirmSpend = false; submit() }) { Text("OK") } },
+                    dismissButton = { TextButton(onClick = { confirmSpend = false }) { Text("Cancel") } },
                 )
             }
             TextButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) {

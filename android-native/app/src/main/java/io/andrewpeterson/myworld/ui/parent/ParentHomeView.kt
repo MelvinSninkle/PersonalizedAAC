@@ -43,6 +43,7 @@ import io.andrewpeterson.myworld.net.changePassword
 import io.andrewpeterson.myworld.net.childSettings
 import io.andrewpeterson.myworld.net.deleteAccount
 import io.andrewpeterson.myworld.net.saveChildSettingsKey
+import io.andrewpeterson.myworld.net.storeCatalog
 import io.andrewpeterson.myworld.ui.theme.Brand
 import io.andrewpeterson.myworld.ui.theme.hexColor
 import kotlinx.coroutines.launch
@@ -61,10 +62,14 @@ fun ParentHomeView() {
 
     var open by remember { mutableStateOf<String?>(null) }
     var facilitatorDismissed by remember { mutableStateOf(false) }
+    // Live credit balance for the Credits & Store card's yellow badge —
+    // the parent always knows what they have before they spend.
+    var creditBalance by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(Unit) {
         c.parentLive.start(c.auth.childSlug)
         c.board.refresh(c.auth.childSlug)   // scopes for StartGame + quick board
+        creditBalance = try { c.api.storeCatalog().balance } catch (_: Exception) { null }
     }
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose { c.parentLive.stop() }
@@ -114,17 +119,27 @@ fun ParentHomeView() {
             modifier = Modifier.fillMaxSize().padding(16.dp),
         ) {
             items(cards, key = { it.first }) { (id, emoji, title) ->
-                Column(
+                Box(
                     Modifier
                         .background(Color.White, RoundedCornerShape(18.dp))
                         .border(1.dp, hexColor("#f3c6dd"), RoundedCornerShape(18.dp))
-                        .clickable { open = id }
-                        .padding(16.dp)
-                        .height(88.dp),
+                        .clickable { open = id },
                 ) {
-                    Text(emoji, fontSize = 30.sp)
-                    Spacer(Modifier.weight(1f))
-                    Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Brand.ink)
+                    Column(Modifier.padding(16.dp).height(88.dp)) {
+                        Text(emoji, fontSize = 30.sp)
+                        Spacer(Modifier.weight(1f))
+                        Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Brand.ink)
+                    }
+                    // Yellow balance badge on Credits & Store (iOS parity).
+                    if (id == "store") creditBalance?.let { bal ->
+                        Text(
+                            "⭐ $bal", fontSize = 13.sp, fontWeight = FontWeight.Black,
+                            color = hexColor("#92400e"),
+                            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+                                .background(hexColor("#fde68a"), RoundedCornerShape(999.dp))
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                    }
                 }
             }
         }

@@ -262,6 +262,7 @@ struct BoardTileEditSheet: View {
     @State private var stagedImageExt = "png"
     @State private var stagedImageCT  = "image/png"
     @State private var generating = false
+    @State private var confirmDraw = false
 
     // Voice staging — a re-recorded clip to upload on save.
     @State private var stagedSound: Data?
@@ -407,8 +408,8 @@ struct BoardTileEditSheet: View {
                 // changing the style is a deliberate act in the parent
                 // dashboard's Art style panel.
                 HStack(spacing: 10) {
-                    Button { Task { await generateArt() } } label: {
-                        pill(generating ? "Generating…" : "Draw in board style", filled: true)
+                    Button { confirmDraw = true } label: {
+                        pill(generating ? "Generating…" : "Draw in board style · ⭐1", filled: true)
                     }
                     .buttonStyle(.plain).disabled(generating)
                     Button { usePhotoAsIs() } label: {
@@ -418,6 +419,13 @@ struct BoardTileEditSheet: View {
                 }
                 Text("Drawn to match the board's art style, so the new picture fits the rest of the tiles.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
+                    // Confirm-before-spend rule: state the cost, then render.
+                    .alert("Use ⭐1?", isPresented: $confirmDraw) {
+                        Button("OK") { Task { await generateArt() } }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("Drawing this photo in the board's art style uses ⭐1. \u{201C}Use photo as-is\u{201D} is free.")
+                    }
             } else {
                 HStack(spacing: 10) {
                     Button { showCamera = true } label: { pill("Take photo", filled: false, icon: "camera.fill") }

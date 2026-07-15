@@ -94,6 +94,7 @@ struct AddTileView: View {
                             photoJPEG: pending.data,
                             destination: destinationName(),
                             stylingAllowed: board.stylingAllowed,
+                            styledCost: section == .people ? 5 : 1,
                             initialUseAsIs: exactPhoto,
                             onGenerate: { name, detail, raw in
                                 pendingCapture = nil
@@ -244,7 +245,9 @@ struct AddTileView: View {
                 .foregroundStyle(Color(hex: "#999"))
             HStack(spacing: 10) {
                 lookChoice(title: "Board art style",
-                           subtitle: board.stylingAllowed ? "Drawn to match the board" : "A membership perk",
+                           subtitle: board.stylingAllowed
+                               ? (section == .people ? "Drawn to match — ⭐5 portrait" : "Drawn to match — ⭐1")
+                               : "A membership perk",
                            selected: !exactPhoto,
                            disabled: !board.stylingAllowed) { exactPhoto = false }
                 lookChoice(title: "My exact photo",
@@ -698,9 +701,13 @@ private struct PreGenerateSheet: View {
     /// False on the free tier: styling is a membership perk, so the sheet
     /// locks to "use my photo as-is" (free on every plan) with a join note.
     var stylingAllowed: Bool = true
+    /// Confirm-before-spend: what the styled render costs (people = the
+    /// ⭐5 keystone portrait, everything else ⭐1). Server-enforced regardless.
+    var styledCost: Int = 1
     /// Seeds the as-is toggle from the destination card's look choice, so a
     /// parent who already said "my exact photo" doesn't have to say it twice.
     var initialUseAsIs: Bool = false
+    @State private var confirmSpend = false
     let onGenerate: (_ name: String, _ detail: String, _ raw: Bool) -> Void
     let onCancel: () -> Void
 
@@ -787,8 +794,10 @@ private struct PreGenerateSheet: View {
                     Button("Cancel") { onCancel() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(useAsIs ? "Add photo" : "Generate") { onGenerate(name, detail, useAsIs) }
-                        .font(.system(size: 16, weight: .bold))
+                    Button(useAsIs ? "Add photo" : "Generate · ⭐\(styledCost)") {
+                        if useAsIs { onGenerate(name, detail, true) } else { confirmSpend = true }
+                    }
+                    .font(.system(size: 16, weight: .bold))
                 }
             }
             .task {
@@ -797,6 +806,13 @@ private struct PreGenerateSheet: View {
                 // Tiny delay so the keyboard doesn't fight the sheet animation.
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 nameFocused = true
+            }
+            // Confirm-before-spend rule: a styled render states its cost first.
+            .alert("Use ⭐\(styledCost)?", isPresented: $confirmSpend) {
+                Button("OK") { onGenerate(name, detail, false) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Drawing this in the board's art style uses ⭐\(styledCost). \u{201C}Use my photo as-is\u{201D} is free.")
             }
         }
     }
