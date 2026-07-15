@@ -158,6 +158,31 @@ family keeps everything they have — only new spends wait.
   push respects opt-out; keepsakes in parent Home → Moments.
 - **Auto-Teach**: scheduled exposure slideshows/games from onboarding prefs.
 
+## Running the product (live-ops)
+
+- **Shipping a new style** (new show, new craze): admin → **✨ New Style
+  wizard** (`/admin/style-wizard.html`). Upload one style image → generate/
+  approve the "demo kid" (person ref) and objects ref (re-roll or upload
+  your own) → 🚀 Generate — the whole default board (every tile + folder
+  icon) queues to `style_build_jobs` and the every-minute cron renders it
+  with the tab closed → review the gallery + demo preview → **Publish**.
+  Drafts are invisible to parents until Publish, and Publish refuses below
+  100% (invariant E9). Cost of the render is house spend (no credits) and
+  is amortized: every family that picks the style gets the full shared set
+  free, so onboarding into a new style costs parents nothing until they
+  personalize.
+- **The public demo** (`/practice`) has a style switcher listing every
+  PUBLISHED style — new styles are marketing the moment they go live, with
+  zero extra renders (the demo reads the same per-style tables).
+- **Add-on boards**: Lab → Default board → ➕ New board with "Add-on" checked
+  (never seeded; `board_catalog.store_only` is the enforcement point).
+  Generate its art, publish defaults, and it appears in every store surface's
+  "Add-on boards" rail once ALL its words have default art. Parents add it
+  free; styling costs credits (the pay-to-add tier is retired).
+- **Credits UX rule**: any button that will spend credits says
+  "uses ⭐N — you have ⭐M" and waits for OK (see surface-audit F1b);
+  balances show on both native parent home cards and the dashboard chip.
+
 ## CI, backups, audits
 
 - `.github/workflows/ci.yml`: syntax gates + surface-audit invariant greps +

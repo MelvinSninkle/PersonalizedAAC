@@ -63,6 +63,12 @@ async function list(req, res, db) {
   res.status(200).json({ styleGuides: rows.map(rowOut) });
 }
 
+// E9: every new offered style starts as a DRAFT (active = FALSE). The
+// onboarding picker and the public demo's switcher filter active = TRUE, so
+// a style can only reach parents after the admin reviews the generated set
+// and clicks Publish (style wizard / the card's active toggle).
+const DRAFT_ACTIVE = false;
+
 async function add(req, res, db, email) {
   const b = (typeof req.body === 'object' && req.body) || {};
   const label = typeof b.label === 'string' ? b.label.trim().slice(0, 120) : '';
@@ -77,8 +83,8 @@ async function add(req, res, db, email) {
   // <img src=> straight from the database row. child_id NULL = public guide.
   const blobUrl = `/api/media?key=${encodeURIComponent(blobKey)}`;
   const rows = await db`
-    INSERT INTO style_guides (label, description, blob_url, blob_key, preview_blob_key, sort_order, created_by, child_id)
-    VALUES (${label}, ${description}, ${blobUrl}, ${blobKey}, ${previewBlobKey}, ${sortOrder}, ${email}, NULL)
+    INSERT INTO style_guides (label, description, blob_url, blob_key, preview_blob_key, sort_order, created_by, child_id, active)
+    VALUES (${label}, ${description}, ${blobUrl}, ${blobKey}, ${previewBlobKey}, ${sortOrder}, ${email}, NULL, ${DRAFT_ACTIVE})
     RETURNING id, label, description, blob_url, blob_key, preview_blob_key, active, sort_order, created_by, created_at
   `;
   res.status(200).json({ ok: true, styleGuide: rowOut(rows[0]) });

@@ -375,11 +375,36 @@ app.html Display modal, and the native parent Settings screens (the first
 parent-editable settings on native — iOS `updateChildSettings`, Android
 `saveChildSettingsKey`).
 
+**E9. No draft style ever reaches a parent.**
+New offered styles (global `style_guides` rows) are created INACTIVE
+(`DRAFT_ACTIVE = false` in api/admin/style-guides.js) and go live only via
+the style wizard's Publish, which refuses until the generated default set is
+100% complete (`_lab-style-wizard.js` op publish → `styleBuildStatus`).
+Two read gates filter `active = TRUE`: the onboarding picker
+(api/onboarding/styles.js) and the public demo's style switcher list
+(api/demo.js). An explicit `/api/demo?style=<id>` also resolves DRAFT ids —
+deliberate (the wizard's preview), safe because per-style default art is
+shared-library-only (`style-defaults/` — already one of A-PUBLIC's four
+public prefixes) and a draft is not discoverable without its id. The build
+pipeline is `style_build_jobs` drained by the run-tile-jobs cron with
+family work always first. Verify: `invariants.sh` E9 greps both active
+filters + the draft default.
+
 ## F. Store & credits integrity
 
 **F1. Ledger is append-only truth.** `credit_ledger` SUM = balance;
 `spendCredits` is a single conditional INSERT (concurrent spends can't
 double-spend). No code may UPDATE/DELETE ledger rows.
+
+**F1b. Spends are announced, and adds are free-by-default.** Every button
+that will spend credits states "uses ⭐N — you have ⭐M" and waits for OK
+BEFORE the call (web `confirmSpend`/`pdConfirmSpend`, native pending-spend
+alerts; the server 402 stays the backstop, never the first notice). Cost
+facts come from the server (`catalog.costs`, `personalize-status`,
+quotes) — clients must not invent prices. The add-on-board "credits"
+pricing tier is RETIRED: every board free-adds with shared default art
+(store.js free-board has no premium gate; init.js migrates old rows) and
+credits only ever buy styling. Do not reintroduce a pay-to-add path.
 
 **F2. Catalog lives in code.** `PACKS`/`SUBSCRIPTIONS` in
 `api/_lib/credits.js` are the only price source (Stripe checkout uses inline

@@ -61,6 +61,11 @@
   actual world, in the art style you choose, speaking in the voice you pick.
 </div>
 
+<div class="toolbar" id="style-bar" style="display:none;">
+  <span style="font-size:13px;color:var(--muted);font-weight:600;">Art style:</span>
+  <div id="styles" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"></div>
+</div>
+
 <div class="toolbar">
   <span style="font-size:13px;color:var(--muted);font-weight:600;">Voice:</span>
   <div id="voices" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
@@ -88,6 +93,7 @@
   const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   let DATA = null;
   let VOICE = '';          // '' = the device's own voice (speechSynthesis)
+  let STYLE = 0;           // 0 = the classic starter art; else a published style id
   const sel = { people: {}, nouns: {}, verbs: {} };   // per section: {cat, sub}
   const tapped = new Set();
   let taps = 0;
@@ -125,6 +131,52 @@
     const f = (DATA.folders || []).find((x) => x.label === n && (!x.section || x.section === section))
            || (DATA.folders || []).find((x) => x.label === n);
     return f ? f.imageKey : null;
+  }
+
+  // Every published style is browsable right here — the same shared
+  // per-style default art a family gets, still only /api/demo + /api/media.
+  function renderStyles() {
+    const bar = document.getElementById('style-bar');
+    const wrap = document.getElementById('styles');
+    const styles = DATA.styles || [];
+    if (!styles.length) { bar.style.display = 'none'; return; }
+    bar.style.display = '';
+    wrap.innerHTML = '';
+    const opts = [{ id: 0, label: 'Classic' }, ...styles];
+    for (const s of opts) {
+      const b = document.createElement('button');
+      b.className = 'voice-chip' + (STYLE === s.id ? ' active' : '');
+      if (s.id) {
+        const img = document.createElement('img');
+        img.src = '/api/style-guides/public?image=' + s.id;
+        img.alt = '';
+        img.style.cssText = 'width:22px;height:22px;border-radius:6px;object-fit:cover;vertical-align:-5px;margin-right:6px;';
+        b.appendChild(img);
+      }
+      b.appendChild(document.createTextNode(s.label));
+      b.addEventListener('click', () => { if (STYLE !== s.id) reloadBoard(s.id); });
+      wrap.appendChild(b);
+    }
+  }
+
+  async function reloadBoard(styleId) {
+    STYLE = styleId;
+    try {
+      const r = await fetch('/api/demo' + (styleId ? '?style=' + styleId : ''));
+      const d = await r.json();
+      if (!d || !Array.isArray(d.tiles) || !d.tiles.length) return;
+      DATA = d;
+    } catch (_) { return; }
+    const board = document.getElementById('board');
+    board.innerHTML = '';
+    for (const section of ['people', 'nouns', 'verbs']) {
+      const col = document.createElement('div');
+      col.className = 'col';
+      board.appendChild(col);
+      renderSection(section, col);
+    }
+    renderNeeds();
+    renderStyles();
   }
 
   function renderVoices() {
@@ -213,7 +265,11 @@
 
   async function boot() {
     try {
-      const r = await fetch('/api/demo');
+      // ?style=N deep link — the Lab wizard's draft preview (published styles
+      // are also linkable). Still only /api/demo + /api/media.
+      const want = parseInt(new URLSearchParams(location.search).get('style') || '', 10);
+      if (Number.isFinite(want) && want > 0) STYLE = want;
+      const r = await fetch('/api/demo' + (STYLE ? '?style=' + STYLE : ''));
       DATA = await r.json();
       if (!DATA || !Array.isArray(DATA.tiles) || !DATA.tiles.length) throw new Error('empty');
     } catch (_) {
@@ -225,6 +281,7 @@
     const board = document.getElementById('board');
     board.style.display = '';
     renderVoices();
+    renderStyles();
     for (const section of ['people', 'nouns', 'verbs']) {
       const col = document.createElement('div');
       col.className = 'col';

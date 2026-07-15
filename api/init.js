@@ -982,6 +982,24 @@ Size: {size}.',
     // The credits pricing tier is retired: every add-on board is free to
     // add with shared default art; credits only ever buy styling.
     await db`UPDATE board_catalog SET pricing = 'free' WHERE pricing = 'credits'`;
+
+    // Style-default build queue (the New Style wizard fans a whole style's
+    // tiles + chips out here; the every-minute cron drains it — see
+    // api/_lib/style-build.js, which also ensures this defensively).
+    await db`
+      CREATE TABLE IF NOT EXISTS style_build_jobs (
+        id BIGSERIAL PRIMARY KEY,
+        style_guide_id BIGINT NOT NULL,
+        kind TEXT NOT NULL,
+        taxonomy_id TEXT,
+        section TEXT, label TEXT, parent TEXT,
+        status TEXT NOT NULL DEFAULT 'queued',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
+    await db`CREATE INDEX IF NOT EXISTS style_build_jobs_pick ON style_build_jobs(status, id)`;
     // Offered TTS voices — data, not code: the Lab adds an ElevenLabs id +
     // label + accent and the onboarding picker updates itself. Seeded from
     // the legacy hardcoded list on first read (see _lib/voices.js).

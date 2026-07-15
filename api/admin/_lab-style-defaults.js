@@ -21,164 +21,18 @@
 // child drawn in the style — style_guides.person_ref_key) standing in for the
 // real child; the style's STUFF reference rides along as a world reference so
 // objects and materials stay consistent. Both are Lab-uploaded per style.
-import { put } from '@vercel/blob';
-import { randomUUID } from 'node:crypto';
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
-import { readBlobBytes, renderTaxonomyTile } from '../_lib/onboarding-render.js';
-import { buildIconPrompt } from '../_lib/category-icons.js';
-import { geminiKey, geminiDefaultModel, geminiGenerateImage, geminiCostCents } from '../_lib/gemini.js';
+import { norm, ensureStyleDefaultTables, loadStyle, placeableRows, chipRows,
+         labSettings, personAnchor, renderOneTile, renderOneChip } from '../_lib/style-build.js';
 
 export const config = { maxDuration: 300 };
-
-const norm = (s) => String(s || '').trim().toLowerCase();
-
-async function ensureTables(db) {
-  await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS person_ref_key TEXT`;
-  await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS stuff_ref_key TEXT`;
-  await db`
-    CREATE TABLE IF NOT EXISTS taxonomy_style_defaults (
-      taxonomy_id TEXT NOT NULL, style_guide_id BIGINT NOT NULL,
-      image_key TEXT, status TEXT NOT NULL DEFAULT 'queued', error TEXT,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (taxonomy_id, style_guide_id)
-    )`;
-  await db`
-    CREATE TABLE IF NOT EXISTS category_style_defaults (
-      style_guide_id BIGINT NOT NULL, section TEXT NOT NULL,
-      label_norm TEXT NOT NULL, parent_norm TEXT NOT NULL DEFAULT '',
-      image_key TEXT, status TEXT NOT NULL DEFAULT 'queued', error TEXT,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (style_guide_id, section, label_norm, parent_norm)
-    )`;
-}
-
-// The style row WITHOUT the active filter (a style being prepped before it's
-// offered is the main use case) — but always a GLOBAL one, never a parent's
-// child-scoped upload (those keep the generic default board by design).
-async function loadStyle(db, id) {
-  const row = (await db`SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key
-                        FROM style_guides WHERE id = ${id} AND child_id IS NULL LIMIT 1`)[0];
-  if (!row) return null;
-  let image = null;
-  if (row.blob_key) { try { image = await readBlobBytes(row.blob_key); } catch (_) {} }
-  return { id: Number(row.id), label: row.label, description: row.description || '',
-           blob_key: row.blob_key, person_ref_key: row.person_ref_key || null,
-           stuff_ref_key: row.stuff_ref_key || null, image };
-}
-
-// Everything a default board places — the same WHERE as seed-board's
-// placementRows, WITHOUT the defaultable/render-scope JS filter: the per-style
-// set covers person-y tiles too (rendered with the style's person reference).
-async function placeableRows(db) {
-  return db`
-    SELECT id, id AS slug, column_name, category, subcategory, label, prompt_template,
-           subject_mode, related_images, default_image_key
-    FROM taxonomy
-    WHERE COALESCE(archived, FALSE) = FALSE
-      AND COALESCE(is_event, FALSE) = FALSE
-      AND COALESCE(is_gestalt, FALSE) = FALSE
-      AND COALESCE(authoring_kind, 'canonical') = 'canonical'
-      AND COALESCE(audience, 'universal') = 'universal'
-    ORDER BY column_name, category NULLS LAST, subcategory NULLS LAST, label, id`;
-}
-
-// Distinct chips (top-level + sub) from the taxonomy hierarchy. Needs is the
-// flat strip — no chips.
-async function chipRows(db) {
-  const rows = await db`
-    SELECT DISTINCT lower(column_name) AS section, category, subcategory
-    FROM taxonomy
-    WHERE COALESCE(archived, FALSE) = FALSE
-      AND COALESCE(is_event, FALSE) = FALSE
-      AND COALESCE(is_gestalt, FALSE) = FALSE
-      AND COALESCE(authoring_kind, 'canonical') = 'canonical'
-      AND COALESCE(audience, 'universal') = 'universal'
-      AND lower(column_name) <> 'needs'
-      AND COALESCE(category, '') <> ''`;
-  const seen = new Map();
-  for (const r of rows) {
-    const top = `${r.section}|${norm(r.category)}|`;
-    if (!seen.has(top)) seen.set(top, { section: r.section, label: String(r.category).trim(), parent: '' });
-    if (r.subcategory && String(r.subcategory).trim()) {
-      const sub = `${r.section}|${norm(r.subcategory)}|${norm(r.category)}`;
-      if (!seen.has(sub)) seen.set(sub, { section: r.section, label: String(r.subcategory).trim(), parent: String(r.category).trim() });
-    }
-  }
-  return [...seen.values()];
-}
-
-async function labSettings(db) {
-  try {
-    const r = await db`SELECT master_prompt, size_default FROM lab_settings WHERE id = 1`;
-    return r[0] || { master_prompt: '', size_default: '1024x1024' };
-  } catch (_) { return { master_prompt: '', size_default: '1024x1024' }; }
-}
-
-async function personAnchor(style) {
-  if (!style || !style.person_ref_key) return null;
-  try {
-    const bytes = await readBlobBytes(style.person_ref_key);
-    return { ...bytes, key: style.person_ref_key, name: 'the child' };
-  } catch (_) { return null; }
-}
-
-async function renderOneTile({ db, style, tax, settings, anchor }) {
-  const r = await renderTaxonomyTile({
-    tax, styleGuide: style, childAnchor: anchor, settings,
-    worldRefKeys: style.stuff_ref_key ? [style.stuff_ref_key] : [],
-  });
-  if (!r.ok) throw new Error(r.detail || 'render failed');
-  const png = Buffer.from(r.b64, 'base64');
-  const imageKey = `style-defaults/${style.id}/${tax.id}/${randomUUID()}.png`;
-  await put(imageKey, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
-  await db`INSERT INTO taxonomy_style_defaults (taxonomy_id, style_guide_id, image_key, status, error, updated_at)
-           VALUES (${tax.id}, ${style.id}, ${imageKey}, 'done', NULL, NOW())
-           ON CONFLICT (taxonomy_id, style_guide_id)
-           DO UPDATE SET image_key = ${imageKey}, status = 'done', error = NULL, updated_at = NOW()`;
-  try {
-    await db`INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, size, cost_cents)
-             VALUES ('__lab__', NULL, 'lab_style_default', ${tax.label},
-                     ${'style-default guide#' + style.id + ' ' + (style.label || '')}, ${r.prompt}, '1024x1024', ${r.costCents ?? 4})`;
-  } catch (_) {}
-  return imageKey;
-}
-
-async function renderOneChip({ db, style, chip }) {
-  const gKey = geminiKey();
-  if (!gKey) throw new Error('GEMINI_API_KEY not configured');
-  let prompt = buildIconPrompt({
-    label: chip.label, parentLabel: chip.parent || '',
-    hasStyle: !!(style.image && style.image.buffer),
-    styleDescription: style.description || '',
-  });
-  const images = [];
-  if (style.image && style.image.buffer) {
-    images.push({ buffer: style.image.buffer, contentType: style.image.contentType });
-    prompt += '\n\nThe attached image is the STYLE reference — copy its art style only, not its content.';
-  }
-  const g = await geminiGenerateImage({ apiKey: gKey, model: geminiDefaultModel(), prompt, images, aspectRatio: '1:1' });
-  if (!g.ok) throw new Error(g.detail || 'chip render failed');
-  const png = Buffer.from(g.b64, 'base64');
-  const imageKey = `style-defaults/${style.id}/chips/${chip.section}/${randomUUID()}.png`;
-  await put(imageKey, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
-  await db`INSERT INTO category_style_defaults (style_guide_id, section, label_norm, parent_norm, image_key, status, error, updated_at)
-           VALUES (${style.id}, ${chip.section}, ${norm(chip.label)}, ${norm(chip.parent)}, ${imageKey}, 'done', NULL, NOW())
-           ON CONFLICT (style_guide_id, section, label_norm, parent_norm)
-           DO UPDATE SET image_key = ${imageKey}, status = 'done', error = NULL, updated_at = NOW()`;
-  try {
-    await db`INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, size, cost_cents)
-             VALUES ('__lab__', NULL, 'lab_style_default', ${'chip: ' + chip.label},
-                     ${'style-default guide#' + style.id + ' ' + (style.label || '')}, ${prompt}, '1024x1024', ${g.costCents ?? geminiCostCents()})`;
-  } catch (_) {}
-  return imageKey;
-}
 
 export default async function handler(req, res) {
   const gate = await requireAdmin(req, res);
   if (!gate.ok) return;
   const db = sql();
-  await ensureTables(db);
+  await ensureStyleDefaultTables(db);
 
   const q = req.query || {};
   const b = (typeof req.body === 'object' && req.body) || {};

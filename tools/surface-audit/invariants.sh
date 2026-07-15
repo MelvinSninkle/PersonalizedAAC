@@ -96,6 +96,16 @@ grep -q 'listenCensor = bool("listenCensor") ?: true' android-native/app/src/mai
   || { fail "E8 Android AccessFeatures lost censor-defaults-ON"; E8=1; }
 [ "$E8" -eq 0 ] && pass "E8 listening filter defaults ON on server + all three clients"
 
+# ── E9: no draft style ever reaches a parent ─────────────────────────────────
+# New offered styles are created INACTIVE (drafts) and go live only via an
+# explicit Publish after the generated set is complete. Both gates must hold:
+# the picker/demo filter on active, and creation defaulting to draft.
+E9=0
+grep -q "active = TRUE" api/onboarding/styles.js || { fail "E9 onboarding styles picker lost the active filter"; E9=1; }
+grep -q "active = TRUE AND child_id IS NULL" api/demo.js || { fail "E9 demo style switcher lost the active filter"; E9=1; }
+grep -q "DRAFT_ACTIVE = false" api/admin/style-guides.js || { fail "E9 style creation no longer defaults to draft"; E9=1; }
+[ "$E9" -eq 0 ] && pass "E9 draft styles stay hidden until published"
+
 # ── Vercel function ceiling (~100 routed functions) ──────────────────────────
 COUNT=$(find api -name '*.js' ! -name '_*' ! -path 'api/_lib/*' | wc -l)
 echo "INFO: routed Vercel functions: $COUNT / 100"
