@@ -109,6 +109,14 @@ grep -q "DRAFT_ACTIVE = false" api/admin/style-guides.js || { fail "E9 style cre
 grep -q "demo_child_id = 0" api/sync.js || { fail "E9 sync.js lost the demo_child_id = 0 pin — a demo kid could reach a family board"; E9=1; }
 [ "$E9" -eq 0 ] && pass "E9 draft styles stay hidden until published + demo kids never reach families"
 
+# ── E10: web self-signup requires a valid invite code ────────────────────────
+# The page-level invite wall moved off the funnel (/, /practice, /signup are
+# public); the private preview is enforced INSIDE account creation instead.
+E10=0
+grep -q "validateInviteCode" api/auth/register.js || { fail "E10 register.js no longer validates an invite code on self-signup"; E10=1; }
+grep -q "invite_required" api/auth/register.js || { fail "E10 register.js lost the invite_required rejection"; E10=1; }
+[ "$E10" -eq 0 ] && pass "E10 self-signup enforces the invite code inline"
+
 # ── Vercel function ceiling (~100 routed functions) ──────────────────────────
 COUNT=$(find api -name '*.js' ! -name '_*' ! -path 'api/_lib/*' | wc -l)
 echo "INFO: routed Vercel functions: $COUNT / 100"

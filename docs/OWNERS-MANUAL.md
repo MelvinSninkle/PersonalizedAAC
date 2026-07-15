@@ -188,6 +188,14 @@ family keeps everything they have — only new spends wait.
   voices panel. "Build" per voice (or Build all active) renders the ~full
   clip set through the shared TTS cache; once built, that voice appears on
   `/practice`'s voice picker on its own.
+- **The public funnel & invite codes**: the landing page, `/practice`, and
+  `/signup` are fully public — share them anywhere. The invite code is
+  required INLINE on the signup form instead (invite links still pre-apply
+  it via the /welcome cookie, and the field says so); a wrong/missing code
+  can't create an account (invariant E10). Every other page still bounces
+  anonymous visitors to /welcome. Caveat: a first-time **Sign in with
+  Apple** signup isn't code-gated yet — the native apps need an invite-code
+  field first (noted in api/auth/apple.js).
 - **Add-on boards**: Lab → Default board → ➕ New board with "Add-on" checked
   (never seeded; `board_catalog.store_only` is the enforcement point).
   Generate its art, publish defaults, and it appears in every store surface's

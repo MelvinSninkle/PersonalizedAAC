@@ -18,7 +18,7 @@ import { hashPassword } from '../_lib/password.js';
 import { signSession, serializeCookie, verifySession, SESSION_MAX_AGE } from '../../lib/session.js';
 import { sendEmail, emailConfigured, escapeHtml } from '../_lib/email.js';
 import { randomUUID } from 'node:crypto';
-import { applyInvitePerks } from '../_lib/invite-perks.js';
+import { applyInvitePerks, inviteCodeFromCookie, validateInviteCode } from '../_lib/invite-perks.js';
 
 // 'school_team' = teacher / aide / school SLP. Peer of therapist for content
 // ownership and canEditContent; presented separately in the parent's roster.
@@ -63,6 +63,19 @@ export default async function handler(req, res) {
     const childName = typeof body.childName === 'string' ? body.childName.trim().slice(0, 60) : '';
     try {
       const db = sql();
+
+      // Private preview: creating an account REQUIRES a valid invite code —
+      // typed on the signup form, or already carried by the signed mw_invite
+      // cookie a /welcome invite link set. The landing + practice pages are
+      // public; the wall is here, at account creation, where it can't be
+      // walked around. Fails closed on an unknown/inactive code.
+      const typedCode = typeof body.inviteCode === 'string' ? body.inviteCode : '';
+      const invCode = await validateInviteCode(db, typedCode || await inviteCodeFromCookie(req));
+      if (!invCode) {
+        res.status(403).json({ error: 'invite_required',
+          detail: 'My World is invite-only right now. Enter the invite code you were given — or write us for one.' });
+        return;
+      }
       await db`
         CREATE TABLE IF NOT EXISTS users (
           id BIGSERIAL PRIMARY KEY,
@@ -152,13 +165,12 @@ export default async function handler(req, res) {
         } catch (_) { /* table may not exist pre-init; onboarding will create it */ }
       }
 
-      // Invite-code perks (beta onboarding): the /welcome gate stored WHICH
-      // code opened this device inside the signed mw_invite cookie. If that
-      // code carries perks, this brand-new account gets them NOW — a comped
-      // tier + starting credits — so the family never stalls at their first
-      // image generation. Creation-time only (existing logins get nothing);
-      // best-effort — a perk failure never blocks the signup itself.
-      await applyInvitePerks(db, Number(user.id), req);
+      // Invite-code perks (beta onboarding): the validated code above — typed
+      // or from the /welcome cookie. If it carries perks, this brand-new
+      // account gets them NOW — a comped tier + starting credits — so the
+      // family never stalls at their first image generation. Creation-time
+      // only; best-effort — a perk failure never blocks the signup itself.
+      await applyInvitePerks(db, Number(user.id), req, invCode);
 
       // Drop a session cookie so they walk straight into /onboard signed in.
       const secret = process.env.SESSION_SECRET;

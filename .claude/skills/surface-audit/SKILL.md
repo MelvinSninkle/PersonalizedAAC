@@ -404,6 +404,19 @@ the switcher only when its person-scope set is COMPLETE, and honors
 `?kid=` only for listed kids. Verify: `invariants.sh` E9 greps the sync
 pin; `practice_smoke.cjs` asserts the switcher + per-kid re-render.
 
+**E10. Self-signup requires a valid invite code.** The public funnel
+(`/`, `/practice`, `/signup` — middleware.js `isPublicPage`) has no page
+wall; the private preview is enforced INSIDE account creation:
+register.js's open self-signup path 403s (`invite_required`) unless
+`validateInviteCode` (invite-perks.js — fails CLOSED) accepts a typed
+`inviteCode` or the signed `mw_invite` cookie an invite link set. The
+validated code also drives perks attribution (`applyInvitePerks`). Every
+other page keeps the /welcome cookie gate. KNOWN GAP, deliberate: a fresh
+Sign-in-with-Apple account (api/auth/apple.js) is not yet gated — the
+native apps have no invite-code field; mirror the gate there once a native
+build ships the field. Verify: `invariants.sh` E10 greps the validation +
+rejection in register.js.
+
 ## F. Store & credits integrity
 
 **F1. Ledger is append-only truth.** `credit_ledger` SUM = balance;

@@ -7,6 +7,31 @@
 // never block the signup itself.
 import { verifySession } from '../../lib/session.js';
 
+/// The invite code this request arrived with, if any — read from the signed
+/// mw_invite cookie the /welcome gate sets. '' when absent/invalid.
+export async function inviteCodeFromCookie(req) {
+  try {
+    const sec = process.env.SESSION_SECRET;
+    const cookies = Object.fromEntries(String((req && req.headers && req.headers.cookie) || '')
+      .split(/;\s*/).filter(Boolean)
+      .map((p) => { const i = p.indexOf('='); return i < 0 ? [p, ''] : [p.slice(0, i), p.slice(i + 1)]; }));
+    const inv = (sec && cookies.mw_invite) ? await verifySession(cookies.mw_invite, sec) : null;
+    return inv && inv.inv && typeof inv.code === 'string' ? inv.code.toLowerCase() : '';
+  } catch (_) { return ''; }
+}
+
+/// Is this a real, ACTIVE invite code? Returns the normalized code, or null.
+/// Signup requires this (private preview is enforced at account creation, not
+/// just at the page gate) — so it fails CLOSED on a missing table/DB error.
+export async function validateInviteCode(db, code) {
+  const c = String(code || '').toLowerCase().trim().slice(0, 64);
+  if (!c) return null;
+  try {
+    const rows = await db`SELECT code FROM invite_codes WHERE lower(code) = ${c} AND active = TRUE LIMIT 1`;
+    return rows.length ? c : null;
+  } catch (_) { return null; }
+}
+
 export async function applyInvitePerks(db, userId, req, explicitCode = '') {
   try {
     let invCode = String(explicitCode || '').toLowerCase().trim().slice(0, 64);

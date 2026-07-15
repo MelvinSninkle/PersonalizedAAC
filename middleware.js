@@ -7,9 +7,11 @@
 //      never touches the DB. A logged-in session bypasses the gate entirely —
 //      that's also how the admin gets in to create the first codes.
 //
-//   2. Login session. Once past the gate, the home/landing page (`/`) is public
-//      so we can point everyone there; the app, dashboards, admin and onboarding
-//      still require a valid `mw_session` cookie → /login otherwise.
+//   2. Login session. The public funnel (`/`, `/practice`, `/signup`) needs
+//      neither cookie — the invite code is enforced inside account creation
+//      (api/auth/register.js) instead of at the page. The app, dashboards,
+//      admin and onboarding still require a valid `mw_session` cookie →
+//      /login otherwise.
 //
 // /api/*, /login, /reset, /welcome and the static/PWA assets are excluded from
 // the matcher entirely so the gate pages, login and Add-to-Home-Screen work.
@@ -21,16 +23,17 @@ export const config = {
   matcher: ['/((?!api/|login|reset|welcome|accept-invite|favicon\\.ico|robots\\.txt|manifest\\.webmanifest|sw\\.js|icons/|audio/|styles/).*)'],
 };
 
-// Fully public — viewable with no invite code and no login. The marketing
-// home/benefits page so /welcome, /login and emails can all point people here.
+// Fully public — viewable with no invite code and no login: the marketing
+// home/benefits page, the practice board (the "try it live" demo — strictly
+// read-only, see practice.html), and the signup page. Signup is public so the
+// funnel flows landing → practice → signup without a wall; the invite code is
+// REQUIRED inline at account creation instead (api/auth/register.js accepts a
+// typed code or the mw_invite cookie an invite link set). Everything else
+// stays behind the /welcome gate.
 function isPublicPage(pathname) {
-  return pathname === '/' || pathname === '/index.html';
-}
-// Reachable once past the invite gate but WITHOUT a login session: self-service
-// account creation. An invited visitor has no account yet, so bouncing them to
-// /login here is the bug — they need to be able to reach /signup.
-function isInviteGatedNoAuthPage(pathname) {
-  return pathname === '/signup' || pathname === '/signup.html';
+  return pathname === '/' || pathname === '/index.html'
+    || pathname === '/practice' || pathname === '/practice.html'
+    || pathname === '/signup' || pathname === '/signup.html';
 }
 
 export default async function middleware(req) {
@@ -52,8 +55,8 @@ export default async function middleware(req) {
   const session = token ? await verifySession(token, secret) : null;
   if (session) return;
 
-  // The marketing home is public even without an invite code, so the gate and
-  // login pages (and emails) can always send people to the benefits page.
+  // The public funnel (home, practice board, signup) needs no invite cookie —
+  // account creation itself enforces the code (see isPublicPage above).
   if (isPublicPage(url.pathname)) return;
 
   // Anonymous visitors must clear the private-preview invite gate first.
@@ -63,10 +66,6 @@ export default async function middleware(req) {
     const next = encodeURIComponent(url.pathname + url.search);
     return new Response(null, { status: 302, headers: { Location: `/welcome?next=${next}` } });
   }
-
-  // Past the gate but not logged in: self-service signup is allowed (no account
-  // exists yet). Everything else still needs a real login session.
-  if (isInviteGatedNoAuthPage(url.pathname)) return;
 
   const next = encodeURIComponent(url.pathname + url.search);
   return new Response(null, { status: 302, headers: { Location: `/login?next=${next}` } });
