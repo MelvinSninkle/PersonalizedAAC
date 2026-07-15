@@ -33,8 +33,14 @@ Why that's the strong position:
    that serve studio art; a neutral camera-roll upload does not trip it.
 
 Guardrails that keep the posture clean:
-- No copy anywhere that instructs users to go find poster art online. The
-  encouragement copy says "a picture you've taken works perfectly."
+- No copy anywhere that instructs users to go find poster art online, and
+  **never name/link a specific download source** — "go to X and download the
+  poster" is the inducement act itself, regardless of the site. (Asked and
+  answered 2026-07: the decision is deliberate, not an oversight.)
+- What the copy DOES suggest instead: photograph the show as it exists in
+  the family's own home (case on the shelf, character plush/backpack, book
+  cover) or reuse photos they already have; a generic note that many shows'
+  official sites offer free downloadable art (licensed giveaways) is fine.
 - Shows/movies tiles are raw-only (never restyled) — no derivative works.
 - Uploaded art stays inside the family's private board (media isolation,
   invariant A1); it never enters shared defaults, demos, or marketing.
