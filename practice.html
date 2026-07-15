@@ -82,6 +82,17 @@
   #loading { flex:1; text-align:center; padding:60px 20px; color:var(--muted); font-family:'Fredoka',sans-serif; }
   .foot-note { font-size:11px; color:var(--pink-deep); margin-left:8px; font-family:'Fredoka',sans-serif; }
   .foot-note a { color:var(--pink-deep); font-weight:700; }
+
+  /* Session-only display prefs (the ⚙ Display panel): hiding labels mirrors
+     the real board's hide-labels mode — tile words, chip words and headers. */
+  body.hide-labels .lb, body.hide-labels .col h2, body.hide-labels .needs h2 { display:none; }
+  /* Needs tile width follows the configured total across (default 9). */
+  .needs .grid .tile { width: calc((100vw - 16px - (var(--needs-across, 9) - 1) * 10px) / var(--needs-across, 9)); }
+  #disp-panel { display:none; }
+  #disp-panel .grp { display:flex; gap:6px; align-items:center; font-size:12px; color:var(--pink-deep); font-family:'Fredoka',sans-serif; font-weight:600; }
+  #disp-panel select { padding:4px 6px; border:2px solid var(--line); border-radius:8px; font-size:12px; font-family:'Fredoka',sans-serif; color:var(--pink-deep); background:#fff; }
+  #disp-panel input[type=color] { width:34px; height:26px; border:2px solid var(--line); border-radius:8px; padding:1px; background:#fff; cursor:pointer; }
+  #disp-panel input[type=checkbox] { accent-color: var(--pink); }
 </style>
 </head>
 <body>
@@ -106,11 +117,37 @@
 <div class="toolbar">
   <span class="tl">Voice:</span>
   <div id="voices" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+  <button class="voice-chip" id="disp-btn" title="Labels, tile sizes, sections and colors — just for this visit">⚙ Display</button>
   <div class="stats" title="On a real board, every tap builds your child's progress charts, word history, and milestone moments.">
     <span>Taps this visit <b id="st-taps">0</b></span>
     <span>Different words <b id="st-words">0</b></span>
     <span class="foot-note"><a href="/signup.html">Create your child's own →</a></span>
   </div>
+</div>
+
+<!-- ⚙ Display — the real board's most-used look controls, so a parent can
+     feel how adjustable it is. Session-only on purpose: prefs live in
+     sessionStorage and vanish when the browser closes; nothing posts. -->
+<div class="toolbar" id="disp-panel">
+  <label class="grp"><input type="checkbox" id="pd-hide-labels"> Hide labels</label>
+  <span class="grp">Tiles across:
+    P <select id="pd-across-people"></select>
+    N <select id="pd-across-nouns"></select>
+    V <select id="pd-across-verbs"></select></span>
+  <span class="grp">Show:
+    <label class="grp"><input type="checkbox" id="pd-show-people">People</label>
+    <label class="grp"><input type="checkbox" id="pd-show-nouns">Nouns</label>
+    <label class="grp"><input type="checkbox" id="pd-show-verbs">Verbs</label>
+    <label class="grp"><input type="checkbox" id="pd-show-needs">Needs</label></span>
+  <span class="grp">Colors:
+    P <input type="color" id="pd-color-people">
+    N <input type="color" id="pd-color-nouns">
+    V <input type="color" id="pd-color-verbs">
+    Needs <input type="color" id="pd-color-needs">
+    Header <input type="color" id="pd-color-header-bg">
+    Text <input type="color" id="pd-color-header-text"></span>
+  <button class="voice-chip" id="pd-reset">Reset</button>
+  <span class="foot-note">Just for this visit — on a real board these follow your child.</span>
 </div>
 
 <div id="loading">Loading the board…</div>
@@ -131,6 +168,50 @@
   const sel = { people: {}, nouns: {}, verbs: {} };   // per section: {cat, sub}
   // The real board's default tiles-across — drives tile size per column.
   const ACROSS = { people: 2, nouns: 5, verbs: 2 };
+
+  // ── ⚙ Display prefs — SESSION-ONLY by design ─────────────────────────────
+  // The same Board-look controls the real board offers, but stored in
+  // sessionStorage: they survive a reload in this tab and disappear when the
+  // browser session ends. Never localStorage, never the server — a library
+  // computer forgets everything, and the page's network surface stays the
+  // same two public GETs.
+  const PD_KEY = 'practiceDisplay';
+  const PD_WEIGHT = { people: 2, nouns: 5, verbs: 2 };   // column width ratio
+  const PD_DEFAULTS = () => ({
+    hideLabels: false,
+    tilesAcross: { ...ACROSS },
+    sectionVisible: { people: true, nouns: true, verbs: true, needs: true },
+    sectionColors: { people: '#ffffff', nouns: '#ffffff', verbs: '#ffffff', needs: '#ffd400' },
+    headerColors: { bg: '#ff1493', text: '#ffffff' },
+  });
+  let PDISP = PD_DEFAULTS();
+  try {
+    const raw = sessionStorage.getItem(PD_KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      PDISP = { ...PD_DEFAULTS(), ...d,
+        tilesAcross: { ...ACROSS, ...(d.tilesAcross || {}) },
+        sectionVisible: { ...PD_DEFAULTS().sectionVisible, ...(d.sectionVisible || {}) },
+        sectionColors: { ...PD_DEFAULTS().sectionColors, ...(d.sectionColors || {}) },
+        headerColors: { ...PD_DEFAULTS().headerColors, ...(d.headerColors || {}) },
+      };
+    }
+  } catch (_) { /* private mode etc. — defaults, still fully usable */ }
+  function pdSave() { try { sessionStorage.setItem(PD_KEY, JSON.stringify(PDISP)); } catch (_) {} }
+  const pdAcross = (s) => Math.min(8, Math.max(1, Number(PDISP.tilesAcross[s]) || ACROSS[s]));
+
+  function pdApply() {
+    document.body.classList.toggle('hide-labels', !!PDISP.hideLabels);
+    const hdr = document.querySelector('header');
+    hdr.style.background = PDISP.headerColors.bg;
+    hdr.style.color = PDISP.headerColors.text;
+    const needsEl = document.getElementById('needs');
+    needsEl.style.background = PDISP.sectionColors.needs;
+    document.body.style.background = PDISP.sectionColors.needs;   // the board's frame
+    const total = ['people', 'nouns', 'verbs'].filter((s) => PDISP.sectionVisible[s])
+      .reduce((n, s) => n + pdAcross(s), 0) || 9;
+    needsEl.style.setProperty('--needs-across', total);
+  }
   const tapped = new Set();
   let taps = 0;
 
@@ -233,12 +314,17 @@
   }
 
   function buildBoard() {
+    pdApply();
     const board = document.getElementById('board');
     board.innerHTML = '';
-    for (const section of ['people', 'nouns', 'verbs']) {
+    const secs = ['people', 'nouns', 'verbs'].filter((s) => PDISP.sectionVisible[s]);
+    board.style.gridTemplateColumns = secs.map((s) => `minmax(0,${PD_WEIGHT[s]}fr)`).join(' ');
+    for (const section of secs) {
       const col = document.createElement('div');
       col.className = 'col';
-      col.style.setProperty('--across', ACROSS[section]);
+      col.dataset.section = section;
+      col.style.setProperty('--across', pdAcross(section));
+      col.style.background = PDISP.sectionColors[section];
       board.appendChild(col);
       renderSection(section, col);
     }
@@ -311,7 +397,10 @@
 
   function renderNeeds() {
     const tiles = tilesFor('needs').slice(0, 24);
-    if (!tiles.length) return;
+    if (!tiles.length || !PDISP.sectionVisible.needs) {
+      document.getElementById('needs').style.display = 'none';
+      return;
+    }
     document.getElementById('needs').style.display = '';
     const grid = document.getElementById('needs-grid');
     grid.innerHTML = '';
@@ -328,6 +417,64 @@
       grid.appendChild(el);
     }
   }
+
+  // ── ⚙ Display panel wiring ────────────────────────────────────────────────
+  function pdPopulate() {
+    document.getElementById('pd-hide-labels').checked = !!PDISP.hideLabels;
+    for (const s of ['people', 'nouns', 'verbs']) {
+      const selEl = document.getElementById('pd-across-' + s);
+      if (!selEl.options.length) {
+        for (let n = 1; n <= 8; n++) {
+          const o = document.createElement('option');
+          o.value = String(n); o.textContent = String(n);
+          selEl.appendChild(o);
+        }
+      }
+      selEl.value = String(pdAcross(s));
+    }
+    for (const s of ['people', 'nouns', 'verbs', 'needs']) {
+      document.getElementById('pd-show-' + s).checked = !!PDISP.sectionVisible[s];
+      document.getElementById('pd-color-' + s).value = PDISP.sectionColors[s];
+    }
+    document.getElementById('pd-color-header-bg').value = PDISP.headerColors.bg;
+    document.getElementById('pd-color-header-text').value = PDISP.headerColors.text;
+  }
+  function pdCommit() { pdSave(); buildBoard(); }
+  (function wireDisplayPanel() {
+    const panel = document.getElementById('disp-panel');
+    document.getElementById('disp-btn').addEventListener('click', () => {
+      const open = panel.style.display !== 'flex';
+      panel.style.display = open ? 'flex' : 'none';
+      if (open) pdPopulate();
+    });
+    document.getElementById('pd-hide-labels').addEventListener('change', (e) => {
+      PDISP.hideLabels = e.target.checked; pdCommit();
+    });
+    for (const s of ['people', 'nouns', 'verbs']) {
+      document.getElementById('pd-across-' + s).addEventListener('change', (e) => {
+        PDISP.tilesAcross[s] = parseInt(e.target.value, 10) || ACROSS[s]; pdCommit();
+      });
+    }
+    for (const s of ['people', 'nouns', 'verbs', 'needs']) {
+      document.getElementById('pd-show-' + s).addEventListener('change', (e) => {
+        PDISP.sectionVisible[s] = e.target.checked; pdCommit();
+      });
+      document.getElementById('pd-color-' + s).addEventListener('input', (e) => {
+        PDISP.sectionColors[s] = e.target.value; pdCommit();
+      });
+    }
+    document.getElementById('pd-color-header-bg').addEventListener('input', (e) => {
+      PDISP.headerColors.bg = e.target.value; pdCommit();
+    });
+    document.getElementById('pd-color-header-text').addEventListener('input', (e) => {
+      PDISP.headerColors.text = e.target.value; pdCommit();
+    });
+    document.getElementById('pd-reset').addEventListener('click', () => {
+      PDISP = PD_DEFAULTS();
+      try { sessionStorage.removeItem(PD_KEY); } catch (_) {}
+      pdPopulate(); buildBoard();
+    });
+  })();
 
   async function boot() {
     try {

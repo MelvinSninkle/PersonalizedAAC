@@ -79,6 +79,30 @@ const fails = [];
     [...document.querySelectorAll('#board .col')].some((c) =>
       (c.querySelector('h2') || {}).textContent === 'Verbs' && c.querySelectorAll('.tile').length > 0)));
 
+  // ── ⚙ Display panel: session-only look controls (sessionStorage, no API) ──
+  await page.locator('#disp-btn').click();
+  await page.waitForTimeout(200);
+  ok('display panel opens', await page.evaluate(() =>
+    document.getElementById('disp-panel').style.display === 'flex'));
+  await page.locator('#pd-hide-labels').check();
+  await page.waitForTimeout(300);
+  ok('hide labels hides tile words + headers', await page.evaluate(() =>
+    document.body.classList.contains('hide-labels')
+      && getComputedStyle(document.querySelector('#board .tile .lb')).display === 'none'));
+  ok('tiles across re-shapes a column', await page.evaluate(() => {
+    const el = document.getElementById('pd-across-nouns');
+    el.value = '3';
+    el.dispatchEvent(new Event('change'));
+    const col = [...document.querySelectorAll('#board .col')].find((c) => c.dataset.section === 'nouns');
+    return col && col.style.getPropertyValue('--across') === '3';
+  }));
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(600);
+  ok('display prefs survive a reload in the same session', await page.evaluate(() =>
+    document.body.classList.contains('hide-labels')
+      && sessionStorage.getItem('practiceDisplay') !== null
+      && localStorage.getItem('practiceDisplay') === null));
+
   ok('only demo/media/style-thumb APIs touched', reqs.length > 0 && reqs.every((u) =>
     u.includes('/api/media') || u.includes('/api/demo') || u.includes('/api/style-guides/public')));
 
