@@ -99,19 +99,25 @@ class H(http.server.SimpleHTTPRequestHandler):
             return
         if u.path.startswith('/api/demo'):
             style = parse_qs(u.query).get('style', [''])[0]
+            kid = parse_qs(u.query).get('kid', [''])[0]
             tiles = []
             for sec in ['people', 'nouns', 'verbs', 'needs']:
                 for i in range(8):
                     # A styled demo serves the same tiles under style-defaults/
                     # keys — the smoke asserts switching styles re-renders.
+                    # A kid overlay swaps person-scope keys (people here).
                     key = f'style-defaults/{style}/demo-{sec}-{i}' if style else f'demo-{sec}-{i}'
+                    if style and kid and sec == 'people':
+                        key = f'style-defaults/{style}/kid-{kid}-{sec}-{i}'
                     tiles.append(dict(label=f'{sec} word {i}', section=sec,
                                       category='Food' if sec == 'nouns' else ('Family' if sec == 'people' else ''),
                                       subcategory='', imageKey=key))
             return self.send_json({'ok': True, 'tiles': tiles, 'folders': [],
                                    'voices': [{'id': 'v1', 'name': 'Bella'}],
                                    'styles': [{'id': 7, 'label': 'Watercolor'}],
-                                   'style': int(style) if style else None})
+                                   'kids': [{'id': 3, 'label': 'Maya'}] if style else [],
+                                   'style': int(style) if style else None,
+                                   'kid': int(kid) if (style and kid) else None})
         if u.path.startswith('/api/child-settings'):
             return self.send_json({'settings': {'tz': 'America/Denver'}})
         if u.path.startswith('/api/relationships'):

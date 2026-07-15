@@ -53,6 +53,21 @@ const fails = [];
   ok('board still renders after the switch', await page.evaluate(() =>
     document.querySelectorAll('.tile').length > 10));
 
+  // ── Demo-kid switcher (styles can offer more than one demo child) ──
+  ok('kid switcher renders in styled mode', await page.evaluate(() => {
+    const bar = document.getElementById('kid-bar');
+    return !!bar && bar.style.display !== 'none'
+      && document.querySelectorAll('#kids .voice-chip').length >= 2;   // primary + Maya
+  }));
+  await page.evaluate(() => {
+    const chips = [...document.querySelectorAll('#kids .voice-chip')];
+    chips[chips.length - 1].click();   // the stubbed "Maya" kid
+  });
+  await page.waitForTimeout(600);
+  ok('switching kid re-renders person tiles', await page.evaluate(() =>
+    [...document.querySelectorAll('#board .tile .sq')]
+      .some((el) => decodeURIComponent(el.style.backgroundImage || '').includes('kid-3-people'))));
+
   // ── Board-parity layout: fixed viewport, pinned needs strip, verbs live ──
   ok('fixed viewport (page never scrolls)', await page.evaluate(() =>
     getComputedStyle(document.body).overflow === 'hidden'));

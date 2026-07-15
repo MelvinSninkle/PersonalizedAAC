@@ -98,6 +98,11 @@
   <div id="styles" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"></div>
 </div>
 
+<div class="toolbar" id="kid-bar" style="display:none;">
+  <span class="tl">Meet:</span>
+  <div id="kids" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"></div>
+</div>
+
 <div class="toolbar">
   <span class="tl">Voice:</span>
   <div id="voices" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
@@ -122,6 +127,7 @@
   let DATA = null;
   let VOICE = '';          // '' = the device's own voice (speechSynthesis)
   let STYLE = 0;           // 0 = the classic starter art; else a published style id
+  let KID = 0;             // 0 = the style's main demo kid; else a style_demo_children id
   const sel = { people: {}, nouns: {}, verbs: {} };   // per section: {cat, sub}
   // The real board's default tiles-across — drives tile size per column.
   const ACROSS = { people: 2, nouns: 5, verbs: 2 };
@@ -189,16 +195,41 @@
     }
   }
 
-  async function reloadBoard(styleId) {
+  // Some styles offer more than one demo child — a "Meet:" rail lets the
+  // parent pick who the board is about. Person tiles re-render per kid;
+  // everything else is the same shared set.
+  function renderKids() {
+    const bar = document.getElementById('kid-bar');
+    const wrap = document.getElementById('kids');
+    const kids = (STYLE && DATA.kids) || [];
+    if (!kids.length) { bar.style.display = 'none'; return; }
+    bar.style.display = '';
+    wrap.innerHTML = '';
+    const opts = [{ id: 0, label: 'Our demo kid' }, ...kids];
+    for (const k of opts) {
+      const b = document.createElement('button');
+      b.className = 'voice-chip' + (KID === k.id ? ' active' : '');
+      b.textContent = k.label;
+      b.addEventListener('click', () => { if (KID !== k.id) reloadBoard(STYLE, k.id); });
+      wrap.appendChild(b);
+    }
+  }
+
+  async function reloadBoard(styleId, kidId) {
     STYLE = styleId;
+    KID = styleId ? (Number(kidId) || 0) : 0;   // kids belong to a style
     try {
-      const r = await fetch('/api/demo' + (styleId ? '?style=' + styleId : ''));
+      const qs = [];
+      if (STYLE) qs.push('style=' + STYLE);
+      if (KID) qs.push('kid=' + KID);
+      const r = await fetch('/api/demo' + (qs.length ? '?' + qs.join('&') : ''));
       const d = await r.json();
       if (!d || !Array.isArray(d.tiles) || !d.tiles.length) return;
       DATA = d;
     } catch (_) { return; }
     buildBoard();
     renderStyles();
+    renderKids();
   }
 
   function buildBoard() {
@@ -316,6 +347,7 @@
     document.getElementById('board').style.display = '';
     renderVoices();
     renderStyles();
+    renderKids();
     buildBoard();
   }
   boot();

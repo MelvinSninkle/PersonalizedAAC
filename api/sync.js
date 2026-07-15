@@ -94,12 +94,20 @@ export default async function handler(req, res) {
       if (typeof langRaw === 'string' && langRaw) boardLang = langRaw;
       const sgId = Number(csRow && csRow.settings && csRow.settings.styleGuideId) || 0;
       if (sgId > 0) {
-        const [sd, cd] = await Promise.all([
-          db`SELECT taxonomy_id, image_key FROM taxonomy_style_defaults
-             WHERE style_guide_id = ${sgId} AND image_key IS NOT NULL`,
-          db`SELECT section, label_norm, parent_norm, image_key FROM category_style_defaults
-             WHERE style_guide_id = ${sgId} AND image_key IS NOT NULL`,
-        ]);
+        // FAMILY boards read ONLY the style's primary set (demo_child_id = 0).
+        // Extra demo kids (style_demo_children) exist for the PUBLIC practice
+        // board alone — never let one leak onto a real child's board (E9).
+        let sd;
+        try {
+          sd = await db`SELECT taxonomy_id, image_key FROM taxonomy_style_defaults
+                        WHERE style_guide_id = ${sgId} AND demo_child_id = 0 AND image_key IS NOT NULL`;
+        } catch (_) {
+          // pre-migration DB: no demo_child_id column yet → every row is kid 0
+          sd = await db`SELECT taxonomy_id, image_key FROM taxonomy_style_defaults
+                        WHERE style_guide_id = ${sgId} AND image_key IS NOT NULL`;
+        }
+        const cd = await db`SELECT section, label_norm, parent_norm, image_key FROM category_style_defaults
+                            WHERE style_guide_id = ${sgId} AND image_key IS NOT NULL`;
         styleTileDefs = new Map(sd.map(r => [r.taxonomy_id, r.image_key]));
         styleChipDefs = new Map(cd.map(r => [`${r.section}|${r.label_norm}|${r.parent_norm}`, r.image_key]));
       }

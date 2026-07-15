@@ -390,6 +390,20 @@ pipeline is `style_build_jobs` drained by the run-tile-jobs cron with
 family work always first. Verify: `invariants.sh` E9 greps both active
 filters + the draft default.
 
+**E9b. Demo kids never reach a family board.** A style can carry extra
+"demo kids" (`style_demo_children` + `demo_child_id` on
+`taxonomy_style_defaults` / `style_build_jobs`; kid 0 = the style's own
+`person_ref_key`) so the PUBLIC practice board offers a "Meet:" switcher.
+Only person-scope rows (`isPersonScopeRow` — mirrors renderTaxonomyTile's
+`usePerson`) re-render per kid; chips + object tiles stay the shared kid-0
+set. The pins that keep kids demo-only: `api/sync.js` styled reads filter
+`AND demo_child_id = 0` (with a pre-migration fallback), and every
+lab writer targeting the family-visible set (`_lab-style-defaults.js`,
+`_lab-default-upload.js`) pins 0 explicitly. `api/demo.js` offers a kid on
+the switcher only when its person-scope set is COMPLETE, and honors
+`?kid=` only for listed kids. Verify: `invariants.sh` E9 greps the sync
+pin; `practice_smoke.cjs` asserts the switcher + per-kid re-render.
+
 ## F. Store & credits integrity
 
 **F1. Ledger is append-only truth.** `credit_ledger` SUM = balance;

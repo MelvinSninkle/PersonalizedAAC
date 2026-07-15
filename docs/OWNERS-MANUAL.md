@@ -174,6 +174,20 @@ family keeps everything they have — only new spends wait.
 - **The public demo** (`/practice`) has a style switcher listing every
   PUBLISHED style — new styles are marketing the moment they go live, with
   zero extra renders (the demo reads the same per-style tables).
+- **More demo kids on the practice board** (per style, optional): wizard →
+  step **2b · More demo kids**. Name the kid, optionally describe their
+  look ("a girl with curly red hair"), ✨ Generate (or upload) their
+  reference, ✓ Save, then **🚀 Render their tiles** — only the person tiles
+  re-render (~340 tiles ≈ $14 of house render spend per kid per style);
+  objects and folder icons are shared. The kid appears on
+  `/practice`'s "Meet:" switcher automatically once their set is 100%
+  rendered — never before, and NEVER on a family's board (family syncs are
+  pinned to the main demo kid; invariant E9b). Remove hides the kid from
+  the switcher but keeps the rendered art.
+- **Practice-board voices**: admin → **Voice library** → 🌍 Practice-board
+  voices panel. "Build" per voice (or Build all active) renders the ~full
+  clip set through the shared TTS cache; once built, that voice appears on
+  `/practice`'s voice picker on its own.
 - **Add-on boards**: Lab → Default board → ➕ New board with "Add-on" checked
   (never seeded; `board_catalog.store_only` is the enforcement point).
   Generate its art, publish defaults, and it appears in every store surface's

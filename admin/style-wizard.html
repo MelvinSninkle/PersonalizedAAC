@@ -108,6 +108,30 @@
     <div class="msg" id="refs-msg"></div>
   </div>
 
+  <!-- Step 2b: extra demo kids (public practice board only) -->
+  <div class="step locked" id="step-kids">
+    <h2>2b · More demo kids <span style="font-weight:400;font-size:12px;color:var(--muted);">(optional)</span></h2>
+    <p class="hint">Extra children parents can switch between on the public practice board. Only the
+      person tiles re-render per kid (~a third of the board); objects and folders are shared. Family
+      boards never see these — they always get the main demo kid until the parent personalizes.</p>
+    <div id="kids-list" class="counts" style="margin-bottom:10px;"></div>
+    <div class="refcard" style="max-width:420px;">
+      <h3>➕ Add a kid</h3>
+      <label>Name (shows on the practice board's switcher)</label>
+      <input type="text" id="kid-label" maxlength="60" placeholder="e.g. Maya">
+      <label>Appearance (optional — guides the generator)</label>
+      <input type="text" id="kid-hint" maxlength="300" placeholder="e.g. a girl with curly red hair and glasses">
+      <div id="kid-img-slot" style="margin-top:8px;"><div class="none">Nothing yet</div></div>
+      <div class="btnrow">
+        <button class="secondary" id="kid-gen">✨ Generate</button>
+        <button class="secondary" id="kid-upload">📤 Upload</button>
+        <button id="kid-save" disabled>✓ Save kid</button>
+      </div>
+      <input type="file" id="kid-file" accept="image/*" style="display:none;">
+    </div>
+    <div class="msg" id="kids-msg"></div>
+  </div>
+
   <!-- Step 3: generate everything -->
   <div class="step locked" id="step-generate">
     <h2>3 · Generate everything</h2>
@@ -243,6 +267,96 @@
     } catch (e) { setMsg('refs-msg', 'Save failed: ' + e.message, 'err'); b.disabled = false; }
   }));
 
+  // ── Step 2b: extra demo kids ───────────────────────────────────────────────
+  let KIDS = [];
+  let kidCandidate = null;   // unsaved generated/uploaded kid ref key
+
+  function paintKids() {
+    const rows = KIDS.map((k) => {
+      const st = k.status || {};
+      const pct = st.tiles ? Math.round(100 * (st.tilesDone || 0) / st.tiles) : 0;
+      const stateTxt = !st.tiles ? '' :
+        (st.tilesDone >= st.tiles ? ' · ✅ on the practice board'
+          : st.tileQueued ? ` · ${st.tilesDone}/${st.tiles} rendered (${st.tileQueued} queued)`
+          : ` · ${st.tilesDone}/${st.tiles} rendered — press 🚀`);
+      return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #fce4ef;">'
+        + (k.personRefKey ? '<img src="' + media(k.personRefKey) + '" alt="" style="width:44px;height:44px;border-radius:10px;object-fit:cover;">' : '')
+        + '<b>' + String(k.label || '').replace(/[<>&]/g, '') + '</b>'
+        + '<span style="flex:1;">' + pct + '%' + stateTxt + '</span>'
+        + '<button class="secondary" type="button" data-kid-jobs="' + k.id + '">🚀 Render their tiles</button>'
+        + '<button class="secondary" type="button" data-kid-remove="' + k.id + '">Remove</button>'
+        + '</div>';
+    });
+    $('kids-list').innerHTML = rows.length ? rows.join('')
+      : 'Just the main demo kid so far.';
+    $('kids-list').querySelectorAll('[data-kid-jobs]').forEach((b) => b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        const d = await wiz({ op: 'kid-jobs', kidId: Number(b.dataset.kidJobs) });
+        setMsg('kids-msg', `Queued ${d.queued.tiles} person tiles for this kid. ` + (d.note || ''), 'ok');
+        startPoll();
+        await refresh();
+      } catch (e) { setMsg('kids-msg', e.message, 'err'); b.disabled = false; }
+    }));
+    $('kids-list').querySelectorAll('[data-kid-remove]').forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm('Remove this demo kid from the practice board? Their rendered art is kept.')) return;
+      try { await wiz({ op: 'kid-remove', kidId: Number(b.dataset.kidRemove) }); await refresh(); }
+      catch (e) { setMsg('kids-msg', e.message, 'err'); }
+    }));
+  }
+
+  function showKidCandidate() {
+    $('kid-img-slot').innerHTML = kidCandidate
+      ? '<img src="' + media(kidCandidate) + '" alt="" style="width:120px;height:120px;border-radius:12px;object-fit:cover;">'
+      : '<div class="none">Nothing yet</div>';
+    $('kid-save').disabled = !kidCandidate;
+  }
+
+  $('kid-gen').addEventListener('click', async () => {
+    const b = $('kid-gen');
+    b.disabled = true; b.textContent = 'Generating… (~20s)';
+    try {
+      const d = await wiz({ op: 'kid-candidate', hint: $('kid-hint').value.trim() });
+      kidCandidate = d.key;
+      showKidCandidate();
+      setMsg('kids-msg', '');
+    } catch (e) { setMsg('kids-msg', 'Generate failed: ' + e.message, 'err'); }
+    b.disabled = false; b.textContent = '♻️ Re-roll';
+  });
+
+  $('kid-upload').addEventListener('click', () => $('kid-file').click());
+  $('kid-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; e.target.value = '';
+    if (!file) return;
+    setMsg('kids-msg', 'Uploading…');
+    try {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+      const up = await fetch(`/api/upload?kind=style&ext=${ext}`, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': file.type || 'image/jpeg' }, body: file });
+      if (!up.ok) throw new Error('upload failed: ' + up.status);
+      const { key } = await up.json();
+      kidCandidate = key;
+      showKidCandidate();
+      setMsg('kids-msg', '');
+    } catch (err) { setMsg('kids-msg', 'Upload failed: ' + err.message, 'err'); }
+  });
+
+  $('kid-save').addEventListener('click', async () => {
+    const label = $('kid-label').value.trim();
+    if (!label) { setMsg('kids-msg', 'Give the kid a name.', 'err'); return; }
+    if (!kidCandidate) return;
+    $('kid-save').disabled = true;
+    try {
+      await wiz({ op: 'kid-save', label, blobKey: kidCandidate });
+      kidCandidate = null;
+      $('kid-label').value = ''; $('kid-hint').value = '';
+      showKidCandidate();
+      setMsg('kids-msg', 'Saved ✓ — now 🚀 Render their tiles to put them on the practice board.', 'ok');
+      await refresh();
+    } catch (e) { setMsg('kids-msg', 'Save failed: ' + e.message, 'err'); $('kid-save').disabled = !!kidCandidate; }
+  });
+
   // ── Step 3: generate + progress poll ─────────────────────────────────────
   $('go-generate').addEventListener('click', async () => {
     $('go-generate').disabled = true;
@@ -303,9 +417,10 @@
     pollTimer = setInterval(async () => {
       try {
         const d = await api('GET', '/api/admin/lab?action=style-wizard&styleGuideId=' + SID);
-        STATUS = d.status; STYLE = d.style;
-        paintStatus();
-        if (STATUS.complete) { clearInterval(pollTimer); pollTimer = null; paintAll(); }
+        STATUS = d.status; STYLE = d.style; KIDS = d.kids || KIDS;
+        paintStatus(); paintKids();
+        const kidsWaiting = KIDS.some((k) => (k.status || {}).tileQueued > 0);
+        if (STATUS.complete && !kidsWaiting) { clearInterval(pollTimer); pollTimer = null; paintAll(); }
       } catch (_) {}
     }, 5000);
   }
@@ -332,8 +447,10 @@
     $('step-refs').classList.toggle('locked', !has);
     const refsReady = has && STYLE.personRefKey && STYLE.stuffRefKey;
     $('step-refs').classList.toggle('done', !!refsReady);
+    $('step-kids').classList.toggle('locked', !refsReady);
     $('step-generate').classList.toggle('locked', !refsReady);
     $('step-publish').classList.toggle('locked', !refsReady);
+    paintKids();
     if (!has) return;
     $('create-form').style.display = 'none';
     $('create-done').style.display = '';
@@ -373,7 +490,7 @@
     if (!SID) { showResumeList(); paintAll(); return; }
     try {
       const d = await api('GET', '/api/admin/lab?action=style-wizard&styleGuideId=' + SID);
-      STYLE = d.style; STATUS = d.status;
+      STYLE = d.style; STATUS = d.status; KIDS = d.kids || [];
       candidate.person = null; candidate.stuff = null;
       paintAll();
     } catch (e) { setMsg('create-msg', 'Could not load style #' + SID + ': ' + e.message, 'err'); }

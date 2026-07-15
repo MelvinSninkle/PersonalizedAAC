@@ -104,7 +104,10 @@ E9=0
 grep -q "active = TRUE" api/onboarding/styles.js || { fail "E9 onboarding styles picker lost the active filter"; E9=1; }
 grep -q "active = TRUE AND child_id IS NULL" api/demo.js || { fail "E9 demo style switcher lost the active filter"; E9=1; }
 grep -q "DRAFT_ACTIVE = false" api/admin/style-guides.js || { fail "E9 style creation no longer defaults to draft"; E9=1; }
-[ "$E9" -eq 0 ] && pass "E9 draft styles stay hidden until published"
+# Demo-kid isolation: extra demo children (style_demo_children) exist for the
+# PUBLIC practice board only. Family syncs must pin the primary set.
+grep -q "demo_child_id = 0" api/sync.js || { fail "E9 sync.js lost the demo_child_id = 0 pin — a demo kid could reach a family board"; E9=1; }
+[ "$E9" -eq 0 ] && pass "E9 draft styles stay hidden until published + demo kids never reach families"
 
 # ── Vercel function ceiling (~100 routed functions) ──────────────────────────
 COUNT=$(find api -name '*.js' ! -name '_*' ! -path 'api/_lib/*' | wc -l)
