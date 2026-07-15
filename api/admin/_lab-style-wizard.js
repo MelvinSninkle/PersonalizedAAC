@@ -23,7 +23,7 @@ import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { readBlobBytes } from '../_lib/onboarding-render.js';
 import { geminiKey, geminiDefaultModel, geminiGenerateImage } from '../_lib/gemini.js';
-import { loadStyle, enqueueStyleBuild, styleBuildStatus } from '../_lib/style-build.js';
+import { loadStyle, enqueueStyleBuild, styleBuildStatus, drainStyleBuildJobs } from '../_lib/style-build.js';
 
 export const config = { maxDuration: 120 };
 
@@ -118,6 +118,16 @@ export default async function handler(req, res) {
       const queued = await enqueueStyleBuild(db, styleGuideId);
       res.status(200).json({ ok: true, queued,
         note: 'Queued — the every-minute cron renders these on its own. You can close this tab.' });
+      return;
+    }
+
+    if (op === 'drain') {
+      // "⚡ Render a batch now" — one inline, bounded drain so a slow or
+      // unconfigured cron (Hobby plans only run daily) never blocks the
+      // wizard. Same code path the cron runs; safe to click repeatedly.
+      const r = await drainStyleBuildJobs(db, { budgetMs: 90_000, batch: 4 });
+      const status = await styleBuildStatus(db, styleGuideId);
+      res.status(200).json({ ok: true, ...r, status });
       return;
     }
 

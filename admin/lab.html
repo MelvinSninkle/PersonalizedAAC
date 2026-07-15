@@ -413,6 +413,7 @@ function renderStyleGuides() {
         <button data-act="personref" title="A generic CHILD drawn in this style — anchors person-y tiles on this style's pre-built default board">${s.personRefKey ? '👤 Person ✓' : '👤 Person'}</button>
         <button data-act="stuffref" title="A 'stuff' scene in this style (objects/materials) — rides along on every default-board render for this style">${s.stuffRefKey ? '🧸 Stuff ✓' : '🧸 Stuff'}</button>
         <button data-act="defaults" title="Open this style's pre-built default board (review / bulk generate)">🧩 Defaults</button>
+        <button data-act="wizard" title="Open this style in the New Style wizard (refs, one-button generate, progress, publish)">✨ Wizard</button>
       </div>`;
     card.querySelector('[data-act="toggle"]').addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -482,6 +483,10 @@ function renderStyleGuides() {
     card.querySelector('[data-act="defaults"]').addEventListener('click', (e) => {
       e.stopPropagation();
       window.open('/admin/defaults.html?styleGuideId=' + s.id, '_blank');
+    });
+    card.querySelector('[data-act="wizard"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.open('/admin/style-wizard.html?styleGuideId=' + s.id, '_blank');
     });
     grid.appendChild(card);
   }
