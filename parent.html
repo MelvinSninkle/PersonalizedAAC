@@ -641,7 +641,7 @@
 
   </details>
   <details class="acc"><summary>✋ Touch &amp; safety</summary>
-  <div class="section-label">Touch</div>
+  <div class="section-label">Touch &amp; play</div>
   <div class="panel" id="touch-panel">
     <h2>Touch controls</h2>
     <p class="hint">How the board responds to your child's taps while a word is still playing.</p>
@@ -657,6 +657,14 @@
           <span class="hint" style="display:block;margin:2px 0 0;">Tapping the same tile twice quickly plays its teaching facts (up to three per word).</span></span>
         <input type="checkbox" id="touch-doubletap">
       </label>
+    </div>
+  </div>
+
+  <div class="section-label">Listening</div>
+  <div class="panel" id="listening-panel">
+    <h2>Listening mode</h2>
+    <p class="hint">What the live listening bar shows when people talk near the board.</p>
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:520px;">
       <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <span>🙊 Hide bad words in Listening
           <span class="hint" style="display:block;margin:2px 0 0;">On (default): curse words and slurs someone says nearby show as "Bad Word" in the listening
@@ -668,7 +676,7 @@
           <span class="hint" style="display:block;margin:2px 0 0;">Spoken words that aren't on your child's board don't appear at all — the strictest option.</span></span>
         <input type="checkbox" id="touch-listen-tiles">
       </label>
-      <div><button class="btn primary" id="touch-save">Save touch controls</button>
+      <div><button class="btn primary" id="touch-save">Save touch &amp; listening</button>
         <span id="touch-msg" class="hint"></span></div>
     </div>
   </div>
@@ -704,7 +712,9 @@
   </div>
 
   </details>
-  <details class="acc admin-access-only" style="display:none;"><summary>🧪 Access experiments (admin)</summary>
+  <!-- Board tools — parent-facing (the keys were always parent-writable
+       server-side; only the UI used to hide behind the admin accordion). -->
+  <details class="acc"><summary>🔘 Board tools</summary>
   <div class="section-label">Board tools</div>
   <div class="panel" id="tools-panel">
     <h2>Buttons on the board's top bar</h2>
@@ -735,6 +745,8 @@
     </div>
   </div>
 
+  </details>
+  <details class="acc admin-access-only" style="display:none;"><summary>🧪 Access experiments (admin)</summary>
   <div class="section-label admin-access-only" style="display:none;">Access (admin testing)</div>
   <div class="panel admin-access-only" id="access-panel" style="display:none;">
     <h2>Access experiments</h2>
