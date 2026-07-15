@@ -53,6 +53,17 @@ const fails = [];
   ok('board still renders after the switch', await page.evaluate(() =>
     document.querySelectorAll('.tile').length > 10));
 
+  // ── Board-parity layout: fixed viewport, pinned needs strip, verbs live ──
+  ok('fixed viewport (page never scrolls)', await page.evaluate(() =>
+    getComputedStyle(document.body).overflow === 'hidden'));
+  ok('needs strip renders after the board', await page.evaluate(() => {
+    const n = document.getElementById('needs');
+    return !!n && n.style.display !== 'none' && n.querySelectorAll('.tile').length >= 1;
+  }));
+  ok('verbs column shows tiles in styled mode', await page.evaluate(() =>
+    [...document.querySelectorAll('#board .col')].some((c) =>
+      (c.querySelector('h2') || {}).textContent === 'Verbs' && c.querySelectorAll('.tile').length > 0)));
+
   ok('only demo/media/style-thumb APIs touched', reqs.length > 0 && reqs.every((u) =>
     u.includes('/api/media') || u.includes('/api/demo') || u.includes('/api/style-guides/public')));
 

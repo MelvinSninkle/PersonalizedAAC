@@ -26,6 +26,12 @@ export default async function handler(req, res) {
     // an explicit ?style= id also resolves drafts so the Lab wizard can
     // preview before publishing (draft art is still shared-library-only).
     const styleId = parseInt((req.query && req.query.style) || '', 10);
+    // Base rows are ALL placeable canonical/universal taxonomy — NOT gated on
+    // default_image_key. Person-referencing rows (all of People, all of
+    // Verbs, most of Needs) never get a generic default by design, but the
+    // per-style sets DO include them (rendered around the demo kid) — so a
+    // styled demo shows the FULL board. Rows with no art from either source
+    // are dropped after the overlay below; Classic behaves exactly as before.
     let rows;
     try {
       rows = await db`
@@ -36,7 +42,6 @@ export default async function handler(req, res) {
           AND COALESCE(is_gestalt, FALSE) = FALSE
           AND COALESCE(authoring_kind, 'canonical') = 'canonical'
           AND COALESCE(audience, 'universal') = 'universal'
-          AND default_image_key IS NOT NULL
         ORDER BY column_name, category NULLS LAST, subcategory NULLS LAST,
                  sort_order NULLS LAST, label`;
     } catch (_) {
@@ -46,7 +51,6 @@ export default async function handler(req, res) {
         WHERE COALESCE(archived, FALSE) = FALSE
           AND COALESCE(authoring_kind, 'canonical') = 'canonical'
           AND COALESCE(audience, 'universal') = 'universal'
-          AND default_image_key IS NOT NULL
         ORDER BY column_name, category NULLS LAST, subcategory NULLS LAST, label`;
     }
     // Style overlay: styled art wins, generic default fills any gaps.
@@ -63,13 +67,15 @@ export default async function handler(req, res) {
       } catch (_) { /* pre-migration DB — generic art */ }
     }
 
-    const tiles = rows.map((r) => ({
-      label: r.label,
-      section: String(r.column_name || '').toLowerCase(),
-      category: r.category || '',
-      subcategory: r.subcategory || '',
-      imageKey: styledTiles.get(r.id) || r.default_image_key,
-    }));
+    const tiles = rows
+      .filter((r) => styledTiles.get(r.id) || r.default_image_key)
+      .map((r) => ({
+        label: r.label,
+        section: String(r.column_name || '').toLowerCase(),
+        category: r.category || '',
+        subcategory: r.subcategory || '',
+        imageKey: styledTiles.get(r.id) || r.default_image_key,
+      }));
 
     // Shared folder icons (category chips), keyed by normalized label.
     let folders = [];
