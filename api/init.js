@@ -979,6 +979,9 @@ Size: {size}.',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (section, label_norm)
       )`;
+    // The credits pricing tier is retired: every add-on board is free to
+    // add with shared default art; credits only ever buy styling.
+    await db`UPDATE board_catalog SET pricing = 'free' WHERE pricing = 'credits'`;
     // Offered TTS voices — data, not code: the Lab adds an ElevenLabs id +
     // label + accent and the onboarding picker updates itself. Seeded from
     // the legacy hardcoded list on first read (see _lib/voices.js).

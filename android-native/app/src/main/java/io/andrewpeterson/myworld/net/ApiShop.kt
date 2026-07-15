@@ -28,7 +28,8 @@ data class ShopTile(
     val credits: Int = 1,
     // false = store-only board priced in credits: hide from the FREE
     // common-use-boards section. Defaults true so older servers stay free.
-    val freeBoard: Boolean = true,
+    val freeBoard: Boolean = true,   // legacy credits-tier flag — tier retired, everything free-adds
+    val storeOnly: Boolean = false,  // true = add-on board (never seeded; own shop section)
 )
 
 @Serializable

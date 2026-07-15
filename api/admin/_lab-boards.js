@@ -10,8 +10,10 @@
 // taxonomy live).
 //
 //   default (no row)      on every new board, free in the shop's free section
-//   store_only + free     never seeded; families add it free from the shop
-//   store_only + credits  never seeded; free-add refused, words cost credits
+//   store_only            never seeded; an ADD-ON families add free from the
+//                         shop (styling is what costs credits). The old
+//                         'credits' pricing tier is retired — init.js
+//                         migrates legacy rows to 'free'.
 //
 //   GET → { boards:[{section,label,count,defaultables,storeOnly,pricing}] }
 //   POST op:'flags'  { section, label, storeOnly, pricing }

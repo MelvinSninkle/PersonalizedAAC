@@ -220,27 +220,42 @@ fun WordShopView(onDismiss: () -> Unit) {
                                 Spacer(Modifier.height(14.dp))
                             }
 
-                            // Free common-use boards: whole categories, default art.
-                            Text("FREE — COMMON USE BOARDS", fontSize = 12.sp,
-                                fontWeight = FontWeight.Black, color = hexColor("#047857"))
-                            Text("Add whole categories with the shared pictures for free. Remove keeps anything you personalized.",
-                                fontSize = 12.sp, color = Brand.muted)
-                            Spacer(Modifier.height(6.dp))
+                            // Free boards: add-on boards (store-only, never seeded) get their
+                            // own section; the standard common-use set follows. Both add free
+                            // with shared art — styling is what costs credits.
                             val freeGroups = run {
                                 val order = mutableListOf<String>()
-                                val agg = mutableMapOf<String, IntArray>()  // [total, onBoard]
+                                val agg = mutableMapOf<String, IntArray>()  // [total, onBoard, addon]
                                 val meta = mutableMapOf<String, Pair<String, String>>()
                                 for (t in tiles) {
                                     val cat = t.category?.takeIf { it.isNotEmpty() } ?: continue
-                                    if (!t.freeBoard) continue   // credits-priced board: not free-addable
                                     val key = "${t.column}|$cat"
-                                    if (key !in agg) { order.add(key); agg[key] = intArrayOf(0, 0); meta[key] = t.column to cat }
+                                    if (key !in agg) { order.add(key); agg[key] = intArrayOf(0, 0, 0); meta[key] = t.column to cat }
                                     agg[key]!![0]++
                                     if (t.onBoard) agg[key]!![1]++
+                                    if (t.storeOnly) agg[key]!![2] = 1
                                 }
                                 order.map { k -> Triple(k, meta[k]!!, agg[k]!!) }
                             }
-                            freeGroups.forEach { (key, colCat, counts) ->
+                            val addonGroups = freeGroups.filter { it.third[2] == 1 }
+                            val standardGroups = freeGroups.filter { it.third[2] == 0 }
+                            if (addonGroups.isNotEmpty()) {
+                                Text("🧩 ADD-ON BOARDS", fontSize = 12.sp,
+                                    fontWeight = FontWeight.Black, color = hexColor("#7c3aed"))
+                                Text("Extra boards beyond the standard set — add them free with the shared pictures; styling them is what uses credits.",
+                                    fontSize = 12.sp, color = Brand.muted)
+                                Spacer(Modifier.height(6.dp))
+                            }
+                            (addonGroups + listOf(null) + standardGroups).forEach { entry ->
+                                if (entry == null) {
+                                    Text("FREE — COMMON USE BOARDS", fontSize = 12.sp,
+                                        fontWeight = FontWeight.Black, color = hexColor("#047857"))
+                                    Text("Add whole categories with the shared pictures for free. Remove keeps anything you personalized.",
+                                        fontSize = 12.sp, color = Brand.muted)
+                                    Spacer(Modifier.height(6.dp))
+                                    return@forEach
+                                }
+                                val (key, colCat, counts) = entry
                                 val (col, cat) = colCat
                                 val (total, on) = counts[0] to counts[1]
                                 Row(

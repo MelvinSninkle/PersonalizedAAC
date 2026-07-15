@@ -628,10 +628,13 @@ struct APIClient {
         let itemId: Int?
         let freeRetryUsed: Bool
         let credits: Int
-        /// false = this word's board is store-only and priced in credits, so
-        /// it must not appear in the FREE common-use-boards section. Optional
-        /// so cached catalogs and older servers (no field) decode as free.
+        /// Legacy: false once meant a credits-priced board. That tier is
+        /// retired (everything free-adds); kept optional so cached catalogs
+        /// and older servers decode.
         let freeBoard: Bool?
+        /// true = an ADD-ON board (store-only, never seeded) — shown in its
+        /// own "Add-on boards" section. Optional for cached/old payloads.
+        let storeOnly: Bool?
     }
     private struct ShopBrowse: Decodable { let tiles: [ShopTile] }
     func storeBrowse(childId: String) async throws -> [ShopTile] {

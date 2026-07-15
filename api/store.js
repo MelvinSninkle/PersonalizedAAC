@@ -235,15 +235,24 @@ async function browse(req, res, db, auth) {
        WHERE child_id = ${childId} AND taxonomy_slug IS NOT NULL`,
     loadChildStyleGuideId(db, childId),
   ]);
-  // Boards the Lab priced in credits: their categories are hidden from the
-  // clients' FREE common-use-boards section (words still buyable one by one).
-  let paidBoards = new Set();
+  // Add-on ("store only") boards: never seeded, parents add them from the
+  // shop for free — credits only ever buy styling (the credits pricing tier
+  // is retired; init.js migrates old rows to 'free').
+  let addonBoards = new Set();
   try {
-    const bc = await db`SELECT section, label_norm FROM board_catalog WHERE pricing = 'credits'`;
-    paidBoards = new Set(bc.map((r) => `${r.section}|${r.label_norm}`));
+    const bc = await db`SELECT section, label_norm FROM board_catalog WHERE store_only = TRUE`;
+    addonBoards = new Set(bc.map((r) => `${r.section}|${r.label_norm}`));
   } catch (_) { /* catalog table may not exist yet */ }
   const mine = new Map(items.map((i) => [i.taxonomy_slug, i]));
-  const tiles = rows.map((t) => {
+  const boardKey = (t) => `${String(t.column_name || '').toLowerCase()}|${String(t.category || '').trim().toLowerCase()}`;
+  // An add-on board is invisible to parents until EVERY word has shared
+  // default art — a Lab-created board must be fully generated before it
+  // can be offered (an art-less free add would land bare word-tiles).
+  const incompleteAddons = new Set();
+  for (const t of rows) {
+    if (addonBoards.has(boardKey(t)) && !t.default_image_key) incompleteAddons.add(boardKey(t));
+  }
+  const tiles = rows.filter((t) => !incompleteAddons.has(boardKey(t))).map((t) => {
     const it = mine.get(t.id);
     const img = it && it.image_key ? it.image_key : null;
     // "personalized" = styled under the child's CURRENT guide (or before
@@ -257,7 +266,8 @@ async function browse(req, res, db, auth) {
       itemId: it ? Number(it.id) : null,
       freeRetryUsed: it ? !!it.free_retry_used : false,
       credits: COST.nano,
-      freeBoard: !paidBoards.has(`${String(t.column_name || '').toLowerCase()}|${String(t.category || '').trim().toLowerCase()}`),
+      freeBoard: true,                          // credits tier retired — every board free-adds
+      storeOnly: addonBoards.has(boardKey(t)),  // optional add-on vs standard library
     };
   });
   res.setHeader('Cache-Control', 'no-store');
@@ -333,19 +343,9 @@ async function freeBoard(req, res, db, auth, body) {
   if (!childId || !column || !category) { res.status(400).json({ error: 'childId, column, category required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
 
-  // A board the Lab priced in credits is not free-addable — its words go
-  // through checkout like any other purchase.
-  if (on) {
-    try {
-      const bc = (await db`SELECT pricing FROM board_catalog
-                           WHERE section = ${column} AND label_norm = ${category.trim().toLowerCase()} LIMIT 1`)[0];
-      if (bc && bc.pricing === 'credits') {
-        res.status(402).json({ error: 'premium_board',
-          note: 'This board requires credits — add its words from the shop.' });
-        return;
-      }
-    } catch (_) { /* catalog table may not exist yet */ }
-  }
+  // Every board free-adds with shared default art — the old credits-priced
+  // tier is retired (credits only ever buy styling). init.js migrates any
+  // legacy 'credits' catalog rows to 'free'.
 
   const all = await shoppableRows(db);
   const group = all.filter((t) => String(t.column_name || '').toLowerCase() === column

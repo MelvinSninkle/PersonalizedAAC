@@ -114,7 +114,6 @@
     border:1px solid var(--line); background:#fff; color:#6b7280; cursor:pointer;
   }
   select.board-flag.store { border-color:#c4b5fd; background:#f5f3ff; color:#6d28d9; }
-  select.board-flag.paid { border-color:#fbbf24; background:#fffbeb; color:#b45309; }
   #nb-overlay {
     position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center;
     background:rgba(31,41,55,.45);
@@ -188,12 +187,8 @@
       <input type="text" id="nb-label" placeholder="e.g. Dinosaurs" maxlength="80">
     </label>
     <label style="flex-direction:row;align-items:center;gap:8px;">
-      <input type="checkbox" id="nb-store" checked style="margin:0;"> Store only (never on new boards — families add it from the Word Shop)
+      <input type="checkbox" id="nb-store" checked style="margin:0;"> Add-on board (never on new boards — families add it free from the Word Shop; credits only buy styling)
     </label>
-    <div class="radios" id="nb-pricing-row">
-      <label><input type="radio" name="nb-pricing" value="free" checked> Free to add</label>
-      <label><input type="radio" name="nb-pricing" value="credits"> ⭐ Requires credits</label>
-    </div>
     <label>Words — one per line
       <textarea id="nb-words" placeholder="t-rex&#10;triceratops&#10;stegosaurus"></textarea>
     </label>
@@ -334,16 +329,17 @@
       '<div class="word">' + esc(c.label) + '</div></div>';
   }
 
-  // Board-catalog tag on each category: where the board lives + its price.
+  // Board-catalog tag on each category: on every new board, or an add-on
+  // families add free from the shop (the credits pricing tier is retired —
+  // credits only ever buy styling).
   function boardFlagHTML(section, cat) {
-    const f = BOARDS.get(section + '|' + norm(cat)) || { storeOnly: false, pricing: 'free' };
-    const v = !f.storeOnly ? 'default' : (f.pricing === 'credits' ? 'credits' : 'free');
-    const cls = v === 'default' ? '' : (v === 'credits' ? ' paid' : ' store');
+    const f = BOARDS.get(section + '|' + norm(cat)) || { storeOnly: false };
+    const v = !f.storeOnly ? 'default' : 'free';
+    const cls = v === 'default' ? '' : ' store';
     return '<select class="board-flag' + cls + '" data-sec="' + esc(section) + '" data-cat="' + esc(cat) + '"' +
-      ' title="Where this board lives: on every new board, or store-only (free / credits)">' +
+      ' title="Where this board lives: on every new board, or an add-on in the Word Shop">' +
       '<option value="default"' + (v === 'default' ? ' selected' : '') + '>on new boards</option>' +
-      '<option value="free"' + (v === 'free' ? ' selected' : '') + '>store only · free</option>' +
-      '<option value="credits"' + (v === 'credits' ? ' selected' : '') + '>store only · ⭐ credits</option>' +
+      '<option value="free"' + (v === 'free' ? ' selected' : '') + '>add-on (store only)</option>' +
       '</select>';
   }
 
@@ -650,11 +646,10 @@
     try {
       await apiPost('/api/admin/lab?action=boards', {
         op: 'flags', section: sel.dataset.sec, label: sel.dataset.cat,
-        storeOnly: v !== 'default', pricing: v === 'credits' ? 'credits' : 'free',
+        storeOnly: v !== 'default', pricing: 'free',
       });
-      BOARDS.set(sel.dataset.sec + '|' + norm(sel.dataset.cat),
-                 { storeOnly: v !== 'default', pricing: v === 'credits' ? 'credits' : 'free' });
-      sel.className = 'board-flag' + (v === 'default' ? '' : (v === 'credits' ? ' paid' : ' store'));
+      BOARDS.set(sel.dataset.sec + '|' + norm(sel.dataset.cat), { storeOnly: v !== 'default' });
+      sel.className = 'board-flag' + (v === 'default' ? '' : ' store');
     } catch (e) {
       alert('Could not save: ' + (e.message || e));
       render();
@@ -685,7 +680,7 @@
         section: document.getElementById('nb-section').value,
         label,
         storeOnly: document.getElementById('nb-store').checked,
-        pricing: document.querySelector('input[name=nb-pricing]:checked').value,
+        pricing: 'free',
         words,
       });
       msg.textContent = d.created + ' words created' + (d.skipped ? ', ' + d.skipped + ' already existed' : '') +
