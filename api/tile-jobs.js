@@ -1,7 +1,9 @@
 // /api/tile-jobs — the durable, server-side add-tile pipeline.
 //
 //   POST ?childId=&label=&detail=&section=&categoryId=&style=&styleGuideId=
-//        &model=&bg=&keepAspect=&needsReview=&emotion=   body = raw photo bytes
+//        &model=&bg=&keepAspect=&needsReview=&emotion=&folder=   body = raw photo bytes
+//     `folder` is a find-or-create-LEAF-category-by-name hint (onboarding
+//     favorites send folder=Food/Toys instead of a categoryId).
 //     Stores the photo durably, creates a job, and returns its id immediately —
 //     the photo is now SAFE no matter what happens to the device. Fires a best-
 //     effort render right away; the cron (/api/cron/run-tile-jobs) guarantees the
@@ -137,7 +139,7 @@ export default async function handler(req, res) {
     const rows = await db`
       INSERT INTO tile_jobs
         (child_id, actor_email, status, source_key, source_content_type, label, detail, section,
-         category_id, style, style_guide_id, model, bg, keep_aspect, needs_review, emotion, relationship, raw, age_group)
+         category_id, style, style_guide_id, model, bg, keep_aspect, needs_review, emotion, relationship, raw, age_group, folder)
       VALUES
         (${childId}, ${auth.user.email || null}, 'queued', ${sourceKey}, ${contentType},
          ${qs(req, 'label').slice(0, 80) || null}, ${qs(req, 'detail').slice(0, 200) || null},
@@ -145,7 +147,8 @@ export default async function handler(req, res) {
          ${qs(req, 'style').slice(0, 80) || null}, ${isAdmin ? qint(req, 'styleGuideId') : null},
          ${isAdmin ? (qs(req, 'model').slice(0, 60) || null) : null}, ${qs(req, 'bg').slice(0, 16) || null},
          ${qbool(req, 'keepAspect')}, ${qbool(req, 'needsReview')}, ${qs(req, 'emotion') || 'default'},
-         ${qs(req, 'relationship').slice(0, 40) || null}, ${qbool(req, 'raw')}, ${ageGroup})
+         ${qs(req, 'relationship').slice(0, 40) || null}, ${qbool(req, 'raw')}, ${ageGroup},
+         ${qs(req, 'folder').slice(0, 80) || null})
       RETURNING id`;
     id = Number(rows[0].id);
   } catch (err) {

@@ -182,6 +182,15 @@ family keeps everything they have — only new spends wait.
 - **Credits UX rule**: any button that will spend credits says
   "uses ⭐N — you have ⭐M" and waits for OK (see surface-audit F1b);
   balances show on both native parent home cards and the dashboard chip.
+- **Onboarding "personal touches"**: after the founder letter, parents are
+  walked through favorite foods (⭐3 gift) → toys (⭐3 gift) → shows &
+  movies (own-photo upload, raw-only). Grants are idempotent by ledger
+  reason (`onboard:foods`/`onboard:toys`); photos ride /api/tile-jobs with
+  a folder-by-name hint (leaf-resolved server-side). Plus-tier families see
+  the honest "month one's ⭐ mostly build the board" note here and on the
+  store's Plus card. Show/movie art legal posture + the TMDB option:
+  **runbooks/show-movie-art-licensing.md** (action item there: register a
+  DMCA agent before launch).
 
 ## CI, backups, audits
 

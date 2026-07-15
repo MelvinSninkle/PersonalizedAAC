@@ -148,11 +148,17 @@
       'plus.monthly':    'everything in Starter · bigger voice budget',
       'pro.monthly':     'everything in Plus · biggest voice budget · new features first',
     };
+    // Honest month-one expectation: onboarding (family portraits + first
+    // personal touches) uses most of a fresh month's credits by design.
+    const HONEST = {
+      'plus.monthly': 'Heads up: building your child’s board usually uses most of month one’s ⭐ — they refresh every month.',
+    };
     for (const s of subs) {
       const mine = ent && ent.tier === s.sku;
       html += `<div class="card"${mine ? ' style="border-color:#047857;"' : ''}><h3>${esc(s.label)}${mine ? ' <span style="font-size:10px;font-weight:800;color:#047857;">CURRENT</span>' : ''}</h3>
         <div class="big">⭐ ${s.creditsPerPeriod}<span style="font-size:13px;font-weight:600;color:var(--muted);">/month</span></div>
         <div class="sub">${money(s.cents)}/month · ${esc(PERKS[s.sku] || 'membership')} · packs stack anytime</div>
+        ${HONEST[s.sku] ? `<div class="sub" style="color:#92400e;background:#fffbeb;border-radius:8px;padding:6px 8px;margin-top:6px;">💛 ${esc(HONEST[s.sku])}</div>` : ''}
         ${mine ? `<button class="btn secondary" id="manage-billing">Manage billing</button>`
                : `<button class="btn" data-sku="${esc(s.sku)}">Subscribe</button>`}</div>`;
     }
