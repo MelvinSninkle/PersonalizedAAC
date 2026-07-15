@@ -60,6 +60,11 @@ data class AccessData(
     val toolTeach: Boolean = true,
     val toolPlay: Boolean = true,
     val toolSentence: Boolean = true,
+    // Listening display filter (E8, parent-set). censor defaults ON: words
+    // on the synced blocklist render as the pill "Bad Word". tilesOnly
+    // hides every spoken word that has no tile on the board.
+    val listenCensor: Boolean = true,
+    val listenTilesOnly: Boolean = false,
 ) {
     val buttonsNav: Boolean get() = navMode == "buttons"
 }
@@ -93,6 +98,8 @@ class AccessPrefs(private val api: ApiClient, private val scope: CoroutineScope)
                 toolTeach = bool("toolTeach") ?: true,
                 toolPlay = bool("toolPlay") ?: true,
                 toolSentence = bool("toolSentence") ?: true,
+                listenCensor = bool("listenCensor") ?: true,
+                listenTilesOnly = bool("listenTilesOnly") ?: false,
             )
             // Touch + safety controls ride the same settings fetch (root keys too).
             TouchConfig.interrupt = bool("tapInterrupt") ?: false

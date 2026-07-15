@@ -119,6 +119,9 @@ data class SyncResponse(
     val categories: List<Category> = emptyList(),
     val items: List<Tile> = emptyList(),
     val entitlement: Entitlement? = null,
+    /** Listening display filter (E8): server-owned bad-word list; words on
+     *  it render as "Bad Word" in the listening strip. */
+    val listenBlocklist: List<String>? = null,
 )
 
 /**

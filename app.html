@@ -186,6 +186,7 @@
   .listen-chip { flex: 0 0 auto; height: 92px; width: 92px; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.14); overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .listen-chip img { width: 100%; height: 100%; object-fit: cover; }
   .listen-chip.is-text { width: auto; min-width: 60px; padding: 0 14px; font-family: Fredoka, ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: 22px; color: #ad1457; background: #fce4ec; cursor: default; }
+  .listen-chip.is-text.masked { font-style: italic; opacity: .7; }
   #listen-hint { flex: 0 0 auto; font-size: 13px; color: #fff; opacity: .85; white-space: nowrap; }
   @media (max-width: 820px) { .listen-chip { height: 70px; width: 70px; } }
   header button:hover { background: #880e4f; }
@@ -1277,7 +1278,7 @@
       <div style="font-size:12px;color:#666;margin-bottom:8px;">Snap a photo — we'll name it, draw it to match the board, add the voice, and put it on the board automatically. Naming it above first is optional.</div>
       <div style="display:flex;gap:8px;margin:6px 0 2px;">
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="item-look" id="item-look-style" checked style="width:auto;margin:0;">Board art style</label>
+          <input type="radio" name="item-look" id="item-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1</label>
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
           <input type="radio" name="item-look" id="item-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
       </div>
@@ -1315,10 +1316,6 @@
         </select>
       </div>
       <button type="button" class="secondary" id="item-generate" style="margin:0;padding:10px 16px;border-radius:6px;background:#e0e3e8;color:#333;border:none;font-weight:600;cursor:pointer;">Generate audio</button>
-    </div>
-    <div class="checkbox-row">
-      <input type="checkbox" id="item-keep-aspect">
-      <label for="item-keep-aspect">Keep original image ratio (don't crop)</label>
     </div>
     <div class="checkbox-row" id="pin-row" style="display:none;">
       <input type="checkbox" id="item-pin">
@@ -1364,17 +1361,9 @@
          default = drawn to match the BOARD's saved art style. -->
     <div style="display:flex;gap:8px;margin:6px 0 2px;">
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-        <input type="radio" name="cat-look" id="cat-look-style" checked style="width:auto;margin:0;">Board art style</label>
+        <input type="radio" name="cat-look" id="cat-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1</label>
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
         <input type="radio" name="cat-look" id="cat-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
-    </div>
-    <div class="checkbox-row">
-      <input type="checkbox" id="cat-keep-aspect">
-      <label for="cat-keep-aspect">Keep original image ratio (don't crop)</label>
-    </div>
-    <div class="checkbox-row" id="cat-apply-items-row" style="display:none;">
-      <input type="checkbox" id="cat-apply-items">
-      <label for="cat-apply-items">Also apply this ratio setting to every item &amp; subcategory inside</label>
     </div>
     <label for="cat-kind">Category type</label>
     <select id="cat-kind" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font-size:15px;">
@@ -1415,7 +1404,7 @@
       <div style="font-weight:700;color:#ad1457;">✨ How should the pictures look?</div>
       <div style="display:flex;gap:8px;margin:8px 0 2px;">
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="bulk-look" id="bulk-look-style" checked style="width:auto;margin:0;">Board art style</label>
+          <input type="radio" name="bulk-look" id="bulk-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1 each</label>
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
           <input type="radio" name="bulk-look" id="bulk-look-raw" style="width:auto;margin:0;">Keep original photos — free</label>
       </div>
@@ -1436,10 +1425,6 @@
         <option value="calm">Calm</option>
         <option value="whisper">Whisper</option>
       </select>
-    </div>
-    <div class="checkbox-row">
-      <input type="checkbox" id="bulk-keep-aspect">
-      <label for="bulk-keep-aspect">Keep original image ratio for category + all items</label>
     </div>
     <div class="bulk-list" id="bulk-list">
       <div class="bulk-empty">No images selected yet</div>
@@ -1548,6 +1533,16 @@
         <button class="secondary" id="disp-unlock-no">Cancel</button>
       </div>
       <div id="disp-unlock-msg" style="font-size:12px;color:#c0392b;margin-top:6px;"></div>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-listen-censor">
+      <label for="disp-listen-censor">Hide bad words in Listening
+        <span style="display:block;font-size:12px;color:#666;">Curse words and slurs someone says nearby show as "Bad Word" instead of the word itself.</span></label>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-listen-tiles">
+      <label for="disp-listen-tiles">Listening shows only words with tiles
+        <span style="display:block;font-size:12px;color:#666;">Spoken words that aren't on the board don't appear at all.</span></label>
     </div>
     <div id="disp-account" style="margin-top:18px;border-top:1px solid #eee;padding-top:14px;display:none;">
       <label>Account &amp; password</label>
@@ -3018,6 +3013,31 @@
     try { localStorage.setItem('aacEntitlement', JSON.stringify(ENT)); } catch (_) {}
   }
   function entAllows(feature) { return !ENT || ENT[feature] !== false; }
+  // ── Listening display filter (from /api/sync — invariant E8) ─────────────
+  // Server-owned blocklist (api/_lib/bad-words.js): listed words render as
+  // the pill "Bad Word" in the listening strip. Persisted so an offline
+  // board keeps the last-known list. censor defaults ON; tilesOnly hides
+  // every non-tile word (parent settings, synced like tapInterrupt).
+  const LISTEN = {
+    censor: true, tilesOnly: false,
+    blocklist: new Set((() => { try { return JSON.parse(localStorage.getItem('aacListenBlocklist') || '[]'); } catch (_) { return []; } })()),
+  };
+  function noteListenBlocklist(data) {
+    if (!data || !Array.isArray(data.listenBlocklist) || !data.listenBlocklist.length) return;
+    LISTEN.blocklist = new Set(data.listenBlocklist);
+    try { localStorage.setItem('aacListenBlocklist', JSON.stringify(data.listenBlocklist)); } catch (_) {}
+  }
+  // ── The confirm-before-spend rule ─────────────────────────────────────────
+  // Anything about to spend credits says so FIRST, with the live balance.
+  // The server still enforces (402s stay the backstop); this is honesty UX.
+  async function confirmSpend(cost, what) {
+    let bal = null;
+    try {
+      const r = await apiFetch('/api/store?action=catalog&childId=' + encodeURIComponent(CHILD_ID));
+      if (r.ok) bal = (await r.json()).balance;
+    } catch (_) {}
+    return confirm(what + ' uses ⭐' + cost + (bal == null ? '' : ' — you have ⭐' + bal) + '. Continue?');
+  }
   function showMembershipUpsell(title, msg) {
     let o = document.getElementById('upsell-overlay');
     if (!o) {
@@ -3091,6 +3111,7 @@
 
   async function hydrateFromServer(data) {
     noteEntitlement(data);
+    noteListenBlocklist(data);
     // Clear + write the whole server snapshot in ONE transaction. Writing each
     // tile as its own transaction floods iOS Safari's IndexedDB and can stall
     // or abort, leaving the board blank — especially on a fresh device with no
@@ -3182,6 +3203,7 @@
       if (!r.ok) return;
       const data = await r.json();
       noteEntitlement(data);   // tier flags refresh even when the board itself is unchanged
+      noteListenBlocklist(data);
       if (!(data.categories || []).length && !(data.items || []).length) return;   // never wipe to empty
       const sig = structSig(data);
       if (sig === _lastSig) { precacheAllMedia(); return; }   // unchanged → just keep media warm (retries failures)
@@ -3371,7 +3393,6 @@
     // Pre-fill phrase with current label so regeneration is a 1-edit flow
     document.getElementById('item-phrase').value = item?.label || '';
     document.getElementById('item-emotion').value = 'default';
-    document.getElementById('item-keep-aspect').checked = !!item?.keepAspect;
     document.getElementById('item-description').value = item?.description || '';
     const ist = document.getElementById('item-image-status');
     ist.textContent = item?.imageKey ? 'Current image will be kept' : 'No image selected';
@@ -3533,6 +3554,11 @@
     try {
       const photo = await compressImage(file);
       const raw = document.getElementById('item-look-raw').checked;
+      if (!raw && !(await confirmSpend(1, 'Drawing this photo in the board’s art style'))) {
+        statusEl.textContent = '—';
+        btn.disabled = false; btn.textContent = prevText;
+        return;
+      }
       const label = document.getElementById('item-label').value.trim();
       statusEl.textContent = '📤 Saving the photo…';
       let qs = '/api/tile-jobs?childId=' + encodeURIComponent(CHILD_ID)
@@ -3711,7 +3737,6 @@
         if (!blob) throw new Error('could not render the crop');
         // keepAspect off — the whole point is a filled square tile.
         const saved = await serverUpdateItem(item, { image: blob, keepAspect: false });
-        document.getElementById('item-keep-aspect').checked = false;
         cropModal.classList.remove('show');
         document.getElementById('item-frame-note').textContent = 'Framed ✓ — the old picture is in Previous pictures.';
         if (saved) { editingItem = saved; loadItemHistory(saved); }
@@ -3725,7 +3750,6 @@
   document.getElementById('item-save').addEventListener('click', async () => {
     const label = document.getElementById('item-label').value.trim();
     const pinned = document.getElementById('item-pin').checked;
-    const keepAspect = document.getElementById('item-keep-aspect').checked;
     const description = document.getElementById('item-description').value.trim();   // PRD §5
     const errEl = document.getElementById('item-error');
     errEl.textContent = '';
@@ -3740,16 +3764,17 @@
 
     try {
       // Auto-framing: uploads become standard squares (plain CENTER crop,
-      // no automatic blank-space trimming) unless the parent asked to keep
-      // the original ratio (posters). "Adjust framing" picks any other crop.
+      // no automatic blank-space trimming); "Adjust framing" picks any other
+      // crop. The old keep-original-ratio control is retired — omitting
+      // keepAspect on update preserves whatever the tile already has
+      // (admin's Lab tools still set it for TV/movie posters).
       let image = pendingImage;
-      if (image && !keepAspect) image = await squareCropBlob(image);
+      if (image) image = await squareCropBlob(image);
       if (editingItem) {
         await serverUpdateItem(editingItem, {
           label,
           image,
           sound: pendingSound,
-          keepAspect,
           description,
           pinned: editingItemSection === 'people' ? pinned : undefined,
         });
@@ -3760,7 +3785,6 @@
           label,
           image,
           sound: pendingSound,
-          keepAspect,
           description,
           order: Date.now(),
           pinned: editingItemSection === 'people' ? pinned : false,
@@ -3838,10 +3862,7 @@
     document.getElementById('cat-modal-title').textContent = title;
     document.getElementById('cat-label').value = cat?.label || '';
     document.getElementById('cat-image').value = '';
-    document.getElementById('cat-keep-aspect').checked = !!cat?.keepAspect;
     document.getElementById('cat-kind').value = cat?.kind || '';
-    document.getElementById('cat-apply-items').checked = false;
-    document.getElementById('cat-apply-items-row').style.display = cat ? 'flex' : 'none';
     document.getElementById('cat-look-style').checked = true;   // re-default every open
     const cist = document.getElementById('cat-image-status');
     cist.textContent = cat?.imageKey ? 'Current image will be kept' : 'No image selected';
@@ -3866,7 +3887,6 @@
 
   document.getElementById('cat-save').addEventListener('click', async () => {
     const label = document.getElementById('cat-label').value.trim();
-    const keepAspect = document.getElementById('cat-keep-aspect').checked;
     const kind = document.getElementById('cat-kind').value || null;
     const errEl = document.getElementById('cat-error');
     errEl.textContent = '';
@@ -3882,6 +3902,11 @@
       // A new photo defaults to the BOARD's saved art style, like every other
       // image add. 402 (free tier) falls back to the exact photo + upsell.
       if (pendingCatImage && document.getElementById('cat-look-style').checked) {
+        if (!(await confirmSpend(1, 'Drawing the folder picture in the board’s art style'))) {
+          errEl.textContent = 'Not drawn — pick "My exact photo" for a free add, or save again to confirm.';
+          saveBtn.disabled = false; saveBtn.textContent = prev;
+          return;
+        }
         saveBtn.textContent = 'Drawing…';
         try {
           const photo = await compressImage(pendingCatImage);
@@ -3898,34 +3923,20 @@
         } catch (_) { /* generation hiccup → keep the exact photo */ }
         saveBtn.textContent = 'Saving…';
       }
+      // Ratio control retired: omitting keepAspect preserves the stored
+      // value on update; new categories default to square (false).
       if (editingCat) {
         await serverUpdateCategory(editingCat, {
           label,
           image: pendingCatImage,
-          keepAspect,
           kind,
         });
-        if (document.getElementById('cat-apply-items').checked) {
-          saveBtn.textContent = 'Applying…';
-          const allCats = await getAllCats(editingCatSection);
-          const subtree = new Set(descendantCatIds(allCats, editingCat.id));
-          for (const c of allCats) {
-            if (subtree.has(c.id) && c.id !== editingCat.id && !!c.keepAspect !== keepAspect) {
-              await serverUpdateCategory(c, { keepAspect });
-            }
-          }
-          const items = (await getAllItems(editingCatSection)).filter(i => subtree.has(i.categoryId));
-          for (const it of items) {
-            if (!!it.keepAspect !== keepAspect) await serverUpdateItem(it, { keepAspect });
-          }
-        }
       } else {
         const saved = await serverCreateCategory({
           section: editingCatSection,
           label,
           parentId: editingCatParentId,
           image: pendingCatImage,
-          keepAspect,
           kind,
           order: Date.now(),
         });
@@ -4091,7 +4102,6 @@
     document.getElementById('bulk-folder-input').value = '';
     document.getElementById('bulk-tts').checked = true;
     document.getElementById('bulk-emotion').value = 'default';
-    document.getElementById('bulk-keep-aspect').checked = false;
     // Every open re-defaults to the board's art style — the same rule as
     // every other image add (keep exact photo is the explicit opt-out).
     document.getElementById('bulk-look-style').checked = true;
@@ -4142,6 +4152,7 @@
     // child's style-guide image; this text is only a neutral prompt nudge.
     const style = document.getElementById('bulk-look-raw').checked
       ? '' : 'picture drawn in the board\'s art style';
+    if (style && !(await confirmSpend(bulkItems.length, 'Drawing ' + bulkItems.length + ' photo' + (bulkItems.length === 1 ? '' : 's') + ' in the board’s art style'))) return;
     btn.disabled = true; const prev = btn.textContent;
     let stylingGated = false;
     for (let i = 0; i < bulkItems.length; i++) {
@@ -4176,7 +4187,6 @@
     const label = document.getElementById('bulk-cat-label').value.trim();
     const useTts = document.getElementById('bulk-tts').checked;
     const emotion = document.getElementById('bulk-emotion').value;
-    const keepAspect = document.getElementById('bulk-keep-aspect').checked;
     const errEl = document.getElementById('bulk-error');
     const progEl = document.getElementById('bulk-progress');
     const saveBtn = document.getElementById('bulk-save');
@@ -4202,7 +4212,6 @@
         label,
         parentId: bulkParentId,
         image: catImage,
-        keepAspect,
         order: Date.now(),
       });
       newCatId = savedCat.id;
@@ -4242,7 +4251,6 @@
           label: it.label.trim(),
           image: it.file,
           sound: sound || undefined,
-          keepAspect,
           order: Date.now() + i,
         });
       } catch (err) {
@@ -4518,6 +4526,8 @@
     const ht = document.getElementById('disp-color-header-text');   if (ht) ht.value = display.headerColors.text;
     document.getElementById('disp-easy-close').checked = SAFETY.easyClose;
     document.getElementById('disp-easy-unlock').checked = SAFETY.easyUnlock;
+    document.getElementById('disp-listen-censor').checked = LISTEN.censor;
+    document.getElementById('disp-listen-tiles').checked = LISTEN.tilesOnly;
     document.getElementById('disp-unlock-confirm').style.display = 'none';
     document.getElementById('disp-unlock-pass').value = '';
     document.getElementById('disp-unlock-msg').textContent = '';
@@ -4603,6 +4613,8 @@
     if (!w.ok) throw new Error('save ' + w.status);
     SAFETY.easyClose = !!next.easyClose;
     SAFETY.easyUnlock = !!next.easyUnlock;
+    LISTEN.censor = next.listenCensor !== false;
+    LISTEN.tilesOnly = !!next.listenTilesOnly;
   }
   (function wireSafetyToggles() {
     const closeCb = document.getElementById('disp-easy-close');
@@ -4610,6 +4622,17 @@
       const want = closeCb.checked;
       try { await saveSafety({ easyClose: want }); }
       catch (_) { closeCb.checked = SAFETY.easyClose; }   // offline / no permission — revert
+    });
+    // Listening filter toggles (E8) — plain settings, no confirm friction.
+    const censorCb = document.getElementById('disp-listen-censor');
+    censorCb.addEventListener('change', async () => {
+      try { await saveSafety({ listenCensor: censorCb.checked }); }
+      catch (_) { censorCb.checked = LISTEN.censor; }
+    });
+    const tilesOnlyCb = document.getElementById('disp-listen-tiles');
+    tilesOnlyCb.addEventListener('change', async () => {
+      try { await saveSafety({ listenTilesOnly: tilesOnlyCb.checked }); }
+      catch (_) { tilesOnlyCb.checked = LISTEN.tilesOnly; }
     });
     const unlockCb = document.getElementById('disp-easy-unlock');
     const box = document.getElementById('disp-unlock-confirm');
@@ -5158,6 +5181,9 @@
       TOOLS.teach = s.toolTeach !== false;
       TOOLS.play = s.toolPlay !== false;
       TOOLS.sentence = s.toolSentence !== false;
+      // Listening display filter (E8): masking defaults ON.
+      LISTEN.censor = s.listenCensor !== false;
+      LISTEN.tilesOnly = !!s.listenTilesOnly;
       applyTools();
       const kd = s.kidDisplay;
       if (kd && /^#[0-9a-fA-F]{6}$/.test(String(kd.colorHeaderBg || ''))) {
@@ -6090,7 +6116,12 @@
         if (lex.has(phrase)) { matched = lex.get(phrase); used = w; break; }
       }
       if (matched) out.push({ word: matched.label, imageKey: matched.imageKey, soundKey: matched.soundKey, item: matched });
-      else out.push({ word: words[i].replace(/[.,!?;:"()\[\]{}]/g, '') });
+      else if (!LISTEN.tilesOnly) {
+        // Display filter (E8): blocklisted words never render as themselves.
+        const raw = words[i].replace(/[.,!?;:"()\[\]{}]/g, '');
+        if (LISTEN.censor && LISTEN.blocklist.has(normalizeListenWord(raw))) out.push({ word: 'Bad Word', masked: true });
+        else out.push({ word: raw });
+      }
       i += used;
     }
     return out;
@@ -6101,7 +6132,7 @@
     wrap.innerHTML = '';
     for (const t of tokens) {
       const chip = document.createElement('div');
-      chip.className = 'listen-chip' + (t.imageKey ? '' : ' is-text');
+      chip.className = 'listen-chip' + (t.imageKey ? '' : ' is-text') + (t.masked ? ' masked' : '');
       if (t.imageKey) {
         const img = document.createElement('img');
         img.alt = t.word || '';
@@ -6796,7 +6827,15 @@
 
   // Runtime hooks for the surface-audit stub harness (client parity checks) —
   // client-side only, nothing here crosses a security boundary.
-  window.__accessHooks = { applyAccessSettings, sbStage, sbClear, sbSetMode, navigateToTile, getAllItems, updateAllPagers };
+  window.__accessHooks = { applyAccessSettings, sbStage, sbClear, sbSetMode, navigateToTile, getAllItems, updateAllPagers,
+    // Listening filter test hooks (E8): feed a fake transcript through the
+    // real tokenizer, and drive the filter prefs/blocklist directly.
+    listenTokens: async (text) => tokenizeForListen(text, _listenLex || (_listenLex = await buildListenLexicon())),
+    setListenPrefs: (p) => {
+      if (p && 'censor' in p) LISTEN.censor = !!p.censor;
+      if (p && 'tilesOnly' in p) LISTEN.tilesOnly = !!p.tilesOnly;
+      if (p && Array.isArray(p.blocklist)) LISTEN.blocklist = new Set(p.blocklist);
+    } };
 
   // ---- Phone mode: one section at a time behind tabs -------------------------
   // The tab bar is display:none above 700px, so this is inert on tablets.

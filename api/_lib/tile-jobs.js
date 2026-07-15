@@ -62,6 +62,9 @@ export async function ensureTileJobs(db) {
   // explicitly by the capture UI for age-ambiguous relationships; the
   // relationship itself decides when it can (mother → adult).
   await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS age_group TEXT`;
+  // Folder-by-name hint (onboarding favorites): resolved to a leaf category
+  // at process time — see the folder block in processTileJob.
+  await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS folder TEXT`;
   // §9 styled tracking on items (also ensured by seed-board's ensureSeedJobs;
   // duplicated here because this pipeline writes the columns independently).
   await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS styled_style_id INT`;
@@ -274,6 +277,40 @@ export async function processTileJob(db, jobId) {
           const ins = await db`INSERT INTO categories
               (section, label, parent_id, image_key, keep_aspect, display_order, child_id, updated_at)
             VALUES ('people', 'Family', NULL, NULL, FALSE, 0, ${job.child_id}, NOW())
+            RETURNING id`;
+          categoryId = Number(ins[0].id);
+        }
+      } catch (_) { /* fall through — worst case the tile lands uncategorized */ }
+    }
+    // Folder-by-NAME hint (the onboarding favorites flow sends folder=Food /
+    // Toys / TV & Movies): find-or-create a LEAF folder — items only render
+    // inside leaf folders. A matching root that has subfolders gets a
+    // "Favorites" leaf under it instead.
+    if (!categoryId && job.folder && section !== 'needs') {
+      try {
+        const want = String(job.folder).trim().toLowerCase();
+        const cats = await db`SELECT id, label, parent_id FROM categories
+                              WHERE child_id = ${job.child_id} AND section = ${section}`;
+        const parents = new Set(cats.filter((c) => c.parent_id != null).map((c) => Number(c.parent_id)));
+        const match = cats.filter((c) => String(c.label).trim().toLowerCase() === want);
+        const leaf = match.find((c) => !parents.has(Number(c.id)));
+        if (leaf) categoryId = Number(leaf.id);
+        else if (match.length) {
+          const root = match[0];
+          const fav = cats.find((c) => Number(c.parent_id) === Number(root.id)
+                                        && String(c.label).trim().toLowerCase() === 'favorites');
+          if (fav) categoryId = Number(fav.id);
+          else {
+            const ins = await db`INSERT INTO categories
+                (section, label, parent_id, image_key, keep_aspect, display_order, child_id, updated_at)
+              VALUES (${section}, 'Favorites', ${Number(root.id)}, NULL, FALSE, 0, ${job.child_id}, NOW())
+              RETURNING id`;
+            categoryId = Number(ins[0].id);
+          }
+        } else {
+          const ins = await db`INSERT INTO categories
+              (section, label, parent_id, image_key, keep_aspect, display_order, child_id, updated_at)
+            VALUES (${section}, ${String(job.folder).trim().slice(0, 80)}, NULL, NULL, FALSE, ${Date.now()}, ${job.child_id}, NOW())
             RETURNING id`;
           categoryId = Number(ins[0].id);
         }

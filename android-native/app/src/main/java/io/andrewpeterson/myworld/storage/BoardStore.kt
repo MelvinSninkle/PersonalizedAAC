@@ -38,6 +38,10 @@ class BoardStore(context: Context, private val api: ApiClient, private val media
     val lastError: StateFlow<String?> = _lastError
     private val _entitlement = MutableStateFlow<Entitlement?>(null)
     val entitlement: StateFlow<Entitlement?> = _entitlement
+    /** Listening display filter (E8): bad-word list from the last sync;
+     *  persisted with the board cache so offline keeps filtering. */
+    private val _listenBlocklist = MutableStateFlow<Set<String>>(emptySet())
+    val listenBlocklist: StateFlow<Set<String>> = _listenBlocklist
 
     /** Unknown = permissive; the server enforces regardless (iOS parity). */
     val sttAllowed: Boolean get() = _entitlement.value?.stt ?: true
@@ -113,6 +117,7 @@ class BoardStore(context: Context, private val api: ApiClient, private val media
             _categories.value = resp.categories
             _tiles.value = resp.items
             resp.entitlement?.let { _entitlement.value = it }
+            resp.listenBlocklist?.takeIf { it.isNotEmpty() }?.let { _listenBlocklist.value = it.toSet() }
             _lastError.value = null
             persistToDisk(resp)
             precacheMedia()
@@ -152,6 +157,7 @@ class BoardStore(context: Context, private val api: ApiClient, private val media
         _categories.value = resp.categories
         _tiles.value = resp.items
         _entitlement.value = resp.entitlement
+        resp.listenBlocklist?.takeIf { it.isNotEmpty() }?.let { _listenBlocklist.value = it.toSet() }
         precacheMedia()
     }
 

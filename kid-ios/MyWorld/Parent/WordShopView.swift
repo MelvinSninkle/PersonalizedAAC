@@ -54,6 +54,12 @@ struct WordShopView: View {
     @State private var paQuote: APIClient.PersonalizeAllResult?
     @State private var paBusy = false
     @State private var freeBusy: String?     // category label mid free-add/remove
+    /// Confirm-before-spend rule: every credit spend states its cost + the
+    /// live balance and waits for OK. The server still enforces (402s stay).
+    private struct PendingSpend: Identifiable {
+        let id = UUID(); let cost: Int; let what: String; let run: () -> Void
+    }
+    @State private var pendingSpend: PendingSpend?
 
     private let api = APIClient()
 
@@ -145,6 +151,14 @@ struct WordShopView: View {
         }
         .safeAreaInset(edge: .bottom) { cartBar }
         .task { await load() }
+        .alert(item: $pendingSpend) { p in
+            Alert(
+                title: Text("Use ⭐\(p.cost)?"),
+                message: Text("\(p.what) uses ⭐\(p.cost). You have ⭐\(balance ?? 0)."),
+                primaryButton: .default(Text("OK"), action: p.run),
+                secondaryButton: .cancel()
+            )
+        }
     }
 
     // MARK: -- Pieces
@@ -183,7 +197,8 @@ struct WordShopView: View {
                 Text("\(remaining) of \(total) tiles still wear the shared pictures. Finish the whole set in your child's style — 20% off.")
                     .font(.system(size: 13)).foregroundStyle(.secondary)
                 Button {
-                    Task { await personalizeAll() }
+                    let cost = q.cost ?? remaining
+                    pendingSpend = PendingSpend(cost: cost, what: "Personalizing \(remaining) tiles") { Task { await personalizeAll() } }
                 } label: {
                     Text(paBusy ? "Queuing…" : "Personalize \(remaining) tiles · ⭐\(q.cost ?? remaining)")
                         .font(.system(size: 14, weight: .bold))
@@ -200,16 +215,30 @@ struct WordShopView: View {
     }
 
     /// Free common-use boards: whole categories placed with the shared default
-    /// art at no cost — personalizing is what costs credits.
+    /// art at no cost — personalizing is what costs credits. Add-on boards
+    /// (store-only, never seeded) get their own section above the standard set.
     private var freeBoardsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if !addonGroups.isEmpty {
+                Text("🧩 ADD-ON BOARDS")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(Color(hex: "#7c3aed"))
+                Text("Extra boards beyond the standard set — add them free with the shared pictures; styling them is what uses credits.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                ForEach(addonGroups, id: \.key) { g in freeBoardRow(g) }
+            }
             Text("FREE — COMMON USE BOARDS")
                 .font(.system(size: 12, weight: .heavy))
                 .foregroundStyle(Color(hex: "#047857"))
             Text("Add whole categories with the shared pictures for free. Remove keeps anything you personalized.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
-            ForEach(freeGroups, id: \.key) { g in
-                HStack(spacing: 10) {
+            ForEach(standardGroups, id: \.key) { g in freeBoardRow(g) }
+        }
+        .padding(.top, 4)
+    }
+
+    private func freeBoardRow(_ g: FreeGroup) -> some View {
+        HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(g.category)
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
@@ -229,31 +258,30 @@ struct WordShopView: View {
                     }
                     .buttonStyle(.plain).disabled(freeBusy != nil)
                 }
-                .padding(10)
-                .background(.white, in: RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#d1fae5"), lineWidth: 1.5))
-            }
-        }
-        .padding(.top, 4)
+        .padding(10)
+        .background(.white, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#d1fae5"), lineWidth: 1.5))
     }
 
-    private struct FreeGroup { let key: String; let column: String; let category: String; let total: Int; let onBoard: Int }
+    private struct FreeGroup { let key: String; let column: String; let category: String; let total: Int; let onBoard: Int; let addon: Bool }
     private var freeGroups: [FreeGroup] {
         var order: [String] = []
-        var agg: [String: (col: String, cat: String, total: Int, on: Int)] = [:]
+        var agg: [String: (col: String, cat: String, total: Int, on: Int, addon: Bool)] = [:]
         for t in tiles {
             guard let cat = t.category, !cat.isEmpty else { continue }
-            if t.freeBoard == false { continue }   // credits-priced board: not free-addable
             let key = t.column + "|" + cat
-            if agg[key] == nil { order.append(key); agg[key] = (t.column, cat, 0, 0) }
+            if agg[key] == nil { order.append(key); agg[key] = (t.column, cat, 0, 0, false) }
             agg[key]!.total += 1
             if t.onBoard { agg[key]!.on += 1 }
+            if t.storeOnly == true { agg[key]!.addon = true }
         }
         return order.compactMap { k in
             guard let a = agg[k] else { return nil }
-            return FreeGroup(key: k, column: a.col, category: a.cat, total: a.total, onBoard: a.on)
+            return FreeGroup(key: k, column: a.col, category: a.cat, total: a.total, onBoard: a.on, addon: a.addon)
         }
     }
+    private var addonGroups: [FreeGroup] { freeGroups.filter { $0.addon } }
+    private var standardGroups: [FreeGroup] { freeGroups.filter { !$0.addon } }
 
     private func sectionCard(_ emoji: String, _ title: String, _ value: String) -> some View {
         Button { column = value } label: {
@@ -281,7 +309,7 @@ struct WordShopView: View {
         if unpersonalized.count >= 3 {
             let cost = max(1, Int((Double(unpersonalized.count) * 0.8).rounded(.up)))
             Button {
-                Task { await buyBundle(unpersonalized.map(\.id)) }
+                pendingSpend = PendingSpend(cost: cost, what: "Personalizing all \(unpersonalized.count) in this folder") { Task { await buyBundle(unpersonalized.map(\.id)) } }
             } label: {
                 Text(busy ? "…" : "✨ Personalize all \(unpersonalized.count) · ⭐\(cost) (20% off)")
                     .font(.system(size: 13, weight: .bold))
@@ -319,6 +347,17 @@ struct WordShopView: View {
                         .padding(.horizontal, 7).padding(.vertical, 3)
                         .background(Capsule().fill(Color(hex: "#ff1493")))
                         .foregroundStyle(.white)
+                }
+                // "⭐N to finish": what completing this category's
+                // personalization costs (bundle price at 3+, else per-word).
+                let unstyled = group.tiles.filter { $0.onBoard && !$0.personalized }.count
+                if unstyled > 0 {
+                    let finishCost = unstyled >= 3 ? max(1, Int((Double(unstyled) * 0.8).rounded(.up))) : unstyled
+                    Text("⭐\(finishCost) to finish")
+                        .font(.system(size: 10, weight: .heavy))
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Capsule().fill(Color(hex: "#fde68a")))
+                        .foregroundStyle(Color(hex: "#92400e"))
                 }
                 Text("\(group.tiles.count)")
                     .font(.system(size: 11, weight: .bold))
@@ -407,7 +446,7 @@ struct WordShopView: View {
                 Button("Clear") { cart.removeAll() }
                     .font(.system(size: 13, weight: .semibold))
                 Button {
-                    Task { await checkout() }
+                    pendingSpend = PendingSpend(cost: cart.count, what: "Buying \(cart.count) word\(cart.count == 1 ? "" : "s")") { Task { await checkout() } }
                 } label: {
                     Text(busy ? "…" : "Get these words")
                         .font(.system(size: 14, weight: .bold))

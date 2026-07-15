@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Style wizard — admin</title>
+<style>
+  :root { --pink:#ff1493; --pink-deep:#ad1457; --line:#f3c6dd; --muted:#8b7a84; --ok:#047857; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Fredoka,ui-rounded,system-ui,sans-serif; background:#fff7fb; color:#2d2230; }
+  header { display:flex; align-items:center; gap:12px; background:#fff; border-bottom:2px solid var(--line); padding:14px 20px; }
+  h1 { font-size:20px; margin:0; color:var(--pink-deep); }
+  .spacer { flex:1; }
+  a.back { color:var(--pink); text-decoration:none; font-size:13px; }
+  main { max-width:880px; margin:0 auto; padding:20px; display:flex; flex-direction:column; gap:16px; }
+  .step { background:#fff; border:2px solid var(--line); border-radius:16px; padding:16px 18px; }
+  .step h2 { margin:0 0 4px; font-size:16px; color:var(--pink-deep); }
+  .step p.hint { margin:0 0 12px; font-size:13px; color:var(--muted); }
+  .step.locked { opacity:.45; pointer-events:none; }
+  .step.done h2::after { content:" ✓"; color:var(--ok); }
+  label { display:block; font-size:13px; font-weight:600; margin:10px 0 4px; }
+  input[type=text], textarea { width:100%; font:inherit; font-size:14px; padding:9px 11px; border:1.5px solid var(--line); border-radius:10px; background:#fff; }
+  button { font:inherit; font-weight:700; border:none; border-radius:999px; padding:10px 18px; cursor:pointer; background:var(--pink); color:#fff; font-size:14px; }
+  button.secondary { background:#fce4ef; color:var(--pink-deep); }
+  button:disabled { opacity:.5; cursor:default; }
+  .refrow { display:flex; gap:16px; flex-wrap:wrap; }
+  .refcard { flex:1; min-width:260px; border:1.5px solid var(--line); border-radius:14px; padding:12px; }
+  .refcard h3 { margin:0 0 6px; font-size:14px; color:var(--pink-deep); }
+  .refcard img { width:160px; height:160px; border-radius:12px; object-fit:cover; background:#fce4ef; display:block; margin:6px 0 10px; }
+  .refcard .none { width:160px; height:160px; border-radius:12px; background:#fce4ef; display:flex; align-items:center; justify-content:center; color:var(--pink-deep); font-size:12px; margin:6px 0 10px; text-align:center; padding:10px; }
+  .btnrow { display:flex; gap:8px; flex-wrap:wrap; }
+  .bar { height:14px; border-radius:999px; background:#fce4ef; overflow:hidden; margin:6px 0 2px; }
+  .bar > div { height:100%; background:var(--pink); transition:width .4s; }
+  .counts { font-size:13px; color:var(--muted); }
+  .msg { font-size:13px; margin-top:8px; }
+  .msg.err { color:#b91c1c; }
+  .msg.ok { color:var(--ok); }
+  .pill { display:inline-block; font-size:11px; font-weight:800; border-radius:999px; padding:3px 10px; }
+  .pill.draft { background:#fef3c7; color:#92400e; }
+  .pill.live { background:#d1fae5; color:#065f46; }
+</style>
+</head>
+<body>
+<header>
+  <h1>✨ New Style wizard</h1>
+  <span id="style-pill"></span>
+  <div class="spacer"></div>
+  <a class="back" href="/admin/lab.html">Style cards</a>
+  <a class="back" href="/admin/">← Lab home</a>
+</header>
+<main>
+
+  <!-- Step 1: the style itself -->
+  <div class="step" id="step-create">
+    <h2>1 · The style</h2>
+    <p class="hint">Upload ONE image that captures the look (a frame from the show, a poster, a sample
+      illustration). Everything else is generated from it.</p>
+    <div id="create-form">
+      <label>Name (what parents see in the picker)</label>
+      <input type="text" id="nw-label" maxlength="120" placeholder="e.g. Space Robots">
+      <label>Description (optional — helps the generator: era, medium, mood)</label>
+      <textarea id="nw-desc" rows="2" maxlength="600" placeholder="e.g. chunky retro cartoon robots, bold outlines, warm palette"></textarea>
+      <label>Style image</label>
+      <input type="file" id="nw-file" accept="image/*">
+      <div style="margin-top:12px;"><button id="nw-create">Create draft style</button></div>
+    </div>
+    <div id="create-done" style="display:none;">
+      <img id="anchor-img" alt="" style="width:160px;height:160px;border-radius:12px;object-fit:cover;">
+      <div class="counts" id="anchor-cap"></div>
+    </div>
+    <div class="msg" id="create-msg"></div>
+  </div>
+
+  <!-- Step 2: the two references -->
+  <div class="step locked" id="step-refs">
+    <h2>2 · The demo kid &amp; the objects reference</h2>
+    <p class="hint">Person-y tiles render around a generic child drawn in this style (the "demo kid");
+      objects render against the stuff reference. Generate candidates from the style image, re-roll until
+      one looks right, or upload your own.</p>
+    <div class="refrow">
+      <div class="refcard" id="ref-person">
+        <h3>🧒 Demo kid (person reference)</h3>
+        <div id="person-img-slot"><div class="none">Nothing yet</div></div>
+        <div class="btnrow">
+          <button class="secondary" data-gen="person">✨ Generate</button>
+          <button class="secondary" data-upload="person">📤 Upload</button>
+          <button data-use="person" disabled>✓ Use this</button>
+        </div>
+      </div>
+      <div class="refcard" id="ref-stuff">
+        <h3>🧸 Objects (stuff reference)</h3>
+        <div id="stuff-img-slot"><div class="none">Nothing yet</div></div>
+        <div class="btnrow">
+          <button class="secondary" data-gen="stuff">✨ Generate</button>
+          <button class="secondary" data-upload="stuff">📤 Upload</button>
+          <button data-use="stuff" disabled>✓ Use this</button>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="ref-file" accept="image/*" style="display:none;">
+    <div class="msg" id="refs-msg"></div>
+  </div>
+
+  <!-- Step 3: generate everything -->
+  <div class="step locked" id="step-generate">
+    <h2>3 · Generate everything</h2>
+    <p class="hint">One click queues every default tile and folder icon. The every-minute server job
+      renders them on its own — you can close this tab and come back.</p>
+    <button id="go-generate">🚀 Generate the whole default board</button>
+    <div id="progress" style="display:none;margin-top:12px;">
+      <div class="counts">Tiles <b id="p-tiles">–</b></div>
+      <div class="bar"><div id="bar-tiles" style="width:0%"></div></div>
+      <div class="counts">Folder icons <b id="p-chips">–</b></div>
+      <div class="bar"><div id="bar-chips" style="width:0%"></div></div>
+      <div class="counts" id="p-note"></div>
+    </div>
+    <div class="msg" id="gen-msg"></div>
+  </div>
+
+  <!-- Step 4: review + publish -->
+  <div class="step locked" id="step-publish">
+    <h2>4 · Review &amp; publish</h2>
+    <p class="hint">Eyeball the art, try the demo board, then flip it live. Publishing puts the style in
+      the parent onboarding picker AND the public demo's style switcher.</p>
+    <div class="btnrow">
+      <a id="review-gallery" target="_blank"><button class="secondary" type="button">🖼 Open the gallery</button></a>
+      <a id="review-demo" target="_blank"><button class="secondary" type="button">🌍 Preview the demo board</button></a>
+      <button id="go-publish" disabled>📣 Publish</button>
+      <button id="go-unpublish" class="secondary" style="display:none;">Unpublish</button>
+    </div>
+    <div class="msg" id="pub-msg"></div>
+  </div>
+
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const media = (k) => '/api/media?key=' + encodeURIComponent(k);
+  let SID = parseInt(new URLSearchParams(location.search).get('styleGuideId') || '', 10) || 0;
+  let STYLE = null, STATUS = null;
+  const candidate = { person: null, stuff: null };   // unsaved generated/uploaded keys
+  let uploadKind = null;
+  let pollTimer = null;
+
+  async function api(method, url, body) {
+    const r = await fetch(url, {
+      method, credentials: 'same-origin',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(d.detail || d.error || ('HTTP ' + r.status)), { data: d });
+    return d;
+  }
+  const wiz = (body) => api('POST', '/api/admin/lab?action=style-wizard', { styleGuideId: SID, ...body });
+
+  function setMsg(id, text, cls) { const el = $(id); el.textContent = text || ''; el.className = 'msg' + (cls ? ' ' + cls : ''); }
+
+  // ── Step 1: create (or resume) ─────────────────────────────────────────────
+  $('nw-create').addEventListener('click', async () => {
+    const label = $('nw-label').value.trim();
+    const file = $('nw-file').files[0];
+    if (!label) { setMsg('create-msg', 'Give the style a name.', 'err'); return; }
+    if (!file) { setMsg('create-msg', 'Pick the style image.', 'err'); return; }
+    $('nw-create').disabled = true; setMsg('create-msg', 'Uploading…');
+    try {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+      const up = await fetch(`/api/upload?kind=style&ext=${ext}`, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': file.type || 'image/jpeg' }, body: file });
+      if (!up.ok) throw new Error('upload failed: ' + up.status);
+      const { key } = await up.json();
+      const d = await api('POST', '/api/admin/style-guides', {
+        label, blobKey: key, description: $('nw-desc').value.trim() });
+      SID = d.styleGuide.id;
+      history.replaceState(null, '', '?styleGuideId=' + SID);
+      setMsg('create-msg', 'Draft created — it stays hidden from parents until you publish.', 'ok');
+      await refresh();
+    } catch (e) { setMsg('create-msg', 'Failed: ' + e.message, 'err'); }
+    $('nw-create').disabled = false;
+  });
+
+  // ── Step 2: references ─────────────────────────────────────────────────────
+  function refSlot(kind) { return $(kind + '-img-slot'); }
+  function showRef(kind, key, saved) {
+    refSlot(kind).innerHTML = key
+      ? '<img src="' + media(key) + '" alt="">' + (saved ? '<div class="counts">Saved ✓</div>' : '<div class="counts">Candidate — approve it below</div>')
+      : '<div class="none">Nothing yet</div>';
+    document.querySelector('[data-use="' + kind + '"]').disabled = !key || saved;
+  }
+
+  document.querySelectorAll('[data-gen]').forEach((b) => b.addEventListener('click', async () => {
+    const kind = b.dataset.gen;
+    b.disabled = true; const t = b.textContent; b.textContent = 'Generating… (~20s)';
+    setMsg('refs-msg', '');
+    try {
+      const d = await wiz({ op: kind + '-candidate' });
+      candidate[kind] = d.key;
+      showRef(kind, d.key, false);
+    } catch (e) { setMsg('refs-msg', 'Generate failed: ' + e.message, 'err'); }
+    b.disabled = false; b.textContent = '♻️ Re-roll';
+  }));
+
+  document.querySelectorAll('[data-upload]').forEach((b) => b.addEventListener('click', () => {
+    uploadKind = b.dataset.upload;
+    $('ref-file').click();
+  }));
+  $('ref-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; e.target.value = '';
+    if (!file || !uploadKind) return;
+    setMsg('refs-msg', 'Uploading…');
+    try {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+      const up = await fetch(`/api/upload?kind=style&ext=${ext}`, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': file.type || 'image/jpeg' }, body: file });
+      if (!up.ok) throw new Error('upload failed: ' + up.status);
+      const { key } = await up.json();
+      candidate[uploadKind] = key;
+      showRef(uploadKind, key, false);
+      setMsg('refs-msg', '');
+    } catch (err) { setMsg('refs-msg', 'Upload failed: ' + err.message, 'err'); }
+  });
+
+  document.querySelectorAll('[data-use]').forEach((b) => b.addEventListener('click', async () => {
+    const kind = b.dataset.use;
+    if (!candidate[kind]) return;
+    b.disabled = true;
+    try {
+      await wiz({ op: 'set-ref', kind, blobKey: candidate[kind] });
+      setMsg('refs-msg', (kind === 'person' ? 'Demo kid' : 'Objects reference') + ' saved ✓', 'ok');
+      await refresh();
+    } catch (e) { setMsg('refs-msg', 'Save failed: ' + e.message, 'err'); b.disabled = false; }
+  }));
+
+  // ── Step 3: generate + progress poll ─────────────────────────────────────
+  $('go-generate').addEventListener('click', async () => {
+    $('go-generate').disabled = true;
+    try {
+      const d = await wiz({ op: 'create-jobs' });
+      setMsg('gen-msg', `Queued ${d.queued.tiles} tiles + ${d.queued.chips} icons. ` + (d.note || ''), 'ok');
+      startPoll();
+    } catch (e) { setMsg('gen-msg', e.message, 'err'); $('go-generate').disabled = false; }
+  });
+
+  function paintStatus() {
+    if (!STATUS) return;
+    $('progress').style.display = '';
+    $('p-tiles').textContent = `${STATUS.tilesDone} / ${STATUS.tiles}`;
+    $('p-chips').textContent = `${STATUS.chipsDone} / ${STATUS.chips}`;
+    $('bar-tiles').style.width = STATUS.tiles ? Math.round(100 * STATUS.tilesDone / STATUS.tiles) + '%' : '0%';
+    $('bar-chips').style.width = STATUS.chips ? Math.round(100 * STATUS.chipsDone / STATUS.chips) + '%' : '0%';
+    const waiting = STATUS.tileQueued + STATUS.chipQueued;
+    const failedN = STATUS.tileFailed + STATUS.chipFailed;
+    $('p-note').textContent = STATUS.complete
+      ? '✅ Complete — review and publish below.'
+      : (waiting ? `${waiting} queued — the cron renders a few every minute; safe to close this tab.` : 'Idle.')
+        + (failedN ? ` ⚠️ ${failedN} failed (fix in the gallery, or re-run Generate to requeue).` : '');
+    $('go-generate').disabled = false;
+    $('go-generate').textContent = STATUS.complete ? '🚀 Re-check for missing pieces' : '🚀 Generate the whole default board';
+    $('go-publish').disabled = !STATUS.complete || (STYLE && STYLE.active);
+  }
+
+  function startPoll() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+      try {
+        const d = await api('GET', '/api/admin/lab?action=style-wizard&styleGuideId=' + SID);
+        STATUS = d.status; STYLE = d.style;
+        paintStatus();
+        if (STATUS.complete) { clearInterval(pollTimer); pollTimer = null; paintAll(); }
+      } catch (_) {}
+    }, 5000);
+  }
+
+  // ── Step 4: publish ────────────────────────────────────────────────────────
+  $('go-publish').addEventListener('click', async () => {
+    $('go-publish').disabled = true;
+    try {
+      await wiz({ op: 'publish', active: true });
+      setMsg('pub-msg', '📣 Live! It now shows in the onboarding picker and the demo\'s style switcher.', 'ok');
+      await refresh();
+    } catch (e) { setMsg('pub-msg', e.message, 'err'); $('go-publish').disabled = false; }
+  });
+  $('go-unpublish').addEventListener('click', async () => {
+    if (!confirm('Hide this style from parents again? Families already using it keep it.')) return;
+    try { await wiz({ op: 'publish', active: false }); await refresh(); }
+    catch (e) { setMsg('pub-msg', e.message, 'err'); }
+  });
+
+  // ── Paint the whole page from server state ─────────────────────────────────
+  function paintAll() {
+    const has = !!STYLE;
+    $('step-create').classList.toggle('done', has);
+    $('step-refs').classList.toggle('locked', !has);
+    const refsReady = has && STYLE.personRefKey && STYLE.stuffRefKey;
+    $('step-refs').classList.toggle('done', !!refsReady);
+    $('step-generate').classList.toggle('locked', !refsReady);
+    $('step-publish').classList.toggle('locked', !refsReady);
+    if (!has) return;
+    $('create-form').style.display = 'none';
+    $('create-done').style.display = '';
+    $('anchor-img').src = media(STYLE.blobKey);
+    $('anchor-cap').textContent = `#${STYLE.id} · ${STYLE.label}`;
+    $('style-pill').innerHTML = STYLE.active
+      ? '<span class="pill live">LIVE</span>' : '<span class="pill draft">DRAFT — hidden from parents</span>';
+    showRef('person', candidate.person || STYLE.personRefKey, !candidate.person && !!STYLE.personRefKey);
+    showRef('stuff', candidate.stuff || STYLE.stuffRefKey, !candidate.stuff && !!STYLE.stuffRefKey);
+    $('review-gallery').href = '/admin/defaults.html?styleGuideId=' + STYLE.id;
+    $('review-demo').href = '/practice.html?style=' + STYLE.id;
+    $('go-unpublish').style.display = STYLE.active ? '' : 'none';
+    $('go-publish').style.display = STYLE.active ? 'none' : '';
+    paintStatus();
+    if (STATUS && !STATUS.complete && (STATUS.tileQueued + STATUS.chipQueued) > 0 && !pollTimer) startPoll();
+  }
+
+  async function refresh() {
+    if (!SID) { paintAll(); return; }
+    try {
+      const d = await api('GET', '/api/admin/lab?action=style-wizard&styleGuideId=' + SID);
+      STYLE = d.style; STATUS = d.status;
+      candidate.person = null; candidate.stuff = null;
+      paintAll();
+    } catch (e) { setMsg('create-msg', 'Could not load style #' + SID + ': ' + e.message, 'err'); }
+  }
+  refresh();
+})();
+</script>
+</body>
+</html>

@@ -6,7 +6,10 @@ the original build context. Detailed how-tos live in `docs/runbooks/`;
 mechanical safety invariants live in `.claude/skills/surface-audit/SKILL.md`
 (and run as CI, see below). Content/vocabulary conventions live in
 `.claude/skills/update-taxonomy/SKILL.md` and
-`.claude/skills/aac-prompt-author/SKILL.md`.
+`.claude/skills/aac-prompt-author/SKILL.md`. The release walk-order
+(pre-merge gate → deploy → production smoke → TestFlight/Play + launch
+gates) is `.claude/skills/release/SKILL.md`; conventions for any new or
+changed server route are `.claude/skills/new-endpoint/SKILL.md`.
 
 ## What this product is
 
@@ -98,6 +101,13 @@ ACCESS_KEYS gate), set from parent dashboard → Board tab (themed accordions)
   OFF; **native apps only** — web keeps the pencil, because the web gesture
   required killing touch scroll). Additive to the pencil and needs the
   admin-gated `sentenceBuilder`; works during normal scroll-mode use.
+- `listenCensor` — listening mode shows "Bad Word" instead of curse words
+  and slurs said near the device (default ON; the blocklist lives
+  server-side in `api/_lib/bad-words.js` and ships via /api/sync, so
+  additions need no app release). `listenTilesOnly` (default OFF) hides
+  every spoken word that has no tile. Both editable in the dashboard,
+  the web board's Display modal, AND the native parent Settings screens
+  (the first parent-editable settings on native). See surface-audit E8.
 
 ## Money
 
@@ -135,6 +145,10 @@ family keeps everything they have — only new spends wait.
   replaceable tile, never family art). Every image swap archives the old key
   to `item_image_history`; the tile editor's "Previous pictures" strip
   reverts from it (keys contained to the tile's own history).
+  Tile shape: family surfaces always produce square tiles (Adjust framing
+  picks the crop) — the old keep-original-ratio toggle is retired. The
+  stored `keep_aspect` flag still renders uncropped on all three apps and
+  stays settable via Lab's ⬜ Square-tiles tool (TV/movie posters).
 - **Game scoring**: sessions need ≥3 answers to enter weekly accuracy or
   spike baselines; shorter ones are recorded but annotated "too short to
   score" (analytics.js / spike.js).
@@ -143,6 +157,40 @@ family keeps everything they have — only new spends wait.
 - **Milestones**: detected inline on `/api/events` (pivot-grammar frames);
   push respects opt-out; keepsakes in parent Home → Moments.
 - **Auto-Teach**: scheduled exposure slideshows/games from onboarding prefs.
+
+## Running the product (live-ops)
+
+- **Shipping a new style** (new show, new craze): admin → **✨ New Style
+  wizard** (`/admin/style-wizard.html`). Upload one style image → generate/
+  approve the "demo kid" (person ref) and objects ref (re-roll or upload
+  your own) → 🚀 Generate — the whole default board (every tile + folder
+  icon) queues to `style_build_jobs` and the every-minute cron renders it
+  with the tab closed → review the gallery + demo preview → **Publish**.
+  Drafts are invisible to parents until Publish, and Publish refuses below
+  100% (invariant E9). Cost of the render is house spend (no credits) and
+  is amortized: every family that picks the style gets the full shared set
+  free, so onboarding into a new style costs parents nothing until they
+  personalize.
+- **The public demo** (`/practice`) has a style switcher listing every
+  PUBLISHED style — new styles are marketing the moment they go live, with
+  zero extra renders (the demo reads the same per-style tables).
+- **Add-on boards**: Lab → Default board → ➕ New board with "Add-on" checked
+  (never seeded; `board_catalog.store_only` is the enforcement point).
+  Generate its art, publish defaults, and it appears in every store surface's
+  "Add-on boards" rail once ALL its words have default art. Parents add it
+  free; styling costs credits (the pay-to-add tier is retired).
+- **Credits UX rule**: any button that will spend credits says
+  "uses ⭐N — you have ⭐M" and waits for OK (see surface-audit F1b);
+  balances show on both native parent home cards and the dashboard chip.
+- **Onboarding "personal touches"**: after the founder letter, parents are
+  walked through favorite foods (⭐3 gift) → toys (⭐3 gift) → shows &
+  movies (own-photo upload, raw-only). Grants are idempotent by ledger
+  reason (`onboard:foods`/`onboard:toys`); photos ride /api/tile-jobs with
+  a folder-by-name hint (leaf-resolved server-side). Plus-tier families see
+  the honest "month one's ⭐ mostly build the board" note here and on the
+  store's Plus card. Show/movie art legal posture + the TMDB option:
+  **runbooks/show-movie-art-licensing.md** (action item there: register a
+  DMCA agent before launch).
 
 ## CI, backups, audits
 

@@ -271,6 +271,61 @@
       <div class="magic-rail" id="magic-right"></div>
     </div>
     <div id="magic-strip"></div>
+
+    <!-- Personal touches: while the board paints, capture the child's REAL
+         favorites. Foods + toys each carry a ⭐3 gift (granted when the card
+         unlocks; idempotent server-side by ledger reason). Shows & movies is
+         a deliberately NEUTRAL own-photo upload — the app never searches or
+         fetches anything (see the F1b/IP notes in the owner's manual). -->
+    <div id="fav-wrap" style="display:none;border-top:1px solid var(--line);margin-top:18px;padding-top:16px;text-align:left;">
+      <h3 class="fred" style="font-size:17px;">Make it really theirs — add <span class="fav-child-name">your child</span>'s favorites</h3>
+      <p class="note">The board's shared pictures are good; <em>their</em> pizza, <em>their</em> bear are better.
+        Photos you've already taken work great — pick from your library instead of the camera.</p>
+      <p class="note" id="fav-plus-note" style="display:none;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:8px 12px;">
+        💛 An honest note about credits: building the board uses most of your first month's ⭐ —
+        that's the deal working as intended, and they refresh every month. The two gifts below are extra, on us.</p>
+
+      <div class="fav-card" id="fav-foods" style="border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0;">
+        <h4 class="fred" style="font-size:15px;margin:0 0 4px;">🍕 Favorite foods <span id="fav-foods-gift" style="background:#fef3c7;color:#92400e;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;"></span></h4>
+        <p class="note" style="margin:4px 0 8px;">Snap up to 3 — the mac and cheese they'd eat every day. Each one is drawn in
+          <span class="fav-child-name">your child</span>'s art style (⭐1 of your gift) and lands in the board's Food folder on its own.</p>
+        <label class="note" style="display:block;margin:0 0 8px;"><input type="checkbox" id="fav-foods-raw" style="width:auto;"> Use my exact photos instead (free, no restyle)</label>
+        <div class="row">
+          <button class="btn" id="fav-foods-add">📸 Add food photos</button>
+          <button class="btn ghost" id="fav-foods-next">Next →</button>
+        </div>
+        <input type="file" id="fav-foods-file" accept="image/*" multiple style="display:none;">
+        <p class="note" id="fav-foods-msg" style="margin:8px 0 0;"></p>
+      </div>
+
+      <div class="fav-card" id="fav-toys" style="border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0;opacity:.45;">
+        <h4 class="fred" style="font-size:15px;margin:0 0 4px;">🧸 Favorite toys <span id="fav-toys-gift" style="background:#fef3c7;color:#92400e;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;"></span></h4>
+        <p class="note" style="margin:4px 0 8px;">Up to 3 — the bear, the trucks, the thing they sleep with. Drawn in their style
+          (⭐1 of your gift each), straight into the Toys folder.</p>
+        <label class="note" style="display:block;margin:0 0 8px;"><input type="checkbox" id="fav-toys-raw" style="width:auto;"> Use my exact photos instead (free, no restyle)</label>
+        <div class="row">
+          <button class="btn" id="fav-toys-add">📸 Add toy photos</button>
+          <button class="btn ghost" id="fav-toys-next">Next →</button>
+        </div>
+        <input type="file" id="fav-toys-file" accept="image/*" multiple style="display:none;">
+        <p class="note" id="fav-toys-msg" style="margin:8px 0 0;"></p>
+      </div>
+
+      <div class="fav-card" id="fav-shows" style="border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0;opacity:.45;">
+        <h4 class="fred" style="font-size:15px;margin:0 0 4px;">🎬 Favorite shows &amp; movies</h4>
+        <p class="note" style="margin:4px 0 8px;">Point the camera at the show as it lives in <em>your</em> house: the movie case
+          on the shelf, the character plush or backpack, a favorite book cover — or a picture you've already taken.
+          (Many shows' official websites also offer free downloadable art.) The exact photo becomes the tile
+          (free, kept poster-shaped, never redrawn) and lands in a TV &amp; Movies folder, private to your family's board.</p>
+        <div class="row">
+          <button class="btn" id="fav-shows-add">🖼 Add from my photos</button>
+          <button class="btn ghost" id="fav-shows-next">Done ✓</button>
+        </div>
+        <input type="file" id="fav-shows-file" accept="image/*" multiple style="display:none;">
+        <p class="note" id="fav-shows-msg" style="margin:8px 0 0;"></p>
+      </div>
+    </div>
+
     <div class="center" id="board-done" style="display:none;">
       <div style="font-size:40px;">🎉</div>
       <p class="fred" style="font-size:18px;color:var(--pink-deep);" id="board-done-msg">The board is ready!</p>
@@ -472,7 +527,107 @@
     const idx = { style: 0, people: 1, scene: 2, board: 3 }[name];
     document.querySelectorAll('#steps .dot').forEach((d, i) => d.classList.toggle('on', i <= idx));
     if (name === 'people' || name === 'scene') applyStyleRef();
+    if (name === 'board') favShow();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ---- Personal touches: favorite foods / toys / shows ----------------------
+  // Foods + toys each grant ⭐3 the moment their card unlocks (idempotent —
+  // POST /api/onboarding/state op=bonus). Photos go through the durable
+  // /api/tile-jobs queue with a folder-by-name hint, so each one lands in
+  // Food / Toys / TV & Movies on its own even if the parent closes the page.
+  // Shows & movies is raw-only BY DESIGN: the exact personal photo, never
+  // fetched by us and never restyled.
+  const FAV_CFG = {
+    foods: { folder: 'Food',        bonus: true,  max: 3 },
+    toys:  { folder: 'Toys',        bonus: true,  max: 3 },
+    shows: { folder: 'TV & Movies', bonus: false, max: 5, raw: true, keepAspect: true },
+  };
+  const FAV_ORDER = ['foods', 'toys', 'shows'];
+  const FAV = { shown: false, idx: 0, added: { foods: 0, toys: 0, shows: 0 }, granted: {} };
+
+  function favShow() {
+    if (FAV.shown) return;
+    FAV.shown = true;
+    $('fav-wrap').style.display = '';
+    document.querySelectorAll('.fav-child-name').forEach((el) => { if (CHILD_NAME) el.textContent = CHILD_NAME; });
+    // The honest Plus note — shown when this family is on the $9.99 tier.
+    fetch('/api/store?action=catalog&childId=' + encodeURIComponent(CHILD_ID), { credentials: 'same-origin' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((c) => {
+        if (c && c.entitlement && /plus/i.test(c.entitlement.label || '')) $('fav-plus-note').style.display = '';
+      }).catch(() => {});
+    favActivate(0);
+  }
+
+  async function favActivate(i) {
+    FAV.idx = Math.min(i, FAV_ORDER.length - 1);
+    FAV_ORDER.forEach((step, n) => {
+      const card = $('fav-' + step);
+      card.style.opacity = n <= FAV.idx ? '1' : '.45';
+      card.style.pointerEvents = n <= FAV.idx ? '' : 'none';
+    });
+    const step = FAV_ORDER[FAV.idx];
+    if (FAV_CFG[step].bonus && !FAV.granted[step]) {
+      FAV.granted[step] = true;
+      try {
+        const r = await fetch('/api/onboarding/state', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'bonus', step }),
+        });
+        const d = r.ok ? await r.json() : null;
+        if (d) $('fav-' + step + '-gift').textContent =
+          (d.granted ? '⭐3 added — ' : '') + 'you have ⭐' + d.balance;
+      } catch (_) { /* the gift shows next refresh — grant is idempotent */ }
+    }
+  }
+
+  for (const step of FAV_ORDER) {
+    $('fav-' + step + '-add').addEventListener('click', () => $('fav-' + step + '-file').click());
+    $('fav-' + step + '-next').addEventListener('click', () => {
+      const n = FAV_ORDER.indexOf(step) + 1;
+      if (n < FAV_ORDER.length) favActivate(n);
+      else $('fav-shows-msg').textContent = '✓ All set — everything you added lands on the board on its own.';
+    });
+    $('fav-' + step + '-file').addEventListener('change', async (e) => {
+      const cfg = FAV_CFG[step];
+      const files = [...e.target.files].slice(0, Math.max(0, cfg.max - FAV.added[step]));
+      e.target.value = '';
+      if (!files.length) return;
+      const msg = $('fav-' + step + '-msg');
+      const rawBox = $('fav-' + step + '-raw');
+      const raw = cfg.raw || (rawBox && rawBox.checked);
+      for (const f of files) {
+        msg.textContent = '📤 Saving photo ' + (FAV.added[step] + 1) + '…';
+        try {
+          const blob = await downscale(f, 1024, 0.85);
+          const qs = '/api/tile-jobs?childId=' + encodeURIComponent(CHILD_ID)
+            + '&section=nouns&emotion=default'
+            + '&folder=' + encodeURIComponent(cfg.folder)
+            + (raw ? '&raw=1' : '')
+            + (cfg.keepAspect ? '&keepAspect=1' : '');
+          const r = await fetch(qs, { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+          if (!r.ok) {
+            const t = await r.text();
+            if (r.status === 402 && /needs_subscription/.test(t)) {
+              msg.textContent = 'Styled pictures are a membership perk — check "use my exact photos" (free) and try again.';
+            } else if (r.status === 402) {
+              msg.textContent = 'Out of ⭐ — check "use my exact photos" (free) and try again.';
+            } else {
+              msg.textContent = 'That one didn’t save — try again.';
+            }
+            break;
+          }
+          FAV.added[step]++;
+          msg.textContent = '✓ ' + FAV.added[step] + ' of ' + cfg.max + ' saved — '
+            + (raw ? 'it lands' : 'we name it, draw it in ' + (CHILD_NAME || 'your child') + '’s style, and it lands')
+            + ' in ' + cfg.folder + ' on its own.';
+        } catch (_) { msg.textContent = 'That one didn’t save — try again.'; }
+      }
+      if (FAV.added[step] >= cfg.max) $('fav-' + step + '-add').disabled = true;
+    });
   }
 
   // ---- resume / identity ----

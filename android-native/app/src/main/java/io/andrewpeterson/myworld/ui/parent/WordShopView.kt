@@ -101,6 +101,19 @@ fun WordShopView(onDismiss: () -> Unit) {
             "Not enough credits — add a pack on the Credits & Store screen first."
         else "$prefix: ${e.message}"
 
+    // Confirm-before-spend rule: every credit spend states its cost + the
+    // live balance and waits for OK. The server still enforces (402s stay).
+    var pendingSpend by remember { mutableStateOf<Triple<Int, String, () -> Unit>?>(null) }
+    pendingSpend?.let { (cost, what, run) ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pendingSpend = null },
+            title = { Text("Use ⭐$cost?") },
+            text = { Text("$what uses ⭐$cost. You have ⭐${balance ?: 0}.") },
+            confirmButton = { TextButton(onClick = { pendingSpend = null; run() }) { Text("OK") } },
+            dismissButton = { TextButton(onClick = { pendingSpend = null }) { Text("Cancel") } },
+        )
+    }
+
     fun checkout(ids: List<String>, bundle: Boolean) {
         if (busy) return
         busy = true; error = null; note = null
@@ -198,15 +211,17 @@ fun WordShopView(onDismiss: () -> Unit) {
                                     Button(
                                         onClick = {
                                             if (paBusy) return@Button
-                                            paBusy = true; error = null; note = null
-                                            scope.launch {
-                                                try {
-                                                    val r = c.api.storePersonalizeAll(c.auth.childSlug, quote = false)
-                                                    r.balance?.let { balance = it }
-                                                    note = r.note
-                                                    paQuote = try { c.api.storePersonalizeAll(c.auth.childSlug, quote = true) } catch (_: Exception) { null }
-                                                } catch (e: Exception) { error = creditError(e, "Couldn't start") }
-                                                paBusy = false
+                                            pendingSpend = Triple(q.cost ?: q.remaining ?: 0, "Personalizing ${q.remaining} tiles") {
+                                                paBusy = true; error = null; note = null
+                                                scope.launch {
+                                                    try {
+                                                        val r = c.api.storePersonalizeAll(c.auth.childSlug, quote = false)
+                                                        r.balance?.let { balance = it }
+                                                        note = r.note
+                                                        paQuote = try { c.api.storePersonalizeAll(c.auth.childSlug, quote = true) } catch (_: Exception) { null }
+                                                    } catch (e: Exception) { error = creditError(e, "Couldn't start") }
+                                                    paBusy = false
+                                                }
                                             }
                                         },
                                         enabled = !paBusy,
@@ -220,27 +235,42 @@ fun WordShopView(onDismiss: () -> Unit) {
                                 Spacer(Modifier.height(14.dp))
                             }
 
-                            // Free common-use boards: whole categories, default art.
-                            Text("FREE — COMMON USE BOARDS", fontSize = 12.sp,
-                                fontWeight = FontWeight.Black, color = hexColor("#047857"))
-                            Text("Add whole categories with the shared pictures for free. Remove keeps anything you personalized.",
-                                fontSize = 12.sp, color = Brand.muted)
-                            Spacer(Modifier.height(6.dp))
+                            // Free boards: add-on boards (store-only, never seeded) get their
+                            // own section; the standard common-use set follows. Both add free
+                            // with shared art — styling is what costs credits.
                             val freeGroups = run {
                                 val order = mutableListOf<String>()
-                                val agg = mutableMapOf<String, IntArray>()  // [total, onBoard]
+                                val agg = mutableMapOf<String, IntArray>()  // [total, onBoard, addon]
                                 val meta = mutableMapOf<String, Pair<String, String>>()
                                 for (t in tiles) {
                                     val cat = t.category?.takeIf { it.isNotEmpty() } ?: continue
-                                    if (!t.freeBoard) continue   // credits-priced board: not free-addable
                                     val key = "${t.column}|$cat"
-                                    if (key !in agg) { order.add(key); agg[key] = intArrayOf(0, 0); meta[key] = t.column to cat }
+                                    if (key !in agg) { order.add(key); agg[key] = intArrayOf(0, 0, 0); meta[key] = t.column to cat }
                                     agg[key]!![0]++
                                     if (t.onBoard) agg[key]!![1]++
+                                    if (t.storeOnly) agg[key]!![2] = 1
                                 }
                                 order.map { k -> Triple(k, meta[k]!!, agg[k]!!) }
                             }
-                            freeGroups.forEach { (key, colCat, counts) ->
+                            val addonGroups = freeGroups.filter { it.third[2] == 1 }
+                            val standardGroups = freeGroups.filter { it.third[2] == 0 }
+                            if (addonGroups.isNotEmpty()) {
+                                Text("🧩 ADD-ON BOARDS", fontSize = 12.sp,
+                                    fontWeight = FontWeight.Black, color = hexColor("#7c3aed"))
+                                Text("Extra boards beyond the standard set — add them free with the shared pictures; styling them is what uses credits.",
+                                    fontSize = 12.sp, color = Brand.muted)
+                                Spacer(Modifier.height(6.dp))
+                            }
+                            (addonGroups + listOf(null) + standardGroups).forEach { entry ->
+                                if (entry == null) {
+                                    Text("FREE — COMMON USE BOARDS", fontSize = 12.sp,
+                                        fontWeight = FontWeight.Black, color = hexColor("#047857"))
+                                    Text("Add whole categories with the shared pictures for free. Remove keeps anything you personalized.",
+                                        fontSize = 12.sp, color = Brand.muted)
+                                    Spacer(Modifier.height(6.dp))
+                                    return@forEach
+                                }
+                                val (key, colCat, counts) = entry
                                 val (col, cat) = colCat
                                 val (total, on) = counts[0] to counts[1]
                                 Row(
@@ -316,6 +346,17 @@ fun WordShopView(onDismiss: () -> Unit) {
                                                 .padding(horizontal = 7.dp, vertical = 3.dp))
                                         Spacer(Modifier.width(6.dp))
                                     }
+                                    // "⭐N to finish": what completing this category's
+                                    // personalization costs (bundle price at 3+, else per-word).
+                                    val unstyled = groupTiles.count { it.onBoard && !it.personalized }
+                                    if (unstyled > 0) {
+                                        val finishCost = if (unstyled >= 3) maxOf(1, kotlin.math.ceil(unstyled * 0.8).toInt()) else unstyled
+                                        Text("⭐$finishCost to finish", fontSize = 10.sp, fontWeight = FontWeight.Black,
+                                            color = hexColor("#92400e"),
+                                            modifier = Modifier.background(hexColor("#fde68a"), RoundedCornerShape(50))
+                                                .padding(horizontal = 7.dp, vertical = 3.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                    }
                                     Text("${groupTiles.size}", fontSize = 11.sp, fontWeight = FontWeight.Bold,
                                         color = hexColor("#9d2463"),
                                         modifier = Modifier.background(hexColor("#fdf2f8"), RoundedCornerShape(50))
@@ -330,7 +371,11 @@ fun WordShopView(onDismiss: () -> Unit) {
                                     item(key = "bundle-$key") {
                                         val cost = maxOf(1, kotlin.math.ceil(unpersonalized.size * 0.8).toInt())
                                         TextButton(
-                                            onClick = { checkout(unpersonalized.map { it.id }, bundle = true) },
+                                            onClick = {
+                                                pendingSpend = Triple(cost, "Personalizing all ${unpersonalized.size} in this folder") {
+                                                    checkout(unpersonalized.map { it.id }, bundle = true)
+                                                }
+                                            },
                                             enabled = !busy,
                                             modifier = Modifier.fillMaxWidth()
                                                 .background(hexColor("#fce4ef"), RoundedCornerShape(50)),
@@ -365,7 +410,11 @@ fun WordShopView(onDismiss: () -> Unit) {
                         modifier = Modifier.weight(1f))
                     TextButton(onClick = { cart = emptySet() }) { Text("Clear", fontSize = 13.sp) }
                     Button(
-                        onClick = { checkout(cart.toList(), bundle = false) },
+                        onClick = {
+                            pendingSpend = Triple(cart.size, "Buying ${cart.size} word${if (cart.size == 1) "" else "s"}") {
+                                checkout(cart.toList(), bundle = false)
+                            }
+                        },
                         enabled = !busy,
                         colors = ButtonDefaults.buttonColors(containerColor = Brand.pink),
                     ) { Text(if (busy) "…" else "Get these words", fontWeight = FontWeight.Bold) }

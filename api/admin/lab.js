@@ -33,6 +33,7 @@ import settings from './_lab-settings.js';
 import uploadImage from './_lab-upload-image.js';
 import tileLab from './_lab-tile-lab.js';
 import styleDefaults from './_lab-style-defaults.js';
+import styleWizard from './_lab-style-wizard.js';
 import layout from './_lab-layout.js';
 import voices from './_lab-voices.js';
 import publish from './_lab-publish.js';
@@ -72,6 +73,7 @@ const HANDLERS = {
   'tile-lab': tileLab,
   'upload-image': uploadImage,
   'style-defaults': styleDefaults,
+  'style-wizard': styleWizard,
   'layout': layout,
   'voices': voices,
   'publish': publish,

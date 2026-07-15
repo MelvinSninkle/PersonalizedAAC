@@ -8,6 +8,7 @@
 import { sql } from '../_lib/db.js';
 import { ensureTileJobs, claimRunnableJobs, processTileJob } from '../_lib/tile-jobs.js';
 import { ensureSeedJobs, claimSeedJobs, processSeedJob, makeSeedContext } from '../_lib/seed-board.js';
+import { drainStyleBuildJobs } from '../_lib/style-build.js';
 
 export const config = { maxDuration: 300 };
 
@@ -80,8 +81,19 @@ export default async function handler(req, res) {
       }
     }
 
+    // 3) Style-default builds (the New Style wizard's queue) — family work
+    //    above always goes first; leftover budget renders the style set so a
+    //    full-taxonomy build finishes on its own with the Lab tab closed.
+    let styleBuild = { processed: 0, failed: 0 };
+    if (!overBudget()) {
+      try {
+        styleBuild = await drainStyleBuildJobs(db, {
+          budgetMs: Math.max(10_000, TIME_BUDGET_MS - (Date.now() - started)), batch: 6 });
+      } catch (_) { /* style builds are lab work — never fail the family cron */ }
+    }
+
     res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json({ ok: true, ran: results.length, results, seed, ms: Date.now() - started });
+    res.status(200).json({ ok: true, ran: results.length, results, seed, styleBuild, ms: Date.now() - started });
   } catch (err) {
     res.status(500).json({ error: 'run-tile-jobs failed', detail: String(err.message || err) });
   }

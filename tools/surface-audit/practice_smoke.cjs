@@ -38,8 +38,23 @@ const fails = [];
   ok('tap counts local stats', await page.evaluate(() => document.getElementById('st-taps').textContent) === '1');
   ok('no add/edit affordances', await page.evaluate(() =>
     !document.body.innerHTML.match(/Add tile|New Category|\+ Add/i)));
-  ok('only demo/media APIs touched', reqs.length > 0 && reqs.every((u) =>
-    u.includes('/api/media') || u.includes('/api/demo')));
+
+  // ── Style switcher (published styles browsable on the public demo) ──
+  ok('style switcher renders', await page.evaluate(() =>
+    document.querySelectorAll('#styles .voice-chip').length >= 2));   // Classic + stub style
+  await page.evaluate(() => {
+    const chips = [...document.querySelectorAll('#styles .voice-chip')];
+    chips[chips.length - 1].click();   // the stubbed "Watercolor" style
+  });
+  await page.waitForTimeout(600);
+  ok('switching style re-renders styled art', await page.evaluate(() =>
+    [...document.querySelectorAll('#board .tile .sq')]
+      .some((el) => decodeURIComponent(el.style.backgroundImage || '').includes('style-defaults/'))));
+  ok('board still renders after the switch', await page.evaluate(() =>
+    document.querySelectorAll('.tile').length > 10));
+
+  ok('only demo/media/style-thumb APIs touched', reqs.length > 0 && reqs.every((u) =>
+    u.includes('/api/media') || u.includes('/api/demo') || u.includes('/api/style-guides/public')));
 
   await browser.close();
   console.log(fails.length ? 'FAILURES: ' + JSON.stringify(fails) : 'ALL PASS');

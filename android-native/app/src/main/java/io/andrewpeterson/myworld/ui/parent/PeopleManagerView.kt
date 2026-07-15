@@ -216,6 +216,7 @@ private fun PersonEditorDialog(draft: PersonDraft, onDone: () -> Unit) {
     // portrait drawn in the board's art style; free tier locked to as-is.
     val stylingAllowed = c.board.stylingAllowed
     var useAsIs by remember { mutableStateOf(!stylingAllowed) }
+    var confirmPortrait by remember { mutableStateOf(false) }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -301,7 +302,7 @@ private fun PersonEditorDialog(draft: PersonDraft, onDone: () -> Unit) {
                     Column(Modifier.weight(1f)) {
                         Text("Use my photo as-is", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Brand.ink)
                         Text(if (useAsIs) "The photo itself becomes the tile — free."
-                             else "Drawn as a portrait in the board's art style.",
+                             else "Drawn as a portrait in the board's art style — ⭐5.",
                             fontSize = 12.sp, color = Brand.muted)
                     }
                     Switch(checked = useAsIs, onCheckedChange = { if (stylingAllowed) useAsIs = it },
@@ -341,11 +342,22 @@ private fun PersonEditorDialog(draft: PersonDraft, onDone: () -> Unit) {
 
             Spacer(Modifier.height(14.dp))
             Button(
-                onClick = { save() },
+                // Confirm-before-spend: a styled family portrait is the ⭐5
+                // keystone render; the as-is path stays free.
+                onClick = { if (jpeg != null && !useAsIs) confirmPortrait = true else save() },
                 enabled = name.isNotBlank() && !(isNew && jpeg == null) && !saving,
                 colors = ButtonDefaults.buttonColors(containerColor = Brand.pink),
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) { Text(if (saving) "Saving…" else "Save", fontWeight = FontWeight.Bold) }
+            if (confirmPortrait) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { confirmPortrait = false },
+                    title = { Text("Use ⭐5?") },
+                    text = { Text("A family portrait drawn in the board's style uses ⭐5 (our best likeness model). “Use my photo as-is” is free.") },
+                    confirmButton = { TextButton(onClick = { confirmPortrait = false; save() }) { Text("OK") } },
+                    dismissButton = { TextButton(onClick = { confirmPortrait = false }) { Text("Cancel") } },
+                )
+            }
 
             if (!isNew) {
                 TextButton(onClick = {

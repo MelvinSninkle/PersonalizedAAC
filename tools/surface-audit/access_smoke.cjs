@@ -140,6 +140,28 @@ const fails = [];
   ok('defaults restore scroll mode', await page.evaluate(() =>
     !document.body.classList.contains('nav-buttons-mode') && !document.body.classList.contains('sb-on')));
 
+  // ── E8: listening display filter — masking + tiles-only, through the
+  //    REAL tokenizer (listenTokens hook feeds a fake transcript). ──
+  const lt = await page.evaluate(async () => {
+    const H = window.__accessHooks;
+    H.setListenPrefs({ censor: true, tilesOnly: false, blocklist: ['damn', 'heck'] });
+    const masked = await H.listenTokens('oh damn pizza');
+    H.setListenPrefs({ tilesOnly: true });
+    const tilesOnly = await H.listenTokens('zzgibberish damn pizza');
+    H.setListenPrefs({ censor: false, tilesOnly: false });
+    const uncensored = await H.listenTokens('damn');
+    H.setListenPrefs({ censor: true });   // restore the shipped default
+    return { masked, tilesOnly, uncensored };
+  });
+  ok('E8: blocklisted word renders as "Bad Word"',
+    lt.masked.some(t => t.word === 'Bad Word' && t.masked === true)
+    && !lt.masked.some(t => t.word === 'damn'));
+  ok('E8: normal unmatched words still pass through', lt.masked.some(t => t.word === 'oh'));
+  ok('E8: tile words still match while masking', lt.masked.some(t => t.item && /pizza/i.test(t.word)));
+  ok('E8: tiles-only drops every non-tile word (bad ones included)',
+    lt.tilesOnly.length >= 1 && lt.tilesOnly.every(t => !!t.item));
+  ok('E8: censor off renders the raw word', lt.uncensored.some(t => t.word === 'damn'));
+
   await browser.close();
   console.log(fails.length ? '\nFAILURES: ' + JSON.stringify(fails) : '\nALL PASS');
   process.exit(fails.length ? 1 : 0);

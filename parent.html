@@ -657,6 +657,17 @@
           <span class="hint" style="display:block;margin:2px 0 0;">Tapping the same tile twice quickly plays its teaching facts (up to three per word).</span></span>
         <input type="checkbox" id="touch-doubletap">
       </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>🙊 Hide bad words in Listening
+          <span class="hint" style="display:block;margin:2px 0 0;">On (default): curse words and slurs someone says nearby show as "Bad Word" in the listening
+          bar instead of the word itself. The blocked list is maintained by My World and updates automatically.</span></span>
+        <input type="checkbox" id="touch-listen-censor">
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>🧩 Listening shows only words with tiles
+          <span class="hint" style="display:block;margin:2px 0 0;">Spoken words that aren't on your child's board don't appear at all — the strictest option.</span></span>
+        <input type="checkbox" id="touch-listen-tiles">
+      </label>
       <div><button class="btn primary" id="touch-save">Save touch controls</button>
         <span id="touch-msg" class="hint"></span></div>
     </div>
@@ -1055,7 +1066,7 @@
          default = drawn as a portrait in the BOARD's saved art style. -->
     <div style="display:flex;gap:8px;margin:0 0 12px;">
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-        <input type="radio" name="family-look" id="family-look-style" checked style="width:auto;margin:0;">Board art style</label>
+        <input type="radio" name="family-look" id="family-look-style" checked style="width:auto;margin:0;">Board art style — ⭐5 portrait</label>
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
         <input type="radio" name="family-look" id="family-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
     </div>
@@ -1138,7 +1149,7 @@
            every styled tile renders in the BOARD's saved house style. -->
       <div style="display:flex;gap:8px;margin:0 0 8px;">
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="tile-look" id="tile-look-style" checked style="width:auto;margin:0;">Board art style</label>
+          <input type="radio" name="tile-look" id="tile-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1</label>
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
           <input type="radio" name="tile-look" id="tile-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
       </div>
@@ -1168,7 +1179,6 @@
       <input type="file" id="tile-sound" accept="audio/*" style="margin-top:8px;width:100%;box-sizing:border-box;">
       <p class="hint" id="tile-sound-status" style="margin:6px 0 0;">No sound yet</p>
     </div>
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:12px;"><input type="checkbox" id="tile-keep-aspect" style="width:auto;"> Keep original image ratio (don't crop)</label>
     <label id="tile-pin-row" style="display:none;align-items:center;gap:8px;font-size:13px;margin-top:10px;"><input type="checkbox" id="tile-pin" style="width:auto;"> Pin to top (e.g. for Fletcher)</label>
     <p class="hint" id="tile-error" style="color:#dc2626;margin:8px 0 0;"></p>
     <div class="foot">
@@ -1371,12 +1381,28 @@
   document.getElementById('to-therapist').href = '/therapist/' + encodeURIComponent(slug);
   // Word Store link + live credit balance chip.
   const storeLink = document.getElementById('store-link');
+  // Live balance chip beside the Word Store link — refreshed after every
+  // in-page spend so it never lies (also used by the confirm-before-spend
+  // dialogs). Returns the balance (or null offline).
+  async function refreshStoreBalance() {
+    try {
+      const r = await fetch('/api/store?action=catalog&childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      const d = r.ok ? await r.json() : null;
+      if (d && typeof d.balance === 'number') {
+        const el = document.getElementById('store-balance');
+        if (el) el.textContent = '⭐' + d.balance;
+        return d.balance;
+      }
+    } catch (_) {}
+    return null;
+  }
+  async function pdConfirmSpend(cost, what) {
+    const bal = await refreshStoreBalance();
+    return confirm(what + ' uses ⭐' + cost + (bal == null ? '' : ' — you have ⭐' + bal) + '. Continue?');
+  }
   if (storeLink) {
     storeLink.href = '/store.html?child=' + encodeURIComponent(slug);
-    fetch('/api/store?action=catalog&childId=' + encodeURIComponent(slug), { credentials: 'same-origin' })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && typeof d.balance === 'number') document.getElementById('store-balance').textContent = '⭐' + d.balance; })
-      .catch(() => {});
+    refreshStoreBalance();
   }
   // Re-open the per-device "who uses this device?" chooser on the board.
   const deviceDefaultLink = document.getElementById('device-default');
@@ -1891,6 +1917,7 @@
         return;
       }
       styleRegenMsg(`Rebuilding ${d.queued} pictures in the new style — they refresh over the next while. ✨`);
+      refreshStoreBalance();
     } catch (_) { /* the offer is best-effort; the store always has the rebuild */ }
   }
 
@@ -2377,7 +2404,6 @@
     document.getElementById('tile-label').value = existing?.label || '';
     // Pre-fill phrase with the current label so re-generating audio is a 1-edit flow.
     document.getElementById('tile-phrase').value = existing?.label || '';
-    document.getElementById('tile-keep-aspect').checked = !!existing?.keepAspect;
     document.getElementById('tile-emotion').value = 'default';
     document.getElementById('tile-pin').checked = !!existing?.pinned;
     // Pin-to-top only makes sense in the People column (kid-board sorts pinned
@@ -2431,6 +2457,11 @@
     try {
       const photo = await downscale(file, 1024, 0.85);
       const raw = document.getElementById('tile-look-raw').checked;
+      if (!raw && !(await pdConfirmSpend(1, 'Drawing this photo in the board’s art style'))) {
+        statusEl.textContent = '—';
+        btn.disabled = false; btn.textContent = pv;
+        return;
+      }
       const label = document.getElementById('tile-label').value.trim();
       // Categories: /api/tile-jobs makes ITEMS, so a folder icon takes the
       // direct path instead — same keep-vs-restyle choice, the styled photo
@@ -2530,7 +2561,8 @@
     if (!existing && !tilePendingImage) { tileSetErr('Add a picture — make one from a photo or upload an image'); return; }
     const btn = document.getElementById('tile-save'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Saving…'; tileSetErr('');
     try {
-      const keepAspect = document.getElementById('tile-keep-aspect').checked;
+      // Ratio control retired — omitting keepAspect preserves the stored
+      // value on edit (admin Lab tools still set it for posters).
       const newImageKey = tilePendingImage ? await tileUpload(tilePendingImage, 'image', 'jpg', 'image/jpeg') : null;
       if (tileTarget.kind === 'item') {
         let newSoundKey = null;
@@ -2539,21 +2571,21 @@
         const pinned = tileTarget.section === 'people' && document.getElementById('tile-pin').checked;
         if (existing) {
           // PUT only what's set; api/items uses COALESCE so omitted fields keep their old value.
-          const body = { childId: slug, label, keepAspect };
+          const body = { childId: slug, label };
           if (newImageKey) body.imageKey = newImageKey;
           if (newSoundKey) body.soundKey = newSoundKey;
           if (tileTarget.section === 'people') body.pinned = pinned;
           await orgApi('/api/items?id=' + existing.id, { method: 'PUT', body: JSON.stringify(body) });
         } else {
-          await orgApi('/api/items', { method: 'POST', body: JSON.stringify({ section: tileTarget.section, categoryId: tileTarget.catId, label, imageKey: newImageKey, soundKey: newSoundKey, keepAspect, pinned, childId: slug }) });
+          await orgApi('/api/items', { method: 'POST', body: JSON.stringify({ section: tileTarget.section, categoryId: tileTarget.catId, label, imageKey: newImageKey, soundKey: newSoundKey, pinned, childId: slug }) });
         }
       } else {
         if (existing) {
-          const body = { childId: slug, label, keepAspect };
+          const body = { childId: slug, label };
           if (newImageKey) body.imageKey = newImageKey;
           await orgApi('/api/categories?id=' + existing.id, { method: 'PUT', body: JSON.stringify(body) });
         } else {
-          const body = { section: tileTarget.section, label, imageKey: newImageKey, keepAspect, childId: slug };
+          const body = { section: tileTarget.section, label, imageKey: newImageKey, childId: slug };
           if (tileTarget.kind === 'subcategory' && tileTarget.parentId) body.parentId = tileTarget.parentId;
           await orgApi('/api/categories', { method: 'POST', body: JSON.stringify(body) });
         }
@@ -2936,6 +2968,11 @@
           // via the onboarding endpoint. No client style param: the server
           // resolves the child's house style itself (the old localStorage
           // 'aacStyle' string could silently fight the saved style guide).
+          if (!(await pdConfirmSpend(5, 'A family portrait drawn in the board’s style'))) {
+            mmsg.textContent = 'Not drawn — pick "My exact photo" for a free add, or Save again to confirm.';
+            saveBtn.disabled = false;
+            return;
+          }
           mmsg.textContent = 'Making ' + v.displayName + ' in your style… (about 30 seconds)';
           const blob = await downscale(photoFile);
           const qs = '?childId=' + encodeURIComponent(slug) +
@@ -2956,6 +2993,7 @@
           if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
         }
         close(); load();
+        refreshStoreBalance();
       } catch (err) { mmsg.textContent = 'Could not save: ' + (err.message || err); }
       finally { saveBtn.disabled = false; }
     });
@@ -3081,10 +3119,15 @@
     if (touchInt) {
       touchInt.checked = !!childSettings.tapInterrupt;
       document.getElementById('touch-doubletap').checked = !!childSettings.doubleTapTeach;
+      // Listening display filter (E8): masking defaults ON, tiles-only OFF.
+      document.getElementById('touch-listen-censor').checked = childSettings.listenCensor !== false;
+      document.getElementById('touch-listen-tiles').checked = !!childSettings.listenTilesOnly;
       document.getElementById('touch-save').addEventListener('click', () => {
         childSettings = { ...childSettings,
           tapInterrupt: touchInt.checked,
           doubleTapTeach: document.getElementById('touch-doubletap').checked,
+          listenCensor: document.getElementById('touch-listen-censor').checked,
+          listenTilesOnly: document.getElementById('touch-listen-tiles').checked,
         };
         saveSettingsToServer('Saved ✓ — the board picks it up on its next settings sync', 'touch-msg');
       });

@@ -262,6 +262,7 @@ struct BoardTileEditSheet: View {
     @State private var stagedImageExt = "png"
     @State private var stagedImageCT  = "image/png"
     @State private var generating = false
+    @State private var confirmDraw = false
 
     // Voice staging — a re-recorded clip to upload on save.
     @State private var stagedSound: Data?
@@ -407,8 +408,8 @@ struct BoardTileEditSheet: View {
                 // changing the style is a deliberate act in the parent
                 // dashboard's Art style panel.
                 HStack(spacing: 10) {
-                    Button { Task { await generateArt() } } label: {
-                        pill(generating ? "Generating…" : "Draw in board style", filled: true)
+                    Button { confirmDraw = true } label: {
+                        pill(generating ? "Generating…" : "Draw in board style · ⭐1", filled: true)
                     }
                     .buttonStyle(.plain).disabled(generating)
                     Button { usePhotoAsIs() } label: {
@@ -418,6 +419,13 @@ struct BoardTileEditSheet: View {
                 }
                 Text("Drawn to match the board's art style, so the new picture fits the rest of the tiles.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
+                    // Confirm-before-spend rule: state the cost, then render.
+                    .alert("Use ⭐1?", isPresented: $confirmDraw) {
+                        Button("OK") { Task { await generateArt() } }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("Drawing this photo in the board's art style uses ⭐1. \u{201C}Use photo as-is\u{201D} is free.")
+                    }
             } else {
                 HStack(spacing: 10) {
                     Button { showCamera = true } label: { pill("Take photo", filled: false, icon: "camera.fill") }
@@ -449,10 +457,6 @@ struct BoardTileEditSheet: View {
                         .font(.system(size: 12)).foregroundStyle(Color(hex: "#2e7d32"))
                 }
             }
-
-            Toggle("Keep original ratio (don't crop)", isOn: $keepAspect)
-                .font(.system(size: 14))
-                .tint(Color(hex: "#ff1493"))
 
             if stagedImage != nil || currentImage != nil {
                 Button {
@@ -493,7 +497,7 @@ struct BoardTileEditSheet: View {
                     ForEach(emotions, id: \.self) { e in
                         Button(e.capitalized) { emotion = e }
                     }
-                } label: { chip("waveform", emotion.capitalized) }
+                } label: { menuPill("waveform", emotion.capitalized) }
                 Button { Task { await revoice() } } label: {
                     pill(stagedSound == nil ? "Re-record voice" : "Voice updated ✓", filled: false, icon: "mic.fill")
                 }
@@ -565,9 +569,9 @@ struct BoardTileEditSheet: View {
     private var deleteButton: some View {
         Button(role: .destructive) { showDeleteConfirm = true } label: {
             Label("Delete tile", systemImage: "trash")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+                .padding(.vertical, 11)
                 .background(Color.red.opacity(0.1))
                 .foregroundStyle(.red)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -812,17 +816,21 @@ struct BoardTileEditSheet: View {
             .foregroundStyle(Color(hex: "#999"))
     }
 
-    private func chip(_ icon: String, _ text: String) -> some View {
+    // A Menu label shaped exactly like an outline pill (same font, height,
+    // corner, stroke) so the voice picker matches the button beside it.
+    private func menuPill(_ icon: String, _ text: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
             Text(text).lineLimit(1)
-            Image(systemName: "chevron.down").font(.system(size: 10))
+            Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
         }
         .font(.system(size: 14, weight: .semibold))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 11)
         .foregroundStyle(Color(hex: "#ad1457"))
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(Color(hex: "#fce4ef"))
-        .clipShape(Capsule())
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#ff1493"), lineWidth: 1.5))
     }
 
     private func pill(_ text: String, filled: Bool, icon: String? = nil) -> some View {

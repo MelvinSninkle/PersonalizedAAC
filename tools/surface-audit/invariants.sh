@@ -81,6 +81,31 @@ grep -q "ForEach(ImageModel.allCases)" kid-ios/MyWorld/Views/TileEditSheet.swift
 grep -q "localStorage.getItem('aacStyle')" parent.html && { fail "C8 parent.html reads the stale localStorage aacStyle string"; C8=1; }
 [ "$C8" -eq 0 ] && pass "C8 no per-image style/model pickers"
 
+# ── E8: listening profanity filter defaults ON everywhere ───────────────────
+# Words on the server-owned blocklist (api/_lib/bad-words.js, shipped via
+# /api/sync) render as "Bad Word" in listening mode. The DEFAULT must stay
+# masking-ON on all three clients — a regression here puts slurs on a
+# child's screen. Parents opt out via listenCensor; see skill section E8.
+E8=0
+[ -f api/_lib/bad-words.js ] || { fail "E8 api/_lib/bad-words.js missing"; E8=1; }
+grep -q "listenBlocklist: BAD_WORDS" api/sync.js || { fail "E8 sync.js no longer ships the blocklist"; E8=1; }
+grep -q "s.listenCensor !== false" app.html || { fail "E8 app.html lost the censor-defaults-ON pattern"; E8=1; }
+grep -q 'listenCensor = (s\["listenCensor"\] as? Bool) ?? true' kid-ios/MyWorld/Models/AccessFeatures.swift \
+  || { fail "E8 iOS AccessFeatures lost censor-defaults-ON"; E8=1; }
+grep -q 'listenCensor = bool("listenCensor") ?: true' android-native/app/src/main/java/io/andrewpeterson/myworld/access/AccessFeatures.kt \
+  || { fail "E8 Android AccessFeatures lost censor-defaults-ON"; E8=1; }
+[ "$E8" -eq 0 ] && pass "E8 listening filter defaults ON on server + all three clients"
+
+# ── E9: no draft style ever reaches a parent ─────────────────────────────────
+# New offered styles are created INACTIVE (drafts) and go live only via an
+# explicit Publish after the generated set is complete. Both gates must hold:
+# the picker/demo filter on active, and creation defaulting to draft.
+E9=0
+grep -q "active = TRUE" api/onboarding/styles.js || { fail "E9 onboarding styles picker lost the active filter"; E9=1; }
+grep -q "active = TRUE AND child_id IS NULL" api/demo.js || { fail "E9 demo style switcher lost the active filter"; E9=1; }
+grep -q "DRAFT_ACTIVE = false" api/admin/style-guides.js || { fail "E9 style creation no longer defaults to draft"; E9=1; }
+[ "$E9" -eq 0 ] && pass "E9 draft styles stay hidden until published"
+
 # ── Vercel function ceiling (~100 routed functions) ──────────────────────────
 COUNT=$(find api -name '*.js' ! -name '_*' ! -path 'api/_lib/*' | wc -l)
 echo "INFO: routed Vercel functions: $COUNT / 100"

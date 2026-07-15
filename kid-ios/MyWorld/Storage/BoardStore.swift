@@ -17,6 +17,9 @@ final class BoardStore {
     /// Family membership flags from the last sync (nil = unknown → permissive;
     /// the server enforces regardless). Persisted with the board cache.
     var entitlement: APIClient.Entitlement?
+    /// Listening display filter (E8): server-owned bad-word list from the
+    /// last sync. Persisted with the board cache so offline keeps filtering.
+    var listenBlocklist: Set<String> = []
 
     /// Convenience gates for the UI. Unknown = allowed, so an offline board
     /// never locks features it can't verify.
@@ -125,6 +128,7 @@ final class BoardStore {
             self.categories = resp.categories
             self.tiles = resp.items
             self.entitlement = resp.entitlement ?? self.entitlement
+            if let bl = resp.listenBlocklist, !bl.isEmpty { self.listenBlocklist = Set(bl) }
             self.lastError = nil
             persistToDisk(resp)
             precacheMedia()
@@ -168,6 +172,7 @@ final class BoardStore {
         self.categories = resp.categories
         self.tiles = resp.items
         self.entitlement = resp.entitlement
+        if let bl = resp.listenBlocklist, !bl.isEmpty { self.listenBlocklist = Set(bl) }
         precacheMedia()   // start warming from the cached board on cold launch
     }
 

@@ -71,7 +71,10 @@ class H(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         if u.path.startswith('/api/sync'):
-            return self.send_json({'categories': CATS, 'items': ITEMS})
+            # listenBlocklist: mild stand-ins for the real bad-words list so
+            # the smoke can assert masking without profanity in the repo tests.
+            return self.send_json({'categories': CATS, 'items': ITEMS,
+                                   'listenBlocklist': ['damn', 'heck']})
         if u.path.startswith('/api/media'):
             key = parse_qs(u.query).get('key', ['x'])[0]
             body = png_solid(color_for(key))
@@ -85,15 +88,30 @@ class H(http.server.SimpleHTTPRequestHandler):
             return self.send_json({'step': 'child_photo', 'childId': 'testkid',
                                    'data': {'childName': 'Fletcher', 'birthDate': '2022-03-01',
                                             'seedNextG': 0, 'seededCount': 0}})
+        if u.path.startswith('/api/style-guides/public'):
+            # Public style thumbnails for practice.html's style switcher.
+            body = png_solid((240, 180, 220))
+            self.send_response(200)
+            self.send_header('Content-Type', 'image/png')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if u.path.startswith('/api/demo'):
+            style = parse_qs(u.query).get('style', [''])[0]
             tiles = []
             for sec in ['people', 'nouns', 'verbs', 'needs']:
                 for i in range(8):
+                    # A styled demo serves the same tiles under style-defaults/
+                    # keys — the smoke asserts switching styles re-renders.
+                    key = f'style-defaults/{style}/demo-{sec}-{i}' if style else f'demo-{sec}-{i}'
                     tiles.append(dict(label=f'{sec} word {i}', section=sec,
                                       category='Food' if sec == 'nouns' else ('Family' if sec == 'people' else ''),
-                                      subcategory='', imageKey=f'demo-{sec}-{i}'))
+                                      subcategory='', imageKey=key))
             return self.send_json({'ok': True, 'tiles': tiles, 'folders': [],
-                                   'voices': [{'id': 'v1', 'name': 'Bella'}]})
+                                   'voices': [{'id': 'v1', 'name': 'Bella'}],
+                                   'styles': [{'id': 7, 'label': 'Watercolor'}],
+                                   'style': int(style) if style else None})
         if u.path.startswith('/api/child-settings'):
             return self.send_json({'settings': {'tz': 'America/Denver'}})
         if u.path.startswith('/api/relationships'):

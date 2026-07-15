@@ -2,9 +2,11 @@ import SwiftUI
 import Observation
 
 // Access experiments (admin dark-launch) — the native port of the web board's
-// accessibility features. Settings are READ-ONLY here: only admins can write
-// them (server-enforced in api/child-settings.js), the kid app just honors
-// whatever is stored for this child. Keys live at the settings ROOT (not
+// accessibility features. This holder is READ-ONLY: the kid app honors
+// whatever is stored for this child (admin keys are server-enforced in
+// api/child-settings.js; the parent-set keys are written from the parent
+// Settings screen via APIClient.updateChildSettings, then refresh() here
+// picks them up). Keys live at the settings ROOT (not
 // under kidDisplay), so this holder reads the raw child-settings blob rather
 // than riding DisplayPrefs (whose didSet save-back would echo writes).
 
@@ -41,6 +43,11 @@ final class AccessPrefs {
     /// Drag-to-bar staging (the ORIGINAL sentence gesture, parent-enabled;
     /// native apps only — web keeps the pencil).
     var sentenceDrag = false
+    /// Listening display filter (E8, parent-set). censor defaults ON: words
+    /// on the synced blocklist render as the pill "Bad Word". tilesOnly
+    /// hides every spoken word that has no tile on the board.
+    var listenCensor = true
+    var listenTilesOnly = false
 
     var buttonsNav: Bool { navMode == "buttons" }
 
@@ -68,6 +75,8 @@ final class AccessPrefs {
             toolPlay = (s["toolPlay"] as? Bool) ?? true
             toolSentence = (s["toolSentence"] as? Bool) ?? true
             sentenceDrag = (s["sentenceDrag"] as? Bool) ?? false
+            listenCensor = (s["listenCensor"] as? Bool) ?? true
+            listenTilesOnly = (s["listenTilesOnly"] as? Bool) ?? false
             // Touch + safety controls ride the same settings fetch (root keys too).
             TouchConfig.interrupt = (s["tapInterrupt"] as? Bool) ?? false
             TouchConfig.doubleTapTeach = (s["doubleTapTeach"] as? Bool) ?? false

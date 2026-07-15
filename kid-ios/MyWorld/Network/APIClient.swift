@@ -53,6 +53,9 @@ struct APIClient {
         let categories: [Category]
         let items: [Tile]
         var entitlement: Entitlement? = nil
+        /// Listening display filter (E8): server-owned bad-word list; words
+        /// on it render as "Bad Word" in the listening strip.
+        var listenBlocklist: [String]? = nil
     }
 
     /// POST /api/auth/login — captures the Set-Cookie session.
@@ -535,6 +538,21 @@ struct APIClient {
         return data
     }
 
+    /// Merge-safe write of arbitrary root settings keys (parent toggles like
+    /// listenCensor): read the current blob, overlay the patch, write it all
+    /// back. The server clamps admin-gated keys for non-admins regardless.
+    func updateChildSettings(childId: String, patch: [String: Any]) async -> Bool {
+        var settings = await childSettings(childId: childId)
+        for (k, v) in patch { settings[k] = v }
+        guard let body = try? JSONSerialization.data(withJSONObject: ["settings": settings]) else { return false }
+        let ok = (try? await request(
+            method: "POST",
+            path: "/api/child-settings?childId=\(percentEscape(childId))",
+            body: body, contentType: "application/json"
+        )) != nil
+        return ok
+    }
+
     /// Merge-safe write of display prefs: read the current settings blob, set
     /// only the `kidDisplay` key, write the whole thing back. Avoids clobbering
     /// the web app's schedule / reward settings stored in the same blob.
@@ -610,10 +628,13 @@ struct APIClient {
         let itemId: Int?
         let freeRetryUsed: Bool
         let credits: Int
-        /// false = this word's board is store-only and priced in credits, so
-        /// it must not appear in the FREE common-use-boards section. Optional
-        /// so cached catalogs and older servers (no field) decode as free.
+        /// Legacy: false once meant a credits-priced board. That tier is
+        /// retired (everything free-adds); kept optional so cached catalogs
+        /// and older servers decode.
         let freeBoard: Bool?
+        /// true = an ADD-ON board (store-only, never seeded) — shown in its
+        /// own "Add-on boards" section. Optional for cached/old payloads.
+        let storeOnly: Bool?
     }
     private struct ShopBrowse: Decodable { let tiles: [ShopTile] }
     func storeBrowse(childId: String) async throws -> [ShopTile] {
