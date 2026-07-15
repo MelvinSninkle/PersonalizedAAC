@@ -1,8 +1,34 @@
 # Domain flip: aac.andrewpeterson.io → myworldtaptotalk.com
 
-Do this ONCE, in one commit + one env change, after the domain is attached
-to the Vercel project (Vercel → Settings → Domains → add
-myworldtaptotalk.com and www; follow the DNS instructions at the registrar).
+## Phase 0 — ADDITIVE mode (both domains serve; done first, zero code)
+
+The safe first step: attach the new domain so BOTH hosts serve the same
+deployment as duplicates. No redirects, no code changes — every hardcoded
+aac.andrewpeterson.io reference (native app origins, email links, reset
+URLs) keeps working untouched.
+
+1. Vercel → Project → Settings → Domains → Add: the apex
+   (myworldtaptotalk.com) and www.myworldtaptotalk.com.
+2. At the registrar, follow Vercel's shown DNS instructions — either point
+   the domain's nameservers at Vercel (easiest), or add records:
+   apex `A → 76.76.21.21`, www `CNAME → cname.vercel-dns.com`.
+3. In the Domains list, set www to "Redirect to myworldtaptotalk.com"
+   (within-brand redirect is fine) and make sure aac.andrewpeterson.io is
+   set to SERVE, not redirect — that's the dupe behavior.
+4. Wait for the ✓ (DNS + auto-TLS, usually minutes) and load /practice,
+   /signup, and a parent login on the new host.
+
+Gotchas in additive mode:
+- Cookies are per-host: a parent signed in on the old domain signs in once
+  on the new one. Nothing is lost — same account, same board.
+- Emails, password resets, Stripe webhooks, and the native apps still say/
+  use aac.andrewpeterson.io — correct until Phase 1 below.
+- Duplicate content SEO is a non-issue pre-launch; the full flip adds the
+  301s.
+
+## Phase 1 — the real flip (later, one commit + env change)
+
+Do this ONCE, in one commit + one env change, after Phase 0 is verified.
 
 ## The hardcoded sites (verify with grep before AND after)
 
