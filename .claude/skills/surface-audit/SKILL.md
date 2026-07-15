@@ -335,15 +335,24 @@ scrolling on the web board), and the listening display filter
 `listenCensor` (default TRUE) / `listenTilesOnly` (default false — see E8)
 are ordinary
 child-settings root keys — do NOT "fix" them into the ACCESS_KEYS gate;
-parents own these decisions. The one guarded flow is `easyUnlock` ENABLE:
-both UIs (app.html Display modal `disp-unlock-yes`, parent.html Safety panel
-`safety-unlock-yes`) must show the strong warning and re-verify the account
-password via `/api/auth/login` before saving `easyUnlock: true`; disabling
-never needs friction. The board's unlock skip additionally requires a
-signed-in editor session (`sessionUser && canEdit()`) — easyUnlock skips the
-password re-prompt, never the login. Native honoring reads TouchConfig
-(AccessFeatures, both platforms): quick-tap on the shared
-LongPressExitButton and lock-long-press straight to edit mode.
+parents own these decisions. ALL of these are parent-editable on every
+surface, organized in one canonical themed order (most common first): Board
+look → Art style → Board tools → Touch & play → Listening → Safety &
+unlock → This device. The editors: app.html Display modal, parent.html
+accordions, iOS `DisplaySettingsView.swift` + ParentSettings Art style,
+Android `DisplaySettingsView.kt` + ParentSettings Art style. The one
+guarded flow is `easyUnlock` ENABLE: every UI (app.html `disp-unlock-yes`,
+parent.html `safety-unlock-yes`, and the native screens' `confirmEasyUnlock`
+flows) must show the strong warning and re-verify the account password via
+`/api/auth/login` before saving `easyUnlock: true`; disabling never needs
+friction (invariants.sh greps all four). The board's unlock skip
+additionally requires a signed-in editor session (`sessionUser &&
+canEdit()`) — easyUnlock skips the password re-prompt, never the login.
+Native honoring reads TouchConfig (AccessFeatures, both platforms):
+quick-tap on the shared LongPressExitButton and lock-long-press straight to
+edit mode. The public practice board offers the Board-look controls too,
+but SESSION-ONLY (`sessionStorage 'practiceDisplay'` — never localStorage,
+never the server; A-PUBLIC's two-GET surface is unchanged).
 
 **E7. Recorded ≠ scored.** Game sessions with fewer than 3 answers are
 RECORDED (they appear in recent sessions, annotated "too short to score")

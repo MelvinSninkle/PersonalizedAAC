@@ -204,6 +204,18 @@ family keeps everything they have — only new spends wait.
 - **Credits UX rule**: any button that will spend credits says
   "uses ⭐N — you have ⭐M" and waits for OK (see surface-audit F1b);
   balances show on both native parent home cards and the dashboard chip.
+- **Parent settings, one order everywhere**: every surface presents the
+  parent controls in the same themed order, most-common first — 🎨 Board
+  look · 🖼 Art style · 🔘 Board tools · ✋ Touch & play · 🎙 Listening ·
+  🔒 Safety & unlock · 📱 This device. Editors: the web board's ⚙ Display
+  modal, the dashboard accordions, and each app's ⚙ Display sheet +
+  parent Settings (which now also shows the current style, its three
+  reference images, a switcher, and own-reference upload — every change
+  warns that existing tiles keep their old art). Enabling
+  password-free unlock always re-asks for the account password (invariant
+  E6b, enforced on all four editors). The practice board offers the
+  Board-look controls too, but only for that browser session — nothing a
+  visitor does there is saved anywhere.
 - **Onboarding "personal touches"**: after the founder letter, parents are
   walked through favorite foods (⭐3 gift) → toys (⭐3 gift) → shows &
   movies (own-photo upload, raw-only). Grants are idempotent by ledger

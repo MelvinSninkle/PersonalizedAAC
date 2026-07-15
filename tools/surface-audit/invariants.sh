@@ -63,6 +63,12 @@ if grep -q "confirmEasyUnlock" kid-ios/MyWorld/Views/DisplaySettingsView.swift \
 else
   fail "E6b easyUnlock enable flow missing password verify in iOS DisplaySettingsView"
 fi
+ANDROID_DSV=android-native/app/src/main/java/io/andrewpeterson/myworld/ui/board/DisplaySettingsView.kt
+if grep -q "confirmEasyUnlock" "$ANDROID_DSV" && grep -q "api.login" "$ANDROID_DSV"; then
+  pass "E6b easyUnlock password-confirm present in Android DisplaySettingsView"
+else
+  fail "E6b easyUnlock enable flow missing password verify in Android DisplaySettingsView"
+fi
 
 # ── C6b: revert-image only restores keys from the tile's own history ─────────
 grep -q "item_image_history" api/items.js \

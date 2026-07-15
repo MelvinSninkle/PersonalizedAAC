@@ -1,5 +1,9 @@
 package io.andrewpeterson.myworld.ui.parent
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,22 +35,35 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.andrewpeterson.myworld.LocalAppContainer
 import io.andrewpeterson.myworld.model.prettyChildName
+import io.andrewpeterson.myworld.net.StyleGuideInfo
+import io.andrewpeterson.myworld.net.StyleOverview
 import io.andrewpeterson.myworld.net.advanceBand
 import io.andrewpeterson.myworld.net.bandStatus
 import io.andrewpeterson.myworld.net.changePassword
 import io.andrewpeterson.myworld.net.childSettings
 import io.andrewpeterson.myworld.net.deleteAccount
+import io.andrewpeterson.myworld.net.imageBytes
 import io.andrewpeterson.myworld.net.saveChildSettingsKey
+import io.andrewpeterson.myworld.net.setStyle
+import io.andrewpeterson.myworld.net.setStyleRef
 import io.andrewpeterson.myworld.net.storeCatalog
+import io.andrewpeterson.myworld.net.styleOverview
+import io.andrewpeterson.myworld.net.upload
+import io.andrewpeterson.myworld.storage.downscaleJpeg
 import io.andrewpeterson.myworld.ui.theme.Brand
 import io.andrewpeterson.myworld.ui.theme.hexColor
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The parent app home — port of `Parent/ParentHomeView.swift`'s card grid.
@@ -230,6 +247,40 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
     var listenCensor by remember { mutableStateOf(true) }
     var listenTilesOnly by remember { mutableStateOf(false) }
     var listenLoaded by remember { mutableStateOf(false) }
+    // Art style — native twin of the web dashboard's style gallery
+    // (/api/parent/style): current style + exact refs, switcher, own uploads.
+    var styleOv by remember { mutableStateOf<StyleOverview?>(null) }
+    var styleMsg by remember { mutableStateOf<String?>(null) }
+    var pendingStyle by remember { mutableStateOf<StyleGuideInfo?>(null) }
+    var showStyleList by remember { mutableStateOf(false) }
+    var pendingUploadKind by remember { mutableStateOf<String?>(null) }
+    var styleUploadKind by remember { mutableStateOf<String?>(null) }
+    var styleUploading by remember { mutableStateOf(false) }
+
+    suspend fun reloadStyles() {
+        styleOv = try { c.api.styleOverview(c.auth.childSlug) } catch (_: Exception) { styleOv }
+    }
+    val pickStyleRef = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val kind = styleUploadKind
+        styleUploadKind = null
+        if (uri == null || kind == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            styleUploading = true
+            try {
+                val jpeg = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?.let { downscaleJpeg(it, maxDim = 1600) }
+                } ?: throw Exception("couldn't read that photo")
+                val key = c.api.upload("styleref", "jpg", jpeg, "image/jpeg")
+                c.api.setStyleRef(c.auth.childSlug, kind, key)
+                styleMsg = "Reference saved — new pictures follow it from now on."
+                reloadStyles()
+            } catch (e: Exception) {
+                styleMsg = "Upload failed: ${e.message}"
+            }
+            styleUploading = false
+        }
+    }
 
     LaunchedEffect(Unit) {
         band = try { c.api.bandStatus(c.auth.childSlug) } catch (_: Exception) { null }
@@ -239,6 +290,7 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
         listenCensor = bool("listenCensor") ?: true
         listenTilesOnly = bool("listenTilesOnly") ?: false
         listenLoaded = true
+        reloadStyles()
     }
     fun saveListen(key: String, value: Boolean) {
         if (!listenLoaded) return
@@ -262,6 +314,47 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
         ) {
             Text("Settings", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
             Text(c.auth.user.value?.email ?: "", fontSize = 13.sp, color = Brand.muted)
+
+            Spacer(Modifier.height(14.dp))
+            Text("ART STYLE", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
+            val ov = styleOv
+            if (ov == null) {
+                Text("Loading…", fontSize = 13.sp, color = Brand.muted)
+            } else {
+                val cur = ov.styleGuide
+                if (cur != null) {
+                    Text("Current: ${cur.label}${if (cur.source == "family") " (your own)" else ""}",
+                        fontSize = 14.sp, color = Brand.ink)
+                    Row(Modifier.padding(vertical = 6.dp)) {
+                        StyleRefThumb("Style", cur.refs?.main)
+                        Spacer(Modifier.width(10.dp))
+                        StyleRefThumb("Person", cur.refs?.person)
+                        Spacer(Modifier.width(10.dp))
+                        StyleRefThumb("Objects", cur.refs?.stuff)
+                    }
+                } else {
+                    Text("No style set yet — pick one below.", fontSize = 13.sp, color = Brand.muted)
+                }
+                Text(
+                    "Every generated picture is drawn from these references. Changes apply to NEW pictures only — tiles already on the board keep their current art.",
+                    fontSize = 12.sp, color = Brand.muted,
+                )
+                if (ov.styles.isNotEmpty()) {
+                    androidx.compose.material3.TextButton(onClick = { showStyleList = true },
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text("Switch to another style…", color = Brand.pinkDeep)
+                    }
+                }
+                androidx.compose.material3.TextButton(
+                    onClick = { pendingUploadKind = "main" },
+                    enabled = !styleUploading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (styleUploading) "Uploading…" else "Upload your own reference…",
+                        color = Brand.pinkDeep)
+                }
+                styleMsg?.let { Text(it, fontSize = 12.sp, color = Brand.muted) }
+            }
 
             Spacer(Modifier.height(14.dp))
             Text("VOCABULARY LEVEL", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
@@ -476,6 +569,136 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
                 }
             },
         )
+    }
+
+    // Style switch confirm — the web dashboard's exact warning copy.
+    val pending = pendingStyle
+    if (pending != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pendingStyle = null },
+            title = { androidx.compose.material3.Text("Draw new pictures in “${pending.label}”?") },
+            text = {
+                androidx.compose.material3.Text(
+                    "Tiles already on the board keep their current pictures — the board will mix " +
+                        "styles until you remake them from each tile's editor. New pictures use " +
+                        "the new style right away.")
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    pendingStyle = null
+                    scope.launch {
+                        try {
+                            c.api.setStyle(c.auth.childSlug, pending.id)
+                            styleMsg = "Style switched — new pictures use “${pending.label}” from now on."
+                            reloadStyles()
+                        } catch (e: Exception) { styleMsg = "Couldn't switch: ${e.message}" }
+                    }
+                }) { androidx.compose.material3.Text("Switch style") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { pendingStyle = null }) {
+                    androidx.compose.material3.Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // Built-in style picker.
+    if (showStyleList) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showStyleList = false }) {
+            Column(
+                Modifier.background(Color.White, RoundedCornerShape(22.dp)).padding(18.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text("Built-in styles", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
+                Spacer(Modifier.height(8.dp))
+                val currentId = styleOv?.styleGuide?.id
+                for (s in styleOv?.styles.orEmpty()) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clickable {
+                                if (s.id != currentId) { showStyleList = false; pendingStyle = s }
+                            }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        StyleRefThumb("", s.previewUrl ?: s.refs?.main, size = 48)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(s.label, fontSize = 15.sp, color = Brand.ink, fontWeight = FontWeight.SemiBold)
+                            s.description?.takeIf { it.isNotEmpty() }?.let {
+                                Text(it, fontSize = 12.sp, color = Brand.muted, maxLines = 2)
+                            }
+                        }
+                        if (s.id == currentId) Text("✓", fontSize = 16.sp, color = Brand.pinkDeep)
+                    }
+                }
+                androidx.compose.material3.TextButton(onClick = { showStyleList = false },
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("Cancel", color = Brand.muted)
+                }
+            }
+        }
+    }
+
+    // Own-upload warning BEFORE the photo picker opens (pick which reference).
+    if (pendingUploadKind != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pendingUploadKind = null },
+            title = { androidx.compose.material3.Text("Use your own reference?") },
+            text = {
+                androidx.compose.material3.Text(
+                    "New pictures will be drawn to match it. Tiles already on the board don't " +
+                        "change, so the board can look inconsistent until you remake them. " +
+                        "Pick which reference to replace:")
+            },
+            confirmButton = {
+                Column {
+                    for ((kind, label) in listOf("main" to "Style scene (the overall look)",
+                                                 "person" to "Person reference",
+                                                 "stuff" to "Objects reference")) {
+                        androidx.compose.material3.TextButton(onClick = {
+                            pendingUploadKind = null
+                            styleUploadKind = kind
+                            pickStyleRef.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        }) { androidx.compose.material3.Text(label) }
+                    }
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { pendingUploadKind = null }) {
+                    androidx.compose.material3.Text("Cancel")
+                }
+            },
+        )
+    }
+}
+
+/** One labeled reference thumbnail, fetched through the authenticated
+ *  /api/parent/style?image= stream (never a raw blob URL). */
+@Composable
+private fun StyleRefThumb(title: String, path: String?, size: Int = 68) {
+    val c = LocalAppContainer.current
+    var bmp by remember(path) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    LaunchedEffect(path) {
+        bmp = null
+        val p = path ?: return@LaunchedEffect
+        val bytes = c.api.imageBytes(p) ?: return@LaunchedEffect
+        bmp = try { android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) } catch (_: Exception) { null }
+    }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        val b = bmp
+        if (b != null) {
+            Image(b.asImageBitmap(), contentDescription = title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(size.dp).clip(RoundedCornerShape(10.dp)))
+        } else {
+            Box(Modifier.size(size.dp).clip(RoundedCornerShape(10.dp)).background(hexColor("#fce4ec")),
+                contentAlignment = Alignment.Center) {
+                Text(if (path == null) "—" else "…", fontSize = 12.sp, color = Brand.muted)
+            }
+        }
+        if (title.isNotEmpty()) Text(title, fontSize = 10.sp, color = Brand.muted)
     }
 }
 
