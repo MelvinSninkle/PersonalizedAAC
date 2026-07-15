@@ -55,6 +55,14 @@ for f in app.html parent.html; do
     fail "E6b easyUnlock enable flow missing password verify in $f"
   fi
 done
+# Native twins: the settings screens that expose easyUnlock must carry the
+# same confirm flow (a confirmEasyUnlock gate that re-verifies via login).
+if grep -q "confirmEasyUnlock" kid-ios/MyWorld/Views/DisplaySettingsView.swift \
+   && grep -q "api.login" kid-ios/MyWorld/Views/DisplaySettingsView.swift; then
+  pass "E6b easyUnlock password-confirm present in iOS DisplaySettingsView"
+else
+  fail "E6b easyUnlock enable flow missing password verify in iOS DisplaySettingsView"
+fi
 
 # ── C6b: revert-image only restores keys from the tile's own history ─────────
 grep -q "item_image_history" api/items.js \

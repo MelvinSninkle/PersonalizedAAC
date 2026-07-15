@@ -288,6 +288,8 @@ struct ParentSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                ArtStyleSection()
+
                 Section("Vocabulary level") {
                     if let b = band {
                         LabeledContent("Showing", value: bandLabel(b.current))
@@ -474,6 +476,214 @@ struct ParentSettingsView: View {
 
     private var webDashboardURL: URL {
         URL(string: "\(APIClient.defaultOrigin)/parent/\(auth.user?.slug ?? auth.childSlug)")!
+    }
+}
+
+// MARK: -- Art style (parent settings section)
+
+/// The parent-facing window into the art-style machine, native twin of the
+/// web dashboard's style gallery (/api/parent/style): see the current style
+/// and the EXACT reference images every picture is drawn from, switch to
+/// another built-in style, or upload your own references. Every change warns
+/// that tiles already on the board keep their current pictures — new art
+/// follows the new style, so a switch means a mixed board until tiles are
+/// remade (same copy as the web).
+struct ArtStyleSection: View {
+    @Environment(AuthManager.self) private var auth
+
+    @State private var overview: APIClient.StyleOverview?
+    @State private var loaded = false
+    @State private var msg: String?
+    @State private var pendingStyle: APIClient.StyleGuideInfo?
+    @State private var switching = false
+    // Own-reference upload: which slot, then the picked photo.
+    @State private var uploadKind: String?          // "main" | "person" | "stuff"
+    @State private var pendingUploadKind: String?   // confirmed, awaiting photo
+    @State private var showPhotoPicker = false
+    @State private var libraryItem: PhotosPickerItem?
+    @State private var uploading = false
+
+    private let api = APIClient()
+
+    var body: some View {
+        Section {
+            if let ov = overview {
+                if let cur = ov.styleGuide {
+                    LabeledContent("Current style") {
+                        Text(cur.label + (cur.source == "family" ? " (your own)" : ""))
+                    }
+                    // The three references renders are drawn from.
+                    HStack(spacing: 12) {
+                        StyleRefThumb(title: "Style", path: cur.refs?.main)
+                        StyleRefThumb(title: "Person", path: cur.refs?.person)
+                        StyleRefThumb(title: "Objects", path: cur.refs?.stuff)
+                    }
+                } else {
+                    Text("No style set yet — pick one below.").foregroundStyle(.secondary)
+                }
+                if !ov.styles.isEmpty {
+                    NavigationLink("Switch to another style…") {
+                        StyleSwitcherList(styles: ov.styles,
+                                          currentId: ov.styleGuide?.id,
+                                          onPick: { pendingStyle = $0 })
+                    }
+                }
+                Menu {
+                    Button("Style scene (the overall look)") { pendingUploadKind = "main" }
+                    Button("Person reference") { pendingUploadKind = "person" }
+                    Button("Objects reference") { pendingUploadKind = "stuff" }
+                } label: {
+                    Label(uploading ? "Uploading…" : "Upload your own reference…",
+                          systemImage: "photo.badge.plus")
+                }
+                .disabled(uploading)
+                if let msg { Text(msg).font(.footnote).foregroundStyle(.secondary) }
+            } else {
+                Text(loaded ? "Couldn't load styles — check your connection." : "Loading…")
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Art style")
+        } footer: {
+            Text("Every generated picture is drawn while looking at these references. Changes apply to NEW pictures only — tiles already on the board keep their current art.")
+        }
+        .task { await load() }
+        // Switch confirm — the web dashboard's exact warning copy.
+        .alert("Draw new pictures in \u{201C}\(pendingStyle?.label ?? "")\u{201D}?",
+               isPresented: Binding(get: { pendingStyle != nil },
+                                    set: { if !$0 { pendingStyle = nil } })) {
+            Button("Cancel", role: .cancel) { pendingStyle = nil }
+            Button("Switch style") { Task { await confirmSwitch() } }
+        } message: {
+            Text("Tiles already on the board keep their current pictures — the board will mix styles until you remake them from each tile's editor. New pictures use the new style right away.")
+        }
+        // Own-upload warning BEFORE the photo picker opens.
+        .alert("Use your own reference?",
+               isPresented: Binding(get: { pendingUploadKind != nil },
+                                    set: { if !$0 { pendingUploadKind = nil } })) {
+            Button("Cancel", role: .cancel) { pendingUploadKind = nil }
+            Button("Choose a photo") {
+                uploadKind = pendingUploadKind
+                pendingUploadKind = nil
+                showPhotoPicker = true
+            }
+        } message: {
+            Text("New pictures will be drawn to match it. Tiles already on the board don't change, so the board can look inconsistent until you remake them.")
+        }
+        .photosPicker(isPresented: $showPhotoPicker, selection: $libraryItem, matching: .images)
+        .onChange(of: libraryItem) { _, item in
+            guard let item else { return }
+            Task { await uploadRef(item) }
+        }
+    }
+
+    private func load() async {
+        overview = await api.styleOverview(childId: auth.childSlug)
+        loaded = true
+    }
+
+    private func confirmSwitch() async {
+        guard let pick = pendingStyle else { return }
+        pendingStyle = nil
+        switching = true
+        defer { switching = false }
+        if await api.setStyle(childId: auth.childSlug, styleGuideId: pick.id) {
+            msg = "Style switched — new pictures use \u{201C}\(pick.label)\u{201D} from now on."
+            await load()
+        } else {
+            msg = "Couldn't switch — check your connection."
+        }
+    }
+
+    private func uploadRef(_ item: PhotosPickerItem) async {
+        let kind = uploadKind ?? "main"
+        libraryItem = nil
+        uploadKind = nil
+        uploading = true
+        defer { uploading = false }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                msg = "Couldn't read that photo."; return
+            }
+            let key = try await api.uploadBlob(data, kind: "styleref", ext: "jpg",
+                                               contentType: "image/jpeg")
+            if await api.setStyleRef(childId: auth.childSlug, kind: kind, blobKey: key) {
+                msg = "Reference saved — new pictures follow it from now on."
+                await load()
+            } else {
+                msg = "Couldn't save the reference — check your connection."
+            }
+        } catch {
+            msg = "Upload failed: \(error.localizedDescription)"
+        }
+    }
+}
+
+/// One labeled reference thumbnail, fetched through the authenticated
+/// /api/parent/style?image= stream (never a raw blob URL).
+struct StyleRefThumb: View {
+    let title: String
+    let path: String?
+    @State private var image: UIImage?
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Group {
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color(hex: "#fce4ec"))
+                        .overlay(Text(path == nil ? "—" : "…")
+                            .font(.caption).foregroundStyle(.secondary))
+                }
+            }
+            .frame(width: 72, height: 72)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            Text(title).font(.caption2).foregroundStyle(.secondary)
+        }
+        .task(id: path) {
+            image = nil
+            guard let path else { return }
+            if let data = await APIClient().imageData(path: path) {
+                image = UIImage(data: data)
+            }
+        }
+    }
+}
+
+/// The template picker — every public style with its polished preview.
+struct StyleSwitcherList: View {
+    let styles: [APIClient.StyleGuideInfo]
+    let currentId: Int?
+    let onPick: (APIClient.StyleGuideInfo) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List(styles, id: \.id) { s in
+            Button {
+                guard s.id != currentId else { return }
+                dismiss()
+                onPick(s)
+            } label: {
+                HStack(spacing: 12) {
+                    StyleRefThumb(title: "", path: s.previewUrl ?? s.refs?.main)
+                        .frame(width: 56)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(s.label).foregroundStyle(.primary)
+                        if let d = s.description, !d.isEmpty {
+                            Text(d).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
+                        }
+                    }
+                    Spacer()
+                    if s.id == currentId {
+                        Image(systemName: "checkmark").foregroundStyle(.tint)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Built-in styles")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
