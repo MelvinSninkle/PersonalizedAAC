@@ -5,7 +5,8 @@
   "type": "module",
   "dependencies": {
     "@neondatabase/serverless": "^0.10.0",
-    "@vercel/blob": "^2.3.0"
+    "@vercel/blob": "^2.3.0",
+    "sharp": "^0.33.5"
   },
   "devDependencies": {
     "@capacitor-community/speech-recognition": "^6.0.0",

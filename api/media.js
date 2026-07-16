@@ -1,8 +1,15 @@
-// GET /api/media?key=<pathname> — auth-gated proxy for private blobs.
+// GET /api/media?key=<pathname>[&w=<px>] — auth-gated proxy for private blobs.
 // The client passes the bearer token; we stream the bytes back so <img>/<audio>
 // elements can use a same-origin URL (after the client wraps the response in
 // an object URL).
-import { get } from '@vercel/blob';
+//
+// ?w= asks for a resized copy (images only; audio ignores it). Requests snap
+// UP to a fixed ladder so every image has at most |SIZES| cached variants;
+// the resized webp is stored back to blob storage under thumbs/<w>/<key>.webp
+// so each variant is built exactly once, ever. Resize is an OPTIMIZATION,
+// never a gate: any failure (sharp unavailable, decode error, blob write
+// refused) falls through to streaming the original bytes.
+import { get, put } from '@vercel/blob';
 import { checkAuth } from './_lib/auth.js';
 import { sql } from './_lib/db.js';
 import { canAccessChild } from './_lib/access.js';
@@ -61,6 +68,68 @@ export default async function handler(req, res) {
   }
   }
 
+  // Cache policy. Private blob keys are IMMUTABLE — every write path mints a
+  // fresh `${kind}/${uuid}` key (tile regenerate = new key, old one goes to
+  // item_image_history) and the TTS cache is content-addressed — so browsers
+  // may keep them for a year and never revalidate. The public shared-library
+  // prefixes stay on the shorter policy because two of them (demo-audio
+  // regenerates, default-art republish) can rewrite content behind a key.
+  const privateCache = 'private, max-age=31536000, immutable';
+  const publicCache = 'public, s-maxage=86400, max-age=3600';
+
+  // ── Resized variant (?w=) ─────────────────────────────────────────────────
+  const wReq = parseInt(String(req.query.w || ''), 10);
+  const SIZES = [256, 640, 1024];
+  const wantW = Number.isFinite(wReq) && wReq > 0 ? (SIZES.find((s) => s >= wReq) || 1024) : 0;
+  if (wantW && /\.(png|jpe?g|webp)$/i.test(key)) {
+    const variantKey = `thumbs/${wantW}/${key}.webp`;
+    // The variant inherits the ORIGINAL key's access decision (already made
+    // above) — clients never pass thumbs/ keys directly, and thumbs/ is not a
+    // public prefix, so the only road to these bytes runs through this check.
+    const variantCache = isPublic ? 'public, s-maxage=31536000, max-age=31536000, immutable' : privateCache;
+    try {
+      const v = await get(variantKey, { access: 'private' });
+      if (v.statusCode === 200 && v.stream) {
+        res.setHeader('Content-Type', 'image/webp');
+        if (v.blob.size) res.setHeader('Content-Length', v.blob.size);
+        res.setHeader('Cache-Control', variantCache);
+        await pipeOut(v.stream, res);
+        return;
+      }
+    } catch (_) { /* not built yet — build it below */ }
+    try {
+      const orig = await get(key, { access: 'private' });
+      if (orig.statusCode === 200 && orig.stream) {
+        const chunks = [];
+        const reader = orig.stream.getReader();
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          chunks.push(Buffer.from(value));
+        }
+        const sharp = (await import('sharp')).default;
+        const out = await sharp(Buffer.concat(chunks))
+          .rotate()
+          .resize(wantW, wantW, { fit: 'inside', withoutEnlargement: true })
+          .webp({ quality: 82 })
+          .toBuffer();
+        // Store-back failure only means the next request rebuilds — still serve.
+        try {
+          await put(variantKey, out, { access: 'private', contentType: 'image/webp', addRandomSuffix: false });
+        } catch (err) {
+          console.error('media variant store failed:', String(err.message || err));
+        }
+        res.setHeader('Content-Type', 'image/webp');
+        res.setHeader('Content-Length', out.length);
+        res.setHeader('Cache-Control', variantCache);
+        res.end(out);
+        return;
+      }
+    } catch (err) {
+      console.error('media resize failed (serving original):', String(err.message || err));
+    }
+  }
+
   let result;
   try {
     result = await get(key, { access: 'private' });
@@ -75,11 +144,12 @@ export default async function handler(req, res) {
 
   res.setHeader('Content-Type', result.blob.contentType || 'application/octet-stream');
   if (result.blob.size) res.setHeader('Content-Length', result.blob.size);
-  // Private, short-lived browser cache — the bytes are sensitive. The public
-  // shared-library prefixes CDN-cache instead (generic art, no child data).
-  res.setHeader('Cache-Control', isPublic ? 'public, s-maxage=86400, max-age=3600' : 'private, max-age=300');
+  res.setHeader('Cache-Control', isPublic ? publicCache : privateCache);
+  await pipeOut(result.stream, res);
+}
 
-  const reader = result.stream.getReader();
+async function pipeOut(stream, res) {
+  const reader = stream.getReader();
   try {
     while (true) {
       const { value, done } = await reader.read();
