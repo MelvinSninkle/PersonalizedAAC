@@ -187,10 +187,13 @@ family keeps everything they have — only new spends wait.
 - **Voice QC — one window for everything a voice says**: Voice library →
   **🎧 Listen & confirm** reviews every standard-library word AND every
   learning-mode teaching fact (the clues Teach mode recites), playing the
-  exact cached clips boards play. **▶▶ Hands-free** autoplays clip after
-  clip; ✓ approves (marks persist server-side and resume anywhere), ↻
-  re-renders the clip and plays the fresh take, and words accept a phonetic
-  override that every board speaks from then on. If adding a voice by id
+  exact cached clips boards play. **▶▶ Hands-free** auto-approves each clip
+  as it finishes playing — you only intervene when something sounds wrong
+  (← Back withdraws the last ✓, ↻ re-renders and replays). Marks persist
+  server-side continuously, so you can close mid-run and resume on any
+  machine. **✓ Approve whole voice** marks everything in one click when you
+  don't need to listen at all; spot-check later anytime. Words accept a
+  phonetic override that every board speaks from then on. If adding a voice by id
   says the metadata lookup failed, the message now tells you WHY — most
   commonly the ElevenLabs API key lacks the "Voices: Read" permission
   (TTS works without it; enable it under ElevenLabs → API Keys), or the

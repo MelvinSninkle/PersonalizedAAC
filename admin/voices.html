@@ -131,14 +131,16 @@
     <p class="sub">Listen to every standard-library word in each active voice. ▶ plays the exact cached clip every
       board plays; ↻ re-renders it (overwriting the shared cache) and plays the fresh take.
       <b>🎧 Listen &amp; confirm</b> reviews EVERYTHING the voice says — every word AND every learning-mode
-      teaching fact — one window, back to back: turn on <b>▶▶ Hands-free</b> to autoplay clip after clip,
-      ✓ to approve (resumes where you stopped, on any machine), ↻ to re-render and hear it again.
+      teaching fact — one window, back to back: <b>▶▶ Hands-free</b> auto-approves each clip as you hear it
+      (← Back withdraws one, ↻ re-renders it); progress saves continuously, so close anytime and resume on
+      any machine. In a hurry? <b>✓ Approve whole voice</b> marks everything without listening.
       Standard library only — personalized words render per child.</p>
     <div class="bench-controls">
       <select id="voice-sel"></select>
       <button id="preview-btn">▶ Preview voice</button>
       <input type="search" id="wq" placeholder="Filter words…" style="width:160px;">
       <button class="primary" id="review-btn">🎧 Listen &amp; confirm (words + facts)</button>
+      <button id="approve-all-btn" title="Mark every word and teaching fact approved for this voice without listening — spot-check later anytime">✓ Approve whole voice</button>
       <button id="playall-btn">▶ Play all (top 20 visible)</button>
       <button id="stop-btn" disabled>⏹ Stop</button>
       <span id="bench-msg" class="errmsg"></span>
@@ -161,14 +163,17 @@
         <button id="rv-approve" style="flex:1;padding:14px;border:none;border-radius:12px;background:#16a34a;color:#fff;font-weight:800;font-size:17px;cursor:pointer;">✓ Sounds right</button>
         <button id="rv-retry" style="flex:1;padding:14px;border:none;border-radius:12px;background:#f59e0b;color:#fff;font-weight:800;font-size:17px;cursor:pointer;">↻ Retry</button>
       </div>
-      <button id="rv-auto" style="width:100%;margin-top:10px;padding:11px;border:1.5px solid #cbd5e1;border-radius:12px;background:#f8fafc;color:#334155;font-weight:700;font-size:14px;cursor:pointer;">▶▶ Hands-free — play everything back to back</button>
+      <button id="rv-auto" style="width:100%;margin-top:10px;padding:11px;border:1.5px solid #cbd5e1;border-radius:12px;background:#f8fafc;color:#334155;font-weight:700;font-size:14px;cursor:pointer;">▶▶ Hands-free — clips approve as you hear them</button>
+      <div style="font-size:11.5px;color:#94a3b8;margin-top:6px;">Every clip you hear all the way through is ✓ approved automatically —
+        press ⏸, ← Back, or ↻ only when something sounds wrong. Progress saves as you go; close anytime and resume later.</div>
       <div style="display:flex;gap:14px;justify-content:center;margin-top:12px;font-size:13px;">
+        <button id="rv-back" style="border:none;background:none;color:#64748b;cursor:pointer;">← Back (un-approve)</button>
         <button id="rv-replay" style="border:none;background:none;color:#64748b;cursor:pointer;">▶ Replay (space)</button>
         <button id="rv-skip" style="border:none;background:none;color:#64748b;cursor:pointer;">Skip →</button>
-        <button id="rv-close" style="border:none;background:none;color:#dc2626;cursor:pointer;">✕ Close (esc)</button>
+        <button id="rv-close" style="border:none;background:none;color:#16a34a;font-weight:700;cursor:pointer;">✓ Save &amp; close (esc)</button>
       </div>
       <div id="rv-msg" style="font-size:12px;color:#dc2626;min-height:16px;margin-top:8px;"></div>
-      <div style="font-size:11px;color:#cbd5e1;margin-top:2px;">Enter = sounds right · R = retry · A = hands-free · → = skip</div>
+      <div style="font-size:11px;color:#cbd5e1;margin-top:2px;">Enter = sounds right · R = retry · A = hands-free · ← = back · → = skip</div>
     </div>
   </div>
 
@@ -531,6 +536,24 @@
     }
   });
 
+  // ✓ Approve whole voice — publish without reviewing each utterance. One
+  // server call derives every word + fact key and bulk-marks them; the
+  // review overlay then reads "all approved" and any spot-check works via
+  // ← Back / the per-word grid.
+  document.getElementById('approve-all-btn').addEventListener('click', async () => {
+    const voice = currentVoice();
+    const msg = document.getElementById('bench-msg');
+    if (!voice) { msg.textContent = 'No active voice selected.'; return; }
+    if (!confirm(`Approve EVERYTHING for "${voice.name}" without listening?\n\nMarks every standard-library word and every teaching fact ✓ for this voice. You can still spot-check anytime — Listen & confirm's ← Back or a word's ▶ both work, and ↻ re-renders anything that sounds off.`)) return;
+    try {
+      const r = await withSpinner(document.getElementById('approve-all-btn'), () =>
+        api('/api/admin/lab?action=voices', { method: 'POST', body: { op: 'qc-all', voiceId: voice.id } }));
+      await loadQC();
+      renderWords();
+      msg.textContent = `✓ Approved ${r.approved} clips for ${voice.name}.`;
+    } catch (e) { msg.textContent = e.message || String(e); }
+  });
+
   document.getElementById('wq').addEventListener('input', () => { stopPlayAll(); renderWords(); });
   document.getElementById('voice-sel').addEventListener('change', async () => {
     stopPlayAll();
@@ -642,9 +665,11 @@
       });
     } catch (e) { rv('rv-msg').textContent = e.message || String(e); }
   }
-  // The hands-free loop: play the current item to the END, advance to the
-  // next unapproved, breathe, repeat. Any manual action bumps rvAutoRun to
-  // cancel the in-flight iteration.
+  // The hands-free loop: play the current item to the END — hearing a clip
+  // all the way through IS the approval (✓ saved automatically) — then
+  // advance to the next unapproved, breathe, repeat. Stopping mid-clip
+  // leaves that clip UNapproved; ← Back un-approves the one just heard.
+  // Any manual action bumps rvAutoRun to cancel the in-flight iteration.
   async function rvAutoLoop() {
     const run = ++rvAutoRun;
     while (rvAuto && rvOpen && rvIdx >= 0 && run === rvAutoRun) {
@@ -657,6 +682,10 @@
       if (!rvAuto || run !== rvAutoRun || !rvOpen) break;
       await playBlob(blob, true);
       if (!rvAuto || run !== rvAutoRun || !rvOpen) break;
+      // Heard in full → auto-approve (server mark; progress survives exit).
+      QC.approved.add(rvKey(w));
+      api('/api/admin/lab?action=voices', { method: 'POST', body: { op: 'qc', voiceId: voice.id, label: rvKey(w), approved: true } })
+        .catch((e) => { rv('rv-msg').textContent = 'Mark not saved: ' + (e.message || e); });
       const next = rvFirstUnapproved(rvIdx + 1);
       if (next < 0) { rvAdvance(); break; }
       rvIdx = next;
@@ -667,8 +696,26 @@
   function setAuto(on) {
     rvAuto = on;
     const b = rv('rv-auto');
-    if (b) b.textContent = on ? '⏸ Pause hands-free' : '▶▶ Hands-free — play everything back to back';
+    if (b) b.textContent = on ? '⏸ Pause hands-free (current clip stays unapproved)' : '▶▶ Hands-free — clips approve as you hear them';
     if (on) rvAutoLoop(); else rvAutoRun++;
+  }
+  // ← Back: the objection path — return to the previous clip, WITHDRAW its
+  // ✓ (it was auto-approved as it played), and replay it for a ↻ / re-listen.
+  function rvBack() {
+    setAuto(false);
+    const q = rvQueue();
+    if (!q.length) return;
+    if (rvIdx < 0) rvIdx = q.length - 1;          // from the 🎉 screen → last clip
+    else if (rvIdx > 0) rvIdx--;
+    const voice = currentVoice();
+    const w = q[rvIdx];
+    if (voice && w && QC.approved.has(rvKey(w))) {
+      QC.approved.delete(rvKey(w));
+      api('/api/admin/lab?action=voices', { method: 'POST', body: { op: 'qc', voiceId: voice.id, label: rvKey(w), approved: false } })
+        .catch((e) => { rv('rv-msg').textContent = 'Mark not saved: ' + (e.message || e); });
+    }
+    rvShow();
+    rvPlay(false);
   }
   function rvClose() {
     setAuto(false);
@@ -693,6 +740,7 @@
   });
   rv('rv-approve').addEventListener('click', rvApprove);
   rv('rv-retry').addEventListener('click', rvRetry);
+  rv('rv-back').addEventListener('click', rvBack);
   rv('rv-replay').addEventListener('click', () => { setAuto(false); rvPlay(false); });
   rv('rv-skip').addEventListener('click', () => { setAuto(false); rvIdx++; const q = rvQueue(); if (rvIdx >= q.length) rvIdx = q.length - 1; rvShow(); rvPlay(false); });
   rv('rv-auto').addEventListener('click', () => setAuto(!rvAuto));
@@ -705,6 +753,7 @@
     else if (ev.key === 'r' || ev.key === 'R') { ev.preventDefault(); rvRetry(); }
     else if (ev.key === 'a' || ev.key === 'A') { ev.preventDefault(); setAuto(!rvAuto); }
     else if (ev.key === 'ArrowRight') { ev.preventDefault(); rv('rv-skip').click(); }
+    else if (ev.key === 'ArrowLeft') { ev.preventDefault(); rvBack(); }
     else if (ev.key === 'Escape') { ev.preventDefault(); rvClose(); }
   });
 

@@ -95,6 +95,36 @@ export default async function handler(req, res) {
       return;
     }
 
+    if (req.method === 'POST' && b.op === 'qc-all') {
+      // Bulk-approve EVERYTHING a voice says (every word + every teaching
+      // fact) in one shot — "publish the voice without reviewing each
+      // utterance". Keys are derived server-side from the same taxonomy
+      // projection the QC bench queues (non-archived rows), so the ✓ set
+      // exactly matches what Listen & confirm would have walked through.
+      const voiceId = String(b.voiceId || '').trim();
+      if (!voiceId) { res.status(400).json({ error: 'voiceId required' }); return; }
+      let rows;
+      try {
+        rows = await db`SELECT label, descriptive_clues FROM taxonomy WHERE COALESCE(archived, FALSE) = FALSE`;
+      } catch (_) {
+        rows = await db`SELECT label FROM taxonomy WHERE COALESCE(archived, FALSE) = FALSE`;
+      }
+      const keys = new Set();
+      for (const r of rows) {
+        const label = String(r.label || '').trim();
+        if (label) keys.add(label.toLowerCase());
+        for (const clue of (Array.isArray(r.descriptive_clues) ? r.descriptive_clues : [])) {
+          if (clue) keys.add('clue|' + String(clue).toLowerCase().slice(0, 280));
+        }
+      }
+      const arr = [...keys];
+      await db`INSERT INTO voice_qc (voice_id, label_norm)
+               SELECT ${voiceId}, unnest(${arr}::text[])
+               ON CONFLICT (voice_id, label_norm) DO NOTHING`;
+      res.status(200).json({ ok: true, approved: arr.length });
+      return;
+    }
+
     if (req.method === 'POST' && b.op === 'qc') {
       const voiceId = String(b.voiceId || '').trim();
       const labelNorm = String(b.label || '').trim().toLowerCase();
