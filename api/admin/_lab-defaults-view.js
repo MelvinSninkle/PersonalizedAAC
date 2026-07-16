@@ -43,12 +43,25 @@ export default async function handler(req, res) {
       folders.sort((a, b) => a.section.localeCompare(b.section) || a.label.localeCompare(b.label));
     } catch (_) { folders = []; }
 
-    const rows = await db`
-      SELECT id, column_name, category, subcategory, label, prompt_template,
-             subject_mode, status, default_image_key
-      FROM taxonomy
-      WHERE COALESCE(archived, FALSE) = FALSE
-      ORDER BY column_name, category NULLS LAST, subcategory NULLS LAST, label, id`;
+    // descriptive_clues rides along for the Voice library's QC bench — the
+    // teaching facts a voice recites in learning mode are reviewable clips
+    // too. Pre-migration fallback keeps the page alive without the column.
+    let rows;
+    try {
+      rows = await db`
+        SELECT id, column_name, category, subcategory, label, prompt_template,
+               subject_mode, status, default_image_key, descriptive_clues
+        FROM taxonomy
+        WHERE COALESCE(archived, FALSE) = FALSE
+        ORDER BY column_name, category NULLS LAST, subcategory NULLS LAST, label, id`;
+    } catch (_) {
+      rows = await db`
+        SELECT id, column_name, category, subcategory, label, prompt_template,
+               subject_mode, status, default_image_key
+        FROM taxonomy
+        WHERE COALESCE(archived, FALSE) = FALSE
+        ORDER BY column_name, category NULLS LAST, subcategory NULLS LAST, label, id`;
+    }
 
     let defaultable = 0, withImage = 0;
     const tiles = rows.map((r) => {
@@ -65,6 +78,7 @@ export default async function handler(req, res) {
         status: r.status,
         defaultable: isDef,
         imageKey: hasImg ? r.default_image_key : null,
+        clues: Array.isArray(r.descriptive_clues) ? r.descriptive_clues.filter(Boolean) : [],
       };
     });
 

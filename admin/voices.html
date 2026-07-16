@@ -126,12 +126,17 @@
 
   <div class="panel" id="bench-panel">
     <h2>Sound check</h2>
-    <p class="sub">Listen to every standard-library word in each active voice. ▶ plays the exact cached clip every board plays; ↻ re-renders it (overwriting the shared cache) and plays the fresh take. Standard library only — personalized words render per child.</p>
+    <p class="sub">Listen to every standard-library word in each active voice. ▶ plays the exact cached clip every
+      board plays; ↻ re-renders it (overwriting the shared cache) and plays the fresh take.
+      <b>🎧 Listen &amp; confirm</b> reviews EVERYTHING the voice says — every word AND every learning-mode
+      teaching fact — one window, back to back: turn on <b>▶▶ Hands-free</b> to autoplay clip after clip,
+      ✓ to approve (resumes where you stopped, on any machine), ↻ to re-render and hear it again.
+      Standard library only — personalized words render per child.</p>
     <div class="bench-controls">
       <select id="voice-sel"></select>
       <button id="preview-btn">▶ Preview voice</button>
       <input type="search" id="wq" placeholder="Filter words…" style="width:160px;">
-      <button class="primary" id="review-btn">🎧 Listen &amp; confirm</button>
+      <button class="primary" id="review-btn">🎧 Listen &amp; confirm (words + facts)</button>
       <button id="playall-btn">▶ Play all (top 20 visible)</button>
       <button id="stop-btn" disabled>⏹ Stop</button>
       <span id="bench-msg" class="errmsg"></span>
@@ -154,13 +159,14 @@
         <button id="rv-approve" style="flex:1;padding:14px;border:none;border-radius:12px;background:#16a34a;color:#fff;font-weight:800;font-size:17px;cursor:pointer;">✓ Sounds right</button>
         <button id="rv-retry" style="flex:1;padding:14px;border:none;border-radius:12px;background:#f59e0b;color:#fff;font-weight:800;font-size:17px;cursor:pointer;">↻ Retry</button>
       </div>
+      <button id="rv-auto" style="width:100%;margin-top:10px;padding:11px;border:1.5px solid #cbd5e1;border-radius:12px;background:#f8fafc;color:#334155;font-weight:700;font-size:14px;cursor:pointer;">▶▶ Hands-free — play everything back to back</button>
       <div style="display:flex;gap:14px;justify-content:center;margin-top:12px;font-size:13px;">
         <button id="rv-replay" style="border:none;background:none;color:#64748b;cursor:pointer;">▶ Replay (space)</button>
         <button id="rv-skip" style="border:none;background:none;color:#64748b;cursor:pointer;">Skip →</button>
         <button id="rv-close" style="border:none;background:none;color:#dc2626;cursor:pointer;">✕ Close (esc)</button>
       </div>
       <div id="rv-msg" style="font-size:12px;color:#dc2626;min-height:16px;margin-top:8px;"></div>
-      <div style="font-size:11px;color:#cbd5e1;margin-top:2px;">Enter = sounds right · R = retry · → = skip</div>
+      <div style="font-size:11px;color:#cbd5e1;margin-top:2px;">Enter = sounds right · R = retry · A = hands-free · → = skip</div>
     </div>
   </div>
 
@@ -205,7 +211,8 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   let VOICES = [];        // full catalog, incl. inactive, in sortOrder
-  let WORDS = [];         // [{label, group}] unique standard-library labels
+  let WORDS = [];         // [{label, group, taxId, clues}] unique standard-library labels
+  let REVIEW = [];        // the full QC queue: every word AND every teaching fact
   const CLIPS = new Map(); // client-side blob cache: "voiceId|text" → Blob
   // Listen-and-confirm state for the SELECTED voice: server-persisted ✓ marks
   // (resume anywhere) + the global phonetic overrides (taxonomy.pronunciation).
@@ -290,8 +297,10 @@
 
   function renderStat() {
     const active = VOICES.filter((v) => v.active).length;
+    const facts = REVIEW.filter((x) => x.kind === 'fact').length;
     document.getElementById('stat').innerHTML =
-      `<b>${VOICES.length}</b> voices · <b>${active}</b> active · <b>${WORDS.length}</b> standard-library words`;
+      `<b>${VOICES.length}</b> voices · <b>${active}</b> active · <b>${WORDS.length}</b> standard-library words`
+      + (facts ? ` · <b>${facts}</b> teaching facts` : '');
   }
 
   function renderVoiceSelect() {
@@ -381,8 +390,16 @@
     const btn = document.getElementById('add-btn');
     try {
       const r = await withSpinner(btn, () => api('/api/admin/lab?action=voices', { method: 'POST', body: body }));
-      msg.className = 'okmsg';
-      msg.textContent = `Added "${r.voice.name}"` + (r.lookedUp ? ' — looked up from ElevenLabs ✓' : '');
+      if (r.lookupError) {
+        // The voice IS added — but the admin needs to know why the metadata
+        // came back empty (usually an API-key permission, not a bad id).
+        msg.className = 'errmsg';
+        msg.textContent = `Added "${r.voice.name}", but the metadata lookup failed: ${r.lookupError} `
+          + 'You can fill name / accent / gender by hand above — the voice works for speech either way.';
+      } else {
+        msg.className = 'okmsg';
+        msg.textContent = `Added "${r.voice.name}"` + (r.lookedUp ? ' — looked up from ElevenLabs ✓' : '');
+      }
       ['add-id', 'add-name', 'add-accent', 'add-gender'].forEach((x) => { document.getElementById(x).value = ''; });
       const existing = VOICES.findIndex((v) => v.id === r.voice.id);
       if (existing >= 0) VOICES[existing] = r.voice; else VOICES.push(r.voice);
@@ -505,12 +522,17 @@
   // that boards will speak from then on. Resumes at the first unapproved word.
   const rv = (id) => document.getElementById(id);
   let rvIdx = -1, rvOpen = false;
+  // Hands-free: after a clip finishes, auto-advance to the next unreviewed
+  // item and keep playing — hear the whole voice (words AND facts) back to
+  // back, pausing only when something needs a ✓ decision or a ↻.
+  let rvAuto = false, rvAutoRun = 0;
 
-  function rvQueue() { return WORDS; }
+  function rvQueue() { return REVIEW.length ? REVIEW : WORDS.map((w) => ({ kind: 'word', label: w.label, taxId: w.taxId, group: w.group, qcKey: w.label.toLowerCase() })); }
+  function rvKey(x) { return x.qcKey || x.label.toLowerCase(); }
   function rvFirstUnapproved(from) {
     const q = rvQueue();
     for (let i = Math.max(0, from); i < q.length; i++) {
-      if (!QC.approved.has(q[i].label.toLowerCase())) return i;
+      if (!QC.approved.has(rvKey(q[i]))) return i;
     }
     return -1;
   }
@@ -518,10 +540,17 @@
     const q = rvQueue();
     const w = q[rvIdx];
     if (!w) { rvClose(); return; }
-    const approvedCount = q.filter((x) => QC.approved.has(x.label.toLowerCase())).length;
-    rv('rv-progress').textContent = `word ${rvIdx + 1} of ${q.length} · ${approvedCount} approved`;
+    const approvedCount = q.filter((x) => QC.approved.has(rvKey(x))).length;
+    rv('rv-progress').textContent = `clip ${rvIdx + 1} of ${q.length} · ${approvedCount} approved`;
     rv('rv-word').textContent = w.label;
+    // Facts are sentences — shrink so they fit; words keep the big type.
+    rv('rv-word').style.fontSize = w.kind === 'fact' ? (w.label.length > 90 ? '17px' : '21px') : '40px';
     rv('rv-group').textContent = w.group;
+    // Phonetic overrides are a WORD concept (taxonomy.pronunciation); facts
+    // are prose — a bad fact clip just gets a ↻ re-render.
+    const isWord = w.kind !== 'fact';
+    rv('rv-pron').style.display = isWord ? '' : 'none';
+    rv('rv-pron-note').style.display = isWord ? '' : 'none';
     rv('rv-pron').value = (w.taxId && QC.pron[w.taxId]) || '';
     rv('rv-msg').textContent = '';
   }
@@ -537,39 +566,51 @@
   function rvAdvance() {
     const next = rvFirstUnapproved(rvIdx + 1);
     if (next < 0) {
+      setAuto(false);
       rv('rv-msg').textContent = '';
       rv('rv-word').textContent = '🎉 All approved!';
-      rv('rv-progress').textContent = `${rvQueue().length} of ${rvQueue().length} · every word approved for this voice`;
+      rv('rv-word').style.fontSize = '40px';
+      rv('rv-progress').textContent = `${rvQueue().length} of ${rvQueue().length} · every clip approved for this voice`;
       rv('rv-group').textContent = 'Close this, or pick another voice.';
       rvIdx = -1;
       return;
     }
     rvIdx = next;
     rvShow();
-    rvPlay(false);
+    if (!rvAuto) rvPlay(false);   // hands-free's own loop does the playing
   }
   async function rvApprove() {
     const voice = currentVoice();
     const w = rvQueue()[rvIdx];
     if (!voice || !w) return;
-    QC.approved.add(w.label.toLowerCase());
-    api('/api/admin/lab?action=voices', { method: 'POST', body: { op: 'qc', voiceId: voice.id, label: w.label, approved: true } })
+    QC.approved.add(rvKey(w));
+    api('/api/admin/lab?action=voices', { method: 'POST', body: { op: 'qc', voiceId: voice.id, label: rvKey(w), approved: true } })
       .catch((e) => { rv('rv-msg').textContent = 'Mark not saved: ' + (e.message || e); });
+    if (rvAuto) {
+      // Keep flowing: the loop is mid-clip on this item; skip it forward.
+      const next = rvFirstUnapproved(rvIdx + 1);
+      if (next < 0) { rvAdvance(); return; }
+      rvIdx = next; rvShow();
+      rvAutoRun++;            // cancel the in-flight clip…
+      rvAutoLoop();           // …and restart the loop at the new item
+      return;
+    }
     rvAdvance();
   }
   async function rvRetry() {
+    setAuto(false);   // a retake is a stop-and-listen moment
     const voice = currentVoice();
     const w = rvQueue()[rvIdx];
     if (!voice || !w) return;
     const typed = rv('rv-pron').value.trim();
     const stored = (w.taxId && QC.pron[w.taxId]) || '';
     try {
-      if (w.taxId && typed !== stored) {
+      if (w.kind !== 'fact' && w.taxId && typed !== stored) {
         // Save the override first — boards speak it from now on; approvals for
         // this word reset across voices (everyone re-listens to the new say).
         await api('/api/admin/lab?action=voices', { method: 'POST', body: { op: 'pronounce', taxonomyId: w.taxId, pronunciation: typed } });
         if (typed) QC.pron[w.taxId] = typed; else delete QC.pron[w.taxId];
-        QC.approved.delete(w.label.toLowerCase());
+        QC.approved.delete(rvKey(w));
         rvShow();
       }
       const btn = rv('rv-retry');
@@ -579,7 +620,36 @@
       });
     } catch (e) { rv('rv-msg').textContent = e.message || String(e); }
   }
+  // The hands-free loop: play the current item to the END, advance to the
+  // next unapproved, breathe, repeat. Any manual action bumps rvAutoRun to
+  // cancel the in-flight iteration.
+  async function rvAutoLoop() {
+    const run = ++rvAutoRun;
+    while (rvAuto && rvOpen && rvIdx >= 0 && run === rvAutoRun) {
+      const voice = currentVoice();
+      const w = rvQueue()[rvIdx];
+      if (!voice || !w) break;
+      let blob;
+      try { blob = await getClip(speakText(w), voice.id, false); }
+      catch (e) { rv('rv-msg').textContent = e.message || String(e); setAuto(false); break; }
+      if (!rvAuto || run !== rvAutoRun || !rvOpen) break;
+      await playBlob(blob, true);
+      if (!rvAuto || run !== rvAutoRun || !rvOpen) break;
+      const next = rvFirstUnapproved(rvIdx + 1);
+      if (next < 0) { rvAdvance(); break; }
+      rvIdx = next;
+      rvShow();
+      await new Promise((r) => setTimeout(r, 350));
+    }
+  }
+  function setAuto(on) {
+    rvAuto = on;
+    const b = rv('rv-auto');
+    if (b) b.textContent = on ? '⏸ Pause hands-free' : '▶▶ Hands-free — play everything back to back';
+    if (on) rvAutoLoop(); else rvAutoRun++;
+  }
   function rvClose() {
+    setAuto(false);
     rvOpen = false;
     stopAudio();
     rv('review-overlay').style.display = 'none';
@@ -601,15 +671,17 @@
   });
   rv('rv-approve').addEventListener('click', rvApprove);
   rv('rv-retry').addEventListener('click', rvRetry);
-  rv('rv-replay').addEventListener('click', () => rvPlay(false));
-  rv('rv-skip').addEventListener('click', () => { rvIdx++; const q = rvQueue(); if (rvIdx >= q.length) rvIdx = q.length - 1; rvShow(); rvPlay(false); });
+  rv('rv-replay').addEventListener('click', () => { setAuto(false); rvPlay(false); });
+  rv('rv-skip').addEventListener('click', () => { setAuto(false); rvIdx++; const q = rvQueue(); if (rvIdx >= q.length) rvIdx = q.length - 1; rvShow(); rvPlay(false); });
+  rv('rv-auto').addEventListener('click', () => setAuto(!rvAuto));
   rv('rv-close').addEventListener('click', rvClose);
   document.addEventListener('keydown', (ev) => {
     if (!rvOpen) return;
     if (ev.target === rv('rv-pron') && ev.key !== 'Escape' && ev.key !== 'Enter') return;  // let typing happen
     if (ev.key === 'Enter') { ev.preventDefault(); if (rvIdx >= 0) rvApprove(); }
-    else if (ev.key === ' ') { ev.preventDefault(); rvPlay(false); }
+    else if (ev.key === ' ') { ev.preventDefault(); setAuto(false); rvPlay(false); }
     else if (ev.key === 'r' || ev.key === 'R') { ev.preventDefault(); rvRetry(); }
+    else if (ev.key === 'a' || ev.key === 'A') { ev.preventDefault(); setAuto(!rvAuto); }
     else if (ev.key === 'ArrowRight') { ev.preventDefault(); rv('rv-skip').click(); }
     else if (ev.key === 'Escape') { ev.preventDefault(); rvClose(); }
   });
@@ -634,7 +706,22 @@
         const k = label.toLowerCase();
         if (seen.has(k)) continue;
         seen.add(k);
-        WORDS.push({ label: label, taxId: t.id, group: (t.column || 'Other') + (t.category ? ' › ' + t.category : '') });
+        WORDS.push({ label: label, taxId: t.id, group: (t.column || 'Other') + (t.category ? ' › ' + t.category : ''),
+                     clues: Array.isArray(t.clues) ? t.clues.filter(Boolean) : [] });
+      }
+      // The review queue: each word, then the teaching facts the voice
+      // recites in learning mode — the SAME cached clips boards play
+      // (teach mode POSTs /api/tts with the clue text and default emotion,
+      // exactly what getClip does). Facts carry their own ✓ key.
+      REVIEW = [];
+      for (const w of WORDS) {
+        REVIEW.push({ kind: 'word', label: w.label, taxId: w.taxId, group: w.group,
+                      qcKey: w.label.toLowerCase() });
+        for (const clue of (w.clues || [])) {
+          REVIEW.push({ kind: 'fact', label: clue, taxId: null,
+                        group: '📖 teaching fact · ' + w.label,
+                        qcKey: 'clue|' + clue.toLowerCase().slice(0, 280) });
+        }
       }
       renderCatalog();
       await loadQC();
