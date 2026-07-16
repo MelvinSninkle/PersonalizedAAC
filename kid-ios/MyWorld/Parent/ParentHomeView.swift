@@ -494,7 +494,6 @@ struct ArtStyleSection: View {
     @State private var overview: APIClient.StyleOverview?
     @State private var loaded = false
     @State private var msg: String?
-    @State private var pendingStyle: APIClient.StyleGuideInfo?
     @State private var switching = false
     // Own-reference upload: which slot, then the picked photo.
     @State private var uploadKind: String?          // "main" | "person" | "stuff"
@@ -523,9 +522,13 @@ struct ArtStyleSection: View {
                 }
                 if !ov.styles.isEmpty {
                     NavigationLink("Switch to another style…") {
+                        // The confirm alert lives INSIDE the list: presenting
+                        // an alert from here mid-pop can silently no-op
+                        // (Andrew's "the switch didn't take"). onPick fires
+                        // only AFTER the user confirmed.
                         StyleSwitcherList(styles: ov.styles,
                                           currentId: ov.styleGuide?.id,
-                                          onPick: { pendingStyle = $0 })
+                                          onPick: { s in Task { await confirmSwitch(to: s) } })
                     }
                 }
                 Menu {
@@ -548,15 +551,6 @@ struct ArtStyleSection: View {
             Text("Every generated picture is drawn while looking at these references. Changes apply to NEW pictures only — tiles already on the board keep their current art.")
         }
         .task { await load() }
-        // Switch confirm — the web dashboard's exact warning copy.
-        .alert("Draw new pictures in \u{201C}\(pendingStyle?.label ?? "")\u{201D}?",
-               isPresented: Binding(get: { pendingStyle != nil },
-                                    set: { if !$0 { pendingStyle = nil } })) {
-            Button("Cancel", role: .cancel) { pendingStyle = nil }
-            Button("Switch style") { Task { await confirmSwitch() } }
-        } message: {
-            Text("Tiles already on the board keep their current pictures — the board will mix styles until you remake them from each tile's editor. New pictures use the new style right away.")
-        }
         // Own-upload warning BEFORE the photo picker opens.
         .alert("Use your own reference?",
                isPresented: Binding(get: { pendingUploadKind != nil },
@@ -582,16 +576,15 @@ struct ArtStyleSection: View {
         loaded = true
     }
 
-    private func confirmSwitch() async {
-        guard let pick = pendingStyle else { return }
-        pendingStyle = nil
+    private func confirmSwitch(to pick: APIClient.StyleGuideInfo) async {
         switching = true
         defer { switching = false }
+        msg = "Switching to \u{201C}\(pick.label)\u{201D}…"
         if await api.setStyle(childId: auth.childSlug, styleGuideId: pick.id) {
             msg = "Style switched — new pictures use \u{201C}\(pick.label)\u{201D} from now on."
             await load()
         } else {
-            msg = "Couldn't switch — check your connection."
+            msg = "Couldn't switch to \u{201C}\(pick.label)\u{201D} — check your connection and try again."
         }
     }
 
@@ -653,18 +646,22 @@ struct StyleRefThumb: View {
 }
 
 /// The template picker — every public style with its polished preview.
+/// The mixed-styles confirm alert is presented HERE (not by the parent
+/// screen): presenting from a view that's mid-navigation-pop can silently
+/// drop the alert, which read as "the switch didn't take". onPick fires
+/// only after the user confirms; then the list dismisses itself.
 struct StyleSwitcherList: View {
     let styles: [APIClient.StyleGuideInfo]
     let currentId: Int?
     let onPick: (APIClient.StyleGuideInfo) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var pending: APIClient.StyleGuideInfo?
 
     var body: some View {
         List(styles, id: \.id) { s in
             Button {
                 guard s.id != currentId else { return }
-                dismiss()
-                onPick(s)
+                pending = s
             } label: {
                 HStack(spacing: 12) {
                     StyleRefThumb(title: "", path: s.previewUrl ?? s.refs?.main)
@@ -684,6 +681,17 @@ struct StyleSwitcherList: View {
         }
         .navigationTitle("Built-in styles")
         .navigationBarTitleDisplayMode(.inline)
+        // The web dashboard's exact warning copy.
+        .alert("Draw new pictures in \u{201C}\(pending?.label ?? "")\u{201D}?",
+               isPresented: Binding(get: { pending != nil },
+                                    set: { if !$0 { pending = nil } })) {
+            Button("Cancel", role: .cancel) { pending = nil }
+            Button("Switch style") {
+                if let p = pending { pending = nil; onPick(p); dismiss() }
+            }
+        } message: {
+            Text("Tiles already on the board keep their current pictures — the board will mix styles until you remake them from each tile's editor. New pictures use the new style right away.")
+        }
     }
 }
 

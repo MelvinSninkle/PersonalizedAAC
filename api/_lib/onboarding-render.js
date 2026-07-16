@@ -40,9 +40,14 @@ export async function loadStyleGuide(db, styleGuideId) {
         { status: 404, code: 'style_not_found' });
     }
   } else {
-    // No style chosen → fall back to the first active global template.
+    // No style chosen → fall back to the first active GLOBAL template.
+    // child_id IS NULL is load-bearing: without it, another family's
+    // child-scoped guide (their uploaded reference photos!) could win the
+    // sort and become this family's style reference (invariant A).
     row = (await cols((ext) => ext
-      ? db`SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`
+      ? db`SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key FROM style_guides WHERE active = TRUE AND child_id IS NULL ORDER BY sort_order ASC, created_at ASC LIMIT 1`
+      // pre-migration fallback: no child_id column ⇒ no family guides exist,
+      // so the unfiltered query can only see global templates anyway.
       : db`SELECT id, label, description, blob_key FROM style_guides WHERE active = TRUE ORDER BY sort_order ASC, created_at ASC LIMIT 1`))[0] || null;
   }
   if (!row) return null;
