@@ -365,7 +365,9 @@ a string of misses, and a one-tap game must never read as 100%.
 Listening mode captions everything said near the device onto a child's
 screen. Words on the server-owned blocklist (`api/_lib/bad-words.js`,
 shipped to all three clients as `/api/sync` → `listenBlocklist`, cached
-for offline) render as the pill **"Bad Word"** instead; the parent-writable
+for offline; ALSO shipped on the public `/api/demo` for practice.html's
+timeboxed listening demo, where the censor is permanently ON with no
+toggle) render as the pill **"Bad Word"** instead; the parent-writable
 `listenCensor` key defaults TRUE on every client (`!== false` on web,
 `?? true` iOS, `?: true` Android) and `listenTilesOnly` (default false)
 hides every non-tile word outright. The filter lives at each client's

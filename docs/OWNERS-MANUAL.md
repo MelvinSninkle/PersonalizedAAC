@@ -186,8 +186,26 @@ family keeps everything they have — only new spends wait.
   the switcher but keeps the rendered art.
 - **Practice-board voices**: admin → **Voice library** → 🌍 Practice-board
   voices panel. "Build" per voice (or Build all active) renders the ~full
-  clip set through the shared TTS cache; once built, that voice appears on
-  `/practice`'s voice picker on its own.
+  clip set through the shared TTS cache. A voice appears on `/practice`'s
+  picker **only when its clip set is 100% built** — a half-built voice
+  would silently fall back to the visitor's device voice, which is exactly
+  the "macbook voice" problem. Until you build at least one voice, the
+  demo offers only the device voice.
+- **Practice board follows the Lab layout automatically**: the drag-order
+  screen's category/word order (`default_category_order` +
+  `taxonomy.sort_order`) is read live by `/api/demo` — rearrange the
+  default board and `/practice` shows the new order on its next load, no
+  publish needed. "Publish to boards" remains only for retrofitting
+  EXISTING family boards.
+- **Practice-board education + live listening demo**: `/practice` opens
+  pictures-first (labels hidden, white frame — a visitor can flip both in
+  ⚙ Display, session-only) with an education bar that leads with
+  **🎙 Try listening**: the browser's own speech recognition captions what
+  the visitor says and matching words light up as tiles — 60 seconds per
+  press, bad-word masking permanently ON, nothing recorded or sent to any
+  server. Unsupported browsers (Firefox) or a blocked mic get a friendly
+  explainer with the one-click fix and a note that the real board has
+  listening built in on every device.
 - **The public funnel & invite codes**: the landing page, `/practice`, and
   `/signup` are fully public — share them anywhere. The invite code is
   required INLINE on the signup form instead (invite links still pre-apply

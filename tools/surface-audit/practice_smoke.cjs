@@ -39,6 +39,38 @@ const fails = [];
   ok('no add/edit affordances', await page.evaluate(() =>
     !document.body.innerHTML.match(/Add tile|New Category|\+ Add/i)));
 
+  // ── New defaults: pictures-first (labels hidden) on a white frame ──
+  ok('labels hidden by default', await page.evaluate(() =>
+    document.body.classList.contains('hide-labels')
+      && getComputedStyle(document.querySelector('#board .tile .lb')).display === 'none'));
+  ok('white board frame by default', await page.evaluate(() =>
+    getComputedStyle(document.body).backgroundColor === 'rgb(255, 255, 255)'));
+
+  // ── Curated layout: chips follow server tile order, not the alphabet ──
+  ok('category chips honor curated (non-alphabetical) order', await page.evaluate(() => {
+    const col = [...document.querySelectorAll('#board .col')].find((c) => c.dataset.section === 'nouns');
+    const labels = [...col.querySelectorAll('.chips .chip .lb')].map((el) => el.textContent);
+    return labels[0] === 'Toys' && labels[1] === 'Food';
+  }));
+
+  // ── Education bar + live listening demo (driven micless via the hook) ──
+  ok('education bar leads with listening', await page.evaluate(() => {
+    const bar = document.getElementById('edu-bar');
+    return !!bar && bar.style.display !== 'none' && !!document.getElementById('listen-btn');
+  }));
+  ok('listening matches a tile and masks a bad word', await page.evaluate(() => {
+    const tokens = window.practiceHooks.listenTokens('pizza is damn good');
+    const bar = document.getElementById('listen-bar');
+    const chipWords = [...bar.querySelectorAll('.lchip .lb')].map((el) => el.textContent);
+    const masked = [...bar.querySelectorAll('.ltext.masked')].map((el) => el.textContent);
+    return tokens.some((t) => t.tile && t.word === 'pizza')
+      && chipWords.includes('pizza')
+      && masked.includes('Bad Word')
+      && !bar.textContent.includes('damn');
+  }));
+  ok('listening matchTerms inflections match too', await page.evaluate(() =>
+    window.practiceHooks.listenTokens('two pizzas please').some((t) => t.tile && t.word === 'pizza')));
+
   // ── Style switcher (published styles browsable on the public demo) ──
   ok('style switcher renders', await page.evaluate(() =>
     document.querySelectorAll('#styles .voice-chip').length >= 2));   // Classic + stub style
@@ -79,16 +111,16 @@ const fails = [];
     [...document.querySelectorAll('#board .col')].some((c) =>
       (c.querySelector('h2') || {}).textContent === 'Verbs' && c.querySelectorAll('.tile').length > 0)));
 
-  // ── ⚙ Display panel: session-only look controls (sessionStorage, no API) ──
+  // ── ⚙ Display modal: session-only look controls (sessionStorage, no API) ──
   await page.locator('#disp-btn').click();
   await page.waitForTimeout(200);
-  ok('display panel opens', await page.evaluate(() =>
-    document.getElementById('disp-panel').style.display === 'flex'));
-  await page.locator('#pd-hide-labels').check();
+  ok('display modal opens', await page.evaluate(() =>
+    document.getElementById('disp-modal').classList.contains('show')));
+  await page.locator('#pd-hide-labels').uncheck();
   await page.waitForTimeout(300);
-  ok('hide labels hides tile words + headers', await page.evaluate(() =>
-    document.body.classList.contains('hide-labels')
-      && getComputedStyle(document.querySelector('#board .tile .lb')).display === 'none'));
+  ok('unhiding labels shows tile words again', await page.evaluate(() =>
+    !document.body.classList.contains('hide-labels')
+      && getComputedStyle(document.querySelector('#board .tile .lb')).display !== 'none'));
   ok('tiles across re-shapes a column', await page.evaluate(() => {
     const el = document.getElementById('pd-across-nouns');
     el.value = '3';
@@ -96,10 +128,14 @@ const fails = [];
     const col = [...document.querySelectorAll('#board .col')].find((c) => c.dataset.section === 'nouns');
     return col && col.style.getPropertyValue('--across') === '3';
   }));
+  await page.locator('#pd-done').click();
+  await page.waitForTimeout(200);
+  ok('display modal closes', await page.evaluate(() =>
+    !document.getElementById('disp-modal').classList.contains('show')));
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(600);
   ok('display prefs survive a reload in the same session', await page.evaluate(() =>
-    document.body.classList.contains('hide-labels')
+    !document.body.classList.contains('hide-labels')   // the labels-ON override persisted
       && sessionStorage.getItem('practiceDisplay') !== null
       && localStorage.getItem('practiceDisplay') === null));
 
