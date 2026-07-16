@@ -159,7 +159,7 @@ fun ExpressiveNamingView(session: GameController.Session, onExit: () -> Unit) {
 
     val image by produceState<Bitmap?>(initialValue = null, target?.imageKey) {
         val key = target?.imageKey
-        value = if (key.isNullOrEmpty()) null else c.media.bitmap(key)
+        value = if (key.isNullOrEmpty()) null else c.media.bitmap(key, maxDim = 640)
     }
 
     Box(Modifier.fillMaxSize().background(hexColor("#fff7fb"))) {
