@@ -2031,7 +2031,11 @@
       if (cached) return cached;
     } catch (_) {}
     let r;
-    try { r = await apiFetch('/api/media?key=' + encodeURIComponent(key)); }
+    // Images fetch the 1024px webp variant — same display quality (tiles
+    // render at ≤1024), ~10× fewer bytes than the original PNGs. Audio keys
+    // and already-cached blobs are untouched (cache is keyed by blob key).
+    const wq = /\.(png|jpe?g|webp)$/i.test(key) ? '&w=1024' : '';
+    try { r = await apiFetch('/api/media?key=' + encodeURIComponent(key) + wq); }
     catch (_) { return null; }
     if (!r.ok) return null;
     const blob = await r.blob();

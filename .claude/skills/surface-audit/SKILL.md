@@ -72,6 +72,12 @@ blob keys.**
 - Note: the ownership check fails OPEN on DB error by design (availability
   for the child's own board). Confirm the catch only logs — it must not
   widen: no code path may skip the check when the DB is healthy.
+- Resized variants (`?w=`, stored at `thumbs/<w>/<key>.webp`): the variant
+  is served ONLY after the ORIGINAL key passes the auth + ownership check
+  above, `thumbs/` is deliberately NOT a public prefix, and clients never
+  pass `thumbs/` keys directly. VERIFY the resize block sits AFTER the
+  ownership check and derives its access decision from the original key —
+  a variant reachable by its own key without that check = FAIL.
 
 **A3. Blob keys are unguessable.** Any new blob write must embed
 `randomUUID()` (or a content hash) in the key — grep the diff for `blobPut`/

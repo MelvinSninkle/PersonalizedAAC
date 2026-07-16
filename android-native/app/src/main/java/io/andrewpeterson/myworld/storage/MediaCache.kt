@@ -48,7 +48,13 @@ class MediaCache(context: Context, private val api: ApiClient) {
             inFlight.getOrPut(key) {
                 scope.async {
                     try {
-                        val bytes = api.raw("GET", "/api/media?key=${api.esc(key)}")
+                        // Images download the server's 1024px webp variant:
+                        // identical on screen at ~10% of the PNG bytes, so
+                        // first sync / warm() is much faster. Audio and
+                        // already-cached files are untouched.
+                        val ext = key.substringAfterLast('.', "").lowercase()
+                        val wq = if (ext in setOf("png", "jpg", "jpeg", "webp")) "&w=1024" else ""
+                        val bytes = api.raw("GET", "/api/media?key=${api.esc(key)}$wq")
                         val tmp = File(dir, "${f.name}.tmp")
                         tmp.writeBytes(bytes)
                         tmp.renameTo(f)

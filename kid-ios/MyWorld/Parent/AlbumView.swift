@@ -71,7 +71,7 @@ struct AlbumView: View {
         return HStack(spacing: 14) {
             ZStack {
                 ForEach(Array(covers.enumerated()), id: \.offset) { i, key in
-                    MediaImage(blobKey: key)
+                    MediaImage(blobKey: key, maxPixel: 256)
                         .frame(width: 60, height: 60)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(.white, lineWidth: 2))
@@ -220,7 +220,7 @@ private struct AlbumFolderView: View {
     private func tileRow(_ tile: APIClient.AlbumTile) -> some View {
         HStack(spacing: 12) {
             if let key = tile.current?.blobKey ?? tile.history.first?.blobKey {
-                MediaImage(blobKey: key)
+                MediaImage(blobKey: key, maxPixel: 256)
                     .frame(width: 56, height: 56)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             } else {
@@ -269,7 +269,7 @@ private struct AlbumTileView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $zoomed) { e in
             VStack(spacing: 14) {
-                MediaImage(blobKey: e.blobKey)
+                MediaImage(blobKey: e.blobKey, maxPixel: 1024)
                     .aspectRatio(1, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 20))
                     .padding(.horizontal, 16)

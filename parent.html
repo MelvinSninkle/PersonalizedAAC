@@ -2424,7 +2424,7 @@
     // Image preview: show the current image when editing, otherwise blank.
     const prev = document.getElementById('tile-preview');
     if (existing?.imageKey) {
-      prev.src = '/api/media?key=' + encodeURIComponent(existing.imageKey);
+      prev.src = '/api/media?key=' + encodeURIComponent(existing.imageKey) + '&w=640';
       prev.style.display = 'block';
     } else {
       prev.style.display = 'none'; prev.removeAttribute('src');
@@ -2761,7 +2761,7 @@
         const subCount = (d.categories || []).filter(s => s.parentId === c.id).length;
         const owner = emailByUid.get(Number(c.ownerUserId)) || 'a therapist';
         const thumb = c.imageKey
-          ? `<div style="width:46px;height:46px;border-radius:8px;background-image:url(/api/media?key=${encodeURIComponent(c.imageKey)});background-size:cover;background-position:center;flex:none;"></div>`
+          ? `<div style="width:46px;height:46px;border-radius:8px;background-image:url(/api/media?key=${encodeURIComponent(c.imageKey)}&w=256);background-size:cover;background-position:center;flex:none;"></div>`
           : '<div style="width:46px;height:46px;border-radius:8px;background:#fce4ec;display:grid;place-items:center;font-size:20px;color:#d6a8c6;flex:none;">🧩</div>';
         return `<div style="display:flex;align-items:center;gap:12px;background:#fff7fb;border:1px solid var(--line);border-radius:12px;padding:10px 14px;">
           ${thumb}
@@ -2809,7 +2809,7 @@
     panel.style.display = '';
     document.getElementById('review-count').textContent = REVIEW_ITEMS.length;
     document.getElementById('review-list').innerHTML = REVIEW_ITEMS.map(it => {
-      const img = it.imageKey ? '/api/media?key=' + encodeURIComponent(it.imageKey) : '';
+      const img = it.imageKey ? '/api/media?key=' + encodeURIComponent(it.imageKey) + '&w=256' : '';
       const audio = it.soundKey ? '/api/media?key=' + encodeURIComponent(it.soundKey) : '';
       return '<div class="rv-row" data-id="' + it.id + '" style="display:flex;gap:12px;align-items:center;background:#fff7fb;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px;">'
         + (img
@@ -2901,7 +2901,7 @@
     function render(persons) {
       listEl.innerHTML = persons.length ? persons.map(p => `
         <div style="display:flex;align-items:center;gap:10px;background:#fafafa;border:1px solid #f0e6ea;border-radius:10px;padding:8px;">
-          ${p.reference_key ? `<img src="/api/media?key=${schEsc(encodeURIComponent(p.reference_key))}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;">` : '<div style="width:40px;height:40px;border-radius:8px;background:#f0e6ea;"></div>'}
+          ${p.reference_key ? `<img src="/api/media?key=${schEsc(encodeURIComponent(p.reference_key))}&w=256" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;">` : '<div style="width:40px;height:40px;border-radius:8px;background:#f0e6ea;"></div>'}
           <div style="flex:1;"><strong>${schEsc(p.display_name)}</strong> <span style="color:#9ca3af;font-size:13px;">${schEsc(relLabel(p))}</span></div>
           <button class="btn ghost" data-edit="${p.id}">Edit</button>
         </div>`).join('') : '<div style="font-size:13px;color:#9ca3af;">No family added yet.</div>';
@@ -2923,7 +2923,7 @@
       document.getElementById('family-modal-title').textContent = person ? 'Edit family member' : 'Add family member';
       document.getElementById('family-delete').style.display = person ? '' : 'none';
       thumb.innerHTML = (person && person.reference_key)
-        ? `<img src="/api/media?key=${schEsc(encodeURIComponent(person.reference_key))}" alt="" style="width:96px;height:96px;border-radius:12px;object-fit:cover;">`
+        ? `<img src="/api/media?key=${schEsc(encodeURIComponent(person.reference_key))}&w=256" alt="" style="width:96px;height:96px;border-radius:12px;object-fit:cover;">`
         : 'Tap to add / change photo';
       mmsg.textContent = '';
       if (!picker) picker = await PeoplePicker.mount(document.getElementById('family-picker'), {});
@@ -3372,7 +3372,7 @@
   function updateSchedPreview() {
     const sel = document.getElementById('sch-image'), pv = document.getElementById('sch-image-preview');
     if (!sel || !pv) return;
-    if (sel.value) { pv.src = '/api/media?key=' + encodeURIComponent(sel.value); pv.style.display = 'block'; }
+    if (sel.value) { pv.src = '/api/media?key=' + encodeURIComponent(sel.value) + '&w=640'; pv.style.display = 'block'; }
     else { pv.removeAttribute('src'); pv.style.display = 'none'; }
   }
   let gameScopeOptsHTML = '<option value="all">Everything</option>';
@@ -3592,7 +3592,9 @@
     a.target = '_blank'; a.rel = 'noopener';
     a.style.cssText = 'display:block;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;text-decoration:none;color:inherit;';
     const img = document.createElement('img');
-    img.src = '/api/media?key=' + encodeURIComponent(blobKey);
+    // Grid thumbnail loads the 640px webp variant (a few % of the original
+    // PNG bytes); the click-through link above keeps the full original.
+    img.src = '/api/media?key=' + encodeURIComponent(blobKey) + '&w=640';
     img.alt = label || '';
     img.loading = 'lazy';
     img.style.cssText = 'width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#f3f4f6;';
@@ -3776,7 +3778,7 @@
       '<button class="btn ghost" data-org="del"  data-type="' + type + '" data-id="' + id + '" aria-label="Delete">✕</button></span>';
   }
   function orgThumb(imageKey) {
-    return imageKey ? '<span class="org-thumb" style="background-image:url(/api/media?key=' + encodeURIComponent(imageKey) + ')"></span>' : '';
+    return imageKey ? '<span class="org-thumb" style="background-image:url(/api/media?key=' + encodeURIComponent(imageKey) + '&w=256)"></span>' : '';
   }
   function orgItemsHTML(catId) {
     const items = ORG_ITEMS.filter(i => i.categoryId === catId).sort(orgByOrder);

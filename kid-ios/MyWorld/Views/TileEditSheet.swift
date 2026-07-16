@@ -595,7 +595,7 @@ struct BoardTileEditSheet: View {
 
     private func loadCurrentImage() async {
         guard let key = tile.imageKey, !key.isEmpty else { return }
-        if let img = await MediaCache.shared.image(for: key) { currentImage = img }
+        if let img = await MediaCache.shared.image(for: key, maxPixel: 1024) { currentImage = img }
     }
 
     @MainActor

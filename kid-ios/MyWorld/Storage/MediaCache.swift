@@ -32,7 +32,12 @@ actor MediaCache {
             return try await task.value
         }
         let task = Task<Data, Error> {
-            let (bytes, _) = try await api.media(key: key)
+            // Images download the server's 1024px webp variant: identical on
+            // screen (nothing displays larger than 1024) at ~10% of the PNG
+            // bytes, so first sync / board warm-up is much faster. Audio and
+            // already-cached files are untouched (cache is keyed by blob key).
+            let isImage = ["png", "jpg", "jpeg", "webp"].contains((key as NSString).pathExtension.lowercased())
+            let (bytes, _) = try await api.media(key: key, w: isImage ? 1024 : nil)
             try bytes.write(to: file, options: .atomic)
             return bytes
         }

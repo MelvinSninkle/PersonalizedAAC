@@ -238,7 +238,8 @@
 
 <script>
 (() => {
-  const media = (k) => '/api/media?key=' + encodeURIComponent(k);
+  const media = (k) => '/api/media?key=' + encodeURIComponent(k)
+    + (/\.(png|jpe?g|webp)$/i.test(k) ? '&w=640' : '');   // tiles show ≤640px; the webp variant is ~10× smaller and CDN-cached
   const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   let DATA = null;
   let VOICE = '';          // '' = the device's own voice (speechSynthesis)

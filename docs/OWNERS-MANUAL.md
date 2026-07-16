@@ -46,6 +46,18 @@ Google Play for billing + APNs for push. Every endpoint self-gates
 `api/init.js` (`CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`);
 endpoints reading new columns carry pre-migration fallback queries.
 
+**Image delivery**: `/api/media` accepts `?w=256|640|1024` and serves a
+resized webp variant (3–13% of the original PNG bytes). The first request
+for each (image, size) builds the variant with `sharp` and stores it at
+`thumbs/<w>/<key>.webp` — built once, ever; expect the first day after a
+deploy to be slightly slower while variants fill in, then everything is
+fast forever. Every failure mode (sharp missing, weird image) falls back to
+serving the original bytes, so resize can never take the board down.
+Because every image write mints a fresh UUID key, private media is served
+with a one-year immutable cache — browsers stop re-downloading art they
+already have. If a resized image ever looks wrong, delete its `thumbs/…`
+blob and the next request rebuilds it.
+
 ## Non-negotiable invariants (the "why" behind CI)
 
 1. **Family isolation** — one family's media/data must never reach another.

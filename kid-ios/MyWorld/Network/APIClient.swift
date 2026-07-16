@@ -122,10 +122,12 @@ struct APIClient {
         } catch { return false }
     }
 
-    /// GET /api/media?key=<key> — streams blob bytes. Used for images + audio.
-    func media(key: String) async throws -> (Data, String) {
+    /// GET /api/media?key=<key>[&w=] — streams blob bytes. Used for images +
+    /// audio; `w` asks the server for a resized webp variant (images only).
+    func media(key: String, w: Int? = nil) async throws -> (Data, String) {
+        let wq = w.map { "&w=\($0)" } ?? ""
         let (data, resp) = try await request(method: "GET",
-                                             path: "/api/media?key=\(percentEscape(key))",
+                                             path: "/api/media?key=\(percentEscape(key))\(wq)",
                                              body: nil)
         let mime = (resp as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? "application/octet-stream"
         return (data, mime)

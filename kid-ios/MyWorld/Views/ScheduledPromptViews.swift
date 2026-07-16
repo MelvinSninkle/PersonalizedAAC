@@ -54,7 +54,7 @@ struct ReminderToast: View {
 
     private func loadImage() async {
         guard let key = schedule.imageKey, !key.isEmpty else { return }
-        if let img = await MediaCache.shared.image(for: key) {
+        if let img = await MediaCache.shared.image(for: key, maxPixel: 640) {
             await MainActor.run { self.image = img }
         }
     }
@@ -131,7 +131,7 @@ struct ScheduledQuestionSheet: View {
 
     private func loadPromptImage() async {
         guard let key = schedule.imageKey, !key.isEmpty else { return }
-        if let img = await MediaCache.shared.image(for: key) {
+        if let img = await MediaCache.shared.image(for: key, maxPixel: 640) {
             await MainActor.run { self.promptImage = img }
         }
     }
@@ -185,7 +185,7 @@ private struct ResponseChip: View {
         .buttonStyle(.plain)
         .task(id: response.imageKey) {
             guard let key = response.imageKey, !key.isEmpty else { return }
-            if let img = await MediaCache.shared.image(for: key) {
+            if let img = await MediaCache.shared.image(for: key, maxPixel: 640) {
                 await MainActor.run { self.image = img }
             }
         }
@@ -265,7 +265,7 @@ struct GameNudgeCard: View {
 
     private func loadImage() async {
         guard let key = schedule.imageKey, !key.isEmpty else { return }
-        if let img = await MediaCache.shared.image(for: key) {
+        if let img = await MediaCache.shared.image(for: key, maxPixel: 640) {
             await MainActor.run { self.image = img }
         }
     }
