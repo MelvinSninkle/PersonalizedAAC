@@ -15,10 +15,11 @@
 // create tile) lives in _lib/tile-jobs.js and runs server-side.
 import { put, del } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
+import { waitUntil } from '@vercel/functions';
 import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
-import { ensureTileJobs, processTileJob } from './_lib/tile-jobs.js';
+import { ensureTileJobs, processTileJob, claimRunnableJobs } from './_lib/tile-jobs.js';
 import { chargeForGeneration, requireStyling, NEEDS_SUBSCRIPTION_DETAIL, COST } from './_lib/credits.js';
 
 export const config = { api: { bodyParser: false }, maxDuration: 300 };
@@ -55,6 +56,17 @@ export default async function handler(req, res) {
         artFailed: !!j.art_failed, needsReview: !!j.needs_review, error: j.error, attempts: j.attempts,
         createdAt: j.created_at, updatedAt: j.updated_at,
       })) });
+      // EVENT-DRIVEN pump: the tray polls this while jobs are pending, so
+      // every poll advances the queue (atomic claim — concurrent polls and
+      // the cron SKIP each other's jobs). Runnable work therefore progresses
+      // whenever anyone is watching; the cron is only the nobody's-looking
+      // backstop and the retry-backoff timer.
+      if (rows.some((j) => j.status === 'queued' || j.status === 'failed' || j.status === 'processing')) {
+        waitUntil((async () => {
+          const claimed = await claimRunnableJobs(db, 2, childId);
+          for (const j of claimed) await processTileJob(db, Number(j.id));
+        })().catch(() => {}));
+      }
     } catch (err) { res.status(500).json({ error: 'List failed', detail: String(err.message || err) }); }
     return;
   }
@@ -158,8 +170,9 @@ export default async function handler(req, res) {
 
   // Device is free immediately; the photo is safe.
   res.status(200).json({ id, status: 'queued' });
-  // Best-effort immediate render. If this request is frozen/killed after the
-  // response, the cron picks the job up (still 'queued'/'processing') and finishes
-  // it — so completion never depends on this call surviving.
-  processTileJob(db, id).catch(() => {});
+  // Immediate render, registered with waitUntil so Vercel doesn't freeze it
+  // with the response (a bare floating promise here only sometimes survived).
+  // If this invocation still dies mid-render, the tray's GET pump or the cron
+  // picks the job back up — completion never depends on this call surviving.
+  waitUntil(processTileJob(db, id).catch(() => {}));
 }

@@ -513,6 +513,10 @@ async function personalizeStatus(req, res, db, auth, uid) {
   if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
   await ensureSeedJobs(db);
+  // EVENT-DRIVEN pump: this is polled while a personalize/regen batch runs,
+  // so every status check also advances the child's render queue (SKIP LOCKED
+  // keeps concurrent polls + the cron off each other's jobs).
+  afterResponse(drainRenderJobs(db, childId, 2));
   const [rows, cats, currentGuide] = await Promise.all([
     db`SELECT id, category_id, taxonomy_slug, image_key, styled_style_id FROM items
        WHERE child_id = ${childId} AND taxonomy_slug IS NOT NULL`,

@@ -104,12 +104,12 @@ export async function enqueueRenderJob(db, childId, taxonomyId, { force = false,
 // minute-cron isn't firing (Hobby-plan crons run daily; a CRON_SECRET
 // mismatch 401s silently) their jobs sat 'queued' forever — the parent paid,
 // saw "re-rendering ✨", and nothing ever landed or archived.
-export async function drainRenderJobs(db, childId, limit = 3) {
+export async function drainRenderJobs(db, childId, limit = 3, kind = 'render') {
   const jobs = await db`
     UPDATE seed_jobs SET status = 'processing', updated_at = NOW()
     WHERE id IN (
       SELECT id FROM seed_jobs
-      WHERE child_id = ${childId} AND kind = 'render' AND (
+      WHERE child_id = ${childId} AND kind = ${kind} AND (
         status = 'queued'
         OR (status = 'failed' AND attempts < ${MAX_SEED_ATTEMPTS})
       )

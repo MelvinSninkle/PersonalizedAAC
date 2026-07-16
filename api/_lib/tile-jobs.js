@@ -413,18 +413,27 @@ export async function processTileJob(db, jobId) {
   }
 }
 
-// Pick the next batch of jobs the cron should run: fresh queued ones, jobs stuck
+// Pick the next batch of runnable jobs: fresh queued ones, jobs stuck
 // 'processing' (the fire-and-forget kick died), and failed jobs with attempts
 // left. Failed jobs back off (attempts × 90s) so a provider outage is retried
 // over ~15 minutes instead of burning every attempt inside three cron ticks.
-// Oldest first.
-export async function claimRunnableJobs(db, limit = 5) {
+// Oldest first. ATOMIC claim (status flips inside the locked select): the
+// cron and the poll-driven pumps in /api/tile-jobs GET run concurrently, and
+// SKIP LOCKED is what keeps them from double-rendering the same job.
+// Pass childId to scope a pump to the family whose poll triggered it.
+export async function claimRunnableJobs(db, limit = 5, childId = null) {
   return await db`
-    SELECT id FROM tile_jobs
-    WHERE status = 'queued'
-       OR (status = 'processing' AND updated_at < NOW() - INTERVAL '3 minutes')
-       OR (status = 'failed' AND attempts < ${MAX_ATTEMPTS}
-           AND updated_at < NOW() - (INTERVAL '90 seconds' * attempts))
-    ORDER BY created_at ASC
-    LIMIT ${limit}`;
+    UPDATE tile_jobs SET status = 'processing', updated_at = NOW()
+    WHERE id IN (
+      SELECT id FROM tile_jobs
+      WHERE (${childId}::text IS NULL OR child_id = ${childId})
+        AND (status = 'queued'
+         OR (status = 'processing' AND updated_at < NOW() - INTERVAL '3 minutes')
+         OR (status = 'failed' AND attempts < ${MAX_ATTEMPTS}
+             AND updated_at < NOW() - (INTERVAL '90 seconds' * attempts)))
+      ORDER BY created_at ASC
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id`;
 }

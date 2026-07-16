@@ -138,9 +138,15 @@ family keeps everything they have — only new spends wait.
 ## The pipelines
 
 - **Board build**: onboard places words instantly (chunked `seed-core`),
-  then durable `seed_jobs` (render/voice/chip) drain via the every-minute
-  cron `run-tile-jobs`. Progress = `seedStatus` (also feeds the onboarding
-  "magic gallery"). Stuck builds: Lab tools re-arm dead jobs.
+  then durable `seed_jobs` (render/voice/chip) drain EVENT-DRIVEN: every
+  enqueue starts work in-request (`waitUntil`), and every status poll —
+  the add-tile tray, onboarding progress, personalize-status — pumps a few
+  more jobs (atomic `SKIP LOCKED` claims keep concurrent pumps + the cron
+  off each other's work). The every-minute cron `run-tile-jobs` is the
+  backstop, not the engine: it covers retry backoff timers, style-wizard
+  builds, and queues nobody is watching. Progress = `seedStatus` (also
+  feeds the onboarding "magic gallery"). Stuck builds: Lab tools re-arm
+  dead jobs.
 - **Image generation**: `buildPortraitPrompt`/`renderTaxonomyTile` — single
   prompt source; style guides + child anchor photo; `IMAGE_GEN_DAILY_LIMIT`.
   Each style carries up to three reference images (main anchor `blob_key`,
