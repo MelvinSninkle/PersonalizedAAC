@@ -153,12 +153,23 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
     `Bright friendly colors and a gentle, age-appropriate look.` +
     detailClause + captionClause + styleClause + subjectRule + SQUARE_RULE;
 
-  // Ordered images + positional legend (style guide first, source photo second).
+  // Ordered images + positional legend (style guide first, then the style's
+  // OBJECTS reference when it has one, source photo last). The stuff ref is
+  // the same world anchor the pre-built default boards render with — without
+  // it, a family's added object tiles drifted from the board's material
+  // treatment even when every reference was uploaded.
   const images = [];
   const legend = [];
   if (styleGuide && styleGuide.image && styleGuide.image.buffer) {
     images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
     legend.push(`Image ${images.length} is the STYLE reference — copy its art style only, not its content.`);
+  }
+  if (styleGuide && styleGuide.stuff_ref_key) {
+    try {
+      const stuff = await readBlobBytes(styleGuide.stuff_ref_key);
+      images.push({ buffer: stuff.buffer, contentType: stuff.contentType });
+      legend.push(`Image ${images.length} shows how OBJECTS and materials are rendered in this style — match that treatment; never copy its content.`);
+    } catch (_) { /* missing ref → style scene alone still anchors the look */ }
   }
   images.push({ buffer: photo, contentType: contentType || 'image/jpeg' });
   legend.push(`Image ${images.length} is the source photo — re-illustrate THIS subject in the style above.`);

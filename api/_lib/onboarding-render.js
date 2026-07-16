@@ -52,7 +52,49 @@ export async function loadStyleGuide(db, styleGuideId) {
   }
   if (!row) return null;
   let image = null;
-  if (row.blob_key) { try { image = await readBlobBytes(row.blob_key); } catch (_) { /* missing blob → text-only style */ } }
+  if (row.blob_key) { try { image = await readBlobBytes(row.blob_key); } catch (_) { /* missing blob → heal below */ } }
+  if (!image) {
+    // LEGACY / LOST-ANCHOR HEAL. The earliest style rows (the very first
+    // guides) predate blob_key — they carried a public blob_url — and a row
+    // whose anchor blob is gone would silently render every tile GENERIC
+    // while thumbnails (which fall back to preview_blob_key) look healthy.
+    // Recover the anchor bytes, and when a durable key is recovered, write
+    // it back so the row is healed permanently.
+    try {
+      const extra = (await db`SELECT blob_url, preview_blob_key FROM style_guides WHERE id = ${row.id}`)[0] || {};
+      let healKey = null;
+      // 1) blob_url of the /api/media?key=… shape embeds the real key.
+      const m = String(extra.blob_url || '').match(/[?&]key=([^&]+)/);
+      if (m) {
+        const k = decodeURIComponent(m[1]);
+        try { image = await readBlobBytes(k); healKey = k; } catch (_) {}
+      }
+      // 2) legacy public storage URL → fetch the bytes, re-home them under a
+      //    durable private key.
+      if (!image && /^https?:\/\//.test(String(extra.blob_url || ''))) {
+        try {
+          const r = await fetch(extra.blob_url);
+          if (r.ok) {
+            const buffer = Buffer.from(await r.arrayBuffer());
+            if (buffer.length) {
+              image = { buffer, contentType: r.headers.get('content-type') || 'image/png' };
+              const k = `styles/healed-${row.id}.png`;
+              try { await blobPut(k, buffer, { access: 'private', contentType: image.contentType, addRandomSuffix: false }); healKey = k; } catch (_) {}
+            }
+          }
+        } catch (_) {}
+      }
+      // 3) last resort: the polished preview still carries the look —
+      //    use it for THIS render but don't rewrite blob_key to it.
+      if (!image && extra.preview_blob_key) {
+        try { image = await readBlobBytes(extra.preview_blob_key); } catch (_) {}
+      }
+      if (healKey && image) {
+        try { await db`UPDATE style_guides SET blob_key = ${healKey} WHERE id = ${row.id}`; } catch (_) {}
+      }
+      if (!image) console.warn(`style guide ${row.id} (${row.label}) has NO loadable anchor image — renders will be generic`);
+    } catch (_) { /* pre-migration columns — stay text-only */ }
+  }
   return { id: Number(row.id), label: row.label, description: row.description || '', blob_key: row.blob_key,
            person_ref_key: row.person_ref_key || null, stuff_ref_key: row.stuff_ref_key || null, image };
 }
