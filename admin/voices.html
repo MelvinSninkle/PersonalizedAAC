@@ -113,7 +113,9 @@
       <b>Live voices are mostly already paid for:</b> every word any board has ever spoken in a voice sits in
       the shared render cache, and this button just <b>copies</b> those clips to the practice address —
       ElevenLabs is only called for words that voice has never said. A "0 / 1057" on a live voice is a copy
-      job, not a re-generation. Runs are resumable — press again to finish.</p>
+      job, not a re-generation — though the FIRST build has a real "new" remainder: the standard library is
+      bigger than any one board, so words never spoken anywhere render once and are cached forever. Clips
+      speak exactly what boards speak (phonetic overrides included). Runs are resumable — press again to finish.</p>
     <table>
       <thead><tr><th>Voice</th><th>Clips built</th><th style="width:190px;"></th></tr></thead>
       <tbody id="demo-rows"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody>

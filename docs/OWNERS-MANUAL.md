@@ -203,7 +203,12 @@ family keeps everything they have — only new spends wait.
   every word ever spoken in a voice sits in the shared render cache,
   "⚡ Copy + fill clips" pulls already-generated words from cache **free**
   and only calls ElevenLabs for words that voice has never said. The run
-  reports the split ("N free from cache · M new") so you can see it. A
+  reports the split ("N free from cache · M new") so you can see it. The
+  FIRST build of a voice has a real "new" remainder — the standard library
+  is bigger than any one board, and clips made before the shared cache (or
+  under an older model) can't be reused — but it's one-time: every later
+  run is copies. Demo clips speak exactly what boards speak, phonetic
+  overrides included. A
   voice appears on `/practice`'s picker **only when its clip set is 100%
   built** — a half-built voice would silently fall back to the visitor's
   device voice ("macbook voice"). Until you prepare at least one voice,

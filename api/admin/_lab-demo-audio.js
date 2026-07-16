@@ -24,15 +24,40 @@ export const demoSlug = (s) =>
 async function demoLabels(db) {
   // ALL placeable canonical/universal labels — no default_image_key gate:
   // styled demos show person-referencing tiles (People/Verbs/Needs) too, so
-  // their words need clips. The shared TTS cache makes re-builds cheap.
-  const rows = await db`
-    SELECT DISTINCT label FROM taxonomy
-    WHERE COALESCE(archived, FALSE) = FALSE
-      AND COALESCE(is_event, FALSE) = FALSE
-      AND COALESCE(is_gestalt, FALSE) = FALSE
-      AND COALESCE(authoring_kind, 'canonical') = 'canonical'
-      AND COALESCE(audience, 'universal') = 'universal'`;
-  return rows.map((r) => r.label);
+  // their words need clips. Each entry carries the SPOKEN text separately:
+  // boards speak `pronunciation || label` (seed-board's spokenTextFor — the
+  // Voice-QC phonetic overrides), so the demo must synthesize the same text
+  // or it both misses the shared TTS cache AND pronounces words differently
+  // from every real board. The blob key stays label-slugged (practice.html
+  // addresses clips by label).
+  let rows;
+  try {
+    rows = await db`
+      SELECT DISTINCT label, pronunciation FROM taxonomy
+      WHERE COALESCE(archived, FALSE) = FALSE
+        AND COALESCE(is_event, FALSE) = FALSE
+        AND COALESCE(is_gestalt, FALSE) = FALSE
+        AND COALESCE(authoring_kind, 'canonical') = 'canonical'
+        AND COALESCE(audience, 'universal') = 'universal'`;
+  } catch (_) {
+    rows = await db`
+      SELECT DISTINCT label FROM taxonomy
+      WHERE COALESCE(archived, FALSE) = FALSE
+        AND COALESCE(is_event, FALSE) = FALSE
+        AND COALESCE(is_gestalt, FALSE) = FALSE
+        AND COALESCE(authoring_kind, 'canonical') = 'canonical'
+        AND COALESCE(audience, 'universal') = 'universal'`;
+  }
+  // DISTINCT on (label, pronunciation) can dupe a label — keep the first
+  // row that carries a pronunciation, else the plain one.
+  const byLabel = new Map();
+  for (const r of rows) {
+    const cur = byLabel.get(r.label);
+    if (!cur || (!cur.speak_override && r.pronunciation)) {
+      byLabel.set(r.label, { label: r.label, speak_override: r.pronunciation || null });
+    }
+  }
+  return [...byLabel.values()].map((r) => ({ label: r.label, speak: r.speak_override || r.label }));
 }
 
 async function existingKeys(prefix) {
@@ -94,12 +119,12 @@ export default async function handler(req, res) {
     for (const vid of voiceIds) {
       const have = await existingKeys(`demo-audio/${vid}/`);
       let vDone = 0;
-      for (const label of labels) {
-        const key = `demo-audio/${vid}/${demoSlug(label)}.mp3`;
+      for (const item of labels) {
+        const key = `demo-audio/${vid}/${demoSlug(item.label)}.mp3`;
         if (have.has(key)) { skipped++; vDone++; continue; }
         if (Date.now() > deadline) { remaining++; continue; }
         try {
-          const buf = await synthesizeVoice({ text: label, voiceId: vid, stats });
+          const buf = await synthesizeVoice({ text: item.speak, voiceId: vid, stats });
           if (buf) {
             await put(key, buf, { access: 'private', addRandomSuffix: false, contentType: 'audio/mpeg' });
             built++; vDone++;
