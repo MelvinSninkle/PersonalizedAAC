@@ -9,7 +9,7 @@
 // run canEditContent against its ownership.
 import { del } from '@vercel/blob';
 import { checkAuth } from './_lib/auth.js';
-import { sql, rowToCategory } from './_lib/db.js';
+import { sql, rowToCategory, stampLayoutCustomized } from './_lib/db.js';
 import { canEditContent, isParentOf } from './_lib/access.js';
 
 export default async function handler(req, res) {
@@ -169,6 +169,10 @@ async function update(req, res, db, user) {
   if (imageKey && old.image_key && imageKey !== old.image_key) {
     try { await del(old.image_key); } catch (_) {}
   }
+
+  // A deliberate folder reorder marks the board family-arranged: the Lab's
+  // layout push skips it from now on unless the admin explicitly overrides.
+  if (order != null && old.child_id) await stampLayoutCustomized(db, old.child_id);
 
   res.status(200).json(rowToCategory(rows[0]));
 }

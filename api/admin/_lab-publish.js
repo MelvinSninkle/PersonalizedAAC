@@ -64,7 +64,20 @@ async function targetChildren(db, { scope, styleGuideId, child }) {
   return rows.map((r) => r.child_id);
 }
 
-async function pushLayout(db, childId) {
+// Exported: /api/layout-offer applies the SAME push when a parent accepts an
+// offer (their approval stands in for the admin override).
+export async function pushLayout(db, childId, { overwriteCustomized = false } = {}) {
+  // A family that dragged tiles/folders into their OWN order is stamped
+  // (child_settings.layoutCustomizedAt, written by /api/items +
+  // /api/categories reorders). Their arrangement is never overwritten
+  // unless the admin ticked the explicit override on this push.
+  if (!overwriteCustomized) {
+    try {
+      const cs = (await db`SELECT settings->>'layoutCustomizedAt' AS at
+                           FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+      if (cs && cs.at) return { cats: 0, tiles: 0, skipped: 'family-arranged', customizedAt: cs.at };
+    } catch (_) { /* pre-migration — nothing stamped, proceed */ }
+  }
   const [order, cats] = await Promise.all([
     db`SELECT section, label_norm, parent_norm, sort_order FROM default_category_order`,
     db`SELECT id, section, label, parent_id, display_order FROM categories WHERE child_id = ${childId}`,
@@ -177,6 +190,20 @@ async function ensureLog(db) {
       counts JSONB,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
+  // Layout OFFERS: instead of applying, ask each family. The board shows a
+  // popup ("apply the new suggested layout?"); accept runs pushLayout with
+  // the parent's consent, decline dismisses. One pending offer per child.
+  await db`
+    CREATE TABLE IF NOT EXISTS layout_offers (
+      id BIGSERIAL PRIMARY KEY,
+      child_id TEXT NOT NULL,
+      note TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',   -- pending | accepted | dismissed | revoked
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      responded_at TIMESTAMPTZ
+    )`;
+  await db`CREATE INDEX IF NOT EXISTS layout_offers_pending
+           ON layout_offers(child_id) WHERE status = 'pending'`;
 }
 
 export default async function handler(req, res) {
@@ -210,11 +237,28 @@ export default async function handler(req, res) {
     const limit = Math.min(cap, Math.max(1, Math.floor(Number(b.limit) || cap)));
     const slice = children.slice(offset, offset + limit);
 
+    const overwriteCustomized = b.overwriteCustomized === true;
+    // mode 'offer': create an approval popup for each family instead of
+    // touching their board — the parent decides. Applies to layout only
+    // (sounds are additive and stay direct). Andrew previews first by
+    // pushing scope=child to his own board, then offers to everyone.
+    const offerMode = b.mode === 'offer' && what.layout;
+    const offerNote = typeof b.note === 'string' ? b.note.trim().slice(0, 300) : '';
     const results = [];
     let advanced = 0;
     for (const childId of slice) {
       const r = { childId };
-      if (what.layout) r.layout = await pushLayout(db, childId);
+      if (offerMode) {
+        const pending = (await db`SELECT id FROM layout_offers WHERE child_id = ${childId} AND status = 'pending' LIMIT 1`)[0];
+        if (pending) {
+          r.layout = { offered: true, already: true };
+        } else {
+          await db`INSERT INTO layout_offers (child_id, note) VALUES (${childId}, ${offerNote || null})`;
+          r.layout = { offered: true };
+        }
+      } else if (what.layout) {
+        r.layout = await pushLayout(db, childId, { overwriteCustomized });
+      }
       if (what.sounds) r.sounds = await pushSounds(db, childId);
       results.push(r);
       try {

@@ -946,6 +946,20 @@ Size: {size}.',
         sort_order  INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (section, label_norm, parent_norm)
       )`;
+    // Layout OFFERS — "ask families to approve" layout pushes (mirrors the
+    // ensure in _lab-publish.js): the board shows an approve/keep popup and
+    // /api/layout-offer records the family's answer.
+    await db`
+      CREATE TABLE IF NOT EXISTS layout_offers (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL,
+        note TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        responded_at TIMESTAMPTZ
+      )`;
+    await db`CREATE INDEX IF NOT EXISTS layout_offers_pending
+             ON layout_offers(child_id) WHERE status = 'pending'`;
     // Communication milestones (first two-word combo, vocabulary marks…) —
     // detected on /api/events ingestion, deduped by (child, kind, detail_key).
     await db`

@@ -10,7 +10,7 @@
 // PUT/DELETE load the row and run canEditContent against its ownership.
 import { del } from '@vercel/blob';
 import { checkAuth } from './_lib/auth.js';
-import { sql, rowToItem } from './_lib/db.js';
+import { sql, rowToItem, stampLayoutCustomized } from './_lib/db.js';
 import { canEditContent, isParentOf } from './_lib/access.js';
 import { archivePriorImage } from './_lib/image-history.js';
 
@@ -195,6 +195,10 @@ async function update(req, res, db, user) {
 
   if (imageKey && old.image_key && imageKey !== old.image_key) { try { await del(old.image_key); } catch (_) {} }
   if (soundKey && old.sound_key && soundKey !== old.sound_key) { try { await del(old.sound_key); } catch (_) {} }
+
+  // A deliberate reorder marks the board family-arranged: the Lab's layout
+  // push skips it from now on unless the admin explicitly overrides.
+  if (order != null && old.child_id) await stampLayoutCustomized(db, old.child_id);
 
   res.status(200).json(rowToItem(rows[0]));
 }

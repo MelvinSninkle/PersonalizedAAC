@@ -71,3 +71,19 @@ export function rowToItem(r) {
     needsReview: !!r.needs_review,
   };
 }
+
+/// Record that a FAMILY deliberately arranged this board (a parent dragged
+/// tiles or folders into their own order). The Lab's "Publish to boards"
+/// layout push reads this stamp and SKIPS the board unless the admin ticks
+/// the explicit overwrite override — a family's chosen order is theirs.
+/// Best-effort: a stamp failure must never fail the reorder itself.
+export async function stampLayoutCustomized(db, childId) {
+  if (!childId) return;
+  try {
+    const cur = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
+    const settings = { ...((cur && cur.settings) || {}), layoutCustomizedAt: new Date().toISOString() };
+    await db`INSERT INTO child_settings (child_id, settings, updated_at)
+             VALUES (${childId}, ${JSON.stringify(settings)}::jsonb, NOW())
+             ON CONFLICT (child_id) DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()`;
+  } catch (_) {}
+}

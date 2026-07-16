@@ -262,6 +262,17 @@ export default async function handler(req, res) {
       } catch (_) { /* translation is best-effort — sync must never fail over it */ }
     }
 
+    // Pending layout offer (admin curated a new default arrangement and chose
+    // "ask families" instead of applying): the board shows an approve/keep
+    // popup; /api/layout-offer records the answer.
+    let layoutOffer = null;
+    try {
+      const off = (await db`SELECT id, note FROM layout_offers
+                            WHERE child_id = ${childId} AND status = 'pending'
+                            ORDER BY id DESC LIMIT 1`)[0];
+      if (off) layoutOffer = { id: Number(off.id), note: off.note || null };
+    } catch (_) { /* table appears with the first offer push */ }
+
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
       language: langOut,
@@ -273,6 +284,7 @@ export default async function handler(req, res) {
       // "Bad Word" on the child's screen. Server-owned like match terms —
       // extend _lib/bad-words.js and every device updates on next sync.
       listenBlocklist: BAD_WORDS,
+      layoutOffer,
     });
   } catch (err) {
     res.status(500).json({ error: 'Sync failed', detail: String(err.message || err) });

@@ -3069,6 +3069,48 @@
     LISTEN.blocklist = new Set(data.listenBlocklist);
     try { localStorage.setItem('aacListenBlocklist', JSON.stringify(data.listenBlocklist)); } catch (_) {}
   }
+  // ── Layout offer: the admin curated a new default arrangement and chose
+  //    "ask families" — the FAMILY approves or keeps their own order. The
+  //    answer is recorded server-side, so the popup never nags twice.
+  let _offerShownId = null;
+  function noteLayoutOffer(data) {
+    const off = data && data.layoutOffer;
+    if (!off || !off.id || _offerShownId === off.id) return;
+    _offerShownId = off.id;
+    let o = document.getElementById('layout-offer-overlay');
+    if (o) o.remove();
+    o = document.createElement('div');
+    o.id = 'layout-offer-overlay';
+    o.style.cssText = 'position:fixed;inset:0;z-index:2600;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:24px;';
+    o.innerHTML = '<div style="background:#fff;border-radius:22px;max-width:460px;padding:26px 24px;text-align:center;font-family:Fredoka,ui-rounded,system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.25);">'
+      + '<div style="font-size:40px;">🧩</div>'
+      + '<div style="font-size:19px;font-weight:700;color:#ad1457;margin:6px 0;">A new suggested board layout</div>'
+      + '<div style="font-size:14px;color:#4b5563;line-height:1.5;">We’ve improved the standard arrangement of folders and words.'
+      + (off.note ? '<br><i>“' + String(off.note).replace(/[<>&]/g, '') + '”</i>' : '')
+      + '<br>Apply it to this board? Only the <b>order</b> changes — every picture, word, and recording stays exactly as it is.</div>'
+      + '<div style="display:flex;gap:10px;margin-top:16px;">'
+      + '<button id="lo-keep" style="flex:1;padding:12px;border:1.5px solid #e5e7eb;border-radius:12px;background:#fff;font:inherit;font-weight:700;color:#6b7280;cursor:pointer;">Keep my order</button>'
+      + '<button id="lo-apply" style="flex:1;padding:12px;border:none;border-radius:12px;background:#ff1493;color:#fff;font:inherit;font-weight:700;cursor:pointer;">Apply new layout</button>'
+      + '</div><div id="lo-msg" style="font-size:12px;color:#6b7280;margin-top:8px;min-height:14px;"></div></div>';
+    document.body.appendChild(o);
+    const respond = async (action) => {
+      const msg = document.getElementById('lo-msg');
+      msg.textContent = action === 'accept' ? 'Applying…' : 'Okay!';
+      try {
+        const r = await apiFetch('/api/layout-offer', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ childId: CHILD_ID, offerId: off.id, action }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        o.remove();
+        if (action === 'accept') reloadFromServer();
+      } catch (e) {
+        msg.textContent = 'Could not save that — try again. (' + (e.message || e) + ')';
+      }
+    };
+    document.getElementById('lo-apply').addEventListener('click', () => respond('accept'));
+    document.getElementById('lo-keep').addEventListener('click', () => respond('dismiss'));
+  }
   // ── The confirm-before-spend rule ─────────────────────────────────────────
   // Anything about to spend credits says so FIRST, with the live balance.
   // The server still enforces (402s stay the backstop); this is honesty UX.
@@ -3154,6 +3196,7 @@
   async function hydrateFromServer(data) {
     noteEntitlement(data);
     noteListenBlocklist(data);
+    noteLayoutOffer(data);
     // Clear + write the whole server snapshot in ONE transaction. Writing each
     // tile as its own transaction floods iOS Safari's IndexedDB and can stall
     // or abort, leaving the board blank — especially on a fresh device with no
@@ -3246,6 +3289,7 @@
       const data = await r.json();
       noteEntitlement(data);   // tier flags refresh even when the board itself is unchanged
       noteListenBlocklist(data);
+      noteLayoutOffer(data);
       if (!(data.categories || []).length && !(data.items || []).length) return;   // never wipe to empty
       const sig = structSig(data);
       if (sig === _lastSig) { precacheAllMedia(); return; }   // unchanged → just keep media warm (retries failures)

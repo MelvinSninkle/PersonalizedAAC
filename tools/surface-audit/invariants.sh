@@ -126,6 +126,15 @@ grep -q "DRAFT_ACTIVE = false" api/admin/style-guides.js || { fail "E9 style cre
 grep -q "demo_child_id = 0" api/sync.js || { fail "E9 sync.js lost the demo_child_id = 0 pin — a demo kid could reach a family board"; E9=1; }
 [ "$E9" -eq 0 ] && pass "E9 draft styles stay hidden until published + demo kids never reach families"
 
+# ── E11: layout pushes never clobber a family-arranged board by default ──────
+# Family reorders stamp layoutCustomizedAt; the publish push skips stamped
+# boards unless the admin ticks the explicit overwrite override.
+E11=0
+grep -q "layoutCustomizedAt" api/admin/_lab-publish.js || { fail "E11 publish lost the family-arranged skip"; E11=1; }
+grep -q "stampLayoutCustomized" api/items.js || { fail "E11 items.js reorders no longer stamp layoutCustomizedAt"; E11=1; }
+grep -q "stampLayoutCustomized" api/categories.js || { fail "E11 categories.js reorders no longer stamp layoutCustomizedAt"; E11=1; }
+[ "$E11" -eq 0 ] && pass "E11 layout pushes skip family-arranged boards unless explicitly overridden"
+
 # ── E10: web self-signup requires a valid invite code ────────────────────────
 # The page-level invite wall moved off the funnel (/, /practice, /signup are
 # public); the private preview is enforced INSIDE account creation instead.
