@@ -83,9 +83,9 @@
     <p class="sub">The voices offered app-wide. Rows are the onboarding picker's order — reorder with ▲▼. Edits to name / accent / gender save on change.</p>
     <table>
       <thead>
-        <tr><th style="width:70px;">Order</th><th>Name</th><th>Accent</th><th>Gender</th><th>ElevenLabs id</th><th style="width:60px;">Active</th><th style="width:36px;"></th></tr>
+        <tr><th style="width:70px;">Order</th><th>Name</th><th>Accent</th><th>Gender</th><th style="width:92px;" title="Non-English voices only show for admins + language-tester families">Language</th><th>ElevenLabs id</th><th style="width:60px;">Active</th><th style="width:36px;"></th></tr>
       </thead>
-      <tbody id="vrows"><tr><td colspan="7" class="empty">Loading voices…</td></tr></tbody>
+      <tbody id="vrows"><tr><td colspan="8" class="empty">Loading voices…</td></tr></tbody>
     </table>
     <div class="addrow">
       <input type="text" id="add-id" placeholder="ElevenLabs voice id (required)">
@@ -273,6 +273,19 @@
   }
 
   // --------------------------------------------------------------- catalog
+  // Language is editable right in the row — a non-English voice accidentally
+  // added as "en" would show in EVERY family's onboarding picker (the E1
+  // gate hides non-en voices from ordinary accounts), and until this cell
+  // existed the mistagging was invisible.
+  const LANGS = [['en', 'English'], ['zh', '中文 zh'], ['es', 'Español es'],
+                 ['fr', 'Français fr'], ['pt', 'Português pt'], ['de', 'Deutsch de']];
+  function langCellHTML(v) {
+    const cur = v.lang || 'en';
+    const opts = LANGS.map(([c, l]) => `<option value="${c}" ${c === cur ? 'selected' : ''}>${l}</option>`);
+    if (!LANGS.some(([c]) => c === cur)) opts.push(`<option value="${esc(cur)}" selected>${esc(cur)}</option>`);
+    return `<select data-field="lang" title="Non-English voices only show for admins + language-tester families"
+              style="${cur === 'en' ? '' : 'border-color:#f59e0b;background:#fffbeb;'}">${opts.join('')}</select>`;
+  }
   function voiceRowHTML(v, i) {
     return `<tr class="${v.active ? '' : 'inactive'}" data-id="${esc(v.id)}">
       <td class="ordbtns">
@@ -282,6 +295,7 @@
       <td><input type="text" data-field="name" value="${esc(v.name)}"></td>
       <td><input type="text" data-field="accent" value="${esc(v.accent)}" placeholder="—"></td>
       <td><input type="text" data-field="gender" value="${esc(v.gender)}" placeholder="—"></td>
+      <td>${langCellHTML(v)}</td>
       <td class="vid">${esc(v.id)}</td>
       <td style="text-align:center;"><input type="checkbox" data-act="active" ${v.active ? 'checked' : ''} title="Active voices appear in the onboarding picker"></td>
       <td><button class="del" data-act="del" title="Remove from the catalog (children already using it keep it)">✕</button></td>
@@ -292,7 +306,7 @@
     const tb = document.getElementById('vrows');
     tb.innerHTML = VOICES.length
       ? VOICES.map(voiceRowHTML).join('')
-      : '<tr><td colspan="7" class="empty">No voices yet — add one below.</td></tr>';
+      : '<tr><td colspan="8" class="empty">No voices yet — add one below.</td></tr>';
     renderVoiceSelect();
     renderStat();
   }
@@ -372,6 +386,12 @@
         v[field] = val || null;
         el.classList.remove('dirty');
         renderVoiceSelect();
+        if (field === 'lang') {
+          // Language moves the voice between "everyone's picker" and the
+          // language-tester gate, and in/out of the demo build list.
+          renderCatalog();
+          loadDemoStatus().catch(() => {});
+        }
       }
     } catch (e) { alert(e.message || e); }
   });
@@ -731,7 +751,7 @@
       loadDemoStatus().catch(() => {});
     } catch (e) {
       document.getElementById('stat').textContent = 'Error';
-      document.getElementById('vrows').innerHTML = '<tr><td colspan="7" class="empty">' + esc(e.message || e) + '</td></tr>';
+      document.getElementById('vrows').innerHTML = '<tr><td colspan="8" class="empty">' + esc(e.message || e) + '</td></tr>';
       document.getElementById('words').innerHTML = '<div class="empty">' + esc(e.message || e) + '</div>';
     }
   }
