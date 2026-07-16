@@ -531,6 +531,10 @@ struct ArtStyleSection: View {
                                           onPick: { s in Task { await confirmSwitch(to: s) } })
                     }
                 }
+                // Presentation modifiers (.alert / .photosPicker) MUST hang
+                // off this concrete row, never the Section: a Form Section
+                // isn't a stable presentation anchor, and the UIKit-backed
+                // photo picker crashed the app when presented from one.
                 Menu {
                     Button("Style scene (the overall look)") { pendingUploadKind = "main" }
                     Button("Person reference") { pendingUploadKind = "person" }
@@ -540,6 +544,30 @@ struct ArtStyleSection: View {
                           systemImage: "photo.badge.plus")
                 }
                 .disabled(uploading)
+                // Own-upload warning BEFORE the photo picker opens.
+                .alert("Use your own reference?",
+                       isPresented: Binding(get: { pendingUploadKind != nil },
+                                            set: { if !$0 { pendingUploadKind = nil } })) {
+                    Button("Cancel", role: .cancel) { pendingUploadKind = nil }
+                    Button("Choose a photo") {
+                        uploadKind = pendingUploadKind
+                        pendingUploadKind = nil
+                        // Let the alert finish dismissing before the picker
+                        // presents — presenting during the dismissal is the
+                        // other half of the crash.
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 300_000_000)
+                            showPhotoPicker = true
+                        }
+                    }
+                } message: {
+                    Text("New pictures will be drawn to match it. Tiles already on the board don't change, so the board can look inconsistent until you remake them.")
+                }
+                .photosPicker(isPresented: $showPhotoPicker, selection: $libraryItem, matching: .images)
+                .onChange(of: libraryItem) { _, item in
+                    guard let item else { return }
+                    Task { await uploadRef(item) }
+                }
                 if let msg { Text(msg).font(.footnote).foregroundStyle(.secondary) }
             } else {
                 Text(loaded ? "Couldn't load styles — check your connection." : "Loading…")
@@ -551,24 +579,6 @@ struct ArtStyleSection: View {
             Text("Every generated picture is drawn while looking at these references. Changes apply to NEW pictures only — tiles already on the board keep their current art.")
         }
         .task { await load() }
-        // Own-upload warning BEFORE the photo picker opens.
-        .alert("Use your own reference?",
-               isPresented: Binding(get: { pendingUploadKind != nil },
-                                    set: { if !$0 { pendingUploadKind = nil } })) {
-            Button("Cancel", role: .cancel) { pendingUploadKind = nil }
-            Button("Choose a photo") {
-                uploadKind = pendingUploadKind
-                pendingUploadKind = nil
-                showPhotoPicker = true
-            }
-        } message: {
-            Text("New pictures will be drawn to match it. Tiles already on the board don't change, so the board can look inconsistent until you remake them.")
-        }
-        .photosPicker(isPresented: $showPhotoPicker, selection: $libraryItem, matching: .images)
-        .onChange(of: libraryItem) { _, item in
-            guard let item else { return }
-            Task { await uploadRef(item) }
-        }
     }
 
     private func load() async {
