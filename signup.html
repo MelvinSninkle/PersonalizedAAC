@@ -49,6 +49,11 @@
       <label for="password">Password</label>
       <input id="password" type="password" autocomplete="new-password" placeholder="At least 8 characters" required>
 
+      <label for="inviteCode">Invite code</label>
+      <input id="inviteCode" type="text" autocomplete="off" autocapitalize="none" placeholder="e.g. soccer-friends">
+      <p class="hint">My World is invite-only during early access. Came here from an invite link?
+        Your code is already applied — you can leave this blank.</p>
+
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;font-weight:500;text-transform:none;letter-spacing:0;line-height:1.45;margin:14px 0 10px;color:#4b5563;">
         <input type="checkbox" id="consent" style="width:auto;margin-top:2px;flex:0 0 auto;">
         <span>I'm the parent or legal guardian (or a caregiver with their permission), I'm 18+,
@@ -93,13 +98,18 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ selfSignup: true, email, password, childName, consent: true, consentVersion: '2026-07' }),
+        body: JSON.stringify({ selfSignup: true, email, password, childName, consent: true, consentVersion: '2026-07',
+                               inviteCode: $('inviteCode').value.trim() }),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
         msg.className = 'msg err';
         msg.textContent = data.error || ('Could not create account (HTTP ' + r.status + ').');
         if (r.status === 409) msg.innerHTML = (data.error || 'That email already has an account.') + ' <a href="/login">Sign in →</a>';
+        if (data.error === 'invite_required') {
+          msg.textContent = data.detail || 'My World is invite-only right now — enter your invite code above.';
+          $('inviteCode').focus();
+        }
         btn.disabled = false; btn.textContent = prev;
         return;
       }

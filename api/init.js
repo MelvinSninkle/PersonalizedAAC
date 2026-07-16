@@ -892,6 +892,31 @@ Size: {size}.',
       )`;
     await db`CREATE INDEX IF NOT EXISTS tax_style_defaults_style_idx
              ON taxonomy_style_defaults(style_guide_id, status)`;
+    // Extra "demo kids" per offered style — PUBLIC practice-board only.
+    // demo_child_id 0 = the style's primary kid (style_guides.person_ref_key);
+    // rows > 0 re-render just the person-scope tiles around another child.
+    // Family boards read ONLY demo_child_id = 0 (pinned in api/sync.js — E9).
+    await db`
+      CREATE TABLE IF NOT EXISTS style_demo_children (
+        id             BIGSERIAL PRIMARY KEY,
+        style_guide_id BIGINT NOT NULL,
+        label          TEXT NOT NULL,
+        person_ref_key TEXT,
+        sort_order     INTEGER NOT NULL DEFAULT 0,
+        active         BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
+    await db`ALTER TABLE taxonomy_style_defaults ADD COLUMN IF NOT EXISTS demo_child_id INT NOT NULL DEFAULT 0`;
+    // One-time PK widen to (taxonomy_id, style_guide_id, demo_child_id) —
+    // checked via conkey length so re-runs never churn the constraint.
+    try {
+      const pk = await db`SELECT array_length(conkey, 1) AS n FROM pg_constraint
+                          WHERE conrelid = 'taxonomy_style_defaults'::regclass AND contype = 'p'`;
+      if ((Number(pk[0]?.n) || 0) < 3) {
+        await db`ALTER TABLE taxonomy_style_defaults DROP CONSTRAINT taxonomy_style_defaults_pkey`;
+        await db`ALTER TABLE taxonomy_style_defaults ADD PRIMARY KEY (taxonomy_id, style_guide_id, demo_child_id)`;
+      }
+    } catch (_) { /* concurrent ensure — style-build.js settles it */ }
     // Same idea for category/subcategory chips (parent_norm '' = top level).
     await db`
       CREATE TABLE IF NOT EXISTS category_style_defaults (

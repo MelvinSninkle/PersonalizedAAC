@@ -14,6 +14,13 @@
 //   POST { styleGuideId, op:'create-jobs' }      → fan out tiles+chips (gap-fill)
 //   POST { styleGuideId, op:'publish', active }  → go live (requires 100%) / unpublish
 //
+// Demo kids (extra children on the PUBLIC practice board's kid switcher —
+// family boards only ever see the primary kid, demo_child_id 0):
+//   POST { styleGuideId, op:'kid-candidate', hint? } → { key } generated kid
+//   POST { styleGuideId, op:'kid-save', label, blobKey, kidId? } → add/update a kid
+//   POST { styleGuideId, op:'kid-jobs', kidId }  → queue that kid's person-scope tiles
+//   POST { styleGuideId, op:'kid-remove', kidId } → deactivate (art kept)
+//
 // Drafts: wizard-created styles are active=FALSE until Publish — the
 // onboarding picker (active=TRUE filter) and the demo switcher can never
 // show a half-rendered style (invariant E9).
@@ -23,7 +30,8 @@ import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { readBlobBytes } from '../_lib/onboarding-render.js';
 import { geminiKey, geminiDefaultModel, geminiGenerateImage } from '../_lib/gemini.js';
-import { loadStyle, enqueueStyleBuild, styleBuildStatus } from '../_lib/style-build.js';
+import { loadStyle, enqueueStyleBuild, styleBuildStatus, drainStyleBuildJobs,
+         ensureStyleDefaultTables } from '../_lib/style-build.js';
 
 export const config = { maxDuration: 120 };
 
@@ -69,6 +77,18 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const meta = (await db`SELECT active, preview_blob_key FROM style_guides WHERE id = ${styleGuideId}`)[0] || {};
       const status = await styleBuildStatus(db, styleGuideId);
+      // Extra demo kids + each one's person-scope render progress.
+      await ensureStyleDefaultTables(db);
+      const kidRows = await db`SELECT id, label, person_ref_key, sort_order, active
+                               FROM style_demo_children
+                               WHERE style_guide_id = ${styleGuideId} AND active = TRUE
+                               ORDER BY sort_order, id`;
+      const kids = [];
+      for (const k of kidRows) {
+        const ks = await styleBuildStatus(db, styleGuideId, { demoChildId: Number(k.id) });
+        kids.push({ id: Number(k.id), label: k.label, personRefKey: k.person_ref_key || null,
+                    status: ks });
+      }
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({
         ok: true,
@@ -77,6 +97,7 @@ export default async function handler(req, res) {
                  stuffRefKey: style.stuff_ref_key, previewKey: meta.preview_blob_key || null,
                  active: !!meta.active },
         status,
+        kids,
       });
       return;
     }
@@ -118,6 +139,79 @@ export default async function handler(req, res) {
       const queued = await enqueueStyleBuild(db, styleGuideId);
       res.status(200).json({ ok: true, queued,
         note: 'Queued — the every-minute cron renders these on its own. You can close this tab.' });
+      return;
+    }
+
+    if (op === 'drain') {
+      // "⚡ Render a batch now" — one inline, bounded drain so a slow or
+      // unconfigured cron (Hobby plans only run daily) never blocks the
+      // wizard. Same code path the cron runs; safe to click repeatedly.
+      const r = await drainStyleBuildJobs(db, { budgetMs: 90_000, batch: 4 });
+      const status = await styleBuildStatus(db, styleGuideId);
+      res.status(200).json({ ok: true, ...r, status });
+      return;
+    }
+
+    if (op === 'kid-candidate') {
+      // Same generator as the primary demo kid, plus the admin's appearance
+      // hint ("a girl with curly red hair", "a boy in a wheelchair"…).
+      const hint = String(b.hint || '').trim().slice(0, 300);
+      const prompt = hint
+        ? PERSON_PROMPT + ` Appearance for THIS child: ${hint}.`
+        : PERSON_PROMPT;
+      const png = await renderCandidate(style, prompt);
+      const key = `style-wizard/${style.id}/kids/${randomUUID()}.png`;
+      await put(key, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
+      res.status(200).json({ ok: true, key });
+      return;
+    }
+
+    if (op === 'kid-save') {
+      await ensureStyleDefaultTables(db);
+      const label = String(b.label || '').trim().slice(0, 60);
+      const blobKey = String(b.blobKey || '');
+      if (!label) { res.status(400).json({ error: 'label required' }); return; }
+      if (!/^(style-wizard|styleref|style-guides|styles)\/[A-Za-z0-9/._-]+$/.test(blobKey)) {
+        res.status(400).json({ error: 'unexpected blobKey' }); return;
+      }
+      await readBlobBytes(blobKey);   // throws if missing
+      const kidId = Number(b.kidId) || 0;
+      if (kidId > 0) {
+        const upd = await db`UPDATE style_demo_children
+                             SET label = ${label}, person_ref_key = ${blobKey}, active = TRUE
+                             WHERE id = ${kidId} AND style_guide_id = ${styleGuideId}
+                             RETURNING id`;
+        if (!upd.length) { res.status(404).json({ error: 'kid not found' }); return; }
+        res.status(200).json({ ok: true, kidId });
+        return;
+      }
+      const ins = await db`INSERT INTO style_demo_children (style_guide_id, label, person_ref_key)
+                           VALUES (${styleGuideId}, ${label}, ${blobKey}) RETURNING id`;
+      res.status(200).json({ ok: true, kidId: Number(ins[0].id) });
+      return;
+    }
+
+    if (op === 'kid-jobs') {
+      const kidId = Number(b.kidId) || 0;
+      if (!kidId) { res.status(400).json({ error: 'kidId required' }); return; }
+      const kid = (await db`SELECT person_ref_key FROM style_demo_children
+                            WHERE id = ${kidId} AND style_guide_id = ${styleGuideId} AND active = TRUE`)[0];
+      if (!kid) { res.status(404).json({ error: 'kid not found' }); return; }
+      if (!kid.person_ref_key) { res.status(400).json({ error: 'kid has no reference image yet' }); return; }
+      const queued = await enqueueStyleBuild(db, styleGuideId, { demoChildId: kidId });
+      res.status(200).json({ ok: true, queued,
+        note: 'Queued — only the person tiles re-render for this kid; objects and folders are shared.' });
+      return;
+    }
+
+    if (op === 'kid-remove') {
+      const kidId = Number(b.kidId) || 0;
+      if (!kidId) { res.status(400).json({ error: 'kidId required' }); return; }
+      await db`UPDATE style_demo_children SET active = FALSE
+               WHERE id = ${kidId} AND style_guide_id = ${styleGuideId}`;
+      await db`DELETE FROM style_build_jobs
+               WHERE style_guide_id = ${styleGuideId} AND demo_child_id = ${kidId} AND status = 'queued'`;
+      res.status(200).json({ ok: true });
       return;
     }
 

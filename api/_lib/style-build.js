@@ -40,6 +40,52 @@ export async function ensureStyleDefaultTables(db) {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (style_guide_id, section, label_norm, parent_norm)
     )`;
+  // Demo children: extra "demo kids" per style for the PUBLIC practice
+  // board's kid switcher. demo_child_id 0 = the style's primary kid
+  // (style_guides.person_ref_key). Only PERSON-SCOPE tiles vary per kid
+  // (~29% of rows); object tiles + folder chips stay the shared kid-0 set.
+  // Family boards read ONLY demo_child_id = 0 (pinned in api/sync.js — E9).
+  await db`
+    CREATE TABLE IF NOT EXISTS style_demo_children (
+      id BIGSERIAL PRIMARY KEY,
+      style_guide_id BIGINT NOT NULL,
+      label TEXT NOT NULL,
+      person_ref_key TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`;
+  await db`ALTER TABLE taxonomy_style_defaults ADD COLUMN IF NOT EXISTS demo_child_id INT NOT NULL DEFAULT 0`;
+  // Widen the PK to include demo_child_id (once — checked, not churned).
+  try {
+    const pk = await db`SELECT array_length(conkey, 1) AS n FROM pg_constraint
+                        WHERE conrelid = 'taxonomy_style_defaults'::regclass AND contype = 'p'`;
+    if ((Number(pk[0]?.n) || 0) < 3) {
+      await db`ALTER TABLE taxonomy_style_defaults DROP CONSTRAINT taxonomy_style_defaults_pkey`;
+      await db`ALTER TABLE taxonomy_style_defaults ADD PRIMARY KEY (taxonomy_id, style_guide_id, demo_child_id)`;
+    }
+  } catch (_) { /* pre-migration DB or concurrent ensure — next call settles it */ }
+}
+
+/// PERSON-SCOPE ⇔ the tile draws the child, so it varies per demo kid.
+/// Mirrors renderTaxonomyTile's usePerson (onboarding-render.js) exactly.
+export function isPersonScopeRow(t) {
+  return String(t.column_name || '').toLowerCase() === 'people'
+    || /\{reference\}/i.test(String(t.prompt_template || ''))
+    || t.subject_mode === 'child_as_subject';
+}
+
+/// The anchor image for a build: kid 0 = the style's own person ref;
+/// otherwise the style_demo_children row's ref.
+export async function demoChildAnchor(db, style, demoChildId) {
+  if (!demoChildId) return personAnchor(style);
+  const row = (await db`SELECT person_ref_key FROM style_demo_children
+                        WHERE id = ${demoChildId} AND style_guide_id = ${style.id} LIMIT 1`)[0];
+  if (!row || !row.person_ref_key) return null;
+  try {
+    const bytes = await readBlobBytes(row.person_ref_key);
+    return { ...bytes, key: row.person_ref_key, name: 'the child' };
+  } catch (_) { return null; }
 }
 
 // The style row WITHOUT the active filter (a style being prepped before it's
@@ -112,7 +158,7 @@ export async function personAnchor(style) {
   } catch (_) { return null; }
 }
 
-export async function renderOneTile({ db, style, tax, settings, anchor }) {
+export async function renderOneTile({ db, style, tax, settings, anchor, demoChildId = 0 }) {
   const r = await renderTaxonomyTile({
     tax, styleGuide: style, childAnchor: anchor, settings,
     worldRefKeys: style.stuff_ref_key ? [style.stuff_ref_key] : [],
@@ -121,9 +167,9 @@ export async function renderOneTile({ db, style, tax, settings, anchor }) {
   const png = Buffer.from(r.b64, 'base64');
   const imageKey = `style-defaults/${style.id}/${tax.id}/${randomUUID()}.png`;
   await put(imageKey, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
-  await db`INSERT INTO taxonomy_style_defaults (taxonomy_id, style_guide_id, image_key, status, error, updated_at)
-           VALUES (${tax.id}, ${style.id}, ${imageKey}, 'done', NULL, NOW())
-           ON CONFLICT (taxonomy_id, style_guide_id)
+  await db`INSERT INTO taxonomy_style_defaults (taxonomy_id, style_guide_id, demo_child_id, image_key, status, error, updated_at)
+           VALUES (${tax.id}, ${style.id}, ${Number(demoChildId) || 0}, ${imageKey}, 'done', NULL, NOW())
+           ON CONFLICT (taxonomy_id, style_guide_id, demo_child_id)
            DO UPDATE SET image_key = ${imageKey}, status = 'done', error = NULL, updated_at = NOW()`;
   try {
     await db`INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, size, cost_cents)
@@ -182,9 +228,11 @@ export async function ensureStyleBuildJobs(db) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
+  await db`ALTER TABLE style_build_jobs ADD COLUMN IF NOT EXISTS demo_child_id INT NOT NULL DEFAULT 0`;
   await db`CREATE INDEX IF NOT EXISTS style_build_jobs_pick ON style_build_jobs(status, id)`;
-  await db`CREATE UNIQUE INDEX IF NOT EXISTS style_build_jobs_tile
-           ON style_build_jobs(style_guide_id, taxonomy_id) WHERE kind = 'tile'`;
+  await db`DROP INDEX IF EXISTS style_build_jobs_tile`;
+  await db`CREATE UNIQUE INDEX IF NOT EXISTS style_build_jobs_tile_kid
+           ON style_build_jobs(style_guide_id, taxonomy_id, demo_child_id) WHERE kind = 'tile'`;
   await db`CREATE UNIQUE INDEX IF NOT EXISTS style_build_jobs_chip
            ON style_build_jobs(style_guide_id, section, label, parent) WHERE kind = 'chip'`;
 }
@@ -192,47 +240,63 @@ export async function ensureStyleBuildJobs(db) {
 /// Fan out every missing tile + chip for a style. Already-rendered pieces are
 /// skipped (gap-fill semantics — same as the gallery's non-force loop); a
 /// failed/stale job re-queues. Returns { tiles, chips } queued counts.
-export async function enqueueStyleBuild(db, styleGuideId) {
+///
+/// demoChildId ≠ 0 = an EXTRA demo kid: only person-scope rows re-render
+/// (object tiles + chips are shared with kid 0), so a kid costs ~344 tiles,
+/// not the full board.
+export async function enqueueStyleBuild(db, styleGuideId, { demoChildId = 0 } = {}) {
   await ensureStyleDefaultTables(db);
   await ensureStyleBuildJobs(db);
-  const [rows, chips, tileDefs, chipDefs] = await Promise.all([
+  const kid = Number(demoChildId) || 0;
+  const [allRows, chips, tileDefs, chipDefs] = await Promise.all([
     placeableRows(db), chipRows(db),
-    db`SELECT taxonomy_id, image_key FROM taxonomy_style_defaults WHERE style_guide_id = ${styleGuideId}`,
+    db`SELECT taxonomy_id, image_key FROM taxonomy_style_defaults
+       WHERE style_guide_id = ${styleGuideId} AND demo_child_id = ${kid}`,
     db`SELECT section, label_norm, parent_norm, image_key FROM category_style_defaults WHERE style_guide_id = ${styleGuideId}`,
   ]);
+  const rows = kid === 0 ? allRows : allRows.filter(isPersonScopeRow);
   const doneTiles = new Set(tileDefs.filter(t => t.image_key).map(t => t.taxonomy_id));
   const doneChips = new Set(chipDefs.filter(c => c.image_key).map(c => `${c.section}|${c.label_norm}|${c.parent_norm}`));
   let tiles = 0, chipsN = 0;
   for (const t of rows) {
     if (doneTiles.has(t.id)) continue;
-    await db`INSERT INTO style_build_jobs (style_guide_id, kind, taxonomy_id)
-             VALUES (${styleGuideId}, 'tile', ${t.id})
-             ON CONFLICT (style_guide_id, taxonomy_id) WHERE kind = 'tile'
+    await db`INSERT INTO style_build_jobs (style_guide_id, kind, taxonomy_id, demo_child_id)
+             VALUES (${styleGuideId}, 'tile', ${t.id}, ${kid})
+             ON CONFLICT (style_guide_id, taxonomy_id, demo_child_id) WHERE kind = 'tile'
              DO UPDATE SET status = 'queued', error = NULL, updated_at = NOW()`;
     tiles++;
   }
-  for (const c of chips) {
-    if (doneChips.has(`${c.section}|${norm(c.label)}|${norm(c.parent)}`)) continue;
-    await db`INSERT INTO style_build_jobs (style_guide_id, kind, section, label, parent)
-             VALUES (${styleGuideId}, 'chip', ${c.section}, ${c.label}, ${c.parent})
-             ON CONFLICT (style_guide_id, section, label, parent) WHERE kind = 'chip'
-             DO UPDATE SET status = 'queued', error = NULL, updated_at = NOW()`;
-    chipsN++;
+  if (kid === 0) {
+    for (const c of chips) {
+      if (doneChips.has(`${c.section}|${norm(c.label)}|${norm(c.parent)}`)) continue;
+      await db`INSERT INTO style_build_jobs (style_guide_id, kind, section, label, parent)
+               VALUES (${styleGuideId}, 'chip', ${c.section}, ${c.label}, ${c.parent})
+               ON CONFLICT (style_guide_id, section, label, parent) WHERE kind = 'chip'
+               DO UPDATE SET status = 'queued', error = NULL, updated_at = NOW()`;
+      chipsN++;
+    }
   }
   return { tiles, chips: chipsN };
 }
 
 /// Queue + completion status for one style (the wizard's progress bar).
-export async function styleBuildStatus(db, styleGuideId) {
+/// demoChildId ≠ 0 scopes everything to that kid's person-scope set: totals
+/// count only person-scope rows, chips are always 0/0 (shared with kid 0).
+export async function styleBuildStatus(db, styleGuideId, { demoChildId = 0 } = {}) {
   await ensureStyleDefaultTables(db);
   await ensureStyleBuildJobs(db);
-  const [jobs, rows, chips, tileDefs, chipDefs] = await Promise.all([
+  const kid = Number(demoChildId) || 0;
+  const [jobs, allRows, allChips, tileDefs, chipDefs] = await Promise.all([
     db`SELECT kind, status, COUNT(*)::int AS n FROM style_build_jobs
-       WHERE style_guide_id = ${styleGuideId} GROUP BY kind, status`,
+       WHERE style_guide_id = ${styleGuideId} AND demo_child_id = ${kid} GROUP BY kind, status`,
     placeableRows(db), chipRows(db),
-    db`SELECT COUNT(*)::int AS n FROM taxonomy_style_defaults WHERE style_guide_id = ${styleGuideId} AND image_key IS NOT NULL`,
+    db`SELECT COUNT(*)::int AS n FROM taxonomy_style_defaults
+       WHERE style_guide_id = ${styleGuideId} AND demo_child_id = ${kid} AND image_key IS NOT NULL`,
     db`SELECT COUNT(*)::int AS n FROM category_style_defaults WHERE style_guide_id = ${styleGuideId} AND image_key IS NOT NULL`,
   ]);
+  const rows = kid === 0 ? allRows : allRows.filter(isPersonScopeRow);
+  const chips = kid === 0 ? allChips : [];
+  const chipsDone = kid === 0 ? (chipDefs[0]?.n || 0) : 0;
   const j = { tileQueued: 0, tileFailed: 0, chipQueued: 0, chipFailed: 0 };
   for (const r of jobs) {
     if (r.kind === 'tile' && r.status === 'queued') j.tileQueued = r.n;
@@ -242,9 +306,9 @@ export async function styleBuildStatus(db, styleGuideId) {
   }
   return {
     tiles: rows.length, tilesDone: tileDefs[0]?.n || 0,
-    chips: chips.length, chipsDone: chipDefs[0]?.n || 0,
+    chips: chips.length, chipsDone,
     ...j,
-    complete: (tileDefs[0]?.n || 0) >= rows.length && (chipDefs[0]?.n || 0) >= chips.length,
+    complete: (tileDefs[0]?.n || 0) >= rows.length && chipsDone >= chips.length,
   };
 }
 
@@ -259,26 +323,29 @@ export async function drainStyleBuildJobs(db, { budgetMs = 40000, batch = 6 } = 
                           ORDER BY id LIMIT ${batch}`;
   if (!picked.length) return { processed: 0, failed: 0 };
   const settings = await labSettings(db);
-  const styles = new Map();   // style id → { style, anchor }
+  const styles = new Map();   // style id → style row (or null)
+  const anchors = new Map();  // "styleId:kidId" → child anchor image (or null)
   let processed = 0, failed = 0;
   for (const job of picked) {
     if (Date.now() - started > budgetMs) break;
     const sid = Number(job.style_guide_id);
-    if (!styles.has(sid)) {
-      const style = await loadStyle(db, sid);
-      styles.set(sid, style ? { style, anchor: await personAnchor(style) } : null);
-    }
-    const s = styles.get(sid);
+    const kid = Number(job.demo_child_id) || 0;
+    if (!styles.has(sid)) styles.set(sid, await loadStyle(db, sid));
+    const style = styles.get(sid);
     try {
-      if (!s) throw new Error('style guide missing');
+      if (!style) throw new Error('style guide missing');
       if (job.kind === 'tile') {
+        const aKey = `${sid}:${kid}`;
+        if (!anchors.has(aKey)) anchors.set(aKey, await demoChildAnchor(db, style, kid));
+        const anchor = anchors.get(aKey);
+        if (kid !== 0 && !anchor) throw new Error('demo kid reference missing');
         const tax = (await db`SELECT id, id AS slug, column_name, category, subcategory, label, prompt_template,
                                      subject_mode, related_images, default_image_key
                               FROM taxonomy WHERE id = ${job.taxonomy_id} LIMIT 1`)[0];
         if (!tax) throw new Error('taxonomy row gone');
-        await renderOneTile({ db, style: s.style, tax, settings, anchor: s.anchor });
+        await renderOneTile({ db, style, tax, settings, anchor, demoChildId: kid });
       } else {
-        await renderOneChip({ db, style: s.style,
+        await renderOneChip({ db, style,
           chip: { section: job.section, label: job.label, parent: job.parent || '' } });
       }
       await db`UPDATE style_build_jobs SET status = 'done', error = NULL, updated_at = NOW() WHERE id = ${job.id}`;

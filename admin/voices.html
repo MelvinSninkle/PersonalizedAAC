@@ -106,6 +106,21 @@
     <div class="note">Paste an id from the ElevenLabs voice library — name, accent and gender are looked up automatically if left blank. Active <b>English</b> voices appear in everyone's onboarding picker immediately; voices tagged another language stay hidden from ordinary accounts and only show for admins + language-tester families.</div>
   </div>
 
+  <div class="panel" id="demo-panel">
+    <h2>🌍 Practice-board voices</h2>
+    <p class="sub">The PUBLIC practice board plays pre-rendered clips (never live TTS — visitors can't spend).
+      Build a voice's clip set here and it appears in the /practice voice picker. Builds are resumable —
+      run again to finish; the shared TTS cache makes re-runs cheap.</p>
+    <table>
+      <thead><tr><th>Voice</th><th>Clips built</th><th style="width:190px;"></th></tr></thead>
+      <tbody id="demo-rows"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody>
+    </table>
+    <div class="addrow">
+      <button class="primary" id="demo-build-all">Build all active English voices</button>
+      <span id="demo-msg"></span>
+    </div>
+  </div>
+
   <div class="panel" id="bench-panel">
     <h2>Sound check</h2>
     <p class="sub">Listen to every standard-library word in each active voice. ▶ plays the exact cached clip every board plays; ↻ re-renders it (overwriting the shared cache) and plays the fresh take. Standard library only — personalized words render per child.</p>
@@ -621,12 +636,61 @@
       renderCatalog();
       await loadQC();
       renderWords();
+      loadDemoStatus().catch(() => {});
     } catch (e) {
       document.getElementById('stat').textContent = 'Error';
       document.getElementById('vrows').innerHTML = '<tr><td colspan="7" class="empty">' + esc(e.message || e) + '</td></tr>';
       document.getElementById('words').innerHTML = '<div class="empty">' + esc(e.message || e) + '</div>';
     }
   }
+
+  // ── Practice-board voices: build the public demo's pre-rendered clips ─────
+  // The /practice picker only lists voices in demo_voices, and those only
+  // play once demo-audio/<vid>/<slug>.mp3 clips exist. op=build is
+  // resumable/time-boxed server-side, so we loop until remaining hits 0.
+  let DEMO_TOTAL = 0;
+  async function loadDemoStatus() {
+    const d = await api('/api/admin/lab?action=demo-audio');
+    DEMO_TOTAL = Number(d.tiles) || 0;
+    const built = d.built || {};
+    const rows = VOICES.filter((v) => v.active && (v.lang || 'en') === 'en');
+    const tb = document.getElementById('demo-rows');
+    if (!rows.length) { tb.innerHTML = '<tr><td colspan="3" class="empty">No active English voices.</td></tr>'; return; }
+    tb.innerHTML = rows.map((v) => {
+      const n = Number(built[v.id]) || 0;
+      const done = DEMO_TOTAL > 0 && n >= DEMO_TOTAL;
+      return '<tr><td>' + esc(v.name) + '</td>'
+        + '<td>' + (done ? '✅ ' : '') + n + (DEMO_TOTAL ? ' / ' + DEMO_TOTAL : '') + '</td>'
+        + '<td><button class="primary" data-demo-build="' + esc(v.id) + '"' + (done ? ' disabled' : '') + '>'
+        + (n > 0 && !done ? 'Resume build' : 'Build demo clips') + '</button></td></tr>';
+    }).join('');
+    tb.querySelectorAll('[data-demo-build]').forEach((b) =>
+      b.addEventListener('click', () => buildDemo([b.dataset.demoBuild])));
+  }
+  async function buildDemo(voiceIds) {
+    const msg = document.getElementById('demo-msg');
+    document.querySelectorAll('#demo-panel button').forEach((b) => { b.disabled = true; });
+    try {
+      for (const vid of voiceIds) {
+        for (let round = 0; round < 60; round++) {   // safety cap; each call is time-boxed
+          msg.textContent = 'Building ' + vid + '… (round ' + (round + 1) + ' — safe to keep waiting)';
+          const r = await api('/api/admin/lab?action=demo-audio', { method: 'POST', body: { op: 'build', voiceIds: [vid] } });
+          const remaining = Number(r.remaining) || 0;
+          if (!remaining) break;
+          msg.textContent = 'Building ' + vid + '… ' + remaining + ' clips to go.';
+        }
+      }
+      msg.textContent = '✅ Done — the /practice voice picker updates on its next load.';
+    } catch (e) { msg.textContent = 'Build failed: ' + (e.message || e); }
+    document.querySelectorAll('#demo-panel button').forEach((b) => { b.disabled = false; });
+    loadDemoStatus().catch(() => {});
+  }
+  document.getElementById('demo-build-all').addEventListener('click', () => {
+    const ids = VOICES.filter((v) => v.active && (v.lang || 'en') === 'en').map((v) => v.id);
+    if (!ids.length) return;
+    if (!confirm('Build practice clips for ' + ids.length + ' voice(s)? Each voice renders every standard-library word (cached words are free).')) return;
+    buildDemo(ids);
+  });
 
   document.getElementById('refresh').addEventListener('click', load);
   load();

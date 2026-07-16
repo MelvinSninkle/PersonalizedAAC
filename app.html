@@ -1464,16 +1464,22 @@
 <div class="modal-backdrop" id="display-modal">
   <div class="modal">
     <h3>Display Settings</h3>
-    <div style="font-size:13px;color:#666;margin-bottom:8px;">These are saved on this device only.</div>
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #eee;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
-      <span style="font-size:13px;color:#666;">Signed in on this device</span>
-      <button type="button" class="secondary" id="display-signout" style="padding:8px 14px;border-radius:8px;border:none;background:#fee2e2;color:#b91c1c;font-weight:700;cursor:pointer;">Sign out</button>
-    </div>
-    <div class="checkbox-row">
+
+    <!-- 1 · Board look — per-device, most-used first (canonical themed order
+         shared with parent.html and the native settings screens). -->
+    <label style="margin-top:4px;">🎨 Board look</label>
+    <div style="font-size:12px;color:#666;margin:4px 0 2px;">Saved on this device only — size things for this screen.</div>
+    <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-hide-labels">
       <label for="disp-hide-labels">Hide all labels — tiles, categories &amp; the People/Nouns/Verbs headers</label>
     </div>
-    <label style="margin-top:18px;">Show sections</label>
+    <label style="margin-top:14px;font-size:13px;">Tiles across each section</label>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-top:6px;">
+      <span>People</span><select id="disp-across-people" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
+      <span>Nouns</span><select id="disp-across-nouns" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
+      <span>Verbs</span><select id="disp-across-verbs" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
+    </div>
+    <label style="margin-top:14px;font-size:13px;">Show sections</label>
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-show-people"><label for="disp-show-people">People</label>
     </div>
@@ -1486,33 +1492,66 @@
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-show-needs"><label for="disp-show-needs">Needs strip (bottom row)</label>
     </div>
-    <label style="margin-top:18px;">Tiles across each section</label>
-    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-top:6px;">
-      <span>People</span><select id="disp-across-people" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
-      <span>Nouns</span><select id="disp-across-nouns" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
-      <span>Verbs</span><select id="disp-across-verbs" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;"></select>
-    </div>
-    <label style="margin-top:18px;">Section colors</label>
+    <label style="margin-top:14px;font-size:13px;">Section colors</label>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-top:6px;">
       <span>People</span><input type="color" id="disp-color-people" style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
       <span>Nouns</span><input type="color"  id="disp-color-nouns"  style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
       <span>Verbs</span><input type="color"  id="disp-color-verbs"  style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
       <span>Needs</span><input type="color"  id="disp-color-needs"  style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
     </div>
-    <label style="margin-top:18px;">Header colors</label>
+    <label style="margin-top:14px;font-size:13px;">Header colors</label>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-top:6px;">
       <span>Background</span><input type="color" id="disp-color-header-bg"   style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
       <span>Text</span>      <input type="color" id="disp-color-header-text" style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
     </div>
-    <label style="margin-top:18px;">Default view for this device</label>
-    <div style="font-size:12px;color:#666;margin:4px 0 6px;">When the app opens on this device, go straight to:</div>
-    <select id="disp-device-role" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;width:100%;box-sizing:border-box;">
-      <option value="child" id="opt-child-view">This child's board (this view)</option>
-      <option value="parent">Parent dashboard</option>
-      <option value="therapist" id="opt-therapist-view">Therapist view</option>
-    </select>
-    <label style="margin-top:18px;">Buttons &amp; safety</label>
-    <div style="font-size:12px;color:#666;margin:4px 0 2px;">Unlike the settings above, these follow the child — they apply on every device this board is used on.</div>
+
+    <!-- Synced sections: everything below follows the child, not the device. -->
+    <div style="font-size:12px;color:#666;margin:18px 0 2px;border-top:1px solid #eee;padding-top:12px;">Everything below follows your child — it applies on every device this board is used on.</div>
+
+    <!-- 2 · Board tools -->
+    <label style="margin-top:10px;">🔘 Board tools</label>
+    <div style="font-size:12px;color:#666;margin:4px 0 2px;">Which buttons show in the board's header.</div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-tool-listen"><label for="disp-tool-listen">🎙 Listening (live word strip)</label>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-tool-teach"><label for="disp-tool-teach">📖 Teach (word slideshows)</label>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-tool-play"><label for="disp-tool-play">🙋 Play (find-the-word game)</label>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-tool-sentence"><label for="disp-tool-sentence">✏️ Sentence mode</label>
+    </div>
+
+    <!-- 3 · Touch & play -->
+    <label style="margin-top:18px;">✋ Touch &amp; play</label>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-tap-interrupt">
+      <label for="disp-tap-interrupt">New taps interrupt the current word
+        <span style="display:block;font-size:12px;color:#666;">Off = each word finishes before the next plays (steadier for new talkers).</span></label>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-double-teach">
+      <label for="disp-double-teach">Double-tap a tile teaches it
+        <span style="display:block;font-size:12px;color:#666;">A quick second tap opens the word's teaching slideshow.</span></label>
+    </div>
+
+    <!-- 4 · Listening -->
+    <label style="margin-top:18px;">🎙 Listening</label>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-listen-censor">
+      <label for="disp-listen-censor">Hide bad words in Listening
+        <span style="display:block;font-size:12px;color:#666;">Curse words and slurs someone says nearby show as "Bad Word" instead of the word itself.</span></label>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-listen-tiles">
+      <label for="disp-listen-tiles">Listening shows only words with tiles
+        <span style="display:block;font-size:12px;color:#666;">Spoken words that aren't on the board don't appear at all.</span></label>
+    </div>
+
+    <!-- 5 · Safety & unlock -->
+    <label style="margin-top:18px;">🔒 Safety &amp; unlock</label>
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-easy-close">
       <label for="disp-easy-close">Close buttons work with a quick tap
@@ -1534,15 +1573,18 @@
       </div>
       <div id="disp-unlock-msg" style="font-size:12px;color:#c0392b;margin-top:6px;"></div>
     </div>
-    <div class="checkbox-row" style="margin-top:6px;">
-      <input type="checkbox" id="disp-listen-censor">
-      <label for="disp-listen-censor">Hide bad words in Listening
-        <span style="display:block;font-size:12px;color:#666;">Curse words and slurs someone says nearby show as "Bad Word" instead of the word itself.</span></label>
-    </div>
-    <div class="checkbox-row" style="margin-top:6px;">
-      <input type="checkbox" id="disp-listen-tiles">
-      <label for="disp-listen-tiles">Listening shows only words with tiles
-        <span style="display:block;font-size:12px;color:#666;">Spoken words that aren't on the board don't appear at all.</span></label>
+
+    <!-- 6 · This device -->
+    <label style="margin-top:18px;">📱 This device</label>
+    <div style="font-size:12px;color:#666;margin:4px 0 6px;">When the app opens on this device, go straight to:</div>
+    <select id="disp-device-role" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;width:100%;box-sizing:border-box;">
+      <option value="child" id="opt-child-view">This child's board (this view)</option>
+      <option value="parent">Parent dashboard</option>
+      <option value="therapist" id="opt-therapist-view">Therapist view</option>
+    </select>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #eee;border-radius:10px;padding:10px 12px;margin-top:10px;">
+      <span style="font-size:13px;color:#666;">Signed in on this device</span>
+      <button type="button" class="secondary" id="display-signout" style="padding:8px 14px;border-radius:8px;border:none;background:#fee2e2;color:#b91c1c;font-weight:700;cursor:pointer;">Sign out</button>
     </div>
     <div id="disp-account" style="margin-top:18px;border-top:1px solid #eee;padding-top:14px;display:none;">
       <label>Account &amp; password</label>
@@ -4528,6 +4570,12 @@
     document.getElementById('disp-easy-unlock').checked = SAFETY.easyUnlock;
     document.getElementById('disp-listen-censor').checked = LISTEN.censor;
     document.getElementById('disp-listen-tiles').checked = LISTEN.tilesOnly;
+    document.getElementById('disp-tool-listen').checked = TOOLS.listen;
+    document.getElementById('disp-tool-teach').checked = TOOLS.teach;
+    document.getElementById('disp-tool-play').checked = TOOLS.play;
+    document.getElementById('disp-tool-sentence').checked = TOOLS.sentence;
+    document.getElementById('disp-tap-interrupt').checked = TOUCH.interrupt;
+    document.getElementById('disp-double-teach').checked = TOUCH.doubleTapTeach;
     document.getElementById('disp-unlock-confirm').style.display = 'none';
     document.getElementById('disp-unlock-pass').value = '';
     document.getElementById('disp-unlock-msg').textContent = '';
@@ -4615,6 +4663,13 @@
     SAFETY.easyUnlock = !!next.easyUnlock;
     LISTEN.censor = next.listenCensor !== false;
     LISTEN.tilesOnly = !!next.listenTilesOnly;
+    TOUCH.interrupt = !!next.tapInterrupt;
+    TOUCH.doubleTapTeach = !!next.doubleTapTeach;
+    TOOLS.listen = next.toolListen !== false;
+    TOOLS.teach = next.toolTeach !== false;
+    TOOLS.play = next.toolPlay !== false;
+    TOOLS.sentence = next.toolSentence !== false;
+    applyTools();
   }
   (function wireSafetyToggles() {
     const closeCb = document.getElementById('disp-easy-close');
@@ -4623,6 +4678,22 @@
       try { await saveSafety({ easyClose: want }); }
       catch (_) { closeCb.checked = SAFETY.easyClose; }   // offline / no permission — revert
     });
+    // Board tools + touch controls — plain synced toggles, same read-merge-
+    // write path; the mirrors in saveSafety keep the live board in step.
+    const plain = (id, key, mirror) => {
+      const cb = document.getElementById(id);
+      if (!cb) return;
+      cb.addEventListener('change', async () => {
+        try { await saveSafety({ [key]: cb.checked }); }
+        catch (_) { cb.checked = mirror(); }             // offline — revert
+      });
+    };
+    plain('disp-tool-listen', 'toolListen', () => TOOLS.listen);
+    plain('disp-tool-teach', 'toolTeach', () => TOOLS.teach);
+    plain('disp-tool-play', 'toolPlay', () => TOOLS.play);
+    plain('disp-tool-sentence', 'toolSentence', () => TOOLS.sentence);
+    plain('disp-tap-interrupt', 'tapInterrupt', () => TOUCH.interrupt);
+    plain('disp-double-teach', 'doubleTapTeach', () => TOUCH.doubleTapTeach);
     // Listening filter toggles (E8) — plain settings, no confirm friction.
     const censorCb = document.getElementById('disp-listen-censor');
     censorCb.addEventListener('change', async () => {

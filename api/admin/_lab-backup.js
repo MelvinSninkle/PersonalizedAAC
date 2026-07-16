@@ -25,7 +25,7 @@ const TABLES = [
   'item_image_history', 'reference_images', 'pending_tiles', 'taxonomy',
   'category_defaults', 'style_guides', 'tile_generations', 'invite_codes',
   'child_settings', 'push_tokens', 'persons', 'taxonomy_style_defaults',
-  'category_style_defaults', 'default_category_order', 'milestones',
+  'category_style_defaults', 'style_demo_children', 'default_category_order', 'milestones',
   'role_grants', 'label_translations', 'board_pings', 'board_catalog',
   'voices', 'onboarding_progress', 'seed_jobs', 'tile_jobs',
 ];
@@ -44,6 +44,7 @@ const KEY_COLUMNS = [
   ['tile_generations', 'blob_key'],
   ['taxonomy_style_defaults', 'image_key'],
   ['category_style_defaults', 'image_key'],
+  ['style_demo_children', 'person_ref_key'],
 ];
 
 export default async function handler(req, res) {

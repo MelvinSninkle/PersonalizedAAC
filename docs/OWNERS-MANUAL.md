@@ -174,6 +174,28 @@ family keeps everything they have — only new spends wait.
 - **The public demo** (`/practice`) has a style switcher listing every
   PUBLISHED style — new styles are marketing the moment they go live, with
   zero extra renders (the demo reads the same per-style tables).
+- **More demo kids on the practice board** (per style, optional): wizard →
+  step **2b · More demo kids**. Name the kid, optionally describe their
+  look ("a girl with curly red hair"), ✨ Generate (or upload) their
+  reference, ✓ Save, then **🚀 Render their tiles** — only the person tiles
+  re-render (~340 tiles ≈ $14 of house render spend per kid per style);
+  objects and folder icons are shared. The kid appears on
+  `/practice`'s "Meet:" switcher automatically once their set is 100%
+  rendered — never before, and NEVER on a family's board (family syncs are
+  pinned to the main demo kid; invariant E9b). Remove hides the kid from
+  the switcher but keeps the rendered art.
+- **Practice-board voices**: admin → **Voice library** → 🌍 Practice-board
+  voices panel. "Build" per voice (or Build all active) renders the ~full
+  clip set through the shared TTS cache; once built, that voice appears on
+  `/practice`'s voice picker on its own.
+- **The public funnel & invite codes**: the landing page, `/practice`, and
+  `/signup` are fully public — share them anywhere. The invite code is
+  required INLINE on the signup form instead (invite links still pre-apply
+  it via the /welcome cookie, and the field says so); a wrong/missing code
+  can't create an account (invariant E10). Every other page still bounces
+  anonymous visitors to /welcome. Caveat: a first-time **Sign in with
+  Apple** signup isn't code-gated yet — the native apps need an invite-code
+  field first (noted in api/auth/apple.js).
 - **Add-on boards**: Lab → Default board → ➕ New board with "Add-on" checked
   (never seeded; `board_catalog.store_only` is the enforcement point).
   Generate its art, publish defaults, and it appears in every store surface's
@@ -182,6 +204,18 @@ family keeps everything they have — only new spends wait.
 - **Credits UX rule**: any button that will spend credits says
   "uses ⭐N — you have ⭐M" and waits for OK (see surface-audit F1b);
   balances show on both native parent home cards and the dashboard chip.
+- **Parent settings, one order everywhere**: every surface presents the
+  parent controls in the same themed order, most-common first — 🎨 Board
+  look · 🖼 Art style · 🔘 Board tools · ✋ Touch & play · 🎙 Listening ·
+  🔒 Safety & unlock · 📱 This device. Editors: the web board's ⚙ Display
+  modal, the dashboard accordions, and each app's ⚙ Display sheet +
+  parent Settings (which now also shows the current style, its three
+  reference images, a switcher, and own-reference upload — every change
+  warns that existing tiles keep their old art). Enabling
+  password-free unlock always re-asks for the account password (invariant
+  E6b, enforced on all four editors). The practice board offers the
+  Board-look controls too, but only for that browser session — nothing a
+  visitor does there is saved anywhere.
 - **Onboarding "personal touches"**: after the founder letter, parents are
   walked through favorite foods (⭐3 gift) → toys (⭐3 gift) → shows &
   movies (own-photo upload, raw-only). Grants are idempotent by ledger

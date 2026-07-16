@@ -124,6 +124,11 @@ export default async function handler(req, res) {
     // 3) Fresh account. Pick a unique child_slug — fall back with a numeric
     //    suffix on collision.
     if (!row) {
+      // NOTE: unlike register.js's web self-signup, a fresh SIWA account is
+      // NOT invite-gated — the native apps have no invite-code field yet, so
+      // requiring one here would strand every new iPad signup until a native
+      // rebuild ships the field. Add the field natively, then mirror
+      // register.js's validateInviteCode gate here.
       created = true;
       let slug = wantSlug;
       for (let i = 2; i < 1000; i++) {

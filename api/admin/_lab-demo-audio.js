@@ -22,12 +22,16 @@ export const demoSlug = (s) =>
   String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
 async function demoLabels(db) {
+  // ALL placeable canonical/universal labels — no default_image_key gate:
+  // styled demos show person-referencing tiles (People/Verbs/Needs) too, so
+  // their words need clips. The shared TTS cache makes re-builds cheap.
   const rows = await db`
     SELECT DISTINCT label FROM taxonomy
     WHERE COALESCE(archived, FALSE) = FALSE
+      AND COALESCE(is_event, FALSE) = FALSE
+      AND COALESCE(is_gestalt, FALSE) = FALSE
       AND COALESCE(authoring_kind, 'canonical') = 'canonical'
-      AND COALESCE(audience, 'universal') = 'universal'
-      AND default_image_key IS NOT NULL`;
+      AND COALESCE(audience, 'universal') = 'universal'`;
   return rows.map((r) => r.label);
 }
 

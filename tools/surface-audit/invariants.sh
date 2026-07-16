@@ -55,6 +55,20 @@ for f in app.html parent.html; do
     fail "E6b easyUnlock enable flow missing password verify in $f"
   fi
 done
+# Native twins: the settings screens that expose easyUnlock must carry the
+# same confirm flow (a confirmEasyUnlock gate that re-verifies via login).
+if grep -q "confirmEasyUnlock" kid-ios/MyWorld/Views/DisplaySettingsView.swift \
+   && grep -q "api.login" kid-ios/MyWorld/Views/DisplaySettingsView.swift; then
+  pass "E6b easyUnlock password-confirm present in iOS DisplaySettingsView"
+else
+  fail "E6b easyUnlock enable flow missing password verify in iOS DisplaySettingsView"
+fi
+ANDROID_DSV=android-native/app/src/main/java/io/andrewpeterson/myworld/ui/board/DisplaySettingsView.kt
+if grep -q "confirmEasyUnlock" "$ANDROID_DSV" && grep -q "api.login" "$ANDROID_DSV"; then
+  pass "E6b easyUnlock password-confirm present in Android DisplaySettingsView"
+else
+  fail "E6b easyUnlock enable flow missing password verify in Android DisplaySettingsView"
+fi
 
 # ── C6b: revert-image only restores keys from the tile's own history ─────────
 grep -q "item_image_history" api/items.js \
@@ -104,7 +118,18 @@ E9=0
 grep -q "active = TRUE" api/onboarding/styles.js || { fail "E9 onboarding styles picker lost the active filter"; E9=1; }
 grep -q "active = TRUE AND child_id IS NULL" api/demo.js || { fail "E9 demo style switcher lost the active filter"; E9=1; }
 grep -q "DRAFT_ACTIVE = false" api/admin/style-guides.js || { fail "E9 style creation no longer defaults to draft"; E9=1; }
-[ "$E9" -eq 0 ] && pass "E9 draft styles stay hidden until published"
+# Demo-kid isolation: extra demo children (style_demo_children) exist for the
+# PUBLIC practice board only. Family syncs must pin the primary set.
+grep -q "demo_child_id = 0" api/sync.js || { fail "E9 sync.js lost the demo_child_id = 0 pin — a demo kid could reach a family board"; E9=1; }
+[ "$E9" -eq 0 ] && pass "E9 draft styles stay hidden until published + demo kids never reach families"
+
+# ── E10: web self-signup requires a valid invite code ────────────────────────
+# The page-level invite wall moved off the funnel (/, /practice, /signup are
+# public); the private preview is enforced INSIDE account creation instead.
+E10=0
+grep -q "validateInviteCode" api/auth/register.js || { fail "E10 register.js no longer validates an invite code on self-signup"; E10=1; }
+grep -q "invite_required" api/auth/register.js || { fail "E10 register.js lost the invite_required rejection"; E10=1; }
+[ "$E10" -eq 0 ] && pass "E10 self-signup enforces the invite code inline"
 
 # ── Vercel function ceiling (~100 routed functions) ──────────────────────────
 COUNT=$(find api -name '*.js' ! -name '_*' ! -path 'api/_lib/*' | wc -l)

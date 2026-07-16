@@ -44,10 +44,12 @@ export default async function handler(req, res) {
     if (styleGuideId) {
       const key = `style-defaults/${styleGuideId}/${taxonomyId}/${randomUUID()}.png`;
       await put(key, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
+      // Uploads always target the style's PRIMARY set (demo_child_id 0) —
+      // the one family boards read. Extra demo kids render via the wizard.
       await db`
-        INSERT INTO taxonomy_style_defaults (taxonomy_id, style_guide_id, image_key, status, updated_at)
-        VALUES (${taxonomyId}, ${styleGuideId}, ${key}, 'done', NOW())
-        ON CONFLICT (taxonomy_id, style_guide_id)
+        INSERT INTO taxonomy_style_defaults (taxonomy_id, style_guide_id, demo_child_id, image_key, status, updated_at)
+        VALUES (${taxonomyId}, ${styleGuideId}, 0, ${key}, 'done', NOW())
+        ON CONFLICT (taxonomy_id, style_guide_id, demo_child_id)
         DO UPDATE SET image_key = ${key}, status = 'done', error = NULL, updated_at = NOW()`;
       res.status(200).json({ ok: true, scope: 'style', styleGuideId, imageKey: key, label: tax.label });
       return;

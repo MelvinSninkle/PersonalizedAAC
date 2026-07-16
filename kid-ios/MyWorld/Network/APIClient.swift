@@ -538,6 +538,66 @@ struct APIClient {
         return data
     }
 
+    // MARK: -- Parent art style (/api/parent/style)
+
+    /// The parent-facing window into the art-style machine: the guide
+    /// currently driving renders (with its exact reference-image URLs) plus
+    /// every public template for the switcher. URLs are relative,
+    /// auth-gated paths — fetch them with `imageData(path:)`.
+    struct StyleRefs: Codable {
+        let main: String?
+        let person: String?
+        let stuff: String?
+    }
+    struct StyleGuideInfo: Codable {
+        let id: Int
+        let label: String
+        let description: String?
+        let source: String?        // "family" | "template" (current guide only)
+        let imageUrl: String?      // current guide's main ref
+        let previewUrl: String?    // templates' polished preview
+        let refs: StyleRefs?
+    }
+    struct StyleOverview: Codable {
+        let styleGuide: StyleGuideInfo?
+        let styles: [StyleGuideInfo]
+    }
+
+    func styleOverview(childId: String) async -> StyleOverview? {
+        guard let (data, _) = try? await request(
+            method: "GET", path: "/api/parent/style?childId=\(percentEscape(childId))", body: nil
+        ) else { return nil }
+        return try? JSONDecoder().decode(StyleOverview.self, from: data)
+    }
+
+    /// Point the child's board at a template (new pictures only — existing
+    /// tiles keep their art; the UI warns before calling this).
+    func setStyle(childId: String, styleGuideId: Int) async -> Bool {
+        guard let body = try? JSONSerialization.data(withJSONObject:
+            ["action": "set", "styleGuideId": styleGuideId]) else { return false }
+        return (try? await request(
+            method: "POST", path: "/api/parent/style?childId=\(percentEscape(childId))",
+            body: body, contentType: "application/json")) != nil
+    }
+
+    /// Set one reference (main/person/stuff) on the child's OWN family guide
+    /// from a blob uploaded via uploadBlob(kind: "styleref").
+    func setStyleRef(childId: String, kind: String, blobKey: String) async -> Bool {
+        guard let body = try? JSONSerialization.data(withJSONObject:
+            ["action": "upload", "kind": kind, "blobKey": blobKey]) else { return false }
+        return (try? await request(
+            method: "POST", path: "/api/parent/style?childId=\(percentEscape(childId))",
+            body: body, contentType: "application/json")) != nil
+    }
+
+    /// GET an authenticated same-origin image path (e.g. a style-ref URL)
+    /// as raw bytes.
+    func imageData(path: String) async -> Data? {
+        let p = path.hasPrefix("/") ? path : "/" + path
+        guard let (data, _) = try? await request(method: "GET", path: p, body: nil) else { return nil }
+        return data
+    }
+
     /// Merge-safe write of arbitrary root settings keys (parent toggles like
     /// listenCensor): read the current blob, overlay the patch, write it all
     /// back. The server clamps admin-gated keys for non-admins regardless.

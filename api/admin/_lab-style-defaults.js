@@ -45,7 +45,8 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const [rows, chips, tileDefs, chipDefs] = await Promise.all([
         placeableRows(db), chipRows(db),
-        db`SELECT taxonomy_id, image_key, status, error FROM taxonomy_style_defaults WHERE style_guide_id = ${styleGuideId}`,
+        db`SELECT taxonomy_id, image_key, status, error FROM taxonomy_style_defaults
+           WHERE style_guide_id = ${styleGuideId} AND demo_child_id = 0`,
         db`SELECT section, label_norm, parent_norm, image_key, status, error FROM category_style_defaults WHERE style_guide_id = ${styleGuideId}`,
       ]);
       const tMap = new Map(tileDefs.map(t => [t.taxonomy_id, t]));
@@ -110,7 +111,8 @@ export default async function handler(req, res) {
       try {
         if (kind === 'tiles') {
           const ex = (await db`SELECT image_key FROM taxonomy_style_defaults
-                               WHERE taxonomy_id = ${item.id} AND style_guide_id = ${styleGuideId} LIMIT 1`)[0];
+                               WHERE taxonomy_id = ${item.id} AND style_guide_id = ${styleGuideId}
+                                 AND demo_child_id = 0 LIMIT 1`)[0];
           if (ex && ex.image_key && !force) { skipped++; continue; }
           await renderOneTile({ db, style, tax: item, settings, anchor });
         } else {
@@ -126,9 +128,9 @@ export default async function handler(req, res) {
         const msg = String(err.message || err).slice(0, 400);
         try {
           if (kind === 'tiles') {
-            await db`INSERT INTO taxonomy_style_defaults (taxonomy_id, style_guide_id, status, error, updated_at)
-                     VALUES (${item.id}, ${styleGuideId}, 'failed', ${msg}, NOW())
-                     ON CONFLICT (taxonomy_id, style_guide_id)
+            await db`INSERT INTO taxonomy_style_defaults (taxonomy_id, style_guide_id, demo_child_id, status, error, updated_at)
+                     VALUES (${item.id}, ${styleGuideId}, 0, 'failed', ${msg}, NOW())
+                     ON CONFLICT (taxonomy_id, style_guide_id, demo_child_id)
                      DO UPDATE SET status = 'failed', error = ${msg}, updated_at = NOW()`;
           } else {
             await db`INSERT INTO category_style_defaults (style_guide_id, section, label_norm, parent_norm, status, error, updated_at)
