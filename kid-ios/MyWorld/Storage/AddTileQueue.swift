@@ -149,6 +149,14 @@ struct MagicCandidate: Identifiable, Equatable {
     let label: String
     let imageKey: String?
     let childId: String
+    /// The tile_jobs row backing this follow-up. The server re-offers the
+    /// question (store action=followups) until it's marked answered — so a
+    /// parent who swipes the sheet away or leaves gets asked again later.
+    var jobId: Int? = nil
+    /// Prefetched impact (rides along with action=followups); when nil the
+    /// presenter fetches it BEFORE showing the sheet, so a follow-up with
+    /// nothing to offer never flashes an empty sheet.
+    var impact: APIClient.ImpactResult? = nil
 }
 
 /// App-level queue that drives the SERVER-SIDE tile pipeline. The parent fires
@@ -309,7 +317,8 @@ final class AddTileQueue {
                 // exactly once per finished job, when the art actually rendered.
                 if newlyDone, !s.artFailed, let itemId = s.itemId, !job.label.isEmpty {
                     magicCandidates.append(MagicCandidate(itemId: itemId, label: job.label,
-                                                          imageKey: s.imageKey, childId: job.childId))
+                                                          imageKey: s.imageKey, childId: job.childId,
+                                                          jobId: sid))
                 }
                 job.statusText = s.needsReview ? "✅ On the board — needs review"
                     : (s.artFailed ? "✅ Saved your photo — art didn't render" : "✅ On the board")

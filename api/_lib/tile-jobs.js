@@ -16,7 +16,7 @@ import { geminiKey, geminiDefaultModel, geminiProModel, isGeminiModel, geminiGen
 import { openaiEditImage, openaiKeystoneModel, openaiCostCents } from './openai-image.js';
 import { describePhotoLabel } from './vision.js';
 import { grantCredits, COST } from './credits.js';
-import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, buildPortraitPrompt, SQUARE_RULE } from './onboarding-render.js';
+import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, buildPortraitPrompt, SQUARE_RULE, captionRule } from './onboarding-render.js';
 import { relationshipAgeGroup } from './relationships.js';
 
 // 5 attempts with a growing gap between them (see claimRunnableJobs) rides out
@@ -65,6 +65,10 @@ export async function ensureTileJobs(db) {
   // Folder-by-name hint (onboarding favorites): resolved to a leaf category
   // at process time — see the folder block in processTileJob.
   await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS folder TEXT`;
+  // Magic follow-up bookkeeping (replace-existing / remake-related): NULL =
+  // the parent hasn't answered yet — store.js action=followups re-offers it
+  // on every surface until answered or auto-closed (nothing to offer).
+  await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS followup_done_at TIMESTAMPTZ`;
   // §9 styled tracking on items (also ensured by seed-board's ensureSeedJobs;
   // duplicated here because this pipeline writes the columns independently).
   await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS styled_style_id INT`;
@@ -128,8 +132,12 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
   }
 
   const detailClause = detail ? ` Important detail from the family: ${detail}.` : '';
+  // Caption: the SAME captionRule every other generator appends (black
+  // lettering on a solid white band) — this pipeline used to hand-roll its
+  // own vaguer wording, so photo-added tiles drifted in band color and font
+  // from the rest of the board.
   const captionClause = label
-    ? ` At the very bottom, add a clean caption band with the word “${label}”, spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered; put no other text anywhere else.`
+    ? captionRule(label)
     : ` Do not include any text, words, or letters in the image.`;
   const styleClause = (styleGuide && styleGuide.image)
     ? ` Match the art style of the style-reference image exactly — its palette, linework, shading, and finish — so this tile is consistent with the rest of the board.`

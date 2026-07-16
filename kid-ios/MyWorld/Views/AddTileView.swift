@@ -49,6 +49,10 @@ struct AddTileView: View {
     // board-style vs the untouched photo.
     @State private var showStyleChange = false
     @State private var magic: MagicCandidate?
+    /// True while advanceMagic is prefetching a candidate's impact — stops a
+    /// second advance from double-consuming the queue.
+    @State private var magicChecking = false
+    private let magicApi = APIClient()
 
     init(defaultSection: BoardSection = .needs, defaultCategoryId: Int? = nil, onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -144,6 +148,15 @@ struct AddTileView: View {
                 // this device).
                 queue.pruneFinished()
                 await queue.restore(childId: auth.childSlug, board: board)
+                // Re-offer follow-ups the parent left unanswered (any surface,
+                // any session) — the server keeps them until answered.
+                let pending = await magicApi.storeFollowups(childId: auth.childSlug)
+                for f in pending where !queue.magicCandidates.contains(where: { $0.jobId == f.jobId }) {
+                    queue.magicCandidates.append(MagicCandidate(
+                        itemId: f.itemId, label: f.label, imageKey: f.imageKey,
+                        childId: auth.childSlug, jobId: f.jobId,
+                        impact: APIClient.ImpactResult(existing: f.existing, affected: f.affected)))
+                }
                 advanceMagic()
             }
             // Style is a BOARD-level choice; changing it means new tiles won't
@@ -163,18 +176,42 @@ struct AddTileView: View {
             // the board (offer replace) or appears inside other pictures (offer
             // contextual re-renders). One candidate at a time, FIFO.
             .onChange(of: queue.magicCandidates.count) { _, _ in advanceMagic() }
-            .sheet(item: $magic) { c in
+            .sheet(item: $magic, onDismiss: { advanceMagic() }) { c in
                 MagicFollowUpSheet(candidate: c) {
-                    magic = nil
-                    advanceMagic()
+                    // ANSWERED (any button reached the end of the flow) — stop
+                    // re-offering. A swipe-dismiss skips this on purpose: the
+                    // question stays pending and comes back next visit.
+                    if let jobId = c.jobId {
+                        Task { await magicApi.storeFollowupDone(childId: c.childId, jobId: jobId) }
+                    }
+                    magic = nil   // dismissal → onDismiss advances the queue
                 }
             }
         }
     }
 
+    /// Pop the next follow-up — but only present the sheet once we KNOW there
+    /// is something to ask. The sheet used to open in its loading phase and
+    /// instantly self-dismiss when the word had no matches, which read as
+    /// "it started to ask me and then just did it". Candidates with nothing
+    /// to offer are closed server-side without any UI.
     private func advanceMagic() {
-        guard magic == nil, !queue.magicCandidates.isEmpty else { return }
-        magic = queue.magicCandidates.removeFirst()
+        guard magic == nil, !magicChecking, !queue.magicCandidates.isEmpty else { return }
+        magicChecking = true
+        var c = queue.magicCandidates.removeFirst()
+        Task {
+            let imp = c.impact ?? (await magicApi.storeImpact(childId: c.childId, word: c.label))
+            let hasReplace = imp?.existing.map { $0.itemId != c.itemId } ?? false
+            let hasRegen = !(imp?.affected.filter { $0.itemId != c.itemId } ?? []).isEmpty
+            if let imp, hasReplace || hasRegen {
+                c.impact = imp
+                magic = c
+            } else if let jobId = c.jobId {
+                await magicApi.storeFollowupDone(childId: c.childId, jobId: jobId)
+            }
+            magicChecking = false
+            if magic == nil { advanceMagic() }
+        }
     }
 
     // MARK: -- Destination
@@ -873,7 +910,9 @@ private struct MagicFollowUpSheet: View {
         .interactiveDismissDisabled(busy)
         .task {
             refItemId = candidate.itemId
-            impact = await api.storeImpact(childId: candidate.childId, word: candidate.label)
+            // The presenter prefetches impact and only shows this sheet when
+            // there's something to ask — the fetch here is just a fallback.
+            impact = candidate.impact ?? (await api.storeImpact(childId: candidate.childId, word: candidate.label))
             advance(from: .loading)
         }
     }

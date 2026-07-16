@@ -764,10 +764,10 @@ struct APIClient {
 
     /// The add-tile magic lookups: the exact-word tile already on the board
     /// (for the replace dialog) + other tiles whose prompts mention the word.
-    struct ImpactExisting: Decodable { let itemId: Int; let label: String; let imageKey: String?; let isDefault: Bool }
-    struct ImpactTile: Decodable, Identifiable { var id: String { taxonomyId }
+    struct ImpactExisting: Decodable, Equatable { let itemId: Int; let label: String; let imageKey: String?; let isDefault: Bool }
+    struct ImpactTile: Decodable, Identifiable, Equatable { var id: String { taxonomyId }
         let taxonomyId: String; let itemId: Int; let label: String; let previewKey: String? }
-    struct ImpactResult: Decodable { let existing: ImpactExisting?; let affected: [ImpactTile] }
+    struct ImpactResult: Decodable, Equatable { let existing: ImpactExisting?; let affected: [ImpactTile] }
     func storeImpact(childId: String, word: String) async -> ImpactResult? {
         guard let (data, _) = try? await request(method: "GET",
             path: "/api/store?action=impact&childId=\(percentEscape(childId))&word=\(percentEscape(word))",
@@ -782,6 +782,29 @@ struct APIClient {
             "childId": childId, "sourceItemId": sourceItemId, "targetItemId": targetItemId])
         _ = try await request(method: "POST", path: "/api/store?action=adopt-image",
                               body: body, contentType: "application/json")
+    }
+
+    /// Unanswered magic follow-ups for recent photo adds — the server keeps
+    /// re-offering these until answered, so a parent who left mid-question
+    /// gets asked again on the next Add-tiles visit.
+    struct FollowupEntry: Decodable {
+        let jobId: Int; let label: String; let itemId: Int; let imageKey: String?
+        let existing: ImpactExisting?; let affected: [ImpactTile]
+    }
+    func storeFollowups(childId: String) async -> [FollowupEntry] {
+        struct R: Decodable { let followups: [FollowupEntry] }
+        guard let (data, _) = try? await request(method: "GET",
+            path: "/api/store?action=followups&childId=\(percentEscape(childId))",
+            body: nil) else { return [] }
+        return (try? JSONDecoder().decode(R.self, from: data))?.followups ?? []
+    }
+
+    /// The parent answered (or explicitly declined) a follow-up — stop
+    /// re-offering it. Swiping the sheet away does NOT call this, on purpose.
+    func storeFollowupDone(childId: String, jobId: Int) async {
+        guard let body = try? JSONSerialization.data(withJSONObject: ["childId": childId, "jobId": jobId]) else { return }
+        _ = try? await request(method: "POST", path: "/api/store?action=followup-done",
+                               body: body, contentType: "application/json")
     }
 
     struct RegenWithResult: Decodable { let ok: Bool; let queued: Int; let charged: Int; let balance: Int?; let note: String? }

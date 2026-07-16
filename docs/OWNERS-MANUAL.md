@@ -161,6 +161,18 @@ family keeps everything they have — only new spends wait.
   picks the crop) — the old keep-original-ratio toggle is retired. The
   stored `keep_aspect` flag still renders uncropped on all three apps and
   stays settable via Lab's ⬜ Square-tiles tool (TV/movie posters).
+- **Add-tile follow-ups** (replace-existing / remake-related): when a photo
+  tile finishes, the parent is asked two magic questions — the word already
+  exists on the board (swap the art? old image archives) and/or appears
+  inside other tiles' prompts via `objects_present` (remake them with YOUR
+  object, ⭐1 each). The question is DURABLE: every finished job stays
+  "unanswered" (`tile_jobs.followup_done_at IS NULL`) and re-offers on every
+  surface — iOS Add-tiles, Android Add-tiles, and a web-dashboard popup —
+  until the parent answers or the word turns out to touch nothing (auto-
+  closed). Swiping the question away leaves it pending on purpose. Remakes
+  queue `seed_jobs` and start draining in-request (`waitUntil`); the minute
+  cron finishes anything left, so arm the cron. Captions on photo tiles use
+  the SAME `captionRule` (black text, white band) as every other generator.
 - **Game scoring**: sessions need ≥3 answers to enter weekly accuracy or
   spike baselines; shorter ones are recorded but annotated "too short to
   score" (analytics.js / spike.js).

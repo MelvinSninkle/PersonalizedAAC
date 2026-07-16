@@ -2871,6 +2871,110 @@
   })();
   loadReviewQueue();
 
+  // ── Add-tile follow-ups (replace-existing / remake-related) ────────────────
+  // Photo adds can raise questions the parent never saw answered: the word
+  // already exists on the board (replace the old art?) or appears inside other
+  // pictures (remake them with YOUR object?). The iOS sheet asks at add time;
+  // if the parent leaves without answering, the server keeps the question and
+  // this popup re-asks on the dashboard until it's answered.
+  async function loadFollowups() {
+    let list = [];
+    try {
+      const r = await fetch('/api/store?action=followups&childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return;
+      list = (await r.json()).followups || [];
+    } catch (_) { return; }
+    if (list.length) showFollowup(list, 0);
+  }
+  function fuThumb(key, side) {
+    return key
+      ? '<img src="/api/media?key=' + encodeURIComponent(key) + '&w=256" alt="" style="width:' + side + 'px;height:' + side + 'px;border-radius:12px;object-fit:cover;border:1px solid var(--line);">'
+      : '<div style="width:' + side + 'px;height:' + side + 'px;border-radius:12px;background:#fce4ec;"></div>';
+  }
+  function showFollowup(list, idx) {
+    document.getElementById('fu-overlay')?.remove();
+    if (idx >= list.length) return;
+    const f = list[idx];
+    const done = async () => {
+      try {
+        await fetch('/api/store?action=followup-done', { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ childId: slug, jobId: f.jobId }) });
+      } catch (_) {}
+      showFollowup(list, idx + 1);
+    };
+    const ov = document.createElement('div');
+    ov.id = 'fu-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(31,41,55,.45);display:flex;align-items:center;justify-content:center;padding:18px;';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:20px;max-width:440px;width:100%;max-height:86vh;overflow:auto;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.3);';
+    let step2Ref = f.itemId;   // the tile whose image anchors the remakes
+
+    const renderRegen = () => {
+      const n = f.affected.length;
+      card.innerHTML =
+        '<div style="font-size:19px;font-weight:800;color:#ad1457;">🪄 Your ' + schEsc(f.label) + ' shows up in ' + n + ' other picture' + (n === 1 ? '' : 's') + '</div>' +
+        '<div style="font-size:13px;color:#6b7280;margin:8px 0 12px;">Remake ' + (n === 1 ? 'it' : 'them') + ' so they show YOUR ' + schEsc(f.label) + '? ⭐1 each — replaced art is archived in the Album.</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">' +
+          f.affected.slice(0, 12).map((a) => '<div style="text-align:center;font-size:11px;color:#6b7280;">' + fuThumb(a.previewKey, 64) + '<div>' + schEsc(a.label) + '</div></div>').join('') +
+          (n > 12 ? '<div style="align-self:center;font-size:12px;color:#6b7280;">+' + (n - 12) + ' more</div>' : '') +
+        '</div>' +
+        '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+          '<button class="btn ghost" id="fu-skip">Not now</button>' +
+          '<button class="btn" id="fu-regen">Remake ' + n + ' (⭐' + n + ')</button>' +
+        '</div>';
+      card.querySelector('#fu-skip').onclick = done;
+      card.querySelector('#fu-regen').onclick = async (e) => {
+        e.target.disabled = true; e.target.textContent = 'Queuing…';
+        try {
+          const r = await fetch('/api/store?action=regen-with', { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ childId: slug, taxonomyIds: f.affected.map((a) => a.taxonomyId), refItemId: step2Ref }) });
+          const d = await r.json();
+          card.innerHTML = '<div style="font-size:15px;font-weight:600;color:' + (r.ok ? '#16a34a' : '#9b1c1c') + ';">' +
+            schEsc(r.ok ? (d.note || 'Re-rendering — they pop in over the next few minutes.') : (d.error === 'not_enough_credits' ? 'Not enough credits — add a pack in Credits & Store first.' : 'Could not queue: ' + (d.detail || d.error || r.status))) +
+            '</div><div style="text-align:right;margin-top:14px;"><button class="btn" id="fu-close">Done</button></div>';
+          card.querySelector('#fu-close').onclick = done;
+        } catch (err) {
+          e.target.disabled = false; e.target.textContent = 'Remake ' + n + ' (⭐' + n + ')';
+        }
+      };
+    };
+
+    const renderReplace = () => {
+      card.innerHTML =
+        '<div style="font-size:19px;font-weight:800;color:#ad1457;">🪄 “' + schEsc(f.label) + '” is already on the board</div>' +
+        '<div style="display:flex;gap:16px;align-items:center;justify-content:center;margin:14px 0;">' +
+          '<div style="text-align:center;font-size:12px;color:#6b7280;">' + fuThumb(f.existing.imageKey, 96) + '<div>Now' + (f.existing.isDefault ? ' (classic art)' : '') + '</div></div>' +
+          '<div style="font-size:20px;color:#6b7280;">→</div>' +
+          '<div style="text-align:center;font-size:12px;color:#6b7280;">' + fuThumb(f.imageKey, 96) + '<div>Your new picture</div></div>' +
+        '</div>' +
+        '<div style="font-size:13px;color:#6b7280;margin-bottom:14px;">Swap in your picture? The current one ' + (f.existing.isDefault ? 'stays available to every board.' : 'is archived in the Album — you never lose it.') + '</div>' +
+        '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+          '<button class="btn ghost" id="fu-keep">Keep both</button>' +
+          '<button class="btn" id="fu-replace">Replace</button>' +
+        '</div>';
+      const next = () => f.affected.length ? renderRegen() : done();
+      card.querySelector('#fu-keep').onclick = next;
+      card.querySelector('#fu-replace').onclick = async (e) => {
+        e.target.disabled = true; e.target.textContent = 'Replacing…';
+        try {
+          const r = await fetch('/api/store?action=adopt-image', { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ childId: slug, sourceItemId: f.itemId, targetItemId: f.existing.itemId }) });
+          if (r.ok) step2Ref = f.existing.itemId;   // the existing tile now holds the art
+          next();
+        } catch (_) { next(); }
+      };
+    };
+
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+    if (f.existing) renderReplace();
+    else renderRegen();
+  }
+  loadFollowups();
+
   // Shared image downscaler used by tile + family-photo uploads.
   async function downscale(file, max = 1024, quality = 0.85) {
     try {

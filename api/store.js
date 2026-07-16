@@ -24,9 +24,11 @@ import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
 // Velocity-guard pause (spendCredits blocked:true) — friendly, support-routed.
 const PAUSED_MSG = 'Image making is paused on this account as a safety measure. '
   + "Email support@myworldtaptotalk.com and we'll sort it out right away.";
+import { waitUntil } from '@vercel/functions';
 import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
+import { ensureTileJobs } from './_lib/tile-jobs.js';
 import { isDefaultableTile, loadChildStyleGuideId } from './_lib/onboarding-render.js';
 import { archivePriorImage } from './_lib/image-history.js';
 import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus, needsStyling, drainRenderJobs } from './_lib/seed-board.js';
@@ -56,6 +58,17 @@ async function memberOr402(res, db, auth, childId) {
 // render jobs in the background (20-40s each) — same save-first pattern as
 // tile-jobs; the cron remains the completion guarantee.
 export const config = { api: { bodyParser: false }, maxDuration: 300 };
+
+// Post-response render drains. Vercel FREEZES the function the moment the
+// response ends unless the work is registered with waitUntil — a floating
+// `drain().catch()` after res.json() silently never ran in production, so
+// paid regen-with renders sat queued until the minute cron (which must also
+// be armed). With waitUntil the drain runs inside this invocation's
+// maxDuration; the cron remains the completion guarantee for anything left.
+function afterResponse(work) {
+  const p = Promise.resolve(work).catch(() => {});
+  try { waitUntil(p); } catch (_) { /* non-Vercel runtime: floating promise */ }
+}
 
 async function readRawBody(req) {
   const chunks = [];
@@ -93,6 +106,8 @@ export default async function handler(req, res) {
       case 'impact':         return impact(req, res, db, auth);
       case 'adopt-image':    return adoptImage(req, res, db, auth);
       case 'regen-with':     return regenWith(req, res, db, auth, uid, body);
+      case 'followups':      return followups(req, res, db, auth);
+      case 'followup-done':  return followupDone(req, res, db, auth, body);
       case 'retry':          return retryTile(req, res, db, auth, uid, body);
       case 'rebuild':        return rebuild(req, res, db, auth, uid, body);
       case 'iap-verify':     return iapVerify(req, res, db, uid, body);
@@ -327,7 +342,7 @@ async function checkout(req, res, db, auth, uid, body) {
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${queued} word${queued === 1 ? '' : 's'} queued — they render in your child's style over the next few minutes.`,
   });
-  drainRenderJobs(db, childId, 3).catch(() => {});
+  afterResponse(drainRenderJobs(db, childId, 3));
 }
 
 // ── Free common-use boards: place/remove a whole category with DEFAULT art ──
@@ -444,7 +459,7 @@ async function personalizeAll(req, res, db, auth, uid, body) {
   res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length + chips.length,
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${remaining.length} tiles + ${chips.length} folder icons queued — the whole board personalizes over the next while.` });
-  drainRenderJobs(db, childId, 3).catch(() => {});
+  afterResponse(drainRenderJobs(db, childId, 3));
 }
 
 // §9: batch "match all images in THIS FOLDER to my child's style".
@@ -487,7 +502,7 @@ async function personalizeCategory(req, res, db, auth, uid, body) {
   res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length,
     balance: uid ? await creditBalance(db, uid) : null,
     note: `${remaining.length} picture${remaining.length === 1 ? '' : 's'} queued — they land over the next few minutes.` });
-  drainRenderJobs(db, childId, 3).catch(() => {});
+  afterResponse(drainRenderJobs(db, childId, 3));
 }
 
 // ── Per-folder personalization status — one call for every "⭐N to finish"
@@ -537,24 +552,27 @@ async function impact(req, res, db, auth) {
   const raw = String((req.query && req.query.word) || '').trim().toLowerCase();
   if (!childId || !raw) { res.status(400).json({ error: 'childId and word required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+  const imp = await computeImpact(db, childId, raw);
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(200).json({ ok: true, ...imp });
+}
 
+// Shared core of impact() and followups(): what does adding `word` touch?
+async function computeImpact(db, childId, word) {
   // Simple singular/plural variants so "forks" finds "fork" prompts.
-  const variants = [...new Set([raw, raw + 's', raw.endsWith('s') ? raw.slice(0, -1) : raw])].filter(Boolean);
-
+  const variants = [...new Set([word, word + 's', word.endsWith('s') ? word.slice(0, -1) : word])].filter(Boolean);
   const [exact, mentions] = await Promise.all([
     db`SELECT id, label, image_key FROM items
-       WHERE child_id = ${childId} AND lower(label) = ${raw} LIMIT 2`,
+       WHERE child_id = ${childId} AND lower(label) = ${word} LIMIT 2`,
     db`SELECT t.id AS tax_id, i.id AS item_id, i.label, i.image_key, t.default_image_key
        FROM taxonomy t
        JOIN items i ON i.taxonomy_slug = t.id AND i.child_id = ${childId}
        WHERE t.objects_present && ${variants}
-         AND lower(t.label) != ${raw}
+         AND lower(t.label) != ${word}
        ORDER BY i.label LIMIT 100`,
   ]);
   const ex = exact[0] || null;
-  res.setHeader('Cache-Control', 'no-store');
-  res.status(200).json({
-    ok: true,
+  return {
     existing: ex ? {
       itemId: Number(ex.id), label: ex.label, imageKey: ex.image_key,
       isDefault: !ex.image_key || String(ex.image_key).startsWith('taxonomy-defaults/'),
@@ -563,7 +581,64 @@ async function impact(req, res, db, auth) {
       taxonomyId: m.tax_id, itemId: Number(m.item_id), label: m.label,
       previewKey: m.image_key || m.default_image_key || null,
     })),
-  });
+  };
+}
+
+// GET ?action=followups&childId= →
+//   { followups: [{ jobId, label, itemId, imageKey, existing, affected }] }
+// Unanswered magic follow-ups (replace-existing / remake-related) for recent
+// photo adds. The offer used to live only in the iOS sheet's memory — leave
+// the screen without answering and the decision was orphaned forever. Now
+// every surface re-offers until the parent answers (followup-done) or there
+// is nothing to offer (auto-closed here so the list stays short).
+async function followups(req, res, db, auth) {
+  const childId = String((req.query && req.query.childId) || '').slice(0, 64);
+  if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+  await ensureTileJobs(db);   // adds followup_done_at on first run
+
+  let jobs = [];
+  try {
+    jobs = await db`SELECT id, label, image_key, item_id FROM tile_jobs
+      WHERE child_id = ${childId} AND status = 'done' AND art_failed IS NOT TRUE
+        AND followup_done_at IS NULL AND item_id IS NOT NULL
+        AND label IS NOT NULL AND label != ''
+        AND updated_at > NOW() - INTERVAL '14 days'
+      ORDER BY updated_at DESC LIMIT 12`;
+  } catch (_) { /* pre-migration */ }
+
+  const out = [];
+  for (const j of jobs) {
+    // The job's own tile may be gone (adopt-image deletes the duplicate row).
+    const item = (await db`SELECT id, image_key FROM items
+                           WHERE id = ${j.item_id} AND child_id = ${childId} LIMIT 1`)[0];
+    const word = String(j.label).trim().toLowerCase();
+    const imp = item ? await computeImpact(db, childId, word) : { existing: null, affected: [] };
+    const existing = (imp.existing && Number(imp.existing.itemId) !== Number(j.item_id)) ? imp.existing : null;
+    const affected = imp.affected.filter((a) => Number(a.itemId) !== Number(j.item_id));
+    if (!item || (!existing && !affected.length)) {
+      try { await db`UPDATE tile_jobs SET followup_done_at = NOW() WHERE id = ${j.id}`; } catch (_) {}
+      continue;
+    }
+    out.push({ jobId: Number(j.id), label: j.label, itemId: Number(j.item_id),
+               imageKey: item.image_key || j.image_key, existing, affected });
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(200).json({ ok: true, followups: out });
+}
+
+// POST ?action=followup-done { childId, jobId } — the parent answered (or
+// explicitly declined) this job's follow-up on any surface; stop re-offering.
+async function followupDone(req, res, db, auth, body) {
+  const childId = String(body.childId || '').slice(0, 64);
+  const jobId = Number(body.jobId);
+  if (!childId || !jobId) { res.status(400).json({ error: 'childId and jobId required' }); return; }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+  try {
+    await db`UPDATE tile_jobs SET followup_done_at = NOW()
+             WHERE id = ${jobId} AND child_id = ${childId}`;
+  } catch (_) { /* pre-migration: nothing to mark */ }
+  res.status(200).json({ ok: true });
 }
 
 // POST ?action=adopt-image { childId, sourceItemId, targetItemId }
@@ -633,7 +708,7 @@ async function regenWith(req, res, db, auth, uid, body) {
   // Best-effort immediate render (the response is already out). Seed jobs are
   // ONLY drained by the minute-cron otherwise — on a deployment where that
   // cron doesn't fire, these paid re-renders sat queued forever.
-  drainRenderJobs(db, childId, 3).catch(() => {});
+  afterResponse(drainRenderJobs(db, childId, 3));
 }
 
 // One FREE retry per tile, then 1 credit.
@@ -669,7 +744,7 @@ async function retryTile(req, res, db, auth, uid, body) {
   await enqueueRenderJob(db, childId, item.taxonomy_slug, { force: true, refKey: priorKey, guidance: guidance || null });
   res.status(200).json({ ok: true, charged, freeRetry: charged === 0 && !isAdmin,
                          balance: uid ? await creditBalance(db, uid) : null });
-  drainRenderJobs(db, childId, 1).catch(() => {});
+  afterResponse(drainRenderJobs(db, childId, 1));
 }
 
 // Whole-board rebuild at the quoted discount (see rebuildQuote).
@@ -699,7 +774,7 @@ async function rebuild(req, res, db, auth, uid, body) {
     balance: uid ? await creditBalance(db, uid) : null,
     note: `Rebuilding ${words.length} words in your child's style. Every replaced image is archived — you keep them all.`,
   });
-  drainRenderJobs(db, childId, 3).catch(() => {});
+  afterResponse(drainRenderJobs(db, childId, 3));
 }
 
 // ── Apple IAP (StoreKit 2) ───────────────────────────────────────────────────

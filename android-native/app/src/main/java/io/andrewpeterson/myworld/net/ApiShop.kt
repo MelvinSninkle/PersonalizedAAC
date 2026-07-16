@@ -95,3 +95,71 @@ suspend fun ApiClient.storeRedeem(code: String): StoreRedeemResult {
     val body = "{\"code\":${jsonQuote(code)}}"
     return decode(raw("POST", "/api/store?action=redeem", body.encodeToByteArray()))
 }
+
+// ── Add-tile magic follow-ups (replace-existing / remake-related) ───────────
+// The server keeps every unanswered follow-up (store action=followups) until
+// the parent answers on ANY surface — leaving mid-question no longer orphans
+// the decision.
+
+@Serializable
+data class ImpactExisting(
+    val itemId: Int = 0,
+    val label: String = "",
+    val imageKey: String? = null,
+    val isDefault: Boolean = false,
+)
+
+@Serializable
+data class ImpactTile(
+    val taxonomyId: String = "",
+    val itemId: Int = 0,
+    val label: String = "",
+    val previewKey: String? = null,
+)
+
+@Serializable
+data class FollowupEntry(
+    val jobId: Int = 0,
+    val label: String = "",
+    val itemId: Int = 0,
+    val imageKey: String? = null,
+    val existing: ImpactExisting? = null,
+    val affected: List<ImpactTile> = emptyList(),
+)
+
+@Serializable
+private data class FollowupsResult(val followups: List<FollowupEntry> = emptyList())
+
+suspend fun ApiClient.storeFollowups(childId: String): List<FollowupEntry> =
+    try { getJson<FollowupsResult>("/api/store?action=followups&childId=${esc(childId)}").followups }
+    catch (_: Exception) { emptyList() }
+
+suspend fun ApiClient.storeFollowupDone(childId: String, jobId: Int) {
+    val body = "{\"childId\":${jsonQuote(childId)},\"jobId\":$jobId}"
+    try { raw("POST", "/api/store?action=followup-done", body.encodeToByteArray()) } catch (_: Exception) {}
+}
+
+suspend fun ApiClient.storeAdoptImage(childId: String, sourceItemId: Int, targetItemId: Int): Boolean {
+    val body = "{\"childId\":${jsonQuote(childId)},\"sourceItemId\":$sourceItemId,\"targetItemId\":$targetItemId}"
+    return try { raw("POST", "/api/store?action=adopt-image", body.encodeToByteArray()); true }
+    catch (_: Exception) { false }
+}
+
+@Serializable
+data class RegenWithResult(
+    val ok: Boolean = false,
+    val queued: Int = 0,
+    val charged: Int = 0,
+    val balance: Int? = null,
+    val note: String? = null,
+)
+
+suspend fun ApiClient.storeRegenWith(childId: String, taxonomyIds: List<String>, refItemId: Int): RegenWithResult? {
+    val body = buildJsonObject {
+        put("childId", childId)
+        put("taxonomyIds", buildJsonArray { taxonomyIds.forEach { add(JsonPrimitive(it)) } })
+        put("refItemId", refItemId)
+    }
+    return try { decode(raw("POST", "/api/store?action=regen-with", body.toString().encodeToByteArray(), long = true)) }
+    catch (_: Exception) { null }
+}
