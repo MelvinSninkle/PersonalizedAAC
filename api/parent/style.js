@@ -86,6 +86,17 @@ async function resolveCurrent(db, childId) {
       WHERE child_id = ${childId} AND active = TRUE
       ORDER BY ephemeral ASC, created_at DESC LIMIT 1`)[0] || null;
   }
+  if (!row) {
+    // Mirror the RENDERER's fallback (loadStyleGuide with no id): with no
+    // pinned pointer and no family guide, generations use the first active
+    // GLOBAL template — the panel must say the same thing, never "no style
+    // set" while tiles visibly render in one.
+    row = (await db`
+      SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key, child_id
+      FROM style_guides
+      WHERE active = TRUE AND child_id IS NULL
+      ORDER BY sort_order ASC, created_at ASC LIMIT 1`)[0] || null;
+  }
   return row;
 }
 
