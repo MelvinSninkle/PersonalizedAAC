@@ -84,10 +84,18 @@
         <span><b>Board layout order</b><span class="sub">Applies the drag-to-reorder screen's category and word order.
         Curated words take the curated order; a family's own additions keep their relative order after them.
         <b>Boards where the family has dragged tiles into their own order are SKIPPED</b> — their arrangement is theirs.</span></span></label>
+      <label class="opt" style="border-color:#16a34a;background:#f0fdf4;"><input type="checkbox" id="w-offer">
+        <span><b>🙋 Ask families to approve instead (recommended)</b><span class="sub">No board changes now: every targeted
+        family gets a friendly popup on their board — "Apply the new suggested layout?" — and only the order changes when
+        THEY say yes. Preview first by pushing directly to your own board (target: One child), then send the offer to all.
+        A short note typed below rides along in the popup.</span></span>
+      </label>
+      <input type="text" id="w-offer-note" placeholder="Optional note for the popup, e.g. 'Foods are now grouped by mealtime'"
+             style="width:100%;box-sizing:border-box;margin:6px 0 10px;padding:9px 11px;border:1px solid #e5e7eb;border-radius:9px;font:inherit;display:none;">
       <label class="opt" style="border-color:#f59e0b;background:#fffbeb;"><input type="checkbox" id="w-overwrite">
         <span><b>⚠️ Also overwrite family-arranged boards</b><span class="sub">Explicit override: pushes the curated order
         onto boards the family deliberately rearranged too. Their custom order is REPLACED and cannot be recovered —
-        use only when you mean it (e.g. repairing a bad push).</span></span></label>
+        use only when you mean it (e.g. repairing a bad push). Ignored in ask-families mode (their approval decides).</span></span></label>
       <label class="opt"><input type="checkbox" id="w-sounds">
         <span><b>Voice clips (current pronunciations)</b><span class="sub">Re-points every standard tile at audio for the
         current pronunciation in the board's own voice — the same clips you QC'd in the voice library, so cached words cost
@@ -180,20 +188,29 @@
   });
 
   let running = false;
+  $('w-offer').addEventListener('change', () => {
+    $('w-offer-note').style.display = $('w-offer').checked ? '' : 'none';
+  });
+
   $('push-btn').addEventListener('click', async () => {
     if (running) return;
     const t = target();
     const what = { layout: $('w-layout').checked, sounds: $('w-sounds').checked };
     if (!what.layout && !what.sounds) { $('preview').innerHTML = '<span class="err">Tick at least one thing to push.</span>'; return; }
-    const overwriteCustomized = what.layout && $('w-overwrite').checked;
+    const offerMode = what.layout && $('w-offer').checked;
+    const overwriteCustomized = what.layout && !offerMode && $('w-overwrite').checked;
     const label = [what.layout && 'layout order', what.sounds && 'voice clips'].filter(Boolean).join(' + ');
-    if (!confirm(`Push ${label} to the previewed boards now?\n\nThis rewrites those boards' ordering${what.sounds ? ' and standard voice clips' : ''}. Personalized art, parent recordings, and custom words are untouched.`
-      + (what.layout ? (overwriteCustomized
-        ? '\n\n⚠️ OVERRIDE IS ON: boards the family deliberately rearranged will be overwritten too. Their custom order cannot be recovered.'
-        : '\n\nBoards the family has rearranged themselves are skipped automatically.') : ''))) return;
-    // The override is a one-push decision — never a sticky default.
-    if (overwriteCustomized
-        && !confirm('Second check: really replace FAMILY-ARRANGED boards\' order with the curated layout?')) return;
+    if (offerMode) {
+      if (!confirm(`Ask the previewed families to approve the new layout${what.sounds ? ' (voice clips still push directly)' : ''}?\n\nNo board changes yet — each family gets a popup and decides for themselves.`)) return;
+    } else {
+      if (!confirm(`Push ${label} to the previewed boards now?\n\nThis rewrites those boards' ordering${what.sounds ? ' and standard voice clips' : ''}. Personalized art, parent recordings, and custom words are untouched.`
+        + (what.layout ? (overwriteCustomized
+          ? '\n\n⚠️ OVERRIDE IS ON: boards the family deliberately rearranged will be overwritten too. Their custom order cannot be recovered.'
+          : '\n\nBoards the family has rearranged themselves are skipped automatically.') : ''))) return;
+      // The override is a one-push decision — never a sticky default.
+      if (overwriteCustomized
+          && !confirm('Second check: really replace FAMILY-ARRANGED boards\' order with the curated layout?')) return;
+    }
 
     running = true;
     $('push-btn').disabled = true; $('preview-btn').disabled = true;
@@ -205,11 +222,13 @@
     let offset = 0, total = null, stalls = 0;
     try {
       while (true) {
-        const d = await api('/api/admin/lab?action=publish', { ...t, what, offset, overwriteCustomized });
+        const d = await api('/api/admin/lab?action=publish', { ...t, what, offset, overwriteCustomized,
+          mode: offerMode ? 'offer' : undefined, note: offerMode ? $('w-offer-note').value.trim() : undefined });
         total = d.total;
         for (const r of d.results || []) {
           const bits = [];
-          if (r.layout && r.layout.skipped) bits.push('layout: SKIPPED — family arranged this board themselves');
+          if (r.layout && r.layout.offered) bits.push(r.layout.already ? 'offer: already pending' : 'offer sent — family will see the popup');
+          else if (r.layout && r.layout.skipped) bits.push('layout: SKIPPED — family arranged this board themselves');
           else if (r.layout) bits.push(`layout: ${r.layout.cats} folders, ${r.layout.tiles} tiles reordered`);
           if (r.sounds) bits.push(`sounds: ${r.sounds.updated} updated, ${r.sounds.already} current` +
             (r.sounds.failed ? `, ${r.sounds.failed} FAILED` : '') + (r.sounds.partial ? ' (continuing…)' : ''));

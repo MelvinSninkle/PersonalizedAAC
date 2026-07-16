@@ -222,9 +222,23 @@ family keeps everything they have — only new spends wait.
   log says so per board). The amber "⚠️ Also overwrite family-arranged
   boards" checkbox is the explicit override — double-confirmed, resets
   after every push, and replaces their order irreversibly, so use it only
-  on purpose (e.g. repairing a bad push). Boards arranged BEFORE this
-  feature shipped carry no stamp — protection starts with the family's
-  next reorder.
+  on purpose. Boards arranged BEFORE this feature shipped carry no stamp —
+  protection starts with the family's next reorder.
+- **The kind way to push layout — ask families**: tick the green
+  "🙋 Ask families to approve instead" option. No board changes; each
+  family's web board shows a friendly popup ("Apply the new suggested
+  layout? Only the order changes") with your optional note, and applies
+  only when THEY say yes. Answers are recorded, so nobody is nagged twice.
+  Your preview workflow: push directly to YOUR OWN board first
+  (target: One child), eyeball it, then send the offer to everyone.
+- **Repairing a bad layout push** (order restore from backup): download
+  the nightly backup artifact from BEFORE the push (GitHub → Actions →
+  Nightly DB backup — requires the BACKUP_DATABASE_URL secret to have been
+  armed), extract the two tables
+  (`pg_restore --data-only --table=items --table=categories -f order.sql backup.dump`),
+  dry-run `DATABASE_URL=… node tools/restore-order.mjs order.sql --since
+  <push-date>` (uses publish_log to touch ONLY boards that push hit), then
+  re-run with `--apply`. Order only — no words, art, or recordings move.
 - **Practice board follows the Lab layout automatically**: the drag-order
   screen's category/word order (`default_category_order` +
   `taxonomy.sort_order`) is read live by `/api/demo` — rearrange the
