@@ -44,9 +44,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.andrewpeterson.myworld.LocalAppContainer
 import io.andrewpeterson.myworld.model.prettyChildName
+import io.andrewpeterson.myworld.net.ProblemEntry
 import io.andrewpeterson.myworld.net.StyleGuideInfo
 import io.andrewpeterson.myworld.net.StyleOverview
 import io.andrewpeterson.myworld.net.advanceBand
+import io.andrewpeterson.myworld.net.storeProblems
+import io.andrewpeterson.myworld.net.storeRearmAdd
+import io.andrewpeterson.myworld.net.storeRetry
 import io.andrewpeterson.myworld.net.bandStatus
 import io.andrewpeterson.myworld.net.changePassword
 import io.andrewpeterson.myworld.net.childSettings
@@ -82,11 +86,16 @@ fun ParentHomeView() {
     // Live credit balance for the Credits & Store card's yellow badge —
     // the parent always knows what they have before they spend.
     var creditBalance by remember { mutableStateOf<Int?>(null) }
+    // Renders that failed every attempt — alert banner with one-tap retry
+    // (word redraws: first free; failed photo adds: no charge).
+    var problems by remember { mutableStateOf<List<ProblemEntry>>(emptyList()) }
+    var problemBusy by remember { mutableStateOf(setOf<String>()) }
 
     LaunchedEffect(Unit) {
         c.parentLive.start(c.auth.childSlug)
         c.board.refresh(c.auth.childSlug)   // scopes for StartGame + quick board
         creditBalance = try { c.api.storeCatalog().balance } catch (_: Exception) { null }
+        problems = c.api.storeProblems(c.auth.childSlug)
     }
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose { c.parentLive.stop() }
@@ -127,6 +136,51 @@ fun ParentHomeView() {
                     .clickable { open = "settings" },
                 contentAlignment = Alignment.Center,
             ) { Text("⚙", fontSize = 19.sp) }
+        }
+
+        // ⚠️ Pictures that failed every render attempt — the parent's alert
+        // with one-tap retry. Word tiles re-render (first retry per tile
+        // free, then credits — server-enforced); failed photo adds restart
+        // at no charge (paid at enqueue, never delivered).
+        if (problems.isNotEmpty()) {
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 12.dp)
+                    .background(hexColor("#fef3c7"), RoundedCornerShape(16.dp))
+                    .border(1.dp, hexColor("#f59e0b"), RoundedCornerShape(16.dp))
+                    .padding(14.dp),
+            ) {
+                Text("⚠️ ${problems.size} picture${if (problems.size == 1) "" else "s"} didn't finish",
+                    fontSize = 16.sp, fontWeight = FontWeight.Bold, color = hexColor("#b45309"))
+                Text("Retrying is safe — failed photo adds never re-charge, and each word's first redraw is free.",
+                    fontSize = 12.sp, color = Brand.muted)
+                problems.forEach { p ->
+                    val pid = p.kind + "-" + (p.itemId ?: p.jobId ?: 0)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(p.label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                            color = Brand.ink, modifier = Modifier.weight(1f))
+                        androidx.compose.material3.TextButton(enabled = pid !in problemBusy, onClick = {
+                            problemBusy = problemBusy + pid
+                            scope.launch {
+                                val ok = try {
+                                    if (p.kind == "add" && p.jobId != null) c.api.storeRearmAdd(c.auth.childSlug, p.jobId)
+                                    else if (p.itemId != null) { c.api.storeRetry(c.auth.childSlug, p.itemId, ""); true }
+                                    else false
+                                } catch (_: Exception) { false }
+                                if (ok) problems = problems.filter { (it.kind + "-" + (it.itemId ?: it.jobId ?: 0)) != pid }
+                                problemBusy = problemBusy - pid
+                            }
+                        }) {
+                            Text(
+                                if (pid in problemBusy) "Retrying…"
+                                else if (p.kind == "add") "Try again (no charge)"
+                                else if (p.freeRetryUsed == true) "Try again ⭐1" else "Try again (free)",
+                                color = hexColor("#b45309"), fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         LazyVerticalGrid(

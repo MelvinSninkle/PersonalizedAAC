@@ -163,3 +163,27 @@ suspend fun ApiClient.storeRegenWith(childId: String, taxonomyIds: List<String>,
     return try { decode(raw("POST", "/api/store?action=regen-with", body.toString().encodeToByteArray(), long = true)) }
     catch (_: Exception) { null }
 }
+
+@Serializable
+data class ProblemEntry(
+    val kind: String = "",          // "render" | "add"
+    val label: String = "",
+    val itemId: Int? = null,        // render: retry via storeRetry (free-first)
+    val jobId: Int? = null,         // add: restart via storeRearmAdd (no charge)
+    val freeRetryUsed: Boolean? = null,
+)
+
+@Serializable
+private data class ProblemsResult(val problems: List<ProblemEntry> = emptyList())
+
+/** Renders that failed every attempt — the parent-home alert list. */
+suspend fun ApiClient.storeProblems(childId: String): List<ProblemEntry> =
+    try { getJson<ProblemsResult>("/api/store?action=followups&childId=${esc(childId)}").problems }
+    catch (_: Exception) { emptyList() }
+
+/** Restart a failed photo add. No charge — paid at enqueue, never delivered. */
+suspend fun ApiClient.storeRearmAdd(childId: String, jobId: Int): Boolean {
+    val body = "{\"childId\":${jsonQuote(childId)},\"jobId\":$jobId}"
+    return try { raw("POST", "/api/store?action=rearm-add", body.encodeToByteArray()); true }
+    catch (_: Exception) { false }
+}

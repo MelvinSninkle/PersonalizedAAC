@@ -743,6 +743,25 @@ struct APIClient {
         return try JSONDecoder().decode(PersonalizeAllResult.self, from: data)
     }
 
+    /// The tile's past pictures (item_image_history), newest first — powers
+    /// the edit sheet's "Previous pictures" one-tap revert strip.
+    struct HistoryEntry: Decodable, Identifiable {
+        var id: String { key }
+        let key: String; let source: String?; let archivedAt: String?
+    }
+    func imageHistory(itemId: Int) async -> [HistoryEntry] {
+        struct R: Decodable { let history: [HistoryEntry] }
+        guard let (data, _) = try? await request(method: "GET", path: "/api/items?history=\(itemId)", body: nil) else { return [] }
+        return (try? JSONDecoder().decode(R.self, from: data))?.history ?? []
+    }
+
+    /// Put a past picture back on the tile (the current one archives first,
+    /// so reverting is itself revertible).
+    func revertImage(itemId: Int, key: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["op": "revert-image", "id": itemId, "key": key])
+        _ = try await request(method: "POST", path: "/api/items", body: body, contentType: "application/json")
+    }
+
     func storeRetry(childId: String, itemId: Int, guidance: String = "") async throws -> StoreRetryResult {
         // guidance = the parent's correction; the server attaches the current
         // image as the previous attempt so the model improves, not re-rolls.
@@ -797,6 +816,33 @@ struct APIClient {
             path: "/api/store?action=followups&childId=\(percentEscape(childId))",
             body: nil) else { return [] }
         return (try? JSONDecoder().decode(R.self, from: data))?.followups ?? []
+    }
+
+    /// Renders that failed every attempt (word tiles stuck on default art,
+    /// photo adds that never landed) — surfaced as a parent-home alert with
+    /// one-tap retry. Rides the same GET as storeFollowups.
+    struct ProblemEntry: Decodable, Identifiable {
+        var id: String { kind + "-" + String(itemId ?? jobId ?? 0) }
+        let kind: String            // "render" | "add"
+        let label: String
+        let itemId: Int?            // render: retry via storeRetry (free-first)
+        let jobId: Int?             // add: restart via storeRearmAdd (no charge)
+        let freeRetryUsed: Bool?
+    }
+    func storeProblems(childId: String) async -> [ProblemEntry] {
+        struct R: Decodable { let problems: [ProblemEntry]? }
+        guard let (data, _) = try? await request(method: "GET",
+            path: "/api/store?action=followups&childId=\(percentEscape(childId))",
+            body: nil) else { return [] }
+        return (try? JSONDecoder().decode(R.self, from: data))?.problems ?? []
+    }
+
+    /// Restart a photo add that failed every attempt. No charge — the family
+    /// paid at enqueue and never got the tile.
+    func storeRearmAdd(childId: String, jobId: Int) async -> Bool {
+        guard let body = try? JSONSerialization.data(withJSONObject: ["childId": childId, "jobId": jobId]) else { return false }
+        return (try? await request(method: "POST", path: "/api/store?action=rearm-add",
+                                   body: body, contentType: "application/json")) != nil
     }
 
     /// The parent answered (or explicitly declined) a follow-up — stop

@@ -28,7 +28,8 @@ import { waitUntil } from '@vercel/functions';
 import { checkAuth } from './_lib/auth.js';
 import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
-import { ensureTileJobs } from './_lib/tile-jobs.js';
+import { ensureTileJobs, processTileJob, MAX_ATTEMPTS } from './_lib/tile-jobs.js';
+import { MAX_SEED_ATTEMPTS } from './_lib/seed-board.js';
 import { isDefaultableTile, loadChildStyleGuideId } from './_lib/onboarding-render.js';
 import { archivePriorImage } from './_lib/image-history.js';
 import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus, needsStyling, drainRenderJobs } from './_lib/seed-board.js';
@@ -108,6 +109,7 @@ export default async function handler(req, res) {
       case 'regen-with':     return regenWith(req, res, db, auth, uid, body);
       case 'followups':      return followups(req, res, db, auth);
       case 'followup-done':  return followupDone(req, res, db, auth, body);
+      case 'rearm-add':      return rearmAdd(req, res, db, auth, body);
       case 'retry':          return retryTile(req, res, db, auth, uid, body);
       case 'rebuild':        return rebuild(req, res, db, auth, uid, body);
       case 'iap-verify':     return iapVerify(req, res, db, uid, body);
@@ -627,8 +629,33 @@ async function followups(req, res, db, auth) {
     out.push({ jobId: Number(j.id), label: j.label, itemId: Number(j.item_id),
                imageKey: item.image_key || j.image_key, existing, affected });
   }
+
+  // PROBLEMS: renders that failed every attempt. Two queues can strand a
+  // family — seed_jobs (word-shop buys, remakes, personalize batches: the
+  // tile sits on default art) and tile_jobs (photo adds that never landed).
+  // Surfaced here so every parent view can alert + offer the retry.
+  let problems = [];
+  try {
+    const [renderFails, addFails] = await Promise.all([
+      db`SELECT DISTINCT ON (i.id) i.id AS item_id, i.label, i.free_retry_used
+         FROM seed_jobs sj JOIN items i ON i.child_id = sj.child_id AND i.taxonomy_slug = sj.taxonomy_id
+         WHERE sj.child_id = ${childId} AND sj.kind = 'render'
+           AND sj.status = 'failed' AND sj.attempts >= ${MAX_SEED_ATTEMPTS}
+         ORDER BY i.id, sj.updated_at DESC LIMIT 20`,
+      db`SELECT id, label FROM tile_jobs
+         WHERE child_id = ${childId} AND status = 'failed' AND attempts >= ${MAX_ATTEMPTS}
+           AND updated_at > NOW() - INTERVAL '14 days'
+         ORDER BY updated_at DESC LIMIT 20`,
+    ]);
+    problems = [
+      ...renderFails.map((r) => ({ kind: 'render', itemId: Number(r.item_id), label: r.label,
+                                   freeRetryUsed: !!r.free_retry_used })),
+      ...addFails.map((r) => ({ kind: 'add', jobId: Number(r.id), label: r.label || 'New tile' })),
+    ];
+  } catch (_) { /* pre-migration */ }
+
   res.setHeader('Cache-Control', 'no-store');
-  res.status(200).json({ ok: true, followups: out });
+  res.status(200).json({ ok: true, followups: out, problems });
 }
 
 // POST ?action=followup-done { childId, jobId } — the parent answered (or
@@ -715,7 +742,10 @@ async function regenWith(req, res, db, auth, uid, body) {
   afterResponse(drainRenderJobs(db, childId, 3));
 }
 
-// One FREE retry per tile, then 1 credit.
+// One FREE retry per tile, then credits (⭐1; people photo tiles ⭐5 — the
+// keystone portrait costs what it costs). Works for BOTH kinds of tile:
+// library words re-render their taxonomy prompt; photo-added custom tiles
+// re-run their durable tile job from the stored source photo.
 async function retryTile(req, res, db, auth, uid, body) {
   const childId = String(body.childId || '').slice(0, 64);
   const itemId = Number(body.itemId);
@@ -723,32 +753,70 @@ async function retryTile(req, res, db, auth, uid, body) {
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
   if (!(await memberOr402(res, db, auth, childId))) return;
 
-  const item = (await db`SELECT id, taxonomy_slug, image_key, free_retry_used FROM items
+  const item = (await db`SELECT id, taxonomy_slug, image_key, free_retry_used, section FROM items
                          WHERE id = ${itemId} AND child_id = ${childId} LIMIT 1`)[0];
-  if (!item || !item.taxonomy_slug) { res.status(404).json({ error: 'tile not found (or not a library word)' }); return; }
+  if (!item) { res.status(404).json({ error: 'tile not found' }); return; }
+
+  // Custom (photo-added) tile: the redraw source is its most recent tile job's
+  // stored photo. Without one there's nothing to redraw from.
+  let customJob = null;
+  if (!item.taxonomy_slug) {
+    await ensureTileJobs(db);
+    customJob = (await db`SELECT id FROM tile_jobs
+                          WHERE child_id = ${childId} AND item_id = ${item.id} AND source_key IS NOT NULL
+                          ORDER BY id DESC LIMIT 1`)[0];
+    if (!customJob) { res.status(404).json({ error: 'tile not found (no source photo to redraw from)' }); return; }
+  }
 
   const isAdmin = auth.user.role === 'admin';
+  const cost = (!item.taxonomy_slug && String(item.section || '').toLowerCase() === 'people') ? COST.person : COST.nano;
   let charged = 0;
   if (!item.free_retry_used) {
     await db`UPDATE items SET free_retry_used = TRUE, updated_at = NOW() WHERE id = ${item.id}`;
   } else if (!isAdmin) {
-    const s = await spendCredits(db, { userId: uid, credits: COST.nano, reason: 'store:retry', ref: String(itemId) });
+    const s = await spendCredits(db, { userId: uid, credits: cost, reason: 'store:retry', ref: String(itemId) });
     if (s.blocked) { res.status(429).json({ error: 'account_paused', detail: PAUSED_MSG }); return; }
-    if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: COST.nano, balance: s.balance }); return; }
-    charged = COST.nano;
+    if (!s.ok) { res.status(402).json({ error: 'not_enough_credits', needed: cost, balance: s.balance }); return; }
+    charged = cost;
   }
   // Guided retry: the parent's correction text rides along and the CURRENT
   // image is attached as the previous attempt — the model improves the same
   // picture per the instruction instead of rolling fresh dice. (Old app builds
   // send no guidance and get the legacy blind re-roll.)
   const guidance = String(body.guidance || '').trim().slice(0, 400);
-  const priorKey = (guidance && item.image_key && !String(item.image_key).startsWith('taxonomy-defaults/'))
-    ? item.image_key : null;
-  await ensureSeedJobs(db);
-  await enqueueRenderJob(db, childId, item.taxonomy_slug, { force: true, refKey: priorKey, guidance: guidance || null });
+  if (item.taxonomy_slug) {
+    const priorKey = (guidance && item.image_key && !String(item.image_key).startsWith('taxonomy-defaults/'))
+      ? item.image_key : null;
+    await ensureSeedJobs(db);
+    await enqueueRenderJob(db, childId, item.taxonomy_slug, { force: true, refKey: priorKey, guidance: guidance || null });
+  } else {
+    // Re-arm the job: processTileJob re-renders from the source photo (styled,
+    // never raw) and updates THIS item in place, archiving the old picture.
+    await db`UPDATE tile_jobs SET status = 'queued', attempts = 0, error = NULL, raw = FALSE,
+               detail = CASE WHEN ${guidance} = '' THEN detail
+                        ELSE COALESCE(detail, '') || ' Correction from the parent — apply this exactly: ' || ${guidance} END,
+               updated_at = NOW() WHERE id = ${customJob.id}`;
+  }
   res.status(200).json({ ok: true, charged, freeRetry: charged === 0 && !isAdmin,
                          balance: uid ? await creditBalance(db, uid) : null });
-  afterResponse(drainRenderJobs(db, childId, 1));
+  if (item.taxonomy_slug) afterResponse(drainRenderJobs(db, childId, 1));
+  else afterResponse(processTileJob(db, Number(customJob.id)));
+}
+
+// POST ?action=rearm-add { childId, jobId } — restart a photo add that failed
+// every attempt. NO charge: the family paid at enqueue and never got the tile.
+async function rearmAdd(req, res, db, auth, body) {
+  const childId = String(body.childId || '').slice(0, 64);
+  const jobId = Number(body.jobId);
+  if (!childId || !jobId) { res.status(400).json({ error: 'childId and jobId required' }); return; }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+  await ensureTileJobs(db);
+  const j = (await db`UPDATE tile_jobs SET status = 'queued', attempts = 0, error = NULL, updated_at = NOW()
+                      WHERE id = ${jobId} AND child_id = ${childId} AND status = 'failed'
+                      RETURNING id`)[0];
+  if (!j) { res.status(404).json({ error: 'job not found (or not failed)' }); return; }
+  res.status(200).json({ ok: true });
+  afterResponse(processTileJob(db, Number(j.id)));
 }
 
 // Whole-board rebuild at the quoted discount (see rebuildQuote).

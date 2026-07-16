@@ -1175,6 +1175,12 @@
       <button class="btn primary" id="tile-magic" style="width:100%;">📷 Take a photo &amp; we'll do the rest</button>
       <p class="hint" id="tile-magic-status" style="margin:8px 0 0;">—</p>
       <img id="tile-preview" alt="" style="display:none;width:100%;max-width:180px;border-radius:12px;margin-top:8px;">
+      <div id="tile-versions" style="display:none;margin-top:10px;">
+        <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:4px;">Previous pictures <span style="font-weight:400;color:#999;">(tap to bring one back)</span></div>
+        <div id="tile-history" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;"></div>
+        <button class="btn ghost" id="tile-retry" type="button" style="margin-top:8px;">🎨 Draw a new picture <span style="font-weight:400;">(1st retry free, then ⭐)</span></button>
+        <p class="hint" id="tile-retry-status" style="margin:6px 0 0;"></p>
+      </div>
     </div>
     <div class="field"><label>Or upload an image</label><input type="file" id="tile-image" accept="image/*"></div>
     <div id="tile-voice">
@@ -2436,11 +2442,78 @@
       ? 'Current sound will be kept'
       : 'No sound yet';
     document.getElementById('tile-delete').style.display = existing ? 'inline-flex' : 'none';
+    // Previous pictures + guided redraw — parity with the kid-board editor,
+    // so every surface can revert art or ask for a better take.
+    const vwrap = document.getElementById('tile-versions');
+    document.getElementById('tile-retry-status').textContent = '';
+    if (kind === 'item' && existing?.id) {
+      vwrap.style.display = '';
+      loadTileHistory(existing.id);
+    } else {
+      vwrap.style.display = 'none';
+      document.getElementById('tile-history').innerHTML = '';
+    }
     tileSetErr('');
     document.getElementById('tile-look-style').checked = true;
     tileScrim.classList.add('open');
   }
   function closeTileAdder() { tileScrim.classList.remove('open'); }
+  async function loadTileHistory(itemId) {
+    const hist = document.getElementById('tile-history');
+    hist.innerHTML = '<span class="hint">Loading…</span>';
+    try {
+      const r = await fetch('/api/items?history=' + itemId, { credentials: 'same-origin' });
+      const d = await r.json();
+      const rows = d.history || [];
+      if (!rows.length) {
+        hist.innerHTML = '<span class="hint">No previous pictures yet — redraws and photo swaps archive here.</span>';
+        return;
+      }
+      hist.innerHTML = '';
+      rows.forEach((h) => {
+        const img = document.createElement('img');
+        img.src = '/api/media?key=' + encodeURIComponent(h.key) + '&w=256';
+        img.alt = 'Previous picture';
+        img.style.cssText = 'width:72px;height:72px;border-radius:10px;object-fit:cover;border:1px solid var(--line);cursor:pointer;flex:none;';
+        img.onclick = async () => {
+          if (!confirm('Bring this picture back? The current one is archived — you can always undo.')) return;
+          try {
+            const r2 = await fetch('/api/items', { method: 'POST', credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ op: 'revert-image', id: itemId, key: h.key }) });
+            if (r2.ok) {
+              const prev = document.getElementById('tile-preview');
+              prev.src = '/api/media?key=' + encodeURIComponent(h.key) + '&w=640';
+              prev.style.display = 'block';
+              document.getElementById('tile-retry-status').textContent = '✅ Brought back — the swapped-out picture is in Previous pictures.';
+              loadTileHistory(itemId);
+            }
+          } catch (_) {}
+        };
+        hist.appendChild(img);
+      });
+    } catch (_) { hist.innerHTML = '<span class="hint">Couldn’t load previous pictures.</span>'; }
+  }
+  document.getElementById('tile-retry').addEventListener('click', async () => {
+    const existing = tileTarget && tileTarget.existing;
+    if (!existing || !existing.id) return;
+    const guidance = (prompt('What should change? (e.g. “no cartoon face, make it black like ours”) — your note guides the redraw:') || '').trim();
+    if (!guidance) return;
+    const st = document.getElementById('tile-retry-status');
+    st.textContent = 'Starting the redraw…';
+    try {
+      const r = await fetch('/api/store?action=retry', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: slug, itemId: existing.id, guidance }) });
+      const d = await r.json().catch(() => ({}));
+      st.textContent = r.ok
+        ? (d.freeRetry ? '🎨 Redrawing now (free) — the new picture lands in a minute or two.'
+                       : '🎨 Redrawing now (⭐' + (d.charged || 1) + ') — the new picture lands in a minute or two.')
+        : (d.error === 'not_enough_credits' ? 'Not enough credits — add a pack in Credits & Store.'
+          : d.error === 'needs_subscription' ? 'Styled redraws are part of My World memberships — join under Credits & Store.'
+          : 'Couldn’t start: ' + (d.detail || d.error || r.status));
+    } catch (err) { st.textContent = 'Couldn’t start: ' + (err.message || err); }
+  });
   async function tileUpload(blob, kind, ext, type) {
     const r = await fetch('/api/upload?kind=' + kind + '&ext=' + ext, { method: 'POST', headers: { 'Content-Type': type }, credentials: 'same-origin', body: blob });
     const d = await r.json().catch(() => ({}));
@@ -2878,13 +2951,64 @@
   // if the parent leaves without answering, the server keeps the question and
   // this popup re-asks on the dashboard until it's answered.
   async function loadFollowups() {
-    let list = [];
+    let list = [], problems = [];
     try {
       const r = await fetch('/api/store?action=followups&childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
       if (!r.ok) return;
-      list = (await r.json()).followups || [];
+      const d = await r.json();
+      list = d.followups || [];
+      problems = d.problems || [];
     } catch (_) { return; }
-    if (list.length) showFollowup(list, 0);
+    // Failures FIRST — a picture that never rendered matters more than a
+    // remake offer. "Later" hides them for this browser session only; the
+    // alert returns until every failure is retried (retry clears it).
+    if (problems.length && sessionStorage.getItem('fuProblemsLater') !== '1') {
+      showProblems(problems, () => { if (list.length) showFollowup(list, 0); });
+    } else if (list.length) showFollowup(list, 0);
+  }
+  function showProblems(problems, andThen) {
+    document.getElementById('fu-overlay')?.remove();
+    const ov = document.createElement('div');
+    ov.id = 'fu-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(31,41,55,.45);display:flex;align-items:center;justify-content:center;padding:18px;';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:20px;max-width:440px;width:100%;max-height:86vh;overflow:auto;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.3);';
+    card.innerHTML =
+      '<div style="font-size:19px;font-weight:800;color:#b45309;">⚠️ ' + problems.length + ' picture' + (problems.length === 1 ? '' : 's') + ' didn’t finish</div>' +
+      '<div style="font-size:13px;color:#6b7280;margin:8px 0 12px;">The image maker hit a snag on these. Retrying is safe' +
+        ' — failed photo adds never re-charge, and each word’s first redraw is free.</div>' +
+      '<div id="fu-problem-rows"></div>' +
+      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">' +
+        '<button class="btn ghost" id="fu-prob-later">Later</button>' +
+      '</div>';
+    const rowsEl = card.querySelector('#fu-problem-rows');
+    problems.forEach((p) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);';
+      const retryLabel = p.kind === 'add' ? 'Try again (no charge)'
+        : (p.freeRetryUsed ? 'Try again ⭐1' : 'Try again (free)');
+      row.innerHTML = '<div style="flex:1;font-weight:600;">' + schEsc(p.label || '') + '</div>' +
+        '<button class="btn" style="font-size:13px;">' + retryLabel + '</button>';
+      const btn = row.querySelector('button');
+      btn.onclick = async () => {
+        btn.disabled = true; btn.textContent = 'Retrying…';
+        try {
+          const url = p.kind === 'add' ? '/api/store?action=rearm-add' : '/api/store?action=retry';
+          const body = p.kind === 'add' ? { childId: slug, jobId: p.jobId } : { childId: slug, itemId: p.itemId };
+          const r = await fetch(url, { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          btn.textContent = r.ok ? '✅ Retrying' : 'Failed (' + r.status + ')';
+        } catch (_) { btn.textContent = 'Failed'; btn.disabled = false; }
+      };
+      rowsEl.appendChild(row);
+    });
+    card.querySelector('#fu-prob-later').onclick = () => {
+      sessionStorage.setItem('fuProblemsLater', '1');
+      ov.remove();
+      if (andThen) andThen();
+    };
+    ov.appendChild(card);
+    document.body.appendChild(ov);
   }
   function fuThumb(key, side) {
     return key

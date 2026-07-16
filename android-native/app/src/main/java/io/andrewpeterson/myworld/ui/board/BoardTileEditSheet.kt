@@ -1,12 +1,18 @@
 package io.andrewpeterson.myworld.ui.board
 
+import android.graphics.Bitmap
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -18,14 +24,19 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,7 +44,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.andrewpeterson.myworld.LocalAppContainer
 import io.andrewpeterson.myworld.model.Tile
+import io.andrewpeterson.myworld.net.HistoryEntry
 import io.andrewpeterson.myworld.net.deleteItem
+import io.andrewpeterson.myworld.net.imageHistory
+import io.andrewpeterson.myworld.net.revertImage
 import io.andrewpeterson.myworld.net.storeRetry
 import io.andrewpeterson.myworld.net.updateItem
 import io.andrewpeterson.myworld.net.upload
@@ -60,6 +74,11 @@ fun BoardTileEditSheet(tile: Tile, onDismiss: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    // Previous pictures (item_image_history): tap one to bring it back — the
+    // current picture archives first, so reverting is itself revertible.
+    var history by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
+    var revertCandidate by remember { mutableStateOf<HistoryEntry?>(null) }
+    LaunchedEffect(tile.id) { history = c.api.imageHistory(tile.id) }
 
     fun save() {
         if (busy) return
@@ -190,6 +209,52 @@ fun BoardTileEditSheet(tile: Tile, onDismiss: () -> Unit) {
                 modifier = Modifier.fillMaxWidth())
             TextButton(onClick = { redraw() }, enabled = !busy) {
                 Text("🎨 Redraw with my note (1st free)", color = Brand.pinkDeep, fontWeight = FontWeight.Bold)
+            }
+
+            if (history.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text("PREVIOUS PICTURES — TAP TO BRING ONE BACK",
+                    fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                    history.forEach { h ->
+                        val thumb by produceState<Bitmap?>(initialValue = null, h.key) {
+                            value = c.media.bitmap(h.key, maxDim = 256)
+                        }
+                        thumb?.let { bmp ->
+                            Image(bmp.asImageBitmap(), contentDescription = "Previous picture",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(72.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable(enabled = !busy) { revertCandidate = h })
+                            Spacer(Modifier.width(8.dp))
+                        }
+                    }
+                }
+            }
+            revertCandidate?.let { h ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { revertCandidate = null },
+                    title = { Text("Bring this picture back?") },
+                    text = { Text("The current picture is archived first — you can always undo.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            revertCandidate = null
+                            busy = true; error = null
+                            scope.launch {
+                                try {
+                                    c.api.revertImage(tile.id, h.key)
+                                    note = "✅ Brought back — the swapped-out picture is in Previous pictures."
+                                    history = c.api.imageHistory(tile.id)
+                                    c.board.refresh(c.auth.childSlug)
+                                } catch (e: Exception) {
+                                    error = "Couldn't bring it back: ${e.message}"
+                                } finally { busy = false }
+                            }
+                        }) { Text("Bring it back") }
+                    },
+                    dismissButton = { TextButton(onClick = { revertCandidate = null }) { Text("Cancel") } },
+                )
             }
 
             note?.let { Text(it, fontSize = 13.sp, color = Brand.goodInk) }

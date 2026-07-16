@@ -23,6 +23,10 @@ struct ParentHomeView: View {
     /// Live credit balance for the Credits & Store card's yellow badge —
     /// the parent always knows what they have before they spend.
     @State private var creditBalance: Int?
+    /// Renders that failed every attempt — shown as an alert card with
+    /// one-tap retry (word redraws: first free; failed photo adds: no charge).
+    @State private var problems: [APIClient.ProblemEntry] = []
+    @State private var problemBusy: Set<String> = []
 
     private let columns = [GridItem(.adaptive(minimum: 160), spacing: 14)]
 
@@ -31,6 +35,8 @@ struct ParentHomeView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     brandedHeader
+
+                    if !problems.isEmpty { problemsCard }
 
                     LazyVGrid(columns: columns, spacing: 14) {
                         navCard(icon: "star.fill", tint: "#f59e0b",
@@ -127,6 +133,7 @@ struct ParentHomeView: View {
                 // Real child name for the title + board-build progress banner.
                 ChildNames.shared.refresh(auth.childSlug)
                 creditBalance = try? await APIClient().storeBalance()
+                problems = await APIClient().storeProblems(childId: auth.childSlug)
                 await watchBuildProgress()
             }
             // PRD: when a facilitated game session starts on the iPad — from
@@ -158,6 +165,59 @@ struct ParentHomeView: View {
     /// mostly-empty navigation bar above — the bar is hidden now, so the grid
     /// starts higher). When no child is set up yet, a CTA appears instead of
     /// the name.
+    /// ⚠️ Pictures that failed every render attempt — the parent's alert with
+    /// one-tap retry. Word tiles re-render (first retry per tile free, then
+    /// credits — server-enforced); failed photo adds restart at no charge
+    /// (they were paid at enqueue and never delivered).
+    private var problemsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("\(problems.count) picture\(problems.count == 1 ? "" : "s") didn’t finish",
+                  systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: "#b45309"))
+            Text("The image maker hit a snag on these. Retrying is safe — failed photo adds never re-charge, and each word’s first redraw is free.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+            ForEach(problems) { p in
+                HStack {
+                    Text(p.label)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer()
+                    Button {
+                        Task { await retryProblem(p) }
+                    } label: {
+                        Text(problemBusy.contains(p.id) ? "Retrying…"
+                             : p.kind == "add" ? "Try again (no charge)"
+                             : (p.freeRetryUsed == true ? "Try again ⭐1" : "Try again (free)"))
+                            .font(.system(size: 13, weight: .bold))
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(Color(hex: "#b45309"), in: Capsule())
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(problemBusy.contains(p.id))
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: "#fef3c7"), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: "#f59e0b"), lineWidth: 1))
+    }
+
+    private func retryProblem(_ p: APIClient.ProblemEntry) async {
+        problemBusy.insert(p.id)
+        defer { problemBusy.remove(p.id) }
+        let api = APIClient()
+        var ok = false
+        if p.kind == "add", let jobId = p.jobId {
+            ok = await api.storeRearmAdd(childId: auth.childSlug, jobId: jobId)
+        } else if let itemId = p.itemId {
+            ok = (try? await api.storeRetry(childId: auth.childSlug, itemId: itemId)) != nil
+        }
+        if ok { problems.removeAll { $0.id == p.id } }   // retry re-arms the job → alert clears
+    }
+
     private var brandedHeader: some View {
         let name = prettyChildName(auth.user?.slug)
         return VStack(spacing: 12) {

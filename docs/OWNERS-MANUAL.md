@@ -167,6 +167,18 @@ family keeps everything they have — only new spends wait.
   picks the crop) — the old keep-original-ratio toggle is retired. The
   stored `keep_aspect` flag still renders uncropped on all three apps and
   stays settable via Lab's ⬜ Square-tiles tool (TV/movie posters).
+- **Failed renders alert the parent** (never silent): a render that fails
+  every attempt (word tile stuck on default art, photo add that never
+  landed) appears as a ⚠️ alert in all three parent views — web dashboard
+  popup, iOS parent home card, Android parent home banner — with one-tap
+  retry. Word redraws follow first-retry-free-then-credits (people photo
+  tiles ⭐5 — keystone pricing); restarting a failed photo add never
+  re-charges (it was paid at enqueue). The alert clears when retried.
+- **Every tile editor** (web board, web dashboard, iOS, Android) shows the
+  tile's "Previous pictures" strip (one-tap revert; the swap archives the
+  current picture, so reverting is revertible) and the guided redraw. The
+  redraw works on photo-added tiles too — the server re-runs the stored
+  tile job from the original photo with the parent's correction.
 - **Add-tile follow-ups** (replace-existing / remake-related): when a photo
   tile finishes, the parent is asked two magic questions — the word already
   exists on the board (swap the art? old image archives) and/or appears

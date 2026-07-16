@@ -18,6 +18,7 @@ import { describePhotoLabel } from './vision.js';
 import { grantCredits, COST } from './credits.js';
 import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, buildPortraitPrompt, SQUARE_RULE, captionRule } from './onboarding-render.js';
 import { relationshipAgeGroup } from './relationships.js';
+import { archivePriorImage } from './image-history.js';
 
 // 5 attempts with a growing gap between them (see claimRunnableJobs) rides out
 // a ~15-minute provider outage before the save-first raw photo lands — there is
@@ -346,6 +347,17 @@ export async function processTileJob(db, jobId) {
     // raw photos and save-first fallbacks are NOT styled (stay null).
     const styledId = (!job.raw && !artFailed && sgId) ? Number(sgId) : null;
     if (itemId) {
+      // Updating an existing tile (person refresh, custom-tile retry): the
+      // old picture archives to the Album first — every swap is revertible.
+      try {
+        const prev = (await db`SELECT image_key, label, section FROM items WHERE id = ${itemId} LIMIT 1`)[0];
+        if (prev && prev.image_key && prev.image_key !== imageKey
+            && !String(prev.image_key).startsWith('taxonomy-defaults/')) {
+          await archivePriorImage({ db, childId: job.child_id, itemId, oldKey: prev.image_key,
+                                    label: prev.label, section: prev.section, source: 'tile-job-update',
+                                    who: job.actor_email || null });
+        }
+      } catch (_) { /* archive is best-effort — never fail a landed tile */ }
       await db`UPDATE items SET label = ${label || 'New tile'}, image_key = ${imageKey},
                  sound_key = COALESCE(${soundKey}, sound_key), section = ${section},
                  category_id = COALESCE(${categoryId}, category_id), keep_aspect = ${!!job.keep_aspect},
