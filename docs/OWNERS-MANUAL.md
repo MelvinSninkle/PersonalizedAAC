@@ -184,13 +184,19 @@ family keeps everything they have — only new spends wait.
   rendered — never before, and NEVER on a family's board (family syncs are
   pinned to the main demo kid; invariant E9b). Remove hides the kid from
   the switcher but keeps the rendered art.
-- **Practice-board voices**: admin → **Voice library** → 🌍 Practice-board
-  voices panel. "Build" per voice (or Build all active) renders the ~full
-  clip set through the shared TTS cache. A voice appears on `/practice`'s
-  picker **only when its clip set is 100% built** — a half-built voice
-  would silently fall back to the visitor's device voice, which is exactly
-  the "macbook voice" problem. Until you build at least one voice, the
-  demo offers only the device voice.
+- **Practice-board voices — mostly a COPY, not a re-generation**: there are
+  two audio stores. Family boards keep their own per-tile clips; the
+  anonymous practice page can't read those (family data), so each voice
+  needs its own PUBLIC copies under `demo-audio/`. That's what admin →
+  **Voice library** → 🌍 Practice-board voices prepares — and because
+  every word ever spoken in a voice sits in the shared render cache,
+  "⚡ Copy + fill clips" pulls already-generated words from cache **free**
+  and only calls ElevenLabs for words that voice has never said. The run
+  reports the split ("N free from cache · M new") so you can see it. A
+  voice appears on `/practice`'s picker **only when its clip set is 100%
+  built** — a half-built voice would silently fall back to the visitor's
+  device voice ("macbook voice"). Until you prepare at least one voice,
+  the demo offers only the device voice.
 - **Practice board follows the Lab layout automatically**: the drag-order
   screen's category/word order (`default_category_order` +
   `taxonomy.sort_order`) is read live by `/api/demo` — rearrange the

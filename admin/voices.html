@@ -108,15 +108,18 @@
 
   <div class="panel" id="demo-panel">
     <h2>🌍 Practice-board voices</h2>
-    <p class="sub">The PUBLIC practice board plays pre-rendered clips (never live TTS — visitors can't spend).
-      Build a voice's clip set here and it appears in the /practice voice picker. Builds are resumable —
-      run again to finish; the shared TTS cache makes re-runs cheap.</p>
+    <p class="sub">The PUBLIC practice board plays pre-rendered clips (never live TTS — visitors can't spend),
+      so each voice needs its own set of public copies here before it shows in the /practice picker.
+      <b>Live voices are mostly already paid for:</b> every word any board has ever spoken in a voice sits in
+      the shared render cache, and this button just <b>copies</b> those clips to the practice address —
+      ElevenLabs is only called for words that voice has never said. A "0 / 1057" on a live voice is a copy
+      job, not a re-generation. Runs are resumable — press again to finish.</p>
     <table>
       <thead><tr><th>Voice</th><th>Clips built</th><th style="width:190px;"></th></tr></thead>
       <tbody id="demo-rows"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody>
     </table>
     <div class="addrow">
-      <button class="primary" id="demo-build-all">Build all active English voices</button>
+      <button class="primary" id="demo-build-all">⚡ Prepare all active English voices</button>
       <span id="demo-msg"></span>
     </div>
   </div>
@@ -662,7 +665,7 @@
       return '<tr><td>' + esc(v.name) + '</td>'
         + '<td>' + (done ? '✅ ' : '') + n + (DEMO_TOTAL ? ' / ' + DEMO_TOTAL : '') + '</td>'
         + '<td><button class="primary" data-demo-build="' + esc(v.id) + '"' + (done ? ' disabled' : '') + '>'
-        + (n > 0 && !done ? 'Resume build' : 'Build demo clips') + '</button></td></tr>';
+        + (n > 0 && !done ? '⚡ Resume copy + fill' : '⚡ Copy + fill clips') + '</button></td></tr>';
     }).join('');
     tb.querySelectorAll('[data-demo-build]').forEach((b) =>
       b.addEventListener('click', () => buildDemo([b.dataset.demoBuild])));
@@ -670,17 +673,24 @@
   async function buildDemo(voiceIds) {
     const msg = document.getElementById('demo-msg');
     document.querySelectorAll('#demo-panel button').forEach((b) => { b.disabled = true; });
+    // Accumulate the money story across rounds: free cache copies vs
+    // genuinely new ElevenLabs generations.
+    let fromCache = 0, generated = 0;
     try {
       for (const vid of voiceIds) {
         for (let round = 0; round < 60; round++) {   // safety cap; each call is time-boxed
-          msg.textContent = 'Building ' + vid + '… (round ' + (round + 1) + ' — safe to keep waiting)';
+          msg.textContent = 'Preparing ' + vid + '… (round ' + (round + 1) + ' — safe to keep waiting)';
           const r = await api('/api/admin/lab?action=demo-audio', { method: 'POST', body: { op: 'build', voiceIds: [vid] } });
+          fromCache += Number(r.fromCache) || 0;
+          generated += Number(r.generated) || 0;
           const remaining = Number(r.remaining) || 0;
           if (!remaining) break;
-          msg.textContent = 'Building ' + vid + '… ' + remaining + ' clips to go.';
+          msg.textContent = 'Preparing ' + vid + '… ' + remaining + ' clips to go '
+            + '(' + fromCache + ' free from cache · ' + generated + ' new so far).';
         }
       }
-      msg.textContent = '✅ Done — the /practice voice picker updates on its next load.';
+      msg.textContent = '✅ Done — ' + fromCache + ' copied free from your existing voice cache, '
+        + generated + ' newly generated. The /practice voice picker updates on its next load.';
     } catch (e) { msg.textContent = 'Build failed: ' + (e.message || e); }
     document.querySelectorAll('#demo-panel button').forEach((b) => { b.disabled = false; });
     loadDemoStatus().catch(() => {});
@@ -688,7 +698,7 @@
   document.getElementById('demo-build-all').addEventListener('click', () => {
     const ids = VOICES.filter((v) => v.active && (v.lang || 'en') === 'en').map((v) => v.id);
     if (!ids.length) return;
-    if (!confirm('Build practice clips for ' + ids.length + ' voice(s)? Each voice renders every standard-library word (cached words are free).')) return;
+    if (!confirm('Prepare practice clips for ' + ids.length + ' voice(s)? Words each voice has already spoken are COPIED free from the shared cache; only never-spoken words generate anew.')) return;
     buildDemo(ids);
   });
 

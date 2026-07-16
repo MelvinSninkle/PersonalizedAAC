@@ -86,6 +86,10 @@ export default async function handler(req, res) {
     }
 
     const deadline = Date.now() + 240_000;   // leave headroom under maxDuration
+    // stats splits each run into FREE cache copies (words this voice has
+    // already spoken anywhere in the product) vs fresh ElevenLabs spend —
+    // for a live voice, a "build" is mostly a copy job, and the panel says so.
+    const stats = { cached: 0, generated: 0 };
     let built = 0, skipped = 0, remaining = 0;
     for (const vid of voiceIds) {
       const have = await existingKeys(`demo-audio/${vid}/`);
@@ -95,7 +99,7 @@ export default async function handler(req, res) {
         if (have.has(key)) { skipped++; vDone++; continue; }
         if (Date.now() > deadline) { remaining++; continue; }
         try {
-          const buf = await synthesizeVoice({ text: label, voiceId: vid });
+          const buf = await synthesizeVoice({ text: label, voiceId: vid, stats });
           if (buf) {
             await put(key, buf, { access: 'private', addRandomSuffix: false, contentType: 'audio/mpeg' });
             built++; vDone++;
@@ -109,7 +113,10 @@ export default async function handler(req, res) {
       } catch (_) {}
     }
     res.status(200).json({ ok: true, built, skipped, remaining,
-      note: remaining > 0 ? 'Run build again to finish the rest.' : 'Complete.' });
+      fromCache: stats.cached, generated: stats.generated,
+      note: (built > 0
+        ? `${stats.cached} copied free from your existing voice cache, ${stats.generated} newly generated. `
+        : '') + (remaining > 0 ? 'Run build again to finish the rest.' : 'Complete.') });
   } catch (err) {
     res.status(500).json({ error: 'demo-audio failed', detail: String(err.message || err) });
   }
