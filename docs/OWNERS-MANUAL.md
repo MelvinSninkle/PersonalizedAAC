@@ -216,6 +216,15 @@ family keeps everything they have — only new spends wait.
   built** — a half-built voice would silently fall back to the visitor's
   device voice ("macbook voice"). Until you prepare at least one voice,
   the demo offers only the device voice.
+- **Layout pushes respect families**: when a parent drags tiles or folders
+  into their own order, that board is stamped family-arranged, and
+  **Publish to boards → layout skips it automatically** from then on (the
+  log says so per board). The amber "⚠️ Also overwrite family-arranged
+  boards" checkbox is the explicit override — double-confirmed, resets
+  after every push, and replaces their order irreversibly, so use it only
+  on purpose (e.g. repairing a bad push). Boards arranged BEFORE this
+  feature shipped carry no stamp — protection starts with the family's
+  next reorder.
 - **Practice board follows the Lab layout automatically**: the drag-order
   screen's category/word order (`default_category_order` +
   `taxonomy.sort_order`) is read live by `/api/demo` — rearrange the

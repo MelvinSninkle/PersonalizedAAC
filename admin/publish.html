@@ -82,7 +82,12 @@
     <div class="body">
       <label class="opt"><input type="checkbox" id="w-layout" checked>
         <span><b>Board layout order</b><span class="sub">Applies the drag-to-reorder screen's category and word order.
-        Curated words take the curated order; a family's own additions keep their relative order after them.</span></span></label>
+        Curated words take the curated order; a family's own additions keep their relative order after them.
+        <b>Boards where the family has dragged tiles into their own order are SKIPPED</b> — their arrangement is theirs.</span></span></label>
+      <label class="opt" style="border-color:#f59e0b;background:#fffbeb;"><input type="checkbox" id="w-overwrite">
+        <span><b>⚠️ Also overwrite family-arranged boards</b><span class="sub">Explicit override: pushes the curated order
+        onto boards the family deliberately rearranged too. Their custom order is REPLACED and cannot be recovered —
+        use only when you mean it (e.g. repairing a bad push).</span></span></label>
       <label class="opt"><input type="checkbox" id="w-sounds">
         <span><b>Voice clips (current pronunciations)</b><span class="sub">Re-points every standard tile at audio for the
         current pronunciation in the board's own voice — the same clips you QC'd in the voice library, so cached words cost
@@ -180,8 +185,15 @@
     const t = target();
     const what = { layout: $('w-layout').checked, sounds: $('w-sounds').checked };
     if (!what.layout && !what.sounds) { $('preview').innerHTML = '<span class="err">Tick at least one thing to push.</span>'; return; }
+    const overwriteCustomized = what.layout && $('w-overwrite').checked;
     const label = [what.layout && 'layout order', what.sounds && 'voice clips'].filter(Boolean).join(' + ');
-    if (!confirm(`Push ${label} to the previewed boards now?\n\nThis rewrites those boards' ordering${what.sounds ? ' and standard voice clips' : ''}. Personalized art, parent recordings, and custom words are untouched.`)) return;
+    if (!confirm(`Push ${label} to the previewed boards now?\n\nThis rewrites those boards' ordering${what.sounds ? ' and standard voice clips' : ''}. Personalized art, parent recordings, and custom words are untouched.`
+      + (what.layout ? (overwriteCustomized
+        ? '\n\n⚠️ OVERRIDE IS ON: boards the family deliberately rearranged will be overwritten too. Their custom order cannot be recovered.'
+        : '\n\nBoards the family has rearranged themselves are skipped automatically.') : ''))) return;
+    // The override is a one-push decision — never a sticky default.
+    if (overwriteCustomized
+        && !confirm('Second check: really replace FAMILY-ARRANGED boards\' order with the curated layout?')) return;
 
     running = true;
     $('push-btn').disabled = true; $('preview-btn').disabled = true;
@@ -193,11 +205,12 @@
     let offset = 0, total = null, stalls = 0;
     try {
       while (true) {
-        const d = await api('/api/admin/lab?action=publish', { ...t, what, offset });
+        const d = await api('/api/admin/lab?action=publish', { ...t, what, offset, overwriteCustomized });
         total = d.total;
         for (const r of d.results || []) {
           const bits = [];
-          if (r.layout) bits.push(`layout: ${r.layout.cats} folders, ${r.layout.tiles} tiles reordered`);
+          if (r.layout && r.layout.skipped) bits.push('layout: SKIPPED — family arranged this board themselves');
+          else if (r.layout) bits.push(`layout: ${r.layout.cats} folders, ${r.layout.tiles} tiles reordered`);
           if (r.sounds) bits.push(`sounds: ${r.sounds.updated} updated, ${r.sounds.already} current` +
             (r.sounds.failed ? `, ${r.sounds.failed} FAILED` : '') + (r.sounds.partial ? ' (continuing…)' : ''));
           say(`✓ ${r.childId} — ${bits.join(' · ')}`);
@@ -215,6 +228,8 @@
     } catch (e) {
       say('Failed: ' + e.message + ' — safe to run again; completed boards are skipped fast.', 'err');
     }
+    // The override never persists past one push — every use is re-confirmed.
+    $('w-overwrite').checked = false;
     running = false;
     $('push-btn').disabled = false; $('preview-btn').disabled = false;
   });
