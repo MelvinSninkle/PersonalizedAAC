@@ -20,23 +20,45 @@ export const config = { maxDuration: 30 };
 
 const ID_RE = /^[A-Za-z0-9]{8,40}$/;
 
-// Best-effort metadata lookup so "add a voice" = paste the id.
+// Best-effort metadata lookup so "add a voice" = paste the id. Never blocks
+// the add — but the FAILURE REASON is captured and returned so the admin can
+// see exactly why fields came back empty (a silent null here cost real
+// debugging time: a TTS-scoped API key can synthesize but not read voices).
 async function elevenLabsVoice(id) {
   const key = process.env.Fletchers_AAC_Device;
-  if (!key) return null;
+  if (!key) return { ok: false, error: 'The server has no ElevenLabs API key configured.' };
   try {
     const r = await fetch(`https://api.elevenlabs.io/v1/voices/${encodeURIComponent(id)}`, {
       headers: { 'xi-api-key': key },
     });
-    if (!r.ok) return null;
+    if (!r.ok) {
+      let detail = '';
+      try {
+        const e = await r.json();
+        detail = (e && e.detail && (e.detail.message || e.detail.status)) || JSON.stringify(e).slice(0, 120);
+      } catch (_) { detail = (await r.text().catch(() => '')).slice(0, 120); }
+      let hint = '';
+      if (r.status === 401 || /missing_permissions|voices_read/i.test(detail)) {
+        hint = ' — the API key likely lacks the "Voices: Read" permission. In ElevenLabs → '
+          + 'Developers → API Keys, edit the key and enable Voices read (TTS keeps working either way).';
+      } else if (r.status === 404 || r.status === 400 || /voice_not_found|does not exist/i.test(detail)) {
+        hint = ' — ElevenLabs doesn\'t return this id for YOUR account. Open the voice in '
+          + 'ElevenLabs, add it to My Voices, and copy the id from there (library ids only '
+          + 'resolve after the voice is in your workspace).';
+      }
+      return { ok: false, error: `ElevenLabs lookup failed (HTTP ${r.status}${detail ? ': ' + detail : ''})${hint}` };
+    }
     const d = await r.json();
     const labels = (d && d.labels) || {};
     return {
+      ok: true,
       name: (d && d.name) || null,
       gender: labels.gender ? labels.gender[0].toUpperCase() + labels.gender.slice(1) : null,
       accent: labels.accent ? labels.accent[0].toUpperCase() + labels.accent.slice(1) : null,
     };
-  } catch (_) { return null; }
+  } catch (err) {
+    return { ok: false, error: 'ElevenLabs lookup failed: ' + String(err.message || err).slice(0, 120) };
+  }
 }
 
 export default async function handler(req, res) {
@@ -121,15 +143,17 @@ export default async function handler(req, res) {
       let accent = String(b.accent || '').trim().slice(0, 40) || null;
       let looked = null;
       if (!name || !accent || !gender) looked = await elevenLabsVoice(id);
-      if (!name) name = (looked && looked.name) || id.slice(0, 8);
-      if (!gender && looked) gender = looked.gender;
-      if (!accent && looked) accent = looked.accent;
+      const lookedOk = !!(looked && looked.ok);
+      if (!name) name = (lookedOk && looked.name) || id.slice(0, 8);
+      if (!gender && lookedOk) gender = looked.gender;
+      if (!accent && lookedOk) accent = looked.accent;
       const maxSort = (await db`SELECT COALESCE(max(sort_order), -1)::int AS m FROM voices`)[0].m;
       await db`INSERT INTO voices (id, name, gender, accent, active, sort_order, lang)
                VALUES (${id}, ${name}, ${gender}, ${accent}, TRUE, ${maxSort + 1}, ${lang})
                ON CONFLICT (id) DO UPDATE SET name = ${name}, gender = ${gender}, accent = ${accent}, lang = ${lang}`;
       res.status(200).json({ ok: true, voice: { id, name, gender, accent, lang, active: true, sortOrder: maxSort + 1 },
-                             lookedUp: !!looked });
+                             lookedUp: lookedOk,
+                             lookupError: looked && !looked.ok ? looked.error : null });
       return;
     }
 

@@ -184,10 +184,45 @@ family keeps everything they have — only new spends wait.
   rendered — never before, and NEVER on a family's board (family syncs are
   pinned to the main demo kid; invariant E9b). Remove hides the kid from
   the switcher but keeps the rendered art.
-- **Practice-board voices**: admin → **Voice library** → 🌍 Practice-board
-  voices panel. "Build" per voice (or Build all active) renders the ~full
-  clip set through the shared TTS cache; once built, that voice appears on
-  `/practice`'s voice picker on its own.
+- **Voice QC — one window for everything a voice says**: Voice library →
+  **🎧 Listen & confirm** reviews every standard-library word AND every
+  learning-mode teaching fact (the clues Teach mode recites), playing the
+  exact cached clips boards play. **▶▶ Hands-free** autoplays clip after
+  clip; ✓ approves (marks persist server-side and resume anywhere), ↻
+  re-renders the clip and plays the fresh take, and words accept a phonetic
+  override that every board speaks from then on. If adding a voice by id
+  says the metadata lookup failed, the message now tells you WHY — most
+  commonly the ElevenLabs API key lacks the "Voices: Read" permission
+  (TTS works without it; enable it under ElevenLabs → API Keys), or the
+  voice isn't in your workspace's My Voices yet.
+- **Practice-board voices — mostly a COPY, not a re-generation**: there are
+  two audio stores. Family boards keep their own per-tile clips; the
+  anonymous practice page can't read those (family data), so each voice
+  needs its own PUBLIC copies under `demo-audio/`. That's what admin →
+  **Voice library** → 🌍 Practice-board voices prepares — and because
+  every word ever spoken in a voice sits in the shared render cache,
+  "⚡ Copy + fill clips" pulls already-generated words from cache **free**
+  and only calls ElevenLabs for words that voice has never said. The run
+  reports the split ("N free from cache · M new") so you can see it. A
+  voice appears on `/practice`'s picker **only when its clip set is 100%
+  built** — a half-built voice would silently fall back to the visitor's
+  device voice ("macbook voice"). Until you prepare at least one voice,
+  the demo offers only the device voice.
+- **Practice board follows the Lab layout automatically**: the drag-order
+  screen's category/word order (`default_category_order` +
+  `taxonomy.sort_order`) is read live by `/api/demo` — rearrange the
+  default board and `/practice` shows the new order on its next load, no
+  publish needed. "Publish to boards" remains only for retrofitting
+  EXISTING family boards.
+- **Practice-board education + live listening demo**: `/practice` opens
+  pictures-first (labels hidden, white frame — a visitor can flip both in
+  ⚙ Display, session-only) with an education bar that leads with
+  **🎙 Try listening**: the browser's own speech recognition captions what
+  the visitor says and matching words light up as tiles — 60 seconds per
+  press, bad-word masking permanently ON, nothing recorded or sent to any
+  server. Unsupported browsers (Firefox) or a blocked mic get a friendly
+  explainer with the one-click fix and a note that the real board has
+  listening built in on every device.
 - **The public funnel & invite codes**: the landing page, `/practice`, and
   `/signup` are fully public — share them anywhere. The invite code is
   required INLINE on the signup form instead (invite links still pre-apply

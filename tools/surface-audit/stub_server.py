@@ -109,13 +109,25 @@ class H(http.server.SimpleHTTPRequestHandler):
                     key = f'style-defaults/{style}/demo-{sec}-{i}' if style else f'demo-{sec}-{i}'
                     if style and kid and sec == 'people':
                         key = f'style-defaults/{style}/kid-{kid}-{sec}-{i}'
-                    tiles.append(dict(label=f'{sec} word {i}', section=sec,
-                                      category='Food' if sec == 'nouns' else ('Family' if sec == 'people' else ''),
-                                      subcategory='', imageKey=key))
+                    # Nouns carry TWO categories in a deliberately
+                    # NON-alphabetical curated order (Toys before Food) so the
+                    # smoke can assert the practice page honors server order.
+                    cat = ''
+                    if sec == 'nouns':
+                        cat = 'Toys' if i < 4 else 'Food'
+                    elif sec == 'people':
+                        cat = 'Family'
+                    label = 'pizza' if (sec == 'nouns' and i == 4) else f'{sec} word {i}'
+                    t = dict(label=label, section=sec, category=cat,
+                             subcategory='', imageKey=key)
+                    if label == 'pizza':
+                        t['matchTerms'] = ['pizzas']   # server-expanded inflections
+                    tiles.append(t)
             return self.send_json({'ok': True, 'tiles': tiles, 'folders': [],
                                    'voices': [{'id': 'v1', 'name': 'Bella'}],
                                    'styles': [{'id': 7, 'label': 'Watercolor'}],
                                    'kids': [{'id': 3, 'label': 'Maya'}] if style else [],
+                                   'listenBlocklist': ['damn', 'heck'],
                                    'style': int(style) if style else None,
                                    'kid': int(kid) if (style and kid) else None})
         if u.path.startswith('/api/child-settings'):

@@ -358,7 +358,10 @@ export async function loadChildStyleGuideId(db, childId) {
 // Pass { db, childId } to book the spend in voice_generations so the admin
 // Usage tally covers EVERY ElevenLabs call, not just /api/tts (tile voicing is
 // part of board builds — logged, never capped).
-export async function synthesizeVoice({ text, voiceId, db = null, childId = null, kind = 'tile' } = {}) {
+// `stats` (optional): a mutable {cached, generated} counter the caller owns —
+// lets bulk jobs (the demo-clip builder) report how much of a run was free
+// cache copies vs fresh ElevenLabs spend. Null = no accounting, no change.
+export async function synthesizeVoice({ text, voiceId, db = null, childId = null, kind = 'tile', stats = null } = {}) {
   const key = process.env.Fletchers_AAC_Device;
   if (!key || !text || !String(text).trim()) return null;
   const vid = voiceId || process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
@@ -378,7 +381,10 @@ export async function synthesizeVoice({ text, voiceId, db = null, childId = null
       const reader = cached.stream.getReader();
       const chunks = [];
       while (true) { const { value, done } = await reader.read(); if (done) break; chunks.push(Buffer.from(value)); }
-      if (chunks.length) return Buffer.concat(chunks);   // hit: no spend, no metering
+      if (chunks.length) {
+        if (stats) stats.cached = (stats.cached || 0) + 1;
+        return Buffer.concat(chunks);   // hit: no spend, no metering
+      }
     }
   } catch (_) { /* miss → generate */ }
   try {
@@ -398,6 +404,7 @@ export async function synthesizeVoice({ text, voiceId, db = null, childId = null
     }
     const buf = Buffer.from(await r.arrayBuffer());
     try { await blobPut(cacheKey, buf, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false }); } catch (_) {}
+    if (stats) stats.generated = (stats.generated || 0) + 1;
     return buf;
   } catch (_) { return null; }
 }

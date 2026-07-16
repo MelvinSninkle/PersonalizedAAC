@@ -83,16 +83,55 @@
   .foot-note { font-size:11px; color:var(--pink-deep); margin-left:8px; font-family:'Fredoka',sans-serif; }
   .foot-note a { color:var(--pink-deep); font-weight:700; }
 
-  /* Session-only display prefs (the ⚙ Display panel): hiding labels mirrors
+  /* Session-only display prefs (the ⚙ Display modal): hiding labels mirrors
      the real board's hide-labels mode — tile words, chip words and headers. */
   body.hide-labels .lb, body.hide-labels .col h2, body.hide-labels .needs h2 { display:none; }
   /* Needs tile width follows the configured total across (default 9). */
   .needs .grid .tile { width: calc((100vw - 16px - (var(--needs-across, 9) - 1) * 10px) / var(--needs-across, 9)); }
-  #disp-panel { display:none; }
-  #disp-panel .grp { display:flex; gap:6px; align-items:center; font-size:12px; color:var(--pink-deep); font-family:'Fredoka',sans-serif; font-weight:600; }
-  #disp-panel select { padding:4px 6px; border:2px solid var(--line); border-radius:8px; font-size:12px; font-family:'Fredoka',sans-serif; color:var(--pink-deep); background:#fff; }
-  #disp-panel input[type=color] { width:34px; height:26px; border:2px solid var(--line); border-radius:8px; padding:1px; background:#fff; cursor:pointer; }
-  #disp-panel input[type=checkbox] { accent-color: var(--pink); }
+
+  /* ── Modals (Display settings + listening help) ── */
+  .pmodal-backdrop { display:none; position:fixed; inset:0; background:rgba(45,20,40,.45); z-index:60;
+                     align-items:center; justify-content:center; }
+  .pmodal-backdrop.show { display:flex; }
+  .pmodal { background:#fff; border-radius:18px; padding:18px 20px; width:min(540px, 92vw);
+            max-height:86vh; overflow-y:auto; font-family:'Fredoka',ui-rounded,system-ui,sans-serif;
+            box-shadow:0 18px 50px rgba(0,0,0,.25); }
+  .pmodal h3 { margin:0 0 4px; font-size:18px; color:var(--pink-deep); }
+  .pmodal .hint { font-size:12px; color:var(--muted); margin:0 0 12px; }
+  .pmodal .grp { display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:13px;
+                 color:var(--pink-deep); font-weight:600; margin:8px 0; }
+  .pmodal select { padding:5px 7px; border:2px solid var(--line); border-radius:8px; font-size:13px;
+                   font-family:'Fredoka',sans-serif; color:var(--pink-deep); background:#fff; }
+  .pmodal input[type=color] { width:38px; height:28px; border:2px solid var(--line); border-radius:8px;
+                              padding:1px; background:#fff; cursor:pointer; }
+  .pmodal input[type=checkbox] { accent-color: var(--pink); }
+  .pmodal .btnrow { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+
+  /* ── Education bar — listening mode leads (the seller) ── */
+  #edu-bar { flex:0 0 auto; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+             padding:7px 12px; background:#fff8e1; border-bottom:2px solid #f6e3a1;
+             font-family:'Fredoka',sans-serif; font-size:13px; color:#7a5c00; }
+  #edu-bar b { color:#5c4500; }
+  #edu-bar .edu-chip { font-size:12px; color:#8a6d1a; background:#fff3c4; border-radius:999px;
+                       padding:4px 10px; white-space:nowrap; }
+  #edu-bar #listen-btn { background:var(--pink); color:#fff; border:none; font-weight:700; }
+  #edu-bar #edu-close { margin-left:auto; border:none; background:none; color:#8a6d1a;
+                        font-size:15px; cursor:pointer; padding:2px 6px; }
+
+  /* ── Live listening strip — heard words as chips (censor always on) ── */
+  #listen-bar { flex:0 0 auto; display:none; gap:8px; align-items:center; padding:7px 12px;
+                background:#eef6ff; border-bottom:2px solid #cfe3fb; overflow-x:auto;
+                font-family:'Fredoka',sans-serif; }
+  #listen-bar .lchip { flex:0 0 auto; display:flex; flex-direction:column; align-items:center;
+                       gap:2px; cursor:pointer; }
+  #listen-bar .lchip .sq { width:52px; height:52px; border-radius:10px; background:#fff center/cover no-repeat;
+                           border:2px solid #9cc1ee; }
+  #listen-bar .lchip .lb { font-size:10px; font-weight:700; color:#1f4878; max-width:64px;
+                           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block !important; }
+  #listen-bar .ltext { flex:0 0 auto; font-size:13px; font-weight:600; color:#5b7ba1;
+                       background:#fff; border:1.5px solid #cfe3fb; border-radius:999px; padding:5px 10px; }
+  #listen-bar .ltext.masked { background:#fef3c7; border-color:#f59e0b; color:#92400e; font-weight:800; }
+  #listen-bar .lhint { font-size:12px; color:#5b7ba1; white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -125,29 +164,20 @@
   </div>
 </div>
 
-<!-- ⚙ Display — the real board's most-used look controls, so a parent can
-     feel how adjustable it is. Session-only on purpose: prefs live in
-     sessionStorage and vanish when the browser closes; nothing posts. -->
-<div class="toolbar" id="disp-panel">
-  <label class="grp"><input type="checkbox" id="pd-hide-labels"> Hide labels</label>
-  <span class="grp">Tiles across:
-    P <select id="pd-across-people"></select>
-    N <select id="pd-across-nouns"></select>
-    V <select id="pd-across-verbs"></select></span>
-  <span class="grp">Show:
-    <label class="grp"><input type="checkbox" id="pd-show-people">People</label>
-    <label class="grp"><input type="checkbox" id="pd-show-nouns">Nouns</label>
-    <label class="grp"><input type="checkbox" id="pd-show-verbs">Verbs</label>
-    <label class="grp"><input type="checkbox" id="pd-show-needs">Needs</label></span>
-  <span class="grp">Colors:
-    P <input type="color" id="pd-color-people">
-    N <input type="color" id="pd-color-nouns">
-    V <input type="color" id="pd-color-verbs">
-    Needs <input type="color" id="pd-color-needs">
-    Header <input type="color" id="pd-color-header-bg">
-    Text <input type="color" id="pd-color-header-text"></span>
-  <button class="voice-chip" id="pd-reset">Reset</button>
-  <span class="foot-note">Just for this visit — on a real board these follow your child.</span>
+<!-- User education — listening mode is the seller, so it leads with a live
+     try-it button. Dismiss lasts this browser session only. -->
+<div id="edu-bar">
+  <span>🎙 <b>The board that listens:</b> talk nearby and the words you say light up as tiles.</span>
+  <button class="voice-chip" id="listen-btn">▶ Try listening</button>
+  <span class="edu-chip">🧒 Every picture becomes <b>your child's</b> world</span>
+  <span class="edu-chip">🔊 Their favorite voice — pick one above</span>
+  <button id="edu-close" title="Hide">✕</button>
+</div>
+
+<!-- Live listening strip — heard words appear here (browser speech
+     recognition; nothing is recorded or sent to a server). -->
+<div id="listen-bar">
+  <span class="lhint" id="listen-hint">Say something… tiles you name will light up here.</span>
 </div>
 
 <div id="loading">Loading the board…</div>
@@ -155,6 +185,55 @@
 <div class="needs" id="needs" style="display:none;">
   <h2>Needs</h2>
   <div class="grid" id="needs-grid"></div>
+</div>
+
+<!-- ⚙ Display — the real board's most-used look controls, so a parent can
+     feel how adjustable it is. Session-only on purpose: prefs live in
+     sessionStorage and vanish when the browser closes; nothing posts. -->
+<div class="pmodal-backdrop" id="disp-modal">
+  <div class="pmodal">
+    <h3>⚙ Display</h3>
+    <p class="hint">Just for this visit — on a real board these follow your child to every
+      device, along with lots more: board tools, touch behavior, listening filters, and safety controls.</p>
+    <label class="grp"><input type="checkbox" id="pd-hide-labels"> Hide labels (tiles, folders &amp; headers)</label>
+    <div class="grp">Tiles across:
+      People <select id="pd-across-people"></select>
+      Nouns <select id="pd-across-nouns"></select>
+      Verbs <select id="pd-across-verbs"></select></div>
+    <div class="grp">Show sections:
+      <label class="grp"><input type="checkbox" id="pd-show-people">People</label>
+      <label class="grp"><input type="checkbox" id="pd-show-nouns">Nouns</label>
+      <label class="grp"><input type="checkbox" id="pd-show-verbs">Verbs</label>
+      <label class="grp"><input type="checkbox" id="pd-show-needs">Needs</label></div>
+    <div class="grp">Section colors:
+      P <input type="color" id="pd-color-people">
+      N <input type="color" id="pd-color-nouns">
+      V <input type="color" id="pd-color-verbs">
+      Needs <input type="color" id="pd-color-needs"></div>
+    <div class="grp">Header:
+      Background <input type="color" id="pd-color-header-bg">
+      Text <input type="color" id="pd-color-header-text"></div>
+    <div class="btnrow">
+      <button class="voice-chip" id="pd-reset">Reset</button>
+      <button class="voice-chip" id="pd-done" style="background:var(--pink);color:#fff;border-color:var(--pink);">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Listening help — shown when the browser can't do live recognition or
+     the microphone is blocked. The guided retry IS the setup wizard. -->
+<div class="pmodal-backdrop" id="listen-help">
+  <div class="pmodal">
+    <h3 id="lh-title">🎙 Listening</h3>
+    <p id="lh-body" style="font-size:14px;color:#2d2230;line-height:1.5;"></p>
+    <p class="hint">Nothing is recorded or sent anywhere — speech recognition runs right in your
+      browser. On the real board, listening is built into the iPad and Android apps and the web
+      board, with the bad-word filter and parent controls included.</p>
+    <div class="btnrow">
+      <button class="voice-chip" id="lh-retry" style="display:none;">↻ Try again</button>
+      <button class="voice-chip" id="lh-close">Close</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -177,12 +256,15 @@
   // same two public GETs.
   const PD_KEY = 'practiceDisplay';
   const PD_WEIGHT = { people: 2, nouns: 5, verbs: 2 };   // column width ratio
+  // Defaults: clean white frame, pictures-first (labels hidden) — the board
+  // leads with imagery; every control below is one ⚙ tap away.
   const PD_DEFAULTS = () => ({
-    hideLabels: false,
+    hideLabels: true,
     tilesAcross: { ...ACROSS },
     sectionVisible: { people: true, nouns: true, verbs: true, needs: true },
-    sectionColors: { people: '#ffffff', nouns: '#ffffff', verbs: '#ffffff', needs: '#ffd400' },
+    sectionColors: { people: '#ffffff', nouns: '#ffffff', verbs: '#ffffff', needs: '#ffffff' },
     headerColors: { bg: '#ff1493', text: '#ffffff' },
+    eduDismissed: false,
   });
   let PDISP = PD_DEFAULTS();
   try {
@@ -207,10 +289,15 @@
     hdr.style.color = PDISP.headerColors.text;
     const needsEl = document.getElementById('needs');
     needsEl.style.background = PDISP.sectionColors.needs;
-    document.body.style.background = PDISP.sectionColors.needs;   // the board's frame
+    // The board's frame (page body + the gaps between columns) follows the
+    // needs color — white by default.
+    document.body.style.background = PDISP.sectionColors.needs;
+    document.getElementById('board').style.background = PDISP.sectionColors.needs;
     const total = ['people', 'nouns', 'verbs'].filter((s) => PDISP.sectionVisible[s])
       .reduce((n, s) => n + pdAcross(s), 0) || 9;
     needsEl.style.setProperty('--needs-across', total);
+    const edu = document.getElementById('edu-bar');
+    if (edu) edu.style.display = PDISP.eduDismissed ? 'none' : '';
   }
   const tapped = new Set();
   let taps = 0;
@@ -307,6 +394,7 @@
       const d = await r.json();
       if (!d || !Array.isArray(d.tiles) || !d.tiles.length) return;
       DATA = d;
+      LEX = null;   // listening lexicon follows the loaded board
     } catch (_) { return; }
     buildBoard();
     renderStyles();
@@ -441,12 +529,13 @@
   }
   function pdCommit() { pdSave(); buildBoard(); }
   (function wireDisplayPanel() {
-    const panel = document.getElementById('disp-panel');
+    const modal = document.getElementById('disp-modal');
     document.getElementById('disp-btn').addEventListener('click', () => {
-      const open = panel.style.display !== 'flex';
-      panel.style.display = open ? 'flex' : 'none';
-      if (open) pdPopulate();
+      pdPopulate();
+      modal.classList.add('show');
     });
+    document.getElementById('pd-done').addEventListener('click', () => modal.classList.remove('show'));
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('show'); });
     document.getElementById('pd-hide-labels').addEventListener('change', (e) => {
       PDISP.hideLabels = e.target.checked; pdCommit();
     });
@@ -475,6 +564,176 @@
       pdPopulate(); buildBoard();
     });
   })();
+
+  // ── Live listening demo ─────────────────────────────────────────────────
+  // The product's headline feature, runnable right here: the BROWSER's own
+  // speech recognition (nothing recorded, nothing sent to any server)
+  // captions what a visitor says; words that exist on the board light up as
+  // image chips. Mirrors the real board's tokenizer: greedy longest match
+  // over labels + the server-expanded matchTerms /api/demo now ships, and
+  // the bad-word censor (E8) is ALWAYS ON — no toggle on a public page.
+  // Timeboxed: 60 seconds per press, countdown on the button, never
+  // continuous.
+  const LISTEN_SECONDS = 60;
+  let LEX = null;            // rebuilt lazily; reset when DATA changes
+  let BLOCK = new Set();
+  const normWord = (s) => String(s || '').toLowerCase()
+    .replace(/[.,!?;:"()\[\]{}]/g, '').replace(/\s+/g, ' ').trim();
+  function buildLex() {
+    const lex = new Map();
+    const ts = (DATA && DATA.tiles) || [];
+    // Labels first — a real tile always beats another word's variant.
+    for (const t of ts) { const k = normWord(t.label); if (k && !lex.has(k)) lex.set(k, t); }
+    for (const t of ts) {
+      for (const m of (t.matchTerms || [])) {
+        const k = normWord(m); if (k && !lex.has(k)) lex.set(k, t);
+      }
+    }
+    BLOCK = new Set(((DATA && DATA.listenBlocklist) || []).map(normWord));
+    return lex;
+  }
+  function listenTokenize(text) {
+    if (!LEX) LEX = buildLex();
+    const words = normWord(text).split(' ').filter(Boolean);
+    const out = [];
+    let i = 0;
+    while (i < words.length && out.length < 40) {
+      let matched = null, len = 0;
+      for (let w = Math.min(6, words.length - i); w >= 1; w--) {
+        const phrase = words.slice(i, i + w).join(' ');
+        if (LEX.has(phrase)) { matched = LEX.get(phrase); len = w; break; }
+      }
+      if (matched) { out.push({ word: matched.label, tile: matched }); i += len; }
+      else {
+        const w = words[i];
+        out.push(BLOCK.has(w) ? { word: 'Bad Word', masked: true } : { word: w });
+        i += 1;
+      }
+    }
+    return out;
+  }
+  function renderListen(tokens) {
+    const bar = document.getElementById('listen-bar');
+    bar.style.display = 'flex';
+    bar.innerHTML = '';
+    if (!tokens.length) {
+      bar.innerHTML = '<span class="lhint" id="listen-hint">Say something… tiles you name will light up here.</span>';
+      return;
+    }
+    for (const tk of tokens.slice(-16)) {
+      if (tk.tile) {
+        const c = document.createElement('div');
+        c.className = 'lchip';
+        const sq = document.createElement('div');
+        sq.className = 'sq';
+        sq.style.backgroundImage = 'url("' + media(tk.tile.imageKey) + '")';
+        const lb = document.createElement('span');
+        lb.className = 'lb'; lb.textContent = tk.word;
+        c.appendChild(sq); c.appendChild(lb);
+        c.addEventListener('click', () => speak(tk.word));
+        bar.appendChild(c);
+      } else {
+        const t = document.createElement('span');
+        t.className = 'ltext' + (tk.masked ? ' masked' : '');
+        t.textContent = tk.word;
+        bar.appendChild(t);
+      }
+    }
+    bar.scrollLeft = bar.scrollWidth;
+  }
+
+  let rec = null, listenUntil = 0, listenTick = null, heardText = '';
+  const listenBtn = () => document.getElementById('listen-btn');
+  function showListenHelp(kind) {
+    const title = document.getElementById('lh-title');
+    const body = document.getElementById('lh-body');
+    const retry = document.getElementById('lh-retry');
+    if (kind === 'unsupported') {
+      title.textContent = '🎙 Listening needs a supported browser';
+      body.textContent = 'Live listening on this demo uses your browser’s built-in speech '
+        + 'recognition — Chrome, Edge, and Safari all have it (Firefox doesn’t yet). '
+        + 'On the real board there’s nothing to set up: listening is built into the '
+        + 'iPad and Android apps and works out of the box.';
+      retry.style.display = 'none';
+    } else {
+      title.textContent = '🎙 The microphone is blocked';
+      body.textContent = 'To try listening: click the 🔒 (or 🎤) icon next to the web address, '
+        + 'set Microphone to Allow, then press “Try again” below. '
+        + 'That’s the whole setup — one click.';
+      retry.style.display = '';
+    }
+    document.getElementById('listen-help').classList.add('show');
+  }
+  function stopListen() {
+    listenUntil = 0;
+    if (listenTick) { clearInterval(listenTick); listenTick = null; }
+    if (rec) { try { rec.onend = null; rec.stop(); } catch (_) {} rec = null; }
+    const b = listenBtn();
+    if (b) b.textContent = '▶ Try listening';
+  }
+  function startListen() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { showListenHelp('unsupported'); return; }
+    if (rec) { stopListen(); return; }   // second press stops early
+    let r;
+    try { r = new SR(); } catch (_) { showListenHelp('unsupported'); return; }
+    rec = r;
+    heardText = '';
+    r.lang = 'en-US';
+    r.interimResults = true;
+    r.continuous = false;   // restart per utterance — steadier across browsers
+    r.onresult = (e) => {
+      let interim = '';
+      for (let i = 0; i < e.results.length; i++) {
+        const res = e.results[i];
+        if (res.isFinal) heardText += ' ' + res[0].transcript;
+        else interim += ' ' + res[0].transcript;
+      }
+      // Keep the transcript bounded — this is a demo strip, not a log.
+      heardText = heardText.split(/\s+/).slice(-60).join(' ');
+      renderListen(listenTokenize(heardText + ' ' + interim));
+    };
+    r.onerror = (e) => {
+      const code = String((e && e.error) || '');
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        stopListen(); showListenHelp('denied');
+      }
+    };
+    r.onend = () => {
+      if (Date.now() < listenUntil && rec === r) { try { r.start(); } catch (_) {} }
+      else if (rec === r) stopListen();
+    };
+    listenUntil = Date.now() + LISTEN_SECONDS * 1000;
+    renderListen([]);
+    try { r.start(); } catch (_) { stopListen(); showListenHelp('denied'); return; }
+    const b = listenBtn();
+    const paint = () => {
+      const left = Math.max(0, Math.ceil((listenUntil - Date.now()) / 1000));
+      if (b) b.textContent = '🎙 Listening… ' + left + 's';
+      if (left <= 0) stopListen();
+    };
+    paint();
+    listenTick = setInterval(paint, 1000);
+  }
+  (function wireListening() {
+    document.getElementById('listen-btn').addEventListener('click', startListen);
+    document.getElementById('lh-close').addEventListener('click', () =>
+      document.getElementById('listen-help').classList.remove('show'));
+    document.getElementById('lh-retry').addEventListener('click', () => {
+      document.getElementById('listen-help').classList.remove('show');
+      startListen();
+    });
+    document.getElementById('edu-close').addEventListener('click', () => {
+      PDISP.eduDismissed = true; pdSave();
+      document.getElementById('edu-bar').style.display = 'none';
+    });
+  })();
+
+  // Test/automation surface (the app.html pattern): drive the listening
+  // pipeline without a microphone.
+  window.practiceHooks = {
+    listenTokens: (text) => { const tk = listenTokenize(String(text || '')); renderListen(tk); return tk; },
+  };
 
   async function boot() {
     try {

@@ -108,7 +108,10 @@ grep -q 'listenCensor = (s\["listenCensor"\] as? Bool) ?? true' kid-ios/MyWorld/
   || { fail "E8 iOS AccessFeatures lost censor-defaults-ON"; E8=1; }
 grep -q 'listenCensor = bool("listenCensor") ?: true' android-native/app/src/main/java/io/andrewpeterson/myworld/access/AccessFeatures.kt \
   || { fail "E8 Android AccessFeatures lost censor-defaults-ON"; E8=1; }
-[ "$E8" -eq 0 ] && pass "E8 listening filter defaults ON on server + all three clients"
+# The PUBLIC practice demo masks too — and its censor has NO toggle at all.
+grep -q "Bad Word" practice.html || { fail "E8 practice.html listening demo lost the Bad Word mask"; E8=1; }
+grep -q "listenCensor" practice.html && { fail "E8 practice.html must not expose a censor toggle (always ON on the public page)"; E8=1; }
+[ "$E8" -eq 0 ] && pass "E8 listening filter defaults ON on server + all three clients (+ always-on on /practice)"
 
 # ── E9: no draft style ever reaches a parent ─────────────────────────────────
 # New offered styles are created INACTIVE (drafts) and go live only via an
