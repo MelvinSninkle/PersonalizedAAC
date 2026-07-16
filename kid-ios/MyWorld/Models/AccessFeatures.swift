@@ -316,7 +316,7 @@ private struct SentenceChip: View {
         .buttonStyle(.plain)
         .task(id: tile.imageKey) {
             if let key = tile.imageKey, !key.isEmpty {
-                image = await MediaCache.shared.image(for: key)
+                image = await MediaCache.shared.image(for: key, maxPixel: 256)
             }
         }
     }
@@ -347,7 +347,7 @@ struct SentenceDragGhost: View {
         .allowsHitTesting(false)
         .task(id: tile.imageKey) {
             if let key = tile.imageKey, !key.isEmpty {
-                image = await MediaCache.shared.image(for: key)
+                image = await MediaCache.shared.image(for: key, maxPixel: 256)
             }
         }
     }

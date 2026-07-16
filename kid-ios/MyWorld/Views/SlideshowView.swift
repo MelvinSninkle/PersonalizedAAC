@@ -113,7 +113,7 @@ struct SlideshowView: View {
         image = nil
         guard let t = current else { return }
         if let key = t.imageKey, !key.isEmpty,
-           let img = await MediaCache.shared.image(for: key) {
+           let img = await MediaCache.shared.image(for: key, maxPixel: 1024) {
             await MainActor.run { self.image = img }
         }
         // Speak the phrase ("milk" for Learn, "I can see a milk" for Exposure).
@@ -257,7 +257,7 @@ struct TeachShowView: View {
             if Task.isCancelled { return }
             await MainActor.run { pos = i; clue = ""; image = nil }
             if let key = tile.imageKey, !key.isEmpty,
-               let img = await MediaCache.shared.image(for: key) {
+               let img = await MediaCache.shared.image(for: key, maxPixel: 1024) {
                 if Task.isCancelled { return }
                 await MainActor.run { image = img }
             }

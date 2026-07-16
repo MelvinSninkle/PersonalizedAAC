@@ -212,7 +212,7 @@ private struct ListenTileChip: View {
         }
         .buttonStyle(.plain)
         .task(id: tile.imageKey) {
-            if let key = tile.imageKey { image = await MediaCache.shared.image(for: key) }
+            if let key = tile.imageKey { image = await MediaCache.shared.image(for: key, maxPixel: 256) }
         }
     }
 }

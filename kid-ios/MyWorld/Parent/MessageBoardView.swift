@@ -173,8 +173,14 @@ struct ListeningModeView: View {
 
 /// Tiny async image backed by the shared MediaCache (same cache the board
 /// uses, so message previews are usually instant).
+///
+/// ALWAYS decodes downsampled: a full-res 1024² tile costs ~4 MB of RAM
+/// decoded, and screens that show many MediaImages (the Album) jetsammed
+/// the app (EXC_RESOURCE high-watermark). Default fits thumbnails/rows;
+/// pass a bigger maxPixel for full-screen looks.
 struct MediaImage: View {
     let blobKey: String
+    var maxPixel: Int = 512
     @State private var image: UIImage?
 
     var body: some View {
@@ -186,9 +192,7 @@ struct MediaImage: View {
             }
         }
         .task(id: blobKey) {
-            if let data = try? await MediaCache.shared.data(for: blobKey) {
-                image = UIImage(data: data)
-            }
+            image = await MediaCache.shared.image(for: blobKey, maxPixel: maxPixel)
         }
     }
 }

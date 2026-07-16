@@ -1149,9 +1149,9 @@ private struct OnboardingPhotoView: View {
 
     private func loadPreview(key: String) async {
         draftKey = key
-        if let bytes = try? await MediaCache.shared.data(for: key) {
-            draftImage = UIImage(data: bytes)
-        }
+        // Downsampled decode: this can be a fresh 12 MP camera photo, which
+        // costs ~48 MB of RAM decoded at full resolution (jetsam territory).
+        draftImage = await MediaCache.shared.image(for: key, maxPixel: 1024)
     }
 }
 

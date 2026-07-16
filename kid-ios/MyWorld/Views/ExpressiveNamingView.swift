@@ -134,7 +134,7 @@ struct ExpressiveNamingView: View {
         locked = false
         pendingMarkMethod = nil
         guard let key = target?.imageKey, !key.isEmpty,
-              let img = await MediaCache.shared.image(for: key) else { return }
+              let img = await MediaCache.shared.image(for: key, maxPixel: 640) else { return }
         await MainActor.run { self.image = img }
         publishState()
     }

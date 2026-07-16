@@ -517,7 +517,7 @@ private struct ChoiceTile: View {
         .animation(.easeInOut(duration: 0.2), value: dim)
         .task(id: tile.imageKey) {
             guard let key = tile.imageKey, !key.isEmpty else { return }
-            if let img = await MediaCache.shared.image(for: key) {
+            if let img = await MediaCache.shared.image(for: key, maxPixel: 640) {
                 await MainActor.run { self.image = img }
             }
         }
