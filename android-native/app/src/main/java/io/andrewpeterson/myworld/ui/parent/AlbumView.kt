@@ -16,9 +16,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -205,30 +208,69 @@ private fun FolderList(tiles: List<AlbumTile>, onOpen: (AlbumFolder) -> Unit) {
     }
 }
 
+/** A big folder (Words holds most of the board) must never compose every
+ *  row: LazyColumn + twenty rows per page + a persistent search field so a
+ *  parent jumps straight to a word instead of scrolling a thousand rows. */
+private const val ALBUM_PAGE = 20
+
 @Composable
 private fun FolderTileList(tiles: List<AlbumTile>, onOpen: (AlbumTile) -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        tiles.forEach { tile ->
-            Row(
-                Modifier.fillMaxWidth()
-                    .background(Color.White, RoundedCornerShape(14.dp))
-                    .border(1.dp, hexColor("#f3c6da"), RoundedCornerShape(14.dp))
-                    .clickable { onOpen(tile) }
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val key = tile.current?.blobKey ?: tile.history.firstOrNull()?.blobKey
-                BlobImage(key, Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)), maxDim = 256)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(tile.label ?: "Untitled", fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold, color = Brand.ink)
-                    val total = 1 + tile.history.size
-                    Text("$total picture${if (total == 1) "" else "s"}", fontSize = 12.sp, color = Brand.muted)
+    var query by remember { mutableStateOf("") }
+    var shown by remember { mutableStateOf(ALBUM_PAGE) }
+    val filtered = remember(tiles, query) {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) tiles else tiles.filter { (it.label ?: "").lowercase().contains(q) }
+    }
+    LaunchedEffect(query) { shown = ALBUM_PAGE }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        OutlinedTextField(
+            value = query, onValueChange = { query = it },
+            leadingIcon = { Text("🔍", fontSize = 16.sp) },
+            placeholder = { Text("Find a word…") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(10.dp))
+        LazyColumn(Modifier.fillMaxSize()) {
+            items(filtered.take(shown).size) { i ->
+                val tile = filtered[i]
+                Row(
+                    Modifier.fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(14.dp))
+                        .border(1.dp, hexColor("#f3c6da"), RoundedCornerShape(14.dp))
+                        .clickable { onOpen(tile) }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val key = tile.current?.blobKey ?: tile.history.firstOrNull()?.blobKey
+                    BlobImage(key, Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)), maxDim = 256)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(tile.label ?: "Untitled", fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold, color = Brand.ink)
+                        val total = 1 + tile.history.size
+                        Text("$total picture${if (total == 1) "" else "s"}", fontSize = 12.sp, color = Brand.muted)
+                    }
+                    Text("›", fontSize = 18.sp, color = Brand.muted)
                 }
-                Text("›", fontSize = 18.sp, color = Brand.muted)
+                Spacer(Modifier.height(10.dp))
             }
-            Spacer(Modifier.height(10.dp))
+            if (filtered.isEmpty()) {
+                item {
+                    Text(if (query.isEmpty()) "Nothing here yet." else "No words match “$query”.",
+                        fontSize = 13.sp, color = Brand.muted,
+                        modifier = Modifier.fillMaxWidth().padding(top = 40.dp))
+                }
+            }
+            if (filtered.size > shown) {
+                item {
+                    TextButton(onClick = { shown += ALBUM_PAGE }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Show ${minOf(ALBUM_PAGE, filtered.size - shown)} more · ${filtered.size - shown} left",
+                            color = Brand.pinkDeep, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
         }
     }
 }

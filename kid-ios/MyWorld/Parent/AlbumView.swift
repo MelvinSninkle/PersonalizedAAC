@@ -156,14 +156,28 @@ enum AlbumFolder: String, CaseIterable, Identifiable {
 
 /// One folder open: tiles in that section listed by name with a thumbnail
 /// stack showing current + how many older versions there are.
+///
+/// A big folder (Words holds most of the board) must never build every row:
+/// rows render LAZILY, twenty per page, with a persistent search bar to jump
+/// straight to a word instead of scrolling a thousand rows.
 private struct AlbumFolderView: View {
     let folder: AlbumFolder
     let tiles: [APIClient.AlbumTile]
 
+    static let pageSize = 20
+    @State private var query = ""
+    @State private var shown = AlbumFolderView.pageSize
+
+    private var filtered: [APIClient.AlbumTile] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return tiles }
+        return tiles.filter { ($0.label ?? "").lowercased().contains(q) }
+    }
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 10) {
-                ForEach(tiles) { tile in
+            LazyVStack(spacing: 10) {
+                ForEach(Array(filtered.prefix(shown))) { tile in
                     NavigationLink {
                         AlbumTileView(tile: tile)
                     } label: {
@@ -171,12 +185,36 @@ private struct AlbumFolderView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                if filtered.isEmpty {
+                    Text(query.isEmpty ? "Nothing here yet." : "No words match \u{201C}\(query)\u{201D}.")
+                        .font(.footnote).foregroundStyle(.secondary).padding(.top, 40)
+                }
+                if filtered.count > shown {
+                    Button {
+                        shown += Self.pageSize
+                    } label: {
+                        Text("Show \(min(Self.pageSize, filtered.count - shown)) more · \(filtered.count - shown) left")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color(hex: "#fce4ec"), in: RoundedRectangle(cornerRadius: 14))
+                            .foregroundStyle(Color(hex: "#ad1457"))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
+                }
             }
             .padding(16)
         }
         .background(Color(hex: "#fff7fb"))
         .navigationTitle(folder.title)
         .navigationBarTitleDisplayMode(.large)
+        // Always-visible search: typing narrows by word, so nobody pages
+        // through a thousand rows to find one tile.
+        .searchable(text: $query,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Find a word…")
+        .onChange(of: query) { _, _ in shown = Self.pageSize }
     }
 
     private func tileRow(_ tile: APIClient.AlbumTile) -> some View {
