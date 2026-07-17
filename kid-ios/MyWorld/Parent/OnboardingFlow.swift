@@ -815,11 +815,14 @@ private struct OnboardingPhotoView: View {
             .padding(20)
         }
         .background(Color(hex: Brand.bg))
-        .sheet(isPresented: $showPicker) {
+        // fullScreenCover, NOT sheet: an iPad form-sheet camera renders a
+        // black preview (see CameraPicker's header comment).
+        .fullScreenCover(isPresented: $showPicker) {
             CameraPicker { data in
                 showPicker = false
                 if let data { Task { await draft(data) } }
             }
+            .ignoresSafeArea()
         }
         // Let the parent choose the camera OR their photo library (the bug was
         // that this went straight to the camera with no library option).
