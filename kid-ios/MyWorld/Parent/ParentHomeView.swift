@@ -23,6 +23,13 @@ struct ParentHomeView: View {
     /// Live credit balance for the Credits & Store card's yellow badge —
     /// the parent always knows what they have before they spend.
     @State private var creditBalance: Int?
+    /// Renders that failed every attempt — shown as an alert card with
+    /// one-tap retry (word redraws: first free; failed photo adds: no charge).
+    @State private var problems: [APIClient.ProblemEntry] = []
+    @State private var problemBusy: Set<String> = []
+    /// Support notices ("we've opened your board" / the team's response) —
+    /// shown above everything else until "Got it" acks them server-side.
+    @State private var supportNotices: [APIClient.SupportNotice] = []
 
     private let columns = [GridItem(.adaptive(minimum: 160), spacing: 14)]
 
@@ -31,6 +38,9 @@ struct ParentHomeView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     brandedHeader
+
+                    ForEach(supportNotices) { n in supportNoticeCard(n) }
+                    if !problems.isEmpty { problemsCard }
 
                     LazyVGrid(columns: columns, spacing: 14) {
                         navCard(icon: "star.fill", tint: "#f59e0b",
@@ -127,6 +137,8 @@ struct ParentHomeView: View {
                 // Real child name for the title + board-build progress banner.
                 ChildNames.shared.refresh(auth.childSlug)
                 creditBalance = try? await APIClient().storeBalance()
+                problems = await APIClient().storeProblems(childId: auth.childSlug)
+                supportNotices = await APIClient().storeSupportNotices(childId: auth.childSlug)
                 await watchBuildProgress()
             }
             // PRD: when a facilitated game session starts on the iPad — from
@@ -158,6 +170,93 @@ struct ParentHomeView: View {
     /// mostly-empty navigation bar above — the bar is hidden now, so the grid
     /// starts higher). When no child is set up yet, a CTA appears instead of
     /// the name.
+    /// 🛠/✅ Support notice: the team opened the board (with the family's
+    /// permission — they filed the case) or sent their response. Persists
+    /// until "Got it" acks it server-side; only the requesting account sees it.
+    private func supportNoticeCard(_ n: APIClient.SupportNotice) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(n.kind == "response" ? "Your request is done" : "We’re on it",
+                  systemImage: n.kind == "response" ? "checkmark.seal.fill" : "wrench.and.screwdriver.fill")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: "#ad1457"))
+            Text(n.text)
+                .font(.system(size: 13))
+                .foregroundStyle(Color(hex: "#374151"))
+            HStack {
+                Spacer()
+                Button {
+                    let id = n.id
+                    supportNotices.removeAll { $0.id == id }
+                    Task { await APIClient().storeSupportAck(childId: auth.childSlug, noticeId: id) }
+                } label: {
+                    Text("Got it")
+                        .font(.system(size: 13, weight: .bold))
+                        .padding(.horizontal, 16).padding(.vertical, 7)
+                        .background(Color(hex: "#ad1457"), in: Capsule())
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: "#fdf2f8"), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: "#f3c6da"), lineWidth: 1))
+    }
+
+    /// ⚠️ Pictures that failed every render attempt — the parent's alert with
+    /// one-tap retry. Word tiles re-render (first retry per tile free, then
+    /// credits — server-enforced); failed photo adds restart at no charge
+    /// (they were paid at enqueue and never delivered).
+    private var problemsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("\(problems.count) picture\(problems.count == 1 ? "" : "s") didn’t finish",
+                  systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: "#b45309"))
+            Text("The image maker hit a snag on these. Retrying is safe — failed photo adds never re-charge, and each word’s first redraw is free.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+            ForEach(problems) { p in
+                HStack {
+                    Text(p.label)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer()
+                    Button {
+                        Task { await retryProblem(p) }
+                    } label: {
+                        Text(problemBusy.contains(p.id) ? "Retrying…"
+                             : p.kind == "add" ? "Try again (no charge)"
+                             : (p.freeRetryUsed == true ? "Try again ⭐1" : "Try again (free)"))
+                            .font(.system(size: 13, weight: .bold))
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(Color(hex: "#b45309"), in: Capsule())
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(problemBusy.contains(p.id))
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: "#fef3c7"), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: "#f59e0b"), lineWidth: 1))
+    }
+
+    private func retryProblem(_ p: APIClient.ProblemEntry) async {
+        problemBusy.insert(p.id)
+        defer { problemBusy.remove(p.id) }
+        let api = APIClient()
+        var ok = false
+        if p.kind == "add", let jobId = p.jobId {
+            ok = await api.storeRearmAdd(childId: auth.childSlug, jobId: jobId)
+        } else if let itemId = p.itemId {
+            ok = (try? await api.storeRetry(childId: auth.childSlug, itemId: itemId)) != nil
+        }
+        if ok { problems.removeAll { $0.id == p.id } }   // retry re-arms the job → alert clears
+    }
+
     private var brandedHeader: some View {
         let name = prettyChildName(auth.user?.slug)
         return VStack(spacing: 12) {
@@ -279,6 +378,11 @@ struct ParentSettingsView: View {
     @State private var deleting = false
     @State private var deleteError: String?
     @State private var showChangePw = false
+    // Help & support: request-support / report-a-bug (consented board access).
+    @State private var showSupport = false
+    @State private var supportKind = "support"
+    @State private var supportText = ""
+    @State private var supportMsg: String?
     @State private var curPw = ""
     @State private var newPw = ""
     @State private var pwMsg: String?
@@ -359,6 +463,16 @@ struct ParentSettingsView: View {
                         Label("Full dashboard on the web", systemImage: "safari")
                     }
                 }
+                Section("Help & support") {
+                    // Filing a case IS the consent for the team to open and
+                    // edit the board — the alert message spells that out.
+                    Button("🛟 Request support…") { supportKind = "support"; supportText = ""; showSupport = true }
+                    Button("🐛 Report a bug…") { supportKind = "bug"; supportText = ""; showSupport = true }
+                    if let m = supportMsg {
+                        Text(m).font(.footnote)
+                            .foregroundStyle(m.hasPrefix("Sent") ? Color(hex: "#047857") : .secondary)
+                    }
+                }
                 Section("Account") {
                     if let u = auth.user { LabeledContent("Email", value: u.email) }
                     // The password doubles as the board's edit-unlock gate, so
@@ -404,6 +518,14 @@ struct ParentSettingsView: View {
             } message: {
                 Text("This password also unlocks board editing on the child's device.")
             }
+            .alert(supportKind == "bug" ? "Report a bug" : "Request support", isPresented: $showSupport) {
+                TextField(supportKind == "bug" ? "What went wrong?" : "What do you need help with?", text: $supportText)
+                Button("Cancel", role: .cancel) { supportText = "" }
+                Button("Send") { Task { await sendSupport() } }
+            } message: {
+                // Mirrors api/_lib/support.js CONFIRM_COPY — the disclosure IS the consent.
+                Text("By sending, you give the My World team permission to open and edit your child's board to investigate and fix this. You'll get a notice here when we start, and another when we're done. Responses can take up to 48 hours.")
+            }
             .alert("Delete this account?", isPresented: $showDeleteConfirm) {
                 TextField("Type DELETE to confirm", text: $deleteText)
                     .autocorrectionDisabled()
@@ -415,6 +537,22 @@ struct ParentSettingsView: View {
             } message: {
                 Text("Permanently deletes this account and everything on the board — every tile, photo, generated image, recording, and all history. This cannot be undone.")
             }
+        }
+    }
+
+    private func sendSupport() async {
+        let text = supportText.trimmingCharacters(in: .whitespacesAndNewlines)
+        supportText = ""
+        guard !text.isEmpty else { supportMsg = "Tell us a little about the problem first."; return }
+        do {
+            let r = try await api.storeSupportCreate(childId: auth.childSlug, kind: supportKind, message: text)
+            supportMsg = r.note ?? "Sent! We'll get back to you within 48 hours."
+        } catch let APIError.badStatus(_, body) {
+            supportMsg = body.contains("too_many_open_cases")
+                ? "You already have open requests — we'll get to them within 48 hours."
+                : "Couldn't send — check the connection and try again."
+        } catch {
+            supportMsg = "Couldn't send: \(error.localizedDescription)"
         }
     }
 

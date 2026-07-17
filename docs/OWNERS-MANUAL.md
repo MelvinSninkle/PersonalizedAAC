@@ -138,9 +138,15 @@ family keeps everything they have — only new spends wait.
 ## The pipelines
 
 - **Board build**: onboard places words instantly (chunked `seed-core`),
-  then durable `seed_jobs` (render/voice/chip) drain via the every-minute
-  cron `run-tile-jobs`. Progress = `seedStatus` (also feeds the onboarding
-  "magic gallery"). Stuck builds: Lab tools re-arm dead jobs.
+  then durable `seed_jobs` (render/voice/chip) drain EVENT-DRIVEN: every
+  enqueue starts work in-request (`waitUntil`), and every status poll —
+  the add-tile tray, onboarding progress, personalize-status — pumps a few
+  more jobs (atomic `SKIP LOCKED` claims keep concurrent pumps + the cron
+  off each other's work). The every-minute cron `run-tile-jobs` is the
+  backstop, not the engine: it covers retry backoff timers, style-wizard
+  builds, and queues nobody is watching. Progress = `seedStatus` (also
+  feeds the onboarding "magic gallery"). Stuck builds: Lab tools re-arm
+  dead jobs.
 - **Image generation**: `buildPortraitPrompt`/`renderTaxonomyTile` — single
   prompt source; style guides + child anchor photo; `IMAGE_GEN_DAILY_LIMIT`.
   Each style carries up to three reference images (main anchor `blob_key`,
@@ -161,6 +167,30 @@ family keeps everything they have — only new spends wait.
   picks the crop) — the old keep-original-ratio toggle is retired. The
   stored `keep_aspect` flag still renders uncropped on all three apps and
   stays settable via Lab's ⬜ Square-tiles tool (TV/movie posters).
+- **Failed renders alert the parent** (never silent): a render that fails
+  every attempt (word tile stuck on default art, photo add that never
+  landed) appears as a ⚠️ alert in all three parent views — web dashboard
+  popup, iOS parent home card, Android parent home banner — with one-tap
+  retry. Word redraws follow first-retry-free-then-credits (people photo
+  tiles ⭐5 — keystone pricing); restarting a failed photo add never
+  re-charges (it was paid at enqueue). The alert clears when retried.
+- **Every tile editor** (web board, web dashboard, iOS, Android) shows the
+  tile's "Previous pictures" strip (one-tap revert; the swap archives the
+  current picture, so reverting is revertible) and the guided redraw. The
+  redraw works on photo-added tiles too — the server re-runs the stored
+  tile job from the original photo with the parent's correction.
+- **Add-tile follow-ups** (replace-existing / remake-related): when a photo
+  tile finishes, the parent is asked two magic questions — the word already
+  exists on the board (swap the art? old image archives) and/or appears
+  inside other tiles' prompts via `objects_present` (remake them with YOUR
+  object, ⭐1 each). The question is DURABLE: every finished job stays
+  "unanswered" (`tile_jobs.followup_done_at IS NULL`) and re-offers on every
+  surface — iOS Add-tiles, Android Add-tiles, and a web-dashboard popup —
+  until the parent answers or the word turns out to touch nothing (auto-
+  closed). Swiping the question away leaves it pending on purpose. Remakes
+  queue `seed_jobs` and start draining in-request (`waitUntil`); the minute
+  cron finishes anything left, so arm the cron. Captions on photo tiles use
+  the SAME `captionRule` (black text, white band) as every other generator.
 - **Game scoring**: sessions need ≥3 answers to enter weekly accuracy or
   spike baselines; shorter ones are recorded but annotated "too short to
   score" (analytics.js / spike.js).
@@ -171,6 +201,23 @@ family keeps everything they have — only new spends wait.
 - **Auto-Teach**: scheduled exposure slideshows/games from onboarding prefs.
 
 ## Running the product (live-ops)
+
+- **Support inbox** (`/admin/support.html`) — the consented-access flow, and
+  the ONLY sanctioned way to open a family's board. The promise to families:
+  you never look at their board unless they asked (their Request support /
+  Report a bug IS the permission), they're notified in-app the moment you
+  start, and they get a full list of what you changed. The flow: open the
+  case → **Start review** (snapshots the board + sends the "we've opened
+  your board" notice — first click only) → edit their board via the case's
+  parent-dashboard/kid-board links → **Preview changes** anytime →
+  **Finish review** (drafts the bulk change summary from the snapshot diff;
+  regenerating replaces draft edits) → edit the draft, add context →
+  **Send response & resolve** (the family sees your text word-for-word;
+  can't be edited after). Notices go only to the account that filed the
+  case, in-app only (no email by design), and persist until "Got it".
+  Families can have at most 3 open cases; the settings buttons promise a
+  response within 48 hours — honor that. CI invariant E13 pins the
+  support_cases table to exactly the four intended files.
 
 - **Shipping a new style** (new show, new craze): admin → **✨ New Style
   wizard** (`/admin/style-wizard.html`). Upload one style image → generate/

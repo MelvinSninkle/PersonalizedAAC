@@ -987,6 +987,29 @@
     <span id="backup-msg" style="font-size:13px;color:var(--muted);display:block;margin-top:8px;"></span>
   </div>
 
+  <!-- HELP & SUPPORT -->
+  <div class="section-label">Help &amp; support</div>
+  <div class="panel">
+    <h2>Need a hand?</h2>
+    <p class="hint">Tell us what's wrong and we'll fix it — usually by working directly on your board. Responses can take up to 48 hours.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <button class="btn primary" id="support-request">🛟 Request support</button>
+      <button class="btn" id="support-bug">🐛 Report a bug</button>
+    </div>
+    <div id="support-form" style="display:none;margin-top:12px;max-width:520px;">
+      <label style="font-size:12px;font-weight:700;color:var(--muted);" id="support-form-label">What do you need help with?</label>
+      <textarea id="support-text" rows="4" maxlength="2000" placeholder="Tell us what's going on — the more detail, the faster we can fix it."
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:6px;"></textarea>
+      <p class="hint" id="support-disclosure" style="margin:8px 0;"></p>
+      <div style="display:flex;gap:10px;">
+        <button class="btn primary" id="support-send">Send</button>
+        <button class="btn ghost" id="support-cancel">Cancel</button>
+      </div>
+    </div>
+    <span id="support-msg" style="font-size:13px;color:var(--muted);display:block;margin-top:8px;"></span>
+    <div id="support-cases" style="font-size:13px;color:var(--muted);margin-top:6px;"></div>
+  </div>
+
   <!-- ACCOUNT & SECURITY -->
   <div class="section-label">Account &amp; security</div>
   <div class="panel" id="account-panel">
@@ -1175,6 +1198,12 @@
       <button class="btn primary" id="tile-magic" style="width:100%;">📷 Take a photo &amp; we'll do the rest</button>
       <p class="hint" id="tile-magic-status" style="margin:8px 0 0;">—</p>
       <img id="tile-preview" alt="" style="display:none;width:100%;max-width:180px;border-radius:12px;margin-top:8px;">
+      <div id="tile-versions" style="display:none;margin-top:10px;">
+        <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:4px;">Previous pictures <span style="font-weight:400;color:#999;">(tap to bring one back)</span></div>
+        <div id="tile-history" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;"></div>
+        <button class="btn ghost" id="tile-retry" type="button" style="margin-top:8px;">🎨 Draw a new picture <span style="font-weight:400;">(1st retry free, then ⭐)</span></button>
+        <p class="hint" id="tile-retry-status" style="margin:6px 0 0;"></p>
+      </div>
     </div>
     <div class="field"><label>Or upload an image</label><input type="file" id="tile-image" accept="image/*"></div>
     <div id="tile-voice">
@@ -2436,11 +2465,78 @@
       ? 'Current sound will be kept'
       : 'No sound yet';
     document.getElementById('tile-delete').style.display = existing ? 'inline-flex' : 'none';
+    // Previous pictures + guided redraw — parity with the kid-board editor,
+    // so every surface can revert art or ask for a better take.
+    const vwrap = document.getElementById('tile-versions');
+    document.getElementById('tile-retry-status').textContent = '';
+    if (kind === 'item' && existing?.id) {
+      vwrap.style.display = '';
+      loadTileHistory(existing.id);
+    } else {
+      vwrap.style.display = 'none';
+      document.getElementById('tile-history').innerHTML = '';
+    }
     tileSetErr('');
     document.getElementById('tile-look-style').checked = true;
     tileScrim.classList.add('open');
   }
   function closeTileAdder() { tileScrim.classList.remove('open'); }
+  async function loadTileHistory(itemId) {
+    const hist = document.getElementById('tile-history');
+    hist.innerHTML = '<span class="hint">Loading…</span>';
+    try {
+      const r = await fetch('/api/items?history=' + itemId, { credentials: 'same-origin' });
+      const d = await r.json();
+      const rows = d.history || [];
+      if (!rows.length) {
+        hist.innerHTML = '<span class="hint">No previous pictures yet — redraws and photo swaps archive here.</span>';
+        return;
+      }
+      hist.innerHTML = '';
+      rows.forEach((h) => {
+        const img = document.createElement('img');
+        img.src = '/api/media?key=' + encodeURIComponent(h.key) + '&w=256';
+        img.alt = 'Previous picture';
+        img.style.cssText = 'width:72px;height:72px;border-radius:10px;object-fit:cover;border:1px solid var(--line);cursor:pointer;flex:none;';
+        img.onclick = async () => {
+          if (!confirm('Bring this picture back? The current one is archived — you can always undo.')) return;
+          try {
+            const r2 = await fetch('/api/items', { method: 'POST', credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ op: 'revert-image', id: itemId, key: h.key }) });
+            if (r2.ok) {
+              const prev = document.getElementById('tile-preview');
+              prev.src = '/api/media?key=' + encodeURIComponent(h.key) + '&w=640';
+              prev.style.display = 'block';
+              document.getElementById('tile-retry-status').textContent = '✅ Brought back — the swapped-out picture is in Previous pictures.';
+              loadTileHistory(itemId);
+            }
+          } catch (_) {}
+        };
+        hist.appendChild(img);
+      });
+    } catch (_) { hist.innerHTML = '<span class="hint">Couldn’t load previous pictures.</span>'; }
+  }
+  document.getElementById('tile-retry').addEventListener('click', async () => {
+    const existing = tileTarget && tileTarget.existing;
+    if (!existing || !existing.id) return;
+    const guidance = (prompt('What should change? (e.g. “no cartoon face, make it black like ours”) — your note guides the redraw:') || '').trim();
+    if (!guidance) return;
+    const st = document.getElementById('tile-retry-status');
+    st.textContent = 'Starting the redraw…';
+    try {
+      const r = await fetch('/api/store?action=retry', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: slug, itemId: existing.id, guidance }) });
+      const d = await r.json().catch(() => ({}));
+      st.textContent = r.ok
+        ? (d.freeRetry ? '🎨 Redrawing now (free) — the new picture lands in a minute or two.'
+                       : '🎨 Redrawing now (⭐' + (d.charged || 1) + ') — the new picture lands in a minute or two.')
+        : (d.error === 'not_enough_credits' ? 'Not enough credits — add a pack in Credits & Store.'
+          : d.error === 'needs_subscription' ? 'Styled redraws are part of My World memberships — join under Credits & Store.'
+          : 'Couldn’t start: ' + (d.detail || d.error || r.status));
+    } catch (err) { st.textContent = 'Couldn’t start: ' + (err.message || err); }
+  });
   async function tileUpload(blob, kind, ext, type) {
     const r = await fetch('/api/upload?kind=' + kind + '&ext=' + ext, { method: 'POST', headers: { 'Content-Type': type }, credentials: 'same-origin', body: blob });
     const d = await r.json().catch(() => ({}));
@@ -2870,6 +2966,247 @@
     });
   })();
   loadReviewQueue();
+
+  // ── Add-tile follow-ups (replace-existing / remake-related) ────────────────
+  // Photo adds can raise questions the parent never saw answered: the word
+  // already exists on the board (replace the old art?) or appears inside other
+  // pictures (remake them with YOUR object?). The iOS sheet asks at add time;
+  // if the parent leaves without answering, the server keeps the question and
+  // this popup re-asks on the dashboard until it's answered.
+  async function loadFollowups() {
+    let list = [], problems = [], notices = [];
+    try {
+      const r = await fetch('/api/store?action=followups&childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const d = await r.json();
+      list = d.followups || [];
+      problems = d.problems || [];
+      notices = d.supportNotices || [];
+    } catch (_) { return; }
+    // Support notices FIRST (the team touched YOUR board — nothing outranks
+    // that), then failures, then remake offers. Notices have no session
+    // snooze: they show until "Got it" acks them server-side.
+    const afterNotices = () => {
+      if (problems.length && sessionStorage.getItem('fuProblemsLater') !== '1') {
+        showProblems(problems, () => { if (list.length) showFollowup(list, 0); });
+      } else if (list.length) showFollowup(list, 0);
+    };
+    if (notices.length) showSupportNotice(notices, 0, afterNotices);
+    else afterNotices();
+  }
+  function showSupportNotice(notices, idx, andThen) {
+    document.getElementById('fu-overlay')?.remove();
+    if (idx >= notices.length) { if (andThen) andThen(); return; }
+    const n = notices[idx];
+    const ov = document.createElement('div');
+    ov.id = 'fu-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(31,41,55,.45);display:flex;align-items:center;justify-content:center;padding:18px;';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:20px;max-width:440px;width:100%;max-height:86vh;overflow:auto;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.3);';
+    card.innerHTML =
+      '<div style="font-size:19px;font-weight:800;color:#ad1457;">' +
+        (n.kind === 'response' ? '✅ Your request is done' : '🛠 We’re on it') + '</div>' +
+      '<div style="font-size:14px;color:#374151;margin:10px 0 14px;white-space:pre-wrap;">' + schEsc(n.text || '') + '</div>' +
+      '<div style="text-align:right;"><button class="btn primary" id="fu-notice-ok">Got it</button></div>';
+    card.querySelector('#fu-notice-ok').onclick = async () => {
+      try {
+        await fetch('/api/store?action=support-ack', { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ childId: slug, noticeId: n.id }) });
+      } catch (_) {}
+      showSupportNotice(notices, idx + 1, andThen);
+    };
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+  }
+
+  // ── Help & support: request-support / report-a-bug (consented access) ──────
+  (() => {
+    let supportKind = 'support';
+    const form = document.getElementById('support-form');
+    if (!form) return;
+    const openForm = (kind) => {
+      supportKind = kind;
+      document.getElementById('support-form-label').textContent =
+        kind === 'bug' ? 'What went wrong?' : 'What do you need help with?';
+      // The disclosure IS the consent — mirror api/_lib/support.js CONFIRM_COPY.
+      document.getElementById('support-disclosure').textContent =
+        'By sending, you give the My World team permission to open and edit ' + pretty +
+        "'s board to investigate and fix this. You'll get a notice here when we start, and another when we're done. Responses can take up to 48 hours.";
+      form.style.display = '';
+      document.getElementById('support-msg').textContent = '';
+      document.getElementById('support-text').focus();
+    };
+    document.getElementById('support-request').addEventListener('click', () => openForm('support'));
+    document.getElementById('support-bug').addEventListener('click', () => openForm('bug'));
+    document.getElementById('support-cancel').addEventListener('click', () => { form.style.display = 'none'; });
+    document.getElementById('support-send').addEventListener('click', async () => {
+      const text = document.getElementById('support-text').value.trim();
+      const msg = document.getElementById('support-msg');
+      if (!text) { msg.textContent = 'Tell us a little about the problem first.'; return; }
+      const btn = document.getElementById('support-send');
+      btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        const r = await fetch('/api/store?action=support-create', { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ childId: slug, kind: supportKind, message: text }) });
+        const d = await r.json().catch(() => ({}));
+        if (r.ok) {
+          form.style.display = 'none';
+          document.getElementById('support-text').value = '';
+          msg.textContent = '✅ ' + (d.note || "Sent! We'll get back to you within 48 hours.");
+          loadSupportCases();
+        } else {
+          msg.textContent = d.detail || d.error || ('Could not send (' + r.status + ').');
+        }
+      } catch (err) { msg.textContent = 'Could not send: ' + (err.message || err); }
+      btn.disabled = false; btn.textContent = 'Send';
+    });
+    async function loadSupportCases() {
+      try {
+        const r = await fetch('/api/store?action=support-list&childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+        if (!r.ok) return;
+        const cases = (await r.json()).cases || [];
+        const open = cases.filter((c) => c.status !== 'resolved');
+        document.getElementById('support-cases').textContent = open.length
+          ? (open.length === 1 ? 'You have 1 open request.' : 'You have ' + open.length + ' open requests.')
+          : '';
+      } catch (_) {}
+    }
+    loadSupportCases();
+  })();
+  function showProblems(problems, andThen) {
+    document.getElementById('fu-overlay')?.remove();
+    const ov = document.createElement('div');
+    ov.id = 'fu-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(31,41,55,.45);display:flex;align-items:center;justify-content:center;padding:18px;';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:20px;max-width:440px;width:100%;max-height:86vh;overflow:auto;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.3);';
+    card.innerHTML =
+      '<div style="font-size:19px;font-weight:800;color:#b45309;">⚠️ ' + problems.length + ' picture' + (problems.length === 1 ? '' : 's') + ' didn’t finish</div>' +
+      '<div style="font-size:13px;color:#6b7280;margin:8px 0 12px;">The image maker hit a snag on these. Retrying is safe' +
+        ' — failed photo adds never re-charge, and each word’s first redraw is free.</div>' +
+      '<div id="fu-problem-rows"></div>' +
+      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">' +
+        '<button class="btn ghost" id="fu-prob-later">Later</button>' +
+      '</div>';
+    const rowsEl = card.querySelector('#fu-problem-rows');
+    problems.forEach((p) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);';
+      const retryLabel = p.kind === 'add' ? 'Try again (no charge)'
+        : (p.freeRetryUsed ? 'Try again ⭐1' : 'Try again (free)');
+      row.innerHTML = '<div style="flex:1;font-weight:600;">' + schEsc(p.label || '') + '</div>' +
+        '<button class="btn" style="font-size:13px;">' + retryLabel + '</button>';
+      const btn = row.querySelector('button');
+      btn.onclick = async () => {
+        btn.disabled = true; btn.textContent = 'Retrying…';
+        try {
+          const url = p.kind === 'add' ? '/api/store?action=rearm-add' : '/api/store?action=retry';
+          const body = p.kind === 'add' ? { childId: slug, jobId: p.jobId } : { childId: slug, itemId: p.itemId };
+          const r = await fetch(url, { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          btn.textContent = r.ok ? '✅ Retrying' : 'Failed (' + r.status + ')';
+        } catch (_) { btn.textContent = 'Failed'; btn.disabled = false; }
+      };
+      rowsEl.appendChild(row);
+    });
+    card.querySelector('#fu-prob-later').onclick = () => {
+      sessionStorage.setItem('fuProblemsLater', '1');
+      ov.remove();
+      if (andThen) andThen();
+    };
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+  }
+  function fuThumb(key, side) {
+    return key
+      ? '<img src="/api/media?key=' + encodeURIComponent(key) + '&w=256" alt="" style="width:' + side + 'px;height:' + side + 'px;border-radius:12px;object-fit:cover;border:1px solid var(--line);">'
+      : '<div style="width:' + side + 'px;height:' + side + 'px;border-radius:12px;background:#fce4ec;"></div>';
+  }
+  function showFollowup(list, idx) {
+    document.getElementById('fu-overlay')?.remove();
+    if (idx >= list.length) return;
+    const f = list[idx];
+    const done = async () => {
+      try {
+        await fetch('/api/store?action=followup-done', { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ childId: slug, jobId: f.jobId }) });
+      } catch (_) {}
+      showFollowup(list, idx + 1);
+    };
+    const ov = document.createElement('div');
+    ov.id = 'fu-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(31,41,55,.45);display:flex;align-items:center;justify-content:center;padding:18px;';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:20px;max-width:440px;width:100%;max-height:86vh;overflow:auto;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.3);';
+    let step2Ref = f.itemId;   // the tile whose image anchors the remakes
+
+    const renderRegen = () => {
+      const n = f.affected.length;
+      card.innerHTML =
+        '<div style="font-size:19px;font-weight:800;color:#ad1457;">🪄 Your ' + schEsc(f.label) + ' shows up in ' + n + ' other picture' + (n === 1 ? '' : 's') + '</div>' +
+        '<div style="font-size:13px;color:#6b7280;margin:8px 0 12px;">Remake ' + (n === 1 ? 'it' : 'them') + ' so they show YOUR ' + schEsc(f.label) + '? ⭐1 each — replaced art is archived in the Album.</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">' +
+          f.affected.slice(0, 12).map((a) => '<div style="text-align:center;font-size:11px;color:#6b7280;">' + fuThumb(a.previewKey, 64) + '<div>' + schEsc(a.label) + '</div></div>').join('') +
+          (n > 12 ? '<div style="align-self:center;font-size:12px;color:#6b7280;">+' + (n - 12) + ' more</div>' : '') +
+        '</div>' +
+        '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+          '<button class="btn ghost" id="fu-skip">Not now</button>' +
+          '<button class="btn" id="fu-regen">Remake ' + n + ' (⭐' + n + ')</button>' +
+        '</div>';
+      card.querySelector('#fu-skip').onclick = done;
+      card.querySelector('#fu-regen').onclick = async (e) => {
+        e.target.disabled = true; e.target.textContent = 'Queuing…';
+        try {
+          const r = await fetch('/api/store?action=regen-with', { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ childId: slug, taxonomyIds: f.affected.map((a) => a.taxonomyId), refItemId: step2Ref }) });
+          const d = await r.json();
+          card.innerHTML = '<div style="font-size:15px;font-weight:600;color:' + (r.ok ? '#16a34a' : '#9b1c1c') + ';">' +
+            schEsc(r.ok ? (d.note || 'Re-rendering — they pop in over the next few minutes.') : (d.error === 'not_enough_credits' ? 'Not enough credits — add a pack in Credits & Store first.' : 'Could not queue: ' + (d.detail || d.error || r.status))) +
+            '</div><div style="text-align:right;margin-top:14px;"><button class="btn" id="fu-close">Done</button></div>';
+          card.querySelector('#fu-close').onclick = done;
+        } catch (err) {
+          e.target.disabled = false; e.target.textContent = 'Remake ' + n + ' (⭐' + n + ')';
+        }
+      };
+    };
+
+    const renderReplace = () => {
+      card.innerHTML =
+        '<div style="font-size:19px;font-weight:800;color:#ad1457;">🪄 “' + schEsc(f.label) + '” is already on the board</div>' +
+        '<div style="display:flex;gap:16px;align-items:center;justify-content:center;margin:14px 0;">' +
+          '<div style="text-align:center;font-size:12px;color:#6b7280;">' + fuThumb(f.existing.imageKey, 96) + '<div>Now' + (f.existing.isDefault ? ' (classic art)' : '') + '</div></div>' +
+          '<div style="font-size:20px;color:#6b7280;">→</div>' +
+          '<div style="text-align:center;font-size:12px;color:#6b7280;">' + fuThumb(f.imageKey, 96) + '<div>Your new picture</div></div>' +
+        '</div>' +
+        '<div style="font-size:13px;color:#6b7280;margin-bottom:14px;">Swap in your picture? The current one ' + (f.existing.isDefault ? 'stays available to every board.' : 'is archived in the Album — you never lose it.') + '</div>' +
+        '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+          '<button class="btn ghost" id="fu-keep">Keep both</button>' +
+          '<button class="btn" id="fu-replace">Replace</button>' +
+        '</div>';
+      const next = () => f.affected.length ? renderRegen() : done();
+      card.querySelector('#fu-keep').onclick = next;
+      card.querySelector('#fu-replace').onclick = async (e) => {
+        e.target.disabled = true; e.target.textContent = 'Replacing…';
+        try {
+          const r = await fetch('/api/store?action=adopt-image', { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ childId: slug, sourceItemId: f.itemId, targetItemId: f.existing.itemId }) });
+          if (r.ok) step2Ref = f.existing.itemId;   // the existing tile now holds the art
+          next();
+        } catch (_) { next(); }
+      };
+    };
+
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+    if (f.existing) renderReplace();
+    else renderRegen();
+  }
+  loadFollowups();
 
   // Shared image downscaler used by tile + family-photo uploads.
   async function downscale(file, max = 1024, quality = 0.85) {

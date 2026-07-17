@@ -111,3 +111,25 @@ suspend fun ApiClient.storeRetry(childId: String, itemId: Int, guidance: String)
     val body = "{\"childId\":${jsonQuote(childId)},\"itemId\":$itemId,\"guidance\":${jsonQuote(guidance)}}"
     raw("POST", "/api/store?action=retry", body.encodeToByteArray())
 }
+
+// ── Previous pictures (item_image_history) ───────────────────────────────────
+
+@Serializable
+data class HistoryEntry(val key: String = "", val source: String? = null, val archivedAt: String? = null)
+
+@Serializable
+private data class HistoryResult(val history: List<HistoryEntry> = emptyList())
+
+/** GET /api/items?history=<itemId> — the tile's past pictures, newest first. */
+suspend fun ApiClient.imageHistory(itemId: Int): List<HistoryEntry> =
+    try { getJson<HistoryResult>("/api/items?history=$itemId").history }
+    catch (_: Exception) { emptyList() }
+
+/**
+ * POST /api/items { op: revert-image } — put a past picture back on the tile.
+ * The current picture archives first, so reverting is itself revertible.
+ */
+suspend fun ApiClient.revertImage(itemId: Int, key: String) {
+    val body = "{\"op\":\"revert-image\",\"id\":$itemId,\"key\":${jsonQuote(key)}}"
+    raw("POST", "/api/items", body.encodeToByteArray())
+}

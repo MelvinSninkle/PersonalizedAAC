@@ -44,9 +44,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.andrewpeterson.myworld.LocalAppContainer
 import io.andrewpeterson.myworld.model.prettyChildName
+import io.andrewpeterson.myworld.net.ProblemEntry
 import io.andrewpeterson.myworld.net.StyleGuideInfo
 import io.andrewpeterson.myworld.net.StyleOverview
 import io.andrewpeterson.myworld.net.advanceBand
+import io.andrewpeterson.myworld.net.SupportNotice
+import io.andrewpeterson.myworld.net.storeProblems
+import io.andrewpeterson.myworld.net.storeRearmAdd
+import io.andrewpeterson.myworld.net.storeRetry
+import io.andrewpeterson.myworld.net.storeSupportAck
+import io.andrewpeterson.myworld.net.storeSupportCreate
+import io.andrewpeterson.myworld.net.storeSupportNotices
 import io.andrewpeterson.myworld.net.bandStatus
 import io.andrewpeterson.myworld.net.changePassword
 import io.andrewpeterson.myworld.net.childSettings
@@ -82,11 +90,20 @@ fun ParentHomeView() {
     // Live credit balance for the Credits & Store card's yellow badge —
     // the parent always knows what they have before they spend.
     var creditBalance by remember { mutableStateOf<Int?>(null) }
+    // Renders that failed every attempt — alert banner with one-tap retry
+    // (word redraws: first free; failed photo adds: no charge).
+    var problems by remember { mutableStateOf<List<ProblemEntry>>(emptyList()) }
+    var problemBusy by remember { mutableStateOf(setOf<String>()) }
+    // Support notices ("we've opened your board" / the team's response) —
+    // creator-only, persist until "Got it" acks them server-side.
+    var supportNotices by remember { mutableStateOf<List<SupportNotice>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         c.parentLive.start(c.auth.childSlug)
         c.board.refresh(c.auth.childSlug)   // scopes for StartGame + quick board
         creditBalance = try { c.api.storeCatalog().balance } catch (_: Exception) { null }
+        problems = c.api.storeProblems(c.auth.childSlug)
+        supportNotices = c.api.storeSupportNotices(c.auth.childSlug)
     }
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose { c.parentLive.stop() }
@@ -127,6 +144,75 @@ fun ParentHomeView() {
                     .clickable { open = "settings" },
                 contentAlignment = Alignment.Center,
             ) { Text("⚙", fontSize = 19.sp) }
+        }
+
+        // 🛠/✅ Support notices — the team opened the board (with the family's
+        // filed-case permission) or sent their response. Above everything.
+        val noticeScope = androidx.compose.runtime.rememberCoroutineScope()
+        supportNotices.forEach { n ->
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 12.dp)
+                    .background(hexColor("#fdf2f8"), RoundedCornerShape(16.dp))
+                    .border(1.dp, hexColor("#f3c6da"), RoundedCornerShape(16.dp))
+                    .padding(14.dp),
+            ) {
+                Text(if (n.kind == "response") "✅ Your request is done" else "🛠 We're on it",
+                    fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
+                Text(n.text, fontSize = 13.sp, color = Brand.ink)
+                Row(Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.weight(1f))
+                    androidx.compose.material3.TextButton(onClick = {
+                        val id = n.id
+                        supportNotices = supportNotices.filter { it.id != id }
+                        noticeScope.launch { c.api.storeSupportAck(c.auth.childSlug, id) }
+                    }) { Text("Got it", color = Brand.pinkDeep, fontWeight = FontWeight.Bold) }
+                }
+            }
+        }
+
+        // ⚠️ Pictures that failed every render attempt — the parent's alert
+        // with one-tap retry. Word tiles re-render (first retry per tile
+        // free, then credits — server-enforced); failed photo adds restart
+        // at no charge (paid at enqueue, never delivered).
+        if (problems.isNotEmpty()) {
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 12.dp)
+                    .background(hexColor("#fef3c7"), RoundedCornerShape(16.dp))
+                    .border(1.dp, hexColor("#f59e0b"), RoundedCornerShape(16.dp))
+                    .padding(14.dp),
+            ) {
+                Text("⚠️ ${problems.size} picture${if (problems.size == 1) "" else "s"} didn't finish",
+                    fontSize = 16.sp, fontWeight = FontWeight.Bold, color = hexColor("#b45309"))
+                Text("Retrying is safe — failed photo adds never re-charge, and each word's first redraw is free.",
+                    fontSize = 12.sp, color = Brand.muted)
+                problems.forEach { p ->
+                    val pid = p.kind + "-" + (p.itemId ?: p.jobId ?: 0)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(p.label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                            color = Brand.ink, modifier = Modifier.weight(1f))
+                        androidx.compose.material3.TextButton(enabled = pid !in problemBusy, onClick = {
+                            problemBusy = problemBusy + pid
+                            scope.launch {
+                                val ok = try {
+                                    if (p.kind == "add" && p.jobId != null) c.api.storeRearmAdd(c.auth.childSlug, p.jobId)
+                                    else if (p.itemId != null) { c.api.storeRetry(c.auth.childSlug, p.itemId, ""); true }
+                                    else false
+                                } catch (_: Exception) { false }
+                                if (ok) problems = problems.filter { (it.kind + "-" + (it.itemId ?: it.jobId ?: 0)) != pid }
+                                problemBusy = problemBusy - pid
+                            }
+                        }) {
+                            Text(
+                                if (pid in problemBusy) "Retrying…"
+                                else if (p.kind == "add") "Try again (no charge)"
+                                else if (p.freeRetryUsed == true) "Try again ⭐1" else "Try again (free)",
+                                color = hexColor("#b45309"), fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         LazyVerticalGrid(
@@ -241,6 +327,11 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
     var curPw by remember { mutableStateOf("") }
     var newPw by remember { mutableStateOf("") }
     var pwMsg by remember { mutableStateOf<String?>(null) }
+    // Help & support: request-support / report-a-bug (consented board access).
+    var showSupport by remember { mutableStateOf(false) }
+    var supportKind by remember { mutableStateOf("support") }
+    var supportText by remember { mutableStateOf("") }
+    var supportMsg by remember { mutableStateOf<String?>(null) }
     // Listening display filter (E8) — synced child settings, editable here
     // so a parent can flip them right on the device. Seeded below; the
     // loaded flag keeps the seed from firing the save callbacks.
@@ -445,6 +536,25 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
             )
 
             Spacer(Modifier.height(14.dp))
+            Text("HELP & SUPPORT", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
+            // Filing a case IS the consent for the team to open and edit the
+            // board — the dialog spells that out before sending.
+            androidx.compose.material3.TextButton(onClick = {
+                supportKind = "support"; supportText = ""; showSupport = true
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("🛟 Request support…", color = Brand.pinkDeep)
+            }
+            androidx.compose.material3.TextButton(onClick = {
+                supportKind = "bug"; supportText = ""; showSupport = true
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("🐛 Report a bug…", color = Brand.pinkDeep)
+            }
+            supportMsg?.let {
+                Text(it, fontSize = 12.sp,
+                    color = if (it.startsWith("Sent")) hexColor("#047857") else Brand.muted)
+            }
+
+            Spacer(Modifier.height(14.dp))
             Text("ACCOUNT", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
             // The password doubles as the board's edit-unlock gate, so
             // changing it in-app matters — no detour to the website.
@@ -480,6 +590,50 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
                 Text("Done", color = Brand.pinkDeep, fontWeight = FontWeight.Bold)
             }
         }
+    }
+
+    if (showSupport) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showSupport = false },
+            title = { androidx.compose.material3.Text(if (supportKind == "bug") "Report a bug" else "Request support") },
+            text = {
+                Column {
+                    // Mirrors api/_lib/support.js CONFIRM_COPY — the disclosure IS the consent.
+                    androidx.compose.material3.Text(
+                        "By sending, you give the My World team permission to open and edit your child's board to investigate and fix this. " +
+                        "You'll get a notice here when we start, and another when we're done. Responses can take up to 48 hours.",
+                        fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = supportText, onValueChange = { supportText = it },
+                        label = { androidx.compose.material3.Text(if (supportKind == "bug") "What went wrong?" else "What do you need help with?") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    val text = supportText.trim()
+                    if (text.isEmpty()) return@TextButton
+                    showSupport = false; supportText = ""
+                    scope.launch {
+                        supportMsg = try {
+                            val r = c.api.storeSupportCreate(c.auth.childSlug, supportKind, text)
+                            r.note ?: "Sent! We'll get back to you within 48 hours."
+                        } catch (e: Exception) {
+                            if (e.message?.contains("too_many_open_cases") == true)
+                                "You already have open requests — we'll get to them within 48 hours."
+                            else "Couldn't send — check the connection and try again."
+                        }
+                    }
+                }) { androidx.compose.material3.Text("Send") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showSupport = false }) {
+                    androidx.compose.material3.Text("Cancel")
+                }
+            },
+        )
     }
 
     if (showChangePw) {

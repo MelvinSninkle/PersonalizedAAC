@@ -40,8 +40,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.runtime.LaunchedEffect
 import io.andrewpeterson.myworld.LocalAppContainer
 import io.andrewpeterson.myworld.model.BoardSection
+import io.andrewpeterson.myworld.net.FollowupEntry
+import io.andrewpeterson.myworld.net.storeAdoptImage
+import io.andrewpeterson.myworld.net.storeFollowupDone
+import io.andrewpeterson.myworld.net.storeFollowups
+import io.andrewpeterson.myworld.net.storeRegenWith
 import io.andrewpeterson.myworld.storage.downscaleJpeg
 import io.andrewpeterson.myworld.ui.theme.Brand
 import io.andrewpeterson.myworld.ui.theme.hexColor
@@ -92,6 +98,65 @@ fun AddTileView(
     // the ⭐5 keystone portrait, everything else ⭐1). Server-enforced too.
     val styledCost = if (defaultSection == io.andrewpeterson.myworld.model.BoardSection.PEOPLE) 5 else 1
     var confirmSpend by remember { mutableStateOf(false) }
+
+    // Unanswered magic follow-ups (replace-existing / remake-related) from
+    // earlier photo adds — the server re-offers them until the parent answers
+    // on any surface. Simplified Android flow: one dialog per question;
+    // dismissing (back / tap outside) leaves it pending for next time.
+    var followups by remember { mutableStateOf<List<FollowupEntry>>(emptyList()) }
+    var fuIdx by remember { mutableStateOf(0) }
+    var fuReplaceAnswered by remember { mutableStateOf(false) }
+    var fuRef by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        followups = c.api.storeFollowups(c.auth.childSlug)
+        followups.firstOrNull()?.let { fuRef = it.itemId }
+    }
+    fun fuNext() {
+        val cur = followups.getOrNull(fuIdx) ?: return
+        scope.launch { c.api.storeFollowupDone(c.auth.childSlug, cur.jobId) }
+        fuIdx += 1
+        fuReplaceAnswered = false
+        followups.getOrNull(fuIdx)?.let { fuRef = it.itemId }
+    }
+    val fu = followups.getOrNull(fuIdx)
+    if (fu != null && fu.existing != null && !fuReplaceAnswered) {
+        val ex = fu.existing
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { followups = emptyList() },   // stays pending
+            title = { Text("“${fu.label}” is already on the board") },
+            text = { Text(if (ex.isDefault)
+                "Swap in your new picture? The classic art stays available to every board."
+                else "Swap in your new picture? The current one is archived in the Album — you never lose it.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        if (c.api.storeAdoptImage(c.auth.childSlug, fu.itemId, ex.itemId)) fuRef = ex.itemId
+                        if (fu.affected.isEmpty()) fuNext() else fuReplaceAnswered = true
+                        c.board.refresh(c.auth.childSlug)
+                    }
+                }) { Text("Replace") }
+            },
+            dismissButton = {
+                TextButton(onClick = { if (fu.affected.isEmpty()) fuNext() else fuReplaceAnswered = true }) { Text("Keep both") }
+            },
+        )
+    } else if (fu != null && fu.affected.isNotEmpty()) {
+        val n = fu.affected.size
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { followups = emptyList() },   // stays pending
+            title = { Text("Your ${fu.label} shows up in $n other picture${if (n == 1) "" else "s"}") },
+            text = { Text("Remake ${if (n == 1) "it" else "them"} (${fu.affected.joinToString { it.label }}) so they show YOUR ${fu.label}? ⭐1 each — replaced art is archived in the Album.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        c.api.storeRegenWith(c.auth.childSlug, fu.affected.map { it.taxonomyId }, fuRef)
+                        fuNext()
+                    }
+                }) { Text("Remake $n (⭐$n)") }
+            },
+            dismissButton = { TextButton(onClick = { fuNext() }) { Text("Not now") } },
+        )
+    }
 
     fun submit() {
         val bytes = jpeg ?: return

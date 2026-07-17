@@ -18,7 +18,7 @@ import { checkAuth } from '../_lib/auth.js';
 import { canAccessChild } from '../_lib/access.js';
 import { sql } from '../_lib/db.js';
 import { ensureProgress, setStep } from '../_lib/onboarding.js';
-import { ensureSeedJobs, placementRows, placeChunk, enqueueSeedJobs, seedStatus } from '../_lib/seed-board.js';
+import { ensureSeedJobs, placementRows, placeChunk, enqueueSeedJobs, seedStatus, drainRenderJobs } from '../_lib/seed-board.js';
 
 export const config = { maxDuration: 300 };
 
@@ -41,6 +41,18 @@ export default async function handler(req, res) {
       const s = await seedStatus(db, childId);
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ ok: true, ...s });
+      // EVENT-DRIVEN pump: onboarding polls this while the board builds, so
+      // every progress check advances this child's renders + voices instead
+      // of waiting on the minute cron (which stays as the backstop). waitUntil
+      // keeps the work alive after the response; SKIP LOCKED claims keep
+      // concurrent polls and the cron off each other's jobs.
+      try {
+        const { waitUntil } = await import('@vercel/functions');
+        waitUntil((async () => {
+          await drainRenderJobs(db, childId, 2);
+          await drainRenderJobs(db, childId, 10, 'voice');
+        })().catch(() => {}));
+      } catch (_) { /* non-Vercel runtime */ }
     } catch (err) {
       res.status(500).json({ error: 'seed status failed', detail: String(err.message || err) });
     }

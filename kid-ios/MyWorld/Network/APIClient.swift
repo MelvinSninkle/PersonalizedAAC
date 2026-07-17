@@ -743,6 +743,25 @@ struct APIClient {
         return try JSONDecoder().decode(PersonalizeAllResult.self, from: data)
     }
 
+    /// The tile's past pictures (item_image_history), newest first — powers
+    /// the edit sheet's "Previous pictures" one-tap revert strip.
+    struct HistoryEntry: Decodable, Identifiable {
+        var id: String { key }
+        let key: String; let source: String?; let archivedAt: String?
+    }
+    func imageHistory(itemId: Int) async -> [HistoryEntry] {
+        struct R: Decodable { let history: [HistoryEntry] }
+        guard let (data, _) = try? await request(method: "GET", path: "/api/items?history=\(itemId)", body: nil) else { return [] }
+        return (try? JSONDecoder().decode(R.self, from: data))?.history ?? []
+    }
+
+    /// Put a past picture back on the tile (the current one archives first,
+    /// so reverting is itself revertible).
+    func revertImage(itemId: Int, key: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["op": "revert-image", "id": itemId, "key": key])
+        _ = try await request(method: "POST", path: "/api/items", body: body, contentType: "application/json")
+    }
+
     func storeRetry(childId: String, itemId: Int, guidance: String = "") async throws -> StoreRetryResult {
         // guidance = the parent's correction; the server attaches the current
         // image as the previous attempt so the model improves, not re-rolls.
@@ -764,10 +783,10 @@ struct APIClient {
 
     /// The add-tile magic lookups: the exact-word tile already on the board
     /// (for the replace dialog) + other tiles whose prompts mention the word.
-    struct ImpactExisting: Decodable { let itemId: Int; let label: String; let imageKey: String?; let isDefault: Bool }
-    struct ImpactTile: Decodable, Identifiable { var id: String { taxonomyId }
+    struct ImpactExisting: Decodable, Equatable { let itemId: Int; let label: String; let imageKey: String?; let isDefault: Bool }
+    struct ImpactTile: Decodable, Identifiable, Equatable { var id: String { taxonomyId }
         let taxonomyId: String; let itemId: Int; let label: String; let previewKey: String? }
-    struct ImpactResult: Decodable { let existing: ImpactExisting?; let affected: [ImpactTile] }
+    struct ImpactResult: Decodable, Equatable { let existing: ImpactExisting?; let affected: [ImpactTile] }
     func storeImpact(childId: String, word: String) async -> ImpactResult? {
         guard let (data, _) = try? await request(method: "GET",
             path: "/api/store?action=impact&childId=\(percentEscape(childId))&word=\(percentEscape(word))",
@@ -782,6 +801,89 @@ struct APIClient {
             "childId": childId, "sourceItemId": sourceItemId, "targetItemId": targetItemId])
         _ = try await request(method: "POST", path: "/api/store?action=adopt-image",
                               body: body, contentType: "application/json")
+    }
+
+    /// Unanswered magic follow-ups for recent photo adds — the server keeps
+    /// re-offering these until answered, so a parent who left mid-question
+    /// gets asked again on the next Add-tiles visit.
+    struct FollowupEntry: Decodable {
+        let jobId: Int; let label: String; let itemId: Int; let imageKey: String?
+        let existing: ImpactExisting?; let affected: [ImpactTile]
+    }
+    func storeFollowups(childId: String) async -> [FollowupEntry] {
+        struct R: Decodable { let followups: [FollowupEntry] }
+        guard let (data, _) = try? await request(method: "GET",
+            path: "/api/store?action=followups&childId=\(percentEscape(childId))",
+            body: nil) else { return [] }
+        return (try? JSONDecoder().decode(R.self, from: data))?.followups ?? []
+    }
+
+    /// Renders that failed every attempt (word tiles stuck on default art,
+    /// photo adds that never landed) — surfaced as a parent-home alert with
+    /// one-tap retry. Rides the same GET as storeFollowups.
+    struct ProblemEntry: Decodable, Identifiable {
+        var id: String { kind + "-" + String(itemId ?? jobId ?? 0) }
+        let kind: String            // "render" | "add"
+        let label: String
+        let itemId: Int?            // render: retry via storeRetry (free-first)
+        let jobId: Int?             // add: restart via storeRearmAdd (no charge)
+        let freeRetryUsed: Bool?
+    }
+    func storeProblems(childId: String) async -> [ProblemEntry] {
+        struct R: Decodable { let problems: [ProblemEntry]? }
+        guard let (data, _) = try? await request(method: "GET",
+            path: "/api/store?action=followups&childId=\(percentEscape(childId))",
+            body: nil) else { return [] }
+        return (try? JSONDecoder().decode(R.self, from: data))?.problems ?? []
+    }
+
+    /// Restart a photo add that failed every attempt. No charge — the family
+    /// paid at enqueue and never got the tile.
+    func storeRearmAdd(childId: String, jobId: Int) async -> Bool {
+        guard let body = try? JSONSerialization.data(withJSONObject: ["childId": childId, "jobId": jobId]) else { return false }
+        return (try? await request(method: "POST", path: "/api/store?action=rearm-add",
+                                   body: body, contentType: "application/json")) != nil
+    }
+
+    /// Support notices: "we've opened your board" / the team's response.
+    /// Shown until "Got it" acks them; only the requesting account sees them.
+    struct SupportNotice: Decodable, Identifiable {
+        let id: String              // "sc<caseId>-review" | "sc<caseId>-response"
+        let caseId: Int
+        let kind: String            // "review-started" | "response"
+        let text: String
+        let createdAt: String?
+    }
+    func storeSupportNotices(childId: String) async -> [SupportNotice] {
+        struct R: Decodable { let supportNotices: [SupportNotice]? }
+        guard let (data, _) = try? await request(method: "GET",
+            path: "/api/store?action=followups&childId=\(percentEscape(childId))",
+            body: nil) else { return [] }
+        return (try? JSONDecoder().decode(R.self, from: data))?.supportNotices ?? []
+    }
+
+    struct SupportCreateResult: Decodable { let ok: Bool; let caseId: Int?; let note: String? }
+    /// File a support/bug case. Sending IS the family's permission for the
+    /// team to open and edit the board — the UI shows that disclosure first.
+    func storeSupportCreate(childId: String, kind: String, message: String) async throws -> SupportCreateResult {
+        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "kind": kind, "message": message])
+        let (data, _) = try await request(method: "POST", path: "/api/store?action=support-create",
+                                          body: body, contentType: "application/json")
+        return try JSONDecoder().decode(SupportCreateResult.self, from: data)
+    }
+
+    func storeSupportAck(childId: String, noticeId: String) async {
+        guard let body = try? JSONSerialization.data(withJSONObject: ["childId": childId, "noticeId": noticeId]) else { return }
+        _ = try? await request(method: "POST", path: "/api/store?action=support-ack",
+                               body: body, contentType: "application/json")
+    }
+
+    /// The parent answered (or explicitly declined) a follow-up — stop
+    /// re-offering it. Swiping the sheet away does NOT call this, on purpose.
+    func storeFollowupDone(childId: String, jobId: Int) async {
+        guard let body = try? JSONSerialization.data(withJSONObject: ["childId": childId, "jobId": jobId]) else { return }
+        _ = try? await request(method: "POST", path: "/api/store?action=followup-done",
+                               body: body, contentType: "application/json")
     }
 
     struct RegenWithResult: Decodable { let ok: Bool; let queued: Int; let charged: Int; let balance: Int?; let note: String? }

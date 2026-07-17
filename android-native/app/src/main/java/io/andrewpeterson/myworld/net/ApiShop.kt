@@ -95,3 +95,133 @@ suspend fun ApiClient.storeRedeem(code: String): StoreRedeemResult {
     val body = "{\"code\":${jsonQuote(code)}}"
     return decode(raw("POST", "/api/store?action=redeem", body.encodeToByteArray()))
 }
+
+// ── Add-tile magic follow-ups (replace-existing / remake-related) ───────────
+// The server keeps every unanswered follow-up (store action=followups) until
+// the parent answers on ANY surface — leaving mid-question no longer orphans
+// the decision.
+
+@Serializable
+data class ImpactExisting(
+    val itemId: Int = 0,
+    val label: String = "",
+    val imageKey: String? = null,
+    val isDefault: Boolean = false,
+)
+
+@Serializable
+data class ImpactTile(
+    val taxonomyId: String = "",
+    val itemId: Int = 0,
+    val label: String = "",
+    val previewKey: String? = null,
+)
+
+@Serializable
+data class FollowupEntry(
+    val jobId: Int = 0,
+    val label: String = "",
+    val itemId: Int = 0,
+    val imageKey: String? = null,
+    val existing: ImpactExisting? = null,
+    val affected: List<ImpactTile> = emptyList(),
+)
+
+@Serializable
+private data class FollowupsResult(val followups: List<FollowupEntry> = emptyList())
+
+suspend fun ApiClient.storeFollowups(childId: String): List<FollowupEntry> =
+    try { getJson<FollowupsResult>("/api/store?action=followups&childId=${esc(childId)}").followups }
+    catch (_: Exception) { emptyList() }
+
+suspend fun ApiClient.storeFollowupDone(childId: String, jobId: Int) {
+    val body = "{\"childId\":${jsonQuote(childId)},\"jobId\":$jobId}"
+    try { raw("POST", "/api/store?action=followup-done", body.encodeToByteArray()) } catch (_: Exception) {}
+}
+
+suspend fun ApiClient.storeAdoptImage(childId: String, sourceItemId: Int, targetItemId: Int): Boolean {
+    val body = "{\"childId\":${jsonQuote(childId)},\"sourceItemId\":$sourceItemId,\"targetItemId\":$targetItemId}"
+    return try { raw("POST", "/api/store?action=adopt-image", body.encodeToByteArray()); true }
+    catch (_: Exception) { false }
+}
+
+@Serializable
+data class RegenWithResult(
+    val ok: Boolean = false,
+    val queued: Int = 0,
+    val charged: Int = 0,
+    val balance: Int? = null,
+    val note: String? = null,
+)
+
+suspend fun ApiClient.storeRegenWith(childId: String, taxonomyIds: List<String>, refItemId: Int): RegenWithResult? {
+    val body = buildJsonObject {
+        put("childId", childId)
+        put("taxonomyIds", buildJsonArray { taxonomyIds.forEach { add(JsonPrimitive(it)) } })
+        put("refItemId", refItemId)
+    }
+    return try { decode(raw("POST", "/api/store?action=regen-with", body.toString().encodeToByteArray(), long = true)) }
+    catch (_: Exception) { null }
+}
+
+@Serializable
+data class ProblemEntry(
+    val kind: String = "",          // "render" | "add"
+    val label: String = "",
+    val itemId: Int? = null,        // render: retry via storeRetry (free-first)
+    val jobId: Int? = null,         // add: restart via storeRearmAdd (no charge)
+    val freeRetryUsed: Boolean? = null,
+)
+
+@Serializable
+private data class ProblemsResult(val problems: List<ProblemEntry> = emptyList())
+
+/** Renders that failed every attempt — the parent-home alert list. */
+suspend fun ApiClient.storeProblems(childId: String): List<ProblemEntry> =
+    try { getJson<ProblemsResult>("/api/store?action=followups&childId=${esc(childId)}").problems }
+    catch (_: Exception) { emptyList() }
+
+/** Restart a failed photo add. No charge — paid at enqueue, never delivered. */
+suspend fun ApiClient.storeRearmAdd(childId: String, jobId: Int): Boolean {
+    val body = "{\"childId\":${jsonQuote(childId)},\"jobId\":$jobId}"
+    return try { raw("POST", "/api/store?action=rearm-add", body.encodeToByteArray()); true }
+    catch (_: Exception) { false }
+}
+
+// ── Consented support access ─────────────────────────────────────────────────
+// Filing a case IS the family's permission for the team to open and edit the
+// board (the UI shows that disclosure first). Notices are creator-only and
+// persist until acked with "Got it".
+
+@Serializable
+data class SupportNotice(
+    val id: String = "",            // "sc<caseId>-review" | "sc<caseId>-response"
+    val caseId: Int = 0,
+    val kind: String = "",          // "review-started" | "response"
+    val text: String = "",
+    val createdAt: String? = null,
+)
+
+@Serializable
+private data class SupportNoticesResult(val supportNotices: List<SupportNotice> = emptyList())
+
+suspend fun ApiClient.storeSupportNotices(childId: String): List<SupportNotice> =
+    try { getJson<SupportNoticesResult>("/api/store?action=followups&childId=${esc(childId)}").supportNotices }
+    catch (_: Exception) { emptyList() }
+
+@Serializable
+data class SupportCreateResult(val ok: Boolean = false, val caseId: Int? = null, val note: String? = null)
+
+suspend fun ApiClient.storeSupportCreate(childId: String, kind: String, message: String): SupportCreateResult {
+    val body = buildJsonObject {
+        put("childId", childId)
+        put("kind", kind)
+        put("message", message)
+    }
+    return decode(raw("POST", "/api/store?action=support-create", body.toString().encodeToByteArray()))
+}
+
+suspend fun ApiClient.storeSupportAck(childId: String, noticeId: String) {
+    val body = "{\"childId\":${jsonQuote(childId)},\"noticeId\":${jsonQuote(noticeId)}}"
+    try { raw("POST", "/api/store?action=support-ack", body.encodeToByteArray()) } catch (_: Exception) {}
+}

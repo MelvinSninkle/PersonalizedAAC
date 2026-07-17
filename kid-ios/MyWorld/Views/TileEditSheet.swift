@@ -272,6 +272,12 @@ struct BoardTileEditSheet: View {
     @State private var showLibrary = false
     @State private var redrawing = false
     @State private var redrawNote: String?
+    // Previous pictures (item_image_history): tap one to bring it back — the
+    // current picture archives first, so reverting is itself revertible.
+    @State private var history: [APIClient.HistoryEntry] = []
+    @State private var revertCandidate: APIClient.HistoryEntry?
+    @State private var showRevertConfirm = false
+    @State private var reverting = false
     /// Guided-retry sheet: the redraw button asks WHAT to change (required)
     /// before spending the retry — a blind re-roll wastes the credit.
     @State private var showRedrawSheet = false
@@ -366,7 +372,7 @@ struct BoardTileEditSheet: View {
             } message: {
                 Text("\"\(tile.label)\" will be removed from the board. This can't be undone.")
             }
-            .task { seed(); await loadCurrentImage() }
+            .task { seed(); await loadCurrentImage(); history = await api.imageHistory(itemId: tile.id) }
         }
     }
 
@@ -432,21 +438,21 @@ struct BoardTileEditSheet: View {
                         .buttonStyle(.plain)
                     Button { showLibrary = true } label: { pill("Choose photo", filled: false, icon: "photo.on.rectangle") }
                         .buttonStyle(.plain)
-                    // Library words can be re-drawn in the child's style — the
-                    // first redo of each tile is free, then 1 credit (server-
-                    // enforced; renders in the background and lands on its own).
-                    if tile.taxonomySlug != nil {
-                        // §8: ONE TAP — regenerates in the child's selected
-                        // style automatically; no style hunting, no text.
-                        Button { Task { await redrawTile(guidance: "") } } label: {
-                            pill(redrawing ? "Redrawing…" : "Match my child's style", filled: false, icon: "sparkles")
-                        }
-                        .buttonStyle(.plain).disabled(redrawing)
-                        Button { redrawGuidance = ""; redrawGuidanceError = nil; showRedrawSheet = true } label: {
-                            pill("Fix with a note", filled: false, icon: "wand.and.stars")
-                        }
-                        .buttonStyle(.plain).disabled(redrawing)
+                    // EVERY tile can be re-drawn in the child's style — library
+                    // words re-render their prompt, photo-added tiles re-run
+                    // from the stored source photo (server decides). First redo
+                    // of each tile is free, then credits (server-enforced;
+                    // renders in the background and lands on its own).
+                    // §8: ONE TAP — regenerates in the child's selected
+                    // style automatically; no style hunting, no text.
+                    Button { Task { await redrawTile(guidance: "") } } label: {
+                        pill(redrawing ? "Redrawing…" : "Match my child's style", filled: false, icon: "sparkles")
                     }
+                    .buttonStyle(.plain).disabled(redrawing)
+                    Button { redrawGuidance = ""; redrawGuidanceError = nil; showRedrawSheet = true } label: {
+                        pill("Fix with a note", filled: false, icon: "wand.and.stars")
+                    }
+                    .buttonStyle(.plain).disabled(redrawing)
                 }
                 if let note = redrawNote {
                     Text(note)
@@ -466,6 +472,35 @@ struct BoardTileEditSheet: View {
                 .buttonStyle(.plain)
                 Text("Drag the photo inside a tile-shaped frame to pick exactly what shows. The old picture stays in the album.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+
+            if !history.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("PREVIOUS PICTURES — TAP TO BRING ONE BACK")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color(hex: "#999"))
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(history) { h in
+                                Button { revertCandidate = h; showRevertConfirm = true } label: {
+                                    MediaImage(blobKey: h.key, maxPixel: 256)
+                                        .frame(width: 72, height: 72)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(hex: "#f3c6da"), lineWidth: 1))
+                                }
+                                .buttonStyle(.plain).disabled(reverting)
+                            }
+                        }
+                    }
+                }
+                // Alert attaches to this concrete VStack (never a Form Section —
+                // that silently drops the presentation).
+                .alert("Bring this picture back?", isPresented: $showRevertConfirm, presenting: revertCandidate) { h in
+                    Button("Bring it back") { Task { await doRevert(h) } }
+                    Button("Cancel", role: .cancel) {}
+                } message: { _ in
+                    Text("The current picture is archived first — you can always undo.")
+                }
             }
         }
     }
@@ -745,6 +780,20 @@ struct BoardTileEditSheet: View {
     /// gives every tile ONE free redo, then charges a credit; the new art
     /// renders in the background and replaces the tile on a later sync (the
     /// old image is archived to the Album, never deleted).
+    private func doRevert(_ h: APIClient.HistoryEntry) async {
+        reverting = true
+        defer { reverting = false }
+        do {
+            try await api.revertImage(itemId: tile.id, key: h.key)
+            redrawNote = "✅ Brought back — the swapped-out picture is in Previous pictures."
+            if let img = await MediaCache.shared.image(for: h.key, maxPixel: 1024) { currentImage = img }
+            history = await api.imageHistory(itemId: tile.id)
+            await board.refresh(childId: auth.childSlug)
+        } catch {
+            errorText = friendly(error)
+        }
+    }
+
     private func redrawTile(guidance: String) async {
         redrawing = true; errorText = nil; redrawNote = nil
         defer { redrawing = false }

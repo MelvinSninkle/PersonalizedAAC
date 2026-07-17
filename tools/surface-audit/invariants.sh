@@ -135,6 +135,19 @@ grep -q "stampLayoutCustomized" api/items.js || { fail "E11 items.js reorders no
 grep -q "stampLayoutCustomized" api/categories.js || { fail "E11 categories.js reorders no longer stamp layoutCustomizedAt"; E11=1; }
 [ "$E11" -eq 0 ] && pass "E11 layout pushes skip family-arranged boards unless explicitly overridden"
 
+# ── E13: support_cases stays contained to the intended files ─────────────────
+# The consented-access promise: cases (and the notices they synthesize) are
+# only reachable through the family-facing store actions, the shared _lib
+# helpers, the admin inbox, and the migration. Anything else touching the
+# table is a new access path that needs the same disclosure guarantees.
+E13_WANT="api/_lib/support.js
+api/admin/_lab-support.js
+api/init.js
+api/store.js"
+E13_HITS=$(grep -rln "support_cases" api | sort)
+if [ "$E13_HITS" == "$E13_WANT" ]; then pass "E13 support_cases containment (4 intended files)"; else
+  fail "E13 support_cases reachable from unexpected files: $(echo "$E13_HITS" | tr '\n' ' ')"; fi
+
 # ── E10: web self-signup requires a valid invite code ────────────────────────
 # The page-level invite wall moved off the funnel (/, /practice, /signup are
 # public); the private preview is enforced INSIDE account creation instead.
