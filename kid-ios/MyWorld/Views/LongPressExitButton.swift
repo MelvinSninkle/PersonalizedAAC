@@ -29,7 +29,8 @@ struct LongPressExitButton: View {
                     onExit()
                 }
             }
-            .onLongPressGesture(minimumDuration: 0.7) {
+            // Hold length is the parent's exitHoldMs slider (Safety & unlock).
+            .onLongPressGesture(minimumDuration: Double(TouchConfig.exitHoldMs) / 1000.0) {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 onExit()
             }

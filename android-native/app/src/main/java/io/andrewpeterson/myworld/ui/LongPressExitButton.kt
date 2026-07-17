@@ -1,8 +1,8 @@
 package io.andrewpeterson.myworld.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -38,20 +38,33 @@ fun LongPressExitButton(
             .padding(14.dp)
             .size(50.dp)
             .background(background, CircleShape)
-            .combinedClickable(
-                onClick = {
-                    // Quick-tap close is a synced safety setting for older
-                    // kids; default keeps the tap a deliberate no-op.
+            // Custom hold gesture (combinedClickable's long-press length is a
+            // fixed system constant): the hold length is the parent's
+            // exitHoldMs slider; quick-tap close (easyClose) fires on release.
+            .pointerInput(Unit) {
+                androidx.compose.foundation.gestures.awaitEachGesture {
+                    val down = androidx.compose.foundation.gestures.awaitFirstDown()
+                    down.consume()
                     if (io.andrewpeterson.myworld.access.TouchConfig.easyClose) {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onExit()
+                        val up = androidx.compose.foundation.gestures.waitForUpOrCancellation()
+                        if (up != null) {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onExit()
+                        }
+                    } else {
+                        val holdMs = io.andrewpeterson.myworld.access.TouchConfig.exitHoldMs.toLong()
+                        // Inner block completes (true) on release OR cancel →
+                        // no exit; only a genuine full-length hold times out.
+                        val released = kotlinx.coroutines.withTimeoutOrNull(holdMs) {
+                            androidx.compose.foundation.gestures.waitForUpOrCancellation(); true
+                        }
+                        if (released == null) {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onExit()
+                        }
                     }
-                },
-                onLongClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onExit()
-                },
-            ),
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
         Text("✕", fontSize = 22.sp, color = tint)

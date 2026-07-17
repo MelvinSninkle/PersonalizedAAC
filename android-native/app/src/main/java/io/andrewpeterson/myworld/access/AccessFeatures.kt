@@ -39,11 +39,18 @@ import kotlinx.serialization.json.intOrNull
 object TouchConfig {
     @Volatile var interrupt = false
     @Volatile var doubleTapTeach = false
+    /** Tap-to-learn rapid-tap window (parent slider, 0.5–5s, default 2s). */
+    @Volatile var teachTapMs = 2000
     // Safety controls (synced, for older/capable kids):
     //   easyClose  — game ✕ closes on a quick tap instead of the long-press.
+    //   exitHoldMs — the ✕ hold length when easyClose is off (parent slider).
     //   easyUnlock — the lock opens edit mode without the unlock sheet.
     @Volatile var easyClose = false
+    @Volatile var exitHoldMs = 1200
     @Volatile var easyUnlock = false
+
+    fun clampMs(v: Int?, lo: Int, hi: Int, dflt: Int): Int =
+        if (v != null && v > 0) v.coerceIn(lo, hi) else dflt
 }
 
 data class AccessData(
@@ -104,7 +111,9 @@ class AccessPrefs(private val api: ApiClient, private val scope: CoroutineScope)
             // Touch + safety controls ride the same settings fetch (root keys too).
             TouchConfig.interrupt = bool("tapInterrupt") ?: false
             TouchConfig.doubleTapTeach = bool("doubleTapTeach") ?: false
+            TouchConfig.teachTapMs = TouchConfig.clampMs(int("teachTapMs"), 500, 5000, 2000)
             TouchConfig.easyClose = bool("easyClose") ?: false
+            TouchConfig.exitHoldMs = TouchConfig.clampMs(int("exitHoldMs"), 300, 3000, 1200)
             TouchConfig.easyUnlock = bool("easyUnlock") ?: false
         }
     }

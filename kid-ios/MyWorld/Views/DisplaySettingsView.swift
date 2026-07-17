@@ -24,9 +24,11 @@ struct DisplaySettingsView: View {
     @State private var toolSentence = true
     @State private var tapInterrupt = false
     @State private var doubleTapTeach = false
+    @State private var teachTapSec = 2.0     // tap-to-learn rapid-tap window
     @State private var listenCensor = true
     @State private var listenTilesOnly = false
     @State private var easyClose = false
+    @State private var exitHoldSec = 1.2     // ✕ hold length when easyClose off
     @State private var easyUnlock = false
     @State private var syncedLoaded = false
     @State private var syncedMsg: String?
@@ -116,8 +118,19 @@ struct DisplaySettingsView: View {
                         .onChange(of: tapInterrupt) { _, v in saveSynced(["tapInterrupt": v]) }
                     Text("Off: each word finishes before the next tap counts — steadier for new talkers.")
                         .font(.footnote).foregroundStyle(.secondary)
-                    Toggle("Double-tap a tile teaches it", isOn: $doubleTapTeach)
+                    Toggle("Tap again to learn", isOn: $doubleTapTeach)
                         .onChange(of: doubleTapTeach) { _, v in saveSynced(["doubleTapTeach": v]) }
+                    Text("Tap a tile: hear the word. Tap again quickly: hear a fact — up to three facts on back-to-back taps, then the word again.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if doubleTapTeach {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("How quick “again” has to be: \(String(format: "%.1f", teachTapSec))s")
+                                .font(.footnote)
+                            Slider(value: $teachTapSec, in: 0.5...5.0, step: 0.25) { editing in
+                                if !editing { saveSynced(["teachTapMs": Int(teachTapSec * 1000)]) }
+                            }
+                        }
+                    }
                 } header: {
                     Text("Touch & play")
                 }
@@ -135,6 +148,17 @@ struct DisplaySettingsView: View {
                 Section {
                     Toggle("Close buttons work with a quick tap", isOn: $easyClose)
                         .onChange(of: easyClose) { _, v in saveSynced(["easyClose": v]) }
+                    if !easyClose {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("✕ hold length: \(String(format: "%.1f", exitHoldSec))s")
+                                .font(.footnote)
+                            Slider(value: $exitHoldSec, in: 0.3...3.0, step: 0.1) { editing in
+                                if !editing { saveSynced(["exitHoldMs": Int(exitHoldSec * 1000)]) }
+                            }
+                            Text("Longer = harder for a child to quit by accident; shorter = snappier for grown-ups.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
                     Toggle("Unlock editing without a password", isOn: $easyUnlock)
                         .onChange(of: easyUnlock) { _, v in
                             guard syncedLoaded else { return }
@@ -186,9 +210,11 @@ struct DisplaySettingsView: View {
         toolSentence = (s["toolSentence"] as? Bool) ?? true
         tapInterrupt = (s["tapInterrupt"] as? Bool) ?? false
         doubleTapTeach = (s["doubleTapTeach"] as? Bool) ?? false
+        teachTapSec = Double(TouchConfig.clampMs(s["teachTapMs"], 500, 5000, 2000)) / 1000.0
         listenCensor = (s["listenCensor"] as? Bool) ?? true
         listenTilesOnly = (s["listenTilesOnly"] as? Bool) ?? false
         easyClose = (s["easyClose"] as? Bool) ?? false
+        exitHoldSec = Double(TouchConfig.clampMs(s["exitHoldMs"], 300, 3000, 1200)) / 1000.0
         easyUnlock = (s["easyUnlock"] as? Bool) ?? false
         syncedLoaded = true
     }

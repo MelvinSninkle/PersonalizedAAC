@@ -76,6 +76,8 @@ fun DisplaySettingsView(onDismiss: () -> Unit) {
     var toolSentence by remember { mutableStateOf(true) }
     var tapInterrupt by remember { mutableStateOf(false) }
     var doubleTapTeach by remember { mutableStateOf(false) }
+    var teachTapSec by remember { mutableStateOf(2.0f) }
+    var exitHoldSec by remember { mutableStateOf(1.2f) }
     var listenCensor by remember { mutableStateOf(true) }
     var listenTilesOnly by remember { mutableStateOf(false) }
     var easyClose by remember { mutableStateOf(false) }
@@ -91,12 +93,15 @@ fun DisplaySettingsView(onDismiss: () -> Unit) {
     LaunchedEffect(Unit) {
         val s = c.api.childSettings(c.auth.childSlug)
         fun bool(k: String) = (s[k] as? JsonPrimitive)?.let { it.content == "true" }
+        fun int(k: String) = (s[k] as? JsonPrimitive)?.content?.toIntOrNull()
         toolListen = bool("toolListen") ?: true
         toolTeach = bool("toolTeach") ?: true
         toolPlay = bool("toolPlay") ?: true
         toolSentence = bool("toolSentence") ?: true
         tapInterrupt = bool("tapInterrupt") ?: false
         doubleTapTeach = bool("doubleTapTeach") ?: false
+        teachTapSec = io.andrewpeterson.myworld.access.TouchConfig.clampMs(int("teachTapMs"), 500, 5000, 2000) / 1000f
+        exitHoldSec = io.andrewpeterson.myworld.access.TouchConfig.clampMs(int("exitHoldMs"), 300, 3000, 1200) / 1000f
         listenCensor = bool("listenCensor") ?: true
         listenTilesOnly = bool("listenTilesOnly") ?: false
         easyClose = bool("easyClose") ?: false
@@ -108,6 +113,13 @@ fun DisplaySettingsView(onDismiss: () -> Unit) {
         scope.launch {
             c.api.saveChildSettingsKey(c.auth.childSlug, key, JsonPrimitive(value))
             c.access.refresh()   // the board applies it without a relaunch
+        }
+    }
+    fun saveSyncedInt(key: String, value: Int) {
+        if (!syncedLoaded) return
+        scope.launch {
+            c.api.saveChildSettingsKey(c.auth.childSlug, key, JsonPrimitive(value))
+            c.access.refresh()
         }
     }
     /** E6b: verify the account password (POST /api/auth/login) BEFORE
@@ -196,8 +208,19 @@ fun DisplaySettingsView(onDismiss: () -> Unit) {
             }
             Text("Off: each word finishes before the next tap counts — steadier for new talkers.",
                 fontSize = 12.sp, color = Brand.muted)
-            ToggleRow("Double-tap a tile teaches it", doubleTapTeach) { on ->
+            ToggleRow("Tap again to learn", doubleTapTeach) { on ->
                 doubleTapTeach = on; saveSynced("doubleTapTeach", on)
+            }
+            Text("Tap a tile: hear the word. Tap again quickly: hear a fact — up to three facts on back-to-back taps, then the word again.",
+                fontSize = 12.sp, color = Brand.muted)
+            if (doubleTapTeach) {
+                Text("How quick \"again\" has to be: ${"%.1f".format(teachTapSec)}s",
+                    fontSize = 12.sp, color = Brand.ink)
+                androidx.compose.material3.Slider(
+                    value = teachTapSec, valueRange = 0.5f..5f, steps = 17,
+                    onValueChange = { teachTapSec = it },
+                    onValueChangeFinished = { saveSyncedInt("teachTapMs", (teachTapSec * 1000).toInt()) },
+                )
             }
 
             SectionHeader("LISTENING")
@@ -211,6 +234,15 @@ fun DisplaySettingsView(onDismiss: () -> Unit) {
             SectionHeader("SAFETY & UNLOCK")
             ToggleRow("Close buttons work with a quick tap", easyClose) { on ->
                 easyClose = on; saveSynced("easyClose", on)
+            }
+            if (!easyClose) {
+                Text("✕ hold length: ${"%.1f".format(exitHoldSec)}s — longer is harder for a child to quit by accident.",
+                    fontSize = 12.sp, color = Brand.ink)
+                androidx.compose.material3.Slider(
+                    value = exitHoldSec, valueRange = 0.3f..3f, steps = 26,
+                    onValueChange = { exitHoldSec = it },
+                    onValueChangeFinished = { saveSyncedInt("exitHoldMs", (exitHoldSec * 1000).toInt()) },
+                )
             }
             ToggleRow("Unlock editing without a password", easyUnlock) { on ->
                 if (!syncedLoaded) return@ToggleRow
