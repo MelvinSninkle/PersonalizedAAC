@@ -87,17 +87,38 @@ extension APIClient {
     struct OnboardingVoice: Codable, Identifiable, Hashable {
         let id: String
         let name: String
-        let description: String?
-        let previewUrl: String?
+        let gender: String?
+        let accent: String?
+
+        /// Short descriptor under the name — "Female · American" style.
+        var meta: String {
+            [gender, accent].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        }
     }
-    private struct OnboardingVoicesResult: Codable { let voices: [OnboardingVoice] }
+    struct OnboardingVoicesCatalog: Codable {
+        let voices: [OnboardingVoice]
+        /// Every voice auditions with the SAME lines (server-provided) so the
+        /// parent compares voices, not scripts. Previews synthesize live via
+        /// /api/tts — the endpoint sends no pre-rendered preview URLs.
+        let sampleText: String?
+    }
 
     /// The ElevenLabs voices available to the account — the parent picks how the
     /// board speaks; the choice is saved to the child and used for every tile.
-    func onboardingVoices() async throws -> [OnboardingVoice] {
+    func onboardingVoices() async throws -> OnboardingVoicesCatalog {
         let (data, _) = try await request(method: "GET", path: "/api/onboarding/voices", body: nil)
-        do { return try JSONDecoder().decode(OnboardingVoicesResult.self, from: data).voices }
+        do { return try JSONDecoder().decode(OnboardingVoicesCatalog.self, from: data) }
         catch { throw APIError.decoding(error) }
+    }
+
+    /// Audition one catalog voice: live synthesis of the shared sample text.
+    /// (Same contract the web picker uses — POST /api/tts with an explicit
+    /// voiceId; the server allows catalog voices for any signed-in parent.)
+    func onboardingVoiceSample(voiceId: String, text: String) async throws -> Data {
+        let body = try JSONSerialization.data(withJSONObject: ["voiceId": voiceId, "text": text])
+        let (data, _) = try await request(method: "POST", path: "/api/tts",
+                                          body: body, contentType: "application/json")
+        return data
     }
 
     @discardableResult

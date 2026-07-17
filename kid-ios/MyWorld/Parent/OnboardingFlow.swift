@@ -151,6 +151,18 @@ private struct OBStylePicker: View {
                     }
                     .padding(.vertical, 2)
                 }
+                // Preview board: /practice renders the FULL starter board in
+                // any published style (public shared art only — no login, no
+                // family data), so the parent sees the whole look, not a swatch.
+                if let sid = coord.styleGuideId,
+                   let url = URL(string: APIClient.defaultOrigin + "/practice?style=\(sid)") {
+                    Link(destination: url) {
+                        Label("See a whole board in this style", systemImage: "rectangle.grid.3x2")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color(hex: Brand.pinkDeep))
+                    }
+                    .padding(.top, 2)
+                }
             }
         }
         .task {
@@ -215,9 +227,11 @@ private struct OBStyleSwatch: View {
 private struct OBVoicePicker: View {
     @Environment(OnboardingCoordinator.self) private var coord
     @State private var voices: [APIClient.OnboardingVoice] = []
+    @State private var sampleText = ""
     @State private var loading = true
     @State private var player: AVAudioPlayer?
     @State private var playingId: String?
+    @State private var loadingId: String?
 
     private let api = APIClient()
 
@@ -245,6 +259,7 @@ private struct OBVoicePicker: View {
                             OBVoiceChip(voice: v,
                                         selected: coord.voiceId == v.id,
                                         playing: playingId == v.id,
+                                        loading: loadingId == v.id,
                                         onSelect: { coord.voiceId = v.id; coord.voiceName = v.name },
                                         onPreview: { Task { await preview(v) } })
                         }
@@ -256,9 +271,10 @@ private struct OBVoicePicker: View {
         .task {
             guard voices.isEmpty else { return }
             defer { loading = false }
-            if let result = try? await api.onboardingVoices() {
-                voices = result
-                if coord.voiceId == nil, let first = result.first {
+            if let catalog = try? await api.onboardingVoices() {
+                voices = catalog.voices
+                sampleText = catalog.sampleText ?? "Hi! I can help you talk. Tap a picture and I'll say the word."
+                if coord.voiceId == nil, let first = catalog.voices.first {
                     coord.voiceId = first.id
                     coord.voiceName = first.name
                 }
@@ -268,9 +284,15 @@ private struct OBVoicePicker: View {
 
     @MainActor
     private func preview(_ v: APIClient.OnboardingVoice) async {
-        guard let urlStr = v.previewUrl, let url = URL(string: urlStr) else { return }
+        // Second tap on the playing voice = stop.
+        if playingId == v.id { player?.stop(); playingId = nil; return }
+        guard loadingId == nil else { return }
+        loadingId = v.id
+        defer { loadingId = nil }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            // Live synthesis — the voices endpoint sends no preview URLs; this
+            // is the same POST /api/tts audition the web picker performs.
+            let data = try await api.onboardingVoiceSample(voiceId: v.id, text: sampleText)
             let p = try AVAudioPlayer(data: data)
             p.prepareToPlay(); p.play()
             player = p
@@ -284,6 +306,7 @@ private struct OBVoiceChip: View {
     let voice: APIClient.OnboardingVoice
     let selected: Bool
     let playing: Bool
+    let loading: Bool
     let onSelect: () -> Void
     let onPreview: () -> Void
 
@@ -298,8 +321,8 @@ private struct OBVoiceChip: View {
                         .font(.system(size: 12, weight: selected ? .bold : .semibold))
                         .foregroundStyle(selected ? Color(hex: Brand.pinkDeep) : Color(hex: Brand.ink))
                         .lineLimit(1)
-                    if let d = voice.description, !d.isEmpty {
-                        Text(d).font(.system(size: 9)).lineLimit(1)
+                    if !voice.meta.isEmpty {
+                        Text(voice.meta).font(.system(size: 9)).lineLimit(1)
                             .foregroundStyle(Color(hex: Brand.muted))
                     }
                 }
@@ -316,9 +339,13 @@ private struct OBVoiceChip: View {
             .buttonStyle(.plain)
 
             Button(action: onPreview) {
-                Image(systemName: playing ? "stop.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 22))
-                    .foregroundStyle(Color(hex: Brand.pink))
+                if loading {
+                    ProgressView().tint(Color(hex: Brand.pink)).frame(height: 22)
+                } else {
+                    Image(systemName: playing ? "stop.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(Color(hex: Brand.pink))
+                }
             }
             .buttonStyle(.plain)
         }
@@ -1200,6 +1227,12 @@ private struct OnboardingSeedView: View {
                     Text("Queued \(n) tiles. About 90 seconds.")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Color(hex: Brand.good))
+
+                    // The captive wait is when a parent actually reads — use it
+                    // to fit the board's behavior to this child (same questions
+                    // as the web onboarding's board-behavior wizard).
+                    OBSettingsWizard(childName: coord.childName)
+
                     OBPrimaryButton(title: "Open the board", busy: false) {
                         coord.go(to: .complete)
                     }
@@ -1253,6 +1286,168 @@ private struct OnboardingSeedView: View {
             queued = r.queuedCount
         } catch {
             errorText = "Could not queue the starter tiles: \(error.localizedDescription)"
+        }
+    }
+}
+
+// MARK: -- Board-behavior wizard (seed wait)
+
+/// Five plain-language questions asked while the starter tiles paint — the
+/// iOS twin of onboard.html's #bw-setup. Each maps onto a parent-writable
+/// synced Display setting the board already honors (doubleTapTeach,
+/// tapInterrupt, toolSentence, toolListen, easyClose); every answer saves
+/// immediately via the merge-safe child-settings write, and the same toggles
+/// live under ⚙ Display settings afterwards.
+private struct OBSettingsWizard: View {
+    let childName: String
+    @State private var childId: String?
+    @State private var started = false
+    @State private var declined = false
+    @State private var index = 0
+    @State private var saving = false
+    @State private var errorText: String?
+    private let api = APIClient()
+
+    private struct Choice { let label: String; let key: String; let value: Bool }
+    private struct Question { let title: String; let body: String; let choices: [Choice] }
+
+    private var name: String { childName.isEmpty ? "your child" : childName }
+
+    private var questions: [Question] {
+        [
+            Question(
+                title: "Does \(name) need to learn what words mean, or mostly say them?",
+                body: "With “Tap again to learn” on, a tap speaks the word — and a quick second tap teaches a fun fact about it, up to three facts, before wrapping back to the word. Great for kids still building meanings. If your child mainly needs their words spoken, leave it off — taps stay simple and fast.",
+                choices: [
+                    Choice(label: "🎓 Still learning meanings — turn on Tap again to learn", key: "doubleTapTeach", value: true),
+                    Choice(label: "🗣 They know their words — keep taps simple", key: "doubleTapTeach", value: false),
+                ]),
+            Question(
+                title: "If a new tile is tapped while another is still talking…",
+                body: "“Let each word finish” is calmer for kids who tap the same button over and over — every word plays to the end instead of restarting. “The new tap wins” feels snappier for quick communicators.",
+                choices: [
+                    Choice(label: "🌊 Let each word finish", key: "tapInterrupt", value: false),
+                    Choice(label: "⚡ The new tap wins — talk right away", key: "tapInterrupt", value: true),
+                ]),
+            Question(
+                title: "Is \(name) starting to put words together?",
+                body: "The ✏️ sentence builder in the board header lets a child stage several tiles and play them back as one sentence. If your child is at single words today, hide it — fewer buttons, less clutter. It comes back with one toggle whenever they’re ready.",
+                choices: [
+                    Choice(label: "✏️ Yes — show the sentence builder", key: "toolSentence", value: true),
+                    Choice(label: "🔤 Single words for now — hide it", key: "toolSentence", value: false),
+                ]),
+            Question(
+                title: "Want the board to show the words \(name) hears?",
+                body: "Listening mode (the ear in the board header) captions grown-ups’ speech as tappable words, so your child connects what they hear to their tiles. Bad-word censoring is on by default. Hide it if it would only be a distraction right now.",
+                choices: [
+                    Choice(label: "👂 Keep Listening mode", key: "toolListen", value: true),
+                    Choice(label: "🙈 Hide it for now", key: "toolListen", value: false),
+                ]),
+            Question(
+                title: "How should the ✕ close button work in games and slideshows?",
+                body: "Hold-to-close is kid-proof: a quick mash does nothing; only a deliberate hold exits. Quick tap is instant — better for older kids who close things on purpose. (You can tune the hold length later in Display settings.)",
+                choices: [
+                    Choice(label: "🛡 Hold to close (kid-proof)", key: "easyClose", value: false),
+                    Choice(label: "⚡ Quick tap closes right away", key: "easyClose", value: true),
+                ]),
+        ]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if declined {
+                Text("No problem — the same choices live in ⚙ Display settings, with the same plain-language explanations.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: Brand.muted))
+            } else if !started {
+                Text("While the tiles paint — five quick questions")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(hex: Brand.ink))
+                Text("Every child uses their talker differently. Answer these now and \(name)'s board behaves the right way from day one. Everything can be changed later under ⚙ Display settings.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: Brand.muted))
+                HStack(spacing: 10) {
+                    Button("Let's do it") { started = true }
+                        .font(.system(size: 13, weight: .bold))
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color(hex: Brand.pink))
+                    Button("Maybe later") { declined = true }
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: Brand.muted))
+                }
+            } else if index < questions.count {
+                let q = questions[index]
+                Text("Question \(index + 1) of \(questions.count)")
+                    .font(.system(size: 11, weight: .bold)).tracking(0.4)
+                    .foregroundStyle(Color(hex: Brand.muted))
+                Text(q.title)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(hex: Brand.ink))
+                Text(q.body)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: Brand.muted))
+                ForEach(q.choices, id: \.label) { c in
+                    Button {
+                        Task { await answer(c) }
+                    } label: {
+                        Text(c.label)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color(hex: Brand.pinkDeep))
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 10).padding(.horizontal, 12)
+                            .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color(hex: Brand.line), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(saving)
+                }
+                Button("Skip — keep the default") { index += 1; errorText = nil }
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: Brand.muted))
+                    .disabled(saving)
+                if saving {
+                    HStack(spacing: 6) {
+                        ProgressView().tint(Color(hex: Brand.pink))
+                        Text("Saving…").font(.system(size: 12)).foregroundStyle(Color(hex: Brand.muted))
+                    }
+                }
+                if let e = errorText {
+                    Text(e).font(.system(size: 12)).foregroundStyle(.red)
+                }
+            } else {
+                Label("Board behavior saved — change any of these anytime under ⚙ Display settings.",
+                      systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(hex: Brand.good))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: "#fff7fb"), in: RoundedRectangle(cornerRadius: 14))
+        .task {
+            // The child's slug comes back on the onboarding state — the flow
+            // itself never stored it (each step posts server-side).
+            if childId == nil, let st = try? await api.onboardingState() {
+                childId = st.childId
+            }
+        }
+    }
+
+    private func answer(_ c: Choice) async {
+        guard let id = childId, !id.isEmpty else {
+            errorText = "Still connecting — give it a second and tap again."
+            if let st = try? await api.onboardingState() { childId = st.childId }
+            return
+        }
+        saving = true
+        defer { saving = false }
+        if await api.updateChildSettings(childId: id, patch: [c.key: c.value]) {
+            index += 1
+            errorText = nil
+        } else {
+            errorText = "Could not save — check the connection and tap again."
         }
     }
 }
