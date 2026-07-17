@@ -123,7 +123,7 @@ struct AddTileView: View {
                 // Flip the binding ourselves so the cover actually dismisses and
                 // a second tap re-opens the camera (the picker no longer self-
                 // dismisses — see CameraPicker).
-                CameraPicker { data in
+                CameraCapture { data in
                     showCamera = false
                     if let data { pendingCapture = PendingCapture(data: data) }
                 }

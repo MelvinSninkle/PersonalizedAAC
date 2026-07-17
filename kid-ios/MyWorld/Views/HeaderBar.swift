@@ -30,6 +30,8 @@ struct HeaderBar: View {
 
     var title: String { worldTitle(auth.user?.slug) }
     private var hex: String { prefs.colorHeaderText }
+    /// The bar's ONLY height driver: expanded while a strip owns the header.
+    private var tall: Bool { listening || sentence.active }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,8 +49,13 @@ struct HeaderBar: View {
                 .padding(.bottom, 7)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: listening)
-        .animation(.easeInOut(duration: 0.2), value: sentence.active)
+        // ONE animation source per geometry change. This used to stack three
+        // value-keyed animations (listening / sentence.active / editMode)
+        // while mainRow's frame animated 104→48 off two of those values —
+        // closing listening flips branch content AND height in the same
+        // update, and the coalesced transitions could strand the rendered
+        // frame at 104 ("the top bar stays fat" with the title showing).
+        .animation(.easeInOut(duration: 0.2), value: tall)
         .animation(.easeInOut(duration: 0.2), value: editMode)
         .background(Color(hex: prefs.colorHeaderBg))
         // Drop-target glow while a lifted tile hovers over the bar.
@@ -113,7 +120,7 @@ struct HeaderBar: View {
                 .padding(.horizontal, 12)
             }
         }
-        .frame(height: (listening || sentence.active) ? 104 : 48)
+        .frame(height: tall ? 104 : 48)
     }
 
     // MARK: -- Left: the lock icon

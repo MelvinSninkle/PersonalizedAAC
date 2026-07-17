@@ -818,7 +818,7 @@ private struct OnboardingPhotoView: View {
         // fullScreenCover, NOT sheet: an iPad form-sheet camera renders a
         // black preview (see CameraPicker's header comment).
         .fullScreenCover(isPresented: $showPicker) {
-            CameraPicker { data in
+            CameraCapture { data in
                 showPicker = false
                 if let data { Task { await draft(data) } }
             }

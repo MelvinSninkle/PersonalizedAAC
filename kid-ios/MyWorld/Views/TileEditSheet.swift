@@ -339,7 +339,7 @@ struct BoardTileEditSheet: View {
             // fullScreenCover, NOT sheet: an iPad form-sheet camera renders a
             // black preview (see CameraPicker's header comment).
             .fullScreenCover(isPresented: $showCamera) {
-                CameraPicker { data in
+                CameraCapture { data in
                     showCamera = false
                     if let data, let jpeg = downscaleJPEG(data, maxDim: 1024, quality: 0.85) {
                         newPhoto = jpeg; stagedImage = nil
