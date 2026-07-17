@@ -101,9 +101,14 @@ ACCESS_KEYS gate), set from parent dashboard → Board tab (themed accordions)
 
 - `tapInterrupt` — a tap during playback cuts the word off (default OFF so a
   stimming child hears each word complete).
-- `doubleTapTeach` — same tile twice within 2.5s speaks its teaching facts
-  (English boards only; clues are English prose).
-- `easyClose` — game ✕ closes on a quick tap instead of the 1.2s hold.
+- `doubleTapTeach` — tap-to-learn: rapid re-taps on the same tile walk its
+  teaching facts one per tap (up to three, then wrap to the word; English
+  boards only — clues are English prose). `teachTapMs` (500–5000, default
+  2000) is the rapid-tap window, a slider next to the toggle on all four
+  editors.
+- `easyClose` — game ✕ closes on a quick tap instead of the hold.
+  `exitHoldMs` (300–3000, default 1200) sets the hold length when easyClose
+  is off — same slider placement.
 - `easyUnlock` — the board lock opens edit mode without the password.
   ENABLING re-verifies the account password behind a strong warning (both
   UIs); disabling is friction-free. See surface-audit E6b before touching.
@@ -353,7 +358,13 @@ family keeps everything they have — only new spends wait.
   reason (`onboard:foods`/`onboard:toys`); photos ride /api/tile-jobs with
   a folder-by-name hint (leaf-resolved server-side). Plus-tier families see
   the honest "month one's ⭐ mostly build the board" note here and on the
-  store's Plus card. Show/movie art legal posture + the TMDB option:
+  store's Plus card. The seed wait also runs the **board-behavior wizard**
+  (web `#bw-setup` + iOS `OBSettingsWizard`): five plain-language questions
+  that save `doubleTapTeach` / `tapInterrupt` / `toolSentence` /
+  `toolListen` / `easyClose` immediately via merge-safe child-settings
+  writes — same defaults, same toggles as ⚙ Display settings, so skipping
+  costs nothing. Style pickers (web + iOS) link "See a whole board in this
+  style" → `/practice?style=<id>` (public shared art only). Show/movie art legal posture + the TMDB option:
   **runbooks/show-movie-art-licensing.md** (action item there: register a
   DMCA agent before launch).
 
