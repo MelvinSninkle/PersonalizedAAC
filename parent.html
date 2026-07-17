@@ -987,6 +987,29 @@
     <span id="backup-msg" style="font-size:13px;color:var(--muted);display:block;margin-top:8px;"></span>
   </div>
 
+  <!-- HELP & SUPPORT -->
+  <div class="section-label">Help &amp; support</div>
+  <div class="panel">
+    <h2>Need a hand?</h2>
+    <p class="hint">Tell us what's wrong and we'll fix it — usually by working directly on your board. Responses can take up to 48 hours.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <button class="btn primary" id="support-request">🛟 Request support</button>
+      <button class="btn" id="support-bug">🐛 Report a bug</button>
+    </div>
+    <div id="support-form" style="display:none;margin-top:12px;max-width:520px;">
+      <label style="font-size:12px;font-weight:700;color:var(--muted);" id="support-form-label">What do you need help with?</label>
+      <textarea id="support-text" rows="4" maxlength="2000" placeholder="Tell us what's going on — the more detail, the faster we can fix it."
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:6px;"></textarea>
+      <p class="hint" id="support-disclosure" style="margin:8px 0;"></p>
+      <div style="display:flex;gap:10px;">
+        <button class="btn primary" id="support-send">Send</button>
+        <button class="btn ghost" id="support-cancel">Cancel</button>
+      </div>
+    </div>
+    <span id="support-msg" style="font-size:13px;color:var(--muted);display:block;margin-top:8px;"></span>
+    <div id="support-cases" style="font-size:13px;color:var(--muted);margin-top:6px;"></div>
+  </div>
+
   <!-- ACCOUNT & SECURITY -->
   <div class="section-label">Account &amp; security</div>
   <div class="panel" id="account-panel">
@@ -2951,21 +2974,107 @@
   // if the parent leaves without answering, the server keeps the question and
   // this popup re-asks on the dashboard until it's answered.
   async function loadFollowups() {
-    let list = [], problems = [];
+    let list = [], problems = [], notices = [];
     try {
       const r = await fetch('/api/store?action=followups&childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
       if (!r.ok) return;
       const d = await r.json();
       list = d.followups || [];
       problems = d.problems || [];
+      notices = d.supportNotices || [];
     } catch (_) { return; }
-    // Failures FIRST — a picture that never rendered matters more than a
-    // remake offer. "Later" hides them for this browser session only; the
-    // alert returns until every failure is retried (retry clears it).
-    if (problems.length && sessionStorage.getItem('fuProblemsLater') !== '1') {
-      showProblems(problems, () => { if (list.length) showFollowup(list, 0); });
-    } else if (list.length) showFollowup(list, 0);
+    // Support notices FIRST (the team touched YOUR board — nothing outranks
+    // that), then failures, then remake offers. Notices have no session
+    // snooze: they show until "Got it" acks them server-side.
+    const afterNotices = () => {
+      if (problems.length && sessionStorage.getItem('fuProblemsLater') !== '1') {
+        showProblems(problems, () => { if (list.length) showFollowup(list, 0); });
+      } else if (list.length) showFollowup(list, 0);
+    };
+    if (notices.length) showSupportNotice(notices, 0, afterNotices);
+    else afterNotices();
   }
+  function showSupportNotice(notices, idx, andThen) {
+    document.getElementById('fu-overlay')?.remove();
+    if (idx >= notices.length) { if (andThen) andThen(); return; }
+    const n = notices[idx];
+    const ov = document.createElement('div');
+    ov.id = 'fu-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(31,41,55,.45);display:flex;align-items:center;justify-content:center;padding:18px;';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:20px;max-width:440px;width:100%;max-height:86vh;overflow:auto;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.3);';
+    card.innerHTML =
+      '<div style="font-size:19px;font-weight:800;color:#ad1457;">' +
+        (n.kind === 'response' ? '✅ Your request is done' : '🛠 We’re on it') + '</div>' +
+      '<div style="font-size:14px;color:#374151;margin:10px 0 14px;white-space:pre-wrap;">' + schEsc(n.text || '') + '</div>' +
+      '<div style="text-align:right;"><button class="btn primary" id="fu-notice-ok">Got it</button></div>';
+    card.querySelector('#fu-notice-ok').onclick = async () => {
+      try {
+        await fetch('/api/store?action=support-ack', { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ childId: slug, noticeId: n.id }) });
+      } catch (_) {}
+      showSupportNotice(notices, idx + 1, andThen);
+    };
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+  }
+
+  // ── Help & support: request-support / report-a-bug (consented access) ──────
+  (() => {
+    let supportKind = 'support';
+    const form = document.getElementById('support-form');
+    if (!form) return;
+    const openForm = (kind) => {
+      supportKind = kind;
+      document.getElementById('support-form-label').textContent =
+        kind === 'bug' ? 'What went wrong?' : 'What do you need help with?';
+      // The disclosure IS the consent — mirror api/_lib/support.js CONFIRM_COPY.
+      document.getElementById('support-disclosure').textContent =
+        'By sending, you give the My World team permission to open and edit ' + pretty +
+        "'s board to investigate and fix this. You'll get a notice here when we start, and another when we're done. Responses can take up to 48 hours.";
+      form.style.display = '';
+      document.getElementById('support-msg').textContent = '';
+      document.getElementById('support-text').focus();
+    };
+    document.getElementById('support-request').addEventListener('click', () => openForm('support'));
+    document.getElementById('support-bug').addEventListener('click', () => openForm('bug'));
+    document.getElementById('support-cancel').addEventListener('click', () => { form.style.display = 'none'; });
+    document.getElementById('support-send').addEventListener('click', async () => {
+      const text = document.getElementById('support-text').value.trim();
+      const msg = document.getElementById('support-msg');
+      if (!text) { msg.textContent = 'Tell us a little about the problem first.'; return; }
+      const btn = document.getElementById('support-send');
+      btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        const r = await fetch('/api/store?action=support-create', { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ childId: slug, kind: supportKind, message: text }) });
+        const d = await r.json().catch(() => ({}));
+        if (r.ok) {
+          form.style.display = 'none';
+          document.getElementById('support-text').value = '';
+          msg.textContent = '✅ ' + (d.note || "Sent! We'll get back to you within 48 hours.");
+          loadSupportCases();
+        } else {
+          msg.textContent = d.detail || d.error || ('Could not send (' + r.status + ').');
+        }
+      } catch (err) { msg.textContent = 'Could not send: ' + (err.message || err); }
+      btn.disabled = false; btn.textContent = 'Send';
+    });
+    async function loadSupportCases() {
+      try {
+        const r = await fetch('/api/store?action=support-list&childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+        if (!r.ok) return;
+        const cases = (await r.json()).cases || [];
+        const open = cases.filter((c) => c.status !== 'resolved');
+        document.getElementById('support-cases').textContent = open.length
+          ? (open.length === 1 ? 'You have 1 open request.' : 'You have ' + open.length + ' open requests.')
+          : '';
+      } catch (_) {}
+    }
+    loadSupportCases();
+  })();
   function showProblems(problems, andThen) {
     document.getElementById('fu-overlay')?.remove();
     const ov = document.createElement('div');

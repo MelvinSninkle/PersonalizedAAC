@@ -202,6 +202,23 @@ family keeps everything they have — only new spends wait.
 
 ## Running the product (live-ops)
 
+- **Support inbox** (`/admin/support.html`) — the consented-access flow, and
+  the ONLY sanctioned way to open a family's board. The promise to families:
+  you never look at their board unless they asked (their Request support /
+  Report a bug IS the permission), they're notified in-app the moment you
+  start, and they get a full list of what you changed. The flow: open the
+  case → **Start review** (snapshots the board + sends the "we've opened
+  your board" notice — first click only) → edit their board via the case's
+  parent-dashboard/kid-board links → **Preview changes** anytime →
+  **Finish review** (drafts the bulk change summary from the snapshot diff;
+  regenerating replaces draft edits) → edit the draft, add context →
+  **Send response & resolve** (the family sees your text word-for-word;
+  can't be edited after). Notices go only to the account that filed the
+  case, in-app only (no email by design), and persist until "Got it".
+  Families can have at most 3 open cases; the settings buttons promise a
+  response within 48 hours — honor that. CI invariant E13 pins the
+  support_cases table to exactly the four intended files.
+
 - **Shipping a new style** (new show, new craze): admin → **✨ New Style
   wizard** (`/admin/style-wizard.html`). Upload one style image → generate/
   approve the "demo kid" (person ref) and objects ref (re-roll or upload

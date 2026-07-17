@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support inbox — admin</title>
+<style>
+  :root { --pink:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#faf7f9; }
+  header { position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--line);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; padding:12px 18px; }
+  header h1 { font-size:18px; margin:0; margin-right:6px; }
+  .spacer { flex:1; }
+  a.back { color:var(--pink); text-decoration:none; font-size:13px; }
+  select, button, textarea { font:inherit; padding:7px 11px; border:1px solid var(--line); border-radius:9px; background:#fff; cursor:pointer; }
+  textarea { cursor:text; width:100%; min-height:180px; resize:vertical; line-height:1.45; }
+  button.primary { background:var(--pink); color:#fff; border-color:var(--pink); font-weight:700; }
+  button.warn { background:#fffbeb; color:#b45309; border-color:#fcd34d; }
+  button:disabled { opacity:.5; cursor:default; }
+  main { padding:16px 18px 80px; max-width:1180px; margin:0 auto; }
+  .chips { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; }
+  .chip { background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 14px; font-size:12px; color:var(--muted); }
+  .chip b { display:block; font-size:19px; color:var(--ink); margin-bottom:1px; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:12px; margin-bottom:16px; overflow:hidden; }
+  .panel .head { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); background:#fdf7fa; }
+  .panel h2 { margin:0; font-size:13px; font-weight:700; color:var(--pink); text-transform:uppercase; letter-spacing:.04em; }
+  .panel .body { padding:14px; }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { text-align:left; padding:7px 12px; border-bottom:1px solid #f3f4f6; white-space:nowrap; }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); background:#fbfbfc; }
+  td.msg { white-space:normal; max-width:380px; }
+  tr.row { cursor:pointer; }
+  tr.row:hover { background:#fdf7fa; }
+  .tag { font-size:11px; font-weight:700; border-radius:999px; padding:2px 9px; }
+  .tag.open { background:#eff6ff; color:#1d4ed8; }
+  .tag.reviewing { background:#fffbeb; color:#b45309; }
+  .tag.resolved { background:#ecfdf5; color:#047857; }
+  .tag.bug { background:#fef2f2; color:#b91c1c; }
+  .tag.support { background:#fdf2f8; color:#ad1457; }
+  .empty { color:var(--muted); text-align:center; padding:26px; font-size:13px; }
+  .timeline { font-size:12px; color:var(--muted); line-height:1.7; }
+  .timeline b { color:var(--ink); }
+  .quote { background:#fdf7fa; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+    font-size:13px; white-space:pre-wrap; margin:8px 0 12px; }
+  .btnrow { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .hint { font-size:12px; color:var(--muted); }
+  ul.diff { font-size:13px; padding-left:20px; margin:8px 0; }
+  #status { font-size:13px; color:#b45309; min-height:18px; margin-top:8px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛟 Support inbox</h1>
+  <select id="statusFilter">
+    <option value="">All cases</option>
+    <option value="open" selected>Open</option>
+    <option value="reviewing">Reviewing</option>
+    <option value="resolved">Resolved</option>
+  </select>
+  <button id="refresh">↻ Refresh</button>
+  <div class="spacer"></div>
+  <a class="back" href="/admin/reports.html">Reports</a>
+  <a class="back" href="/admin/">← Lab home</a>
+</header>
+<main>
+  <div class="chips" id="chips"></div>
+
+  <div class="panel">
+    <div class="head"><h2>Cases</h2><span class="hint">A case is the family's permission to open their board — never edit a family board without one.</span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Created</th><th>Kind</th><th>Status</th><th>Child</th><th>From</th><th>Message</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+    </table></div>
+  </div>
+
+  <div class="panel" id="case-panel" style="display:none;">
+    <div class="head"><h2 id="case-title">Case</h2><span class="hint" id="case-sub"></span></div>
+    <div class="body">
+      <div class="quote" id="case-message"></div>
+      <div class="timeline" id="case-timeline"></div>
+      <div class="btnrow">
+        <a class="back" id="link-parent" target="_blank" rel="noopener">Open parent dashboard ↗</a>
+        <a class="back" id="link-board" target="_blank" rel="noopener">Open kid board ↗</a>
+      </div>
+      <div class="btnrow">
+        <button class="primary" id="btn-start">▶ Start review (notifies the family)</button>
+        <button id="btn-diff">👀 Preview changes</button>
+        <button class="warn" id="btn-finish">✔ Finish review → draft summary</button>
+      </div>
+      <div id="diff-out"></div>
+      <div style="margin-top:14px;">
+        <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;">Response to the family</label>
+        <textarea id="draft" placeholder="Finish review generates a change summary here — edit it, add context, then send."></textarea>
+        <div class="btnrow">
+          <button id="btn-save">💾 Save draft</button>
+          <button class="primary" id="btn-send">📨 Send response &amp; resolve</button>
+        </div>
+      </div>
+      <div id="status"></div>
+    </div>
+  </div>
+</main>
+<script>
+  // Same admin auth as the other tools: session cookie (preferred) or the legacy
+  // bearer token in localStorage.
+  const token = localStorage.getItem('aacToken') || '';
+  async function api(path, opts) {
+    const headers = Object.assign({}, (opts && opts.headers) || {});
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const r = await fetch(path, Object.assign({ credentials: 'same-origin' }, opts, { headers }));
+    if (r.status === 401 || r.status === 403) throw new Error('Sign in as an admin first (open /login), then return here.');
+    if (!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0, 200));
+    return r.json();
+  }
+  const post = (body) => api('/api/admin/lab?action=support', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const $ = (id) => document.getElementById(id);
+  const when = (iso) => iso ? new Date(iso).toLocaleString() : '—';
+
+  let CUR = null;   // the open case
+
+  async function load() {
+    const status = $('statusFilter').value;
+    const d = await api('/api/admin/lab?action=support' + (status ? '&status=' + status : ''));
+    $('chips').innerHTML = ['open', 'reviewing', 'resolved'].map((s) =>
+      '<div class="chip"><b>' + (d.counts[s] || 0) + '</b>' + s + '</div>').join('');
+    const rows = d.cases || [];
+    $('rows').innerHTML = rows.length ? rows.map((c) =>
+      '<tr class="row" data-id="' + c.id + '">' +
+        '<td>' + esc(when(c.createdAt)) + '</td>' +
+        '<td><span class="tag ' + esc(c.kind) + '">' + esc(c.kind) + '</span></td>' +
+        '<td><span class="tag ' + esc(c.status) + '">' + esc(c.status) + '</span></td>' +
+        '<td>' + esc(c.childId) + '</td>' +
+        '<td>' + esc(c.createdByEmail || '—') + '</td>' +
+        '<td class="msg">' + esc(String(c.message || '').slice(0, 140)) + '</td>' +
+      '</tr>').join('')
+      : '<tr><td colspan="6" class="empty">No cases' + (status ? ' with status “' + esc(status) + '”' : '') + ' — quiet day 🎉</td></tr>';
+  }
+
+  async function openCase(id) {
+    const d = await api('/api/admin/lab?action=support&id=' + id);
+    CUR = d.case;
+    $('case-panel').style.display = '';
+    $('case-title').textContent = 'Case #' + CUR.id + ' — ' + CUR.childId;
+    $('case-sub').textContent = CUR.kind + ' · ' + CUR.status + ' · from ' + (CUR.createdByEmail || 'unknown');
+    $('case-message').textContent = CUR.message;
+    $('link-parent').href = '/parent/' + encodeURIComponent(CUR.childId);
+    $('link-board').href = '/u/' + encodeURIComponent(CUR.childId);
+    $('case-timeline').innerHTML =
+      'Filed: <b>' + esc(when(CUR.createdAt)) + '</b><br>' +
+      'Review started: <b>' + esc(when(CUR.reviewStartedAt)) + '</b>' +
+        (CUR.reviewStartedBy ? ' by ' + esc(CUR.reviewStartedBy) : '') +
+        (CUR.snapshotStats ? ' · snapshot: ' + CUR.snapshotStats.items + ' tiles, ' + CUR.snapshotStats.categories + ' folders' : '') + '<br>' +
+      'Family saw the “we’re on it” notice: <b>' + esc(when(CUR.reviewNoticeAckAt)) + '</b><br>' +
+      'Response sent: <b>' + esc(when(CUR.responseSentAt)) + '</b>' +
+        (CUR.responseSentBy ? ' by ' + esc(CUR.responseSentBy) : '') + '<br>' +
+      'Family saw the response: <b>' + esc(when(CUR.responseAckAt)) + '</b>';
+    $('draft').value = CUR.responseText || '';
+    $('diff-out').innerHTML = '';
+    const sent = !!CUR.responseSentAt;
+    $('btn-start').disabled = !!CUR.reviewStartedAt;
+    $('btn-start').textContent = CUR.reviewStartedAt ? '▶ Review started ✓' : '▶ Start review (notifies the family)';
+    $('btn-diff').disabled = !CUR.reviewStartedAt;
+    $('btn-finish').disabled = !CUR.reviewStartedAt || sent;
+    $('btn-save').disabled = sent;
+    $('btn-send').disabled = sent;
+    $('draft').disabled = sent;
+    $('status').textContent = sent ? 'Response sent — this case is resolved and read-only.' : '';
+    $('case-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  document.getElementById('rows').addEventListener('click', (e) => {
+    const tr = e.target.closest('tr.row');
+    if (tr) openCase(Number(tr.dataset.id)).catch((err) => { $('status').textContent = String(err.message || err); });
+  });
+  $('statusFilter').addEventListener('change', () => load().catch(() => {}));
+  $('refresh').addEventListener('click', () => load().catch(() => {}));
+
+  $('btn-start').addEventListener('click', async () => {
+    if (!CUR) return;
+    if (!confirm('Start the review? The family gets an in-app notice RIGHT AWAY that you’ve opened ' + CUR.childId + '’s board. The board is snapshotted so Finish review can list exactly what you changed.')) return;
+    try {
+      const r = await post({ op: 'start', id: CUR.id });
+      $('status').textContent = r.alreadyStarted ? 'Already started (no second notice sent).' : '✅ Review started — the family has been notified. Edit their board via the links above.';
+      await openCase(CUR.id); await load();
+    } catch (err) { $('status').textContent = String(err.message || err); }
+  });
+
+  $('btn-diff').addEventListener('click', async () => {
+    if (!CUR) return;
+    try {
+      const r = await api('/api/admin/lab?action=support&id=' + CUR.id + '&op=diff');
+      $('diff-out').innerHTML = '<ul class="diff">' + r.lines.map((l) => '<li>' + esc(l) + '</li>').join('') + '</ul>';
+    } catch (err) { $('status').textContent = String(err.message || err); }
+  });
+
+  $('btn-finish').addEventListener('click', async () => {
+    if (!CUR) return;
+    if ($('draft').value.trim() &&
+        !confirm('Finish review regenerates the change summary and REPLACES the draft below (your edits are lost). Continue?')) return;
+    try {
+      const r = await post({ op: 'finish', id: CUR.id });
+      $('draft').value = r.draft;
+      $('diff-out').innerHTML = '<ul class="diff">' + r.lines.map((l) => '<li>' + esc(l) + '</li>').join('') + '</ul>';
+      $('status').textContent = '📝 Draft generated — edit it, add context, then send.';
+    } catch (err) { $('status').textContent = String(err.message || err); }
+  });
+
+  $('btn-save').addEventListener('click', async () => {
+    if (!CUR) return;
+    try {
+      await post({ op: 'draft', id: CUR.id, text: $('draft').value });
+      $('status').textContent = '💾 Draft saved.';
+    } catch (err) { $('status').textContent = String(err.message || err); }
+  });
+
+  $('btn-send').addEventListener('click', async () => {
+    if (!CUR) return;
+    const text = $('draft').value.trim();
+    if (!text) { $('status').textContent = 'Write (or generate) the response first.'; return; }
+    if (!confirm('Send this response? The family sees it word-for-word as a notice, and the case resolves. This can’t be edited afterwards.')) return;
+    try {
+      await post({ op: 'send', id: CUR.id, text });
+      $('status').textContent = '📨 Sent — the family will see it on their next visit.';
+      await openCase(CUR.id); await load();
+    } catch (err) { $('status').textContent = String(err.message || err); }
+  });
+
+  load().catch((err) => { $('rows').innerHTML = '<tr><td colspan="6" class="empty">' + esc(String(err.message || err)) + '</td></tr>'; });
+</script>
+</body>
+</html>

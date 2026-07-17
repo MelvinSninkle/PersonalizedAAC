@@ -845,6 +845,39 @@ struct APIClient {
                                    body: body, contentType: "application/json")) != nil
     }
 
+    /// Support notices: "we've opened your board" / the team's response.
+    /// Shown until "Got it" acks them; only the requesting account sees them.
+    struct SupportNotice: Decodable, Identifiable {
+        let id: String              // "sc<caseId>-review" | "sc<caseId>-response"
+        let caseId: Int
+        let kind: String            // "review-started" | "response"
+        let text: String
+        let createdAt: String?
+    }
+    func storeSupportNotices(childId: String) async -> [SupportNotice] {
+        struct R: Decodable { let supportNotices: [SupportNotice]? }
+        guard let (data, _) = try? await request(method: "GET",
+            path: "/api/store?action=followups&childId=\(percentEscape(childId))",
+            body: nil) else { return [] }
+        return (try? JSONDecoder().decode(R.self, from: data))?.supportNotices ?? []
+    }
+
+    struct SupportCreateResult: Decodable { let ok: Bool; let caseId: Int?; let note: String? }
+    /// File a support/bug case. Sending IS the family's permission for the
+    /// team to open and edit the board — the UI shows that disclosure first.
+    func storeSupportCreate(childId: String, kind: String, message: String) async throws -> SupportCreateResult {
+        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "kind": kind, "message": message])
+        let (data, _) = try await request(method: "POST", path: "/api/store?action=support-create",
+                                          body: body, contentType: "application/json")
+        return try JSONDecoder().decode(SupportCreateResult.self, from: data)
+    }
+
+    func storeSupportAck(childId: String, noticeId: String) async {
+        guard let body = try? JSONSerialization.data(withJSONObject: ["childId": childId, "noticeId": noticeId]) else { return }
+        _ = try? await request(method: "POST", path: "/api/store?action=support-ack",
+                               body: body, contentType: "application/json")
+    }
+
     /// The parent answered (or explicitly declined) a follow-up — stop
     /// re-offering it. Swiping the sheet away does NOT call this, on purpose.
     func storeFollowupDone(childId: String, jobId: Int) async {

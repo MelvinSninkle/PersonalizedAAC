@@ -960,6 +960,34 @@ Size: {size}.',
       )`;
     await db`CREATE INDEX IF NOT EXISTS layout_offers_pending
              ON layout_offers(child_id) WHERE status = 'pending'`;
+    // Consented support access (canonical DDL; runtime ensure lives in
+    // _lib/support.js ensureSupport): a parent's request grants permission
+    // to open/edit their board; every step is stamped on the row (who filed,
+    // who started/finished review, snapshot for the change diff, the sent
+    // response, and the creator's notice acks). In-app notices only.
+    await db`
+      CREATE TABLE IF NOT EXISTS support_cases (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'support',
+        status TEXT NOT NULL DEFAULT 'open',
+        message TEXT NOT NULL,
+        created_by BIGINT,
+        created_by_email TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        review_started_at TIMESTAMPTZ,
+        review_started_by TEXT,
+        review_notice_ack_at TIMESTAMPTZ,
+        board_snapshot JSONB,
+        response_text TEXT,
+        response_sent_at TIMESTAMPTZ,
+        response_sent_by TEXT,
+        response_ack_at TIMESTAMPTZ,
+        resolved_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
+    await db`CREATE INDEX IF NOT EXISTS support_cases_child_idx ON support_cases(child_id, status)`;
+    await db`CREATE INDEX IF NOT EXISTS support_cases_status_idx ON support_cases(status, created_at DESC)`;
     // Communication milestones (first two-word combo, vocabulary marks…) —
     // detected on /api/events ingestion, deduped by (child, kind, detail_key).
     await db`

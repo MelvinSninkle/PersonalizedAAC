@@ -187,3 +187,41 @@ suspend fun ApiClient.storeRearmAdd(childId: String, jobId: Int): Boolean {
     return try { raw("POST", "/api/store?action=rearm-add", body.encodeToByteArray()); true }
     catch (_: Exception) { false }
 }
+
+// ── Consented support access ─────────────────────────────────────────────────
+// Filing a case IS the family's permission for the team to open and edit the
+// board (the UI shows that disclosure first). Notices are creator-only and
+// persist until acked with "Got it".
+
+@Serializable
+data class SupportNotice(
+    val id: String = "",            // "sc<caseId>-review" | "sc<caseId>-response"
+    val caseId: Int = 0,
+    val kind: String = "",          // "review-started" | "response"
+    val text: String = "",
+    val createdAt: String? = null,
+)
+
+@Serializable
+private data class SupportNoticesResult(val supportNotices: List<SupportNotice> = emptyList())
+
+suspend fun ApiClient.storeSupportNotices(childId: String): List<SupportNotice> =
+    try { getJson<SupportNoticesResult>("/api/store?action=followups&childId=${esc(childId)}").supportNotices }
+    catch (_: Exception) { emptyList() }
+
+@Serializable
+data class SupportCreateResult(val ok: Boolean = false, val caseId: Int? = null, val note: String? = null)
+
+suspend fun ApiClient.storeSupportCreate(childId: String, kind: String, message: String): SupportCreateResult {
+    val body = buildJsonObject {
+        put("childId", childId)
+        put("kind", kind)
+        put("message", message)
+    }
+    return decode(raw("POST", "/api/store?action=support-create", body.toString().encodeToByteArray()))
+}
+
+suspend fun ApiClient.storeSupportAck(childId: String, noticeId: String) {
+    val body = "{\"childId\":${jsonQuote(childId)},\"noticeId\":${jsonQuote(noticeId)}}"
+    try { raw("POST", "/api/store?action=support-ack", body.encodeToByteArray()) } catch (_: Exception) {}
+}

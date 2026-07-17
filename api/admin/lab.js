@@ -45,6 +45,7 @@ import demoAudio from './_lab-demo-audio.js';
 import backup from './_lab-backup.js';
 import defaultUpload from './_lab-default-upload.js';
 import spendGuard from './_lab-spend-guard.js';
+import support from './_lab-support.js';
 
 export const config = { maxDuration: 300 };
 
@@ -76,6 +77,7 @@ const HANDLERS = {
   'style-wizard': styleWizard,
   'layout': layout,
   'voices': voices,
+  'support': support,
   'publish': publish,
   'boards': boards,
   'reports': reports,

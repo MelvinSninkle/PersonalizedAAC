@@ -30,6 +30,7 @@ import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
 import { ensureTileJobs, processTileJob, MAX_ATTEMPTS } from './_lib/tile-jobs.js';
 import { MAX_SEED_ATTEMPTS } from './_lib/seed-board.js';
+import { ensureSupport, supportNoticesFor, MAX_OPEN_CASES, SUCCESS_COPY } from './_lib/support.js';
 import { isDefaultableTile, loadChildStyleGuideId } from './_lib/onboarding-render.js';
 import { archivePriorImage } from './_lib/image-history.js';
 import { ensureSeedJobs, ensureCategory, enqueueRenderJob, seedStatus, needsStyling, drainRenderJobs } from './_lib/seed-board.js';
@@ -107,9 +108,12 @@ export default async function handler(req, res) {
       case 'impact':         return impact(req, res, db, auth);
       case 'adopt-image':    return adoptImage(req, res, db, auth);
       case 'regen-with':     return regenWith(req, res, db, auth, uid, body);
-      case 'followups':      return followups(req, res, db, auth);
+      case 'followups':      return followups(req, res, db, auth, uid);
       case 'followup-done':  return followupDone(req, res, db, auth, body);
       case 'rearm-add':      return rearmAdd(req, res, db, auth, body);
+      case 'support-create': return supportCreate(req, res, db, auth, uid, body);
+      case 'support-list':   return supportList(req, res, db, auth, uid);
+      case 'support-ack':    return supportAck(req, res, db, auth, uid, body);
       case 'retry':          return retryTile(req, res, db, auth, uid, body);
       case 'rebuild':        return rebuild(req, res, db, auth, uid, body);
       case 'iap-verify':     return iapVerify(req, res, db, uid, body);
@@ -597,7 +601,7 @@ async function computeImpact(db, childId, word) {
 // the screen without answering and the decision was orphaned forever. Now
 // every surface re-offers until the parent answers (followup-done) or there
 // is nothing to offer (auto-closed here so the list stays short).
-async function followups(req, res, db, auth) {
+async function followups(req, res, db, auth, uid) {
   const childId = String((req.query && req.query.childId) || '').slice(0, 64);
   if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
   if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
@@ -654,8 +658,82 @@ async function followups(req, res, db, auth) {
     ];
   } catch (_) { /* pre-migration */ }
 
+  // SUPPORT NOTICES: "we've opened your board" / "here's what we changed".
+  // Creator-only by design; no ensure in this hot poll path (support-create
+  // and the admin inbox run the migration), so pre-migration this is [].
+  let supportNotices = [];
+  try {
+    supportNotices = await supportNoticesFor(db, childId, uid);
+  } catch (_) { /* pre-migration */ }
+
   res.setHeader('Cache-Control', 'no-store');
-  res.status(200).json({ ok: true, followups: out, problems });
+  res.status(200).json({ ok: true, followups: out, problems, supportNotices });
+}
+
+// ── Consented support access (family side) ──────────────────────────────────
+// POST ?action=support-create { childId, kind:'support'|'bug', message } —
+// filing a case IS the family's permission for an admin to open and edit
+// their board (the clients show that disclosure before sending). The 48-hour
+// SLA + "you'll be notified" promise ride back in `note`.
+async function supportCreate(req, res, db, auth, uid, body) {
+  const childId = String(body.childId || '').slice(0, 64);
+  const kind = body.kind === 'bug' ? 'bug' : 'support';
+  const message = String(body.message || '').trim().slice(0, 2000);
+  if (!childId || !message) { res.status(400).json({ error: 'childId and message required' }); return; }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+  await ensureSupport(db);
+
+  const open = await db`SELECT COUNT(*)::int AS c FROM support_cases
+                        WHERE child_id = ${childId} AND status != 'resolved'`;
+  if (Number(open[0]?.c || 0) >= MAX_OPEN_CASES) {
+    res.status(400).json({ error: 'too_many_open_cases',
+      detail: "You already have open requests — we'll get to them within 48 hours." });
+    return;
+  }
+  const row = (await db`INSERT INTO support_cases (child_id, kind, message, created_by, created_by_email)
+                        VALUES (${childId}, ${kind}, ${message}, ${uid}, ${auth.user.email || null})
+                        RETURNING id`)[0];
+  res.status(200).json({ ok: true, caseId: Number(row.id), note: SUCCESS_COPY });
+}
+
+// GET ?action=support-list&childId= — the CREATOR's own cases (settings can
+// show "1 open request"); other care-team accounts see nothing here.
+async function supportList(req, res, db, auth, uid) {
+  const childId = String((req.query && req.query.childId) || '').slice(0, 64);
+  if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+  let cases = [];
+  try {
+    cases = await db`SELECT id, kind, status, message, created_at, response_sent_at
+                     FROM support_cases WHERE child_id = ${childId} AND created_by = ${uid}
+                     ORDER BY id DESC LIMIT 20`;
+  } catch (_) { /* pre-migration */ }
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(200).json({ ok: true, cases: cases.map((c) => ({
+    id: Number(c.id), kind: c.kind, status: c.status,
+    message: c.message, createdAt: c.created_at, respondedAt: c.response_sent_at,
+  })) });
+}
+
+// POST ?action=support-ack { childId, noticeId:"sc<id>-review"|"sc<id>-response" }
+async function supportAck(req, res, db, auth, uid, body) {
+  const childId = String(body.childId || '').slice(0, 64);
+  const m = /^sc(\d+)-(review|response)$/.exec(String(body.noticeId || ''));
+  if (!childId || !m) { res.status(400).json({ error: 'childId and noticeId required' }); return; }
+  if (!(await canAccessChild(auth.user, childId, db))) { res.status(403).json({ error: 'Forbidden' }); return; }
+  const caseId = Number(m[1]);
+  try {
+    if (m[2] === 'review') {
+      await db`UPDATE support_cases SET review_notice_ack_at = NOW(), updated_at = NOW()
+               WHERE id = ${caseId} AND child_id = ${childId} AND created_by = ${uid}
+                 AND review_notice_ack_at IS NULL`;
+    } else {
+      await db`UPDATE support_cases SET response_ack_at = NOW(), updated_at = NOW()
+               WHERE id = ${caseId} AND child_id = ${childId} AND created_by = ${uid}
+                 AND response_ack_at IS NULL`;
+    }
+  } catch (_) { /* pre-migration: nothing to ack */ }
+  res.status(200).json({ ok: true });
 }
 
 // POST ?action=followup-done { childId, jobId } — the parent answered (or
