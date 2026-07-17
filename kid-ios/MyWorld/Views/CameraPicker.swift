@@ -13,7 +13,7 @@ import AVFoundation
 struct CameraCapture: View {
     var onCapture: (Data?) -> Void
 
-    private enum Phase { case checking, allowed, blocked }
+    private enum Phase: Equatable { case checking, allowed, blocked(restricted: Bool) }
     @State private var phase: Phase = .checking
 
     var body: some View {
@@ -27,8 +27,8 @@ struct CameraCapture: View {
                 }
             case .allowed:
                 CameraPicker(onCapture: onCapture)
-            case .blocked:
-                blockedView
+            case .blocked(let restricted):
+                blockedView(restricted: restricted)
             }
         }
         .task {
@@ -42,25 +42,41 @@ struct CameraCapture: View {
                 // Ask BEFORE any camera UI, so the first-ever open never
                 // renders a black preview either.
                 let ok = await AVCaptureDevice.requestAccess(for: .video)
-                phase = ok ? .allowed : .blocked
-            default:   // .denied, .restricted
-                phase = .blocked
+                phase = ok ? .allowed : .blocked(restricted: false)
+            case .restricted:
+                // Screen Time / parental controls: the app's own Settings page
+                // won't even SHOW a Camera toggle — written steps are the fix.
+                phase = .blocked(restricted: true)
+            default:   // .denied — Open Settings lands exactly on the toggle
+                phase = .blocked(restricted: false)
             }
         }
     }
 
-    private var blockedView: some View {
+    /// Lead with the fix that matches HOW the camera is blocked: a plain
+    /// denial is one toggle away (the button deep-links to it — the only
+    /// Settings link Apple allows); a Screen Time restriction can only be
+    /// fixed by the written steps, since Apple offers no deep link there.
+    private func blockedView(restricted: Bool) -> some View {
         ZStack {
             Color(hex: "#fff7fb").ignoresSafeArea()
             VStack(alignment: .leading, spacing: 16) {
                 Text("📷").font(.system(size: 44))
-                Text("The camera is turned off for My World")
+                Text(restricted ? "The camera is blocked by Screen Time" : "Camera access is off for My World")
                     .font(.system(size: 22, weight: .heavy, design: .rounded))
                     .foregroundStyle(Color(hex: "#ad1457"))
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("• On a child's iPad, Screen Time often blocks it: Settings → Screen Time → Content & Privacy Restrictions → Allowed Apps & Features → Camera")
-                    Text("• Or allow it under Settings → Privacy & Security → Camera → My World")
-                    Text("• Camera on but the picture is black? Check that the iPad's case isn't covering the camera lens.")
+                    if restricted {
+                        Text("On this iPad, parental controls are blocking the camera for apps. To allow it:")
+                        Text("Settings → Screen Time → Content & Privacy Restrictions → Allowed Apps & Features → turn on Camera")
+                            .fontWeight(.semibold)
+                        Text("(You may need the Screen Time passcode.)")
+                    } else {
+                        Text("Tap Open Settings below and turn on **Camera** — it's one switch.")
+                        Text("Don't see the toggle? Screen Time may be blocking it: Settings → Screen Time → Content & Privacy Restrictions → Allowed Apps & Features → Camera.")
+                    }
+                    Text("Camera on but the picture is black? Check that the iPad's case isn't covering the camera lens.")
+                        .foregroundStyle(Color(hex: "#6b7280"))
                 }
                 .font(.system(size: 15))
                 .foregroundStyle(Color(hex: "#374151"))
@@ -70,10 +86,10 @@ struct CameraCapture: View {
                             UIApplication.shared.open(url)
                         }
                     } label: {
-                        Text("Open Settings")
+                        Text(restricted ? "Open Settings anyway" : "Open Settings")
                             .font(.system(size: 16, weight: .bold))
                             .padding(.horizontal, 22).padding(.vertical, 12)
-                            .background(Color(hex: "#ff1493"), in: Capsule())
+                            .background(Color(hex: restricted ? "#9ca3af" : "#ff1493"), in: Capsule())
                             .foregroundStyle(.white)
                     }
                     .buttonStyle(.plain)
