@@ -200,7 +200,10 @@ struct AddTileView: View {
         magicChecking = true
         var c = queue.magicCandidates.removeFirst()
         Task {
-            let imp = c.impact ?? (await magicApi.storeImpact(childId: c.childId, word: c.label))
+            // (Not `??` — nil-coalescing's right side is an autoclosure, which
+            // can't await.)
+            var imp = c.impact
+            if imp == nil { imp = await magicApi.storeImpact(childId: c.childId, word: c.label) }
             let hasReplace = imp?.existing.map { $0.itemId != c.itemId } ?? false
             let hasRegen = !(imp?.affected.filter { $0.itemId != c.itemId } ?? []).isEmpty
             if let imp, hasReplace || hasRegen {
@@ -912,7 +915,13 @@ private struct MagicFollowUpSheet: View {
             refItemId = candidate.itemId
             // The presenter prefetches impact and only shows this sheet when
             // there's something to ask — the fetch here is just a fallback.
-            impact = candidate.impact ?? (await api.storeImpact(childId: candidate.childId, word: candidate.label))
+            // (Not `??` — nil-coalescing's right side is an autoclosure,
+            // which can't await.)
+            if let pre = candidate.impact {
+                impact = pre
+            } else {
+                impact = await api.storeImpact(childId: candidate.childId, word: candidate.label)
+            }
             advance(from: .loading)
         }
     }
