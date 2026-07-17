@@ -117,8 +117,10 @@ struct AddTileView: View {
                         .font(.system(size: 16, weight: .semibold))
                 }
             }
-            .sheet(isPresented: $showCamera) {
-                // Flip the binding ourselves so the sheet actually dismisses and
+            // fullScreenCover, NOT sheet: an iPad form-sheet camera renders a
+            // black preview (see CameraPicker's header comment).
+            .fullScreenCover(isPresented: $showCamera) {
+                // Flip the binding ourselves so the cover actually dismisses and
                 // a second tap re-opens the camera (the picker no longer self-
                 // dismisses — see CameraPicker).
                 CameraPicker { data in

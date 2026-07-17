@@ -272,6 +272,9 @@ struct BoardTileEditSheet: View {
     @State private var showLibrary = false
     @State private var redrawing = false
     @State private var redrawNote: String?
+    // Position-in-folder fallback (Android parity).
+    @State private var moving = false
+    @State private var moveNote: String?
     // Previous pictures (item_image_history): tap one to bring it back — the
     // current picture archives first, so reverting is itself revertible.
     @State private var history: [APIClient.HistoryEntry] = []
@@ -306,6 +309,7 @@ struct BoardTileEditSheet: View {
                         nameSection
                         voiceSection
                         placementSection
+                        positionSection
                         if section == .people { pinSection }
                         descriptionSection
                         if let errorText {
@@ -332,7 +336,9 @@ struct BoardTileEditSheet: View {
                     }
                 }
             }
-            .sheet(isPresented: $showCamera) {
+            // fullScreenCover, NOT sheet: an iPad form-sheet camera renders a
+            // black preview (see CameraPicker's header comment).
+            .fullScreenCover(isPresented: $showCamera) {
                 CameraPicker { data in
                     showCamera = false
                     if let data, let jpeg = downscaleJPEG(data, maxDim: 1024, quality: 0.85) {
@@ -377,6 +383,57 @@ struct BoardTileEditSheet: View {
     }
 
     // MARK: Sections
+
+    /// Button fallback for reordering (Android parity): the grid's
+    /// hold-and-drag does the same thing, but these always work and are
+    /// discoverable. Splice within the folder's siblings, resequence i*1000 —
+    /// the exact web/Android algorithm — and the server stamps
+    /// layoutCustomizedAt so admin layout pushes won't clobber the choice.
+    private var positionSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            field("Position in folder")
+            HStack(spacing: 10) {
+                Button { Task { await move(-1) } } label: {
+                    pill("← Move earlier", filled: false, icon: nil)
+                }
+                .buttonStyle(.plain).disabled(moving)
+                Button { Task { await move(1) } } label: {
+                    pill("Move later →", filled: false, icon: nil)
+                }
+                .buttonStyle(.plain).disabled(moving)
+            }
+            Text("Tip: on the board you can also hold a tile until it lifts, then drag it where you want it.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+            if let m = moveNote {
+                Text(m).font(.system(size: 12)).foregroundStyle(Color(hex: "#2e7d32"))
+            }
+        }
+    }
+
+    private func move(_ delta: Int) async {
+        guard !moving else { return }
+        moving = true
+        defer { moving = false }
+        var siblings = board.tiles
+            .filter { $0.categoryId == tile.categoryId && $0.section == tile.section }
+            .sorted { ($0.order, $0.id) < ($1.order, $1.id) }
+        guard let i = siblings.firstIndex(where: { $0.id == tile.id }) else { return }
+        let j = i + delta
+        guard j >= 0, j < siblings.count else {
+            moveNote = delta < 0 ? "Already first in this folder." : "Already last in this folder."
+            return
+        }
+        let moved = siblings.remove(at: i)
+        siblings.insert(moved, at: j)
+        for (idx, t) in siblings.enumerated() {
+            let newOrder = idx * 1000
+            if t.order != newOrder {
+                _ = try? await api.updateItem(id: t.id, order: newOrder, childId: auth.childSlug)
+            }
+        }
+        await board.refresh(childId: auth.childSlug)
+        moveNote = delta < 0 ? "Moved earlier ✓" : "Moved later ✓"
+    }
 
     private var imageSection: some View {
         VStack(alignment: .leading, spacing: 10) {

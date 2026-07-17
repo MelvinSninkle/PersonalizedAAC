@@ -167,6 +167,12 @@ family keeps everything they have — only new spends wait.
   picks the crop) — the old keep-original-ratio toggle is retired. The
   stored `keep_aspect` flag still renders uncropped on all three apps and
   stays settable via Lab's ⬜ Square-tiles tool (TV/movie posters).
+- **Reordering tiles works by touch on every surface**: unlock → edit mode →
+  hold a tile until it lifts (haptic on native), drag onto a sibling to
+  reorder or onto a folder chip/tab to move it; a fading hint teaches the
+  gesture each time edit mode opens. Mouse users just drag. iOS/Android tile
+  editors also have Move earlier/later buttons. Family reorders stamp
+  layoutCustomizedAt (E11) so admin pushes never clobber them.
 - **Failed renders alert the parent** (never silent): a render that fails
   every attempt (word tile stuck on default art, photo add that never
   landed) appears as a ⚠️ alert in all three parent views — web dashboard

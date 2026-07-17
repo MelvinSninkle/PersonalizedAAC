@@ -28,6 +28,10 @@ struct BoardView: View {
     @State private var showSettings = false
     @State private var showDisplay  = false
     @State private var editMode     = false
+    /// The reorder gesture is invisible (hold until the tile lifts, then
+    /// drag) — this hint appears each time edit mode turns on and fades.
+    @State private var showEditHint = false
+    @State private var editHintTask: Task<Void, Never>?
     @State private var showBatchReview = false
     @State private var pendingMessage: [MessageToken]?
     /// An in-grid "+ Add tile" tap; carries which section/folder to pre-select.
@@ -50,6 +54,24 @@ struct BoardView: View {
         let id = UUID()
         let section: BoardSection
         let categoryId: Int?
+    }
+
+    /// Small fading strip that teaches the invisible reorder gesture the
+    /// moment edit mode opens. Tap anywhere on it to dismiss early.
+    @ViewBuilder
+    private var editHintOverlay: some View {
+        if showEditHint {
+            Text("✋ Hold a tile until it lifts, then drag it onto another tile to reorder — or onto a folder chip to move it.")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .background(Color(hex: "#ad1457").opacity(0.95), in: RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+                .onTapGesture { withAnimation { showEditHint = false } }
+                .transition(.move(edge: .top).combined(with: .opacity))
+        }
     }
 
     var body: some View {
@@ -120,6 +142,19 @@ struct BoardView: View {
             }
         }
         .overlay { emptyBoardOverlay }
+        .overlay(alignment: .top) { editHintOverlay }
+        .onChange(of: editMode) { _, on in
+            editHintTask?.cancel()
+            if on {
+                showEditHint = true
+                editHintTask = Task {
+                    try? await Task.sleep(nanoseconds: 6_000_000_000)
+                    if !Task.isCancelled { withAnimation { showEditHint = false } }
+                }
+            } else {
+                showEditHint = false
+            }
+        }
         .overlay(alignment: .top) { scheduledPromptOverlay }
         .overlay(alignment: .top) { autoTeachOverlay }
         .overlay(alignment: .bottom) { reviewBanner }

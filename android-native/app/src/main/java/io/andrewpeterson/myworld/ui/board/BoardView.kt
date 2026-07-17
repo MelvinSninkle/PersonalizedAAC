@@ -1,13 +1,16 @@
 package io.andrewpeterson.myworld.ui.board
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -46,6 +49,16 @@ fun BoardView() {
     val loading by c.board.loading.collectAsState()
 
     var editMode by remember { mutableStateOf(false) }
+    // The reorder gesture is invisible (hold until the tile lifts, then
+    // drag) — a fading hint teaches it each time edit mode opens.
+    var showEditHint by remember { mutableStateOf(false) }
+    LaunchedEffect(editMode) {
+        showEditHint = editMode
+        if (editMode) {
+            kotlinx.coroutines.delay(7_000)
+            showEditHint = false
+        }
+    }
     var openRoom by remember { mutableStateOf<Category?>(null) }
     var didInitialLoad by remember { mutableStateOf(false) }
     var showUnlock by remember { mutableStateOf(false) }
@@ -224,6 +237,25 @@ fun BoardView() {
                 EmptyBoardView(possessive = childPossessive(c.auth.childSlug)) {
                     // Re-pull — the server-side build lands tiles as it goes.
                 }
+            }
+
+            // Edit-mode gesture hint (iOS/web parity): fades on its own,
+            // tap to dismiss early.
+            if (showEditHint) {
+                androidx.compose.material3.Text(
+                    "✋ Hold a tile until it lifts, then drag it onto another tile to reorder — or onto a folder chip to move it.",
+                    color = androidx.compose.ui.graphics.Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier
+                        .align(androidx.compose.ui.Alignment.TopCenter)
+                        .padding(horizontal = 24.dp, vertical = 8.dp)
+                        .background(hexColor("#ad1457").copy(alpha = 0.95f),
+                            androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                        .clickable { showEditHint = false }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                )
             }
         }
     }

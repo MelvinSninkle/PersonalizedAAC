@@ -5,10 +5,16 @@ import UIKit
 /// camera. SwiftUI's `PhotosPicker` covers the photo-library path but offers no
 /// camera entry point, so the camera side still has to bridge through UIKit.
 ///
-/// Usage:
-///   .sheet(isPresented: $showCamera) {
-///       CameraPicker { jpeg in pickedPhoto = jpeg }
+/// Usage — MUST be a fullScreenCover, never a sheet:
+///   .fullScreenCover(isPresented: $showCamera) {
+///       CameraPicker { jpeg in pickedPhoto = jpeg }.ignoresSafeArea()
 ///   }
+///
+/// iPad TRAP: presenting the camera picker in a `.sheet` works on iPhone
+/// (sheets are effectively full-screen there) but on iPad a sheet is a
+/// centered form-sheet card, and iPadOS refuses to feed camera frames to a
+/// non-full-screen camera picker — the capture session bails
+/// (FigCaptureSessionRemote err=-12784) and the preview is solid BLACK.
 ///
 /// The callback hands back JPEG bytes (already compressed to a reasonable
 /// dimension for an AAC tile) so the caller doesn't have to think about
@@ -30,6 +36,10 @@ struct CameraPicker: UIViewControllerRepresentable {
         if vc.sourceType == .camera { vc.cameraDevice = .rear }
         vc.allowsEditing = false
         vc.delegate = context.coordinator
+        // Belt-and-suspenders for the iPad black-preview trap (see header
+        // comment): even though every call site presents via fullScreenCover,
+        // pin the picker itself to full-screen too.
+        vc.modalPresentationStyle = .fullScreen
         return vc
     }
 

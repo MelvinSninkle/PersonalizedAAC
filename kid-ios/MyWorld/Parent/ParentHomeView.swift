@@ -1085,7 +1085,9 @@ private struct PersonEditorSheet: View {
             } message: {
                 Text("A family portrait drawn in the board's style uses ⭐5 (our best likeness model). \u{201C}Use my photo as-is\u{201D} is free.")
             }
-            .sheet(isPresented: $showCamera) {
+            // fullScreenCover, NOT sheet: an iPad form-sheet camera renders a
+            // black preview (see CameraPicker's header comment).
+            .fullScreenCover(isPresented: $showCamera) {
                 CameraPicker { data in
                     showCamera = false
                     if let data { capturedJPEG = data }

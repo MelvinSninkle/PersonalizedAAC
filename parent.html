@@ -2505,11 +2505,19 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ op: 'revert-image', id: itemId, key: h.key }) });
             if (r2.ok) {
+              // Show what the server actually stored (a shared-default key is
+              // re-homed to a child-owned copy so the style overlay can't
+              // re-skin it — see api/items.js revertImage).
+              const d2 = await r2.json().catch(() => ({}));
+              const shownKey = d2.imageKey || h.key;
               const prev = document.getElementById('tile-preview');
-              prev.src = '/api/media?key=' + encodeURIComponent(h.key) + '&w=640';
+              prev.src = '/api/media?key=' + encodeURIComponent(shownKey) + '&w=640';
               prev.style.display = 'block';
               document.getElementById('tile-retry-status').textContent = '✅ Brought back — the swapped-out picture is in Previous pictures.';
               loadTileHistory(itemId);
+              // Refresh the organize tree behind the modal so its thumbnails
+              // show the revert too (stale thumbs read as "it didn't work").
+              try { await loadOrg(); } catch (_) {}
             }
           } catch (_) {}
         };

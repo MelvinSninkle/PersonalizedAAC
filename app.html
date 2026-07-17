@@ -736,6 +736,29 @@
 
   body.edit-mode .tile-wrap:not(.category) { cursor: grab; }
   .tile-wrap.dragging { opacity: 0.4; }
+  /* Pointer-drag ghost that follows the finger/cursor while reordering. */
+  .drag-ghost {
+    position: fixed; z-index: 5000; pointer-events: none;
+    background: #fff; border: 2px solid #ff1493; border-radius: 10px;
+    padding: 6px 12px; font-weight: 700; font-size: 14px; color: #ad1457;
+    box-shadow: 0 12px 34px rgba(0,0,0,.28); max-width: 200px;
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  }
+  /* Edit mode: the hold-to-lift gesture must not trigger the browser's
+     long-press behaviors (text selection, iOS callout menu). */
+  body.edit-mode .tile-wrap, body.edit-mode .subcat-tile {
+    -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+  }
+  /* One-line gesture hint shown when edit mode opens (fades on its own). */
+  #edit-hint {
+    position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
+    z-index: 4500; background: rgba(173,20,87,.95); color: #fff;
+    font-weight: 600; font-size: 13px; border-radius: 14px;
+    padding: 10px 16px; max-width: min(92vw, 460px); text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    opacity: 0; pointer-events: none; transition: opacity .4s;
+  }
+  #edit-hint.show { opacity: 1; pointer-events: auto; }
   .tile-wrap.drop-target .tile-square {
     outline: 3px solid #4a90e2;
     outline-offset: 3px;
@@ -2277,20 +2300,17 @@
   }
 
   // ---- Generalized drag-and-drop reordering (edit mode only) ----
-  // Draggables carry data-drag-kind ('item' | 'cat-top' | 'cat-sub'),
-  // data-entity-id, data-section, and (cat-sub only) data-parent-id.
+  // POINTER-based, not HTML5 drag-and-drop: mobile browsers never start an
+  // HTML5 drag from a touch, so on iPads/phones the old draggable=true path
+  // simply did nothing. Behavior now matches the native apps: TOUCH holds a
+  // tile ~400ms until it lifts (moving the finger sooner scrolls normally);
+  // MOUSE drags immediately (8px threshold, no hold). Draggables carry
+  // data-drag-kind ('item' | 'cat-top' | 'cat-sub'), data-entity-id,
+  // data-section, and (cat-sub only) data-parent-id.
   let dragState = null;
 
   function dragGroupKey(el) {
     return [el.dataset.dragKind, el.dataset.section, el.dataset.parentId ?? ''].join('|');
-  }
-  function onTileDragStart(e) {
-    dragState = { id: parseInt(this.dataset.entityId, 10), key: dragGroupKey(this),
-                  kind: this.dataset.dragKind, section: this.dataset.section };
-    this.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-    try { e.dataTransfer.setData('text/plain', String(dragState.id)); } catch (_) {}
-    e.stopPropagation();
   }
   function isDropTarget(el) {
     return dragState
@@ -2306,44 +2326,138 @@
       && (el.dataset.dragKind === 'cat-top' || el.dataset.dragKind === 'cat-sub')
       && el.dataset.section === dragState.section;
   }
-  function onTileDragOver(e) {
-    if (!isDropTarget(this) && !isItemIntoCatDrop(this)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    this.classList.add('drop-target');
+  const DRAG_HOLD_MS = 400;   // touch: hold this long to lift
+  const DRAG_HOLD_SLOP = 10;  // touch: more movement than this before the hold = a scroll
+  const DRAG_MOUSE_SLOP = 8;  // mouse: arm after this much movement (no hold)
+  let pd = null;              // pending/active pointer drag
+  let suppressClickUntil = 0; // swallow the post-drop click on the source tile
+
+  // While a drag is ARMED this non-passive listener is what actually stops
+  // the page from scrolling — touch-action can't change mid-gesture, and
+  // before arming we deliberately don't interfere so scrolling stays native.
+  document.addEventListener('touchmove', (e) => { if (pd && pd.armed) e.preventDefault(); }, { passive: false });
+  document.addEventListener('contextmenu', (e) => { if (pd) e.preventDefault(); });
+
+  function clearDropHighlights() {
+    document.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
   }
-  function onTileDragLeave() { this.classList.remove('drop-target'); }
-  async function onTileDrop(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    this.classList.remove('drop-target');
-    // Dropped a tile onto a category/subcategory tab → move it into that category.
-    if (isItemIntoCatDrop(this)) {
-      await moveItemToCategory(dragState.id, this.dataset.section, parseInt(this.dataset.entityId, 10));
+  function updateDragTarget(x, y) {
+    if (!pd) return;
+    if (pd.ghost) { pd.ghost.style.left = (x + 14) + 'px'; pd.ghost.style.top = (y + 14) + 'px'; }
+    const under = document.elementFromPoint(x, y);
+    const cand = under && under.closest('[data-drag-kind]');
+    const t = (cand && (isDropTarget(cand) || isItemIntoCatDrop(cand))) ? cand : null;
+    if (t !== pd.target) {
+      clearDropHighlights();
+      if (t) t.classList.add('drop-target');
+      pd.target = t;
+    }
+  }
+  // Autoscroll: nudge the group's own scroll container (item grids scroll
+  // vertically, the needs strip + chip strips horizontally) when the pointer
+  // nears its edge, re-running targeting each frame so newly revealed tiles
+  // become droppable.
+  function dragAutoScroll() {
+    if (!pd || !pd.armed) return;
+    const sc = pd.scroller;
+    if (sc) {
+      const r = sc.getBoundingClientRect();
+      const edge = 70, step = 16;
+      if (pd.vertical) {
+        if (pd.lastY < r.top + edge) sc.scrollTop -= step * ((r.top + edge - pd.lastY) / edge);
+        else if (pd.lastY > r.bottom - edge) sc.scrollTop += step * ((pd.lastY - (r.bottom - edge)) / edge);
+      } else {
+        if (pd.lastX < r.left + edge) sc.scrollLeft -= step * ((r.left + edge - pd.lastX) / edge);
+        else if (pd.lastX > r.right - edge) sc.scrollLeft += step * ((pd.lastX - (r.right - edge)) / edge);
+      }
+    }
+    updateDragTarget(pd.lastX, pd.lastY);
+    pd.raf = requestAnimationFrame(dragAutoScroll);
+  }
+  function armDrag() {
+    if (!pd || pd.armed) return;
+    const el = pd.el;
+    pd.armed = true;
+    dragState = { id: parseInt(el.dataset.entityId, 10), key: dragGroupKey(el),
+                  kind: el.dataset.dragKind, section: el.dataset.section };
+    el.classList.add('dragging');
+    const g = document.createElement('div');
+    g.className = 'drag-ghost';
+    g.textContent = (el.textContent || '').trim().replace(/✎/g, '').slice(0, 24) || 'Moving…';
+    document.body.appendChild(g);
+    pd.ghost = g;
+    const sc = el.closest('.items-grid, .tab-strip, .subcat-row');
+    pd.scroller = sc || null;
+    // Axis by which way the container actually overflows (the needs-section
+    // .items-grid is a horizontal strip while the others scroll vertically).
+    pd.vertical = sc ? (sc.scrollHeight - sc.clientHeight) >= (sc.scrollWidth - sc.clientWidth) : true;
+    updateDragTarget(pd.lastX, pd.lastY);
+    pd.raf = requestAnimationFrame(dragAutoScroll);
+  }
+  async function finishDrag(commit) {
+    const cur = pd;
+    pd = null;
+    if (!cur) return;
+    clearTimeout(cur.timer);
+    if (cur.raf) cancelAnimationFrame(cur.raf);
+    if (cur.ghost) cur.ghost.remove();
+    cur.el.classList.remove('dragging');
+    const target = cur.target;
+    clearDropHighlights();
+    if (cur.armed) suppressClickUntil = Date.now() + 400;
+    try {
+      if (commit && cur.armed && target && dragState) {
+        if (isItemIntoCatDrop(target)) {
+          await moveItemToCategory(dragState.id, target.dataset.section, parseInt(target.dataset.entityId, 10));
+        } else if (isDropTarget(target)) {
+          const targetId = parseInt(target.dataset.entityId, 10);
+          const kind = target.dataset.dragKind;
+          const section = target.dataset.section;
+          const parentId = target.dataset.parentId != null ? parseInt(target.dataset.parentId, 10) : null;
+          if (kind === 'item')        await reorderEntities(section, 'item', null, dragState.id, targetId);
+          else if (kind === 'cat-top') await reorderEntities(section, 'cat', null, dragState.id, targetId);
+          else if (kind === 'cat-sub') await reorderEntities(section, 'cat', parentId, dragState.id, targetId);
+        }
+      }
+    } finally { dragState = null; }
+  }
+  document.addEventListener('pointermove', (e) => {
+    if (!pd || e.pointerId !== pd.pointerId) return;
+    pd.lastX = e.clientX; pd.lastY = e.clientY;
+    if (!pd.armed) {
+      const dist = Math.hypot(e.clientX - pd.sx, e.clientY - pd.sy);
+      if (pd.timer) {                       // touch: moved before the hold → it's a scroll
+        if (dist > DRAG_HOLD_SLOP) finishDrag(false);
+      } else if (dist >= DRAG_MOUSE_SLOP) { // mouse: movement IS the arm signal
+        armDrag();
+      }
       return;
     }
-    if (!isDropTarget(this)) return;
-    const targetId = parseInt(this.dataset.entityId, 10);
-    const draggedId = dragState.id;
-    const kind = this.dataset.dragKind;
-    const section = this.dataset.section;
-    const parentId = this.dataset.parentId != null ? parseInt(this.dataset.parentId, 10) : null;
-    if (kind === 'item')        await reorderEntities(section, 'item', null, draggedId, targetId);
-    else if (kind === 'cat-top') await reorderEntities(section, 'cat', null, draggedId, targetId);
-    else if (kind === 'cat-sub') await reorderEntities(section, 'cat', parentId, draggedId, targetId);
-  }
-  function onTileDragEnd() {
-    this.classList.remove('dragging');
-    document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
-    dragState = null;
-  }
+    updateDragTarget(e.clientX, e.clientY);
+  }, { passive: true });
+  document.addEventListener('pointerup', (e) => {
+    if (!pd || e.pointerId !== pd.pointerId) return;
+    finishDrag(true);
+  });
+  // A drop that ends back over the source tile would ALSO fire its click
+  // (down+up on the same element) and pop the editor — swallow it.
+  document.addEventListener('click', (e) => {
+    if (Date.now() < suppressClickUntil) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
+
   function attachDrag(el) {
-    el.draggable = true;
-    el.addEventListener('dragstart', onTileDragStart);
-    el.addEventListener('dragover', onTileDragOver);
-    el.addEventListener('dragleave', onTileDragLeave);
-    el.addEventListener('drop', onTileDrop);
-    el.addEventListener('dragend', onTileDragEnd);
+    el.draggable = false;   // HTML5 DnD retired — pointer drag handles all devices
+    el.addEventListener('pointerdown', (e) => {
+      if (pd || !editMode) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      pd = { el, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY,
+             lastX: e.clientX, lastY: e.clientY, armed: false, target: null,
+             ghost: null, raf: null, timer: null };
+      if (e.pointerType !== 'mouse') {
+        pd.timer = setTimeout(() => { if (pd && !pd.armed) armDrag(); }, DRAG_HOLD_MS);
+      }
+    });
+    el.addEventListener('pointercancel', () => { if (pd && pd.el === el) finishDrag(false); });
   }
 
   // Reorder a sibling group and persist new `order` values.
@@ -2941,6 +3055,25 @@
     document.getElementById('mode-status').textContent = on ? 'Edit mode' : '';
     applyDisplay();   // re-evaluate label hiding now that editMode changed
     renderAll();
+    showEditHint(on);
+  }
+
+  // The reorder gesture is invisible (hold until the tile lifts, then drag)
+  // so a fading hint teaches it each time edit mode opens. Tap to dismiss.
+  let editHintTimer = null;
+  function showEditHint(on) {
+    let h = document.getElementById('edit-hint');
+    clearTimeout(editHintTimer);
+    if (!on) { if (h) h.classList.remove('show'); return; }
+    if (!h) {
+      h = document.createElement('div');
+      h.id = 'edit-hint';
+      h.textContent = '✋ Hold a tile until it lifts, then drag it onto another tile to reorder — or onto a folder tab to move it. (With a mouse: just drag.)';
+      h.addEventListener('click', () => h.classList.remove('show'));
+      document.body.appendChild(h);
+    }
+    requestAnimationFrame(() => h.classList.add('show'));
+    editHintTimer = setTimeout(() => h.classList.remove('show'), 7000);
   }
 
   // ---- Login modal ----

@@ -6,6 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -66,9 +68,11 @@ import kotlinx.coroutines.launch
 
 /**
  * One of the three main columns (People / Nouns / Verbs) — port of
- * `Views/SectionColumn.swift` (M3 scope: selection + tap-to-speak; edit-mode
- * drag/add arrives with M8). Layout: title → category chips → subcategory
- * chips → tile grid. Location categories render their children as room tiles.
+ * `Views/SectionColumn.swift`, INCLUDING edit-mode long-press drag: hold a
+ * tile until it lifts (haptic), drop on a sibling to reorder or on a folder
+ * chip to move it there; dragging near the grid edge autoscrolls. Layout:
+ * title → category chips → subcategory chips → tile grid. Location
+ * categories render their children as room tiles.
  */
 @Composable
 fun SectionColumn(
@@ -274,6 +278,11 @@ private fun TileGrid(
     val paged = access.buttonsNav && !editMode
     val dropZonePx = with(LocalDensity.current) { 140.dp.toPx() }
     val gridState = rememberLazyGridState()
+    // Edit-drag polish: haptic on lift + edge autoscroll (grid bounds in
+    // root space so they compare directly with dragPos).
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    var gridBounds by remember { mutableStateOf<Rect?>(null) }
+    val edgePx = with(LocalDensity.current) { 64.dp.toPx() }
 
     // Long-press drag state — uniform tile size means the drop target is just
     // "whichever cell rect the pointer ends inside" (the plan's port #7).
@@ -347,7 +356,8 @@ private fun TileGrid(
         horizontalArrangement = Arrangement.spacedBy(BoardMetrics.TILE_GAP.dp),
         verticalArrangement = Arrangement.spacedBy(BoardMetrics.TILE_GAP.dp),
         modifier = Modifier.fillMaxWidth().let { if (paged) it.weight(1f) else it.fillMaxHeight() }
-            .padding(horizontal = BoardMetrics.COLUMN_PAD.dp, vertical = 8.dp),
+            .padding(horizontal = BoardMetrics.COLUMN_PAD.dp, vertical = 8.dp)
+            .onGloballyPositioned { gridBounds = it.boundsInRoot() },
     ) {
         items(shown, key = { it.id }) { tile ->
             val isDragging = dragId == tile.id
@@ -373,11 +383,31 @@ private fun TileGrid(
                         editMode -> Modifier.pointerInput(tile.id, tiles.map { it.id }) {
                             detectDragGesturesAfterLongPress(
                                 onDragStart = {
+                                    // The lift is invisible without feedback —
+                                    // buzz like iOS so the parent knows the
+                                    // tile is "picked up".
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                     dragOrigin = cellRects[tile.id]?.center ?: Offset.Zero
                                     dragPos = dragOrigin
                                     dragId = tile.id
                                 },
-                                onDrag = { change, amount -> change.consume(); dragPos += amount },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    dragPos += amount
+                                    // Autoscroll: nudge the grid when the drag
+                                    // point nears its top/bottom edge so
+                                    // off-screen drop targets become reachable
+                                    // (their rects register as cells compose).
+                                    gridBounds?.let { gb ->
+                                        val edge = edgePx
+                                        val step = when {
+                                            dragPos.y < gb.top + edge -> -((gb.top + edge - dragPos.y) / edge) * 18f
+                                            dragPos.y > gb.bottom - edge -> ((dragPos.y - (gb.bottom - edge)) / edge) * 18f
+                                            else -> 0f
+                                        }
+                                        if (step != 0f) scope.launch { gridState.scrollBy(step) }
+                                    }
+                                },
                                 onDragEnd = { completeDrag() },
                                 onDragCancel = { dragId = null },
                             )

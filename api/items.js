@@ -8,11 +8,13 @@
 //     only the owner + admin can edit; written from the therapist library.
 // The CREATE path infers context from the parent category (looked up by id).
 // PUT/DELETE load the row and run canEditContent against its ownership.
-import { del } from '@vercel/blob';
+import { del, put } from '@vercel/blob';
+import { randomUUID } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
 import { sql, rowToItem, stampLayoutCustomized } from './_lib/db.js';
 import { canEditContent, isParentOf } from './_lib/access.js';
 import { archivePriorImage } from './_lib/image-history.js';
+import { readBlobBytes } from './_lib/blob.js';
 
 export default async function handler(req, res) {
   const auth = await checkAuth(req);
@@ -71,13 +73,31 @@ async function revertImage(req, res, db, user, b) {
     SELECT 1 FROM item_image_history
     WHERE item_id = ${itemId} AND child_id = ${item.child_id} AND blob_key = ${key} LIMIT 1`;
   if (!hist.length) { res.status(400).json({ error: 'key is not in this tile\'s history' }); return; }
-  if (item.image_key && item.image_key !== key) {
+  // SHARED-DEFAULT keys can't just be written back: sync's overlay treats
+  // 'style-defaults/' and 'taxonomy-defaults/' image keys as REPLACEABLE and
+  // re-skins them with the current style's default on the very next sync —
+  // so a revert TO one succeeded in the DB but visually never happened
+  // ("messaging was all good but it wouldn't do the swap"). The family
+  // explicitly chose THIS picture, so re-home its bytes to a child-owned
+  // key the overlay never touches.
+  let finalKey = key;
+  if (/^(style-defaults|taxonomy-defaults)\//.test(key) && item.child_id) {
+    try {
+      const bytes = await readBlobBytes(key);
+      const ext = (key.split('.').pop() || 'png').slice(0, 4);
+      finalKey = `item-images/${item.child_id}/revert-${randomUUID()}.${ext}`;
+      await put(finalKey, bytes.buffer, { access: 'private', contentType: bytes.contentType, addRandomSuffix: false });
+    } catch (_) {
+      finalKey = key;   // copy failed → old behavior (better than blocking the revert)
+    }
+  }
+  if (item.image_key && item.image_key !== finalKey) {
     await archivePriorImage({ db, childId: item.child_id, itemId: item.id, oldKey: item.image_key,
                               label: item.label, section: item.section, source: 'revert',
                               who: user && user.email ? user.email : null });
   }
-  await db`UPDATE items SET image_key = ${key}, updated_at = NOW() WHERE id = ${item.id}`;
-  res.status(200).json({ ok: true, imageKey: key });
+  await db`UPDATE items SET image_key = ${finalKey}, updated_at = NOW() WHERE id = ${item.id}`;
+  res.status(200).json({ ok: true, imageKey: finalKey });
 }
 
 async function create(req, res, db, user) {
