@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The mastery-bars + recent-sessions surface, lifted out of the old StatsView
 /// so the hub stays clean. Uses the same /api/analytics call as AccuracyView.
@@ -22,6 +23,9 @@ struct MasterySessionsView: View {
                 }
             }
             .padding(16)
+            // Full width from the FIRST frame — otherwise the loading spinner
+            // defines the width and the page pops from a skinny column.
+            .frame(maxWidth: .infinity, minHeight: UIScreen.main.bounds.height * 0.8, alignment: .top)
         }
         .background(Color(hex: Brand.bg))
         .navigationTitle("Mastery & sessions")

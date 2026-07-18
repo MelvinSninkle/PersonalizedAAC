@@ -23,3 +23,4 @@ Sounds/
 ios/App/Pods/
 ios/App/App/public/
 ios/App/build/
+package-lock.json

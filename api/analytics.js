@@ -10,6 +10,7 @@ import { sql } from './_lib/db.js';
 import { canAccessChild } from './_lib/access.js';
 
 const MODE_LABEL = {
+  sentence: 'Sentence',
   self_paced: 'Self-Paced Game',
   facilitated: 'Facilitated',
   // PRD §5 — the three scored game modes.
@@ -65,6 +66,7 @@ export default async function handler(req, res) {
     recentSessions: [],
     recentSpikes: [],                    // PRD §6 mastery signal
     stats: null,                         // "This week" cards: this vs last 7 days
+    sentences: null,                     // Sentence activity: ▶ presses of the builder
   };
 
   // ---- USE: taps per category per bucket ----
@@ -275,13 +277,43 @@ export default async function handler(req, res) {
     out.hasLegacyScoring = out.recentSessions.some(s => s.scoringVersion < 2);
   } catch (_) { /* */ }
 
+  // ---- SENTENCE ACTIVITY: every ▶ press of the sentence builder ----
+  // mode='sentence' sessions carry the spoken text in `notes`. Excluded from
+  // the This-week game cards below (they're communication, not scoring) —
+  // this is their own panel: count + delta, per-day sparkbars, recent texts.
+  try {
+    const rows = await db`
+      SELECT notes, started_at,
+             (started_at >= now() - interval '7 days') AS this_week,
+             floor(extract(epoch from (now() - started_at)) / 86400)::int AS days_ago
+      FROM sessions
+      WHERE child_id = ${childId} AND mode = 'sentence'
+        AND started_at >= now() - interval '14 days'
+      ORDER BY started_at DESC LIMIT 300`;
+    if (rows.length) {
+      const perDay = new Array(7).fill(0);   // [6 days ago … today]
+      let weekCount = 0, prevWeekCount = 0;
+      const recent = [];
+      for (const r of rows) {
+        if (r.this_week) {
+          weekCount += 1;
+          const d = Math.min(6, Math.max(0, Number(r.days_ago)));
+          perDay[6 - d] += 1;
+        } else prevWeekCount += 1;
+        if (recent.length < 6 && r.notes) recent.push({ text: String(r.notes).slice(0, 120), at: r.started_at });
+      }
+      out.sentences = { weekCount, prevWeekCount, perDay, recent };
+    }
+  } catch (_) { /* */ }
+
   // ---- "THIS WEEK" STAT CARDS (this vs previous 7 days) ----
   try {
     const rows = await db`
       SELECT (started_at >= now() - interval '7 days') AS this_week,
              mode, correct_count, item_count, slides_attempted, started_at, ended_at
       FROM sessions
-      WHERE child_id = ${childId} AND started_at >= now() - interval '14 days'`;
+      WHERE child_id = ${childId} AND mode <> 'sentence'
+        AND started_at >= now() - interval '14 days'`;
     const half = () => ({ sessions: 0, correct: 0, denom: 0, items: 0, passiveSecs: 0 });
     const now7 = half(), prev7 = half();
     for (const r of rows) {

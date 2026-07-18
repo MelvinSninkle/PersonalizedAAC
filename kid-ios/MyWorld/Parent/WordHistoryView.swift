@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Searchable tap log — every word the child tapped, with timestamps,
 /// filterable by word substring and time range. Server pages 200 at a time.
@@ -41,6 +42,9 @@ struct WordHistoryView: View {
                 }
             }
             .padding(16)
+            // Full width from the FIRST frame — otherwise the loading spinner
+            // defines the width and the page pops from a skinny column.
+            .frame(maxWidth: .infinity, minHeight: UIScreen.main.bounds.height * 0.8, alignment: .top)
         }
         .background(Color(hex: Brand.bg))
         .navigationTitle("Word history")
@@ -139,7 +143,9 @@ struct WordHistoryView: View {
                 query: query.trimmingCharacters(in: .whitespaces),
                 since: since,
                 until: Date(),
-                limit: 200,
+                // 60 per page: a screenful and a bit — Load more pages the
+                // rest. 200-row first paints made the page feel endless.
+                limit: 60,
                 offset: append ? rows.count : 0
             )
             if append { rows.append(contentsOf: resp.rows) }

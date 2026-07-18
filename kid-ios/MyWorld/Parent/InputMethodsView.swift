@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import UIKit
 
 /// How the child is answering — tap vs verbal vs object vs physical vs
 /// gesture. PRD §3 mercy bridge: a verbal or physical response is logged as
@@ -28,6 +29,9 @@ struct InputMethodsView: View {
                 }
             }
             .padding(16)
+            // Full width from the FIRST frame — otherwise the loading spinner
+            // defines the width and the page pops from a skinny column.
+            .frame(maxWidth: .infinity, minHeight: UIScreen.main.bounds.height * 0.8, alignment: .top)
         }
         .background(Color(hex: Brand.bg))
         .navigationTitle("How they answer")

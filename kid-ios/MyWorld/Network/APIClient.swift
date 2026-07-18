@@ -181,6 +181,20 @@ struct APIClient {
         _ = try? await request(method: "POST", path: "/api/game-log", body: body, contentType: "application/json")
     }
 
+    /// Log one ▶ of the sentence builder (mode='sentence'; the text rides in
+    /// notes) — feeds the dashboard's Sentence activity panel. Fire-and-forget.
+    func logSentence(childId: String, words: [String]) async {
+        guard !words.isEmpty else { return }
+        let now = ISO8601DateFormatter().string(from: Date())
+        guard let body = try? JSONSerialization.data(withJSONObject: [
+            "childId": childId, "mode": "sentence",
+            "itemCount": words.count, "correctCount": 0,
+            "startedAt": now, "endedAt": now,
+            "notes": words.joined(separator: " "),
+        ]) else { return }
+        _ = try? await request(method: "POST", path: "/api/game-log", body: body, contentType: "application/json")
+    }
+
     /// POST /api/exposure-tick — record one exposure of a skill for a child
     /// and let the server recompute the schedule (PRD §8). Used by the
     /// slideshow at session-end; matching/auditory/expressive sessions tick

@@ -93,15 +93,28 @@ extension APIClient {
         // Important because the server's analytics endpoint may degrade any
         // single section to [] on error; we never want one weak signal to
         // hide the rest.
+        struct SentenceRow: Codable, Identifiable {
+            var id: String { (at ?? "") + text }
+            let text: String
+            let at: String?        // ISO timestamp
+        }
+        struct SentencesPayload: Codable {
+            let weekCount: Int
+            let prevWeekCount: Int
+            let perDay: [Int]      // [6 days ago … today]
+            let recent: [SentenceRow]
+        }
+
         let labels: [String]
         let mastery: [MasteryRow]
         let recentSessions: [SessionRow]
         let use: UsePayload
         let games: GamesPayload
         let gamesByMode: GamesByModePayload
+        let sentences: SentencesPayload?
 
         enum CodingKeys: String, CodingKey {
-            case labels, mastery, recentSessions, use, games, gamesByMode
+            case labels, mastery, recentSessions, use, games, gamesByMode, sentences
         }
 
         init(from decoder: Decoder) throws {
@@ -112,6 +125,7 @@ extension APIClient {
             use            = (try? c.decode(UsePayload.self, forKey: .use))          ?? UsePayload(series: [])
             games          = (try? c.decode(GamesPayload.self, forKey: .games))      ?? GamesPayload(series: [])
             gamesByMode    = (try? c.decode(GamesByModePayload.self, forKey: .gamesByMode)) ?? GamesByModePayload(series: [])
+            sentences      = try? c.decode(SentencesPayload.self, forKey: .sentences)
         }
     }
 
