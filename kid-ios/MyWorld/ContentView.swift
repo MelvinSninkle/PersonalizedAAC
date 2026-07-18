@@ -23,15 +23,18 @@ struct ContentView: View {
         //
         // A RETURNING parent who logs in has needsOnboarding == false and
         // lands straight on their board / parent home.
-        if !auth.isSignedIn || onboarding.needsOnboarding {
-            OnboardingFlow()
-        } else {
-            switch mode.role {
-            case .unset:      RolePickerView()
-            case .childBoard: BoardView()
-            case .parent:     ParentHomeView()
+        Group {
+            if !auth.isSignedIn || onboarding.needsOnboarding {
+                OnboardingFlow()
+            } else {
+                switch mode.role {
+                case .unset:      RolePickerView()
+                case .childBoard: BoardView()
+                case .parent:     ParentHomeView()
+                }
             }
         }
+        .updateGate()   // server-driven min/suggested build check (UpdateGate.swift)
     }
 }
 

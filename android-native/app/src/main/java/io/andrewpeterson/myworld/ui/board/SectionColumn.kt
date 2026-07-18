@@ -102,6 +102,19 @@ fun SectionColumn(
     // Chip drop-targets (root coords) — a long-press drag that ends over a
     // chip moves the tile into that folder (iOS drag-to-chip parity).
     val chipRects = remember { mutableStateMapOf<Int, Rect>() }
+    val colScope = rememberCoroutineScope()
+
+    // Chip drag-reorder commit (edit mode): persist the previewed id order.
+    fun persistCatOrder(ids: List<Int>) {
+        colScope.launch {
+            for ((i, cid) in ids.withIndex()) {
+                try {
+                    c.api.updateCategory(id = cid, childId = c.auth.childSlug, order = i * 1000)
+                } catch (_: Exception) {}
+            }
+            c.board.refresh(c.auth.childSlug)
+        }
+    }
 
     val roots = c.board.roots(section)
 
@@ -170,7 +183,8 @@ fun SectionColumn(
 
         CategoryTabStrip(roots, selectedCategoryId, prefs.hideLabels,
             paged = (access.buttonsNav || sentenceMode) && !editMode,
-            onChipBounds = if (editMode) ({ id, r -> chipRects[id] = r }) else null) { id ->
+            onChipBounds = if (editMode) ({ id, r -> chipRects[id] = r }) else null,
+            onReorder = if (editMode) ({ ids -> persistCatOrder(ids) }) else null) { id ->
             c.boardNav.setCategory(section, id)
             // Every REAL chip press is remembered as the header Play/Teach scope.
             io.andrewpeterson.myworld.game.PlayScope.note("cat:$id", c.auth.childSlug)
@@ -179,7 +193,8 @@ fun SectionColumn(
         if (activeCategory != null && subs.isNotEmpty()) {
             SubcategoryStrip(subs, selectedSubcategoryId ?: subs.first().id, prefs.hideLabels,
                 paged = (access.buttonsNav || sentenceMode) && !editMode,
-                onChipBounds = if (editMode) ({ id, r -> chipRects[id] = r }) else null) { id ->
+                onChipBounds = if (editMode) ({ id, r -> chipRects[id] = r }) else null,
+                onReorder = if (editMode) ({ ids -> persistCatOrder(ids) }) else null) { id ->
                 c.boardNav.setSubcategory(section, id)
                 io.andrewpeterson.myworld.game.PlayScope.note("cat:$id", c.auth.childSlug)
                 // Location chips speak their name on selection.
@@ -290,15 +305,25 @@ private fun TileGrid(
     var dragId by remember { mutableStateOf<Int?>(null) }
     var dragOrigin by remember { mutableStateOf(Offset.Zero) }
     var dragPos by remember { mutableStateOf(Offset.Zero) }
+    // Live-shuffle preview: while a tile is lifted, the OTHER tiles part to
+    // show the landing slot — this holds the previewed id order (null = the
+    // stored order). Keyed on the tile-id list so a board refresh (which
+    // re-renders in the just-persisted order) drops the stale preview.
+    var previewIds by remember(tiles.map { it.id }) { mutableStateOf<List<Int>?>(null) }
+    val displayTiles = previewIds?.let { ids ->
+        val by = tiles.associateBy { it.id }
+        ids.mapNotNull { by[it] } + tiles.filter { t -> t.id !in ids }
+    } ?: tiles
 
     fun completeDrag() {
         val id = dragId ?: return
         dragId = null
-        val moved = tiles.firstOrNull { it.id == id } ?: return
+        val moved = tiles.firstOrNull { it.id == id } ?: run { previewIds = null; return }
         val point = dragPos
         // Dropped on a folder chip → move the tile into that folder.
         val chip = chipRects.entries.firstOrNull { it.value.contains(point) }
         if (chip != null) {
+            previewIds = null
             if (chip.key != moved.categoryId) scope.launch {
                 try {
                     c.api.updateItem(id = moved.id, childId = c.auth.childSlug, categoryId = chip.key)
@@ -307,7 +332,28 @@ private fun TileGrid(
             }
             return
         }
-        // Dropped on a sibling cell → splice + i*1000 resequence (web parity).
+        // The live shuffle already showed where the tile lands — the previewed
+        // order IS the answer; persist it (i*1000 resequence, web parity). The
+        // preview stays visible until the refresh re-keys it, so nothing snaps.
+        val ids = previewIds
+        if (ids != null) {
+            val by = tiles.associateBy { it.id }
+            val ordered = ids.mapNotNull { by[it] } + tiles.filter { t -> t.id !in ids }
+            scope.launch {
+                for ((idx, t) in ordered.withIndex()) {
+                    val newOrder = idx * 1000
+                    if (t.order != newOrder) {
+                        try {
+                            c.api.updateItem(id = t.id, childId = c.auth.childSlug, order = newOrder)
+                        } catch (_: Exception) {}
+                    }
+                }
+                c.board.refresh(c.auth.childSlug)
+            }
+            return
+        }
+        // No shuffle happened (a straight drop without crossing a sibling) —
+        // fall back to the original splice on the cell under the pointer.
         val target = cellRects.entries.firstOrNull { it.key != id && it.value.contains(point) }?.key
             ?: return
         val list = tiles.toMutableList()
@@ -339,7 +385,7 @@ private fun TileGrid(
         val per = if (paged) maxOf(1, rows * cols) else tiles.size
         val pageCount = if (paged) maxOf(1, (tiles.size + per - 1) / per) else 1
         val p = minOf(page, pageCount - 1)
-        val shown = if (paged) tiles.drop(p * per).take(per) else tiles
+        val shown = if (paged) displayTiles.drop(p * per).take(per) else displayTiles
 
         LaunchedEffect(highlightId, paged, per) {
             val idx = tiles.indexOfFirst { it.id == highlightId }
@@ -363,16 +409,21 @@ private fun TileGrid(
             val isDragging = dragId == tile.id
             Box(
                 Modifier
+                    // Displaced siblings glide to their new slots — the moving
+                    // gap is what tells the parent where the drop lands.
+                    .then(if (!isDragging) Modifier.animateItem() else Modifier)
                     .onGloballyPositioned {
-                        // Freeze the dragged tile's rect so the float offset
-                        // stays anchored to where the drag began.
-                        if (dragId != tile.id) cellRects[tile.id] = it.boundsInRoot()
+                        // Rects track live (the shuffle relocates cells); the
+                        // dragged tile's OWN rect feeds the float below, so the
+                        // lifted tile stays glued to the finger across shuffles.
+                        cellRects[tile.id] = it.boundsInRoot()
                     }
                     .zIndex(if (isDragging) 1f else 0f)
                     .graphicsLayer {
                         if (isDragging) {
-                            translationX = dragPos.x - dragOrigin.x
-                            translationY = dragPos.y - dragOrigin.y
+                            val center = cellRects[tile.id]?.center ?: dragOrigin
+                            translationX = dragPos.x - center.x
+                            translationY = dragPos.y - center.y
                             scaleX = 1.06f; scaleY = 1.06f; alpha = 0.85f
                         }
                     }
@@ -394,6 +445,24 @@ private fun TileGrid(
                                 onDrag = { change, amount ->
                                     change.consume()
                                     dragPos += amount
+                                    // Live shuffle: crossing into a sibling's
+                                    // cell moves the lifted tile to that slot
+                                    // in the preview — the neighbors part and
+                                    // the gap shows the landing spot. Once the
+                                    // dragged tile owns the slot under the
+                                    // finger, no sibling rect matches → stable.
+                                    val overId = cellRects.entries.firstOrNull {
+                                        it.key != tile.id && it.value.contains(dragPos)
+                                    }?.key
+                                    if (overId != null) {
+                                        val order = (previewIds ?: tiles.map { it.id }).toMutableList()
+                                        val di = order.indexOf(tile.id)
+                                        val ti = order.indexOf(overId)
+                                        if (di >= 0 && ti >= 0 && di != ti) {
+                                            order.removeAt(di); order.add(ti, tile.id)
+                                            previewIds = order
+                                        }
+                                    }
                                     // Autoscroll: nudge the grid when the drag
                                     // point nears its top/bottom edge so
                                     // off-screen drop targets become reachable
@@ -409,7 +478,7 @@ private fun TileGrid(
                                     }
                                 },
                                 onDragEnd = { completeDrag() },
-                                onDragCancel = { dragId = null },
+                                onDragCancel = { dragId = null; previewIds = null },
                             )
                         }
                         // Drag-to-bar staging (parent-enabled): the original

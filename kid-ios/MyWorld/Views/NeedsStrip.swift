@@ -23,6 +23,10 @@ struct NeedsStrip: View {
     @Environment(AccessPrefs.self) private var access
     @Environment(SentenceBar.self) private var sentence
     @State private var page = 0
+    /// Live-shuffle drag preview (see SectionColumn) — siblings part to show
+    /// the landing slot while a strip tile is lifted.
+    @State private var dragSourceId: Int? = nil
+    @State private var previewIds: [Int]? = nil
 
     private var tiles: [Tile] {
         board.tiles
@@ -32,6 +36,15 @@ struct NeedsStrip: View {
                 if a.order != b.order   { return a.order < b.order }
                 return a.id < b.id
             }
+    }
+
+    private var orderedTiles: [Tile] {
+        guard editMode, let ids = previewIds else { return tiles }
+        let base = tiles
+        let by = Dictionary(uniqueKeysWithValues: base.map { ($0.id, $0) })
+        var out = ids.compactMap { by[$0] }
+        out += base.filter { !ids.contains($0.id) }
+        return out
     }
 
     /// Height hugs the content: the square image, plus the label band only
@@ -68,13 +81,17 @@ struct NeedsStrip: View {
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: BoardMetrics.tileGap) {
-                    ForEach(tiles) { tile in
+                    ForEach(orderedTiles) { tile in
                         needsCell(tile)
                         // Unlocked drag-to-reorder within the strip (Needs is
                         // flat — no categories, and never crosses sections).
-                        .draggableIf(editMode, "tile|needs|\(tile.id)")
+                        // The @autoclosure payload stamps the drag source at
+                        // lift; hover shuffles the preview (see SectionColumn).
+                        .draggableIf(editMode, needsPayload(tile))
                         .dropDestination(for: String.self) { items, _ in
                             handleDrop(items, onto: tile)
+                        } isTargeted: { over in
+                            if over { previewShuffle(around: tile) }
                         }
                     }
                     if editMode {
@@ -87,7 +104,27 @@ struct NeedsStrip: View {
             }
             .frame(height: stripHeight)
             .background(Color(hex: prefs.colorNeeds))
+            .onChange(of: editMode) { _, _ in previewIds = nil; dragSourceId = nil }
+            .onChange(of: tiles.map(\.id)) { _, _ in previewIds = nil }
         }
+    }
+
+    private func needsPayload(_ tile: Tile) -> String {
+        Task { @MainActor in
+            dragSourceId = tile.id
+            previewIds = nil
+        }
+        return "tile|needs|\(tile.id)"
+    }
+
+    private func previewShuffle(around target: Tile) {
+        guard editMode, let dragId = dragSourceId, dragId != target.id else { return }
+        var ids = previewIds ?? tiles.map(\.id)
+        guard let di = ids.firstIndex(of: dragId),
+              let ti = ids.firstIndex(of: target.id) else { return }
+        ids.remove(at: di)
+        ids.insert(dragId, at: ti)
+        withAnimation(.easeInOut(duration: 0.18)) { previewIds = ids }
     }
 
     /// One Needs tile with the sentence-constructor lift attached when it's on
@@ -152,12 +189,31 @@ struct NeedsStrip: View {
         .opacity(disabled ? 0.25 : 1)
     }
 
-    /// Reorder within the strip — same splice + i*1000 resequence as the web.
+    /// Reorder within the strip. When the live shuffle previewed an order,
+    /// persist exactly that (the preview stays up until the refresh re-keys
+    /// it); otherwise the original splice on the drop target.
     private func handleDrop(_ items: [String], onto target: Tile) -> Bool {
         guard editMode, let s = items.first else { return false }
         let parts = s.split(separator: "|")
         guard parts.count == 3, parts[0] == "tile", parts[1] == "needs",
-              let dragId = Int(parts[2]), dragId != target.id else { return false }
+              let dragId = Int(parts[2]) else { return false }
+        if let ids = previewIds, ids.contains(dragId) {
+            dragSourceId = nil
+            let ordered = orderedTiles
+            Task {
+                let api = APIClient()
+                for (i, t) in ordered.enumerated() {
+                    let newOrder = i * 1000
+                    if t.order != newOrder {
+                        _ = try? await api.updateItem(id: t.id, order: newOrder, childId: auth.childSlug)
+                    }
+                }
+                await board.refresh(childId: auth.childSlug)
+                await MainActor.run { previewIds = nil }
+            }
+            return true
+        }
+        guard dragId != target.id else { return false }
         Task {
             var list = tiles
             guard let di = list.firstIndex(where: { $0.id == dragId }),

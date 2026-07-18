@@ -32,6 +32,12 @@ struct SectionColumn: View {
     /// Button-navigation page for the tile grid (strips page themselves).
     @State private var gridPage = 0
     @State private var tilesPerPage = 20
+    /// Live-shuffle drag preview: while a system drag session is in flight the
+    /// OTHER tiles part to show the landing slot. `dragSourceId` is stamped by
+    /// the draggable payload's @autoclosure the moment the lift happens;
+    /// `previewIds` is the previewed order (nil = the stored order).
+    @State private var dragSourceId: Int? = nil
+    @State private var previewIds: [Int]? = nil
 
     // Selection is HOISTED into BoardNav (it was per-column @State) so
     // listening repeat-navigate can select a category from the header.
@@ -94,14 +100,16 @@ struct SectionColumn: View {
                              selectedId: noting(catBinding),
                              hideLabels: prefs.hideLabels,
                              paged: (access.buttonsNav || sentence.mode) && !editMode,
-                             onDropTile: chipDropHandler)
+                             onDropTile: chipDropHandler,
+                             onReorder: editMode ? { ids in persistCatOrder(ids) } : nil)
 
             if let cat = activeCategory(in: cats), !board.children(of: cat).isEmpty {
                 SubcategoryStrip(subcategories: board.children(of: cat),
                                  selectedId: noting(subBinding),
                                  hideLabels: prefs.hideLabels,
                                  paged: (access.buttonsNav || sentence.mode) && !editMode,
-                                 onDropTile: chipDropHandler)
+                                 onDropTile: chipDropHandler,
+                                 onReorder: editMode ? { ids in persistCatOrder(ids) } : nil)
             }
 
             tilesGrid
@@ -115,6 +123,9 @@ struct SectionColumn: View {
             gridPage = 0
         }
         .onChange(of: selectedSubcategoryId) { _, _ in gridPage = 0 }
+        // A cancelled system drag has no callback — locking the board, or the
+        // next refresh re-keying the tile list, is what clears a stale preview.
+        .onChange(of: editMode) { _, _ in previewIds = nil; dragSourceId = nil }
         // Listening repeat-navigate landed on a tile in THIS column: jump the
         // paged grid to its page (scroll mode scrolls inside normalTilesGrid).
         .onChange(of: nav.highlight) { _, h in
@@ -226,9 +237,11 @@ struct SectionColumn: View {
             // can never cross the People/Nouns/Verbs family boundary.
             // Only attached while unlocked — the child's long-presses
             // must never start a drag session.
-            .draggableIf(editMode, "tile|\(section.rawValue)|\(tile.id)")
+            .draggableIf(editMode, dragPayload(tile))
             .dropDestination(for: String.self) { items, _ in
                 handleTileDrop(items, onto: tile)
+            } isTargeted: { over in
+                if over { previewShuffle(around: tile) }
             }
         if dragStaging {
             base.simultaneousGesture(quickLift(tile))
@@ -255,7 +268,7 @@ struct SectionColumn: View {
     }
 
     private var normalTilesGrid: some View {
-        let tiles = effectiveCategory.map { board.tiles(in: $0) } ?? []
+        let tiles = applyPreview(effectiveCategory.map { board.tiles(in: $0) } ?? [])
         let cols = max(1, prefs.across(section))
         let gridCols = Array(repeating: GridItem(.fixed(tileSize), spacing: BoardMetrics.tileGap),
                              count: cols)
@@ -289,6 +302,15 @@ struct SectionColumn: View {
             .padding(.vertical, 8)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Catch-all: releasing anywhere over the grid (not on a specific
+            // cell) commits whatever the live shuffle is showing — the parent
+            // drops "what they see". Also our only reliable end-of-drag hook.
+            .dropDestination(for: String.self) { items, _ in
+                guard let dragId = draggedTileId(items), let cat = effectiveCategory,
+                      let ids = previewIds, ids.contains(dragId) else { return false }
+                commitPreview(in: cat)
+                return true
+            }
             .onChange(of: nav.highlight) { _, h in
                 guard let h, h.section == section else { return }
                 withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(cellKey(h.tileId), anchor: .center) }
@@ -344,12 +366,75 @@ struct SectionColumn: View {
         return id
     }
 
-    /// Drop on a TILE: same category → reorder in place (mirrors the web's
-    /// splice + i*1000 resequence); different category in this section → move
-    /// it here, inserted at the target's spot.
+    /// The draggable payload — an @autoclosure evaluated when the system drag
+    /// session actually LIFTS, which is our only start-of-drag signal. The
+    /// side effect stamps the source tile so hover events can shuffle.
+    private func dragPayload(_ tile: Tile) -> String {
+        Task { @MainActor in
+            dragSourceId = tile.id
+            previewIds = nil
+        }
+        return "tile|\(section.rawValue)|\(tile.id)"
+    }
+
+    /// Live shuffle: hovering a sibling moves the lifted tile to that slot in
+    /// a previewed order, so the gap always shows where the drop lands. Only
+    /// same-category tiles shuffle; a cross-category drag keeps the old
+    /// insert-at-target behavior on drop.
+    private func previewShuffle(around target: Tile) {
+        guard editMode, let dragId = dragSourceId, dragId != target.id,
+              let cat = effectiveCategory else { return }
+        var ids = previewIds ?? board.tiles(in: cat).map(\.id)
+        guard let di = ids.firstIndex(of: dragId),
+              let ti = ids.firstIndex(of: target.id) else { return }
+        ids.remove(at: di)
+        ids.insert(dragId, at: ti)
+        withAnimation(.easeInOut(duration: 0.18)) { previewIds = ids }
+    }
+
+    /// Reorder `base` by the previewed ids (unlisted tiles keep their relative
+    /// order at the end). Identity — not a copy dance — when no preview is up.
+    private func applyPreview(_ base: [Tile]) -> [Tile] {
+        guard editMode, let ids = previewIds else { return base }
+        let by = Dictionary(uniqueKeysWithValues: base.map { ($0.id, $0) })
+        var out = ids.compactMap { by[$0] }
+        out += base.filter { !ids.contains($0.id) }
+        return out
+    }
+
+    /// Persist the previewed order (i*1000 resequence, web parity). The
+    /// preview stays up until the refreshed board arrives in the saved order,
+    /// so the grid never snaps back through the old arrangement.
+    private func commitPreview(in cat: Category) {
+        dragSourceId = nil
+        let ids = previewIds ?? []
+        Task {
+            let base = board.tiles(in: cat)
+            let by = Dictionary(uniqueKeysWithValues: base.map { ($0.id, $0) })
+            var ordered = ids.compactMap { by[$0] }
+            ordered += base.filter { t in !ids.contains(t.id) }
+            let api = APIClient()
+            for (i, t) in ordered.enumerated() {
+                let newOrder = i * 1000
+                if t.order != newOrder {
+                    _ = try? await api.updateItem(id: t.id, order: newOrder, childId: auth.childSlug)
+                }
+            }
+            await board.refresh(childId: auth.childSlug)
+            await MainActor.run { previewIds = nil }
+        }
+    }
+
+    /// Drop on a TILE: if the live shuffle previewed an order, that order IS
+    /// the answer — persist it. Otherwise (cross-category drag-in) fall back
+    /// to insert-at-target.
     private func handleTileDrop(_ items: [String], onto target: Tile) -> Bool {
-        guard let dragId = draggedTileId(items), dragId != target.id,
-              let cat = effectiveCategory else { return false }
+        guard let dragId = draggedTileId(items), let cat = effectiveCategory else { return false }
+        if let ids = previewIds, ids.contains(dragId) {
+            commitPreview(in: cat)
+            return true
+        }
+        guard dragId != target.id else { return false }
         Task { await reorderOrMove(draggedId: dragId, targetId: target.id, in: cat) }
         return true
     }
@@ -359,6 +444,8 @@ struct SectionColumn: View {
     private var chipDropHandler: (Category, [String]) -> Bool {
         { chip, items in
             guard let dragId = draggedTileId(items) else { return false }
+            previewIds = nil            // folder move beats the reorder preview
+            dragSourceId = nil
             Task { await moveTile(dragId, toCategory: chip.id) }
             return true
         }
@@ -385,6 +472,18 @@ struct SectionColumn: View {
                                           order: (list[ti].order) - 500, childId: auth.childSlug)
         }
         await board.refresh(childId: auth.childSlug)
+    }
+
+    /// Persist a chip strip's previewed order (category OR subcategory chips —
+    /// the ids define the sibling group; i*1000 resequence, web parity).
+    private func persistCatOrder(_ ids: [Int]) {
+        Task {
+            let api = APIClient()
+            for (i, id) in ids.enumerated() {
+                _ = try? await api.updateCategory(id: id, order: i * 1000, childId: auth.childSlug)
+            }
+            await board.refresh(childId: auth.childSlug)
+        }
     }
 
     private func moveTile(_ tileId: Int, toCategory catId: Int) async {
@@ -446,10 +545,13 @@ struct SectionColumn: View {
 
 /// Conditionally-attached drag source: only unlocked boards make tiles
 /// draggable, so a child's long-press can never start a drag session.
+/// The payload is @autoclosure and forwarded lazily — .draggable evaluates it
+/// when the drag session LIFTS, which lets call sites piggyback a
+/// start-of-drag side effect (there is no other SwiftUI drag-start hook).
 extension View {
     @ViewBuilder
-    func draggableIf(_ condition: Bool, _ payload: String) -> some View {
-        if condition { self.draggable(payload) } else { self }
+    func draggableIf(_ condition: Bool, _ payload: @autoclosure @escaping () -> String) -> some View {
+        if condition { self.draggable(payload()) } else { self }
     }
 }
 

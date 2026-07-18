@@ -178,6 +178,11 @@ family keeps everything they have — only new spends wait.
   gesture each time edit mode opens. Mouse users just drag. iOS/Android tile
   editors also have Move earlier/later buttons. Family reorders stamp
   layoutCustomizedAt (E11) so admin pushes never clobber them.
+  **Live shuffle**: while a tile (or chip) is lifted, the OTHER tiles part in
+  real time so the gap always shows exactly where the drop lands — no more
+  guessing at the target. Category and subcategory chips drag-reorder the
+  same way on all three surfaces (chips remain tile-drop targets for
+  move-into-folder; that drop takes priority over a reorder).
 - **Failed renders alert the parent** (never silent): a render that fails
   every attempt (word tile stuck on default art, photo add that never
   landed) appears as a ⚠️ alert in all three parent views — web dashboard
@@ -377,6 +382,27 @@ family keeps everything they have — only new spends wait.
 - Run the full audit anytime by invoking the `surface-audit` skill, or
   locally: `bash tools/surface-audit/invariants.sh` + the two smoke suites
   against `tools/surface-audit/stub_server.py`.
+
+## App version gate (telling installed apps to update)
+
+There is no two-way messaging and none is needed: TestFlight / the stores
+notify and auto-update. The one-way backstop for a known-broken old build is
+`GET /api/manifest?app=versions` (public, no auth, no child data), read by
+both native apps at launch (`UpdateGate.swift` / `UpdateGateView.kt`):
+
+- `APP_MIN_BUILD_IOS` / `APP_MIN_BUILD_ANDROID` — builds BELOW this get a
+  full-screen "Time to update" wall.
+- `APP_SOFT_BUILD_IOS` / `APP_SOFT_BUILD_ANDROID` — builds below this get a
+  dismissible once-per-launch nudge.
+- `APP_UPDATE_URL_IOS` / `APP_UPDATE_URL_ANDROID` — the button's link (set to
+  the App Store / Play page once live; unset → text instructions).
+- `APP_UPDATE_NOTE` — optional custom copy for both.
+
+All unset by default → gate off; clients FAIL OPEN on any error (an AAC
+device must never lose its voice to a flaky network). To use: set the env
+var(s) in Vercel, redeploy. iOS compares CFBundleVersion, Android
+versionCode — bump those on every release or the gate can't tell builds
+apart.
 
 ## Runbooks
 

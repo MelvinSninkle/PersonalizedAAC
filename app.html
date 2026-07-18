@@ -2349,12 +2349,62 @@
   function clearDropHighlights() {
     document.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
   }
+  // Live-shuffle preview: instead of highlighting a drop target, the lifted
+  // element MOVES among its siblings as the pointer crosses them, so the gap
+  // (the .dragging element at 40% opacity) always shows exactly where the
+  // drop will land. FLIP-animate the displaced siblings so they glide rather
+  // than jump. Because the source element follows the pointer in the DOM,
+  // elementFromPoint soon lands on the source itself (not a valid target),
+  // which naturally debounces re-shuffling — no oscillation.
+  function shufflePreview(t, x, y) {
+    const el = pd.el;
+    if (!t || t === el || t.parentNode !== el.parentNode) return;
+    const r = t.getBoundingClientRect();
+    // Reading-order test: pointer past the target's center → land AFTER it.
+    // (Rows of a grid: same-row is decided by x-half; different row by y.)
+    const after = y > r.bottom || (y >= r.top && x > r.left + r.width / 2);
+    if (after ? t.nextElementSibling === el : el.nextElementSibling === t) return; // already there
+    const parent = t.parentNode;
+    const group = [...parent.querySelectorAll('[data-drag-kind]')]
+      .filter((s) => dragGroupKey(s) === dragState.key);
+    const before = new Map(group.map((s) => [s, s.getBoundingClientRect()]));
+    parent.insertBefore(el, after ? t.nextSibling : t);
+    pd.moved = true;
+    for (const s of group) {
+      if (s === el) continue;
+      const b = before.get(s);
+      const a = s.getBoundingClientRect();
+      const dx = b.left - a.left, dy = b.top - a.top;
+      if (!dx && !dy) continue;
+      s.style.transition = 'none';
+      s.style.transform = `translate(${dx}px, ${dy}px)`;
+      requestAnimationFrame(() => {
+        s.style.transition = 'transform .18s ease';
+        s.style.transform = '';
+      });
+    }
+  }
+  function clearShuffleStyles(el) {
+    const parent = el && el.parentNode;
+    if (!parent || !parent.querySelectorAll) return;
+    parent.querySelectorAll('[data-drag-kind]').forEach((s) => {
+      s.style.transition = ''; s.style.transform = '';
+    });
+  }
   function updateDragTarget(x, y) {
     if (!pd) return;
     if (pd.ghost) { pd.ghost.style.left = (x + 14) + 'px'; pd.ghost.style.top = (y + 14) + 'px'; }
     const under = document.elementFromPoint(x, y);
     const cand = under && under.closest('[data-drag-kind]');
-    const t = (cand && (isDropTarget(cand) || isItemIntoCatDrop(cand))) ? cand : null;
+    if (cand && isDropTarget(cand)) {
+      // Same sibling group → the shuffle IS the preview; no outline needed.
+      if (pd.target) { clearDropHighlights(); pd.target = null; }
+      shufflePreview(cand, x, y);
+      return;
+    }
+    // A tile over a category/subcategory tab = "move into that folder" —
+    // that one keeps the outline highlight (there's no slot to preview).
+    const t = (cand && isItemIntoCatDrop(cand)) ? cand : null;
     if (t !== pd.target) {
       clearDropHighlights();
       if (t) t.classList.add('drop-target');
@@ -2410,23 +2460,34 @@
     if (cur.raf) cancelAnimationFrame(cur.raf);
     if (cur.ghost) cur.ghost.remove();
     cur.el.classList.remove('dragging');
+    clearShuffleStyles(cur.el);
     const target = cur.target;
     clearDropHighlights();
     if (cur.armed) suppressClickUntil = Date.now() + 400;
     try {
-      if (commit && cur.armed && target && dragState) {
-        if (isItemIntoCatDrop(target)) {
+      if (commit && cur.armed && dragState) {
+        if (target && isItemIntoCatDrop(target)) {
+          // Dropping onto a folder tab beats the reorder preview — that's an
+          // explicit "put it in there".
           await moveItemToCategory(dragState.id, target.dataset.section, parseInt(target.dataset.entityId, 10));
-        } else if (isDropTarget(target)) {
-          const targetId = parseInt(target.dataset.entityId, 10);
-          const kind = target.dataset.dragKind;
-          const section = target.dataset.section;
-          const parentId = target.dataset.parentId != null ? parseInt(target.dataset.parentId, 10) : null;
-          if (kind === 'item')        await reorderEntities(section, 'item', null, dragState.id, targetId);
-          else if (kind === 'cat-top') await reorderEntities(section, 'cat', null, dragState.id, targetId);
-          else if (kind === 'cat-sub') await reorderEntities(section, 'cat', parentId, dragState.id, targetId);
+          return;
+        }
+        if (cur.moved) {
+          // The live shuffle already put the element where it lands — the DOM
+          // order IS the answer; persist it.
+          const el = cur.el;
+          const ids = [...el.parentNode.querySelectorAll('[data-drag-kind]')]
+            .filter((s) => dragGroupKey(s) === dragState.key)
+            .map((s) => parseInt(s.dataset.entityId, 10));
+          const kind = el.dataset.dragKind;
+          const parentId = (el.dataset.parentId ?? '') !== '' ? parseInt(el.dataset.parentId, 10) : null;
+          await persistOrder(el.dataset.section, kind === 'item' ? 'item' : 'cat', parentId, ids);
+          return;
         }
       }
+      // Cancelled (or nothing committed) after a shuffle: re-render so the
+      // preview positions snap back to the stored order.
+      if (cur.moved) await renderSection(cur.el.dataset.section);
     } finally { dragState = null; }
   }
   document.addEventListener('pointermove', (e) => {
@@ -2460,7 +2521,7 @@
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       pd = { el, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY,
              lastX: e.clientX, lastY: e.clientY, armed: false, target: null,
-             ghost: null, raf: null, timer: null };
+             ghost: null, raf: null, timer: null, moved: false };
       if (e.pointerType !== 'mouse') {
         pd.timer = setTimeout(() => { if (pd && !pd.armed) armDrag(); }, DRAG_HOLD_MS);
       }
@@ -2468,9 +2529,11 @@
     el.addEventListener('pointercancel', () => { if (pd && pd.el === el) finishDrag(false); });
   }
 
-  // Reorder a sibling group and persist new `order` values.
-  // entityKind: 'item' (scoped to the active category) | 'cat' (scoped by parentId).
-  async function reorderEntities(section, entityKind, parentId, draggedId, targetId) {
+  // Persist a sibling group's new order from the drag preview's final DOM
+  // sequence. entityKind: 'item' (scoped to the active category) | 'cat'
+  // (scoped by parentId). orderedIds is authoritative; entities the DOM
+  // didn't list (shouldn't happen) keep their relative order at the end.
+  async function persistOrder(section, entityKind, parentId, orderedIds) {
     let list;
     if (entityKind === 'item') {
       // 'needs' items have no categoryId; everything else filters by the active category.
@@ -2485,20 +2548,18 @@
         .filter(c => (c.parentId ?? null) === (parentId ?? null))
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     }
-    const di = list.findIndex(x => x.id === draggedId);
-    const ti = list.findIndex(x => x.id === targetId);
-    if (di < 0 || ti < 0 || di === ti) return;
-    const [moved] = list.splice(di, 1);
-    list.splice(di < ti ? ti - 1 : ti, 0, moved);
-    for (let i = 0; i < list.length; i++) {
+    const byId = new Map(list.map(x => [x.id, x]));
+    const ordered = orderedIds.map(id => byId.get(id)).filter(Boolean);
+    for (const x of list) if (!ordered.includes(x)) ordered.push(x);
+    for (let i = 0; i < ordered.length; i++) {
       const newOrder = i * 1000;
-      if (list[i].order === newOrder) continue;
+      if (ordered[i].order === newOrder) continue;
       try {
-        if (entityKind === 'item') await serverUpdateItem(list[i], { order: newOrder });
-        else await serverUpdateCategory(list[i], { order: newOrder });
+        if (entityKind === 'item') await serverUpdateItem(ordered[i], { order: newOrder });
+        else await serverUpdateCategory(ordered[i], { order: newOrder });
       } catch (_) {
-        list[i].order = newOrder;
-        if (entityKind === 'item') await putItem(list[i]); else await putCat(list[i]);
+        ordered[i].order = newOrder;
+        if (entityKind === 'item') await putItem(ordered[i]); else await putCat(ordered[i]);
       }
     }
     await renderSection(section);

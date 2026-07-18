@@ -345,6 +345,15 @@ struct APIClient {
         _ = try await request(method: "DELETE", path: "/api/items?id=\(id)", body: nil)
     }
 
+    /// PUT /api/categories?id= — partial update (server COALESCEs). Drag
+    /// reorder of category/subcategory chips persists `order` through here.
+    func updateCategory(id: Int, order: Int, childId: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["childId": childId, "order": order])
+        _ = try await request(method: "PUT",
+                              path: "/api/categories?id=\(id)&childId=\(percentEscape(childId))",
+                              body: body, contentType: "application/json")
+    }
+
     // MARK: -- Durable server-side tile jobs
 
     /// One server job's status (for the add-tile tray to poll).
