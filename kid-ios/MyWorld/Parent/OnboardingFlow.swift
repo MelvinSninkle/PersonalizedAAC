@@ -369,25 +369,32 @@ private struct OnboardingDemoView: View {
                          title: "A board that sounds like the child it belongs to.",
                          subtitle: "Watch what My World does for a real family. Tap any tile to hear it speak in their voice.")
 
-                // ┌──────────────────────────────────────────────┐
-                // │  DEMO BOARD GOES HERE                        │
-                // │  An interactive sampler — tap a tile, hear   │
-                // │  it speak, see the personalized art. Until   │
-                // │  the demo is built, this slot shows a static │
-                // │  illustration of what the board looks like.  │
-                // └──────────────────────────────────────────────┘
-                placeholderCard(
-                    height: 320,
-                    icon: "play.rectangle.fill",
-                    title: "Live demo board",
-                    note: "Replace with the tappable demo. For now this slot reserves space + sets pace."
-                )
+                // What-happens-next card (the tappable in-app demo is a
+                // future build; until then this sells the promise without
+                // shipping a visible "replace me" placeholder).
+                VStack(alignment: .leading, spacing: 14) {
+                    demoPoint(icon: "camera.fill",
+                              title: "Photograph their world",
+                              note: "Their snacks, their toys, their people — each photo becomes a talking tile.")
+                    demoPoint(icon: "paintpalette.fill",
+                              title: "Drawn in the style they love",
+                              note: "Their face stays their face; the whole board shares one look.")
+                    demoPoint(icon: "speaker.wave.2.fill",
+                              title: "Tap a tile, it talks",
+                              note: "In the voice you pick — plus listening, teaching, and game modes as they grow.")
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(hex: Brand.card), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color(hex: Brand.line), lineWidth: 1))
 
                 ctaRow
             }
             .padding(20)
         }
         .background(Color(hex: Brand.bg))
+        // (helper lives below ctaRow)
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -410,6 +417,24 @@ private struct OnboardingDemoView: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 6)
+        }
+    }
+
+    private func demoPoint(icon: String, title: String, note: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(Color(hex: Brand.pink), in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(hex: Brand.ink))
+                Text(note)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color(hex: Brand.muted))
+            }
         }
     }
 }
@@ -885,9 +910,18 @@ private struct OnboardingPhotoView: View {
         )
     }
 
-    /// Before/after illustration card. Uses bundled assets when they exist;
-    /// shows a labeled placeholder otherwise.
+    /// Before/after illustration card. Renders ONLY when the bundled sample
+    /// assets exist — a dashed "Add asset" box shipped to real parents until
+    /// this guard (assets still aren't in the catalog; card self-hides).
+    @ViewBuilder
     private var beforeAfterCard: some View {
+        if UIImage(named: "OnboardSampleBefore") != nil,
+           UIImage(named: "OnboardSampleAfter") != nil {
+            beforeAfterContent
+        }
+    }
+
+    private var beforeAfterContent: some View {
         HStack(spacing: 14) {
             illustrativeImage(name: "OnboardSampleBefore",
                               fallbackIcon: "person.crop.square.filled.and.at.rectangle",

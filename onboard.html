@@ -337,6 +337,15 @@
         <span id="board-refresh-msg" style="display:block;font-size:12px;margin-top:6px;text-align:center;"></span>
       </div>
       <a class="btn" href="/app.html" id="open-board-link">Open the board</a>
+      <a class="btn ghost" href="/login" id="open-dashboard-link" style="margin-left:8px;">Open your parent dashboard</a>
+      <!-- The hand-off moment, spelled out — previously buried in the
+           skippable Auto-Teach wizard, so "Maybe later" parents never saw it. -->
+      <p class="note" style="max-width:520px;margin:14px auto 0;text-align:left;background:#fff7fb;border:1px solid var(--line);border-radius:12px;padding:10px 14px;">
+        <strong>On your child's tablet:</strong> open <strong id="board-url-note">the board link</strong> in the browser,
+        choose "🧒 — the communication board" when it asks who uses the device, and (on iPad) turn on
+        <strong>Guided Access</strong> (Settings → Accessibility) so the tablet stays a talker.
+        This screen you're on now is for <em>you</em> — your dashboard has stats, the store, and every setting.
+      </p>
     </div>
 
     <!-- Board-behavior wizard: the captive wait is the one moment a parent
@@ -472,6 +481,17 @@
     if (bl) bl.addEventListener('click', function (e) {
       if (CHILD_ID) { e.preventDefault(); location.href = '/u/' + encodeURIComponent(CHILD_ID); }
     });
+    const dl = document.getElementById('open-dashboard-link');
+    if (dl) dl.addEventListener('click', function (e) {
+      if (CHILD_ID) { e.preventDefault(); location.href = '/parent/' + encodeURIComponent(CHILD_ID); }
+    });
+    // Show the child's real board URL in the hand-off note so a parent can
+    // type it on the tablet.
+    const bn = document.getElementById('board-url-note');
+    if (bn) {
+      const upd = () => { if (CHILD_ID) bn.textContent = location.origin + '/u/' + CHILD_ID; };
+      upd(); setTimeout(upd, 3000);
+    }
   })();
   let CHILD_NAME = '';
   let selectedStyle = null;          // { id, label }

@@ -62,9 +62,11 @@ struct HeaderBar: View {
         .overlay(Rectangle().stroke(Color(hex: "#66bb6a"),
                                     lineWidth: sentence.drag?.overHeader == true ? 4 : 0))
         .onTapGesture(count: 3) {
-            // Hidden gesture: triple-tap the bar to open settings (sign out,
-            // clear cache). Long-press the lock for edit mode.
-            showSettings = true
+            // Hidden gesture: triple-tap the bar opens device settings (sign
+            // out, clear cache, switch to parent app) — but ONLY while the
+            // board is already unlocked. A tablet-fluent child could find an
+            // unguarded triple-tap; the lock's password gate is the door.
+            if editMode { showSettings = true }
         }
         .sheet(isPresented: $showUnlock) {
             UnlockSheet { editMode = true }
