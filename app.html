@@ -180,15 +180,29 @@
   body.listening .hdr-center h1, body.listening .btn-play-req, body.listening .btn-teach,
   body.listening #login-btn { display: none; }
   body.listening #listen-btn { margin-right: 10px; }
-  body.listening #listen-bar { display: flex; align-items: center; gap: 10px; width: 100%; max-width: min(96vw, 1100px); }
-  #listen-tiles { display: flex; align-items: center; gap: 8px; overflow-x: auto; flex: 1 1 auto; padding: 4px 2px; scrollbar-width: none; }
+  /* min-width: 0 down the whole chain — without it, grid/flex auto-min
+     sizing makes the strip's INTRINSIC width (every chip side by side) push
+     into the header: Chromium overflows the header, Safari (the iPad web
+     app) instead SQUISHES the chips to fit. Zeroing the min lets the
+     scroller actually scroll, which is the whole design. */
+  /* While listening the header re-templates: side cells hug their buttons,
+     the center cell gets minmax(0,1fr) so the strip SHRINKS-and-scrolls
+     instead of pushing the stop button off (Chromium) or squishing the
+     chips to fit (Safari — the iPad web app). */
+  body.listening header { grid-template-columns: auto minmax(0, 1fr) auto; }
+  body.listening .hdr-center { min-width: 0; width: 100%; }
+  body.listening #listen-bar { display: flex; align-items: center; gap: 10px; width: 100%; max-width: min(100%, 1100px); min-width: 0; }
+  #listen-tiles { display: flex; align-items: center; gap: 8px; overflow-x: auto; flex: 1 1 auto; min-width: 0; padding: 4px 2px; scrollbar-width: none; }
   #listen-tiles::-webkit-scrollbar { display: none; }
-  .listen-chip { flex: 0 0 auto; height: 92px; width: 92px; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.14); overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-  .listen-chip img { width: 100%; height: 100%; object-fit: cover; }
-  .listen-chip.is-text { width: auto; min-width: 60px; padding: 0 14px; font-family: Fredoka, ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: 22px; color: #ad1457; background: #fce4ec; cursor: default; }
+  /* Chips are HARD squares: min/max + aspect-ratio so no flex algorithm on
+     any engine can compress them; the image fills absolutely (immune to
+     Safari's %-height-in-flex quirks) and center-crops. */
+  .listen-chip { position: relative; flex: 0 0 auto; height: 92px; width: 92px; min-width: 92px; min-height: 92px; aspect-ratio: 1; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.14); overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .listen-chip img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .listen-chip.is-text { width: auto; min-width: 60px; aspect-ratio: auto; padding: 0 14px; font-family: Fredoka, ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: 22px; color: #ad1457; background: #fce4ec; cursor: default; white-space: nowrap; }
   .listen-chip.is-text.masked { font-style: italic; opacity: .7; }
   #listen-hint { flex: 0 0 auto; font-size: 13px; color: #fff; opacity: .85; white-space: nowrap; }
-  @media (max-width: 820px) { .listen-chip { height: 70px; width: 70px; } }
+  @media (max-width: 820px) { .listen-chip { height: 70px; width: 70px; min-width: 70px; min-height: 70px; } }
   header button:hover { background: #880e4f; }
   /* Login icon: small + low-contrast so it doesn't distract the kid (and
      so a stray tap isn't tempting). Becomes more visible once the parent
