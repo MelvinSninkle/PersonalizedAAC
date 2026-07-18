@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Most-tapped words ranked, with a day-range picker (7 / 30 / 90 / 365).
 /// Each row shows count, top category, and a small bar that visualizes
@@ -10,6 +11,7 @@ struct TopWordsView: View {
     @State private var days = 30
     @State private var rows: [APIClient.TopWord] = []
     @State private var loaded = false
+    @State private var visibleCount = 25
     @State private var errorText: String?
 
     var body: some View {
@@ -27,6 +29,9 @@ struct TopWordsView: View {
                 }
             }
             .padding(16)
+            // Full width from the FIRST frame — otherwise the loading spinner
+            // defines the width and the page pops from a skinny column.
+            .frame(maxWidth: .infinity, minHeight: UIScreen.main.bounds.height * 0.8, alignment: .top)
         }
         .background(Color(hex: Brand.bg))
         .navigationTitle("Top words")
@@ -55,11 +60,25 @@ struct TopWordsView: View {
 
     private var listCard: some View {
         let topCount = rows.first?.count ?? 1
+        // Page-break: show 25 at a time. 100 rows of bars in one shot is a
+        // long, heavy first paint — the parent almost always wants the top.
+        let shown = Array(rows.prefix(visibleCount))
         return VStack(spacing: 0) {
-            ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
+            ForEach(Array(shown.enumerated()), id: \.element.id) { i, row in
                 wordRow(row, rank: i + 1, topCount: topCount)
-                if i < rows.count - 1 {
+                if i < shown.count - 1 {
                     Divider().background(Color(hex: Brand.line))
+                }
+            }
+            if rows.count > visibleCount {
+                Button {
+                    visibleCount += 25
+                } label: {
+                    Text("Show more (\(rows.count - visibleCount) left)")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .foregroundStyle(Color(hex: Brand.pinkDeep))
                 }
             }
         }
@@ -106,6 +125,7 @@ struct TopWordsView: View {
 
     private func reload() async {
         errorText = nil
+        visibleCount = 25          // a new range starts back at the top
         do {
             let resp = try await api.topWords(childId: auth.childSlug, days: days, limit: 100)
             rows = resp.rows

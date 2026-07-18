@@ -24,6 +24,10 @@ struct StatsView: View {
                         title: "Game accuracy",
                         subtitle: "Pass rate by category and by game mode",
                         destination: AnyView(AccuracyView()))
+                hubCard(icon: "text.bubble.fill",
+                        title: "Sentence activity",
+                        subtitle: "What they said with the sentence builder",
+                        destination: AnyView(SentenceActivityView()))
                 hubCard(icon: "hand.raised.fingers.spread.fill",
                         title: "How they answer",
                         subtitle: "Tap · verbal · object · physical · gesture",
@@ -71,6 +75,158 @@ struct StatsView: View {
     }
 }
 
+
+// MARK: -- Sentence activity (what the sentence builder actually said)
+
+/// Weekly sentence count + delta, per-day bars, and the recent sentences with
+/// timestamps — the moments a parent actually wants to read. (Lives in this
+/// file so no xcodegen re-run.)
+struct SentenceActivityView: View {
+    @Environment(AuthManager.self) private var auth
+    private let api = APIClient()
+
+    @State private var data: APIClient.AnalyticsResponse?
+    @State private var errorText: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                if let d = data {
+                    if let s = d.sentences {
+                        summaryCard(s)
+                        recentCard(s)
+                    } else {
+                        emptyState
+                    }
+                } else if let e = errorText {
+                    Text(e).font(.footnote).foregroundStyle(.red)
+                } else {
+                    ProgressView("Loading sentences…").padding(.top, 60)
+                }
+            }
+            .padding(16)
+            // Full width from the FIRST frame — without this the loading
+            // spinner defines the content width and the page renders as a
+            // skinny centered column that pops wide when the cards land.
+            .frame(maxWidth: .infinity, minHeight: UIScreen.main.bounds.height * 0.8, alignment: .top)
+        }
+        .background(Color(hex: Brand.bg))
+        .navigationTitle("Sentence activity")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            do { data = try await api.analytics(childId: auth.childSlug) }
+            catch { errorText = "Could not load: \(error.localizedDescription)" }
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "text.bubble")
+                .font(.system(size: 34))
+                .foregroundStyle(Color(hex: Brand.faint))
+            Text("No sentences yet")
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: Brand.ink))
+            Text("When the sentence builder is on and your child plays a sentence with ▶, it lands here — what they said, and when.")
+                .font(.footnote)
+                .foregroundStyle(Color(hex: Brand.muted))
+                .multilineTextAlignment(.center)
+        }
+        .padding(.top, 60)
+        .padding(.horizontal, 24)
+    }
+
+    private struct DayBar: Identifiable { let id: Int; let name: String; let n: Int }
+
+    private func summaryCard(_ s: APIClient.AnalyticsResponse.SentencesPayload) -> some View {
+        let diff = s.weekCount - s.prevWeekCount
+        let fmt = DateFormatter()
+        fmt.dateFormat = "EEE"
+        let bars: [DayBar] = s.perDay.enumerated().map { i, n in
+            let daysAgo = s.perDay.count - 1 - i
+            let d = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date()) ?? Date()
+            return DayBar(id: i, name: daysAgo == 0 ? "today" : fmt.string(from: d), n: n)
+        }
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Sentences this week")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: Brand.pinkDeep))
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("\(s.weekCount)")
+                    .font(.system(size: 40, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Color(hex: Brand.ink))
+                if diff != 0 {
+                    Text(diff > 0 ? "↑ \(diff) vs last week" : "↓ \(-diff) vs last week")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(diff > 0 ? Color(hex: Brand.good) : .orange)
+                } else if s.prevWeekCount > 0 {
+                    Text("same as last week")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(hex: Brand.muted))
+                }
+            }
+            Chart(bars) { b in
+                BarMark(x: .value("Day", b.name), y: .value("Sentences", b.n))
+                    .foregroundStyle(Color(hex: Brand.pink))
+                    .cornerRadius(4)
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading) { _ in
+                    AxisGridLine()
+                    AxisValueLabel().font(.system(size: 9))
+                }
+            }
+            .frame(height: 120)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: Brand.card), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: Brand.line), lineWidth: 1))
+    }
+
+    private func recentCard(_ s: APIClient.AnalyticsResponse.SentencesPayload) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Recent sentences")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: Brand.pinkDeep))
+            if s.recent.isEmpty {
+                Text("Nothing in the last two weeks.")
+                    .font(.footnote)
+                    .foregroundStyle(Color(hex: Brand.muted))
+            } else {
+                ForEach(s.recent) { r in
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("“\(r.text)”")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color(hex: Brand.ink))
+                        Spacer()
+                        Text(prettyWhen(r.at))
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(hex: Brand.faint))
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 10)
+                    .background(Color(hex: "#fff7fb"), in: RoundedRectangle(cornerRadius: 10))
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: Brand.card), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: Brand.line), lineWidth: 1))
+    }
+
+    private func prettyWhen(_ iso: String?) -> String {
+        guard let iso else { return "" }
+        let p = ISO8601DateFormatter()
+        p.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let d = p.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
+        guard let d else { return "" }
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, h:mm a"
+        return f.string(from: d)
+    }
+}
 
 // MARK: -- Usage over time (parity with the web dashboard's "Use" chart)
 
