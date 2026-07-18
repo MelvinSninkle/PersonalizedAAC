@@ -27,6 +27,10 @@ async function ensureTable(db) {
   await db`ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS grant_credits INT NOT NULL DEFAULT 0`;
   await db`ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS grant_tier TEXT`;
   await db`ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS grant_tier_days INT`;
+  // Launch-group signup limit: NULL = unlimited. Enforced at ACCOUNT CREATION
+  // (users.invite_code attribution count), not at gate unlocks — this is the
+  // cash-flow throttle for launch (e.g. one 1000-slot code for the website).
+  await db`ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS max_uses INT`;
 }
 
 // No ambiguous characters (no I, L, O, 0, 1) so codes are easy to read aloud.
@@ -48,9 +52,21 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const codes = await db`SELECT id, code, label, active, uses, last_used_at, created_at,
-                                    grant_credits, grant_tier, grant_tier_days
-                             FROM invite_codes ORDER BY created_at DESC`;
+      // `signups` = accounts actually created with the code (what max_uses
+      // caps); `uses` = gate unlocks (same family on more devices counts).
+      let codes;
+      try {
+        await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_code TEXT`;
+        codes = await db`
+          SELECT ic.id, ic.code, ic.label, ic.active, ic.uses, ic.max_uses, ic.last_used_at, ic.created_at,
+                 ic.grant_credits, ic.grant_tier, ic.grant_tier_days,
+                 (SELECT COUNT(*)::int FROM users u WHERE lower(u.invite_code) = lower(ic.code)) AS signups
+          FROM invite_codes ic ORDER BY ic.created_at DESC`;
+      } catch (_) {
+        codes = await db`SELECT id, code, label, active, uses, max_uses, last_used_at, created_at,
+                                grant_credits, grant_tier, grant_tier_days
+                         FROM invite_codes ORDER BY created_at DESC`;
+      }
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ codes });
       return;
@@ -68,11 +84,14 @@ export default async function handler(req, res) {
       const grantTier = rawTier && subscriptionBySku(rawTier) ? subscriptionBySku(rawTier).sku : null;
       const grantTierDays = grantTier && Number.isFinite(parseInt(b.grantTierDays, 10)) && parseInt(b.grantTierDays, 10) > 0
         ? parseInt(b.grantTierDays, 10) : null;
+      // Signup limit: blank/0 = unlimited (NULL).
+      const maxUses = Number.isFinite(parseInt(b.maxUses, 10)) && parseInt(b.maxUses, 10) > 0
+        ? Math.min(1000000, parseInt(b.maxUses, 10)) : null;
       const rows = await db`
-        INSERT INTO invite_codes (code, label, grant_credits, grant_tier, grant_tier_days)
-        VALUES (${code}, ${label}, ${grantCredits}, ${grantTier}, ${grantTierDays})
+        INSERT INTO invite_codes (code, label, grant_credits, grant_tier, grant_tier_days, max_uses)
+        VALUES (${code}, ${label}, ${grantCredits}, ${grantTier}, ${grantTierDays}, ${maxUses})
         ON CONFLICT (code) DO NOTHING
-        RETURNING id, code, label, active, uses, last_used_at, created_at,
+        RETURNING id, code, label, active, uses, max_uses, last_used_at, created_at,
                   grant_credits, grant_tier, grant_tier_days`;
       if (!rows.length) { res.status(409).json({ error: 'That code already exists' }); return; }
       res.status(200).json({ ok: true, code: rows[0] });
@@ -83,8 +102,17 @@ export default async function handler(req, res) {
       const id = parseInt(req.query.id, 10);
       if (!id) { res.status(400).json({ error: 'id required' }); return; }
       const b = (typeof req.body === 'object' && req.body) || {};
-      const active = !!b.active;
-      await db`UPDATE invite_codes SET active = ${active} WHERE id = ${id}`;
+      // Raising/lowering the signup limit is the launch growth dial — allow
+      // it without recreating the code (which would invalidate what's printed
+      // on flyers / in emails). Only touch what the body actually sends.
+      if ('maxUses' in b) {
+        const maxUses = Number.isFinite(parseInt(b.maxUses, 10)) && parseInt(b.maxUses, 10) > 0
+          ? Math.min(1000000, parseInt(b.maxUses, 10)) : null;
+        await db`UPDATE invite_codes SET max_uses = ${maxUses} WHERE id = ${id}`;
+      }
+      if ('active' in b) {
+        await db`UPDATE invite_codes SET active = ${!!b.active} WHERE id = ${id}`;
+      }
       res.status(200).json({ ok: true });
       return;
     }

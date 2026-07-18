@@ -450,6 +450,7 @@ private struct OnboardingAccountView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var confirm = ""
+    @State private var inviteCode = ""
     @State private var busy = false
     @State private var errorText: String?
     private let api = APIClient()
@@ -475,6 +476,26 @@ private struct OnboardingAccountView: View {
                 // The COPPA/consent anchor — required before EITHER create
                 // path (Apple or email). Log-ins don't need it.
                 if mode == .signup {
+                    // Invite code applies to BOTH create paths (Apple and
+                    // email), so it sits above the Apple button. The server
+                    // is the gate — an empty field just fails there with the
+                    // same friendly message.
+                    TextField("Invite code", text: $inviteCode)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(12)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: Brand.line), lineWidth: 1))
+                    (Text("My World is invite-only during early access. No code yet? Join the waitlist at ")
+                     + Text("our website").underline()
+                     + Text("."))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(hex: Brand.muted))
+                        .onTapGesture {
+                            if let url = URL(string: "\(APIClient.defaultOrigin)/#waitlist") {
+                                UIApplication.shared.open(url)
+                            }
+                        }
                     Toggle(isOn: $consented) {
                         (Text("I'm the parent or legal guardian (or a caregiver with their permission), I'm 18+, and I agree to the ")
                          + Text("Terms of Service").underline()
@@ -586,14 +607,15 @@ private struct OnboardingAccountView: View {
                 let resp = try await api.signInWithApple(.init(
                     identityToken: token,
                     fullName: name.isEmpty ? nil : name,
-                    email: cred.email
+                    email: cred.email,
+                    inviteCode: inviteCode.trimmingCharacters(in: .whitespaces)
                 ))
                 await auth.refreshFromServer()
                 // Brand-new account → continue onboarding; existing → straight
                 // to the board / parent home.
                 finishAuth(created: resp.created ?? false)
             } catch {
-                errorText = "Apple sign-in failed: \(error.localizedDescription)"
+                errorText = friendlyAuthError(error, fallback: "Apple sign-in failed: \(error.localizedDescription)")
             }
         }
     }
@@ -619,20 +641,37 @@ private struct OnboardingAccountView: View {
         busy = true; errorText = nil
         defer { busy = false }
         do {
+            // selfSignup:true routes to the open parent path server-side —
+            // without it register.js treats this as an admin-only call and
+            // rejects every anonymous create.
             let body = try JSONSerialization.data(withJSONObject: [
                 "email": email.trimmingCharacters(in: .whitespaces),
                 "password": password,
-                "role": "parent",
+                "selfSignup": true,
                 "consent": true,
                 "consentVersion": "2026-07",
+                "inviteCode": inviteCode.trimmingCharacters(in: .whitespaces),
             ])
             _ = try await api.request(method: "POST", path: "/api/auth/register",
                                       body: body, contentType: "application/json")
             await auth.refreshFromServer()
             finishAuth(created: true)         // new account → onboarding continues
         } catch {
-            errorText = "Could not create the account: \(error.localizedDescription)"
+            errorText = friendlyAuthError(error, fallback: "Could not create the account: \(error.localizedDescription)")
         }
+    }
+
+    /// Auth errors come back as JSON {error, detail} inside a badStatus body —
+    /// show the human sentence ("Enter the invite code you were given…"), not
+    /// the raw JSON blob.
+    private func friendlyAuthError(_ error: Error, fallback: String) -> String {
+        if case let APIError.badStatus(_, body) = error,
+           let data = body.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let d = obj["detail"] as? String, !d.isEmpty { return d }
+            if let e = obj["error"] as? String, !e.isEmpty { return e }
+        }
+        return fallback
     }
 
     /// After any successful auth: a brand-new account continues the onboarding

@@ -10,11 +10,15 @@ extension APIClient {
         let identityToken: String
         let fullName: String?
         let email: String?
+        /// Launch invite code — required by the server for BRAND-NEW accounts
+        /// once APPLE_SIGNUP_REQUIRES_INVITE is on; ignored for sign-ins.
+        var inviteCode: String? = nil
     }
     func signInWithApple(_ req: AppleSignInRequest) async throws -> LoginResponse {
         var body: [String: Any] = ["identityToken": req.identityToken]
         if let n = req.fullName, !n.isEmpty { body["fullName"] = n }
         if let e = req.email, !e.isEmpty { body["email"] = e }
+        if let c = req.inviteCode, !c.isEmpty { body["inviteCode"] = c }
         let data = try JSONSerialization.data(withJSONObject: body)
         let (respData, _) = try await request(method: "POST", path: "/api/auth/apple",
                                               body: data, contentType: "application/json")

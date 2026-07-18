@@ -70,12 +70,20 @@ export default async function handler(req, res) {
       // public; the wall is here, at account creation, where it can't be
       // walked around. Fails closed on an unknown/inactive code.
       const typedCode = typeof body.inviteCode === 'string' ? body.inviteCode : '';
-      const invCode = await validateInviteCode(db, typedCode || await inviteCodeFromCookie(req));
-      if (!invCode) {
+      const invCheck = await validateInviteCode(db, typedCode || await inviteCodeFromCookie(req));
+      if (!invCheck) {
         res.status(403).json({ error: 'invite_required',
           detail: 'My World is invite-only right now. Enter the invite code you were given — or write us for one.' });
         return;
       }
+      // A real code whose launch-group slots are all taken: be honest about
+      // why, and point at the waitlist instead of a dead end.
+      if (invCheck.full) {
+        res.status(403).json({ error: 'invite_full',
+          detail: 'That invite code’s launch group is full. Join the waitlist on the home page and we’ll email you a fresh code the moment spots open.' });
+        return;
+      }
+      const invCode = invCheck.code;
       await db`
         CREATE TABLE IF NOT EXISTS users (
           id BIGSERIAL PRIMARY KEY,

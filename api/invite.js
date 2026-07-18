@@ -33,6 +33,24 @@ export default async function handler(req, res) {
   try {
     const db = sql();
     await ensureTable(db);
+    // Launch-group limits: a code with max_uses caps ACCOUNTS CREATED with it
+    // (users.invite_code attribution — set at signup), not gate unlocks, so a
+    // family can re-enter their code on a second device freely. A full code is
+    // turned away here too — no point letting someone browse to a signup that
+    // will refuse them.
+    try {
+      await db`ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS max_uses INTEGER`;
+      await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_code TEXT`;
+      const cap = await db`
+        SELECT ic.max_uses,
+               (SELECT COUNT(*)::int FROM users u WHERE lower(u.invite_code) = lower(ic.code)) AS signups
+        FROM invite_codes ic
+        WHERE lower(ic.code) = lower(${code}) AND ic.active = TRUE LIMIT 1`;
+      if (cap.length && cap[0].max_uses != null && Number(cap[0].signups) >= Number(cap[0].max_uses)) {
+        res.status(401).json({ error: 'That invite code’s launch group is full — join the waitlist on the home page and we’ll email you a fresh code when spots open.' });
+        return;
+      }
+    } catch (_) { /* pre-users-table bootstrap: no accounts yet, nothing to cap */ }
     // Match + count the use in one statement; rows is non-empty only on success.
     const rows = await db`
       UPDATE invite_codes SET uses = uses + 1, last_used_at = NOW()

@@ -20,15 +20,33 @@ export async function inviteCodeFromCookie(req) {
   } catch (_) { return ''; }
 }
 
-/// Is this a real, ACTIVE invite code? Returns the normalized code, or null.
-/// Signup requires this (private preview is enforced at account creation, not
-/// just at the page gate) — so it fails CLOSED on a missing table/DB error.
+/// Is this a real, ACTIVE invite code with signup room left? Returns
+/// { code } when usable, { code, full: true } when the code exists but its
+/// signup limit is spent (so the caller can say WHY and point at the
+/// waitlist), or null when unknown/inactive. Signup requires this (private
+/// preview is enforced at account creation, not just at the page gate) — so
+/// it fails CLOSED on a missing table/DB error.
+///
+/// The limit counts ACCOUNTS CREATED with the code (users.invite_code
+/// attribution), not gate unlocks — a family re-entering the code on a
+/// second device never burns a slot. Count-then-insert has a small race
+/// under simultaneous signups; a cap of 1000 landing at 1002 is fine, this
+/// is a cash-flow throttle, not a ledger.
 export async function validateInviteCode(db, code) {
   const c = String(code || '').toLowerCase().trim().slice(0, 64);
   if (!c) return null;
   try {
-    const rows = await db`SELECT code FROM invite_codes WHERE lower(code) = ${c} AND active = TRUE LIMIT 1`;
-    return rows.length ? c : null;
+    await db`ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS max_uses INTEGER`;
+    await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_code TEXT`;
+    const rows = await db`
+      SELECT ic.code, ic.max_uses,
+             (SELECT COUNT(*)::int FROM users u WHERE lower(u.invite_code) = lower(ic.code)) AS signups
+      FROM invite_codes ic
+      WHERE lower(ic.code) = ${c} AND ic.active = TRUE LIMIT 1`;
+    if (!rows.length) return null;
+    const r = rows[0];
+    if (r.max_uses != null && Number(r.signups) >= Number(r.max_uses)) return { code: c, full: true };
+    return { code: c };
   } catch (_) { return null; }
 }
 
