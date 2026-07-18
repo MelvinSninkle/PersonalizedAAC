@@ -85,15 +85,23 @@ class BoardStore(context: Context, private val api: ApiClient, private val media
             s.startsWith("cat:") -> {
                 val rootId = s.removePrefix("cat:").toIntOrNull()
                 if (rootId == null) _tiles.value else {
-                    val ids = mutableSetOf(rootId)
-                    var frontier = listOf(rootId)
-                    while (frontier.isNotEmpty()) {
-                        val next = cats.filter { it.parentId in frontier }.map { it.id }
-                        val fresh = next.filter { it !in ids }
-                        ids.addAll(fresh)
-                        frontier = fresh
+                    // The folder's OWN tiles are the session — a small folder
+                    // makes a short session, never a scope switch (web
+                    // parity). Only a pure CONTAINER folder (no direct
+                    // playable tiles) widens to its descendants.
+                    val direct = _tiles.value.filter { it.categoryId == rootId }
+                    if (direct.any { !it.imageKey.isNullOrEmpty() && it.label.isNotEmpty() }) direct
+                    else {
+                        val ids = mutableSetOf(rootId)
+                        var frontier = listOf(rootId)
+                        while (frontier.isNotEmpty()) {
+                            val next = cats.filter { it.parentId in frontier }.map { it.id }
+                            val fresh = next.filter { it !in ids }
+                            ids.addAll(fresh)
+                            frontier = fresh
+                        }
+                        _tiles.value.filter { it.categoryId in ids }
                     }
-                    _tiles.value.filter { it.categoryId in ids }
                 }
             }
             else -> _tiles.value

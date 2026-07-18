@@ -6002,12 +6002,24 @@
       for (const s of MAIN_SECTIONS) (await getAllItems(s)).forEach(i => { if (i.taxonomySlug && wanted.has(i.taxonomySlug)) items.push(i); });
       return items.filter(i => i.imageKey && i.label);
     }
-    // A specific category/subcategory (e.g. Numbers) — optionally sliced to a range.
+    // A specific category/subcategory (e.g. Numbers) — optionally sliced to a
+    // range. The folder's OWN tiles are the session — a small folder just
+    // makes a short session, never a scope switch. Only a pure CONTAINER
+    // folder (no direct playable tiles — e.g. Food holding only subfolders)
+    // widens to its descendants; callers cap/sample so even that stays short.
     if (scope && scope.startsWith('cat:')) {
       const id = Number(scope.slice(4));
       let items = [];
       for (const s of MAIN_SECTIONS) (await getAllItems(s)).forEach(i => { if (i.categoryId === id) items.push(i); });
-      items = items.filter(i => i.imageKey && i.label).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      items = items.filter(i => i.imageKey && i.label);
+      if (!items.length) {
+        for (const s of MAIN_SECTIONS) {
+          const subtree = new Set(descendantCatIds(await getAllCats(s), id));
+          (await getAllItems(s)).forEach(i => { if (subtree.has(i.categoryId)) items.push(i); });
+        }
+        items = items.filter(i => i.imageKey && i.label);
+      }
+      items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       if (range && (range.from || range.to)) {
         const from = Math.max(1, range.from || 1) - 1;
         const to = (range.to && range.to > 0) ? range.to : items.length;
@@ -6349,7 +6361,10 @@
     TEACH.running = true;
     const o = teachOverlay(); o.style.display = 'flex';
     publishLive('running', { mode: 'teach', scope });
-    const deck = gShuffle(items.slice());
+    // Cap at 12: word + up to three facts each already makes 12 a solid
+    // session, and a wide scope (container folder / whole-board fallback)
+    // must never become an hour-long show.
+    const deck = gShuffle(items.slice()).slice(0, 12);
     const img = document.getElementById('teach-img'),
           clueEl = document.getElementById('teach-clue'), prog = document.getElementById('teach-progress');
     for (let i = 0; i < deck.length && TEACH.running; i++) {
