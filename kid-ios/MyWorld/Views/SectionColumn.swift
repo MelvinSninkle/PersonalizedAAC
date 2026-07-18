@@ -285,15 +285,17 @@ struct SectionColumn: View {
                     tileCell(tile)
                 }
                 // In-flight adds land WHERE THE + CELL WAS: each rendering job
-                // for this folder shows as a shimmering placeholder in the
-                // grid, and the + cell slides one further down. When the render
-                // finishes, the real tile takes the placeholder's spot (new
-                // tiles order to the end of the folder, which is exactly here).
+                // for this folder shows as a "Pending" placeholder in the
+                // grid. Shown even when the board is LOCKED — parents were
+                // closing the add flow and worrying the photo was lost; the
+                // placeholder is the "don't worry, it's coming" signal. When
+                // the render finishes, the real tile takes the placeholder's
+                // spot (new tiles order to the end of the folder — here).
+                ForEach(renderingJobs, id: \.id) { job in
+                    RenderingTileCell(size: tileSize, thumbnail: job.thumbnail, label: job.label)
+                        .frame(width: tileSize)
+                }
                 if editMode {
-                    ForEach(renderingJobs, id: \.id) { job in
-                        RenderingTileCell(size: tileSize, thumbnail: job.thumbnail, label: job.label)
-                            .frame(width: tileSize)
-                    }
                     AddTileCell(size: tileSize) { onAdd(section, effectiveCategory?.id) }
                         .frame(width: tileSize)
                 }
@@ -594,38 +596,49 @@ struct AddTileCell: View {
     }
 }
 
-/// A tile-sized placeholder for an add-tile job still rendering server-side:
-/// the captured photo, dimmed, with a spinner — sitting exactly where the
-/// finished tile will land. (The + cell renders after these, one slot down.)
+/// A tile-sized "Pending" placeholder for an add-tile job still rendering
+/// server-side: the captured photo (dimmed) with a spinner — or, when the
+/// photo isn't on this device (app restarted / added elsewhere), the
+/// My World logo. Sits exactly where the finished tile will land.
 struct RenderingTileCell: View {
     let size: CGFloat
     let thumbnail: UIImage
     let label: String
 
+    private var hasPhoto: Bool { thumbnail.size.width > 0 }
+
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: size, height: size)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .opacity(0.45)
+                if hasPhoto {
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: size, height: size)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .opacity(0.45)
+                } else {
+                    Color.white.opacity(0.6)
+                    Image("MyWorldLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: size * 0.55, height: size * 0.55)
+                        .opacity(0.5)
+                }
                 ProgressView()
                     .tint(Color(hex: "#ad1457"))
                     .scaleEffect(1.2)
             }
             .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .strokeBorder(Color(hex: "#f3c6dd"), lineWidth: 2)
             )
-            if !label.isEmpty {
-                Text(label)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(hex: "#9d2463"))
-                    .lineLimit(1)
-            }
+            Text(label.isEmpty ? "Pending" : "\(label) — pending")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(hex: "#9d2463"))
+                .lineLimit(1)
         }
     }
 }

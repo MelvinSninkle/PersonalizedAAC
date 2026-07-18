@@ -19,6 +19,10 @@ data class TileJobStatus(
     val needsReview: Boolean = false,
     val error: String? = null,
     val attempts: Int = 0,
+    /** Landing spot (server-known) — lets a restarted app place the
+     *  "Pending" tile in the right folder. Older deploys omit them. */
+    val section: String? = null,
+    val categoryId: Int? = null,
 )
 
 /** PUT /api/items?id= — partial update (server COALESCEs). */

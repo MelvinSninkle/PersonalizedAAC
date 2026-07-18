@@ -43,17 +43,22 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       const rows = await db`
-        SELECT id, status, label, item_id, image_key, art_failed, needs_review, error, attempts, created_at, updated_at
+        SELECT id, status, label, item_id, image_key, art_failed, needs_review, error, attempts,
+               section, category_id, created_at, updated_at
         FROM tile_jobs
         WHERE child_id = ${childId}
           AND (status <> 'done' OR updated_at > NOW() - INTERVAL '1 hour')
         ORDER BY created_at DESC
         LIMIT 50`;
       res.setHeader('Cache-Control', 'no-store');
+      // section/categoryId let every client draw a "Pending" placeholder in
+      // the exact folder the tile will land in — including after an app
+      // restart or on a different device than the one that added it.
       res.status(200).json({ jobs: rows.map(j => ({
         id: Number(j.id), status: j.status, label: j.label, itemId: j.item_id ? Number(j.item_id) : null,
         imageKey: j.image_key || null,
         artFailed: !!j.art_failed, needsReview: !!j.needs_review, error: j.error, attempts: j.attempts,
+        section: j.section || null, categoryId: j.category_id ? Number(j.category_id) : null,
         createdAt: j.created_at, updatedAt: j.updated_at,
       })) });
       // EVENT-DRIVEN pump: the tray polls this while jobs are pending, so

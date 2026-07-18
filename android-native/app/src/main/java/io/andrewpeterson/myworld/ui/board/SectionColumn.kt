@@ -247,13 +247,15 @@ fun SectionColumn(
             }
         } else {
             val tiles = effectiveCategory?.let { c.board.tilesIn(it) } ?: emptyList()
-            // Jobs enqueued from this exact spot (section + folder) paint as
-            // spinner cells; jobs restored after a restart have no placement
-            // info and surface via board refreshes instead.
-            val jobsHere = if (editMode) tileJobs.filter {
+            // Jobs headed for this exact spot (section + folder) paint as
+            // "Pending" cells — shown even when the board is LOCKED, so a
+            // parent who closes the add flow still sees where the tile will
+            // land (the server echoes each job's placement, so this survives
+            // an app restart too).
+            val jobsHere = tileJobs.filter {
                 it.phase != AddTileQueue.Phase.DONE &&
                     it.section == section.raw && it.categoryId == effectiveCategory?.id
-            } else emptyList()
+            }
             TileGrid(tiles, cols, tileSize, prefs.hideLabels,
                 posterMode = effectiveCategory?.isPoster ?: false,
                 editMode = editMode, onEditTile = onEditTile,
@@ -617,12 +619,15 @@ fun RenderingTileCell(job: AddTileQueue.TileJob, size: Dp, onDismissFailed: () -
             }
         } else {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // No local photo (app restarted / added on another device) →
+                // the logo globe stands in until the render lands.
+                if (job.thumbnail == null) Text("🌍", fontSize = 26.sp)
                 CircularProgressIndicator(color = Brand.pink, strokeWidth = 3.dp,
                     modifier = Modifier.size(28.dp))
-                if (job.label.isNotBlank()) {
-                    Text(job.label, fontSize = 11.sp, color = Brand.pinkDeep,
-                        fontWeight = FontWeight.SemiBold, maxLines = 1)
-                }
+                Text(if (job.label.isNotBlank()) "${job.label} — pending" else "Pending",
+                    fontSize = 11.sp, color = Brand.pinkDeep,
+                    fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 4.dp))
             }
         }
     }

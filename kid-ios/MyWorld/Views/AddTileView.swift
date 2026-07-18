@@ -455,6 +455,14 @@ struct AddTileView: View {
                             onRetry: { queue.retry(job, board: board) },
                             onRemove:{ queue.remove(job) })
                 }
+                if queue.hasActiveJobs {
+                    Text("This takes a few minutes — don't worry. Your photo is already saved; you can close this and a Pending tile marks the spot on the board until the picture lands.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(hex: "#9d2463"))
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(hex: "#fff7fb"), in: RoundedRectangle(cornerRadius: 10))
+                }
             }
         } else {
             Text("Snap a photo of anything — a snack, a toy, a person — and we'll turn it into a tile while you line up the next one.")

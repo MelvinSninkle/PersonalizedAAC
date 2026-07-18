@@ -353,8 +353,12 @@ final class AddTileQueue {
         guard let server = try? await api.listTileJobs(childId: childId) else { return }
         for s in server where s.status != "done" {
             guard !jobs.contains(where: { $0.serverId == s.id }) else { continue }
-            let job = TileJob(thumbnail: UIImage(), photoJPEG: Data(), section: .nouns,
-                              categoryId: nil, style: .soft, model: "", bg: "pink",
+            // The list endpoint echoes the landing spot, so a restarted app
+            // draws the "Pending" placeholder in the right folder (it used to
+            // guess .nouns/nil, which matched nothing → invisible).
+            let job = TileJob(thumbnail: UIImage(), photoJPEG: Data(),
+                              section: BoardSection(rawValue: s.section ?? "") ?? .nouns,
+                              categoryId: s.categoryId, style: .soft, model: "", bg: "pink",
                               emotion: "default", childId: childId)
             job.serverId = s.id
             job.label = s.label ?? ""

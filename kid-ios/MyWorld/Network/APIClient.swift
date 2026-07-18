@@ -382,6 +382,10 @@ struct APIClient {
         let needsReview: Bool
         let error: String?
         let attempts: Int
+        /// Landing spot (server-known) — lets a restarted app draw the
+        /// "Pending" placeholder in the right folder. Older deploys omit them.
+        let section: String?
+        let categoryId: Int?
     }
     private struct TileJobsList: Codable { let jobs: [TileJobStatus] }
     private struct TileJobCreated: Codable { let id: Int; let status: String }
