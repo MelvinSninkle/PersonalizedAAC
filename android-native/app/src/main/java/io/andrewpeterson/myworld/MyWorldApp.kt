@@ -75,7 +75,7 @@ class AppContainer(context: Context) {
     // board selection + the sentence strip state.
     val access = io.andrewpeterson.myworld.access.AccessPrefs(api, appScope)
     val boardNav = io.andrewpeterson.myworld.access.BoardNav(appScope)
-    val sentenceBar = io.andrewpeterson.myworld.access.SentenceBar(appScope, media, gameAudio)
+    val sentenceBar = io.andrewpeterson.myworld.access.SentenceBar(appScope, media, gameAudio, api)
 
     // M12 — Google Play billing (verify-before-consume; Fire → web store).
     val billing = io.andrewpeterson.myworld.billing.BillingClientManager(context, api)

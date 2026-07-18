@@ -477,6 +477,23 @@
     <div class="bars" id="mastery"></div>
   </div>
 
+  <!-- SENTENCE ACTIVITY — every ▶ of the sentence builder logs what was said.
+       Hidden until the first sentence lands (the builder itself is a parent
+       toggle, so most new boards have nothing here yet). -->
+  <div class="section-label" id="sentence-label" style="display:none;">Sentence activity</div>
+  <div class="panel" id="sentence-panel" style="display:none;">
+    <h2>Sentences built &amp; spoken</h2>
+    <div style="display:flex;align-items:baseline;gap:10px;margin:6px 4px;">
+      <span id="sent-count" style="font-size:36px;font-weight:800;color:#9d174d;line-height:1;">0</span>
+      <span style="font-size:13px;color:#6b7280;">this week</span>
+      <span id="sent-delta" style="font-size:13px;font-weight:700;"></span>
+    </div>
+    <div id="sent-bars" style="display:flex;gap:6px;align-items:flex-end;height:56px;margin:8px 4px 4px;"></div>
+    <div id="sent-days" style="display:flex;gap:6px;margin:0 4px 10px;"></div>
+    <div id="sent-recent" style="margin:0 4px;"></div>
+    <p class="hint" style="margin:10px 4px 8px;">Every ▶ press of the sentence builder — what was said and when. The words also count in Top Words above.</p>
+  </div>
+
   <!-- SKILL INSIGHTS (PRD §7) -->
   <div class="section-label">Skill insights</div>
   <div class="panel" style="padding:8px 14px;">
@@ -1544,6 +1561,53 @@
     tb.innerHTML = rows.map(r =>
       `<tr><td>${schEsc(r.date)}</td><td><span class="chip ${chipFor(r.mode)}">${schEsc(r.mode)}</span></td><td>${schEsc(r.category)}</td><td>${r.result === '—' ? '—' : '<span class="pill-acc hi">' + schEsc(r.result) + '</span>'}</td><td>${schEsc(r.length)}</td></tr>`).join('');
   }
+  // Sentence activity: weekly count + delta, per-day sparkbars, recent texts.
+  function renderSentences(s) {
+    if (!s || (!s.weekCount && !s.prevWeekCount && !(s.recent || []).length)) return;
+    const show = (id) => { const el = document.getElementById(id); if (el) el.style.display = ''; };
+    show('sentence-label'); show('sentence-panel');
+    const count = document.getElementById('sent-count');
+    if (count) count.textContent = String(s.weekCount || 0);
+    const delta = document.getElementById('sent-delta');
+    if (delta) {
+      const diff = (s.weekCount || 0) - (s.prevWeekCount || 0);
+      delta.textContent = diff === 0 ? '· same as last week'
+        : (diff > 0 ? `↑ ${diff} vs last week` : `↓ ${-diff} vs last week`);
+      delta.style.color = diff >= 0 ? '#047857' : '#b45309';
+    }
+    const bars = document.getElementById('sent-bars');
+    const days = document.getElementById('sent-days');
+    if (bars && days) {
+      bars.innerHTML = ''; days.innerHTML = '';
+      const perDay = Array.isArray(s.perDay) && s.perDay.length === 7 ? s.perDay : new Array(7).fill(0);
+      const max = Math.max(1, ...perDay);
+      const names = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        names.push(i === 0 ? 'today' : d.toLocaleDateString('en-US', { weekday: 'short' }));
+      }
+      perDay.forEach((n, i) => {
+        const b = document.createElement('div');
+        b.style.cssText = `flex:1;border-radius:6px 6px 2px 2px;background:${n ? '#ec4899' : '#fce7f3'};height:${Math.max(6, Math.round(n / max * 100))}%;`;
+        b.title = `${n} sentence${n === 1 ? '' : 's'}`;
+        bars.appendChild(b);
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'flex:1;text-align:center;font-size:10px;color:#9ca3af;';
+        lbl.textContent = names[i];
+        days.appendChild(lbl);
+      });
+    }
+    const recent = document.getElementById('sent-recent');
+    if (recent) {
+      recent.innerHTML = (s.recent || []).map((r) => {
+        const when = r.at ? new Date(r.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+        return `<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border:1px solid #fce4ec;border-radius:10px;margin-bottom:6px;">
+          <span style="font-weight:600;color:#1f2937;">“${schEsc(r.text)}”</span>
+          <span style="font-size:12px;color:#9ca3af;white-space:nowrap;">${schEsc(when)}</span></div>`;
+      }).join('') || '<div class="muted" style="color:#888;font-size:13px;">No sentences yet this week.</div>';
+    }
+  }
+
   function applyAnalytics(a) {
     const labels = a.labels || WEEKS;
     if (a.use && a.use.series && a.use.series.length) {
@@ -1562,6 +1626,7 @@
     if (a.recentSessions && a.recentSessions.length) renderRecent(a.recentSessions);
     renderSpikes(a.recentSpikes || []);
     if (a.stats) renderStatCards(a.stats);
+    if (a.sentences) renderSentences(a.sentences);
     // No real activity yet (new account) → keep the honest em-dash placeholders
     const active = (a.use && a.use.series && a.use.series.length)
       || (a.games && a.games.series && a.games.series.length)

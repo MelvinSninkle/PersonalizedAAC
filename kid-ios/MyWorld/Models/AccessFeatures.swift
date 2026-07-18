@@ -241,6 +241,8 @@ final class SentenceBar {
         stopPlayback()   // restart semantics — never two loops at once
         resetIdle(idleMinutes: idleMinutes)
         let list = staged
+        // Log the spoken sentence (fire-and-forget) — Sentence activity panel.
+        Task { await APIClient().logSentence(childId: childId, words: list.map(\.display)) }
         playTask = Task { @MainActor in
             for tile in list {
                 if Task.isCancelled { return }

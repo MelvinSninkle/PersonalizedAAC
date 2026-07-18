@@ -7237,6 +7237,16 @@
     if (!SB.staged.length) return;
     const gen = ++_sbPlayGen;
     sbResetIdle();
+    // Log the spoken sentence (fire-and-forget) — feeds the dashboard's
+    // Sentence activity panel: what was said, when, how many words.
+    try {
+      const text = SB.staged.map(i => i.displayLabel || i.label).join(' ');
+      apiFetch('/api/game-log', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: CHILD_ID, mode: 'sentence',
+          itemCount: SB.staged.length, correctCount: 0, notes: text, attempts: [] }),
+      }).catch(() => {});
+    } catch (_) {}
     for (const item of SB.staged.slice()) {
       if (gen !== _sbPlayGen) return;   // stopped or restarted
       try {

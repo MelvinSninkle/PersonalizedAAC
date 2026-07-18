@@ -170,6 +170,7 @@ class SentenceBar(
     private val scope: CoroutineScope,
     private val media: MediaCache,
     private val gameAudio: GameAudio,
+    private val api: ApiClient? = null,   // sentence-activity logging (optional for tests)
 ) {
     data class Drag(val tile: Tile, val overHeader: Boolean)
 
@@ -247,6 +248,16 @@ class SentenceBar(
         if (list.isEmpty()) return
         stopPlayback()   // restart semantics — never two loops at once
         resetIdle(idleMinutes)
+        // Log the spoken sentence (fire-and-forget) — Sentence activity panel.
+        api?.let { client ->
+            val text = list.joinToString(" ") { it.display }
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                client.postSilently("/api/game-log",
+                    "{\"childId\":${io.andrewpeterson.myworld.audio.SpeechCache.jsonQuote(childId)}," +
+                    "\"mode\":\"sentence\",\"itemCount\":${list.size},\"correctCount\":0," +
+                    "\"notes\":${io.andrewpeterson.myworld.audio.SpeechCache.jsonQuote(text)}}")
+            }
+        }
         playJob = scope.launch {
             for (t in list) {
                 val f = t.soundKey?.takeIf { it.isNotEmpty() }?.let { media.audioFile(it) }

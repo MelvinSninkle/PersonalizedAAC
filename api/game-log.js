@@ -31,6 +31,9 @@ export default async function handler(req, res) {
   // back to the legacy itemCount when the client doesn't send it.
   const slidesAttempted = Number.isFinite(b.slidesAttempted) ? b.slidesAttempted : null;
   const endReason = typeof b.endReason === 'string' ? b.endReason.slice(0, 32) : null;
+  // Free-text session note. Today's use: mode='sentence' logs the sentence
+  // the child built ("I love you mom") for the dashboard's Sentence activity.
+  const notes = typeof b.notes === 'string' && b.notes.trim() ? b.notes.trim().slice(0, 300) : null;
   // PRD §11 skill anchor — the canonical taxonomy slug for the session's
   // target. Clients should pass the resolved slug; if missing we'll fall
   // back to the first attempt's slug below.
@@ -52,10 +55,10 @@ export default async function handler(req, res) {
     const rows = await db`
       INSERT INTO sessions (child_id, mode, category, facilitator, started_at, ended_at,
                             correct_count, item_count,
-                            slides_attempted, end_reason, skill_slug, scoring_version)
+                            slides_attempted, end_reason, skill_slug, scoring_version, notes)
       VALUES (${childId}, ${mode}, ${category}, ${auth.user.role || null}, ${startedAt}, ${endedAt},
               ${correctCount}, ${itemCount},
-              ${slidesAttempted}, ${endReason}, ${effectiveSkill}, ${scoringVersion})
+              ${slidesAttempted}, ${endReason}, ${effectiveSkill}, ${scoringVersion}, ${notes})
       RETURNING id`;
     const sid = rows[0].id;
     for (const a of attempts) {
