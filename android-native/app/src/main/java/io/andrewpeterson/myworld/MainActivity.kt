@@ -47,15 +47,18 @@ fun RootView() {
     val role by c.deviceMode.role.collectAsState()
     val needsOnboarding by c.onboarding.needsOnboarding.collectAsState()
 
-    when {
-        // Brand-new families see the demo → account → setup flow; the account
-        // step's "Log in" mode is the returning-parent path. needsOnboarding
-        // keeps a mid-flow parent HERE even after their account exists.
-        user == null -> io.andrewpeterson.myworld.ui.onboarding.OnboardingFlow()
-        needsOnboarding -> io.andrewpeterson.myworld.ui.onboarding.OnboardingFlow()
-        role == DeviceMode.Role.UNSET -> RolePickerView()
-        role == DeviceMode.Role.CHILD_BOARD -> io.andrewpeterson.myworld.ui.board.BoardView()
-        else -> io.andrewpeterson.myworld.ui.parent.ParentHomeView()
+    // Server-driven min/suggested build check wraps everything (UpdateGateView.kt).
+    io.andrewpeterson.myworld.ui.UpdateGate {
+        when {
+            // Brand-new families see the demo → account → setup flow; the account
+            // step's "Log in" mode is the returning-parent path. needsOnboarding
+            // keeps a mid-flow parent HERE even after their account exists.
+            user == null -> io.andrewpeterson.myworld.ui.onboarding.OnboardingFlow()
+            needsOnboarding -> io.andrewpeterson.myworld.ui.onboarding.OnboardingFlow()
+            role == DeviceMode.Role.UNSET -> RolePickerView()
+            role == DeviceMode.Role.CHILD_BOARD -> io.andrewpeterson.myworld.ui.board.BoardView()
+            else -> io.andrewpeterson.myworld.ui.parent.ParentHomeView()
+        }
     }
 }
 

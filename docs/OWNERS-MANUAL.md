@@ -101,9 +101,14 @@ ACCESS_KEYS gate), set from parent dashboard → Board tab (themed accordions)
 
 - `tapInterrupt` — a tap during playback cuts the word off (default OFF so a
   stimming child hears each word complete).
-- `doubleTapTeach` — same tile twice within 2.5s speaks its teaching facts
-  (English boards only; clues are English prose).
-- `easyClose` — game ✕ closes on a quick tap instead of the 1.2s hold.
+- `doubleTapTeach` — tap-to-learn: rapid re-taps on the same tile walk its
+  teaching facts one per tap (up to three, then wrap to the word; English
+  boards only — clues are English prose). `teachTapMs` (500–5000, default
+  2000) is the rapid-tap window, a slider next to the toggle on all four
+  editors.
+- `easyClose` — game ✕ closes on a quick tap instead of the hold.
+  `exitHoldMs` (300–3000, default 1200) sets the hold length when easyClose
+  is off — same slider placement.
 - `easyUnlock` — the board lock opens edit mode without the password.
   ENABLING re-verifies the account password behind a strong warning (both
   UIs); disabling is friction-free. See surface-audit E6b before touching.
@@ -173,6 +178,11 @@ family keeps everything they have — only new spends wait.
   gesture each time edit mode opens. Mouse users just drag. iOS/Android tile
   editors also have Move earlier/later buttons. Family reorders stamp
   layoutCustomizedAt (E11) so admin pushes never clobber them.
+  **Live shuffle**: while a tile (or chip) is lifted, the OTHER tiles part in
+  real time so the gap always shows exactly where the drop lands — no more
+  guessing at the target. Category and subcategory chips drag-reorder the
+  same way on all three surfaces (chips remain tile-drop targets for
+  move-into-folder; that drop takes priority over a reorder).
 - **Failed renders alert the parent** (never silent): a render that fails
   every attempt (word tile stuck on default art, photo add that never
   landed) appears as a ⚠️ alert in all three parent views — web dashboard
@@ -353,7 +363,13 @@ family keeps everything they have — only new spends wait.
   reason (`onboard:foods`/`onboard:toys`); photos ride /api/tile-jobs with
   a folder-by-name hint (leaf-resolved server-side). Plus-tier families see
   the honest "month one's ⭐ mostly build the board" note here and on the
-  store's Plus card. Show/movie art legal posture + the TMDB option:
+  store's Plus card. The seed wait also runs the **board-behavior wizard**
+  (web `#bw-setup` + iOS `OBSettingsWizard`): five plain-language questions
+  that save `doubleTapTeach` / `tapInterrupt` / `toolSentence` /
+  `toolListen` / `easyClose` immediately via merge-safe child-settings
+  writes — same defaults, same toggles as ⚙ Display settings, so skipping
+  costs nothing. Style pickers (web + iOS) link "See a whole board in this
+  style" → `/practice?style=<id>` (public shared art only). Show/movie art legal posture + the TMDB option:
   **runbooks/show-movie-art-licensing.md** (action item there: register a
   DMCA agent before launch).
 
@@ -366,6 +382,27 @@ family keeps everything they have — only new spends wait.
 - Run the full audit anytime by invoking the `surface-audit` skill, or
   locally: `bash tools/surface-audit/invariants.sh` + the two smoke suites
   against `tools/surface-audit/stub_server.py`.
+
+## App version gate (telling installed apps to update)
+
+There is no two-way messaging and none is needed: TestFlight / the stores
+notify and auto-update. The one-way backstop for a known-broken old build is
+`GET /api/manifest?app=versions` (public, no auth, no child data), read by
+both native apps at launch (`UpdateGate.swift` / `UpdateGateView.kt`):
+
+- `APP_MIN_BUILD_IOS` / `APP_MIN_BUILD_ANDROID` — builds BELOW this get a
+  full-screen "Time to update" wall.
+- `APP_SOFT_BUILD_IOS` / `APP_SOFT_BUILD_ANDROID` — builds below this get a
+  dismissible once-per-launch nudge.
+- `APP_UPDATE_URL_IOS` / `APP_UPDATE_URL_ANDROID` — the button's link (set to
+  the App Store / Play page once live; unset → text instructions).
+- `APP_UPDATE_NOTE` — optional custom copy for both.
+
+All unset by default → gate off; clients FAIL OPEN on any error (an AAC
+device must never lose its voice to a flaky network). To use: set the env
+var(s) in Vercel, redeploy. iOS compares CFBundleVersion, Android
+versionCode — bump those on every release or the gate can't tell builds
+apart.
 
 ## Runbooks
 

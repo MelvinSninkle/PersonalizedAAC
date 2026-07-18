@@ -20,11 +20,22 @@ import Observation
 enum TouchConfig {
     @MainActor static var interrupt = false
     @MainActor static var doubleTapTeach = false
+    /// Tap-to-learn rapid-tap window (parent slider, 0.5–5s, default 2s):
+    /// re-taps inside this window walk facts 1 → 2 → 3, then the word again.
+    @MainActor static var teachTapMs = 2000
     // Safety controls (synced, for older/capable kids):
-    //   easyClose  — game ✕ closes on a quick tap instead of the 0.7s hold.
+    //   easyClose  — game ✕ closes on a quick tap instead of the hold.
+    //   exitHoldMs — the ✕ hold length when easyClose is off (parent slider).
     //   easyUnlock — the lock opens edit mode without the unlock sheet.
     @MainActor static var easyClose = false
+    @MainActor static var exitHoldMs = 1200
     @MainActor static var easyUnlock = false
+
+    /// Clamp a settings value into a sane slider range (bad/absent → default).
+    static func clampMs(_ v: Any?, _ lo: Int, _ hi: Int, _ dflt: Int) -> Int {
+        guard let n = (v as? Int) ?? (v as? Double).map(Int.init), n > 0 else { return dflt }
+        return min(hi, max(lo, n))
+    }
 }
 
 /// The five access keys, defaulted to the shipped behavior.
@@ -80,7 +91,9 @@ final class AccessPrefs {
             // Touch + safety controls ride the same settings fetch (root keys too).
             TouchConfig.interrupt = (s["tapInterrupt"] as? Bool) ?? false
             TouchConfig.doubleTapTeach = (s["doubleTapTeach"] as? Bool) ?? false
+            TouchConfig.teachTapMs = TouchConfig.clampMs(s["teachTapMs"], 500, 5000, 2000)
             TouchConfig.easyClose = (s["easyClose"] as? Bool) ?? false
+            TouchConfig.exitHoldMs = TouchConfig.clampMs(s["exitHoldMs"], 300, 3000, 1200)
             TouchConfig.easyUnlock = (s["easyUnlock"] as? Bool) ?? false
         }
     }

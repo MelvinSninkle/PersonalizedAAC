@@ -57,6 +57,17 @@ suspend fun ApiClient.deleteItem(id: Int, childId: String) {
     raw("DELETE", "/api/items?id=$id&childId=${esc(childId)}")
 }
 
+/** PUT /api/categories?id= — partial update (server COALESCEs); drag-reorder
+ *  persists `order` for category/subcategory chips. */
+suspend fun ApiClient.updateCategory(id: Int, childId: String, order: Int? = null) {
+    val body = buildString {
+        append("{\"childId\":").append(jsonQuote(childId))
+        order?.let { append(",\"order\":").append(it) }
+        append('}')
+    }
+    raw("PUT", "/api/categories?id=$id&childId=${esc(childId)}", body.encodeToByteArray())
+}
+
 /** POST /api/upload — raw bytes → private blob key. */
 @Serializable
 data class UploadResult(val key: String = "")

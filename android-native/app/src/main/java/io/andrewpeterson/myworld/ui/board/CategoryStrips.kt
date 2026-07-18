@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,16 +27,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,6 +67,7 @@ fun CategoryTabStrip(
     hideLabels: Boolean,
     paged: Boolean = false,
     onChipBounds: ((Int, Rect) -> Unit)? = null,
+    onReorder: ((List<Int>) -> Unit)? = null,
     onSelect: (Int) -> Unit,
 ) {
     if (paged) {
@@ -66,6 +75,14 @@ fun CategoryTabStrip(
             CategoryChip(cat, selected = selectedId == cat.id, compact = false,
                 hideLabel = hideLabels, onBounds = null) { onSelect(cat.id) }
         }
+        return
+    }
+    if (onReorder != null) {
+        // Unlocked board: chips reorder by long-press drag with live shuffle,
+        // exactly like the tiles below them.
+        ReorderableChipRow(categories, selectedId, compact = false, hideLabels = hideLabels,
+            spacing = 8.dp, verticalPad = 8.dp, onChipBounds = onChipBounds,
+            onReorder = onReorder, onSelect = onSelect)
         return
     }
     Row(
@@ -77,6 +94,97 @@ fun CategoryTabStrip(
                 hideLabel = hideLabels,
                 onBounds = onChipBounds?.let { report -> { r -> report(cat.id, r) } }) { onSelect(cat.id) }
             androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+        }
+    }
+}
+
+/**
+ * Edit-mode chip drag-reorder with the same live-shuffle language as the tile
+ * grid: long-press lifts a chip (haptic), the OTHER chips part to show the
+ * landing slot as it moves, release persists the previewed order. The preview
+ * survives until the board refresh re-renders the strip in the saved order,
+ * so nothing snaps back. Chips remain tile-drop targets via onChipBounds.
+ */
+@Composable
+private fun ReorderableChipRow(
+    categories: List<Category>,
+    selectedId: Int?,
+    compact: Boolean,
+    hideLabels: Boolean,
+    spacing: Dp,
+    verticalPad: Dp,
+    onChipBounds: ((Int, Rect) -> Unit)?,
+    onReorder: (List<Int>) -> Unit,
+    onSelect: (Int) -> Unit,
+) {
+    var dragId by remember { mutableStateOf<Int?>(null) }
+    var dragPos by remember { mutableStateOf(Offset.Zero) }
+    var preview by remember(categories.map { it.id }) { mutableStateOf<List<Int>?>(null) }
+    val rects = remember { mutableStateMapOf<Int, Rect>() }
+    val haptics = LocalHapticFeedback.current
+
+    val ordered = preview?.let { ids ->
+        val by = categories.associateBy { it.id }
+        ids.mapNotNull { by[it] } + categories.filter { c2 -> c2.id !in ids }
+    } ?: categories
+
+    Row(
+        Modifier.horizontalScroll(rememberScrollState())
+            .padding(horizontal = 10.dp, vertical = verticalPad),
+    ) {
+        ordered.forEach { cat ->
+            val dragging = dragId == cat.id
+            Box(
+                Modifier
+                    .onGloballyPositioned {
+                        val r = it.boundsInRoot()
+                        rects[cat.id] = r
+                        onChipBounds?.invoke(cat.id, r)
+                    }
+                    .zIndex(if (dragging) 1f else 0f)
+                    .graphicsLayer {
+                        if (dragging) {
+                            val center = rects[cat.id]?.center ?: Offset.Zero
+                            translationX = dragPos.x - center.x
+                            translationY = dragPos.y - center.y
+                            scaleX = 1.08f; scaleY = 1.08f; alpha = 0.85f
+                        }
+                    }
+                    .pointerInput(cat.id, categories.map { it.id }) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                dragPos = rects[cat.id]?.center ?: Offset.Zero
+                                dragId = cat.id
+                            },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                dragPos += amount
+                                val overId = rects.entries.firstOrNull {
+                                    it.key != cat.id && it.value.contains(dragPos)
+                                }?.key
+                                if (overId != null) {
+                                    val order = (preview ?: categories.map { it.id }).toMutableList()
+                                    val di = order.indexOf(cat.id)
+                                    val ti = order.indexOf(overId)
+                                    if (di >= 0 && ti >= 0 && di != ti) {
+                                        order.removeAt(di); order.add(ti, cat.id)
+                                        preview = order
+                                    }
+                                }
+                            },
+                            onDragEnd = {
+                                dragId = null
+                                preview?.let(onReorder)
+                            },
+                            onDragCancel = { dragId = null; preview = null },
+                        )
+                    },
+            ) {
+                CategoryChip(cat, selected = selectedId == cat.id, compact = compact,
+                    hideLabel = hideLabels, onBounds = null) { onSelect(cat.id) }
+            }
+            Spacer(Modifier.width(spacing))
         }
     }
 }
@@ -139,6 +247,7 @@ fun SubcategoryStrip(
     hideLabels: Boolean,
     paged: Boolean = false,
     onChipBounds: ((Int, Rect) -> Unit)? = null,
+    onReorder: ((List<Int>) -> Unit)? = null,
     onSelect: (Int) -> Unit,
 ) {
     if (paged) {
@@ -146,6 +255,12 @@ fun SubcategoryStrip(
             CategoryChip(sub, selected = selectedId == sub.id, compact = true,
                 hideLabel = hideLabels, onBounds = null) { onSelect(sub.id) }
         }
+        return
+    }
+    if (onReorder != null) {
+        ReorderableChipRow(subcategories, selectedId, compact = true, hideLabels = hideLabels,
+            spacing = 6.dp, verticalPad = 6.dp, onChipBounds = onChipBounds,
+            onReorder = onReorder, onSelect = onSelect)
         return
     }
     Row(

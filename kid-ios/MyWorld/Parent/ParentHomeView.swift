@@ -1088,7 +1088,7 @@ private struct PersonEditorSheet: View {
             // fullScreenCover, NOT sheet: an iPad form-sheet camera renders a
             // black preview (see CameraPicker's header comment).
             .fullScreenCover(isPresented: $showCamera) {
-                CameraPicker { data in
+                CameraCapture { data in
                     showCamera = false
                     if let data { capturedJPEG = data }
                 }

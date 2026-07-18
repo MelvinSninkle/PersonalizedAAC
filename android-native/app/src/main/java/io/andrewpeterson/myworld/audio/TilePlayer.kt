@@ -40,9 +40,11 @@ class TilePlayer(
     private var player: MediaPlayer? = null
 
     // Double-tap-teach bookkeeping (mirrors the web board's tapSpeak).
+    // Tap-to-learn bookkeeping (mirrors web tapSpeak): the fact index walks
+    // 0→1→2 across rapid re-taps; the window is TouchConfig.teachTapMs.
     private var lastTapTileId: Int? = null
     private var lastTapAt = 0L
-    private val doubleTapWindowMs = 2500L
+    private var teachIdx = 0
     private var ttsReady = false
     private val tts: TextToSpeech = TextToSpeech(context.applicationContext) { status ->
         ttsReady = status == TextToSpeech.SUCCESS
@@ -68,26 +70,31 @@ class TilePlayer(
             val clues = if (tile.displayLabel == null)   // clues are English taxonomy prose
                 (tile.descriptiveClues ?: emptyList()).filter { it.isNotBlank() }.take(3)
             else emptyList()
+            // Tap-to-learn: each rapid re-tap speaks the NEXT fact — tap 2 =
+            // fact 1 … tap 4 = fact 3 — then the next rapid tap wraps back to
+            // the word. Window is the parent's teachTapMs slider.
             if (TouchConfig.doubleTapTeach && tile.id == lastTapTileId &&
-                (now - lastTapAt) < doubleTapWindowMs && clues.isNotEmpty()
+                (now - lastTapAt) < TouchConfig.teachTapMs && clues.isNotEmpty()
             ) {
-                lastTapTileId = null
-                logTap(tile, childId, categoryName, subcategoryName)
-                stop()
-                val ga = gameAudio
-                if (ga != null) {
-                    scope.launch { for (c in clues) ga.speakAwait(c, childId) }
-                } else {
-                    clues.forEachIndexed { i, c ->
-                        if (!ttsReady) return@forEachIndexed
-                        val mode = if (i == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-                        tts.speak(c, mode, null, "clue-$i-${c.hashCode()}")
+                if (teachIdx < clues.size) {
+                    val clue = clues[teachIdx]
+                    teachIdx++
+                    lastTapAt = now         // keep the rapid-tap chain alive
+                    logTap(tile, childId, categoryName, subcategoryName)
+                    stop()
+                    val ga = gameAudio
+                    if (ga != null) {
+                        scope.launch { ga.speakAwait(clue, childId) }
+                    } else if (ttsReady) {
+                        tts.speak(clue, TextToSpeech.QUEUE_FLUSH, null, "clue-$teachIdx-${clue.hashCode()}")
                     }
+                    return
                 }
-                return
+                // every fact heard → fall through: the word, chain restarts
             }
             lastTapTileId = tile.id
             lastTapAt = now
+            teachIdx = 0
             if (isBusy() && !TouchConfig.interrupt) return   // not logged — the tap was ignored
         }
 

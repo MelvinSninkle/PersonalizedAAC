@@ -16,10 +16,12 @@ final class TilePlayer {
     private var player: AVAudioPlayer?
     private let speech = AVSpeechSynthesizer()
 
-    // Double-tap-teach bookkeeping (mirrors the web board's tapSpeak).
+    // Tap-to-learn bookkeeping (mirrors the web board's tapSpeak): the fact
+    // index walks 0→1→2 across rapid re-taps; the window comes from the
+    // parent's TouchConfig.teachTapMs slider.
     private var lastTapTileId: Int?
     private var lastTapAt: Date = .distantPast
-    private static let doubleTapWindow: TimeInterval = 2.5
+    private var teachIdx = 0
 
     /// Plays a tile's audio AND (when `childId` is provided) logs the tap.
     ///
@@ -44,19 +46,28 @@ final class TilePlayer {
         // second tap teaches even while the first word is still playing.
         if let childId, !childId.isEmpty {
             let now = Date()
+            // Tap-to-learn: each rapid re-tap speaks the NEXT fact — tap 2 =
+            // fact 1 … tap 4 = fact 3 — then the next rapid tap wraps back to
+            // the word itself. Window is the parent's teachTapMs slider.
             if TouchConfig.doubleTapTeach, tile.id == lastTapTileId,
-               now.timeIntervalSince(lastTapAt) < Self.doubleTapWindow,
+               now.timeIntervalSince(lastTapAt) < Double(TouchConfig.teachTapMs) / 1000.0,
                tile.displayLabel == nil,   // clues are English taxonomy prose
                let clues = tile.descriptiveClues?.prefix(3), !clues.isEmpty {
-                lastTapTileId = nil
-                logTap(tile, childId: childId, categoryName: categoryName, subcategoryName: subcategoryName)
-                player?.stop()
-                speech.stopSpeaking(at: .immediate)
-                for clue in clues { await GameAudio.shared.speakAwait(clue, childId: childId) }
-                return
+                if teachIdx < clues.count {
+                    let clue = Array(clues)[teachIdx]
+                    teachIdx += 1
+                    lastTapAt = now         // keep the rapid-tap chain alive
+                    logTap(tile, childId: childId, categoryName: categoryName, subcategoryName: subcategoryName)
+                    player?.stop()
+                    speech.stopSpeaking(at: .immediate)
+                    await GameAudio.shared.speakAwait(clue, childId: childId)
+                    return
+                }
+                // every fact heard → fall through: the word, chain restarts
             }
             lastTapTileId = tile.id
             lastTapAt = now
+            teachIdx = 0
             let busy = (player?.isPlaying == true) || speech.isSpeaking
             if busy && !TouchConfig.interrupt { return }   // not logged — the tap was ignored
         }

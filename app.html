@@ -1556,8 +1556,12 @@
     </div>
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-double-teach">
-      <label for="disp-double-teach">Double-tap a tile teaches it
-        <span style="display:block;font-size:12px;color:#666;">A quick second tap opens the word's teaching slideshow.</span></label>
+      <label for="disp-double-teach">Tap again to learn
+        <span style="display:block;font-size:12px;color:#666;">Tap a tile: hear the word. Tap it again quickly: hear a fact about it — up to three facts on back-to-back taps, then the word again.</span></label>
+    </div>
+    <div style="margin:8px 0 0 30px;">
+      <label for="disp-teach-window" style="font-size:12px;color:#666;text-transform:none;letter-spacing:0;">How quick "again" has to be: <strong><span id="disp-teach-window-val">2.0</span>s</strong></label>
+      <input type="range" id="disp-teach-window" min="500" max="5000" step="250" value="2000" style="width:100%;max-width:280px;display:block;">
     </div>
 
     <!-- 4 · Listening -->
@@ -1578,7 +1582,11 @@
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-easy-close">
       <label for="disp-easy-close">Close buttons work with a quick tap
-        <span style="display:block;font-size:12px;color:#666;">Normally the game ✕ needs a 1-second hold so a child can't quit by accident.</span></label>
+        <span style="display:block;font-size:12px;color:#666;">Normally the game ✕ needs a hold so a child can't quit by accident.</span></label>
+    </div>
+    <div style="margin:8px 0 0 30px;">
+      <label for="disp-exit-hold" style="font-size:12px;color:#666;text-transform:none;letter-spacing:0;">Hold length when quick tap is off: <strong><span id="disp-exit-hold-val">1.2</span>s</strong></label>
+      <input type="range" id="disp-exit-hold" min="300" max="3000" step="100" value="1200" style="width:100%;max-width:280px;display:block;">
     </div>
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-easy-unlock">
@@ -2341,12 +2349,62 @@
   function clearDropHighlights() {
     document.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
   }
+  // Live-shuffle preview: instead of highlighting a drop target, the lifted
+  // element MOVES among its siblings as the pointer crosses them, so the gap
+  // (the .dragging element at 40% opacity) always shows exactly where the
+  // drop will land. FLIP-animate the displaced siblings so they glide rather
+  // than jump. Because the source element follows the pointer in the DOM,
+  // elementFromPoint soon lands on the source itself (not a valid target),
+  // which naturally debounces re-shuffling — no oscillation.
+  function shufflePreview(t, x, y) {
+    const el = pd.el;
+    if (!t || t === el || t.parentNode !== el.parentNode) return;
+    const r = t.getBoundingClientRect();
+    // Reading-order test: pointer past the target's center → land AFTER it.
+    // (Rows of a grid: same-row is decided by x-half; different row by y.)
+    const after = y > r.bottom || (y >= r.top && x > r.left + r.width / 2);
+    if (after ? t.nextElementSibling === el : el.nextElementSibling === t) return; // already there
+    const parent = t.parentNode;
+    const group = [...parent.querySelectorAll('[data-drag-kind]')]
+      .filter((s) => dragGroupKey(s) === dragState.key);
+    const before = new Map(group.map((s) => [s, s.getBoundingClientRect()]));
+    parent.insertBefore(el, after ? t.nextSibling : t);
+    pd.moved = true;
+    for (const s of group) {
+      if (s === el) continue;
+      const b = before.get(s);
+      const a = s.getBoundingClientRect();
+      const dx = b.left - a.left, dy = b.top - a.top;
+      if (!dx && !dy) continue;
+      s.style.transition = 'none';
+      s.style.transform = `translate(${dx}px, ${dy}px)`;
+      requestAnimationFrame(() => {
+        s.style.transition = 'transform .18s ease';
+        s.style.transform = '';
+      });
+    }
+  }
+  function clearShuffleStyles(el) {
+    const parent = el && el.parentNode;
+    if (!parent || !parent.querySelectorAll) return;
+    parent.querySelectorAll('[data-drag-kind]').forEach((s) => {
+      s.style.transition = ''; s.style.transform = '';
+    });
+  }
   function updateDragTarget(x, y) {
     if (!pd) return;
     if (pd.ghost) { pd.ghost.style.left = (x + 14) + 'px'; pd.ghost.style.top = (y + 14) + 'px'; }
     const under = document.elementFromPoint(x, y);
     const cand = under && under.closest('[data-drag-kind]');
-    const t = (cand && (isDropTarget(cand) || isItemIntoCatDrop(cand))) ? cand : null;
+    if (cand && isDropTarget(cand)) {
+      // Same sibling group → the shuffle IS the preview; no outline needed.
+      if (pd.target) { clearDropHighlights(); pd.target = null; }
+      shufflePreview(cand, x, y);
+      return;
+    }
+    // A tile over a category/subcategory tab = "move into that folder" —
+    // that one keeps the outline highlight (there's no slot to preview).
+    const t = (cand && isItemIntoCatDrop(cand)) ? cand : null;
     if (t !== pd.target) {
       clearDropHighlights();
       if (t) t.classList.add('drop-target');
@@ -2402,23 +2460,34 @@
     if (cur.raf) cancelAnimationFrame(cur.raf);
     if (cur.ghost) cur.ghost.remove();
     cur.el.classList.remove('dragging');
+    clearShuffleStyles(cur.el);
     const target = cur.target;
     clearDropHighlights();
     if (cur.armed) suppressClickUntil = Date.now() + 400;
     try {
-      if (commit && cur.armed && target && dragState) {
-        if (isItemIntoCatDrop(target)) {
+      if (commit && cur.armed && dragState) {
+        if (target && isItemIntoCatDrop(target)) {
+          // Dropping onto a folder tab beats the reorder preview — that's an
+          // explicit "put it in there".
           await moveItemToCategory(dragState.id, target.dataset.section, parseInt(target.dataset.entityId, 10));
-        } else if (isDropTarget(target)) {
-          const targetId = parseInt(target.dataset.entityId, 10);
-          const kind = target.dataset.dragKind;
-          const section = target.dataset.section;
-          const parentId = target.dataset.parentId != null ? parseInt(target.dataset.parentId, 10) : null;
-          if (kind === 'item')        await reorderEntities(section, 'item', null, dragState.id, targetId);
-          else if (kind === 'cat-top') await reorderEntities(section, 'cat', null, dragState.id, targetId);
-          else if (kind === 'cat-sub') await reorderEntities(section, 'cat', parentId, dragState.id, targetId);
+          return;
+        }
+        if (cur.moved) {
+          // The live shuffle already put the element where it lands — the DOM
+          // order IS the answer; persist it.
+          const el = cur.el;
+          const ids = [...el.parentNode.querySelectorAll('[data-drag-kind]')]
+            .filter((s) => dragGroupKey(s) === dragState.key)
+            .map((s) => parseInt(s.dataset.entityId, 10));
+          const kind = el.dataset.dragKind;
+          const parentId = (el.dataset.parentId ?? '') !== '' ? parseInt(el.dataset.parentId, 10) : null;
+          await persistOrder(el.dataset.section, kind === 'item' ? 'item' : 'cat', parentId, ids);
+          return;
         }
       }
+      // Cancelled (or nothing committed) after a shuffle: re-render so the
+      // preview positions snap back to the stored order.
+      if (cur.moved) await renderSection(cur.el.dataset.section);
     } finally { dragState = null; }
   }
   document.addEventListener('pointermove', (e) => {
@@ -2452,7 +2521,7 @@
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       pd = { el, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY,
              lastX: e.clientX, lastY: e.clientY, armed: false, target: null,
-             ghost: null, raf: null, timer: null };
+             ghost: null, raf: null, timer: null, moved: false };
       if (e.pointerType !== 'mouse') {
         pd.timer = setTimeout(() => { if (pd && !pd.armed) armDrag(); }, DRAG_HOLD_MS);
       }
@@ -2460,9 +2529,11 @@
     el.addEventListener('pointercancel', () => { if (pd && pd.el === el) finishDrag(false); });
   }
 
-  // Reorder a sibling group and persist new `order` values.
-  // entityKind: 'item' (scoped to the active category) | 'cat' (scoped by parentId).
-  async function reorderEntities(section, entityKind, parentId, draggedId, targetId) {
+  // Persist a sibling group's new order from the drag preview's final DOM
+  // sequence. entityKind: 'item' (scoped to the active category) | 'cat'
+  // (scoped by parentId). orderedIds is authoritative; entities the DOM
+  // didn't list (shouldn't happen) keep their relative order at the end.
+  async function persistOrder(section, entityKind, parentId, orderedIds) {
     let list;
     if (entityKind === 'item') {
       // 'needs' items have no categoryId; everything else filters by the active category.
@@ -2477,20 +2548,18 @@
         .filter(c => (c.parentId ?? null) === (parentId ?? null))
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     }
-    const di = list.findIndex(x => x.id === draggedId);
-    const ti = list.findIndex(x => x.id === targetId);
-    if (di < 0 || ti < 0 || di === ti) return;
-    const [moved] = list.splice(di, 1);
-    list.splice(di < ti ? ti - 1 : ti, 0, moved);
-    for (let i = 0; i < list.length; i++) {
+    const byId = new Map(list.map(x => [x.id, x]));
+    const ordered = orderedIds.map(id => byId.get(id)).filter(Boolean);
+    for (const x of list) if (!ordered.includes(x)) ordered.push(x);
+    for (let i = 0; i < ordered.length; i++) {
       const newOrder = i * 1000;
-      if (list[i].order === newOrder) continue;
+      if (ordered[i].order === newOrder) continue;
       try {
-        if (entityKind === 'item') await serverUpdateItem(list[i], { order: newOrder });
-        else await serverUpdateCategory(list[i], { order: newOrder });
+        if (entityKind === 'item') await serverUpdateItem(ordered[i], { order: newOrder });
+        else await serverUpdateCategory(ordered[i], { order: newOrder });
       } catch (_) {
-        list[i].order = newOrder;
-        if (entityKind === 'item') await putItem(list[i]); else await putCat(list[i]);
+        ordered[i].order = newOrder;
+        if (entityKind === 'item') await putItem(ordered[i]); else await putCat(ordered[i]);
       }
     }
     await renderSection(section);
@@ -2882,17 +2951,22 @@
   //   interrupt      — a new tap cuts off the audio that's still playing.
   //                    OFF (default): taps during playback are ignored, so a
   //                    child stimming on one button hears each word complete.
-  //   doubleTapTeach — the SAME tile tapped again within the window plays its
-  //                    teaching facts (descriptive clues, up to three).
-  const TOUCH = { interrupt: false, doubleTapTeach: false };
+  //   doubleTapTeach — tap-to-learn: the SAME tile re-tapped within the
+  //                    window speaks its next teaching fact — tap 2 = fact 1,
+  //                    tap 3 = fact 2, tap 4 = fact 3 (descriptive clues);
+  //                    the next rapid tap wraps back to the word itself.
+  //   teachTapMs     — how quick "back to back" has to be (parent slider).
+  const TOUCH = { interrupt: false, doubleTapTeach: false, teachTapMs: 2000 };
+  const clampMs = (v, lo, hi, dflt) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.max(lo, Math.min(hi, n)) : dflt; };
   // Safety controls — SYNCED child settings (they're facts about the child,
   // not the device): a capable kid gets quick-tap ✕ and password-free unlock
   // on every screen he uses. Parent-writable; set from the parent dashboard
   // (Board → Touch & safety) or this board's Display modal.
-  //   easyClose  — game ✕ closes on a quick tap instead of the 1.2s hold.
-  //   easyUnlock — the lock opens edit mode without the account password.
-  //                Enabling requires the password ONCE plus a strong warning.
-  const SAFETY = { easyClose: false, easyUnlock: false };
+  //   easyClose   — game ✕ closes on a quick tap instead of the hold.
+  //   exitHoldMs  — the hold length when easyClose is off (parent slider).
+  //   easyUnlock  — the lock opens edit mode without the account password.
+  //                 Enabling requires the password ONCE plus a strong warning.
+  const SAFETY = { easyClose: false, exitHoldMs: 1200, easyUnlock: false };
   // Header tools are parent-configurable for every family (synced child
   // settings, default ON): a parent can hide listen / teach / play / the
   // sentence pencil per child. The lock is not optional — parents need it.
@@ -2904,8 +2978,7 @@
     set('play-request-btn', TOOLS.play);
     set('sentence-btn', TOOLS.sentence && ACCESS.sentenceBuilder);
   }
-  const DOUBLE_TAP_WINDOW_MS = 2500;
-  let _lastTapItemId = null, _lastTapItemAt = 0;
+  let _lastTapItemId = null, _lastTapItemAt = 0, _teachIdx = 0;
 
   /// Cut playback loose NOW — pausing + dispatching 'ended' runs playSound's
   /// own release handler, so `speaking` and the safety timer clean up the
@@ -2918,17 +2991,17 @@
     } catch (_) { speaking = false; }
   }
 
-  /// Double-tap teach: the tile's facts, spoken in order. Uses the game voice
+  /// Tap-to-learn: ONE teaching fact per rapid re-tap. Uses the game voice
   /// channel so it can't fight the tile channel's `speaking` bookkeeping.
-  async function playClues(item) {
+  async function playClue(item, idx) {
     const clues = (item.descriptiveClues || []).filter(Boolean).slice(0, 3);
+    const clue = clues[idx];
+    if (!clue) return;
     if (speaking) stopSpeaking();
-    for (const clue of clues) {
-      try {
-        const u = await teachAudioURL(clue);
-        if (u) await playAwait(u);
-      } catch (_) {}
-    }
+    try {
+      const u = await teachAudioURL(clue);
+      if (u) await playAwait(u);
+    } catch (_) {}
   }
 
   function tapSpeak(item, categoryName, subcategoryName) {
@@ -2938,18 +3011,24 @@
     // Sentence mode (the pencil): a tap IS the stage — silent, logged by
     // sbStage. Speaking waits for ▶.
     if (SB.mode) { sbStage(item); return; }
-    // Same tile again inside the window → its teaching facts (when enabled
-    // and it has any). Logged like a normal tap; a third tap starts fresh.
+    // Tap-to-learn: the same tile re-tapped inside the window speaks its NEXT
+    // fact — tap 2 = fact 1 … tap 4 = fact 3. After the last fact (or when a
+    // tile has fewer), the next rapid tap wraps back to the word itself.
     if (TOUCH.doubleTapTeach && item.id === _lastTapItemId
-        && (now - _lastTapItemAt) < DOUBLE_TAP_WINDOW_MS
+        && (now - _lastTapItemAt) < TOUCH.teachTapMs
         && !item.displayLabel   // clues are English taxonomy prose (E5)
         && (item.descriptiveClues || []).length) {
-      _lastTapItemId = null; _lastTapItemAt = 0;
-      enqueueEvent(item, categoryName, subcategoryName);
-      playClues(item);
-      return;
+      const clueCount = (item.descriptiveClues || []).filter(Boolean).slice(0, 3).length;
+      if (_teachIdx < clueCount) {
+        _lastTapItemAt = now;            // keep the rapid-tap chain alive
+        enqueueEvent(item, categoryName, subcategoryName);
+        playClue(item, _teachIdx);
+        _teachIdx++;
+        return;
+      }
+      // every fact heard → fall through: speak the word, restart the chain
     }
-    _lastTapItemId = item.id; _lastTapItemAt = now;
+    _lastTapItemId = item.id; _lastTapItemAt = now; _teachIdx = 0;
     if (speaking) {
       if (!TOUCH.interrupt) return;
       stopSpeaking();
@@ -4757,6 +4836,10 @@
     document.getElementById('disp-tool-sentence').checked = TOOLS.sentence;
     document.getElementById('disp-tap-interrupt').checked = TOUCH.interrupt;
     document.getElementById('disp-double-teach').checked = TOUCH.doubleTapTeach;
+    const tw = document.getElementById('disp-teach-window');
+    if (tw) { tw.value = String(TOUCH.teachTapMs); document.getElementById('disp-teach-window-val').textContent = (TOUCH.teachTapMs / 1000).toFixed(1); }
+    const eh = document.getElementById('disp-exit-hold');
+    if (eh) { eh.value = String(SAFETY.exitHoldMs); document.getElementById('disp-exit-hold-val').textContent = (SAFETY.exitHoldMs / 1000).toFixed(1); }
     document.getElementById('disp-unlock-confirm').style.display = 'none';
     document.getElementById('disp-unlock-pass').value = '';
     document.getElementById('disp-unlock-msg').textContent = '';
@@ -4846,6 +4929,8 @@
     LISTEN.tilesOnly = !!next.listenTilesOnly;
     TOUCH.interrupt = !!next.tapInterrupt;
     TOUCH.doubleTapTeach = !!next.doubleTapTeach;
+    TOUCH.teachTapMs = clampMs(next.teachTapMs, 500, 5000, 2000);
+    SAFETY.exitHoldMs = clampMs(next.exitHoldMs, 300, 3000, 1200);
     TOOLS.listen = next.toolListen !== false;
     TOOLS.teach = next.toolTeach !== false;
     TOOLS.play = next.toolPlay !== false;
@@ -4875,6 +4960,18 @@
     plain('disp-tool-sentence', 'toolSentence', () => TOOLS.sentence);
     plain('disp-tap-interrupt', 'tapInterrupt', () => TOUCH.interrupt);
     plain('disp-double-teach', 'doubleTapTeach', () => TOUCH.doubleTapTeach);
+    // Millisecond sliders — save on release (change), live-update the label.
+    const slider = (id, valId, key, mirror) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', () => { document.getElementById(valId).textContent = (Number(el.value) / 1000).toFixed(1); });
+      el.addEventListener('change', async () => {
+        try { await saveSafety({ [key]: Number(el.value) }); }
+        catch (_) { el.value = String(mirror()); document.getElementById(valId).textContent = (mirror() / 1000).toFixed(1); }
+      });
+    };
+    slider('disp-teach-window', 'disp-teach-window-val', 'teachTapMs', () => TOUCH.teachTapMs);
+    slider('disp-exit-hold', 'disp-exit-hold-val', 'exitHoldMs', () => SAFETY.exitHoldMs);
     // Listening filter toggles (E8) — plain settings, no confirm friction.
     const censorCb = document.getElementById('disp-listen-censor');
     censorCb.addEventListener('change', async () => {
@@ -5427,7 +5524,9 @@
       // Touch controls (ordinary parent settings, no gate).
       TOUCH.interrupt = !!s.tapInterrupt;
       TOUCH.doubleTapTeach = !!s.doubleTapTeach;
+      TOUCH.teachTapMs = clampMs(s.teachTapMs, 500, 5000, 2000);
       SAFETY.easyClose = !!s.easyClose;
+      SAFETY.exitHoldMs = clampMs(s.exitHoldMs, 300, 3000, 1200);
       SAFETY.easyUnlock = !!s.easyUnlock;
       TOOLS.listen = s.toolListen !== false;
       TOOLS.teach = s.toolTeach !== false;
@@ -6805,8 +6904,9 @@
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     exitPid = e.pointerId;
     try { exitBtn.setPointerCapture(exitPid); } catch (_) {}
-    // Quick-tap close (synced safety setting) skips the child-proofing hold.
-    exitTimer = setTimeout(stopGame, SAFETY.easyClose ? 0 : 1200);
+    // Quick-tap close (synced safety setting) skips the child-proofing hold;
+    // otherwise the hold length is the parent's exitHoldMs slider.
+    exitTimer = setTimeout(stopGame, SAFETY.easyClose ? 0 : SAFETY.exitHoldMs);
   }
   function cancelExit() {
     if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; }

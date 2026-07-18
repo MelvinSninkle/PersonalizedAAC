@@ -3,6 +3,10 @@ import SwiftUI
 /// Small horizontal strip of category "chips" — one per top-level category in
 /// the section. Tapping selects it; the tile grid below filters to its
 /// contents (or to its first subcategory's contents if it has subcategories).
+///
+/// While the board is unlocked the chips also drag-reorder with the same
+/// live-shuffle language as the tile grid: lift a chip and its siblings part
+/// to show the landing slot; release persists the previewed order.
 struct CategoryTabStrip: View {
     let categories: [Category]
     @Binding var selectedId: Int?
@@ -12,8 +16,21 @@ struct CategoryTabStrip: View {
     /// Unlocked-board drag support: a tile dropped on a chip moves into that
     /// category (SectionColumn supplies the handler; nil-safe via `?? false`).
     var onDropTile: ((Category, [String]) -> Bool)? = nil
+    /// Unlocked-board chip reorder: called with the full previewed id order to
+    /// persist. nil (locked board) leaves the chips tap-only.
+    var onReorder: (([Int]) -> Void)? = nil
 
     @State private var page = 0
+    @State private var draggedId: Int? = nil
+    @State private var previewIds: [Int]? = nil
+
+    private var ordered: [Category] {
+        guard let ids = previewIds else { return categories }
+        let by = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0) })
+        var out = ids.compactMap { by[$0] }
+        out += categories.filter { !ids.contains($0.id) }
+        return out
+    }
 
     var body: some View {
         if paged {
@@ -29,13 +46,8 @@ struct CategoryTabStrip: View {
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(categories) { cat in
-                        CategoryChip(category: cat,
-                                     selected: selectedId == cat.id,
-                                     hideLabel: hideLabels,
-                                     onDropTile: onDropTile) {
-                            selectedId = cat.id
-                        }
+                    ForEach(ordered) { cat in
+                        chip(cat)
                     }
                 }
                 .padding(.horizontal, 10)
@@ -44,7 +56,42 @@ struct CategoryTabStrip: View {
             // Transparent — shares the section band color set on SectionColumn,
             // so there's no persistent white strip behind the category chips.
             .background(Color.clear)
+            // A stale preview (cancelled drag) clears when the refreshed list
+            // arrives in the saved order — the id sequence is the change key.
+            .onChange(of: categories.map(\.id)) { _, _ in previewIds = nil; draggedId = nil }
         }
+    }
+
+    @ViewBuilder
+    private func chip(_ cat: Category) -> some View {
+        CategoryChip(category: cat,
+                     selected: selectedId == cat.id,
+                     hideLabel: hideLabels,
+                     onDropTile: onDropTile,
+                     reorderable: onReorder != nil,
+                     onChipDragBegan: { draggedId = cat.id; previewIds = nil },
+                     onChipHover: { shuffle(around: cat) },
+                     onChipDrop: { commit() }) {
+            selectedId = cat.id
+        }
+    }
+
+    private func shuffle(around target: Category) {
+        guard let d = draggedId, d != target.id else { return }
+        var ids = previewIds ?? categories.map(\.id)
+        guard let di = ids.firstIndex(of: d), let ti = ids.firstIndex(of: target.id) else { return }
+        ids.remove(at: di)
+        ids.insert(d, at: ti)
+        withAnimation(.easeInOut(duration: 0.18)) { previewIds = ids }
+    }
+
+    private func commit() -> Bool {
+        guard draggedId != nil, let ids = previewIds else { draggedId = nil; return false }
+        draggedId = nil
+        // The preview stays visible until the refreshed categories re-key it —
+        // no snap-back through the old order.
+        onReorder?(ids)
+        return true
     }
 }
 
@@ -100,8 +147,19 @@ struct SubcategoryStrip: View {
     var hideLabels: Bool = false
     var paged: Bool = false
     var onDropTile: ((Category, [String]) -> Bool)? = nil
+    var onReorder: (([Int]) -> Void)? = nil
 
     @State private var page = 0
+    @State private var draggedId: Int? = nil
+    @State private var previewIds: [Int]? = nil
+
+    private var ordered: [Category] {
+        guard let ids = previewIds else { return subcategories }
+        let by = Dictionary(uniqueKeysWithValues: subcategories.map { ($0.id, $0) })
+        var out = ids.compactMap { by[$0] }
+        out += subcategories.filter { !ids.contains($0.id) }
+        return out
+    }
 
     var body: some View {
         if paged {
@@ -117,12 +175,16 @@ struct SubcategoryStrip: View {
         } else {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                ForEach(subcategories) { sub in
+                ForEach(ordered) { sub in
                     CategoryChip(category: sub,
                                  selected: selectedId == sub.id,
                                  compact: true,
                                  hideLabel: hideLabels,
-                                 onDropTile: onDropTile) {
+                                 onDropTile: onDropTile,
+                                 reorderable: onReorder != nil,
+                                 onChipDragBegan: { draggedId = sub.id; previewIds = nil },
+                                 onChipHover: { shuffle(around: sub) },
+                                 onChipDrop: { commit() }) {
                         selectedId = sub.id
                     }
                 }
@@ -133,7 +195,24 @@ struct SubcategoryStrip: View {
         // Transparent so the section band color (set on SectionColumn) shows
         // through — the subcategory strip blends with the tiles underneath it.
         .background(Color.clear)
+        .onChange(of: subcategories.map(\.id)) { _, _ in previewIds = nil; draggedId = nil }
         }
+    }
+
+    private func shuffle(around target: Category) {
+        guard let d = draggedId, d != target.id else { return }
+        var ids = previewIds ?? subcategories.map(\.id)
+        guard let di = ids.firstIndex(of: d), let ti = ids.firstIndex(of: target.id) else { return }
+        ids.remove(at: di)
+        ids.insert(d, at: ti)
+        withAnimation(.easeInOut(duration: 0.18)) { previewIds = ids }
+    }
+
+    private func commit() -> Bool {
+        guard draggedId != nil, let ids = previewIds else { draggedId = nil; return false }
+        draggedId = nil
+        onReorder?(ids)
+        return true
     }
 }
 
@@ -143,6 +222,12 @@ struct CategoryChip: View {
     var compact: Bool = false
     var hideLabel: Bool = false
     var onDropTile: ((Category, [String]) -> Bool)? = nil
+    /// Chip drag-reorder plumbing (unlocked board only). The strip owns the
+    /// preview state; the chip just reports lift / hover / drop.
+    var reorderable: Bool = false
+    var onChipDragBegan: (() -> Void)? = nil
+    var onChipHover: (() -> Void)? = nil
+    var onChipDrop: (() -> Bool)? = nil
     let onTap: () -> Void
 
     @State private var image: UIImage?
@@ -184,10 +269,18 @@ struct CategoryChip: View {
             }
         }
         .buttonStyle(.plain)
-        // Accept a dragged tile (unlocked board): dropping moves the tile into
-        // this category. The handler enforces section + edit-mode rules.
+        // Unlocked-board chip reorder: lifting evaluates the @autoclosure
+        // payload, which is the strip's start-of-drag signal.
+        .draggableIf(reorderable, chipPayload())
+        // Accept a dragged CHIP (reorder commit) or a dragged TILE (move into
+        // this folder). isTargeted drives the strip's live shuffle.
         .dropDestination(for: String.self) { items, _ in
-            onDropTile?(category, items) ?? false
+            if let s = items.first, s.hasPrefix("cat|") {
+                return onChipDrop?() ?? false
+            }
+            return onDropTile?(category, items) ?? false
+        } isTargeted: { over in
+            if over { onChipHover?() }
         }
         .task(id: category.imageKey) {
             guard let key = category.imageKey, !key.isEmpty else { return }
@@ -196,5 +289,11 @@ struct CategoryChip: View {
                 await MainActor.run { self.image = display }
             }
         }
+    }
+
+    private func chipPayload() -> String {
+        // Runs at drag start (@autoclosure through draggableIf).
+        Task { @MainActor in onChipDragBegan?() }
+        return "cat|\(category.id)"
     }
 }

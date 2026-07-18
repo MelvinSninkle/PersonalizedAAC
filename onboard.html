@@ -339,6 +339,35 @@
       <a class="btn" href="/app.html" id="open-board-link">Open the board</a>
     </div>
 
+    <!-- Board-behavior wizard: the captive wait is the one moment a parent
+         actually reads. Five plain-language questions that map onto the
+         Display settings the board already honors (all parent-writable synced
+         keys — doubleTapTeach, tapInterrupt, toolSentence, toolListen,
+         easyClose). Every answer saves immediately (read-merge-write, no
+         cached blob so it can't clobber Auto-Teach's keys) and is repeated
+         under 🔒 → ⚙ Display on the board itself. -->
+    <div id="bw-setup" style="border-top:1px solid var(--line);margin-top:18px;padding-top:16px;text-align:left;">
+      <div class="bw-step" id="bw-step-intro">
+        <h3 class="fred" style="font-size:17px;">Five quick questions — make the board fit <span class="bw-child-name">your child</span></h3>
+        <p class="note">Every child uses their talker differently. Answer these while the tiles paint and the board behaves the right way from day one. Each answer explains the feature it turns on or off, and everything here can be changed later on the board: tap the <strong>🔒 lock → ⚙ Display settings</strong>.</p>
+        <div class="row">
+          <button class="btn" id="bw-start">Let's do it</button>
+          <button class="btn ghost" id="bw-skip">Maybe later</button>
+        </div>
+      </div>
+      <div class="bw-step" id="bw-q" style="display:none;">
+        <p class="note" id="bw-count" style="font-weight:700;margin-bottom:2px;"></p>
+        <h3 class="fred" id="bw-title" style="font-size:16px;margin-top:0;"></h3>
+        <p class="note" id="bw-body"></p>
+        <div id="bw-choices" style="display:flex;flex-direction:column;gap:8px;max-width:520px;"></div>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn ghost tiny" id="bw-skip-q">Skip — keep the default</button>
+        </div>
+        <p class="note" id="bw-msg"></p>
+      </div>
+      <p class="note" id="bw-finished" style="display:none;">✓ Board behavior saved — change any of these anytime on the board under <strong>🔒 → ⚙ Display settings</strong>.</p>
+    </div>
+
     <!-- While the tiles render the parent has a few captive minutes — use them:
          set up Auto-Teach (quiet hours + preferences, saved to child-settings
          so /api/auto-teach can fire) and show how to lock the tablet into the
@@ -681,6 +710,15 @@
       card.innerHTML = '<div class="pic"><img src="/api/onboarding/styles?image=' + s.id + '" alt="" loading="lazy"></div>' +
         '<div class="lbl">' + (s.label || 'Style') + '</div>';
       card.addEventListener('click', () => selectStyle({ id: s.id, label: s.label }, card));
+      // Whole-board preview: /practice renders the full starter board in this
+      // style (public shared art only). stopPropagation so the link doesn't
+      // double as a select-tap.
+      const pv = document.createElement('a');
+      pv.href = '/practice?style=' + s.id; pv.target = '_blank'; pv.rel = 'noopener';
+      pv.textContent = 'See a whole board ↗';
+      pv.style.cssText = 'display:block;font-size:11px;margin-top:4px;color:var(--pink-deep,#c2185b);text-decoration:underline;';
+      pv.addEventListener('click', (e) => e.stopPropagation());
+      card.appendChild(pv);
       grid.appendChild(card);
     }
     // "Upload your own" card.
@@ -1299,6 +1337,113 @@
       AT_STEPS.forEach(s => { $(s).style.display = 'none'; });
       $('at-finished').style.display = '';
     });
+  })();
+
+  // ---- Board-behavior wizard (#bw-setup) -----------------------------------
+  // Each answer is a read-merge-write against /api/child-settings — fetched
+  // FRESH per save (no cached blob) so it never clobbers keys the Auto-Teach
+  // setup below writes in the same sitting. All five keys are the deliberately
+  // parent-writable synced settings the board already honors.
+  (function () {
+    const nm = () => CHILD_NAME || 'your child';
+    const QUESTIONS = [
+      {
+        title: () => 'Does ' + nm() + ' need to learn what words mean, or mostly say them?',
+        body: 'With "Tap again to learn" on, a tap speaks the word — and a quick second tap teaches a fun fact about it, up to three facts, before wrapping back to the word. Great for kids still building meanings. If your child mainly needs their words spoken, leave it off — taps stay simple and fast.',
+        choices: [
+          { label: '🎓 Still learning meanings — turn on Tap again to learn', save: { doubleTapTeach: true } },
+          { label: '🗣 They know their words — keep taps simple', save: { doubleTapTeach: false } },
+        ],
+      },
+      {
+        title: () => 'If a new tile is tapped while another is still talking…',
+        body: '"Let each word finish" is calmer for kids who tap the same button over and over — every word plays to the end instead of restarting. "The new tap wins" feels snappier for quick communicators.',
+        choices: [
+          { label: '🌊 Let each word finish', save: { tapInterrupt: false } },
+          { label: '⚡ The new tap wins — talk right away', save: { tapInterrupt: true } },
+        ],
+      },
+      {
+        title: () => 'Is ' + nm() + ' starting to put words together?',
+        body: 'The ✏️ sentence builder in the board header lets a child stage several tiles and play them back as one sentence. If your child is at single words today, hide it — fewer buttons, less clutter. It comes back with one toggle whenever they’re ready.',
+        choices: [
+          { label: '✏️ Yes — show the sentence builder', save: { toolSentence: true } },
+          { label: '🔤 Single words for now — hide it', save: { toolSentence: false } },
+        ],
+      },
+      {
+        title: () => 'Want the board to show the words ' + nm() + ' hears?',
+        body: 'Listening mode (the ear in the board header) captions grown-ups’ speech as tappable words, so your child connects what they hear to their tiles. Bad-word censoring is on by default. Hide it if it would only be a distraction right now.',
+        choices: [
+          { label: '👂 Keep Listening mode', save: { toolListen: true } },
+          { label: '🙈 Hide it for now', save: { toolListen: false } },
+        ],
+      },
+      {
+        title: () => 'How should the ✕ close button work in games and slideshows?',
+        body: 'Hold-to-close is kid-proof: a quick mash does nothing; only a deliberate hold exits. Quick tap is instant — better for older kids who close things on purpose. (You can tune the hold length later in Display settings.)',
+        choices: [
+          { label: '🛡 Hold to close (kid-proof)', save: { easyClose: false } },
+          { label: '⚡ Quick tap closes right away', save: { easyClose: true } },
+        ],
+      },
+    ];
+    let qi = 0;
+
+    async function bwSave(patch) {
+      const r0 = await fetch('/api/child-settings?childId=' + encodeURIComponent(CHILD_ID), { credentials: 'same-origin' });
+      const s = r0.ok ? ((await r0.json()).settings || {}) : {};
+      Object.assign(s, patch);
+      const r = await fetch('/api/child-settings?childId=' + encodeURIComponent(CHILD_ID), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ settings: s }),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+    }
+
+    function bwRender() {
+      if (qi >= QUESTIONS.length) {
+        $('bw-step-intro').style.display = 'none'; $('bw-q').style.display = 'none';
+        $('bw-finished').style.display = '';
+        return;
+      }
+      const q = QUESTIONS[qi];
+      $('bw-count').textContent = 'Question ' + (qi + 1) + ' of ' + QUESTIONS.length;
+      $('bw-title').textContent = q.title();
+      $('bw-body').textContent = q.body;
+      $('bw-msg').textContent = '';
+      const box = $('bw-choices');
+      box.innerHTML = '';
+      for (const c of q.choices) {
+        const b = document.createElement('button');
+        b.className = 'btn ghost'; b.style.textAlign = 'left'; b.textContent = c.label;
+        b.addEventListener('click', async () => {
+          box.querySelectorAll('button').forEach(x => { x.disabled = true; });
+          $('bw-msg').textContent = 'Saving…';
+          try { await bwSave(c.save); qi += 1; bwRender(); }
+          catch (err) {
+            $('bw-msg').textContent = 'Could not save: ' + (err.message || err) + ' — try again.';
+            box.querySelectorAll('button').forEach(x => { x.disabled = false; });
+          }
+        });
+        box.appendChild(b);
+      }
+    }
+
+    $('bw-start').addEventListener('click', () => {
+      document.querySelectorAll('.bw-child-name').forEach(n => { n.textContent = nm(); });
+      $('bw-step-intro').style.display = 'none'; $('bw-q').style.display = '';
+      bwRender();
+    });
+    $('bw-skip').addEventListener('click', () => {
+      $('bw-step-intro').style.display = 'none';
+      $('bw-finished').textContent = 'No problem — the same choices live on the board under 🔒 → ⚙ Display settings, with plain-language explanations.';
+      $('bw-finished').style.display = '';
+    });
+    $('bw-skip-q').addEventListener('click', () => { qi += 1; bwRender(); });
+    // The intro personalizes as soon as the phase shows (CHILD_NAME is set by
+    // the child step or the resume path before phase-board can appear).
+    document.querySelectorAll('.bw-child-name').forEach(n => { n.textContent = nm(); });
   })();
 })();
 </script>
