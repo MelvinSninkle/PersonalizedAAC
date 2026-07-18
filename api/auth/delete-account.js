@@ -37,12 +37,15 @@ export default async function handler(req, res) {
     try { add(await db`SELECT blob_key FROM reference_images WHERE child_id = ${childId}`, ['blob_key']); } catch (_) {}
     try { add(await db`SELECT blob_key, preview_blob_key FROM style_guides WHERE child_id = ${childId}`, ['blob_key', 'preview_blob_key']); } catch (_) {}
     try { add(await db`SELECT source_key, image_key, sound_key FROM pending_tiles WHERE child_id = ${childId}`, ['source_key', 'image_key', 'sound_key']); } catch (_) {}
-    try { add(await db`SELECT image_key FROM item_image_history WHERE child_id = ${childId}`, ['image_key']); } catch (_) {}
+    // NB: this table's column is blob_key — the old image_key spelling made
+    // this SELECT throw (silently, by design of the catch), so archived album
+    // blobs survived account deletion. Privacy policy says they must not.
+    try { add(await db`SELECT blob_key FROM item_image_history WHERE child_id = ${childId}`, ['blob_key']); } catch (_) {}
     for (const k of keys) { try { await del(k); } catch (_) {} }
 
     // 2) Sweep any remaining blobs under the child's storage prefixes (onboarding
     //    drafts, regenerated styles) not tracked in a table row.
-    for (const prefix of [`onboarding/${childId}/`, `parent/${childId}/`]) {
+    for (const prefix of [`onboarding/${childId}/`, `parent/${childId}/`, `item-images/${childId}/`]) {
       try {
         let cursor;
         do {

@@ -254,7 +254,11 @@ async function update(req, res, db, user) {
     RETURNING *
   `;
 
-  if (imageKey && old.image_key && imageKey !== old.image_key) { try { await del(old.image_key); } catch (_) {} }
+  // The prior IMAGE blob is deliberately NOT deleted: archivePriorImage above
+  // stored a REFERENCE to this exact key in item_image_history, and the
+  // product's headline promise ("archived, never deleted" — the Album, the
+  // one-tap revert) depends on the bytes staying. Deleting here left album
+  // rows pointing at dead blobs. Blobs are reclaimed only by account deletion.
   if (soundKey && old.sound_key && soundKey !== old.sound_key) { try { await del(old.sound_key); } catch (_) {} }
 
   // A deliberate reorder marks the board family-arranged: the Lab's layout
