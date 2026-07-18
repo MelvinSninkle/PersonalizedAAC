@@ -212,6 +212,10 @@ struct BoardView: View {
             scheduler.start(childId: auth.childSlug)
             autoTeach.start(childId: auth.childSlug)
             startSeedWatch()
+            // In-flight photo adds (this device or another) become "Pending"
+            // placeholder tiles at their landing spot — previously this only
+            // ran when the Add flow opened, so a restarted app showed nothing.
+            await addQueue.restore(childId: auth.childSlug, board: board)
         }
         .onDisappear {
             live.stop()

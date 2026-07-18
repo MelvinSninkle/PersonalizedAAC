@@ -85,15 +85,23 @@ class BoardStore(context: Context, private val api: ApiClient, private val media
             s.startsWith("cat:") -> {
                 val rootId = s.removePrefix("cat:").toIntOrNull()
                 if (rootId == null) _tiles.value else {
-                    val ids = mutableSetOf(rootId)
-                    var frontier = listOf(rootId)
-                    while (frontier.isNotEmpty()) {
-                        val next = cats.filter { it.parentId in frontier }.map { it.id }
-                        val fresh = next.filter { it !in ids }
-                        ids.addAll(fresh)
-                        frontier = fresh
+                    // The folder's OWN tiles are the session — a small folder
+                    // makes a short session, never a scope switch (web
+                    // parity). Only a pure CONTAINER folder (no direct
+                    // playable tiles) widens to its descendants.
+                    val direct = _tiles.value.filter { it.categoryId == rootId }
+                    if (direct.any { !it.imageKey.isNullOrEmpty() && it.label.isNotEmpty() }) direct
+                    else {
+                        val ids = mutableSetOf(rootId)
+                        var frontier = listOf(rootId)
+                        while (frontier.isNotEmpty()) {
+                            val next = cats.filter { it.parentId in frontier }.map { it.id }
+                            val fresh = next.filter { it !in ids }
+                            ids.addAll(fresh)
+                            frontier = fresh
+                        }
+                        _tiles.value.filter { it.categoryId in ids }
                     }
-                    _tiles.value.filter { it.categoryId in ids }
                 }
             }
             else -> _tiles.value
@@ -110,6 +118,20 @@ class BoardStore(context: Context, private val api: ApiClient, private val media
     // ── Sync ────────────────────────────────────────────────────────────────
 
     /** Fetch the latest board; silently keeps stale data on failure. */
+    /** Apply a drag-reorder locally (i*1000 across ids) so the grid settles
+     *  the instant the finger lifts; the server sync runs in the background
+     *  and the next refresh confirms. Ids not present are ignored. */
+    fun applyLocalTileOrder(ids: List<Int>) {
+        val pos = ids.withIndex().associate { (i, id) -> id to i * 1000 }
+        _tiles.value = _tiles.value.map { t -> pos[t.id]?.let { t.copy(order = it) } ?: t }
+    }
+
+    /** Same, for category/subcategory chip reorders. */
+    fun applyLocalCategoryOrder(ids: List<Int>) {
+        val pos = ids.withIndex().associate { (i, id) -> id to i * 1000 }
+        _categories.value = _categories.value.map { c -> pos[c.id]?.let { c.copy(order = it) } ?: c }
+    }
+
     suspend fun refresh(childId: String) {
         _loading.value = true
         try {

@@ -285,15 +285,17 @@ struct SectionColumn: View {
                     tileCell(tile)
                 }
                 // In-flight adds land WHERE THE + CELL WAS: each rendering job
-                // for this folder shows as a shimmering placeholder in the
-                // grid, and the + cell slides one further down. When the render
-                // finishes, the real tile takes the placeholder's spot (new
-                // tiles order to the end of the folder, which is exactly here).
+                // for this folder shows as a "Pending" placeholder in the
+                // grid. Shown even when the board is LOCKED — parents were
+                // closing the add flow and worrying the photo was lost; the
+                // placeholder is the "don't worry, it's coming" signal. When
+                // the render finishes, the real tile takes the placeholder's
+                // spot (new tiles order to the end of the folder — here).
+                ForEach(renderingJobs, id: \.id) { job in
+                    RenderingTileCell(size: tileSize, thumbnail: job.thumbnail, label: job.label)
+                        .frame(width: tileSize)
+                }
                 if editMode {
-                    ForEach(renderingJobs, id: \.id) { job in
-                        RenderingTileCell(size: tileSize, thumbnail: job.thumbnail, label: job.label)
-                            .frame(width: tileSize)
-                    }
                     AddTileCell(size: tileSize) { onAdd(section, effectiveCategory?.id) }
                         .frame(width: tileSize)
                 }
@@ -402,26 +404,27 @@ struct SectionColumn: View {
         return out
     }
 
-    /// Persist the previewed order (i*1000 resequence, web parity). The
-    /// preview stays up until the refreshed board arrives in the saved order,
-    /// so the grid never snaps back through the old arrangement.
+    /// LOCAL-FIRST commit: the board's own data takes the previewed order the
+    /// instant the finger lifts (no waiting on the network), then ONE bulk
+    /// call syncs the server in the background — with a per-item fallback so
+    /// an app newer than the deploy still lands the order.
     private func commitPreview(in cat: Category) {
         dragSourceId = nil
         let ids = previewIds ?? []
+        let base = board.tiles(in: cat)
+        var orderedIds = ids.filter { id in base.contains { $0.id == id } }
+        orderedIds += base.map(\.id).filter { !orderedIds.contains($0) }
+        board.applyLocalTileOrder(orderedIds)
+        previewIds = nil
         Task {
-            let base = board.tiles(in: cat)
-            let by = Dictionary(uniqueKeysWithValues: base.map { ($0.id, $0) })
-            var ordered = ids.compactMap { by[$0] }
-            ordered += base.filter { t in !ids.contains(t.id) }
             let api = APIClient()
-            for (i, t) in ordered.enumerated() {
-                let newOrder = i * 1000
-                if t.order != newOrder {
-                    _ = try? await api.updateItem(id: t.id, order: newOrder, childId: auth.childSlug)
+            do { try await api.reorderItems(ids: orderedIds) }
+            catch {
+                for (i, id) in orderedIds.enumerated() {
+                    _ = try? await api.updateItem(id: id, order: i * 1000, childId: auth.childSlug)
                 }
             }
             await board.refresh(childId: auth.childSlug)
-            await MainActor.run { previewIds = nil }
         }
     }
 
@@ -474,13 +477,18 @@ struct SectionColumn: View {
         await board.refresh(childId: auth.childSlug)
     }
 
-    /// Persist a chip strip's previewed order (category OR subcategory chips —
-    /// the ids define the sibling group; i*1000 resequence, web parity).
+    /// Persist a chip strip's previewed order — LOCAL-FIRST (the strip settles
+    /// instantly), then one bulk call in the background with a per-chip
+    /// fallback for older deploys.
     private func persistCatOrder(_ ids: [Int]) {
+        board.applyLocalCategoryOrder(ids)
         Task {
             let api = APIClient()
-            for (i, id) in ids.enumerated() {
-                _ = try? await api.updateCategory(id: id, order: i * 1000, childId: auth.childSlug)
+            do { try await api.reorderCategories(ids: ids) }
+            catch {
+                for (i, id) in ids.enumerated() {
+                    _ = try? await api.updateCategory(id: id, order: i * 1000, childId: auth.childSlug)
+                }
             }
             await board.refresh(childId: auth.childSlug)
         }
@@ -588,38 +596,49 @@ struct AddTileCell: View {
     }
 }
 
-/// A tile-sized placeholder for an add-tile job still rendering server-side:
-/// the captured photo, dimmed, with a spinner — sitting exactly where the
-/// finished tile will land. (The + cell renders after these, one slot down.)
+/// A tile-sized "Pending" placeholder for an add-tile job still rendering
+/// server-side: the captured photo (dimmed) with a spinner — or, when the
+/// photo isn't on this device (app restarted / added elsewhere), the
+/// My World logo. Sits exactly where the finished tile will land.
 struct RenderingTileCell: View {
     let size: CGFloat
     let thumbnail: UIImage
     let label: String
 
+    private var hasPhoto: Bool { thumbnail.size.width > 0 }
+
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: size, height: size)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .opacity(0.45)
+                if hasPhoto {
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: size, height: size)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .opacity(0.45)
+                } else {
+                    Color.white.opacity(0.6)
+                    Image("MyWorldLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: size * 0.55, height: size * 0.55)
+                        .opacity(0.5)
+                }
                 ProgressView()
                     .tint(Color(hex: "#ad1457"))
                     .scaleEffect(1.2)
             }
             .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .strokeBorder(Color(hex: "#f3c6dd"), lineWidth: 2)
             )
-            if !label.isEmpty {
-                Text(label)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(hex: "#9d2463"))
-                    .lineLimit(1)
-            }
+            Text(label.isEmpty ? "Pending" : "\(label) — pending")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(hex: "#9d2463"))
+                .lineLimit(1)
         }
     }
 }

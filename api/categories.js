@@ -21,13 +21,52 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
-    if (req.method === 'POST')   return await create(req, res, db, auth.user);
+    if (req.method === 'POST') {
+      const b = (typeof req.body === 'object' && req.body) || {};
+      if (b.op === 'reorder') return await reorderBulk(req, res, db, auth.user, b);
+      return await create(req, res, db, auth.user);
+    }
     if (req.method === 'PUT')    return await update(req, res, db, auth.user);
     if (req.method === 'DELETE') return await remove(req, res, db, auth.user);
     res.status(405).json({ error: 'Method not allowed' });
   } catch (err) {
     res.status(500).json({ error: 'Request failed', detail: String(err.message || err) });
   }
+}
+
+// POST { op:'reorder', ids:[...] } — persist a chip drag-reorder in ONE
+// request (mirror of items.js reorderBulk; ids = the sibling chips in their
+// new order → i*1000). One board per call; parent-or-admin edits everything,
+// a therapist only their own rows.
+async function reorderBulk(req, res, db, user, b) {
+  const ids = (Array.isArray(b.ids) ? b.ids : []).map(Number).filter(Number.isFinite).slice(0, 200);
+  if (!ids.length) { res.status(400).json({ error: 'ids required' }); return; }
+  const rows = await db`SELECT id, child_id, owner_user_id FROM categories WHERE id = ANY(${ids})`;
+  if (!rows.length) { res.status(404).json({ error: 'categories not found' }); return; }
+  const childId = rows[0].child_id;
+  if (!childId || rows.some((r) => r.child_id !== childId)) {
+    res.status(400).json({ error: 'ids must all belong to one board' }); return;
+  }
+  const parentOK = await canEditContent(user, null, childId, db);
+  for (const r of rows) {
+    const ownRow = r.owner_user_id != null && user.id != null
+      && Number(r.owner_user_id) === Number(user.id);
+    if (!parentOK && !ownRow) { res.status(403).json({ error: 'Not allowed' }); return; }
+  }
+  const orders = ids.map((_, i) => i * 1000);
+  try {
+    await db`
+      UPDATE categories AS c SET display_order = v.ord, updated_at = NOW()
+      FROM (SELECT UNNEST(${ids}::int[]) AS id, UNNEST(${orders}::int[]) AS ord) AS v
+      WHERE c.id = v.id AND c.child_id = ${childId}`;
+  } catch (_) {
+    for (let i = 0; i < ids.length; i++) {
+      await db`UPDATE categories SET display_order = ${orders[i]}, updated_at = NOW()
+               WHERE id = ${ids[i]} AND child_id = ${childId}`;
+    }
+  }
+  await stampLayoutCustomized(db, childId);
+  res.status(200).json({ ok: true, count: ids.length });
 }
 
 async function create(req, res, db, user) {

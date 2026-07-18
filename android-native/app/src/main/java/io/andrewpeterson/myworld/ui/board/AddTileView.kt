@@ -273,6 +273,12 @@ fun AddTileView(
                     dismissButton = { TextButton(onClick = { confirmSpend = false }) { Text("Cancel") } },
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "The tile takes a few minutes to paint — don't worry. Your photo is saved the moment it uploads, and a Pending tile marks the spot on the board until the picture lands.",
+                fontSize = 12.sp, color = Brand.pinkDeep,
+                modifier = Modifier.background(hexColor("#fff7fb"), RoundedCornerShape(12.dp)).padding(10.dp),
+            )
             TextButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
                 Text("Cancel", color = Brand.muted)
             }

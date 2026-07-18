@@ -18,7 +18,7 @@ struct Tile: Codable, Identifiable, Hashable {
     let soundKey: String?
     let soundUrl: String?
     let keepAspect: Bool
-    let order: Int
+    var order: Int   // var: drag-reorder stamps new orders locally before the server confirms
     let pinned: Bool
     let childId: String?
     let ownerUserId: Int?

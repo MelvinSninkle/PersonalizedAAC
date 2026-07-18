@@ -199,17 +199,19 @@ struct NeedsStrip: View {
               let dragId = Int(parts[2]) else { return false }
         if let ids = previewIds, ids.contains(dragId) {
             dragSourceId = nil
-            let ordered = orderedTiles
+            // LOCAL-FIRST: the strip settles now; one bulk sync follows.
+            let orderedIds = orderedTiles.map(\.id)
+            board.applyLocalTileOrder(orderedIds)
+            previewIds = nil
             Task {
                 let api = APIClient()
-                for (i, t) in ordered.enumerated() {
-                    let newOrder = i * 1000
-                    if t.order != newOrder {
-                        _ = try? await api.updateItem(id: t.id, order: newOrder, childId: auth.childSlug)
+                do { try await api.reorderItems(ids: orderedIds) }
+                catch {
+                    for (i, id) in orderedIds.enumerated() {
+                        _ = try? await api.updateItem(id: id, order: i * 1000, childId: auth.childSlug)
                     }
                 }
                 await board.refresh(childId: auth.childSlug)
-                await MainActor.run { previewIds = nil }
             }
             return true
         }

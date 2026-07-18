@@ -29,6 +29,7 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const b = (typeof req.body === 'object' && req.body) || {};
       if (b.op === 'revert-image') return await revertImage(req, res, db, auth.user, b);
+      if (b.op === 'reorder')      return await reorderBulk(req, res, db, auth.user, b);
       return await create(req, res, db, auth.user);
     }
     if (req.method === 'PUT')    return await update(req, res, db, auth.user);
@@ -47,7 +48,9 @@ async function imageHistory(req, res, db, user) {
   if (!Number.isFinite(itemId)) { res.status(400).json({ error: 'history=<itemId> required' }); return; }
   const item = (await db`SELECT id, child_id, owner_user_id, image_key FROM items WHERE id = ${itemId} LIMIT 1`)[0];
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
-  if (!(await canEditContent(user, item, db))) { res.status(403).json({ error: 'Not allowed' }); return; }
+  // NB: signature is (user, ownerUserId, childId, db) — passing the row here
+  // silently 403'd every non-admin parent (admin short-circuits first).
+  if (!(await canEditContent(user, item.owner_user_id, item.child_id, db))) { res.status(403).json({ error: 'Not allowed' }); return; }
   const rows = await db`
     SELECT blob_key, source, archived_at FROM item_image_history
     WHERE item_id = ${itemId} AND child_id = ${item.child_id}
@@ -55,6 +58,44 @@ async function imageHistory(req, res, db, user) {
   res.setHeader('Cache-Control', 'no-store');
   res.status(200).json({ ok: true, currentKey: item.image_key || null,
     history: rows.map((r) => ({ key: r.blob_key, source: r.source || null, archivedAt: r.archived_at })) });
+}
+
+// POST { op:'reorder', ids:[...] } — persist a drag-reorder in ONE request
+// instead of N sequential PUTs (the clients apply the order locally first;
+// this is the background sync). `ids` is the sibling group in its new order;
+// orders become i*1000. All rows must belong to one board; ownership mirrors
+// update()'s per-row gate (parent-or-admin edits everything, a therapist
+// only their own rows).
+async function reorderBulk(req, res, db, user, b) {
+  const ids = (Array.isArray(b.ids) ? b.ids : []).map(Number).filter(Number.isFinite).slice(0, 500);
+  if (!ids.length) { res.status(400).json({ error: 'ids required' }); return; }
+  const rows = await db`SELECT id, child_id, owner_user_id FROM items WHERE id = ANY(${ids})`;
+  if (!rows.length) { res.status(404).json({ error: 'items not found' }); return; }
+  const childId = rows[0].child_id;
+  if (!childId || rows.some((r) => r.child_id !== childId)) {
+    res.status(400).json({ error: 'ids must all belong to one board' }); return;
+  }
+  const parentOK = await canEditContent(user, null, childId, db);
+  for (const r of rows) {
+    const ownRow = r.owner_user_id != null && user.id != null
+      && Number(r.owner_user_id) === Number(user.id);
+    if (!parentOK && !ownRow) { res.status(403).json({ error: 'Not allowed' }); return; }
+  }
+  const orders = ids.map((_, i) => i * 1000);
+  try {
+    await db`
+      UPDATE items AS i SET display_order = v.ord, updated_at = NOW()
+      FROM (SELECT UNNEST(${ids}::int[]) AS id, UNNEST(${orders}::int[]) AS ord) AS v
+      WHERE i.id = v.id AND i.child_id = ${childId}`;
+  } catch (_) {
+    // Array-param path unavailable (older driver) — per-row fallback.
+    for (let i = 0; i < ids.length; i++) {
+      await db`UPDATE items SET display_order = ${orders[i]}, updated_at = NOW()
+               WHERE id = ${ids[i]} AND child_id = ${childId}`;
+    }
+  }
+  await stampLayoutCustomized(db, childId);
+  res.status(200).json({ ok: true, count: ids.length });
 }
 
 // POST { op:'revert-image', id, key } — put a past picture back on the tile.
@@ -67,7 +108,7 @@ async function revertImage(req, res, db, user, b) {
   const item = (await db`SELECT id, child_id, owner_user_id, image_key, label, section
                          FROM items WHERE id = ${itemId} LIMIT 1`)[0];
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
-  if (!(await canEditContent(user, item, db))) { res.status(403).json({ error: 'Not allowed' }); return; }
+  if (!(await canEditContent(user, item.owner_user_id, item.child_id, db))) { res.status(403).json({ error: 'Not allowed' }); return; }
   // The key must come from THIS tile's own history — no arbitrary blob keys.
   const hist = await db`
     SELECT 1 FROM item_image_history

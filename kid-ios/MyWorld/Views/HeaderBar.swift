@@ -315,10 +315,12 @@ struct HeaderBar: View {
     }
 
     /// "Teach me": slideshow of the same last-pressed scope that speaks each
-    /// word and then all of its taxonomy teaching clues.
+    /// word and then all of its taxonomy teaching clues. Capped at 12 —
+    /// word + up to three facts each already makes 12 a solid session, and
+    /// a container-folder scope must never become an hour-long show.
     private func startTeachShow() {
         guard game.current == nil else { return }
         sentence.setMode(false)
-        game.startLocal(.teach, scope: lastScope())
+        game.startLocal(.teach, scope: lastScope(), sample: 12)
     }
 }

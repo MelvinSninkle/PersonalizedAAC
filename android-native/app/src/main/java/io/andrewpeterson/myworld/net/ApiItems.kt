@@ -19,6 +19,10 @@ data class TileJobStatus(
     val needsReview: Boolean = false,
     val error: String? = null,
     val attempts: Int = 0,
+    /** Landing spot (server-known) — lets a restarted app place the
+     *  "Pending" tile in the right folder. Older deploys omit them. */
+    val section: String? = null,
+    val categoryId: Int? = null,
 )
 
 /** PUT /api/items?id= — partial update (server COALESCEs). */
@@ -55,6 +59,19 @@ suspend fun ApiClient.updateItem(
 
 suspend fun ApiClient.deleteItem(id: Int, childId: String) {
     raw("DELETE", "/api/items?id=$id&childId=${esc(childId)}")
+}
+
+/** POST /api/items { op:'reorder', ids } — persist a whole drag-reorder in
+ *  ONE request (the UI already applied it locally; this is the sync). */
+suspend fun ApiClient.reorderItems(ids: List<Int>) {
+    raw("POST", "/api/items",
+        "{\"op\":\"reorder\",\"ids\":[${ids.joinToString(",")}]}".encodeToByteArray())
+}
+
+/** POST /api/categories { op:'reorder', ids } — chip-strip twin of the above. */
+suspend fun ApiClient.reorderCategories(ids: List<Int>) {
+    raw("POST", "/api/categories",
+        "{\"op\":\"reorder\",\"ids\":[${ids.joinToString(",")}]}".encodeToByteArray())
 }
 
 /** PUT /api/categories?id= — partial update (server COALESCEs); drag-reorder

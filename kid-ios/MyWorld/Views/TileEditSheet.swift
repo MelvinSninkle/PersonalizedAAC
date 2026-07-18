@@ -841,9 +841,16 @@ struct BoardTileEditSheet: View {
         reverting = true
         defer { reverting = false }
         do {
-            try await api.revertImage(itemId: tile.id, key: h.key)
+            let newKey = try await api.revertImage(itemId: tile.id, key: h.key)
             redrawNote = "✅ Brought back — the swapped-out picture is in Previous pictures."
             if let img = await MediaCache.shared.image(for: h.key, maxPixel: 1024) { currentImage = img }
+            // The server re-homes the restored image under a FRESH key — seed
+            // that key's cache from the history bytes we just displayed, so
+            // the board tile swaps the moment refresh lands instead of
+            // sitting on a cold download (this was the "takes a minute").
+            if let newKey, newKey != h.key {
+                await MediaCache.shared.seed(key: newKey, fromCached: h.key)
+            }
             history = await api.imageHistory(itemId: tile.id)
             await board.refresh(childId: auth.childSlug)
         } catch {

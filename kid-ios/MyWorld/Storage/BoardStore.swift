@@ -63,6 +63,24 @@ final class BoardStore {
             }
     }
 
+    /// Apply a drag-reorder locally (i*1000 across `ids`) so the grid settles
+    /// the instant the finger lifts — the server hears about it in the
+    /// background and the next refresh confirms. Ids not present are ignored.
+    func applyLocalTileOrder(_ ids: [Int]) {
+        let pos = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0 * 1000) })
+        for i in tiles.indices {
+            if let ord = pos[tiles[i].id] { tiles[i].order = ord }
+        }
+    }
+
+    /// Same, for category/subcategory chip reorders.
+    func applyLocalCategoryOrder(_ ids: [Int]) {
+        let pos = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0 * 1000) })
+        for i in categories.indices {
+            if let ord = pos[categories[i].id] { categories[i].order = ord }
+        }
+    }
+
     /// Pinned/persistent tiles — those flagged `pinned: true` across the board.
     /// Mirrors the persistent strip on the web app.
     func persistentStrip() -> [Tile] {
@@ -91,17 +109,27 @@ final class BoardStore {
             let wanted = Set(s.dropFirst(6).split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
             result = tiles.filter { t in t.taxonomySlug.map { wanted.contains($0) } ?? false }
         } else if s.hasPrefix("cat:"), let id = Int(s.dropFirst(4)) {
-            var ids: Set<Int> = [id]
-            var frontier = [id]
-            while !frontier.isEmpty {
-                let next = categories
-                    .filter { $0.parentId.map { frontier.contains($0) } ?? false }
-                    .map(\.id)
-                let fresh = next.filter { !ids.contains($0) }
-                ids.formUnion(fresh)
-                frontier = fresh
+            // The folder's OWN tiles are the session — a small folder makes a
+            // short session, never a scope switch (web parity; subtree-wide
+            // sessions ran "super long"). Only a pure CONTAINER folder (no
+            // direct playable tiles — e.g. Food holding only subfolders)
+            // widens to its descendants.
+            let direct = tiles.filter { $0.categoryId == id }
+            if direct.contains(where: { $0.imageKey?.isEmpty == false && !$0.label.isEmpty }) {
+                result = direct
+            } else {
+                var ids: Set<Int> = [id]
+                var frontier = [id]
+                while !frontier.isEmpty {
+                    let next = categories
+                        .filter { $0.parentId.map { frontier.contains($0) } ?? false }
+                        .map(\.id)
+                    let fresh = next.filter { !ids.contains($0) }
+                    ids.formUnion(fresh)
+                    frontier = fresh
+                }
+                result = tiles.filter { $0.categoryId.map { ids.contains($0) } ?? false }
             }
-            result = tiles.filter { $0.categoryId.map { ids.contains($0) } ?? false }
         } else {
             result = tiles
         }

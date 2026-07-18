@@ -736,6 +736,12 @@
 
   body.edit-mode .tile-wrap:not(.category) { cursor: grab; }
   .tile-wrap.dragging { opacity: 0.4; }
+  /* "Pending" placeholder for an in-flight photo add: the globe breathes so
+     the tile reads as alive-and-coming, not broken. Never tappable. */
+  .pending-tile { pointer-events: none; }
+  .pending-tile .tile-label { color: #9d2463; font-style: italic; }
+  .pending-pulse { animation: pendingPulse 1.6s ease-in-out infinite; opacity: .5; }
+  @keyframes pendingPulse { 50% { opacity: .9; transform: scale(1.06); } }
   /* Pointer-drag ghost that follows the finger/cursor while reordering. */
   .drag-ghost {
     position: fixed; z-index: 5000; pointer-events: none;
@@ -2297,6 +2303,65 @@
     t.addEventListener('click', onClick);
     return t;
   }
+
+  // ---- "Pending" placeholder tiles for in-flight photo adds ----------------
+  // A parent who closes the add modal used to see... nothing, until the tile
+  // popped in minutes later — which read as "my photo is lost". The server
+  // echoes each queued job's landing spot (section + categoryId), so the
+  // board draws a My World globe + "Pending" tile exactly where it will land,
+  // visible locked or unlocked, surviving reloads and other devices.
+  let PENDING_JOBS = [];
+  let _pendingTimer = null;
+
+  function makePendingTile(job) {
+    const wrap = document.createElement('div');
+    wrap.className = 'tile-wrap pending-tile';
+    const sq = document.createElement('div');
+    sq.className = 'tile-square';
+    sq.style.cssText = 'display:grid;place-items:center;background:#fff7fb;';
+    const img = document.createElement('img');
+    img.src = '/icons/myworld-globe.png';
+    img.alt = '';
+    img.className = 'pending-pulse';
+    img.style.cssText = 'width:55%;height:55%;object-fit:contain;';
+    sq.appendChild(img);
+    wrap.appendChild(sq);
+    const lbl = document.createElement('div');
+    lbl.className = 'tile-label';
+    lbl.textContent = job.label ? job.label + ' — pending' : 'Pending';
+    wrap.appendChild(lbl);
+    return wrap;
+  }
+
+  function appendPendingTiles(itemsEl, section, activeId) {
+    for (const job of PENDING_JOBS) {
+      if ((job.section || '') !== section) continue;
+      if ((job.categoryId ?? null) !== (activeId ?? null)) continue;
+      itemsEl.appendChild(makePendingTile(job));
+    }
+  }
+
+  async function loadPendingJobs() {
+    let jobs = [];
+    try {
+      const r = await apiFetch('/api/tile-jobs?childId=' + encodeURIComponent(CHILD_ID));
+      if (!r.ok) return;
+      jobs = (await r.json()).jobs || [];
+    } catch (_) { return; }
+    const before = PENDING_JOBS.length;
+    // failed-but-retrying still shows (the queue re-arms it); given-up jobs
+    // surface through the parent problem alerts instead of a forever-pending tile.
+    PENDING_JOBS = jobs.filter(j => j.status === 'queued' || j.status === 'processing'
+      || (j.status === 'failed' && (j.attempts || 0) < 5));
+    if (PENDING_JOBS.length < before) { try { await resyncIfChanged(); } catch (_) {} }
+    if (PENDING_JOBS.length !== before) { try { await renderAll(); } catch (_) {} }
+    if (PENDING_JOBS.length && !_pendingTimer) {
+      // Polling doubles as the queue pump (the GET claims + advances jobs).
+      _pendingTimer = setInterval(loadPendingJobs, 15000);
+    } else if (!PENDING_JOBS.length && _pendingTimer) {
+      clearInterval(_pendingTimer); _pendingTimer = null;
+    }
+  }
   function makeAddCatTile(onClick) {
     const t = document.createElement('div');
     t.className = 'tile-add-cat';
@@ -2551,18 +2616,35 @@
     const byId = new Map(list.map(x => [x.id, x]));
     const ordered = orderedIds.map(id => byId.get(id)).filter(Boolean);
     for (const x of list) if (!ordered.includes(x)) ordered.push(x);
+    // LOCAL-FIRST: stamp the new orders into the local store and re-render
+    // NOW — the drop settles instantly. The server hears about it right
+    // after, as ONE bulk call (per-entity fallback keeps an older deploy
+    // working); nothing blocks the parent's next drag.
+    const changed = [];
     for (let i = 0; i < ordered.length; i++) {
       const newOrder = i * 1000;
       if (ordered[i].order === newOrder) continue;
-      try {
-        if (entityKind === 'item') await serverUpdateItem(ordered[i], { order: newOrder });
-        else await serverUpdateCategory(ordered[i], { order: newOrder });
-      } catch (_) {
-        ordered[i].order = newOrder;
-        if (entityKind === 'item') await putItem(ordered[i]); else await putCat(ordered[i]);
-      }
+      ordered[i].order = newOrder;
+      changed.push(ordered[i]);
+      if (entityKind === 'item') await putItem(ordered[i]); else await putCat(ordered[i]);
     }
     await renderSection(section);
+    if (!changed.length) return;
+    (async () => {
+      try {
+        await apiJSON(entityKind === 'item' ? '/api/items' : '/api/categories', {
+          method: 'POST',
+          body: JSON.stringify({ op: 'reorder', ids: ordered.map(x => x.id) }),
+        });
+      } catch (_) {
+        for (const x of changed) {
+          try {
+            if (entityKind === 'item') await serverUpdateItem(x, { order: x.order });
+            else await serverUpdateCategory(x, { order: x.order });
+          } catch (_) { /* stays local; the next successful edit re-syncs */ }
+        }
+      }
+    })();
   }
 
   // Move an item into a different category/subcategory of the SAME section and
@@ -2807,6 +2889,7 @@
       if (editMode) attachDrag(tile);
       itemsEl.appendChild(tile);
     });
+    appendPendingTiles(itemsEl, section, activeId);
     itemsEl.appendChild(makeAddItemTile(() => openItemModal(section, activeId, null)));
   }
 
@@ -2918,6 +3001,7 @@
       if (editMode) attachDrag(tile);
       itemsEl.appendChild(tile);
     });
+    appendPendingTiles(itemsEl, 'needs', null);
     itemsEl.appendChild(makeAddItemTile(() => openItemModal('needs', null, null)));
   }
 
@@ -3881,8 +3965,10 @@
       }
       const { id: jobId } = await jr.json();
       statusEl.textContent = raw
-        ? '📥 Adding the photo to the board…'
-        : '🎨 Drawing it to match the board… (1–3 min). You can close this — it lands on its own.';
+        ? '📥 Adding the photo to the board… Don’t worry — it’s saved; a 🌍 Pending tile marks the spot.'
+        : '🎨 Drawing it to match the board… This takes a few minutes — don’t worry. Your photo is saved; you can close this, and a 🌍 Pending tile marks the spot until it lands.';
+      // Show the placeholder immediately (the poll would catch it in ~15s).
+      loadPendingJobs().catch(() => {});
       // Poll until the job lands (or needs a hand). If the modal is closed the
       // poll keeps going harmlessly; the resync loop shows the tile anyway.
       const t0 = Date.now();
@@ -5916,12 +6002,24 @@
       for (const s of MAIN_SECTIONS) (await getAllItems(s)).forEach(i => { if (i.taxonomySlug && wanted.has(i.taxonomySlug)) items.push(i); });
       return items.filter(i => i.imageKey && i.label);
     }
-    // A specific category/subcategory (e.g. Numbers) — optionally sliced to a range.
+    // A specific category/subcategory (e.g. Numbers) — optionally sliced to a
+    // range. The folder's OWN tiles are the session — a small folder just
+    // makes a short session, never a scope switch. Only a pure CONTAINER
+    // folder (no direct playable tiles — e.g. Food holding only subfolders)
+    // widens to its descendants; callers cap/sample so even that stays short.
     if (scope && scope.startsWith('cat:')) {
       const id = Number(scope.slice(4));
       let items = [];
       for (const s of MAIN_SECTIONS) (await getAllItems(s)).forEach(i => { if (i.categoryId === id) items.push(i); });
-      items = items.filter(i => i.imageKey && i.label).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      items = items.filter(i => i.imageKey && i.label);
+      if (!items.length) {
+        for (const s of MAIN_SECTIONS) {
+          const subtree = new Set(descendantCatIds(await getAllCats(s), id));
+          (await getAllItems(s)).forEach(i => { if (subtree.has(i.categoryId)) items.push(i); });
+        }
+        items = items.filter(i => i.imageKey && i.label);
+      }
+      items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       if (range && (range.from || range.to)) {
         const from = Math.max(1, range.from || 1) - 1;
         const to = (range.to && range.to > 0) ? range.to : items.length;
@@ -6263,7 +6361,10 @@
     TEACH.running = true;
     const o = teachOverlay(); o.style.display = 'flex';
     publishLive('running', { mode: 'teach', scope });
-    const deck = gShuffle(items.slice());
+    // Cap at 12: word + up to three facts each already makes 12 a solid
+    // session, and a wide scope (container folder / whole-board fallback)
+    // must never become an hour-long show.
+    const deck = gShuffle(items.slice()).slice(0, 12);
     const img = document.getElementById('teach-img'),
           clueEl = document.getElementById('teach-clue'), prog = document.getElementById('teach-progress');
     for (let i = 0; i < deck.length && TEACH.running; i++) {
@@ -7312,6 +7413,9 @@
       // re-pull every couple of minutes, and whenever the iPad regains focus.
       setInterval(() => { resyncIfChanged().catch(() => {}); }, 120000);
       document.addEventListener('visibilitychange', () => { if (!document.hidden) { resyncIfChanged().catch(() => {}); checkCelebration().catch(() => {}); } });
+      // In-flight photo adds (from any device) show as "Pending" placeholder
+      // tiles at their landing spot; self-polls while any are outstanding.
+      loadPendingJobs().catch(() => {});
       // Check for special-day celebrations (birthday, holidays). Cheap GET; if
       // today matches, we lazily generate the personalized scene and show a
       // big full-screen modal once that day (suppress after the first dismiss).

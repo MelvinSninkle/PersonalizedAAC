@@ -111,12 +111,15 @@ class AddTileQueue(
                     api.listTileJobs(childId)
                 } catch (_: Exception) { emptyList() }
                 val mapped = statuses.map { s ->
+                    // Enqueue-time placement wins (it's exact); the server's
+                    // echoed section/categoryId covers restarts, where the
+                    // in-memory map is gone and jobs used to go invisible.
                     val place = placements[s.id]
                     TileJob(
                         id = s.id,
                         label = s.label ?: "",
-                        section = place?.first ?: "",
-                        categoryId = place?.second,
+                        section = place?.first ?: s.section ?: "",
+                        categoryId = place?.second ?: s.categoryId,
                         phase = when (s.status) {
                             "done" -> Phase.DONE
                             "failed" -> Phase.FAILED

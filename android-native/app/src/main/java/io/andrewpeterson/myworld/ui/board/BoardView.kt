@@ -173,7 +173,9 @@ fun BoardView() {
         val scope = io.andrewpeterson.myworld.game.PlayScope.recall(c.auth.childSlug) ?: "all"
         val playable = c.board.tilesForScope(scope).count { !it.imageKey.isNullOrEmpty() }
         val useScope = if (playable >= 1) scope else "all"
-        c.game.startLocal(GameController.Mode.Teach, scope = useScope)
+        // Capped at 12 — word + up to three facts each is already a solid
+        // session; a container-folder scope must never run an hour.
+        c.game.startLocal(GameController.Mode.Teach, scope = useScope, sample = 12)
     }
 
     Column(Modifier.fillMaxSize().background(hexColor("#fff7fb"))) {

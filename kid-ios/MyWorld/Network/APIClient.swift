@@ -354,6 +354,21 @@ struct APIClient {
                               body: body, contentType: "application/json")
     }
 
+    /// POST /api/items { op:'reorder', ids } — persist a whole drag-reorder in
+    /// ONE request (the UI already applied it locally; this is the sync).
+    func reorderItems(ids: [Int]) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["op": "reorder", "ids": ids])
+        _ = try await request(method: "POST", path: "/api/items",
+                              body: body, contentType: "application/json")
+    }
+
+    /// POST /api/categories { op:'reorder', ids } — chip-strip twin of the above.
+    func reorderCategories(ids: [Int]) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["op": "reorder", "ids": ids])
+        _ = try await request(method: "POST", path: "/api/categories",
+                              body: body, contentType: "application/json")
+    }
+
     // MARK: -- Durable server-side tile jobs
 
     /// One server job's status (for the add-tile tray to poll).
@@ -367,6 +382,10 @@ struct APIClient {
         let needsReview: Bool
         let error: String?
         let attempts: Int
+        /// Landing spot (server-known) — lets a restarted app draw the
+        /// "Pending" placeholder in the right folder. Older deploys omit them.
+        let section: String?
+        let categoryId: Int?
     }
     private struct TileJobsList: Codable { let jobs: [TileJobStatus] }
     private struct TileJobCreated: Codable { let id: Int; let status: String }
@@ -765,10 +784,15 @@ struct APIClient {
     }
 
     /// Put a past picture back on the tile (the current one archives first,
-    /// so reverting is itself revertible).
-    func revertImage(itemId: Int, key: String) async throws {
+    /// so reverting is itself revertible). Returns the key the tile now uses —
+    /// the server re-homes shared-default art under a fresh child-owned key,
+    /// so the caller can pre-seed the media cache and skip a cold download.
+    @discardableResult
+    func revertImage(itemId: Int, key: String) async throws -> String? {
         let body = try JSONSerialization.data(withJSONObject: ["op": "revert-image", "id": itemId, "key": key])
-        _ = try await request(method: "POST", path: "/api/items", body: body, contentType: "application/json")
+        let (data, _) = try await request(method: "POST", path: "/api/items", body: body, contentType: "application/json")
+        struct R: Decodable { let imageKey: String? }
+        return (try? JSONDecoder().decode(R.self, from: data))?.imageKey
     }
 
     func storeRetry(childId: String, itemId: Int, guidance: String = "") async throws -> StoreRetryResult {
