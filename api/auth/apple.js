@@ -124,11 +124,26 @@ export default async function handler(req, res) {
     // 3) Fresh account. Pick a unique child_slug — fall back with a numeric
     //    suffix on collision.
     if (!row) {
-      // NOTE: unlike register.js's web self-signup, a fresh SIWA account is
-      // NOT invite-gated — the native apps have no invite-code field yet, so
-      // requiring one here would strand every new iPad signup until a native
-      // rebuild ships the field. Add the field natively, then mirror
-      // register.js's validateInviteCode gate here.
+      // Invite gate for App Store signups — OFF until APPLE_SIGNUP_REQUIRES_INVITE
+      // is set (the shipped builds have no invite-code field; flipping this
+      // early would strand every new iPad signup). Once the build that sends
+      // `inviteCode` is live, set the env var to '1' and fresh SIWA accounts
+      // enforce the same code + launch-group limits as web self-signup.
+      // Existing accounts always sign in regardless — the gate is on CREATION.
+      if (process.env.APPLE_SIGNUP_REQUIRES_INVITE === '1') {
+        const { validateInviteCode, inviteCodeFromCookie } = await import('../_lib/invite-perks.js');
+        const invCheck = await validateInviteCode(db, b.inviteCode || await inviteCodeFromCookie(req));
+        if (!invCheck) {
+          res.status(403).json({ error: 'invite_required',
+            detail: 'My World is invite-only right now. Enter the invite code you were given — or join the waitlist on our website.' });
+          return;
+        }
+        if (invCheck.full) {
+          res.status(403).json({ error: 'invite_full',
+            detail: 'That invite code’s launch group is full. Join the waitlist on our website and we’ll email you a fresh code the moment spots open.' });
+          return;
+        }
+      }
       created = true;
       let slug = wantSlug;
       for (let i = 2; i < 1000; i++) {

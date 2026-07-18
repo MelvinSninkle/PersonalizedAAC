@@ -334,9 +334,24 @@ family keeps everything they have — only new spends wait.
   required INLINE on the signup form instead (invite links still pre-apply
   it via the /welcome cookie, and the field says so); a wrong/missing code
   can't create an account (invariant E10). Every other page still bounces
-  anonymous visitors to /welcome. Caveat: a first-time **Sign in with
-  Apple** signup isn't code-gated yet — the native apps need an invite-code
-  field first (noted in api/auth/apple.js).
+  anonymous visitors to /welcome. A first-time **Sign in with Apple**
+  signup is code-gated only after you set `APPLE_SIGNUP_REQUIRES_INVITE=1`
+  — flip it once the iOS build that carries the invite-code field is the
+  one people install; until then App Store signups walk in without a code.
+- **Launch caps (the cash-flow throttle)**: every invite code can carry a
+  **signup limit** (Admin → Invites → "Signup limit" on create, or the
+  Limit button on the row). The limit counts ACCOUNTS CREATED with the code
+  — not gate unlocks, so a family re-entering their code on a second device
+  never burns a slot. At the limit, the /welcome gate and both signup paths
+  turn people away with a "launch group is full" message that points at the
+  landing-page **waitlist** (email + preferred art style + an optional
+  paragraph about their child — review it under Admin → Tools → Load
+  waitlist). Launch recipe: one code with limit 1000 for the website, one
+  with limit 100 in the App Store review notes / app listing, plus an
+  unlimited no-perk code kept private for family & testers. Growing later =
+  raise a limit with the Limit button, or email a fresh code to a batch of
+  waitlist families. The count-then-insert check has a tiny race under
+  simultaneous signups — a 1000 cap landing at 1002 is expected and fine.
 - **Add-on boards**: Lab → Default board → ➕ New board with "Add-on" checked
   (never seeded; `board_catalog.store_only` is the enforcement point).
   Generate its art, publish defaults, and it appears in every store surface's

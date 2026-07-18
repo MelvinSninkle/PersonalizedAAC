@@ -81,7 +81,7 @@
 
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:-6px 0 18px;">
     <span style="font-size:13px;color:var(--muted);font-weight:600;">Have a code?</span>
-    <input type="text" id="redeem-code" placeholder="e.g. WELCOME25" style="font:inherit;padding:8px 12px;border:2px solid var(--line);border-radius:10px;background:#fff;text-transform:uppercase;width:170px;">
+    <input type="text" id="redeem-code" placeholder="Enter your code" style="font:inherit;padding:8px 12px;border:2px solid var(--line);border-radius:10px;background:#fff;text-transform:uppercase;width:170px;">
     <button class="btn secondary" id="redeem-btn">Redeem</button>
   </div>
 
@@ -132,12 +132,21 @@
     const el = document.getElementById('packs');
     const c = CATALOG;
     let html = '';
+    // Packs top up a MEMBERSHIP (every styled spend checks membership before
+    // the wallet) — for a free-tier parent the Buy button would sell credits
+    // they can't use, so it becomes a pointer to the memberships instead.
+    const isMember = c.entitlement && c.entitlement.tier !== 'free';
+    if (!isMember && c.packs.length) {
+      html += `<div class="sub" style="margin:2px 0 10px;">Credit packs top up a membership — join one below first, then packs stack on top of your monthly ⭐.</div>`;
+    }
     for (const p of c.packs) {
       const per = (p.cents / p.credits).toFixed(1);
       html += `<div class="card"><h3>${esc(p.label)} pack</h3>
         <div class="big">⭐ ${p.credits}</div>
         <div class="sub">${money(p.cents)} · ${per}¢ per image credit</div>
-        <button class="btn" data-sku="${esc(p.sku)}">Buy</button></div>`;
+        ${isMember
+          ? `<button class="btn" data-sku="${esc(p.sku)}">Buy</button>`
+          : `<button class="btn secondary" disabled title="Join a membership first">Needs a membership</button>`}</div>`;
     }
     // Memberships — every tier unlocks speech-to-text, auto-teach, reporting,
     // and data saving; tiers differ in monthly credits + voice budget.
@@ -169,7 +178,7 @@
     if (c.rebuild && c.rebuild.words) {
       html += `<div class="card"><h3>Whole-board rebuild</h3>
         <div class="big">⭐ ${c.rebuild.credits}</div>
-        <div class="sub">${c.rebuild.words} words re-made in your child's style — ${Math.round((1 - c.rebuild.credits / c.rebuild.listCredits) * 100)}% off one-by-one</div>
+        <div class="sub">${c.rebuild.words} words re-made in your child's style, in one tap — ⭐1 per word, same as one-by-one</div>
         <button class="btn secondary" id="rebuild-btn">Rebuild the board</button></div>`;
     }
     el.innerHTML = html;
@@ -421,6 +430,11 @@
   })();
 </script>
 
-<div style="text-align:center;font-size:12px;color:#9ca3af;padding:18px 10px;">© My World Tap to Talk LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home — it isn’t a medical device and doesn’t replace your child’s care team.</div>
+<div style="text-align:center;font-size:12px;color:#9ca3af;padding:18px 10px;max-width:640px;margin:0 auto;">
+  Memberships — My World Starter ($4.99/month, ⭐10 monthly), Plus ($9.99/month, ⭐50), Pro ($19.99/month, ⭐150) — renew
+  automatically each month until cancelled. Cancel anytime: web purchases under "Manage billing" above; App Store purchases in
+  your Apple ID subscription settings. Credits are non-refundable once spent on completed images; every image you make is
+  yours to keep.
+  <br><br>© My World Tap to Talk LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home — it isn’t a medical device and doesn’t replace your child’s care team.</div>
 </body>
 </html>

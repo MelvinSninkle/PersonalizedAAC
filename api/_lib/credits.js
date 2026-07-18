@@ -3,11 +3,11 @@
 // PRICING MODEL (per the product decision):
 //   · 1 credit  = one image generated with nano banana (Gemini Flash)
 //   · 5 credits = one family-member portrait (keystone quality + its retries)
-//   · list price 10¢/credit; bundles discount it; the $9.99/mo subscription
+//   · list price 10¢/credit (no discounts anywhere yet); the $9.99/mo Plus tier
 //     grants 50 credits each period (packs stack on top)
 //   · every image gets ONE free retry (tracked per tile / per person)
 //   · whole-board rebuild is quoted dynamically: 70% of the board's word count
-//     in credits (30% off à la carte, still a healthy margin over the ~4¢ cost)
+//     in credits (straight per-word list price)
 //
 // LEDGER: credit_ledger is the source of truth (append-only); the balance is
 // its SUM. spendCredits() is atomic — a conditional single-statement UPDATE-
@@ -26,9 +26,11 @@ export const CREDIT_CENTS = 10;   // list price per credit
 
 // googleProductId reuses the sku verbatim — valid Play product ids, and one
 // id across stores keeps the client + verify paths symmetrical with Apple.
+// Pack labels deliberately avoid the membership tier names ("Starter" was
+// both a $4.99 pack AND the $4.99/mo tier — a guaranteed wrong purchase).
 export const PACKS = [
-  { sku: 'credits50',   credits: 50,   cents: 499,  label: 'Starter', appleProductId: 'credits50',   googleProductId: 'credits50'   },
-  { sku: 'credits100',  credits: 100,  cents: 999,  label: 'Family',  appleProductId: 'credits100',  googleProductId: 'credits100'  },
+  { sku: 'credits50',   credits: 50,   cents: 499,  label: 'Boost',   appleProductId: 'credits50',   googleProductId: 'credits50'   },
+  { sku: 'credits100',  credits: 100,  cents: 999,  label: 'Bundle',  appleProductId: 'credits100',  googleProductId: 'credits100'  },
   { sku: 'credits250',  credits: 250,  cents: 2499, label: 'Super',   appleProductId: 'credits250',  googleProductId: 'credits250'  },
   { sku: 'credits500',  credits: 500,  cents: 4999, label: 'Mega',    appleProductId: 'credits500',  googleProductId: 'credits500'  },
   { sku: 'credits1000', credits: 1000, cents: 9999, label: 'Ultra',   appleProductId: 'credits1000', googleProductId: 'credits1000' },
@@ -42,9 +44,11 @@ export const LEGACY_PACKS = [
   { sku: 'credits150', credits: 150 },
 ];
 
-// One whole category/subcategory personalized at once: 20% off per-tile.
+// One whole category/subcategory personalized at once. NO discount for now —
+// the owner wants real usage data before pricing promotions; the bundle's
+// value is the one-tap convenience, priced exactly at per-tile list.
 export function bundleQuote(words) {
-  return Math.max(1, Math.ceil(words * 0.8));
+  return Math.max(1, Math.ceil(words));
 }
 
 // ── Membership tiers ─────────────────────────────────────────────────────────
@@ -87,9 +91,11 @@ export const COST = { nano: 1, person: 5 };
 // it — the ledger is append-only and the grant was idempotent by reason).
 export const STARTER_CREDITS = 0;
 
-// Whole-board rebuild: 30% off à la carte, floor of 50 credits.
+// Whole-board rebuild: straight per-word list price. NO discount and NO
+// minimum for now (the old 50-credit floor made small boards cost MORE than
+// one-by-one while the card claimed "% off") — revisit with usage data.
 export function rebuildQuote(wordCount) {
-  return Math.max(50, Math.ceil(wordCount * 0.7));
+  return Math.max(1, Math.ceil(wordCount));
 }
 
 // ── Schema ───────────────────────────────────────────────────────────────────

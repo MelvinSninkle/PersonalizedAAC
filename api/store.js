@@ -313,8 +313,9 @@ async function checkout(req, res, db, auth, uid, body) {
   const rows = ids.map((id) => byId.get(id)).filter(Boolean);
   if (!rows.length) { res.status(400).json({ error: 'no valid words in cart' }); return; }
 
-  // Bundle checkout (a whole category/subcategory at once) earns 20% off —
-  // gated to 3+ words so single-word buys can't claim the discount.
+  // Bundle checkout (a whole category/subcategory at once) — same ⭐1/word
+  // as one-by-one; the bundle is a convenience, not a promotion (no
+  // discounts until real usage data exists). Still gated to 3+ words.
   const bundle = body.bundle === true && rows.length >= 3;
   const cost = bundle ? bundleQuote(rows.length) : rows.length * COST.nano;
   const isAdmin = auth.user.role === 'admin';
@@ -897,7 +898,7 @@ async function rearmAdd(req, res, db, auth, body) {
   afterResponse(processTileJob(db, Number(j.id)));
 }
 
-// Whole-board rebuild at the quoted discount (see rebuildQuote).
+// Whole-board rebuild at the quoted per-word list price (see rebuildQuote).
 async function rebuild(req, res, db, auth, uid, body) {
   const childId = String(body.childId || '').slice(0, 64);
   if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
@@ -1061,6 +1062,19 @@ async function stripeCheckout(req, res, db, auth, uid, body) {
   const pack = PACKS.find((p) => p.sku === sku);
   const sub = subscriptionBySku(sku);
   if (!pack && !sub) { res.status(400).json({ error: 'unknown sku', sku }); return; }
+  // Credit packs top up a MEMBERSHIP — every styled spend checks the
+  // membership before the wallet, so a free-tier pack purchase would be
+  // money the parent cannot use. Refuse it up front rather than after.
+  if (pack && auth.user.role !== 'admin') {
+    const ent = await entitlementFor(db, auth.user);
+    if (ent.tier === 'free') {
+      res.status(400).json({
+        error: 'membership_required',
+        detail: 'Credit packs top up a membership. Join My World Starter, Plus, or Pro first — then packs stack on top.',
+      });
+      return;
+    }
+  }
 
   const origin = `https://${req.headers.host}`;
   const form = new URLSearchParams();

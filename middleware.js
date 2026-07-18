@@ -20,7 +20,7 @@ import { verifySession, parseCookies, cookieName } from './lib/session.js';
 const INVITE_COOKIE = 'mw_invite';
 
 export const config = {
-  matcher: ['/((?!api/|login|reset|welcome|accept-invite|favicon\\.ico|robots\\.txt|manifest\\.webmanifest|sw\\.js|icons/|audio/|styles/).*)'],
+  matcher: ['/((?!api/|login|reset|welcome|accept-invite|favicon\\.ico|robots\\.txt|manifest\\.webmanifest|sw\\.js|icons/|audio/|styles/|marketing/).*)'],
 };
 
 // Fully public — viewable with no invite code and no login: the marketing

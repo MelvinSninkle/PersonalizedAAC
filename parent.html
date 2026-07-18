@@ -2009,7 +2009,7 @@
       if (!rb || !rb.words) return;
       const ok = confirm(
         `Heads up: the ${rb.words} pictures already on the board still use the OLD style, so new tiles won't match them.\n\n` +
-        `Re-make the whole board in the new style now? ${rb.credits} credits (${Math.round((1 - rb.credits / rb.listCredits) * 100)}% off one-by-one). ` +
+        `Re-make the whole board in the new style now? ${rb.credits} credits (⭐1 per word). ` +
         `Every replaced picture is archived — you keep them all.\n\nYou have ${c.balance} credits.`);
       if (!ok) { styleRegenMsg('Updated — new tiles use the new style. Re-make the rest anytime in the Word Store.'); return; }
       const r = await fetch('/api/store?action=rebuild', {

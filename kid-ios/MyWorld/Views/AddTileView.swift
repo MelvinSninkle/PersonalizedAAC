@@ -172,7 +172,7 @@ struct AddTileView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Tiles you make after changing the style won't match the board's current look. You can re-make the whole board in the new style afterward (discounted, in the Word Store).")
+                Text("Tiles you make after changing the style won't match the board's current look. You can re-make the whole board in the new style afterward in the Word Store (⭐1 per word).")
             }
             // The magic follow-up: a finished tile whose word already exists on
             // the board (offer replace) or appears inside other pictures (offer

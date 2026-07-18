@@ -88,8 +88,21 @@ struct StoreView: View {
                         .font(.system(size: 12, weight: .heavy))
                         .foregroundStyle(Color(hex: "#ad1457"))
                         .padding(.top, 4)
-                    ForEach(packs, id: \.id) { p in
-                        productRow(p)
+                    if entitlement?.tier == "free" {
+                        // Packs top up a MEMBERSHIP — every styled spend
+                        // checks membership before the wallet, so selling a
+                        // free-tier parent credits they can't use would be
+                        // taking money for nothing. Point at memberships.
+                        Text("Credit packs top up a membership — join My World Starter, Plus, or Pro above first, then packs stack on top of your monthly ⭐.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(hex: "#fff7fb"), in: RoundedRectangle(cornerRadius: 12))
+                    } else {
+                        ForEach(packs, id: \.id) { p in
+                            productRow(p)
+                        }
                     }
                 }
 

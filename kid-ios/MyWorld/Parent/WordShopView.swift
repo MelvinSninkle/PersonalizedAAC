@@ -194,7 +194,7 @@ struct WordShopView: View {
                 Text("✨ Personalize every tile")
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(Color(hex: "#ad1457"))
-                Text("\(remaining) of \(total) tiles still wear the shared pictures. Finish the whole set in your child's style — 20% off.")
+                Text("\(remaining) of \(total) tiles still wear the shared pictures. Finish the whole set in your child's style in one tap.")
                     .font(.system(size: 13)).foregroundStyle(.secondary)
                 Button {
                     let cost = q.cost ?? remaining
@@ -302,7 +302,7 @@ struct WordShopView: View {
         .buttonStyle(.plain)
     }
 
-    /// One-tap bundle purchase for an open folder: 20% off vs word-by-word.
+    /// One-tap bundle purchase for an open folder — same ⭐1/word as one-by-one.
     @ViewBuilder
     private func bundleRow(_ group: Group) -> some View {
         let unpersonalized = group.tiles.filter { !$0.personalized }
@@ -311,7 +311,7 @@ struct WordShopView: View {
             Button {
                 pendingSpend = PendingSpend(cost: cost, what: "Personalizing all \(unpersonalized.count) in this folder") { Task { await buyBundle(unpersonalized.map(\.id)) } }
             } label: {
-                Text(busy ? "…" : "✨ Personalize all \(unpersonalized.count) · ⭐\(cost) (20% off)")
+                Text(busy ? "…" : "✨ Personalize all \(unpersonalized.count) · ⭐\(cost)")
                     .font(.system(size: 13, weight: .bold))
                     .frame(maxWidth: .infinity).padding(.vertical, 10)
                     .background(Color(hex: "#fce4ef")).foregroundStyle(Color(hex: "#ad1457"))

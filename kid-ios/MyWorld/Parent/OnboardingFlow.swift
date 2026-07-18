@@ -369,25 +369,32 @@ private struct OnboardingDemoView: View {
                          title: "A board that sounds like the child it belongs to.",
                          subtitle: "Watch what My World does for a real family. Tap any tile to hear it speak in their voice.")
 
-                // ┌──────────────────────────────────────────────┐
-                // │  DEMO BOARD GOES HERE                        │
-                // │  An interactive sampler — tap a tile, hear   │
-                // │  it speak, see the personalized art. Until   │
-                // │  the demo is built, this slot shows a static │
-                // │  illustration of what the board looks like.  │
-                // └──────────────────────────────────────────────┘
-                placeholderCard(
-                    height: 320,
-                    icon: "play.rectangle.fill",
-                    title: "Live demo board",
-                    note: "Replace with the tappable demo. For now this slot reserves space + sets pace."
-                )
+                // What-happens-next card (the tappable in-app demo is a
+                // future build; until then this sells the promise without
+                // shipping a visible "replace me" placeholder).
+                VStack(alignment: .leading, spacing: 14) {
+                    demoPoint(icon: "camera.fill",
+                              title: "Photograph their world",
+                              note: "Their snacks, their toys, their people — each photo becomes a talking tile.")
+                    demoPoint(icon: "paintpalette.fill",
+                              title: "Drawn in the style they love",
+                              note: "Their face stays their face; the whole board shares one look.")
+                    demoPoint(icon: "speaker.wave.2.fill",
+                              title: "Tap a tile, it talks",
+                              note: "In the voice you pick — plus listening, teaching, and game modes as they grow.")
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(hex: Brand.card), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color(hex: Brand.line), lineWidth: 1))
 
                 ctaRow
             }
             .padding(20)
         }
         .background(Color(hex: Brand.bg))
+        // (helper lives below ctaRow)
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -412,6 +419,24 @@ private struct OnboardingDemoView: View {
             .padding(.top, 6)
         }
     }
+
+    private func demoPoint(icon: String, title: String, note: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(Color(hex: Brand.pink), in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(hex: Brand.ink))
+                Text(note)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color(hex: Brand.muted))
+            }
+        }
+    }
 }
 
 // MARK: -- Step 2: Account (Apple first, email second)
@@ -425,6 +450,7 @@ private struct OnboardingAccountView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var confirm = ""
+    @State private var inviteCode = ""
     @State private var busy = false
     @State private var errorText: String?
     private let api = APIClient()
@@ -450,6 +476,26 @@ private struct OnboardingAccountView: View {
                 // The COPPA/consent anchor — required before EITHER create
                 // path (Apple or email). Log-ins don't need it.
                 if mode == .signup {
+                    // Invite code applies to BOTH create paths (Apple and
+                    // email), so it sits above the Apple button. The server
+                    // is the gate — an empty field just fails there with the
+                    // same friendly message.
+                    TextField("Invite code", text: $inviteCode)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(12)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: Brand.line), lineWidth: 1))
+                    (Text("My World is invite-only during early access. No code yet? Join the waitlist at ")
+                     + Text("our website").underline()
+                     + Text("."))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(hex: Brand.muted))
+                        .onTapGesture {
+                            if let url = URL(string: "\(APIClient.defaultOrigin)/#waitlist") {
+                                UIApplication.shared.open(url)
+                            }
+                        }
                     Toggle(isOn: $consented) {
                         (Text("I'm the parent or legal guardian (or a caregiver with their permission), I'm 18+, and I agree to the ")
                          + Text("Terms of Service").underline()
@@ -561,14 +607,15 @@ private struct OnboardingAccountView: View {
                 let resp = try await api.signInWithApple(.init(
                     identityToken: token,
                     fullName: name.isEmpty ? nil : name,
-                    email: cred.email
+                    email: cred.email,
+                    inviteCode: inviteCode.trimmingCharacters(in: .whitespaces)
                 ))
                 await auth.refreshFromServer()
                 // Brand-new account → continue onboarding; existing → straight
                 // to the board / parent home.
                 finishAuth(created: resp.created ?? false)
             } catch {
-                errorText = "Apple sign-in failed: \(error.localizedDescription)"
+                errorText = friendlyAuthError(error, fallback: "Apple sign-in failed: \(error.localizedDescription)")
             }
         }
     }
@@ -594,20 +641,37 @@ private struct OnboardingAccountView: View {
         busy = true; errorText = nil
         defer { busy = false }
         do {
+            // selfSignup:true routes to the open parent path server-side —
+            // without it register.js treats this as an admin-only call and
+            // rejects every anonymous create.
             let body = try JSONSerialization.data(withJSONObject: [
                 "email": email.trimmingCharacters(in: .whitespaces),
                 "password": password,
-                "role": "parent",
+                "selfSignup": true,
                 "consent": true,
                 "consentVersion": "2026-07",
+                "inviteCode": inviteCode.trimmingCharacters(in: .whitespaces),
             ])
             _ = try await api.request(method: "POST", path: "/api/auth/register",
                                       body: body, contentType: "application/json")
             await auth.refreshFromServer()
             finishAuth(created: true)         // new account → onboarding continues
         } catch {
-            errorText = "Could not create the account: \(error.localizedDescription)"
+            errorText = friendlyAuthError(error, fallback: "Could not create the account: \(error.localizedDescription)")
         }
+    }
+
+    /// Auth errors come back as JSON {error, detail} inside a badStatus body —
+    /// show the human sentence ("Enter the invite code you were given…"), not
+    /// the raw JSON blob.
+    private func friendlyAuthError(_ error: Error, fallback: String) -> String {
+        if case let APIError.badStatus(_, body) = error,
+           let data = body.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let d = obj["detail"] as? String, !d.isEmpty { return d }
+            if let e = obj["error"] as? String, !e.isEmpty { return e }
+        }
+        return fallback
     }
 
     /// After any successful auth: a brand-new account continues the onboarding
@@ -885,9 +949,18 @@ private struct OnboardingPhotoView: View {
         )
     }
 
-    /// Before/after illustration card. Uses bundled assets when they exist;
-    /// shows a labeled placeholder otherwise.
+    /// Before/after illustration card. Renders ONLY when the bundled sample
+    /// assets exist — a dashed "Add asset" box shipped to real parents until
+    /// this guard (assets still aren't in the catalog; card self-hides).
+    @ViewBuilder
     private var beforeAfterCard: some View {
+        if UIImage(named: "OnboardSampleBefore") != nil,
+           UIImage(named: "OnboardSampleAfter") != nil {
+            beforeAfterContent
+        }
+    }
+
+    private var beforeAfterContent: some View {
         HStack(spacing: 14) {
             illustrativeImage(name: "OnboardSampleBefore",
                               fallbackIcon: "person.crop.square.filled.and.at.rectangle",
