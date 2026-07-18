@@ -402,26 +402,27 @@ struct SectionColumn: View {
         return out
     }
 
-    /// Persist the previewed order (i*1000 resequence, web parity). The
-    /// preview stays up until the refreshed board arrives in the saved order,
-    /// so the grid never snaps back through the old arrangement.
+    /// LOCAL-FIRST commit: the board's own data takes the previewed order the
+    /// instant the finger lifts (no waiting on the network), then ONE bulk
+    /// call syncs the server in the background — with a per-item fallback so
+    /// an app newer than the deploy still lands the order.
     private func commitPreview(in cat: Category) {
         dragSourceId = nil
         let ids = previewIds ?? []
+        let base = board.tiles(in: cat)
+        var orderedIds = ids.filter { id in base.contains { $0.id == id } }
+        orderedIds += base.map(\.id).filter { !orderedIds.contains($0) }
+        board.applyLocalTileOrder(orderedIds)
+        previewIds = nil
         Task {
-            let base = board.tiles(in: cat)
-            let by = Dictionary(uniqueKeysWithValues: base.map { ($0.id, $0) })
-            var ordered = ids.compactMap { by[$0] }
-            ordered += base.filter { t in !ids.contains(t.id) }
             let api = APIClient()
-            for (i, t) in ordered.enumerated() {
-                let newOrder = i * 1000
-                if t.order != newOrder {
-                    _ = try? await api.updateItem(id: t.id, order: newOrder, childId: auth.childSlug)
+            do { try await api.reorderItems(ids: orderedIds) }
+            catch {
+                for (i, id) in orderedIds.enumerated() {
+                    _ = try? await api.updateItem(id: id, order: i * 1000, childId: auth.childSlug)
                 }
             }
             await board.refresh(childId: auth.childSlug)
-            await MainActor.run { previewIds = nil }
         }
     }
 
@@ -474,13 +475,18 @@ struct SectionColumn: View {
         await board.refresh(childId: auth.childSlug)
     }
 
-    /// Persist a chip strip's previewed order (category OR subcategory chips —
-    /// the ids define the sibling group; i*1000 resequence, web parity).
+    /// Persist a chip strip's previewed order — LOCAL-FIRST (the strip settles
+    /// instantly), then one bulk call in the background with a per-chip
+    /// fallback for older deploys.
     private func persistCatOrder(_ ids: [Int]) {
+        board.applyLocalCategoryOrder(ids)
         Task {
             let api = APIClient()
-            for (i, id) in ids.enumerated() {
-                _ = try? await api.updateCategory(id: id, order: i * 1000, childId: auth.childSlug)
+            do { try await api.reorderCategories(ids: ids) }
+            catch {
+                for (i, id) in ids.enumerated() {
+                    _ = try? await api.updateCategory(id: id, order: i * 1000, childId: auth.childSlug)
+                }
             }
             await board.refresh(childId: auth.childSlug)
         }

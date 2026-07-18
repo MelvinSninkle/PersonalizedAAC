@@ -97,6 +97,18 @@ actor MediaCache {
         return UIImage(cgImage: cg)
     }
 
+    /// Seed the cache for `key` with the bytes already cached under
+    /// `sourceKey` — same pixels under a new blob key (a revert re-homes the
+    /// image to a fresh child-owned key). The board swaps instantly instead
+    /// of waiting on a cold download + server-side variant build.
+    func seed(key: String, fromCached sourceKey: String) {
+        let src = path(for: sourceKey)
+        let dst = path(for: key)
+        guard FileManager.default.fileExists(atPath: src.path),
+              !FileManager.default.fileExists(atPath: dst.path) else { return }
+        try? FileManager.default.copyItem(at: src, to: dst)
+    }
+
     /// File URL that AVAudioPlayer can play directly.
     func audioFileURL(for key: String) async throws -> URL {
         let file = path(for: key)

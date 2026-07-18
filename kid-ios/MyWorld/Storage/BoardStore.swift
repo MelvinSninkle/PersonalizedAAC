@@ -63,6 +63,24 @@ final class BoardStore {
             }
     }
 
+    /// Apply a drag-reorder locally (i*1000 across `ids`) so the grid settles
+    /// the instant the finger lifts — the server hears about it in the
+    /// background and the next refresh confirms. Ids not present are ignored.
+    func applyLocalTileOrder(_ ids: [Int]) {
+        let pos = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0 * 1000) })
+        for i in tiles.indices {
+            if let ord = pos[tiles[i].id] { tiles[i].order = ord }
+        }
+    }
+
+    /// Same, for category/subcategory chip reorders.
+    func applyLocalCategoryOrder(_ ids: [Int]) {
+        let pos = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0 * 1000) })
+        for i in categories.indices {
+            if let ord = pos[categories[i].id] { categories[i].order = ord }
+        }
+    }
+
     /// Pinned/persistent tiles — those flagged `pinned: true` across the board.
     /// Mirrors the persistent strip on the web app.
     func persistentStrip() -> [Tile] {

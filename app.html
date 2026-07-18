@@ -2551,18 +2551,35 @@
     const byId = new Map(list.map(x => [x.id, x]));
     const ordered = orderedIds.map(id => byId.get(id)).filter(Boolean);
     for (const x of list) if (!ordered.includes(x)) ordered.push(x);
+    // LOCAL-FIRST: stamp the new orders into the local store and re-render
+    // NOW — the drop settles instantly. The server hears about it right
+    // after, as ONE bulk call (per-entity fallback keeps an older deploy
+    // working); nothing blocks the parent's next drag.
+    const changed = [];
     for (let i = 0; i < ordered.length; i++) {
       const newOrder = i * 1000;
       if (ordered[i].order === newOrder) continue;
-      try {
-        if (entityKind === 'item') await serverUpdateItem(ordered[i], { order: newOrder });
-        else await serverUpdateCategory(ordered[i], { order: newOrder });
-      } catch (_) {
-        ordered[i].order = newOrder;
-        if (entityKind === 'item') await putItem(ordered[i]); else await putCat(ordered[i]);
-      }
+      ordered[i].order = newOrder;
+      changed.push(ordered[i]);
+      if (entityKind === 'item') await putItem(ordered[i]); else await putCat(ordered[i]);
     }
     await renderSection(section);
+    if (!changed.length) return;
+    (async () => {
+      try {
+        await apiJSON(entityKind === 'item' ? '/api/items' : '/api/categories', {
+          method: 'POST',
+          body: JSON.stringify({ op: 'reorder', ids: ordered.map(x => x.id) }),
+        });
+      } catch (_) {
+        for (const x of changed) {
+          try {
+            if (entityKind === 'item') await serverUpdateItem(x, { order: x.order });
+            else await serverUpdateCategory(x, { order: x.order });
+          } catch (_) { /* stays local; the next successful edit re-syncs */ }
+        }
+      }
+    })();
   }
 
   // Move an item into a different category/subcategory of the SAME section and

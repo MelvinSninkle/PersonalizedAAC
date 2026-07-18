@@ -110,6 +110,20 @@ class BoardStore(context: Context, private val api: ApiClient, private val media
     // ── Sync ────────────────────────────────────────────────────────────────
 
     /** Fetch the latest board; silently keeps stale data on failure. */
+    /** Apply a drag-reorder locally (i*1000 across ids) so the grid settles
+     *  the instant the finger lifts; the server sync runs in the background
+     *  and the next refresh confirms. Ids not present are ignored. */
+    fun applyLocalTileOrder(ids: List<Int>) {
+        val pos = ids.withIndex().associate { (i, id) -> id to i * 1000 }
+        _tiles.value = _tiles.value.map { t -> pos[t.id]?.let { t.copy(order = it) } ?: t }
+    }
+
+    /** Same, for category/subcategory chip reorders. */
+    fun applyLocalCategoryOrder(ids: List<Int>) {
+        val pos = ids.withIndex().associate { (i, id) -> id to i * 1000 }
+        _categories.value = _categories.value.map { c -> pos[c.id]?.let { c.copy(order = it) } ?: c }
+    }
+
     suspend fun refresh(childId: String) {
         _loading.value = true
         try {

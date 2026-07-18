@@ -446,11 +446,17 @@ export async function processSeedJob(db, job, getCtx) {
       let imageKey = null;
       if (replaceable) {
         // Guided retry (guidance set): ref_key is the PREVIOUS attempt to
-        // improve. Otherwise it's a related-tile composition reference.
+        // improve. Otherwise this is a regen-with ("include this exact fork"):
+        // ref_key is the NEW tile's image — an object-IDENTITY reference — and
+        // the tile's CURRENT art rides along as the scene/composition anchor,
+        // so "cut" keeps looking like cut and gains the child's real knife
+        // (the old wiring sent the knife as a scene-to-copy, which made the
+        // verb render mimic a lone-object composition).
         const isGuidedRetry = !!job.guidance;
         const r = await renderTaxonomyTile({ tax, styleGuide: c.styleGuide, childAnchor: c.childAnchor, settings: c.settings,
                                              suppressBakedText: !!c.trMap,
-                                             referenceImageKeys: (!isGuidedRetry && job.ref_key) ? [job.ref_key] : [],
+                                             referenceImageKeys: (!isGuidedRetry && job.ref_key && cur) ? [cur] : [],
+                                             objectRefKeys: (!isGuidedRetry && job.ref_key) ? [job.ref_key] : [],
                                              guidance: job.guidance || '',
                                              priorKey: isGuidedRetry ? job.ref_key : null });
         if (!r.ok) throw new Error(r.detail || 'render failed');

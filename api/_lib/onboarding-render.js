@@ -250,7 +250,7 @@ function noFaceRule(category) {
 // Render one taxonomy tile. `styleGuide` is the loaded { image, label } (or null),
 // `childAnchor` the loaded { buffer, contentType, name } (or null), `settings`
 // the lab_settings row. Returns { ok, b64?, contentType?, prompt?, costCents?, model?, detail? }.
-export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], worldRefKeys = [], guidance = '', priorKey = null, model = null, suppressBakedText = false }) {
+export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], objectRefKeys = [], worldRefKeys = [], guidance = '', priorKey = null, model = null, suppressBakedText = false }) {
   const section = String(tax.column_name || '').toLowerCase();
   let content = tax.prompt_template || `A friendly illustration of ${tax.label}.`;
   const mentionsRef = /\{reference\}/i.test(content);
@@ -325,13 +325,25 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
       legend.push(`Image ${images.length} is ANOTHER STYLE reference from the same world — match how it renders objects, materials, and backgrounds; do not copy its content.`);
     } catch (_) { /* a missing reference never blocks generation */ }
   }
-  // Related already-generated tiles (paired concepts like open/close, big/little):
+  // Related already-generated tiles (paired concepts like open/close, big/little
+  // — or, on a regen-with, THIS tile's current art as the scene to keep):
   // attach them so this tile reuses the same setup/composition for a legible pair.
   for (const key of (referenceImageKeys || [])) {
     try {
       const bytes = await readBlobBytes(key);
       images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
       legend.push(`Image ${images.length} is a RELATED tile already drawn — match its scene, composition, and props exactly; change only what this word requires.`);
+    } catch (_) { /* a missing reference never blocks generation */ }
+  }
+  // The child's REAL object ("include this exact fork"): an IDENTITY reference
+  // — the pictured object must appear in the scene, but its background and
+  // framing must NOT be copied. Kept separate from the scene refs above, and
+  // pushed after them so the most specific instruction reads last.
+  for (const key of (objectRefKeys || [])) {
+    try {
+      const bytes = await readBlobBytes(key);
+      images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
+      legend.push(`Image ${images.length} shows the child's REAL object that belongs in this scene — draw THIS exact object (same colors, shape, and distinguishing details), not a generic one. Take ONLY the object from this image; do not copy its background, framing, or composition.`);
     } catch (_) { /* a missing reference never blocks generation */ }
   }
   // Guided retry: the PREVIOUS attempt rides along so the model improves the

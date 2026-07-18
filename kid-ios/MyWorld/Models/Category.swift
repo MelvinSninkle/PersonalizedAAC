@@ -12,7 +12,7 @@ struct Category: Codable, Identifiable, Hashable {
     let imageKey: String?
     let imageUrl: String?
     let keepAspect: Bool
-    let order: Int
+    var order: Int   // var: drag-reorder stamps new orders locally before the server confirms
     let childId: String?
     let ownerUserId: Int?
     let taxonomySlug: String?

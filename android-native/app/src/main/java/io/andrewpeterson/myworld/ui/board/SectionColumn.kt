@@ -60,6 +60,9 @@ import io.andrewpeterson.myworld.model.BoardMetrics
 import io.andrewpeterson.myworld.model.BoardSection
 import io.andrewpeterson.myworld.model.Category
 import io.andrewpeterson.myworld.model.Tile
+import io.andrewpeterson.myworld.net.reorderCategories
+import io.andrewpeterson.myworld.net.reorderItems
+import io.andrewpeterson.myworld.net.updateCategory
 import io.andrewpeterson.myworld.net.updateItem
 import io.andrewpeterson.myworld.storage.AddTileQueue
 import io.andrewpeterson.myworld.ui.theme.Brand
@@ -104,13 +107,19 @@ fun SectionColumn(
     val chipRects = remember { mutableStateMapOf<Int, Rect>() }
     val colScope = rememberCoroutineScope()
 
-    // Chip drag-reorder commit (edit mode): persist the previewed id order.
+    // Chip drag-reorder commit (edit mode): LOCAL-FIRST (the strip settles
+    // instantly), then one bulk sync with a per-chip fallback.
     fun persistCatOrder(ids: List<Int>) {
+        c.board.applyLocalCategoryOrder(ids)
         colScope.launch {
-            for ((i, cid) in ids.withIndex()) {
-                try {
-                    c.api.updateCategory(id = cid, childId = c.auth.childSlug, order = i * 1000)
-                } catch (_: Exception) {}
+            try {
+                c.api.reorderCategories(ids)
+            } catch (_: Exception) {
+                for ((i, cid) in ids.withIndex()) {
+                    try {
+                        c.api.updateCategory(id = cid, childId = c.auth.childSlug, order = i * 1000)
+                    } catch (_: Exception) {}
+                }
             }
             c.board.refresh(c.auth.childSlug)
         }
@@ -333,18 +342,22 @@ private fun TileGrid(
             return
         }
         // The live shuffle already showed where the tile lands — the previewed
-        // order IS the answer; persist it (i*1000 resequence, web parity). The
-        // preview stays visible until the refresh re-keys it, so nothing snaps.
+        // order IS the answer. LOCAL-FIRST: the board data takes it now (the
+        // grid settles instantly), then ONE bulk call syncs the server in the
+        // background (per-item fallback for an app newer than the deploy).
         val ids = previewIds
         if (ids != null) {
-            val by = tiles.associateBy { it.id }
-            val ordered = ids.mapNotNull { by[it] } + tiles.filter { t -> t.id !in ids }
+            val orderedIds = ids.filter { pid -> tiles.any { it.id == pid } } +
+                tiles.map { it.id }.filter { it !in ids }
+            c.board.applyLocalTileOrder(orderedIds)
+            previewIds = null
             scope.launch {
-                for ((idx, t) in ordered.withIndex()) {
-                    val newOrder = idx * 1000
-                    if (t.order != newOrder) {
+                try {
+                    c.api.reorderItems(orderedIds)
+                } catch (_: Exception) {
+                    for ((idx, tid) in orderedIds.withIndex()) {
                         try {
-                            c.api.updateItem(id = t.id, childId = c.auth.childSlug, order = newOrder)
+                            c.api.updateItem(id = tid, childId = c.auth.childSlug, order = idx * 1000)
                         } catch (_: Exception) {}
                     }
                 }
