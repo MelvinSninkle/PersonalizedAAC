@@ -107,16 +107,15 @@
   .pmodal input[type=checkbox] { accent-color: var(--pink); }
   .pmodal .btnrow { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
 
-  /* ── Education bar — listening mode leads (the seller) ── */
-  #edu-bar { flex:0 0 auto; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
-             padding:7px 12px; background:#fff8e1; border-bottom:2px solid #f6e3a1;
-             font-family:'Fredoka',sans-serif; font-size:13px; color:#7a5c00; }
-  #edu-bar b { color:#5c4500; }
-  #edu-bar .edu-chip { font-size:12px; color:#8a6d1a; background:#fff3c4; border-radius:999px;
-                       padding:4px 10px; white-space:nowrap; }
-  #edu-bar #listen-btn { background:var(--pink); color:#fff; border:none; font-weight:700; }
-  #edu-bar #edu-close { margin-left:auto; border:none; background:none; color:#8a6d1a;
-                        font-size:15px; cursor:pointer; padding:2px 6px; }
+  /* ── The single control strip — dropdowns keep the chrome to one row so
+         the board itself is the hero. ── */
+  .tsel { border:2px solid var(--line); background:#fff; border-radius:999px; padding:5px 28px 5px 12px;
+          font:inherit; font-size:12px; font-weight:600; color:var(--pink-deep); cursor:pointer;
+          font-family:'Fredoka',sans-serif; appearance:none; -webkit-appearance:none; max-width:200px;
+          background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23ad1457' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+          background-repeat:no-repeat; background-position:right 10px center; }
+  .tsel:focus { outline:none; border-color:var(--pink); }
+  #listen-btn { background:var(--pink); color:#fff; border-color:var(--pink); font-weight:700; }
 
   /* ── Live listening strip — heard words as chips (censor always on) ── */
   #listen-bar { flex:0 0 auto; display:none; gap:8px; align-items:center; padding:7px 12px;
@@ -143,35 +142,25 @@
   <a class="cta" href="/signup.html">Make it your child's →</a>
 </header>
 
-<div class="toolbar" id="style-bar" style="display:none;">
-  <span class="tl">Art style:</span>
-  <div id="styles" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"></div>
-</div>
-
-<div class="toolbar" id="kid-bar" style="display:none;">
-  <span class="tl">Meet:</span>
-  <div id="kids" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"></div>
-</div>
-
-<div class="toolbar">
-  <span class="tl">Voice:</span>
-  <div id="voices" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+<!-- ONE control strip — every knob in a single row of dropdowns/buttons so
+     the board below stays the hero. -->
+<div class="toolbar" id="main-toolbar">
+  <span class="tl" id="style-wrap" style="display:none;">Style
+    <select class="tsel" id="sel-style" title="Every published art style — your child's whole board renders in the one you pick"></select>
+  </span>
+  <span class="tl" id="kid-wrap" style="display:none;">Meet
+    <select class="tsel" id="sel-kid" title="Who the demo board is about — person tiles re-render for them"></select>
+  </span>
+  <span class="tl">Voice
+    <select class="tsel" id="sel-voice" title="Their favorite voice — every picture speaks with it"></select>
+  </span>
   <button class="voice-chip" id="disp-btn" title="Labels, tile sizes, sections and colors — just for this visit">⚙ Display</button>
+  <button class="voice-chip" id="listen-btn" title="The board that listens: talk nearby and the words you say light up as tiles">🎙 Try listening</button>
   <div class="stats" title="On a real board, every tap builds your child's progress charts, word history, and milestone moments.">
     <span>Taps this visit <b id="st-taps">0</b></span>
     <span>Different words <b id="st-words">0</b></span>
     <span class="foot-note"><a href="/signup.html">Create your child's own →</a></span>
   </div>
-</div>
-
-<!-- User education — listening mode is the seller, so it leads with a live
-     try-it button. Dismiss lasts this browser session only. -->
-<div id="edu-bar">
-  <span>🎙 <b>The board that listens:</b> talk nearby and the words you say light up as tiles.</span>
-  <button class="voice-chip" id="listen-btn">▶ Try listening</button>
-  <span class="edu-chip">🧒 Every picture becomes <b>your child's</b> world</span>
-  <span class="edu-chip">🔊 Their favorite voice — pick one above</span>
-  <button id="edu-close" title="Hide">✕</button>
 </div>
 
 <!-- Live listening strip — heard words appear here (browser speech
@@ -297,8 +286,6 @@
     const total = ['people', 'nouns', 'verbs'].filter((s) => PDISP.sectionVisible[s])
       .reduce((n, s) => n + pdAcross(s), 0) || 9;
     needsEl.style.setProperty('--needs-across', total);
-    const edu = document.getElementById('edu-bar');
-    if (edu) edu.style.display = PDISP.eduDismissed ? 'none' : '';
   }
   const tapped = new Set();
   let taps = 0;
@@ -338,50 +325,39 @@
     return f ? f.imageKey : null;
   }
 
+  // Shared filler: (re)populate one of the strip's dropdowns.
+  function fillSelect(sel, opts, current) {
+    sel.innerHTML = '';
+    for (const o of opts) {
+      const el = document.createElement('option');
+      el.value = String(o.id);
+      el.textContent = o.label;
+      sel.appendChild(el);
+    }
+    sel.value = String(current);
+  }
+
   // Every published style is browsable right here — the same shared
   // per-style default art a family gets, still only /api/demo + /api/media.
   function renderStyles() {
-    const bar = document.getElementById('style-bar');
-    const wrap = document.getElementById('styles');
+    const wrap = document.getElementById('style-wrap');
     const styles = DATA.styles || [];
-    if (!styles.length) { bar.style.display = 'none'; return; }
-    bar.style.display = '';
-    wrap.innerHTML = '';
-    const opts = [{ id: 0, label: 'Classic' }, ...styles];
-    for (const s of opts) {
-      const b = document.createElement('button');
-      b.className = 'voice-chip' + (STYLE === s.id ? ' active' : '');
-      if (s.id) {
-        const img = document.createElement('img');
-        img.src = '/api/style-guides/public?image=' + s.id;
-        img.alt = '';
-        img.style.cssText = 'width:22px;height:22px;border-radius:6px;object-fit:cover;vertical-align:-5px;margin-right:6px;';
-        b.appendChild(img);
-      }
-      b.appendChild(document.createTextNode(s.label));
-      b.addEventListener('click', () => { if (STYLE !== s.id) reloadBoard(s.id); });
-      wrap.appendChild(b);
-    }
+    if (!styles.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    fillSelect(document.getElementById('sel-style'),
+               [{ id: 0, label: 'Classic' }, ...styles], STYLE);
   }
 
-  // Some styles offer more than one demo child — a "Meet:" rail lets the
+  // Some styles offer more than one demo child — a "Meet" dropdown lets the
   // parent pick who the board is about. Person tiles re-render per kid;
   // everything else is the same shared set.
   function renderKids() {
-    const bar = document.getElementById('kid-bar');
-    const wrap = document.getElementById('kids');
+    const wrap = document.getElementById('kid-wrap');
     const kids = (STYLE && DATA.kids) || [];
-    if (!kids.length) { bar.style.display = 'none'; return; }
-    bar.style.display = '';
-    wrap.innerHTML = '';
-    const opts = [{ id: 0, label: 'Our demo kid' }, ...kids];
-    for (const k of opts) {
-      const b = document.createElement('button');
-      b.className = 'voice-chip' + (KID === k.id ? ' active' : '');
-      b.textContent = k.label;
-      b.addEventListener('click', () => { if (KID !== k.id) reloadBoard(STYLE, k.id); });
-      wrap.appendChild(b);
-    }
+    if (!kids.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    fillSelect(document.getElementById('sel-kid'),
+               [{ id: 0, label: 'Our demo kid' }, ...kids], KID);
   }
 
   async function reloadBoard(styleId, kidId) {
@@ -421,16 +397,21 @@
   }
 
   function renderVoices() {
-    const wrap = document.getElementById('voices');
-    wrap.innerHTML = '';
-    const opts = [{ id: '', name: 'Device voice' }, ...(DATA.voices || [])];
-    for (const v of opts) {
-      const b = document.createElement('button');
-      b.className = 'voice-chip' + (VOICE === v.id ? ' active' : '');
-      b.textContent = v.name;
-      b.addEventListener('click', () => { VOICE = v.id; renderVoices(); speak(v.id ? 'Hello! I can be your voice.' : 'Hello!'); });
-      wrap.appendChild(b);
-    }
+    const opts = [{ id: '', label: 'Device voice' },
+                  ...(DATA.voices || []).map((v) => ({ id: v.id, label: v.name }))];
+    fillSelect(document.getElementById('sel-voice'), opts, VOICE);
+  }
+
+  // Switching voices plays that voice's PRE-RENDERED introduction clip (the
+  // same tongue-twister sample onboarding uses) — never the device voice
+  // reading a stand-in line. Clip missing (older builds) → stay silent; the
+  // next tile tap demonstrates the voice anyway.
+  function playVoiceSample() {
+    if (!VOICE) { speakLocal('Hello!'); return; }   // device voice IS the device
+    audioEl.src = media('demo-audio/' + VOICE + '/voice-sample.mp3');
+    audioEl.currentTime = 0;
+    audioEl.onerror = null;
+    audioEl.play().catch(() => {});
   }
 
   function tilesFor(section) { return DATA.tiles.filter((t) => t.section === section); }
@@ -724,9 +705,22 @@
       document.getElementById('listen-help').classList.remove('show');
       startListen();
     });
-    document.getElementById('edu-close').addEventListener('click', () => {
-      PDISP.eduDismissed = true; pdSave();
-      document.getElementById('edu-bar').style.display = 'none';
+  })();
+
+  // The strip's dropdowns — wired once; the render*() fillers only swap
+  // their option lists.
+  (function wireToolbar() {
+    document.getElementById('sel-style').addEventListener('change', (e) => {
+      const id = Number(e.target.value) || 0;
+      if (STYLE !== id) reloadBoard(id);
+    });
+    document.getElementById('sel-kid').addEventListener('change', (e) => {
+      const id = Number(e.target.value) || 0;
+      if (KID !== id) reloadBoard(STYLE, id);
+    });
+    document.getElementById('sel-voice').addEventListener('change', (e) => {
+      VOICE = e.target.value;
+      playVoiceSample();
     });
   })();
 

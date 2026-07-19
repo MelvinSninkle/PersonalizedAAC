@@ -14,6 +14,7 @@
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { synthesizeVoice } from '../_lib/onboarding-render.js';
+import { VOICE_SAMPLE_TEXT } from '../_lib/voices.js';
 import { put, list } from '@vercel/blob';
 
 export const config = { maxDuration: 300 };
@@ -119,6 +120,20 @@ export default async function handler(req, res) {
     for (const vid of voiceIds) {
       const have = await existingKeys(`demo-audio/${vid}/`);
       let vDone = 0;
+      // The voice's introduction clip — the SAME tongue-twister sample text
+      // onboarding plays, so the practice page's voice switcher sounds like
+      // the product instead of the device voice reading a stock line. Fixed
+      // key (not label-slugged) so it can never collide with a real word;
+      // deliberately NOT counted in clips_built/clips_total — the /api/demo
+      // completeness gate predates this clip and must not flap for voices
+      // that were already fully built.
+      const sampleKey = `demo-audio/${vid}/voice-sample.mp3`;
+      if (!have.has(sampleKey) && Date.now() <= deadline) {
+        try {
+          const buf = await synthesizeVoice({ text: VOICE_SAMPLE_TEXT, voiceId: vid, stats });
+          if (buf) { await put(sampleKey, buf, { access: 'private', addRandomSuffix: false, contentType: 'audio/mpeg' }); built++; }
+        } catch (_) { remaining++; }
+      }
       for (const item of labels) {
         const key = `demo-audio/${vid}/${demoSlug(item.label)}.mp3`;
         if (have.has(key)) { skipped++; vDone++; continue; }

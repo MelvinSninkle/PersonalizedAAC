@@ -32,7 +32,8 @@ const fails = [];
   await page.goto('http://127.0.0.1:8765/practice.html', { waitUntil: 'networkidle' });
   await page.waitForTimeout(600);
   ok('tiles render', await page.evaluate(() => document.querySelectorAll('.tile').length) > 10);
-  ok('voice chips render', await page.evaluate(() => document.querySelectorAll('.voice-chip').length) >= 1);
+  ok('voice picker renders', await page.evaluate(() =>
+    document.querySelectorAll('#sel-voice option').length >= 1));   // Device voice at minimum
   await page.locator('#board .tile').first().click();
   await page.waitForTimeout(300);
   ok('tap counts local stats', await page.evaluate(() => document.getElementById('st-taps').textContent) === '1');
@@ -53,10 +54,10 @@ const fails = [];
     return labels[0] === 'Toys' && labels[1] === 'Food';
   }));
 
-  // ── Education bar + live listening demo (driven micless via the hook) ──
-  ok('education bar leads with listening', await page.evaluate(() => {
-    const bar = document.getElementById('edu-bar');
-    return !!bar && bar.style.display !== 'none' && !!document.getElementById('listen-btn');
+  // ── Single-strip toolbar + live listening demo (driven micless via hook) ──
+  ok('toolbar strip carries the listening button', await page.evaluate(() => {
+    const bar = document.getElementById('main-toolbar');
+    return !!bar && !!bar.querySelector('#listen-btn');
   }));
   ok('listening matches a tile and masks a bad word', await page.evaluate(() => {
     const tokens = window.practiceHooks.listenTokens('pizza is damn good');
@@ -73,10 +74,11 @@ const fails = [];
 
   // ── Style switcher (published styles browsable on the public demo) ──
   ok('style switcher renders', await page.evaluate(() =>
-    document.querySelectorAll('#styles .voice-chip').length >= 2));   // Classic + stub style
+    document.querySelectorAll('#sel-style option').length >= 2));   // Classic + stub style
   await page.evaluate(() => {
-    const chips = [...document.querySelectorAll('#styles .voice-chip')];
-    chips[chips.length - 1].click();   // the stubbed "Watercolor" style
+    const sel = document.getElementById('sel-style');
+    sel.value = sel.options[sel.options.length - 1].value;   // the stubbed "Watercolor" style
+    sel.dispatchEvent(new Event('change'));
   });
   await page.waitForTimeout(600);
   ok('switching style re-renders styled art', await page.evaluate(() =>
@@ -87,13 +89,14 @@ const fails = [];
 
   // ── Demo-kid switcher (styles can offer more than one demo child) ──
   ok('kid switcher renders in styled mode', await page.evaluate(() => {
-    const bar = document.getElementById('kid-bar');
-    return !!bar && bar.style.display !== 'none'
-      && document.querySelectorAll('#kids .voice-chip').length >= 2;   // primary + Maya
+    const wrap = document.getElementById('kid-wrap');
+    return !!wrap && wrap.style.display !== 'none'
+      && document.querySelectorAll('#sel-kid option').length >= 2;   // primary + Maya
   }));
   await page.evaluate(() => {
-    const chips = [...document.querySelectorAll('#kids .voice-chip')];
-    chips[chips.length - 1].click();   // the stubbed "Maya" kid
+    const sel = document.getElementById('sel-kid');
+    sel.value = sel.options[sel.options.length - 1].value;   // the stubbed "Maya" kid
+    sel.dispatchEvent(new Event('change'));
   });
   await page.waitForTimeout(600);
   ok('switching kid re-renders person tiles', await page.evaluate(() =>
