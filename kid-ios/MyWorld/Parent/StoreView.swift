@@ -26,7 +26,9 @@ struct StoreView: View {
     @State private var redeeming = false
     @State private var entitlement: APIClient.StoreEntitlement?
 
-    private static let productIDs = ["starter.monthly", "plus.monthly", "pro.monthly",
+    // Starter is retired at launch (parent feedback — relaunching later is a
+    // server-side unhide + re-adding the id here + an ASC product).
+    private static let productIDs = ["plus.monthly", "pro.monthly",
                                      "credits50", "credits100", "credits250", "credits500", "credits1000"]
     private let api = APIClient()
 
@@ -93,7 +95,7 @@ struct StoreView: View {
                         // checks membership before the wallet, so selling a
                         // free-tier parent credits they can't use would be
                         // taking money for nothing. Point at memberships.
-                        Text("Credit packs top up a membership — join My World Starter, Plus, or Pro above first, then packs stack on top of your monthly ⭐.")
+                        Text("Credit packs top up a membership — join My World Plus or Pro above first, then packs stack on top of your monthly ⭐.")
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                             .padding(12)
@@ -159,7 +161,7 @@ struct StoreView: View {
                 // Apple Review 3.1.2: the auto-renew terms + working links to
                 // the Terms and Privacy Policy must live in the app.
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Memberships: My World Starter is $4.99/month (10 credits monthly), My World Plus is $9.99/month (50 credits monthly), and My World Pro is $19.99/month (150 credits monthly). Payment is charged to your Apple ID at confirmation of purchase. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period — manage, switch tiers, or cancel any time in Settings → Apple ID → Subscriptions. Credits are non-refundable once spent on completed images, and every image you make is yours to keep.")
+                    Text("Memberships: My World Plus is $9.99/month (50 credits monthly) and My World Pro is $19.99/month (150 credits monthly). Payment is charged to your Apple ID at confirmation of purchase. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period — manage, switch tiers, or cancel any time in Settings → Apple ID → Subscriptions. Credits are non-refundable once spent on completed images, and every image you make is yours to keep.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     HStack(spacing: 14) {
@@ -202,7 +204,7 @@ struct StoreView: View {
     private func membershipBlurb(_ id: String) -> String {
         switch id {
         case "starter.monthly": return "10 image credits/month · speech-to-text · auto-teach · reporting"
-        case "plus.monthly":    return "50 image credits/month · everything in Starter · a bigger voice budget"
+        case "plus.monthly":    return "50 image credits/month · speech-to-text · auto-teach · reporting · a bigger voice budget"
         case "pro.monthly":     return "150 image credits/month · everything in Plus · the biggest voice budget · first in line for new features"
         default:                return "Membership"
         }

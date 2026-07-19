@@ -2852,7 +2852,7 @@
           } catch (err) {
             const m = String(err.message || err);
             alert(m.includes('needs_subscription')
-              ? 'Styled pictures are part of My World memberships (from $4.99/month) — join in the Store. Everything you already made stays yours forever.'
+              ? 'Styled pictures are part of My World memberships (from $9.99/month) — join in the Store. Everything you already made stays yours forever.'
               : m.includes('not_enough_credits')
                 ? 'Not enough credits — add a pack in the Store first.'
                 : 'Could not start: ' + m);
@@ -3972,7 +3972,7 @@
         const d = await jr.text();
         if (jr.status === 402 && /needs_subscription/.test(d)) {
           showMembershipUpsell('Styled tiles are a membership feature',
-            'Making pictures in ' + (window.CHILD_NAME || 'your child') + '’s own art style is part of every My World membership, from $4.99/month. You can still add the photo as-is for free — pick “My exact photo” and tap again.');
+            'Making pictures in ' + (window.CHILD_NAME || 'your child') + '’s own art style is part of every My World membership, from $9.99/month. You can still add the photo as-is for free — pick “My exact photo” and tap again.');
           throw new Error('Styling needs a membership — pick “My exact photo” (free) and tap again.');
         }
         throw new Error(d.slice(0, 200));
@@ -4320,7 +4320,7 @@
             pendingCatImage = await ir.blob();
           } else if (ir.status === 402 && /needs_subscription/.test(await ir.text())) {
             showMembershipUpsell('Styled pictures are a membership feature',
-              'Your photo was used as-is (free on every plan). Drawing it in your child’s art style is part of My World memberships, from $4.99/month.');
+              'Your photo was used as-is (free on every plan). Drawing it in your child’s art style is part of My World memberships, from $9.99/month.');
           }
         } catch (_) { /* generation hiccup → keep the exact photo */ }
         saveBtn.textContent = 'Saving…';
@@ -4579,7 +4579,7 @@
     }
     if (stylingGated) {
       showMembershipUpsell('Styled tiles are a membership feature',
-        'Your photos were added as-is (free on every plan). Making them into your child’s art style is part of My World memberships, from $4.99/month.');
+        'Your photos were added as-is (free on every plan). Making them into your child’s art style is part of My World memberships, from $9.99/month.');
     }
     prog.textContent = '✅ AI done — review the names and Save.';
     btn.disabled = false; btn.textContent = prev;
@@ -6721,7 +6721,7 @@
     if (on && (G.running || SLIDE.running || ROUTINE.active || _messagePlaying)) return; // never hijack an activity
     if (on && !entAllows('stt')) {
       showMembershipUpsell('Speech-to-text is a membership feature',
-        'Turn spoken words into picture tiles in real time — part of every My World membership, from $4.99/month. Everything you already made stays yours forever.');
+        'Turn spoken words into picture tiles in real time — part of every My World membership, from $9.99/month. Everything you already made stays yours forever.');
       return;
     }
     if (on === _listening) return;

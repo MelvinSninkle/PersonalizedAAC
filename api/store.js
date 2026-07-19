@@ -161,7 +161,9 @@ async function catalog(req, res, db, auth, uid) {
     creditCents: CREDIT_CENTS,
     packs: PACKS.map(({ sku, credits, cents, label, appleProductId, googleProductId }) => ({ sku, credits, cents, label, appleProductId, googleProductId })),
     subscription: SUBSCRIPTION,           // legacy field (= Plus)
-    subscriptions: SUBSCRIPTIONS,
+    // Hidden tiers (retired/not-yet-launched, e.g. Starter) stay out of every
+    // purchase surface but remain valid skus for entitlements and comps.
+    subscriptions: SUBSCRIPTIONS.filter((s) => !s.hidden),
     entitlement: {
       tier: ent.tier, label: ent.label, source: ent.source,
       features: { stt: ent.features.stt, autoTeach: ent.features.autoTeach,
@@ -1062,6 +1064,12 @@ async function stripeCheckout(req, res, db, auth, uid, body) {
   const pack = PACKS.find((p) => p.sku === sku);
   const sub = subscriptionBySku(sku);
   if (!pack && !sub) { res.status(400).json({ error: 'unknown sku', sku }); return; }
+  // Hidden tiers aren't for sale — the catalog never shows them, but a
+  // hand-crafted POST could still name the sku. Admins may (comps/testing).
+  if (sub && sub.hidden && auth.user.role !== 'admin') {
+    res.status(400).json({ error: 'not_for_sale', detail: 'That membership tier isn’t available right now.' });
+    return;
+  }
   // Credit packs top up a MEMBERSHIP — every styled spend checks the
   // membership before the wallet, so a free-tier pack purchase would be
   // money the parent cannot use. Refuse it up front rather than after.
@@ -1070,7 +1078,7 @@ async function stripeCheckout(req, res, db, auth, uid, body) {
     if (ent.tier === 'free') {
       res.status(400).json({
         error: 'membership_required',
-        detail: 'Credit packs top up a membership. Join My World Starter, Plus, or Pro first — then packs stack on top.',
+        detail: 'Credit packs top up a membership. Join My World Plus or Pro first — then packs stack on top.',
       });
       return;
     }

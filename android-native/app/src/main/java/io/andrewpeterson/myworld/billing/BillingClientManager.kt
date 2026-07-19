@@ -38,7 +38,8 @@ class BillingClientManager(
 ) : PurchasesUpdatedListener {
 
     companion object {
-        val SUB_SKUS = listOf("starter.monthly", "plus.monthly", "pro.monthly")
+        // Starter is retired at launch — server hides it too (credits.js hidden flag).
+        val SUB_SKUS = listOf("plus.monthly", "pro.monthly")
         val PACK_SKUS = listOf("credits50", "credits100", "credits250", "credits500", "credits1000")
     }
 

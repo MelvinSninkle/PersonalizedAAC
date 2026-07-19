@@ -237,7 +237,7 @@ fun AddTileView(
             if (!stylingAllowed) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "✨ Want this drawn in your child's art style? Styled tiles are part of My World memberships, from $4.99/month — join under Credits & Store. Everything you've already made is yours forever.",
+                    "✨ Want this drawn in your child's art style? Styled tiles are part of My World memberships, from $9.99/month — join under Credits & Store. Everything you've already made is yours forever.",
                     fontSize = 12.sp, color = Brand.pinkDeep,
                     modifier = Modifier.background(hexColor("#fce4ec"), RoundedCornerShape(12.dp)).padding(12.dp),
                 )

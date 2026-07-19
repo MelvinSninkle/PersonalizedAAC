@@ -827,7 +827,7 @@ private struct PreGenerateSheet: View {
                             // and here's what a membership would add.
                             (Text("✨ Want this drawn in your child's art style? ")
                                 .fontWeight(.bold)
-                             + Text("Styled tiles are part of My World memberships, from $4.99/month — join in the parent app under Credits & Store. Everything you've already made is yours forever."))
+                             + Text("Styled tiles are part of My World memberships, from $9.99/month — join in the parent app under Credits & Store. Everything you've already made is yours forever."))
                                 .font(.system(size: 12))
                                 .foregroundStyle(Color(hex: "#ad1457"))
                                 .padding(12)

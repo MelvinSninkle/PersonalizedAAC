@@ -254,7 +254,7 @@ private fun PersonEditorDialog(draft: PersonDraft, onDone: () -> Unit) {
                         (e.code == 402 || e.body.contains("not_enough_credits")) ->
                         "You're out of image credits — open Credits & Store to add more."
                     e is ApiClient.ApiError.BadStatus && e.body.contains("needs_subscription") ->
-                        "Adding styled people is part of My World memberships, from $4.99/month — join under Credits & Store."
+                        "Adding styled people is part of My World memberships, from $9.99/month — join under Credits & Store."
                     else -> "Couldn't save: ${e.message}"
                 }
             } finally { saving = false }
