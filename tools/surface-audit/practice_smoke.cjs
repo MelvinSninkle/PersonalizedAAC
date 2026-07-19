@@ -31,7 +31,23 @@ const fails = [];
 
   await page.goto('http://127.0.0.1:8765/practice.html', { waitUntil: 'networkidle' });
   await page.waitForTimeout(600);
+
+  // ── Welcome tour: front-and-center on first visit, dismissable ──
+  ok('welcome tour opens on first visit', await page.evaluate(() =>
+    document.getElementById('tour-modal').classList.contains('show')));
+  await page.locator('#tour-close').click();
+  await page.waitForTimeout(200);
+  ok('tour dismisses (session-only)', await page.evaluate(() =>
+    !document.getElementById('tour-modal').classList.contains('show')));
+
   ok('tiles render', await page.evaluate(() => document.querySelectorAll('.tile').length) > 10);
+  ok('tier rings color-code sections', await page.evaluate(() => {
+    const cols = [...document.querySelectorAll('#board .col')];
+    const nouns = cols.find((c) => c.dataset.section === 'nouns');
+    const people = cols.find((c) => c.dataset.section === 'people');
+    return !!nouns.querySelector('.tile.tier-pro') && !nouns.querySelector('.tile.tier-plus')
+        && !!people.querySelector('.tile.tier-plus') && !people.querySelector('.tile.tier-pro');
+  }));
   ok('voice picker renders', await page.evaluate(() =>
     document.querySelectorAll('#sel-voice option').length >= 1));   // Device voice at minimum
   await page.locator('#board .tile').first().click();

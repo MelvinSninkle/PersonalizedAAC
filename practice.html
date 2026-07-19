@@ -117,6 +117,21 @@
   .tsel:focus { outline:none; border-color:var(--pink); }
   #listen-btn { background:var(--pink); color:#fff; border-color:var(--pink); font-weight:700; }
 
+  /* ── Tier color code — which tiles a membership comfortably personalizes
+         each month. Soft rings so the art stays the hero: pink = the basics
+         (Plus), violet = the whole Nouns world (Pro). ── */
+  :root { --tier-plus:#ff1493; --tier-pro:#7c3aed; }
+  .tile.tier-plus .sq { box-shadow: 0 0 0 2.5px rgba(255,20,147,.5); }
+  .tile.tier-pro  .sq { box-shadow: 0 0 0 2.5px rgba(124,58,237,.45); }
+  .tier-key { display:inline-block; width:14px; height:14px; border-radius:5px; vertical-align:-2px; margin-right:6px; }
+  .tier-key.plus { background:var(--tier-plus); }
+  .tier-key.pro { background:var(--tier-pro); }
+  #tour-modal .pmodal { max-width:520px; }
+  #tour-modal ul { margin:10px 0; padding-left:0; list-style:none; font-size:14px; line-height:1.55; }
+  #tour-modal li { margin:8px 0; }
+  #tour-modal .cta-link { background:var(--pink); color:#fff; text-decoration:none; font-weight:700;
+                          padding:8px 16px; border-radius:999px; font-size:13px; font-family:'Fredoka',sans-serif; }
+
   /* ── Live listening strip — heard words as chips (censor always on) ── */
   #listen-bar { flex:0 0 auto; display:none; gap:8px; align-items:center; padding:7px 12px;
                 background:#eef6ff; border-bottom:2px solid #cfe3fb; overflow-x:auto;
@@ -156,6 +171,7 @@
   </span>
   <button class="voice-chip" id="disp-btn" title="Labels, tile sizes, sections and colors — just for this visit">⚙ Display</button>
   <button class="voice-chip" id="listen-btn" title="The board that listens: talk nearby and the words you say light up as tiles">🎙 Try listening</button>
+  <button class="voice-chip" id="tour-btn" title="What the colored rings mean and everything you can try here">✨ What's personalized?</button>
   <div class="stats" title="On a real board, every tap builds your child's progress charts, word history, and milestone moments.">
     <span>Taps this visit <b id="st-taps">0</b></span>
     <span>Different words <b id="st-words">0</b></span>
@@ -209,6 +225,33 @@
   </div>
 </div>
 
+<!-- Welcome tour — centered on first load each visit: what this page is,
+     what the colored rings mean, and the tools worth trying. Honest tier
+     framing on purpose: memberships differ by monthly credit budget, so the
+     rings say what each one COMFORTABLY personalizes, never a hard gate. -->
+<div class="pmodal-backdrop" id="tour-modal">
+  <div class="pmodal">
+    <h3>👋 This is the board — here's what becomes <i>your child's</i></h3>
+    <ul>
+      <li><span class="tier-key plus"></span><b>Pink ring — My World Plus ($9.99/mo).</b>
+        The heart of the board becomes theirs: your child and family drawn into the art,
+        and the everyday actions and needs starring <i>them</i>.</li>
+      <li><span class="tier-key pro"></span><b>Violet ring — My World Pro ($19.99/mo).</b>
+        Their <i>whole world</i>: every food, toy, animal, and thing in Nouns redrawn as
+        their actual stuff, in their style.</li>
+      <li>📷 <b>Always free:</b> unlimited tiles from your exact photos, the whole starter
+        board, games, and the sentence builder.</li>
+    </ul>
+    <p class="hint">Things to try right now: pick an <b>art style</b> and <b>voice</b> up top,
+      tap <b>🎙 Try listening</b> and just talk, and open <b>⚙ Display</b> to reshape the board.
+      Every tap speaks — go ahead.</p>
+    <div class="btnrow" style="justify-content:space-between;align-items:center;">
+      <a class="cta-link" href="/signup.html">Make it your child's →</a>
+      <button class="voice-chip" id="tour-close" style="background:var(--pink);color:#fff;border-color:var(--pink);">Explore the board</button>
+    </div>
+  </div>
+</div>
+
 <!-- Listening help — shown when the browser can't do live recognition or
      the microphone is blocked. The guided retry IS the setup wizard. -->
 <div class="pmodal-backdrop" id="listen-help">
@@ -254,7 +297,8 @@
     sectionVisible: { people: true, nouns: true, verbs: true, needs: true },
     sectionColors: { people: '#ffffff', nouns: '#ffffff', verbs: '#ffffff', needs: '#ffffff' },
     headerColors: { bg: '#ff1493', text: '#ffffff' },
-    eduDismissed: false,
+    eduDismissed: false,   // legacy key — older sessions may carry it
+    tourSeen: false,       // welcome tour shown once per browser session
   });
   let PDISP = PD_DEFAULTS();
   try {
@@ -452,7 +496,8 @@
     const shown = tiles.filter((t) => t.category === s.cat && (!s.sub || t.subcategory === s.sub)).slice(0, 80);
     for (const t of shown) {
       const el = document.createElement('div');
-      el.className = 'tile';
+      el.className = 'tile ' + tierClass(section);
+      el.title = tierTip(section);
       const sq = document.createElement('div');
       sq.className = 'sq';
       sq.style.backgroundImage = 'url("' + media(t.imageKey) + '")';
@@ -463,6 +508,17 @@
       grid.appendChild(el);
     }
     host.appendChild(grid);
+  }
+
+  // Tier color code — Nouns (the big vocabulary of THEIR things) is the Pro
+  // budget; everything else personalizable (the child, family, actions,
+  // needs) fits the Plus budget. Framed as "comfortably personalizes each
+  // month", never a feature gate — credits are fungible in the product.
+  function tierClass(section) { return section === 'nouns' ? 'tier-pro' : 'tier-plus'; }
+  function tierTip(section) {
+    return section === 'nouns'
+      ? 'Violet ring: personalized comfortably with My World Pro ($19.99/mo) — their whole world of things, redrawn as theirs'
+      : 'Pink ring: personalized comfortably with My World Plus ($9.99/mo) — your child, family, and everyday actions become the art';
   }
 
   function renderNeeds() {
@@ -476,7 +532,8 @@
     grid.innerHTML = '';
     for (const t of tiles) {
       const el = document.createElement('div');
-      el.className = 'tile';
+      el.className = 'tile ' + tierClass('needs');
+      el.title = tierTip('needs');
       const sq = document.createElement('div');
       sq.className = 'sq';
       sq.style.backgroundImage = 'url("' + media(t.imageKey) + '")';
@@ -707,6 +764,21 @@
     });
   })();
 
+  // Welcome tour — front and center on the first load of each visit (session-
+  // only dismissal, same ethos as the display prefs), reopenable any time
+  // from the ✨ button.
+  (function wireTour() {
+    const modal = document.getElementById('tour-modal');
+    document.getElementById('tour-btn').addEventListener('click', () => modal.classList.add('show'));
+    document.getElementById('tour-close').addEventListener('click', () => {
+      modal.classList.remove('show');
+      PDISP.tourSeen = true; pdSave();
+    });
+  })();
+  function maybeShowTour() {
+    if (!PDISP.tourSeen) document.getElementById('tour-modal').classList.add('show');
+  }
+
   // The strip's dropdowns — wired once; the render*() fillers only swap
   // their option lists.
   (function wireToolbar() {
@@ -750,6 +822,7 @@
     renderStyles();
     renderKids();
     buildBoard();
+    maybeShowTour();
   }
   boot();
 })();
