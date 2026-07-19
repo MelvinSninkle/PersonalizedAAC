@@ -304,7 +304,7 @@ fun BoardView() {
             },
             title = { androidx.compose.material3.Text("Speech-to-text is a membership feature") },
             text = { androidx.compose.material3.Text(
-                "Turn spoken words into picture tiles in real time — part of every My World membership, from $4.99/month. Join in the parent app under Credits & Store. Everything you've already made stays yours forever.") },
+                "Turn spoken words into picture tiles in real time — part of every My World membership, from $9.99/month. Join in the parent app under Credits & Store. Everything you've already made stays yours forever.") },
         )
     }
     if (showSttUnavailable) {

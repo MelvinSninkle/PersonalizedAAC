@@ -60,7 +60,12 @@ export function bundleQuote(words) {
 // voiceCharsPerMonth counts CHARACTERS of newly synthesized speech (cache
 // misses only) — ~25 chars per word/clue, so Starter ≈ 4,000 new phrases/mo.
 export const SUBSCRIPTIONS = [
-  { sku: 'starter.monthly', cents: 499,  creditsPerPeriod: 10,  label: 'My World Starter',
+  // Starter is HIDDEN at launch (parent feedback: customization isn't the
+  // day-one draw — families want it after the board is established, maybe
+  // cheaper). The sku stays valid so admin comps, invite-code grants, and any
+  // grandfathered subscriber keep working; `hidden` just pulls it from every
+  // purchase surface. To relaunch it (at any price), drop the flag.
+  { sku: 'starter.monthly', cents: 499,  creditsPerPeriod: 10,  label: 'My World Starter', hidden: true,
     appleProductId: 'starter.monthly', googleProductId: 'starter.monthly', voiceCharsPerMonth: 100_000 },
   { sku: 'plus.monthly',    cents: 999,  creditsPerPeriod: 50,  label: 'My World Plus',
     appleProductId: 'plus.monthly',    googleProductId: 'plus.monthly',    voiceCharsPerMonth: 300_000 },
@@ -250,7 +255,7 @@ export async function requireStyling(db, { user = null, childId = null } = {}) {
 
 export const NEEDS_SUBSCRIPTION_DETAIL =
   'Making pictures in your child’s own art style is part of My World memberships '
-  + '(from $4.99/month). Join in the Store — everything you’ve already made stays yours forever.';
+  + '(from $9.99/month). Join in the Store — everything you’ve already made stays yours forever.';
 
 // Resolve the account that owns a child's board (cron jobs and board-device
 // requests have no signed-in parent — the entitlement is still the family's).

@@ -153,7 +153,7 @@ fun StoreView(onDismiss: () -> Unit) {
                         }
                     }
                     if (cat.subscriptions.isEmpty()) {
-                        Text("Memberships from $4.99/month unlock speech-to-text, auto-teach, reporting, and styled tiles.",
+                        Text("Memberships from $9.99/month unlock speech-to-text, auto-teach, reporting, and styled tiles.",
                             fontSize = 12.sp, color = Brand.muted)
                     }
 

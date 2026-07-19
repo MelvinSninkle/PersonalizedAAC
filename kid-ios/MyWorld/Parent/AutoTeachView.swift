@@ -250,7 +250,7 @@ struct AutoTeachView: View {
             if let g = state?.gates {
                 gateLine(ok: g.subscribed ?? true,
                          ok_text: "Membership active",
-                         ko_text: "Automatic teaching is part of My World memberships (from $4.99/mo) — join in Credits & Store")
+                         ko_text: "Automatic teaching is part of My World memberships (from $9.99/mo) — join in Credits & Store")
                 gateLine(ok: g.enabled, ok_text: "Auto-teach is on", ko_text: "Auto-teach is off")
                 gateLine(ok: g.scheduleReady ?? true,
                          ok_text: "Quiet hours are set",

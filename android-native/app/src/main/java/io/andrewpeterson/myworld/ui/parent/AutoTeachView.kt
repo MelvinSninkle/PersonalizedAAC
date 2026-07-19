@@ -247,7 +247,7 @@ fun AutoTeachView(onDismiss: () -> Unit) {
                         Text("Loading status…", fontSize = 12.sp, color = Brand.muted)
                     } else {
                         GateLine(g.subscribed ?: true, "Membership active",
-                            "Automatic teaching is part of My World memberships (from $4.99/mo) — join in Credits & Store")
+                            "Automatic teaching is part of My World memberships (from $9.99/mo) — join in Credits & Store")
                         GateLine(g.enabled, "Auto-teach is on", "Auto-teach is off")
                         GateLine(g.scheduleReady ?: true, "Quiet hours are set",
                             "Quiet hours missing — set them above")
