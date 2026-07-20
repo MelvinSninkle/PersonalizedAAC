@@ -293,12 +293,14 @@ export async function enqueueSeedJobs(db, childId, rows) {
   // words / retries still render for anyone: those are paid with credits.
   let personalRenders = true;
   let ownerTier = 'unknown';
+  let chargeCtx = null;   // { ownerId, sub, isAdmin } — the enrollment debit below
   try {
     const { entitlementFor, boardOwnerId } = await import('./credits.js');
     const ownerId = await boardOwnerId(db, childId);
     const ent = await entitlementFor(db, ownerId);
     personalRenders = !!ent.sub || ent.tier === 'admin';
     ownerTier = ent.label || ent.tier || 'unknown';
+    chargeCtx = { ownerId, sub: ent.sub || null, isAdmin: ent.tier === 'admin' };
   } catch (_) { /* on any doubt keep the historical behavior */ }
 
   let renders = 0, voices = 0;
@@ -312,9 +314,47 @@ export async function enqueueSeedJobs(db, childId, rows) {
       if (r.length) { if (kind === 'render') renders++; else voices++; }
     } catch (_) { /* best-effort; the rescue tool can re-enqueue */ }
   }
+  // ── Enrollment debit — the personalized starter build costs credits ──────
+  // The bundle: every render-scope tile (⭐1 each) + the two up-front family
+  // portraits (⭐5 each), charged ONCE per child as
+  //     min(list price, monthly credit grant, current balance).
+  // Plus (⭐50) always pays its full grant for the ~⭐120-value build (a
+  // deliberate welcome deal, balance lands on 0); Pro (⭐150) pays the actual
+  // list and keeps the surplus. Computed from the FULL render scope — not
+  // this call's newly-queued count — so chunked seeding and rescue re-runs
+  // price identically; the ledger row (reason 'enrollment', ref childId) is
+  // the once-only guard. Admin boards never pay; a charge hiccup must never
+  // block the seed itself.
+  let enrollmentCharged = 0;
+  if (personalRenders && chargeCtx && !chargeCtx.isAdmin && chargeCtx.sub && chargeCtx.ownerId) {
+    try {
+      const { COST, ensureCredits, creditBalance, spendCredits } = await import('./credits.js');
+      await ensureCredits(db);
+      const prior = await db`SELECT 1 FROM credit_ledger
+                             WHERE reason = 'enrollment' AND ref = ${String(childId)} LIMIT 1`;
+      if (!prior.length) {
+        const renderTotal = rows.filter((t) => isRenderScope(t)).length;
+        if (renderTotal > 0) {
+          const list = renderTotal * COST.nano + 2 * COST.person;
+          const grant = Number(chargeCtx.sub.creditsPerPeriod) || 0;
+          const balance = await creditBalance(db, chargeCtx.ownerId);
+          // Tier floor: Pro's enrollment leaves at least ⭐enrollKeep behind
+          // (⭐50 today) so the family lands with spending money, not zero.
+          const keep = Number(chargeCtx.sub.enrollKeep) || 0;
+          const debit = Math.max(0, Math.min(list, grant, balance - keep));
+          if (debit > 0) {
+            const r = await spendCredits(db, { userId: chargeCtx.ownerId, credits: debit,
+                                               reason: 'enrollment', ref: String(childId) });
+            if (r.ok) enrollmentCharged = debit;
+          }
+        }
+      }
+    } catch (_) { /* never let billing break board creation */ }
+  }
+
   // Surface the WHY so admin tooling can distinguish "renders queued" from
   // "renders skipped — free tier" instead of a silent voice-only downgrade.
-  return { renders, voices, personalRenders, ownerTier };
+  return { renders, voices, personalRenders, ownerTier, enrollmentCharged };
 }
 
 // Run the whole build for a child in one call (used by the cron 'place' job and

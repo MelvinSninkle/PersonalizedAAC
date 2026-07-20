@@ -260,10 +260,12 @@ export async function enqueueStyleBuild(db, styleGuideId, { demoChildId = 0 } = 
   let tiles = 0, chipsN = 0;
   for (const t of rows) {
     if (doneTiles.has(t.id)) continue;
+    // attempts resets too — a job that already burned its 3 tries would
+    // otherwise sit "queued" forever (the drain only picks attempts < 3).
     await db`INSERT INTO style_build_jobs (style_guide_id, kind, taxonomy_id, demo_child_id)
              VALUES (${styleGuideId}, 'tile', ${t.id}, ${kid})
              ON CONFLICT (style_guide_id, taxonomy_id, demo_child_id) WHERE kind = 'tile'
-             DO UPDATE SET status = 'queued', error = NULL, updated_at = NOW()`;
+             DO UPDATE SET status = 'queued', error = NULL, attempts = 0, updated_at = NOW()`;
     tiles++;
   }
   if (kid === 0) {
@@ -272,7 +274,7 @@ export async function enqueueStyleBuild(db, styleGuideId, { demoChildId = 0 } = 
       await db`INSERT INTO style_build_jobs (style_guide_id, kind, section, label, parent)
                VALUES (${styleGuideId}, 'chip', ${c.section}, ${c.label}, ${c.parent})
                ON CONFLICT (style_guide_id, section, label, parent) WHERE kind = 'chip'
-               DO UPDATE SET status = 'queued', error = NULL, updated_at = NOW()`;
+               DO UPDATE SET status = 'queued', error = NULL, attempts = 0, updated_at = NOW()`;
       chipsN++;
     }
   }

@@ -67,9 +67,14 @@ export const SUBSCRIPTIONS = [
   // purchase surface. To relaunch it (at any price), drop the flag.
   { sku: 'starter.monthly', cents: 499,  creditsPerPeriod: 10,  label: 'My World Starter', hidden: true,
     appleProductId: 'starter.monthly', googleProductId: 'starter.monthly', voiceCharsPerMonth: 100_000 },
-  { sku: 'plus.monthly',    cents: 999,  creditsPerPeriod: 50,  label: 'My World Plus',
+  // enrollKeep: the credit floor the enrollment build must leave behind
+  // (seed-board's debit clamps to balance - enrollKeep). Pro keeps ⭐50 so a
+  // new Pro family finishes enrollment with real spending money — an owner
+  // margin decision; Plus deliberately spends its whole first month on the
+  // build (a ~⭐120 value for ⭐50).
+  { sku: 'plus.monthly',    cents: 999,  creditsPerPeriod: 50,  label: 'My World Plus', enrollKeep: 0,
     appleProductId: 'plus.monthly',    googleProductId: 'plus.monthly',    voiceCharsPerMonth: 300_000 },
-  { sku: 'pro.monthly',     cents: 1999, creditsPerPeriod: 150, label: 'My World Pro',
+  { sku: 'pro.monthly',     cents: 1999, creditsPerPeriod: 150, label: 'My World Pro', enrollKeep: 50,
     appleProductId: 'pro.monthly',     googleProductId: 'pro.monthly',     voiceCharsPerMonth: 750_000 },
 ];
 // Legacy alias — older call sites treated "the subscription" as Plus.

@@ -1338,10 +1338,10 @@ private struct OnboardingSeedView: View {
             Image(systemName: "creditcard.fill")
                 .foregroundStyle(Color(hex: Brand.pinkDeep))
             VStack(alignment: .leading, spacing: 4) {
-                Text("These first 13 don't count against your monthly credits.")
+                Text("Members: your first month's credits build the whole board.")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color(hex: Brand.ink))
-                Text("Onboarding generation is on us. Your plan covers everything you add after.")
+                Text("100+ tiles and two family portraits, personalized up front (Pro finishes with ⭐50 to spare). Without a membership the board starts with our standard artwork — join anytime to personalize it. Everything you make is yours to keep.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color(hex: Brand.muted))
             }
