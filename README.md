@@ -81,6 +81,15 @@ The recent feature waves, in the rough order they shipped:
 - **Magic onboarding** — the board-build wait is now a personal letter from Andrew with the child's freshly rendered tiles fading in around it as seed jobs complete (`seedStatus.recentImages`).
 - **CI + nightly backups + docs** — `.github/workflows/ci.yml` (syntax gates, i18n coverage, surface-audit invariant greps, two Playwright smoke suites against a stdlib stub server) and `backup.yml` (nightly pg_dump artifact); `docs/OWNERS-MANUAL.md` + six runbooks.
 
+### Latest wave (2026-07) — launch readiness: pricing, gating, store setup
+
+- **Two-tier launch pricing** — Starter ($4.99) is `hidden: true` in `SUBSCRIPTIONS` (sku stays valid for comps/grandfathering); Plus $9.99 (⭐50/mo) and Pro $19.99 (⭐150/mo) are the live tiers. No discounts anywhere (`bundleQuote`/`rebuildQuote` are straight per-word counts) and credit packs require an active membership (server 400 + disabled UI on web/iOS).
+- **Enrollment economics** — joining spends credits on the personalized starter build automatically: `debit = min(list price, monthly grant, balance − enrollKeep)`, once per child (ledger reason `enrollment`). Plus invests its whole first month (~⭐120 value for ⭐50); Pro keeps at least ⭐50 (`enrollKeep`). Free accounts still onboard to a standard-art voice-only board; full customization is the membership benefit.
+- **Launch gating** — invite codes carry `max_uses` (a SIGNUP cap counted from `users.invite_code` attribution, not gate unlocks); full codes turn signups away to the landing-page **waitlist** (email + preferred art style + an optional paragraph about the child). SIWA account creation gates on codes only when `APPLE_SIGNUP_REQUIRES_INVITE=1` (flip after the build carrying the native invite-code field ships). Also fixed: iOS email signup never sent `selfSignup:true` and was rejected server-side.
+- **Practice board as the free trial** — one-strip toolbar (Style/Meet/Voice dropdowns), tier-colored rings showing what each membership *comfortably personalizes* (pink = Plus basics, violet = Pro's whole Nouns world — budget framing, never a feature gate), a welcome tour modal, and real pre-rendered voice introductions on switch (`demo-audio/<voice>/voice-sample.mp3`) instead of the device-TTS fallback.
+- **Store setup complete (Apple + Stripe)** — App Store Connect: Paid Apps agreement Active, banking + W-9 Active, privacy label published, age rating 4+, seven IAP products created (`plus.monthly`, `pro.monthly`, `credits50/100/250/500/1000`). Stripe: checkout builds prices inline (no dashboard products); needs only live keys + the `?action=stripe-webhook` endpoint + Customer Portal.
+- **Ops fixes** — style-build queue re-queues now reset `attempts` (max-attempt jobs no longer wedge as "queued"); child board's edit pill is "⚙ Settings" with sign-out inside; easy-unlock confirm copy clarifies only the *board lock* loses its password, never the account.
+
 ---
 
 ## The views

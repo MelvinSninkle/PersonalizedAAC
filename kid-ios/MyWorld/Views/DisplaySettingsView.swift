@@ -230,12 +230,12 @@ struct DisplaySettingsView: View {
             } message: {
                 Text("The board will leave this device until a parent signs in again. Everything stays safe in your account.")
             }
-            .alert("Remove the password?", isPresented: $confirmEasyUnlock) {
-                SecureField("Your password", text: $unlockPassword)
+            .alert("Skip the password on the board's lock?", isPresented: $confirmEasyUnlock) {
+                SecureField("Your account password", text: $unlockPassword)
                 Button("Cancel", role: .cancel) { unlockPassword = "" }
-                Button("Remove the password", role: .destructive) { Task { await confirmUnlockWaiver() } }
+                Button("Skip the lock password", role: .destructive) { Task { await confirmUnlockWaiver() } }
             } message: {
-                Text("Anyone holding this device — including your child — will be able to open edit mode, change or delete tiles, and reach the parent dashboard. Enter your password once to confirm you're removing it on purpose.")
+                Text("This only changes the board's lock — your account password stays exactly the same for signing in everywhere. With this on, anyone holding this device — including your child — can open edit mode, change or delete tiles, and reach the parent dashboard. Enter your account password once to confirm.")
             }
         }
     }
