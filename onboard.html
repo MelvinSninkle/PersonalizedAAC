@@ -1221,7 +1221,28 @@
       $('board-done-msg').textContent = (CHILD_NAME ? CHILD_NAME + "'s" : 'The') + ' board is ready!' +
         (placedTotal ? ' (' + placedTotal + ' tiles)' : '');
     } catch (err) {
-      $('board-msg').textContent = 'Something went wrong building the board: ' + (err.message || err) + ' — refresh to retry.';
+      const m = String(err.message || err);
+      // No membership yet → the join step, not an error. Setup is saved
+      // server-side, so the store round-trip picks up right here.
+      if (/membership_required|402/.test(m)) {
+        seedStarted = false;   // allow the retry button to re-run the build
+        $('board-busy').style.display = 'none';
+        $('board-msg').innerHTML =
+          '<div style="max-width:460px;margin:14px auto;padding:18px;border:2px solid #f3c6dd;border-radius:16px;text-align:center;">'
+          + '<p style="font-weight:700;margin:0 0 6px;">One step left: pick ' + (CHILD_NAME ? CHILD_NAME + "'s" : 'your') + ' membership</p>'
+          + '<p style="font-size:13.5px;color:#6b7280;margin:0 0 12px;">Your first month’s credits build the whole personalized board right now — 100+ tiles and two family portraits. Cancel anytime; everything you make stays yours, forever.</p>'
+          + '<p style="margin:0 0 12px;"><a class="btn" href="/store" style="margin-right:8px;">Join Plus — $9.99/mo</a>'
+          + '<a class="btn" href="/store">Join Pro — $19.99/mo (keep ⭐50 after the build)</a></p>'
+          + '<p style="font-size:12.5px;color:#9ca3af;margin:0 0 10px;">Your setup is saved — after joining, come back and tap continue.</p>'
+          + '<button class="btn primary" id="joined-continue">I’ve joined — build the board</button>'
+          + '</div>';
+        document.getElementById('joined-continue').addEventListener('click', () => {
+          $('board-msg').textContent = '';
+          runSeed(startG, priorPlaced);
+        });
+        return;
+      }
+      $('board-msg').textContent = 'Something went wrong building the board: ' + m + ' — refresh to retry.';
     }
   }
 

@@ -61,6 +61,22 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
 
+  // ── Membership gate: building a board REQUIRES an active membership ──────
+  // Owner decision: there is no free signup path — enrollment (which the
+  // membership's first credits pay for) IS the product's front door. Admins
+  // and comped accounts (invite-code tier grants set sub_override) pass; a
+  // free account gets a 402 the clients turn into the join step. GET stays
+  // open — progress banners must work for everyone, including lapsed members.
+  try {
+    const { entitlementFor } = await import('../_lib/credits.js');
+    const ent = await entitlementFor(db, auth.user);
+    if (!ent.sub && ent.tier !== 'admin') {
+      res.status(402).json({ error: 'membership_required',
+        detail: 'Building your child\'s board starts with a My World membership — Plus ($9.99/mo) or Pro ($19.99/mo). Your first month\'s credits pay for the whole personalized build, and everything you make is yours to keep even if you cancel.' });
+      return;
+    }
+  } catch (_) { /* entitlement hiccup must not strand a paying member — fall through */ }
+
   // ── POST op=refresh: parent-facing self-rescue ────────────────────────────
   // The same repair the admin Build-board tool runs, minus admin: re-arm dead
   // jobs and re-open done-but-artless renders / silent voices for THIS child,

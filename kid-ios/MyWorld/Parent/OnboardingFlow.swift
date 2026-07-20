@@ -1338,10 +1338,10 @@ private struct OnboardingSeedView: View {
             Image(systemName: "creditcard.fill")
                 .foregroundStyle(Color(hex: Brand.pinkDeep))
             VStack(alignment: .leading, spacing: 4) {
-                Text("These first 13 don't count against your monthly credits.")
+                Text("Your first month's credits build the whole board.")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color(hex: Brand.ink))
-                Text("Onboarding generation is on us. Your plan covers everything you add after.")
+                Text("100+ tiles and two family portraits, personalized up front (Pro finishes with ⭐50 to spare). Cancel anytime — everything you make stays yours, forever.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color(hex: Brand.muted))
             }
@@ -1358,7 +1358,14 @@ private struct OnboardingSeedView: View {
             let r = try await api.onboardingSeedCore(styleGuideId: coord.styleGuideId)
             queued = r.queuedCount
         } catch {
-            errorText = "Could not queue the starter tiles: \(error.localizedDescription)"
+            // No membership yet → the join step, not a failure. The server's
+            // 402 carries the human sentence; surface it instead of raw JSON.
+            if case let APIError.badStatus(code, body) = error, code == 402,
+               body.contains("membership_required") {
+                errorText = "One step left: join My World Plus ($9.99/mo) or Pro ($19.99/mo) in Credits & Store — your first month's credits build the whole personalized board. Your setup is saved; come back here and try again after joining."
+            } else {
+                errorText = "Could not queue the starter tiles: \(error.localizedDescription)"
+            }
         }
     }
 }
