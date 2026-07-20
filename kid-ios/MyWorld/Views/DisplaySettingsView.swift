@@ -13,6 +13,7 @@ struct DisplaySettingsView: View {
     @Environment(BoardStore.self) private var board
     @Environment(AuthManager.self) private var auth
     @Environment(AccessPrefs.self) private var access
+    @Environment(DeviceMode.self) private var mode
 
     @State private var refreshing = false
 
@@ -39,6 +40,9 @@ struct DisplaySettingsView: View {
     // Programmatic easyUnlock writes (snap-back, confirmed enable) must not
     // re-enter the onChange save path.
     @State private var suppressUnlockChange = false
+    // Sign-out is disruptive on the child's device (the board goes away until
+    // a parent signs back in) — always confirm.
+    @State private var confirmSignOut = false
 
     private let columnChoices = [1, 2, 3, 4, 5, 6, 7, 8]
     private let api = APIClient()
@@ -182,8 +186,35 @@ struct DisplaySettingsView: View {
                 Section {
                     Button("Reset look to defaults") { prefs.resetToDefaults() }
                 }
+
+                // This sheet is the ONE discoverable settings surface on the
+                // child board (reached from edit mode's ⚙ Settings pill), so
+                // the device/account actions live here too — the old path was
+                // a hidden triple-tap nobody found.
+                Section {
+                    if let u = auth.user {
+                        LabeledContent("Signed in as", value: u.email)
+                    }
+                    Button {
+                        mode.role = .parent
+                        dismiss()
+                    } label: {
+                        Label("Switch this device to the Parent app", systemImage: "person.crop.circle.fill")
+                    }
+                    Button("Clear local cache") {
+                        Task {
+                            await MediaCache.shared.clear()
+                            await SpeechCache.shared.clear()
+                        }
+                    }
+                    Button("Sign out of this device", role: .destructive) { confirmSignOut = true }
+                } header: {
+                    Text("Device & account")
+                } footer: {
+                    Text("Signing out removes the board from this device until a parent signs back in. Nothing is deleted — the board lives in your account.")
+                }
             }
-            .navigationTitle("Display Settings")
+            .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -191,6 +222,14 @@ struct DisplaySettingsView: View {
                 }
             }
             .task { await seedSynced() }
+            .alert("Sign out of this device?", isPresented: $confirmSignOut) {
+                Button("Cancel", role: .cancel) {}
+                Button("Sign out", role: .destructive) {
+                    Task { await auth.signOut(); dismiss() }
+                }
+            } message: {
+                Text("The board will leave this device until a parent signs in again. Everything stays safe in your account.")
+            }
             .alert("Remove the password?", isPresented: $confirmEasyUnlock) {
                 SecureField("Your password", text: $unlockPassword)
                 Button("Cancel", role: .cancel) { unlockPassword = "" }

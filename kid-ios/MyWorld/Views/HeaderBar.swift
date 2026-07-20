@@ -212,7 +212,7 @@ struct HeaderBar: View {
         if rendering > 0 {
             pillButton("⏳ \(rendering) rendering") { showAddTile = true }
         }
-        pillButton("⚙ Display")  { showDisplay = true }
+        pillButton("⚙ Settings")  { showDisplay = true }
         // Switch THIS device to the native parent app. Lives in edit
         // mode (reached by long-pressing the lock) so it's discoverable
         // for a parent but unreachable for the child. The role persists,
