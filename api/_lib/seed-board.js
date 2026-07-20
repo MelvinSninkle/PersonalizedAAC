@@ -338,7 +338,10 @@ export async function enqueueSeedJobs(db, childId, rows) {
           const list = renderTotal * COST.nano + 2 * COST.person;
           const grant = Number(chargeCtx.sub.creditsPerPeriod) || 0;
           const balance = await creditBalance(db, chargeCtx.ownerId);
-          const debit = Math.max(0, Math.min(list, grant, balance));
+          // Tier floor: Pro's enrollment leaves at least ⭐enrollKeep behind
+          // (⭐50 today) so the family lands with spending money, not zero.
+          const keep = Number(chargeCtx.sub.enrollKeep) || 0;
+          const debit = Math.max(0, Math.min(list, grant, balance - keep));
           if (debit > 0) {
             const r = await spendCredits(db, { userId: chargeCtx.ownerId, credits: debit,
                                                reason: 'enrollment', ref: String(childId) });

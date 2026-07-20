@@ -161,7 +161,7 @@ struct StoreView: View {
                 // Apple Review 3.1.2: the auto-renew terms + working links to
                 // the Terms and Privacy Policy must live in the app.
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Memberships: My World Plus is $9.99/month (50 credits monthly) and My World Pro is $19.99/month (150 credits monthly). Payment is charged to your Apple ID at confirmation of purchase. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period — manage, switch tiers, or cancel any time in Settings → Apple ID → Subscriptions. Credits are non-refundable once spent on completed images, and every image you make is yours to keep.")
+                    Text("Joining builds your child's personalized starter board right away — 100+ core words plus two family portraits — charged at the lower of the build's credit price or your monthly grant; Plus invests its whole first month in the build, and Pro always finishes enrollment with at least ⭐50 remaining. Cancel anytime: everything you've made stays yours, forever. Memberships: My World Plus is $9.99/month (50 credits monthly) and My World Pro is $19.99/month (150 credits monthly). Payment is charged to your Apple ID at confirmation of purchase. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period — manage, switch tiers, or cancel any time in Settings → Apple ID → Subscriptions. Credits are non-refundable once spent on completed images, and every image you make is yours to keep.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     HStack(spacing: 14) {
@@ -204,8 +204,8 @@ struct StoreView: View {
     private func membershipBlurb(_ id: String) -> String {
         switch id {
         case "starter.monthly": return "10 image credits/month · speech-to-text · auto-teach · reporting"
-        case "plus.monthly":    return "50 image credits/month · speech-to-text · auto-teach · reporting · a bigger voice budget"
-        case "pro.monthly":     return "150 image credits/month · everything in Plus · the biggest voice budget · first in line for new features"
+        case "plus.monthly":    return "joins with your whole starter board personalized up front (a ⭐120+ value) · ⭐50/month · speech-to-text · auto-teach · reporting"
+        case "pro.monthly":     return "same enrollment build — and ⭐50 still yours after sign-up · ⭐150/month · biggest voice budget · new features first"
         default:                return "Membership"
         }
     }
