@@ -714,12 +714,13 @@
         <input type="checkbox" id="safety-easyunlock">
       </label>
       <div id="safety-unlock-confirm" style="display:none;border:2px solid #f59e0b;background:#fffbeb;border-radius:10px;padding:10px 12px;">
-        <div style="font-size:13px;color:#92400e;font-weight:700;">⚠️ Are you sure?</div>
-        <div style="font-size:12px;color:#92400e;margin:4px 0 8px;">Anyone holding the tablet — including <span class="cn">your child</span> — will be able to open
-          edit mode, change or delete tiles, and reach this dashboard. Enter your password once to confirm you're removing it on purpose.</div>
-        <input type="password" id="safety-unlock-pass" autocomplete="current-password" placeholder="Your password" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit;box-sizing:border-box;">
+        <div style="font-size:13px;color:#92400e;font-weight:700;">⚠️ Skip the password on the board's lock?</div>
+        <div style="font-size:12px;color:#92400e;margin:4px 0 8px;">This only changes the board's lock — <b>your account password stays exactly the same</b> for signing in everywhere.
+          With this on, anyone holding the tablet — including <span class="cn">your child</span> — can open edit mode, change or delete tiles, and reach this dashboard.
+          Enter your account password once to confirm.</div>
+        <input type="password" id="safety-unlock-pass" autocomplete="current-password" placeholder="Your account password" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit;box-sizing:border-box;">
         <div style="display:flex;gap:8px;margin-top:8px;">
-          <button class="btn primary" id="safety-unlock-yes" style="flex:1;">Remove the password</button>
+          <button class="btn primary" id="safety-unlock-yes" style="flex:1;">Skip the lock password</button>
           <button class="btn ghost" id="safety-unlock-no">Cancel</button>
         </div>
         <div id="safety-unlock-msg" style="font-size:12px;color:#c0392b;margin-top:6px;"></div>

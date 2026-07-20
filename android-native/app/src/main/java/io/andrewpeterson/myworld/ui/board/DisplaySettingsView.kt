@@ -284,12 +284,13 @@ fun DisplaySettingsView(onDismiss: () -> Unit) {
             Column(
                 Modifier.background(Color.White, RoundedCornerShape(22.dp)).padding(24.dp),
             ) {
-                Text("Remove the password?", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
+                Text("Skip the password on the board's lock?", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Anyone holding this device — including your child — will be able to open " +
-                        "edit mode, change or delete tiles, and reach the parent dashboard. Enter " +
-                        "your password once to confirm you're removing it on purpose.",
+                    "This only changes the board's lock — your account password stays exactly " +
+                        "the same for signing in everywhere. With this on, anyone holding this " +
+                        "device — including your child — can open edit mode, change or delete " +
+                        "tiles, and reach the parent dashboard. Enter your account password once to confirm.",
                     fontSize = 13.sp, color = Brand.ink,
                 )
                 Spacer(Modifier.height(10.dp))
