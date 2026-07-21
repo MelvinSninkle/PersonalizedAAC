@@ -1596,6 +1596,15 @@
       <label for="disp-listen-tiles">Listening shows only words with tiles
         <span style="display:block;font-size:12px;color:#666;">Spoken words that aren't on the board don't appear at all.</span></label>
     </div>
+    <div style="margin-top:10px;">
+      <label for="disp-repeat-nav" style="font-size:13px;text-transform:none;letter-spacing:0;">Say a word twice to jump to its tile
+        <span style="display:block;font-size:12px;color:#666;">Repeating a word makes the board find and highlight that tile. Raise to 3 for kids who naturally repeat; Off disables the jump.</span></label>
+      <select id="disp-repeat-nav" style="margin-top:4px;padding:8px 10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
+        <option value="0">Off</option>
+        <option value="2">2 in a row</option>
+        <option value="3">3 in a row</option>
+      </select>
+    </div>
 
     <!-- 5 · Safety & unlock -->
     <label style="margin-top:18px;">🔒 Safety &amp; unlock</label>
@@ -4936,6 +4945,8 @@
     document.getElementById('disp-easy-unlock').checked = SAFETY.easyUnlock;
     document.getElementById('disp-listen-censor').checked = LISTEN.censor;
     document.getElementById('disp-listen-tiles').checked = LISTEN.tilesOnly;
+    const rn = document.getElementById('disp-repeat-nav');
+    if (rn) rn.value = String(ACCESS.listenRepeatCount || 0);
     document.getElementById('disp-tool-listen').checked = TOOLS.listen;
     document.getElementById('disp-tool-teach').checked = TOOLS.teach;
     document.getElementById('disp-tool-play').checked = TOOLS.play;
@@ -5089,6 +5100,18 @@
     };
     slider('disp-teach-window', 'disp-teach-window-val', 'teachTapMs', () => TOUCH.teachTapMs);
     slider('disp-exit-hold', 'disp-exit-hold-val', 'exitHoldMs', () => SAFETY.exitHoldMs);
+    // #12 repeat-navigation threshold — synced; writes the legacy boolean in
+    // step so native builds that only know listenRepeatNav stay consistent.
+    const rnSel = document.getElementById('disp-repeat-nav');
+    if (rnSel) rnSel.addEventListener('change', async () => {
+      const n = Number(rnSel.value) || 0;
+      try {
+        await saveSafety({ listenRepeatCount: n, listenRepeatNav: n > 0 });
+        ACCESS.listenRepeatCount = n;
+        ACCESS.listenRepeatNav = n > 0;
+      } catch (_) { rnSel.value = String(ACCESS.listenRepeatCount || 0); }
+    });
+
     // #10 suggestion consent — synced; disabling stops capture immediately
     // and offers to clear what's pending (spec AC). Not `plain()` because of
     // the clear-pending step.
@@ -7215,6 +7238,10 @@
     ACCESS.sentenceIdleMin = (Number.isFinite(m) && m >= 1 && m <= 10) ? m : 1;
     ACCESS.sentenceLift = s.sentenceLift === 'drag' ? 'drag' : 'longpress';
     ACCESS.listenRepeatNav = s.listenRepeatNav !== false;
+    // #12: parent-tunable repeat threshold — 0 (off) / 2 (classic) / 3 (for
+    // kids who naturally repeat). Absent → legacy flag decides at 2.
+    ACCESS.listenRepeatCount = [0, 2, 3].includes(Number(s.listenRepeatCount))
+      ? Number(s.listenRepeatCount) : (s.listenRepeatNav !== false ? 2 : 0);
     document.body.classList.toggle('nav-buttons-mode', ACCESS.navMode === 'buttons' || SB.mode);
     document.body.classList.toggle('sb-on', ACCESS.sentenceBuilder);
     if (!ACCESS.sentenceBuilder) sbSetMode(false);
@@ -7405,10 +7432,19 @@
   // position so re-emitted partial transcripts don't re-trigger.
   let _listenNavKey = '', _listenNavAt = 0;
   function maybeListenNavigate(tokens) {
-    if (!ACCESS.listenRepeatNav) return;
-    for (let i = tokens.length - 1; i >= 1; i--) {
-      const a = tokens[i], b = tokens[i - 1];
-      if (!a.item || !b.item || a.item.id !== b.item.id) continue;
+    // #12: n consecutive repeats trigger the jump (0 = off). The highlight
+    // fade below is deliberately untouched.
+    const need = Number(ACCESS.listenRepeatCount) || 0;
+    if (!need) return;
+    for (let i = tokens.length - 1; i >= need - 1; i--) {
+      const a = tokens[i];
+      if (!a.item) continue;
+      let run = true;
+      for (let k = 1; k < need; k++) {
+        const p = tokens[i - k];
+        if (!p || !p.item || p.item.id !== a.item.id) { run = false; break; }
+      }
+      if (!run) continue;
       const key = a.item.id + '@' + i;
       if (key === _listenNavKey && Date.now() - _listenNavAt < 15000) return;
       _listenNavKey = key; _listenNavAt = Date.now();
