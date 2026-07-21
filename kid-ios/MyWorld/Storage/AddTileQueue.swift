@@ -114,6 +114,13 @@ final class TileJob: Identifiable {
     /// The generated art's blob key once the server job is done — the tray
     /// swaps from the captured photo to the finished tile.
     var generatedImageKey: String?
+    /// #11 movie/show tiles: link ids stamped onto the landed item, the
+    /// keep-tall-poster flag, and a folder-by-name hint ("TV & Movies") the
+    /// server resolves to a leaf folder (creating it if needed).
+    var wikidataQid: String?
+    var imdbId: String?
+    var keepAspect = false
+    var folderHint: String?
 
     init(thumbnail: UIImage, photoJPEG: Data, section: BoardSection,
          categoryId: Int?, style: ArtStyle, model: String, bg: String, emotion: String,
@@ -204,7 +211,11 @@ final class AddTileQueue {
                  childId: String,
                  board: BoardStore,
                  batchId: UUID? = nil,
-                 needsReview: Bool = false) -> TileJob {
+                 needsReview: Bool = false,
+                 wikidataQid: String? = nil,
+                 imdbId: String? = nil,
+                 keepAspect: Bool = false,
+                 folderHint: String? = nil) -> TileJob {
         self.board = board
         self.childId = childId
         let thumb = UIImage(data: photoJPEG) ?? UIImage()
@@ -214,6 +225,10 @@ final class AddTileQueue {
                           needsReview: needsReview, raw: raw)
         job.label = prefilledLabel
         job.detail = prefilledDetail
+        job.wikidataQid = wikidataQid
+        job.imdbId = imdbId
+        job.keepAspect = keepAspect
+        job.folderHint = folderHint
         job.statusText = "Uploading photo…"
         job.progress = 0.05
         jobs.insert(job, at: 0)
@@ -255,11 +270,14 @@ final class AddTileQueue {
                 styleGuideId: nil,                 // server resolves the child's house style
                 model: job.model,
                 bg: job.bg,
-                keepAspect: false,
+                keepAspect: job.keepAspect,
                 needsReview: job.needsReview,
                 emotion: job.emotion,
                 childId: job.childId,
-                raw: job.raw)
+                raw: job.raw,
+                wikidataQid: job.wikidataQid,
+                imdbId: job.imdbId,
+                folder: job.folderHint)
             job.serverId = serverId
             job.statusText = "Saved. Making the tile…"
             job.progress = max(job.progress, 0.15)

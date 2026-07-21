@@ -418,8 +418,29 @@ struct AddTileView: View {
                     .foregroundStyle(Color(hex: "#b45309"))
                     .multilineTextAlignment(.center)
             }
+
+            // #11: the guided movie/show flow. Always available — it files
+            // itself into the TV & Movies folder, so no destination is needed.
+            Button { showMovieFlow = true } label: {
+                HStack(spacing: 8) {
+                    Text("🎬")
+                    Text("Add a movie or show")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .foregroundStyle(Color(hex: "#ad1457"))
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#f3c6dd"), lineWidth: 1.5))
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showMovieFlow) {
+                MovieAddSheet()
+            }
         }
     }
+
+    @State private var showMovieFlow = false
 
     private func captureLabel(icon: String?, text: String, filled: Bool, busy: Bool = false) -> some View {
         VStack(spacing: 6) {

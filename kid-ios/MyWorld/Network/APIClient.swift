@@ -416,7 +416,8 @@ struct APIClient {
     func createTileJob(photoJPEG: Data, label: String, detail: String, section: String,
                        categoryId: Int?, style: String, styleGuideId: Int?, model: String,
                        bg: String, keepAspect: Bool, needsReview: Bool, emotion: String,
-                       childId: String, relationship: String? = nil, raw: Bool = false) async throws -> Int {
+                       childId: String, relationship: String? = nil, raw: Bool = false,
+                       wikidataQid: String? = nil, imdbId: String? = nil, folder: String? = nil) async throws -> Int {
         var path = "/api/tile-jobs?childId=\(percentEscape(childId))&section=\(percentEscape(section))"
             + "&style=\(percentEscape(style))&model=\(percentEscape(model))&bg=\(percentEscape(bg))"
             + "&emotion=\(percentEscape(emotion))"
@@ -428,6 +429,10 @@ struct APIClient {
         if keepAspect  { path += "&keepAspect=1" }
         if needsReview { path += "&needsReview=1" }
         if raw         { path += "&raw=1" }        // photo-as-is: no restyle, no charge
+        // #11 movie/show link ids + folder-by-name hint (server validates shapes)
+        if let wikidataQid, !wikidataQid.isEmpty { path += "&wikidataQid=\(percentEscape(wikidataQid))" }
+        if let imdbId, !imdbId.isEmpty { path += "&imdbId=\(percentEscape(imdbId))" }
+        if let folder, !folder.isEmpty { path += "&folder=\(percentEscape(folder))" }
         let (data, _) = try await request(method: "POST", path: path,
                                           body: photoJPEG, contentType: "image/jpeg", timeout: 60)
         return (try JSONDecoder().decode(TileJobCreated.self, from: data)).id
