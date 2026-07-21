@@ -169,6 +169,9 @@ export default async function handler(req, res) {
     // so the boards' "Teach me" slideshow can speak the word + all its clues
     // without a second fetch.
     for (const i of items) {
+      // #16: a parent's own clues on the tile ALWAYS win over the canonical
+      // overlay — her input supersedes whatever the library says.
+      if (Array.isArray(i.descriptive_clues) && i.descriptive_clues.length) continue;
       const tax = i.taxonomy_slug ? taxBySlug.get(i.taxonomy_slug) : null;
       if (tax && Array.isArray(tax.descriptive_clues) && tax.descriptive_clues.length) {
         i.descriptive_clues = tax.descriptive_clues;

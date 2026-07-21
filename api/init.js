@@ -276,6 +276,10 @@ export default async function handler(req, res) {
     // queue on BOTH surfaces (native review sheet + web parent dashboard).
     // Confirming a tile clears the flag; single-tile adds never set it.
     await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS needs_review BOOLEAN NOT NULL DEFAULT FALSE`;
+    // #16: parent-authored teaching clues on any tile (photo tiles included);
+    // same three-clue shape as taxonomy.descriptive_clues, and the sync
+    // overlay lets the item's own clues win over the canonical ones.
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS descriptive_clues TEXT[]`;
     await db`CREATE INDEX IF NOT EXISTS items_needs_review_idx ON items(child_id, needs_review)`;
 
     // Per-attempt mercy + difficulty + child-generated method flag.

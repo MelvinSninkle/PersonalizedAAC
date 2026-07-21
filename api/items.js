@@ -238,6 +238,17 @@ async function update(req, res, db, user) {
   const descriptions = Array.isArray(rawDescriptions)
     ? rawDescriptions.filter((s) => typeof s === 'string').map((s) => s.slice(0, 240)).slice(0, 6)
     : undefined;
+  // #16: the taxonomy's three descriptive clues, parent-authorable on any
+  // tile (photo tiles included) — same shape as canonical clues, so teaching/
+  // testing/matching modes consume them identically. `undefined` leaves them;
+  // an array replaces (empty array clears back to the canonical overlay).
+  const rawClues = (req.body || {}).descriptiveClues;
+  const clues = Array.isArray(rawClues)
+    ? rawClues.filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim().slice(0, 200)).slice(0, 3)
+    : undefined;
+  if (clues !== undefined) {
+    try { await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS descriptive_clues TEXT[]`; } catch (_) {}
+  }
   // Archive the previous picture before we overwrite it — the parent's album
   // depends on us never losing a tile's prior face.
   if (imageKey && old.image_key && imageKey !== old.image_key) {
@@ -262,6 +273,7 @@ async function update(req, res, db, user) {
       pinned        = ${pinned === undefined ? old.pinned : !!pinned},
       description   = ${description === undefined ? old.description : (typeof description === 'string' ? description.slice(0, 500) : null)},
       descriptions  = ${descriptions === undefined ? old.descriptions : descriptions},
+      descriptive_clues = ${clues === undefined ? (old.descriptive_clues ?? null) : (clues.length ? clues : null)},
       needs_review  = ${needsReview === undefined ? old.needs_review : !!needsReview},
       updated_at    = NOW()
     WHERE id = ${id}
