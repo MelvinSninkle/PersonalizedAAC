@@ -106,6 +106,25 @@ struct DisplaySettingsView: View {
                     ColorRow(label: "Needs",  hex: $prefs.colorNeeds)
                 }
 
+                // #15: per-device low-vision enlargement (screen sizes differ,
+                // so this deliberately does NOT sync — same as the web board).
+                Section {
+                    Picker("Listening tiles", selection: $prefs.listenTileSize) {
+                        Text("Normal").tag(0)
+                        Text("Bigger (+50%)").tag(1)
+                        Text("Biggest (+100%)").tag(2)
+                    }
+                    Picker("Top-row buttons", selection: $prefs.topButtonSize) {
+                        Text("Normal").tag(0)
+                        Text("Bigger (+50%)").tag(1)
+                        Text("Biggest (+100%)").tag(2)
+                    }
+                } header: {
+                    Text("Bigger sizes (low vision)")
+                } footer: {
+                    Text("Make the listening word strip or the header buttons easier to see and tap. Saved on this device only.")
+                }
+
                 Section("Header colors") {
                     ColorRow(label: "Background", hex: $prefs.colorHeaderBg)
                     ColorRow(label: "Text",       hex: $prefs.colorHeaderText)

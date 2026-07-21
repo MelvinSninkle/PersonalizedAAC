@@ -96,6 +96,7 @@ struct ListenStripView: View {
     @Environment(BoardStore.self) private var board
     @Environment(AccessPrefs.self) private var access
     @Environment(BoardNav.self) private var nav
+    @Environment(DisplayPrefs.self) private var prefs
     @State private var lastNavKey = ""
 
     private var tokens: [ListenToken] {
@@ -129,10 +130,10 @@ struct ListenStripView: View {
                         // The word still being spoken, shown faint at the end.
                         if !speech.liveTail.isEmpty {
                             Text(speech.liveTail)
-                                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                .font(.system(size: 18 * prefs.listenScale, weight: .semibold, design: .rounded))
                                 .foregroundStyle(Color(hex: "#ad1457").opacity(0.5))
                                 .padding(.horizontal, 8)
-                                .frame(height: 76)
+                                .frame(height: 76 * prefs.listenScale)
                                 .id("live-tail")
                         }
                     }
@@ -150,7 +151,9 @@ struct ListenStripView: View {
                 withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("live-tail", anchor: .trailing) }
             }
         }
-        .frame(height: 92)
+        // #15 low-vision enlargement: the strip and its chips scale together
+        // (HeaderBar grows its tall frame by the same factor).
+        .frame(height: 92 * prefs.listenScale)
     }
 
     /// A word matched twice IN A ROW = "show me": open that tile's category,
@@ -177,14 +180,14 @@ struct ListenStripView: View {
     @ViewBuilder
     private func chip(_ tok: ListenToken) -> some View {
         if let tile = tok.tile {
-            ListenTileChip(tile: tile)
+            ListenTileChip(tile: tile, scale: prefs.listenScale)
         } else {
             Text(tok.word)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.system(size: 20 * prefs.listenScale, weight: .bold, design: .rounded))
                 .italic(tok.masked)
                 .foregroundStyle(Color(hex: "#ad1457").opacity(tok.masked ? 0.7 : 1))
                 .padding(.horizontal, 12)
-                .frame(height: 76)
+                .frame(height: 76 * prefs.listenScale)
                 .background(Color(hex: "#fce4ec"), in: RoundedRectangle(cornerRadius: 14))
         }
     }
@@ -193,6 +196,7 @@ struct ListenStripView: View {
 /// A single tile thumbnail in the strip; tap to speak it (recorded voice / TTS).
 private struct ListenTileChip: View {
     let tile: Tile
+    var scale: Double = 1
     @State private var image: UIImage?
 
     var body: some View {
@@ -206,13 +210,14 @@ private struct ListenTileChip: View {
                     Color(hex: "#fff7fb")
                 }
             }
-            .frame(width: 76, height: 76)
+            .frame(width: 76 * scale, height: 76 * scale)
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.06)))
         }
         .buttonStyle(.plain)
         .task(id: tile.imageKey) {
-            if let key = tile.imageKey { image = await MediaCache.shared.image(for: key, maxPixel: 256) }
+            // Enlarged chips (#15) decode a step sharper; still bounded (C7).
+            if let key = tile.imageKey { image = await MediaCache.shared.image(for: key, maxPixel: scale > 1 ? 512 : 256) }
         }
     }
 }

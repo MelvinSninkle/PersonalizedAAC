@@ -39,6 +39,14 @@ final class DisplayPrefs {
     var colorHeaderBg:   String { didSet { save() } }
     var colorHeaderText: String { didSet { save() } }
 
+    /// #15 low-vision enlargement, steps 0 = normal / 1 = +50% / 2 = +100%.
+    /// Deliberately PER-DEVICE (screen sizes differ, same decision as the
+    /// web board), so these are excluded from the synced snapshot below.
+    var listenTileSize: Int { didSet { save() } }
+    var topButtonSize:  Int { didSet { save() } }
+    var listenScale: Double { [1.0, 1.5, 2.0][max(0, min(2, listenTileSize))] }
+    var topButtonScale: Double { [1.0, 1.5, 2.0][max(0, min(2, topButtonSize))] }
+
     // MARK: -- Defaults
 
     // Columns start WHITE so the family picks their own palette (the header
@@ -67,6 +75,8 @@ final class DisplayPrefs {
         self.colorNeeds    = d.string(forKey: "pref.colorNeeds")  ?? Self.defaultNeeds
         self.colorHeaderBg   = d.string(forKey: "pref.colorHeaderBg")   ?? Self.defaultHeaderBg
         self.colorHeaderText = d.string(forKey: "pref.colorHeaderText") ?? Self.defaultHeaderText
+        self.listenTileSize  = d.object(forKey: "pref.listenTileSize") as? Int ?? 0
+        self.topButtonSize   = d.object(forKey: "pref.topButtonSize")  as? Int ?? 0
     }
 
     func resetToDefaults() {
@@ -79,6 +89,8 @@ final class DisplayPrefs {
         colorNeeds  = Self.defaultNeeds
         colorHeaderBg   = Self.defaultHeaderBg
         colorHeaderText = Self.defaultHeaderText
+        listenTileSize  = 0
+        topButtonSize   = 0
     }
 
     // MARK: -- Per-section accessors
@@ -196,6 +208,8 @@ final class DisplayPrefs {
         d.set(colorNeeds,   forKey: "pref.colorNeeds")
         d.set(colorHeaderBg,   forKey: "pref.colorHeaderBg")
         d.set(colorHeaderText, forKey: "pref.colorHeaderText")
+        d.set(listenTileSize,  forKey: "pref.listenTileSize")
+        d.set(topButtonSize,   forKey: "pref.topButtonSize")
         scheduleServerSave()
     }
 }
