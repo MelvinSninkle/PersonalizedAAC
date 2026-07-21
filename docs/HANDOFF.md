@@ -150,3 +150,17 @@ store_only is flippable per board in Lab → Boards). Status:
   (owner has it; acceptance criteria are explicit).
 - README update rides with each implemented feature (owner's instruction:
   running code is source of truth; README was stale).
+
+### #12/#13 status (2026-07-21)
+- ✅ #12 shipped (web): listenRepeatNav graduated out of ACCESS_KEYS (E6
+  invariant updated in step), new parent-writable listenRepeatCount 0|2|3,
+  n-consecutive matcher in maybeListenNavigate (absent settings = legacy 2),
+  Display-panel select. Native ports: read listenRepeatCount, same fallback.
+- 🟡 #13 partially: sentence constructor + both modes DOCUMENTED in README
+  (AC6). The tap/drag mode toggle == the existing parent-enabled
+  sentenceDrag setting on natives; web stays tap-only by design. REMAINING:
+  (a) audit that sentenceDrag is exposed as a clear "Tap to add / Pick up
+  and drag" choice in iOS + Android settings UIs, (b) re-tune the native
+  drag pickup thresholds to the spec's "short natural press, light touch
+  still scrolls" balance — needs on-device feel testing with Andrew; the
+  failure mode to avoid is every tile-touch reading as a grab.
