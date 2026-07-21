@@ -537,7 +537,8 @@ white or brown outside, yellow inside'></textarea>
     <h3>Import rows</h3>
     <div class="help">
       Accepts CSV, TSV, or XLSX. Required columns: <code>id</code>, <code>column</code>, <code>label</code>,
-      <code>subject_mode</code>, <code>parent_photo_behavior</code>, <code>prompt_template</code>.
+      <code>subject_mode</code>, <code>parent_photo_behavior</code>, <code>prompt_template</code>
+      (may be empty when <code>authoring_kind</code> is <code>personal_skeleton</code>: photo-only rows never prompt AI art).
       Optional: <code>category</code>, <code>subcategory</code>, <code>pronunciation</code>, <code>phase</code>, <code>core</code> (true/false, default true), <code>status</code>, <code>notes</code>, <code>growth_stage</code>, <code>meal_context</code>, <code>is_gestalt</code>, <code>gestalt_type</code>, <code>gestalt_meaning</code>, <code>gestalt_target_words</code> (comma-separated), <code>descriptive_clues</code> (pipe- or newline-separated).
       Aliases: <code>name→label</code>, <code>mode→subject_mode</code>, <code>behavior→parent_photo_behavior</code>, <code>prompt→prompt_template</code>.
     </div>
@@ -1280,7 +1281,11 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     if (!r.id || !ID_PATTERN.test(r.id))                errors.push('id pattern');
     if (!VALID_COLUMNS.has(r.column))                   errors.push('column');
     if (!r.label || !String(r.label).trim())            errors.push('label');
-    if (!r.promptTemplate || !String(r.promptTemplate).trim()) errors.push('promptTemplate');
+    // personal_skeleton rows are PHOTO-ONLY by design (franchise titles: the
+    // parent's own poster/photo is the tile; no AI art is ever prompted), so
+    // an empty prompt_template is correct for them, never an error.
+    if ((!r.promptTemplate || !String(r.promptTemplate).trim())
+        && r.authoringKind !== 'personal_skeleton') errors.push('promptTemplate');
     if (!VALID_SUBJECT_MODES.has(r.subjectMode))        errors.push('subjectMode');
     if (!VALID_PARENT_PHOTO.has(r.parentPhotoBehavior)) errors.push('parentPhotoBehavior');
     if (r.phase && !VALID_PHASES.has(r.phase))          errors.push('phase');
@@ -1383,11 +1388,12 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       const f = inp.files && inp.files[0];
       if (!f) return;
       try {
-        const grid = parseCSVText(await f.text());
-        if (!grid || grid.length < 2) { alert('CSV looks empty.'); return; }
-        const head = grid[0].map((h) => String(h || '').trim());
-        const rows = grid.slice(1).filter((r) => r.some((c) => String(c || '').trim()))
-          .map((r) => Object.fromEntries(head.map((h, i) => [h, r[i] ?? ''])));
+        // parseCSVText already returns header-keyed OBJECTS (Papa header:true)
+        // — the exact shape the import-csv endpoint expects. Re-slicing it
+        // like a raw grid (the original code here) crashed on first click.
+        const rows = parseCSVText(await f.text())
+          .filter((r) => Object.values(r).some((c) => String(c || '').trim()));
+        if (!rows.length) { alert('CSV looks empty.'); return; }
         const post = (dryRun) => fetch('/api/admin/taxonomy?fn=import-csv', {
           method: 'POST', credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },

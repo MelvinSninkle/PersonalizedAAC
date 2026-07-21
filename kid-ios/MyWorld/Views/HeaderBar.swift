@@ -122,24 +122,34 @@ struct HeaderBar: View {
                 .padding(.horizontal, 12)
             }
         }
-        .frame(height: tall ? 104 : 48)
+        // #15 low-vision enlargement: the bar grows with its content — the
+        // listening strip's scale while tall, the button scale otherwise.
+        .frame(height: tall ? 104 * prefs.listenScale : 48 * prefs.topButtonScale)
     }
 
     // MARK: -- Left: the lock icon
     //
-    // Tap = no-op (kids can mash on it and nothing happens — there's no flash
-    //   of UI, no animation, nothing to "discover").
-    // Tap when unlocked = re-locks immediately (one-tap exit for the parent).
-    // Long-press 0.7s = opens the password sheet → unlock on correct password.
+    // With the password gate ON (default):
+    //   Tap while locked = no-op (kids can mash on it and nothing happens —
+    //   no flash of UI, nothing to "discover"). Long-press 0.7s = password
+    //   sheet → unlock.
+    // With the password gate OFF (easyUnlock, password-confirmed by the
+    //   parent when enabling): a plain TAP toggles edit mode both ways —
+    //   that's the whole point of the setting.
+    // Tap while unlocked always re-locks (one-tap exit for the parent).
 
     private var lockButton: some View {
         Button {
-            if editMode { editMode = false }
+            if editMode {
+                editMode = false
+            } else if TouchConfig.easyUnlock {
+                editMode = true
+            }
         } label: {
             Image(systemName: editMode ? "lock.open.fill" : "lock.fill")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 18 * prefs.topButtonScale, weight: .semibold))
                 .foregroundStyle(Color(hex: hex).opacity(editMode ? 1 : 0.55))
-                .padding(8)
+                .padding(8 * prefs.topButtonScale)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -170,9 +180,9 @@ struct HeaderBar: View {
             listening.toggle()
         } label: {
             Image(systemName: listening ? "stop.circle.fill" : "mic.circle.fill")
-                .font(.system(size: 24, weight: .semibold))
+                .font(.system(size: 24 * prefs.topButtonScale, weight: .semibold))
                 .foregroundStyle(listening ? Color(hex: "#dc2626") : Color(hex: hex).opacity(0.9))
-                .padding(6)
+                .padding(6 * prefs.topButtonScale)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -232,8 +242,8 @@ struct HeaderBar: View {
             sentence.setMode(!sentence.mode)
         } label: {
             Text("✏️")
-                .font(.system(size: 15))
-                .padding(6)
+                .font(.system(size: 15 * prefs.topButtonScale))
+                .padding(6 * prefs.topButtonScale)
                 .background(Circle().fill(sentence.mode ? Color(hex: "#66bb6a") : Color.white.opacity(0.18)))
         }
         .buttonStyle(.plain)
@@ -244,9 +254,9 @@ struct HeaderBar: View {
             startTeachShow()
         } label: {
             Text("📖 Teach me")
-                .font(.system(size: 14, weight: .semibold))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
+                .font(.system(size: 14 * prefs.topButtonScale, weight: .semibold))
+                .padding(.horizontal, 12 * prefs.topButtonScale)
+                .padding(.vertical, 7 * prefs.topButtonScale)
                 .background(Color.white.opacity(0.18))
                 .foregroundStyle(Color(hex: hex))
                 .clipShape(Capsule())
@@ -259,9 +269,9 @@ struct HeaderBar: View {
             startSelfQuiz()
         } label: {
             Text("🙋 Play with me")
-                .font(.system(size: 14, weight: .semibold))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
+                .font(.system(size: 14 * prefs.topButtonScale, weight: .semibold))
+                .padding(.horizontal, 12 * prefs.topButtonScale)
+                .padding(.vertical, 7 * prefs.topButtonScale)
                 .background(Color.white.opacity(0.18))
                 .foregroundStyle(Color(hex: hex))
                 .clipShape(Capsule())

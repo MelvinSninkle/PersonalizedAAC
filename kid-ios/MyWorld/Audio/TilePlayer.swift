@@ -18,10 +18,15 @@ final class TilePlayer {
 
     // Tap-to-learn bookkeeping (mirrors the web board's tapSpeak): the fact
     // index walks 0→1→2 across rapid re-taps; the window comes from the
-    // parent's TouchConfig.teachTapMs slider.
+    // parent's TouchConfig.teachTapMs slider. While a fact is speaking ALL
+    // board taps are ignored (facts are deliberately not interruptible —
+    // without this, queued play() Tasks talked over each other), and the
+    // re-tap window restarts when the fact ENDS, so the next tap continues
+    // the cycle at the listener's pace instead of racing the clock.
     private var lastTapTileId: Int?
     private var lastTapAt: Date = .distantPast
     private var teachIdx = 0
+    private var clueSpeaking = false
 
     /// Plays a tile's audio AND (when `childId` is provided) logs the tap.
     ///
@@ -45,10 +50,14 @@ final class TilePlayer {
         // the double-tap-teach check runs BEFORE the interrupt gate, so a
         // second tap teaches even while the first word is still playing.
         if let childId, !childId.isEmpty {
+            // A teaching fact mid-speech is not interruptible — the tap is
+            // simply ignored (not logged; nothing happened for the child).
+            if clueSpeaking { return }
             let now = Date()
-            // Tap-to-learn: each rapid re-tap speaks the NEXT fact — tap 2 =
-            // fact 1 … tap 4 = fact 3 — then the next rapid tap wraps back to
-            // the word itself. Window is the parent's teachTapMs slider.
+            // Tap-to-learn: each re-tap speaks the NEXT fact — tap 2 =
+            // fact 1 … tap 4 = fact 3 — then the next tap wraps back to
+            // the word itself. Window is the parent's teachTapMs slider,
+            // counted from the end of the previous speech.
             if TouchConfig.doubleTapTeach, tile.id == lastTapTileId,
                now.timeIntervalSince(lastTapAt) < Double(TouchConfig.teachTapMs) / 1000.0,
                tile.displayLabel == nil,   // clues are English taxonomy prose
@@ -56,11 +65,13 @@ final class TilePlayer {
                 if teachIdx < clues.count {
                     let clue = Array(clues)[teachIdx]
                     teachIdx += 1
-                    lastTapAt = now         // keep the rapid-tap chain alive
                     logTap(tile, childId: childId, categoryName: categoryName, subcategoryName: subcategoryName)
                     player?.stop()
                     speech.stopSpeaking(at: .immediate)
+                    clueSpeaking = true
                     await GameAudio.shared.speakAwait(clue, childId: childId)
+                    clueSpeaking = false
+                    lastTapAt = Date()      // window restarts when the fact ENDS
                     return
                 }
                 // every fact heard → fall through: the word, chain restarts

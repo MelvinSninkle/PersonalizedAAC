@@ -45,6 +45,11 @@ class TilePlayer(
     private var lastTapTileId: Int? = null
     private var lastTapAt = 0L
     private var teachIdx = 0
+    // While a fact is speaking ALL board taps are ignored (facts are
+    // deliberately not interruptible — otherwise rapid taps talk over each
+    // other), and the re-tap window restarts when the fact ENDS so the next
+    // tap continues the cycle at the listener's pace.
+    private var clueSpeaking = false
     private var ttsReady = false
     private val tts: TextToSpeech = TextToSpeech(context.applicationContext) { status ->
         ttsReady = status == TextToSpeech.SUCCESS
@@ -66,27 +71,45 @@ class TilePlayer(
         // double-tap-teach check runs BEFORE the interrupt gate, so a second
         // tap teaches even while the first word is still playing.
         if (!childId.isNullOrEmpty()) {
+            // A teaching fact mid-speech is not interruptible — the tap is
+            // simply ignored (not logged; nothing happened for the child).
+            if (clueSpeaking) return
             val now = System.currentTimeMillis()
             val clues = if (tile.displayLabel == null)   // clues are English taxonomy prose
                 (tile.descriptiveClues ?: emptyList()).filter { it.isNotBlank() }.take(3)
             else emptyList()
-            // Tap-to-learn: each rapid re-tap speaks the NEXT fact — tap 2 =
-            // fact 1 … tap 4 = fact 3 — then the next rapid tap wraps back to
-            // the word. Window is the parent's teachTapMs slider.
+            // Tap-to-learn: each re-tap speaks the NEXT fact — tap 2 =
+            // fact 1 … tap 4 = fact 3 — then the next tap wraps back to the
+            // word. Window is the parent's teachTapMs slider, counted from
+            // the end of the previous speech.
             if (TouchConfig.doubleTapTeach && tile.id == lastTapTileId &&
                 (now - lastTapAt) < TouchConfig.teachTapMs && clues.isNotEmpty()
             ) {
                 if (teachIdx < clues.size) {
                     val clue = clues[teachIdx]
                     teachIdx++
-                    lastTapAt = now         // keep the rapid-tap chain alive
                     logTap(tile, childId, categoryName, subcategoryName)
                     stop()
                     val ga = gameAudio
                     if (ga != null) {
-                        scope.launch { ga.speakAwait(clue, childId) }
+                        clueSpeaking = true
+                        scope.launch {
+                            ga.speakAwait(clue, childId)
+                            clueSpeaking = false
+                            lastTapAt = System.currentTimeMillis()   // window restarts when the fact ENDS
+                        }
                     } else if (ttsReady) {
+                        // Local-TTS fallback has no awaitable end; a duration
+                        // estimate (~400ms/word ≈ 150 wpm, floor 1.2s) covers
+                        // the not-interruptible window well enough.
+                        clueSpeaking = true
                         tts.speak(clue, TextToSpeech.QUEUE_FLUSH, null, "clue-$teachIdx-${clue.hashCode()}")
+                        val estMs = maxOf(1200L, clue.split(" ").size * 400L)
+                        scope.launch {
+                            kotlinx.coroutines.delay(estMs)
+                            clueSpeaking = false
+                            lastTapAt = System.currentTimeMillis()
+                        }
                     }
                     return
                 }
