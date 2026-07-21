@@ -23,6 +23,7 @@ struct DisplaySettingsView: View {
     @State private var toolTeach = true
     @State private var toolPlay = true
     @State private var toolSentence = true
+    @State private var sentenceDrag = false
     @State private var tapInterrupt = false
     @State private var doubleTapTeach = false
     @State private var teachTapSec = 2.0     // tap-to-learn rapid-tap window
@@ -120,6 +121,16 @@ struct DisplaySettingsView: View {
                         .onChange(of: toolPlay) { _, v in saveSynced(["toolPlay": v]) }
                     Toggle("✏️ Sentence mode", isOn: $toolSentence)
                         .onChange(of: toolSentence) { _, v in saveSynced(["toolSentence": v]) }
+                    // Drag staging (#13/#34): natural pick-up-and-drop onto the
+                    // top bar, alongside the pencil's tap-to-add. Only shown
+                    // when the sentence constructor itself is enabled for this
+                    // board (it's the thing being staged into).
+                    if access.sentenceBuilder {
+                        Toggle("👆 Sentence drag: pick up a tile and drop it on the top bar", isOn: $sentenceDrag)
+                            .onChange(of: sentenceDrag) { _, v in saveSynced(["sentenceDrag": v]) }
+                        Text("The natural gesture for kids who can do it. Tap-to-add with the ✏️ pencil always keeps working, and a light touch still scrolls.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                 } header: {
                     Text("Board tools")
                 } footer: {
@@ -274,6 +285,7 @@ struct DisplaySettingsView: View {
         toolTeach = (s["toolTeach"] as? Bool) ?? true
         toolPlay = (s["toolPlay"] as? Bool) ?? true
         toolSentence = (s["toolSentence"] as? Bool) ?? true
+        sentenceDrag = (s["sentenceDrag"] as? Bool) ?? false
         tapInterrupt = (s["tapInterrupt"] as? Bool) ?? false
         doubleTapTeach = (s["doubleTapTeach"] as? Bool) ?? false
         teachTapSec = Double(TouchConfig.clampMs(s["teachTapMs"], 500, 5000, 2000)) / 1000.0
