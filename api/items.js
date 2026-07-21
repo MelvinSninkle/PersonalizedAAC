@@ -12,7 +12,7 @@ import { del, put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
 import { sql, rowToItem, stampLayoutCustomized } from './_lib/db.js';
-import { canEditContent, isParentOf } from './_lib/access.js';
+import { canEditContent, isParentOf, canAccessChild } from './_lib/access.js';
 import { archivePriorImage } from './_lib/image-history.js';
 import { readBlobBytes } from './_lib/blob.js';
 
@@ -25,11 +25,25 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
-    if (req.method === 'GET')    return await imageHistory(req, res, db, auth.user);
+    if (req.method === 'GET') {
+      // ?lexicon=1 → the canonical suggestion matcher vocabulary (#10).
+      if (String(req.query.lexicon || '') === '1') {
+        const { suggestLexicon } = await import('./_lib/word-suggestions.js');
+        return await suggestLexicon(req, res, db);
+      }
+      return await imageHistory(req, res, db, auth.user);
+    }
     if (req.method === 'POST') {
       const b = (typeof req.body === 'object' && req.body) || {};
       if (b.op === 'revert-image') return await revertImage(req, res, db, auth.user, b);
       if (b.op === 'reorder')      return await reorderBulk(req, res, db, auth.user, b);
+      // #10 canonical suggestion queue — all roster-gated, consent-checked
+      // server-side (see _lib/word-suggestions.js).
+      if (b.op === 'suggest-record' || b.op === 'suggest-list' || b.op === 'suggest-act') {
+        const ws = await import('./_lib/word-suggestions.js');
+        const fn = { 'suggest-record': ws.suggestRecord, 'suggest-list': ws.suggestList, 'suggest-act': ws.suggestAct }[b.op];
+        return await fn(req, res, db, auth.user, b, canAccessChild);
+      }
       return await create(req, res, db, auth.user);
     }
     if (req.method === 'PUT')    return await update(req, res, db, auth.user);
