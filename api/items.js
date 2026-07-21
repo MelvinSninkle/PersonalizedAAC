@@ -31,6 +31,12 @@ export default async function handler(req, res) {
         const { suggestLexicon } = await import('./_lib/word-suggestions.js');
         return await suggestLexicon(req, res, db);
       }
+      // ?movieSearch=<q> → #11 film/TV title lookup (metadata only, no
+      // artwork; see _lib/movie-search.js — the single swap point for TMDB).
+      if (req.query.movieSearch != null) {
+        const { movieSearch } = await import('./_lib/movie-search.js');
+        return await movieSearch(req, res);
+      }
       return await imageHistory(req, res, db, auth.user);
     }
     if (req.method === 'POST') {
@@ -223,6 +229,20 @@ async function create(req, res, db, user) {
       if (upd.length) rows[0] = upd[0];
     } catch (_) { /* clues are additive — never block tile creation */ }
   }
+  // #11: movie/show link ids on create — additive like the clues above.
+  if (b.wikidataQid != null || b.imdbId != null) {
+    try {
+      const { cleanQid, cleanImdbId } = await import('./_lib/movie-search.js');
+      const qid = cleanQid(b.wikidataQid), imdb = cleanImdbId(b.imdbId);
+      if (qid || imdb) {
+        await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS wikidata_qid TEXT`;
+        await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS imdb_id TEXT`;
+        const upd = await db`UPDATE items SET wikidata_qid = ${qid}, imdb_id = ${imdb}
+                             WHERE id = ${rows[0].id} RETURNING *`;
+        if (upd.length) rows[0] = upd[0];
+      }
+    } catch (_) { /* link ids are additive — never block tile creation */ }
+  }
   res.status(200).json(rowToItem(rows[0]));
 }
 
@@ -261,6 +281,23 @@ async function update(req, res, db, user) {
   if (clues !== undefined) {
     try { await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS descriptive_clues TEXT[]`; } catch (_) {}
   }
+  // #11: movie/show link ids. `undefined` leaves them; a value re-links; an
+  // explicit null / '' clears the link. Validated to the id shapes only.
+  // The guarded ALTER runs unconditionally: the UPDATE below always names
+  // these columns, so a pre-migration DB must self-heal on EVERY update, not
+  // only when the ids are in the payload.
+  try {
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS wikidata_qid TEXT`;
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS imdb_id TEXT`;
+  } catch (_) {}
+  const rawQid = (req.body || {}).wikidataQid;
+  const rawImdb = (req.body || {}).imdbId;
+  let qidSet, imdbSet;   // undefined = leave column alone
+  if (rawQid !== undefined || rawImdb !== undefined) {
+    const { cleanQid, cleanImdbId } = await import('./_lib/movie-search.js');
+    if (rawQid !== undefined) qidSet = rawQid ? cleanQid(rawQid) : null;
+    if (rawImdb !== undefined) imdbSet = rawImdb ? cleanImdbId(rawImdb) : null;
+  }
   // Archive the previous picture before we overwrite it — the parent's album
   // depends on us never losing a tile's prior face.
   if (imageKey && old.image_key && imageKey !== old.image_key) {
@@ -286,6 +323,8 @@ async function update(req, res, db, user) {
       description   = ${description === undefined ? old.description : (typeof description === 'string' ? description.slice(0, 500) : null)},
       descriptions  = ${descriptions === undefined ? old.descriptions : descriptions},
       descriptive_clues = ${clues === undefined ? (old.descriptive_clues ?? null) : (clues.length ? clues : null)},
+      wikidata_qid  = ${qidSet === undefined ? (old.wikidata_qid ?? null) : qidSet},
+      imdb_id       = ${imdbSet === undefined ? (old.imdb_id ?? null) : imdbSet},
       needs_review  = ${needsReview === undefined ? old.needs_review : !!needsReview},
       updated_at    = NOW()
     WHERE id = ${id}

@@ -1386,6 +1386,26 @@
     <input type="text" id="item-clue2" maxlength="200" placeholder='Fact 2, e.g. "Grandpa takes me out for ham sandwiches"' style="margin-top:6px;">
     <input type="text" id="item-clue3" maxlength="200" placeholder='Fact 3, e.g. "Grandpa lives by the lake"' style="margin-top:6px;">
     <div style="font-size:12px;color:#666;margin-top:4px;">If left blank the game falls back to "Who or what is the [tile name]?"</div>
+
+    <!-- #11: movie/show link. Metadata only — the app never fetches poster
+         art; the parent saves the poster themselves and uploads it as this
+         tile's picture (keep exact photo). Search rides GET /api/items
+         ?movieSearch= (Wikidata behind a single swap-ready interface). -->
+    <label style="margin-top:14px;">🎬 Movie or show (optional)</label>
+    <div id="item-movie-unlinked">
+      <div style="display:flex;gap:6px;margin-top:2px;">
+        <input type="text" id="item-movie-q" placeholder="Search a title, e.g. Bluey" style="flex:1;">
+        <button class="secondary" id="item-movie-search" type="button">Find</button>
+      </div>
+      <div id="item-movie-results" style="margin-top:6px;"></div>
+    </div>
+    <div id="item-movie-linked" style="display:none;margin-top:4px;font-size:13px;">
+      <span id="item-movie-title" style="font-weight:600;"></span>
+      <a id="item-movie-imdb" href="#" target="_blank" rel="noopener" style="margin-left:8px;">Open in IMDb ↗</a>
+      <button class="secondary" id="item-movie-clear" type="button" style="margin-left:8px;padding:2px 10px;font-size:12px;">Unlink</button>
+      <div style="font-size:12px;color:#666;margin-top:4px;">To use the real poster: open the IMDb page, save the poster image to this device, then set it as this tile's picture with "keep my exact photo." Poster tiles keep their tall shape.</div>
+    </div>
+    <div id="item-movie-msg" style="font-size:12px;color:#888;margin-top:2px;"></div>
     <div class="error" id="item-error"></div>
     <div id="item-frame-row" style="display:none;margin:6px 0 2px;">
       <button class="secondary" id="item-frame" title="Drag the photo inside a tile-shaped frame to pick exactly what shows. The old picture is archived, never deleted.">🖼 Adjust framing</button>
@@ -3846,7 +3866,7 @@
     }
   }
 
-  async function serverCreateItem({ section, categoryId, label, image, sound, keepAspect, order, pinned, description, descriptiveClues }) {
+  async function serverCreateItem({ section, categoryId, label, image, sound, keepAspect, order, pinned, description, descriptiveClues, wikidataQid, imdbId }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const saved = await apiJSON('/api/items', {
@@ -3859,6 +3879,8 @@
         keepAspect: !!keepAspect,
         description: description ?? null,
         descriptiveClues: descriptiveClues ?? undefined,   // #16 teaching facts
+        wikidataQid: wikidataQid ?? undefined,             // #11 movie/show link
+        imdbId: imdbId ?? undefined,
         childId: CHILD_ID,
       }),
     });
@@ -3868,7 +3890,7 @@
     return saved;
   }
 
-  async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned, description, descriptiveClues }) {
+  async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned, description, descriptiveClues, wikidataQid, imdbId }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const body = { childId: CHILD_ID };
@@ -3879,6 +3901,8 @@
     if (keepAspect !== undefined) body.keepAspect = !!keepAspect;
     if (description !== undefined) body.description = description;     // PRD §5 auditory-comp prompt
     if (descriptiveClues !== undefined) body.descriptiveClues = descriptiveClues;   // #16 teaching facts
+    if (wikidataQid !== undefined) body.wikidataQid = wikidataQid;     // #11 movie/show link
+    if (imdbId !== undefined) body.imdbId = imdbId;
     if (upImg) { body.imageKey = upImg.key; }
     if (upSnd) { body.soundKey = upSnd.key; }
     const saved = await apiJSON('/api/items?id=' + old.id + '&childId=' + encodeURIComponent(CHILD_ID), {
@@ -3908,6 +3932,22 @@
   let editingItemCategoryId = null;
   let pendingImage = null;
   let pendingSound = null;
+  // #11: the modal's current movie/show link. null qid+imdb = unlinked.
+  let movieLink = { qid: null, imdb: null, title: '' };
+
+  function movieShowLinked() {
+    const linked = !!(movieLink.qid || movieLink.imdb);
+    document.getElementById('item-movie-unlinked').style.display = linked ? 'none' : '';
+    document.getElementById('item-movie-linked').style.display = linked ? '' : 'none';
+    if (linked) {
+      document.getElementById('item-movie-title').textContent = movieLink.title || movieLink.qid || movieLink.imdb;
+      const a = document.getElementById('item-movie-imdb');
+      if (movieLink.imdb) { a.style.display = ''; a.href = 'https://www.imdb.com/title/' + encodeURIComponent(movieLink.imdb) + '/'; }
+      else { a.style.display = 'none'; }
+    }
+    document.getElementById('item-movie-results').innerHTML = '';
+    document.getElementById('item-movie-msg').textContent = '';
+  }
 
   async function openItemModal(section, categoryId, item) {
     editingItemSection = section;
@@ -3931,6 +3971,10 @@
     document.getElementById('item-clue1').value = clueVals[0] || '';
     document.getElementById('item-clue2').value = clueVals[1] || '';
     document.getElementById('item-clue3').value = clueVals[2] || '';
+    // #11: existing movie/show link rides in on the synced item.
+    movieLink = { qid: item?.wikidataQid || null, imdb: item?.imdbId || null, title: item?.label || '' };
+    document.getElementById('item-movie-q').value = '';
+    movieShowLinked();
     const ist = document.getElementById('item-image-status');
     ist.textContent = item?.imageKey ? 'Current image will be kept' : 'No image selected';
     ist.className = 'file-status' + (item?.imageKey ? ' has-file' : '');
@@ -4286,6 +4330,45 @@
     });
   })();
 
+  // #11: movie/show search + link wiring. The search is metadata-only
+  // (title/year/type/ids from the server's single search interface); the
+  // parent always picks from the list — never auto-selected.
+  document.getElementById('item-movie-search').addEventListener('click', async () => {
+    const q = document.getElementById('item-movie-q').value.trim();
+    const resEl = document.getElementById('item-movie-results');
+    const msgEl = document.getElementById('item-movie-msg');
+    if (q.length < 2) { msgEl.textContent = 'Type at least two letters first.'; return; }
+    msgEl.textContent = 'Searching…'; resEl.innerHTML = '';
+    try {
+      const r = await apiFetch('/api/items?movieSearch=' + encodeURIComponent(q));
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'search failed');
+      const d = await r.json();
+      const rows = d.results || [];
+      msgEl.textContent = rows.length ? 'Pick the right one:' : 'No movies or shows found for that. Try the full title.';
+      for (const m of rows) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'secondary';
+        b.style.cssText = 'display:block;width:100%;text-align:left;margin-top:4px;padding:8px 10px;font-size:13px;';
+        const kind = m.type === 'tv' ? 'TV' : (m.type === 'film' ? 'Film' : 'Title');
+        b.textContent = m.title + (m.year ? ' (' + m.year + ')' : '') + ' · ' + kind + (m.description ? ' · ' + m.description : '');
+        b.addEventListener('click', () => {
+          movieLink = { qid: m.qid || null, imdb: m.imdbId || null, title: m.title || '' };
+          const labelEl = document.getElementById('item-label');
+          if (!labelEl.value.trim()) labelEl.value = m.title || '';
+          movieShowLinked();
+        });
+        resEl.appendChild(b);
+      }
+    } catch (err) {
+      msgEl.textContent = 'Search failed: ' + (err.message || err);
+    }
+  });
+  document.getElementById('item-movie-clear').addEventListener('click', () => {
+    movieLink = { qid: null, imdb: null, title: '' };
+    movieShowLinked();
+  });
+
   document.getElementById('item-save').addEventListener('click', async () => {
     const label = document.getElementById('item-label').value.trim();
     const pinned = document.getElementById('item-pin').checked;
@@ -4307,8 +4390,12 @@
       // crop. The old keep-original-ratio control is retired — omitting
       // keepAspect on update preserves whatever the tile already has
       // (admin's Lab tools still set it for TV/movie posters).
+      // #11: poster tiles are the rectangular exception — a linked movie/
+      // show keeps the uploaded image's own shape (the poster IS the
+      // recognizable artifact), so skip the square crop and set keep_aspect.
+      const isMovie = !!(movieLink.qid || movieLink.imdb);
       let image = pendingImage;
-      if (image) image = await squareCropBlob(image);
+      if (image && !isMovie) image = await squareCropBlob(image);
       // #16: the three teaching facts — an array (possibly empty = clear back
       // to the canonical overlay) whenever the parent touched the modal.
       const descriptiveClues = ['item-clue1', 'item-clue2', 'item-clue3']
@@ -4320,6 +4407,9 @@
           sound: pendingSound,
           description,
           descriptiveClues,
+          wikidataQid: movieLink.qid || '',   // '' clears an unlinked tile server-side
+          imdbId: movieLink.imdb || '',
+          keepAspect: isMovie && image ? true : undefined,
           pinned: editingItemSection === 'people' ? pinned : undefined,
         });
       } else {
@@ -4331,6 +4421,9 @@
           sound: pendingSound,
           description,
           descriptiveClues,
+          wikidataQid: movieLink.qid || undefined,
+          imdbId: movieLink.imdb || undefined,
+          keepAspect: isMovie,
           order: Date.now(),
           pinned: editingItemSection === 'people' ? pinned : false,
         });

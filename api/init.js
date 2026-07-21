@@ -280,6 +280,11 @@ export default async function handler(req, res) {
     // same three-clue shape as taxonomy.descriptive_clues, and the sync
     // overlay lets the item's own clues win over the canonical ones.
     await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS descriptive_clues TEXT[]`;
+    // #11 movie/show tiles: Wikidata QID + IMDb id link the tile to its title.
+    // Metadata only — poster artwork is never fetched or stored server-side;
+    // the only image is whatever the parent uploads themselves.
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS wikidata_qid TEXT`;
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS imdb_id TEXT`;
     await db`CREATE INDEX IF NOT EXISTS items_needs_review_idx ON items(child_id, needs_review)`;
 
     // Per-attempt mercy + difficulty + child-generated method flag.
