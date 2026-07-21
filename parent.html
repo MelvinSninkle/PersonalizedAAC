@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Parent Dashboard — My World</title>
+<title>Parent Dashboard - My World</title>
 <meta name="theme-color" content="#ad1457">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -286,7 +286,7 @@
     <span style="font-size:24px;">✨</span>
     <div style="flex:1;min-width:220px;">
       <div style="font-weight:700;color:var(--pink-deep,#ad1457);font-size:15px;" id="build-banner-title">Building the board…</div>
-      <div style="font-size:12px;color:#6b7280;margin-top:2px;">Words show up on the board as each one finishes — you can close this page, it keeps going.</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:2px;">Words show up on the board as each one finishes. You can close this page, it keeps going.</div>
       <div style="height:8px;background:#fce4ec;border-radius:999px;overflow:hidden;margin-top:8px;"><div id="build-bar" style="height:100%;width:0;background:var(--pink);transition:width .5s;"></div></div>
     </div>
     <button class="btn" id="build-fix" style="display:none;">Fix missing pieces</button>
@@ -310,7 +310,7 @@
     <h2>✨ New tiles to review
       <span id="review-count" style="display:inline-block;min-width:22px;text-align:center;background:var(--pink);color:#fff;border-radius:999px;font-size:13px;padding:1px 8px;vertical-align:middle;">0</span>
     </h2>
-    <p class="hint">Just imported from photos. Each was named &amp; voiced with AI — listen, fix anything that's off, then confirm. <strong>Whatever you type wins over the AI.</strong></p>
+    <p class="hint">Just imported from photos. Each was named &amp; voiced with AI. Listen, fix anything that's off, then confirm. <strong>Whatever you type wins over the AI.</strong></p>
     <div id="review-list"></div>
     <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;">
       <button class="btn primary" id="review-confirm-all">Save &amp; confirm all</button>
@@ -345,7 +345,7 @@
   <div class="section-label" id="moments-label" style="display:none;">✨ Moments</div>
   <div class="panel" id="moments-panel" style="display:none;">
     <h2>Firsts worth keeping</h2>
-    <p class="hint">Caught automatically from how <span class="cn">your child</span> uses the board — first word pairs, growing vocabulary. These are yours forever.</p>
+    <p class="hint">Caught automatically from how <span class="cn">your child</span> uses the board: first word pairs, growing vocabulary. These are yours forever.</p>
     <div id="moments-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;"></div>
   </div>
 
@@ -389,7 +389,7 @@
     <div class="mode">
       <div class="icon">📺</div><span class="tag">Mode 3 · Passive</span>
       <h3>Learn Slideshow</h3>
-      <p>Pictures from a category cycle automatically with labels. Watch-only — great for the car.</p>
+      <p>Pictures from a category cycle automatically with labels. Watch-only, great for the car.</p>
       <div class="actions">
         <button class="btn primary" data-launch="Learn Slideshow">Start</button>
         <button class="btn ghost" data-config="Learn Slideshow">Configure</button>
@@ -407,7 +407,7 @@
     <div class="mode">
       <div class="icon">📖</div><span class="tag">Teach · Passive</span>
       <h3>Teach Me Slideshow</h3>
-      <p>Each picture shows with its word — spoken, then every teaching clue read aloud. Same show as the board's 📖 button, but you pick the words.</p>
+      <p>Each picture shows with its word: spoken, then every teaching clue read aloud. Same show as the board's 📖 button, but you pick the words.</p>
       <div class="actions">
         <button class="btn primary" data-launch="Teach Me Slideshow">Start</button>
         <button class="btn ghost" data-config="Teach Me Slideshow">Configure</button>
@@ -434,7 +434,7 @@
     <div class="mode">
       <div class="icon">🗣️</div><span class="tag">Mode 6 · Active</span>
       <h3>Expressive Naming</h3>
-      <p>An image alone — no audio prompt. Fletcher names it unaided (voice / gesture / object). You mark the response from your phone. This is the ideal: unprompted expressive production.</p>
+      <p>An image alone, no audio prompt. Fletcher names it unaided (voice / gesture / object). You mark the response from your phone. This is the ideal: unprompted expressive production.</p>
       <div class="actions">
         <button class="btn primary" data-launch="Expressive Naming">Start</button>
         <button class="btn ghost" data-config="Expressive Naming">Configure</button>
@@ -452,7 +452,7 @@
     <div class="mode" style="background:#fffdf5;">
       <div class="icon" style="background:#fef9c3;">➕</div><span class="tag">Mode 6 · Routine</span>
       <h3>Routine Builder</h3>
-      <p>Chain modes into a saved routine — e.g. warm-up slideshow → game → celebration.</p>
+      <p>Chain modes into a saved routine, e.g. warm-up slideshow → game → celebration.</p>
       <div class="actions"><button class="btn primary" id="rb-open">Build a routine</button></div>
     </div>
   </div>
@@ -502,24 +502,24 @@
     <div id="sent-bars" style="display:flex;gap:6px;align-items:flex-end;height:56px;margin:8px 4px 4px;"></div>
     <div id="sent-days" style="display:flex;gap:6px;margin:0 4px 10px;"></div>
     <div id="sent-recent" style="margin:0 4px;"></div>
-    <p class="hint" style="margin:10px 4px 8px;">Every ▶ press of the sentence builder — what was said and when. The words also count in Top Words above.</p>
+    <p class="hint" style="margin:10px 4px 8px;">Every ▶ press of the sentence builder: what was said and when. The words also count in Top Words above.</p>
   </div>
 
   <!-- SKILL INSIGHTS (PRD §7) -->
   <div class="section-label">Skill insights</div>
   <div class="panel" style="padding:8px 14px;">
-    <p class="hint" style="margin:8px 4px 12px;">Joint-attention narrative per skill — refreshed nightly. <strong>"Joint attention improving"</strong> means the spikes are coming closer together (knowledge is becoming more reachable). <strong>"Present but inconsistent"</strong> means the knowledge is there but access is sporadic. <strong>"Mastered"</strong> means ≥2 spikes within 14 days with at least one via voice / gesture / object. Insights flagged <strong>"Consider evaluation"</strong> have reached the 50-exposure ceiling without mastery — only a therapist can dismiss those.</p>
+    <p class="hint" style="margin:8px 4px 12px;">Joint-attention narrative per skill, refreshed nightly. <strong>"Joint attention improving"</strong> means the spikes are coming closer together (knowledge is becoming more reachable). <strong>"Present but inconsistent"</strong> means the knowledge is there but access is sporadic. <strong>"Mastered"</strong> means ≥2 spikes within 14 days with at least one via voice / gesture / object. Insights flagged <strong>"Consider evaluation"</strong> have reached the 50-exposure ceiling without mastery. Only a therapist can dismiss those.</p>
     <div id="insights-body">
-      <div class="muted" style="padding:14px;color:#888;">No skill insights yet — they appear after the first spike events land and the nightly cron runs.</div>
+      <div class="muted" style="padding:14px;color:#888;">No skill insights yet. They appear after the first spike events land and the nightly cron runs.</div>
     </div>
   </div>
 
   <!-- MASTERY MOMENTS (PRD §6) -->
   <div class="section-label">Mastery moments</div>
   <div class="panel" style="padding:8px 14px;">
-    <p class="hint" style="margin:8px 4px 12px;">Sessions where Fletcher cleared his own baseline by 2 or 3 standard deviations, or got 100%. <strong>The knowledge is in there</strong> — these moments are how mastery actually surfaces for autistic learners. Spikes via voice / gesture / object carry the strongest evidence and are flagged with the 🗣️ icon.</p>
+    <p class="hint" style="margin:8px 4px 12px;">Sessions where Fletcher cleared his own baseline by 2 or 3 standard deviations, or got 100%. <strong>The knowledge is in there</strong>. These moments are how mastery actually surfaces for autistic learners. Spikes via voice / gesture / object carry the strongest evidence and are flagged with the 🗣️ icon.</p>
     <div id="spikes-body">
-      <div class="muted" style="padding:14px;color:#888;">No spike events yet — these appear once Fletcher has ≥10 sessions in any (skill, mode) bucket and clears the 2σ threshold (or hits 100%).</div>
+      <div class="muted" style="padding:14px;color:#888;">No spike events yet. These appear once Fletcher has ≥10 sessions in any (skill, mode) bucket and clears the 2σ threshold (or hits 100%).</div>
     </div>
   </div>
 
@@ -529,7 +529,7 @@
     <p class="hint" style="margin:8px 4px 12px;">What's coming up next per skill, ordered by what's due soonest. Each row shows the spaced-repetition stage (10 → 50 ceiling) and how many exposures have landed so far. "Tightened" means the schedule clusters closer because the spike threshold isn't met yet.</p>
     <table id="exposure-table">
       <thead><tr><th>Skill</th><th>Stage</th><th>Progress</th><th>Status</th><th>Next due</th></tr></thead>
-      <tbody id="exposure-body"><tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No exposure protocols yet — they appear once a slideshow or scored session runs for a tile with a canonical skill anchor.</td></tr></tbody>
+      <tbody id="exposure-body"><tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No exposure protocols yet. They appear once a slideshow or scored session runs for a tile with a canonical skill anchor.</td></tr></tbody>
     </table>
   </div>
 
@@ -539,7 +539,7 @@
     <table>
       <thead><tr><th>Date</th><th>Mode</th><th>Category</th><th>Result</th><th>Length</th></tr></thead>
       <tbody id="recent-body">
-        <tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No sessions yet — start a learning mode above.</td></tr>
+        <tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No sessions yet. Start a learning mode above.</td></tr>
       </tbody>
     </table>
   </div>
@@ -604,19 +604,19 @@
     </div>
     <!-- The exact reference images attached to every generation -->
     <div class="section-label" style="margin-top:18px;">The reference pictures behind new art</div>
-    <p class="hint">Every new picture is drawn while looking at these. Portraits of people lean on the people reference; everything else leans on the objects reference (each falls back to the main style when not set). Upload your own to steer the look — it applies to pictures made from now on; existing tiles keep theirs, and any tile can be remade from its editor.</p>
+    <p class="hint">Every new picture is drawn while looking at these. Portraits of people lean on the people reference; everything else leans on the objects reference (each falls back to the main style when not set). Upload your own to steer the look. It applies to pictures made from now on; existing tiles keep theirs, and any tile can be remade from its editor.</p>
     <div id="style-refs" style="display:flex;gap:14px;flex-wrap:wrap;"></div>
     <input type="file" id="style-ref-file" accept="image/*" style="display:none;">
     <div id="style-refs-msg" style="font-size:13px;color:#6b7280;margin-top:6px;"></div>
 
     <!-- Switch to another built-in style -->
     <div class="section-label" style="margin-top:18px;">Switch to another style</div>
-    <p class="hint">Pick a different built-in look. New pictures use it right away — tiles already on the board don't change.</p>
+    <p class="hint">Pick a different built-in look. New pictures use it right away. Tiles already on the board don't change.</p>
     <div id="style-choices" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:6px;"></div>
 
     <!-- Draft preview (approve before it replaces the anchor) -->
     <div id="style-draft" style="display:none;margin-top:16px;padding:14px;border-radius:14px;background:#fdf4ff;border:1px solid #f3c6da;">
-      <div style="font-weight:700;color:#9d174d;margin-bottom:8px;">New take — keep it?</div>
+      <div style="font-weight:700;color:#9d174d;margin-bottom:8px;">New take. Keep it?</div>
       <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
         <img id="style-draft-img" alt="" style="width:160px;height:160px;object-fit:cover;border-radius:16px;border:2px solid #f3c6da;background:#fff;">
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -635,7 +635,7 @@
   <div class="section-label">Voice</div>
   <div class="panel" id="voice-panel">
     <h2>Board voice</h2>
-    <p class="hint"><span class="cn">Your child</span>'s board speaks every tile in this voice. Preview one, then save — new tiles use it immediately; existing tiles refresh their audio over the next little while.</p>
+    <p class="hint"><span class="cn">Your child</span>'s board speaks every tile in this voice. Preview one, then save. New tiles use it immediately; existing tiles refresh their audio over the next little while.</p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <select id="voice-pick" style="flex:1;min-width:200px;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box;">
         <option value="">Loading voices…</option>
@@ -676,7 +676,7 @@
     <div style="display:flex;flex-direction:column;gap:12px;max-width:520px;">
       <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <span>New taps interrupt the word that's playing
-          <span class="hint" style="display:block;margin:2px 0 0;">Off (default): each word finishes before the next tap counts — steadier for a child
+          <span class="hint" style="display:block;margin:2px 0 0;">Off (default): each word finishes before the next tap counts, steadier for a child
           who presses the same button repeatedly. On: every tap responds instantly.</span></span>
         <input type="checkbox" id="touch-interrupt">
       </label>
@@ -701,7 +701,7 @@
       </label>
       <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <span>🧩 Listening shows only words with tiles
-          <span class="hint" style="display:block;margin:2px 0 0;">Spoken words that aren't on your child's board don't appear at all — the strictest option.</span></span>
+          <span class="hint" style="display:block;margin:2px 0 0;">Spoken words that aren't on your child's board don't appear at all, the strictest option.</span></span>
         <input type="checkbox" id="touch-listen-tiles">
       </label>
       <div><button class="btn primary" id="touch-save">Save touch &amp; listening</button>
@@ -712,7 +712,7 @@
   <div class="section-label">Safety</div>
   <div class="panel" id="safety-panel">
     <h2>Safety controls</h2>
-    <p class="hint">For older, more capable kids. These follow <span class="cn">your child</span> — they apply on every device this board is used on.</p>
+    <p class="hint">For older, more capable kids. These follow <span class="cn">your child</span>. They apply on every device this board is used on.</p>
     <div style="display:flex;flex-direction:column;gap:12px;max-width:520px;">
       <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <span>Games close with a quick tap
@@ -721,13 +721,13 @@
       </label>
       <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <span>Unlock editing without a password
-          <span class="hint" style="display:block;margin:2px 0 0;">The board's lock opens edit mode directly — no password prompt.</span></span>
+          <span class="hint" style="display:block;margin:2px 0 0;">The board's lock opens edit mode directly, no password prompt.</span></span>
         <input type="checkbox" id="safety-easyunlock">
       </label>
       <div id="safety-unlock-confirm" style="display:none;border:2px solid #f59e0b;background:#fffbeb;border-radius:10px;padding:10px 12px;">
         <div style="font-size:13px;color:#92400e;font-weight:700;">⚠️ Skip the password on the board's lock?</div>
-        <div style="font-size:12px;color:#92400e;margin:4px 0 8px;">This only changes the board's lock — <b>your account password stays exactly the same</b> for signing in everywhere.
-          With this on, anyone holding the tablet — including <span class="cn">your child</span> — can open edit mode, change or delete tiles, and reach this dashboard.
+        <div style="font-size:12px;color:#92400e;margin:4px 0 8px;">This only changes the board's lock. <b>Your account password stays exactly the same</b> for signing in everywhere.
+          With this on, anyone holding the tablet, including <span class="cn">your child</span>, can open edit mode, change or delete tiles, and reach this dashboard.
           Enter your account password once to confirm.</div>
         <input type="password" id="safety-unlock-pass" autocomplete="current-password" placeholder="Your account password" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit;box-sizing:border-box;">
         <div style="display:flex;gap:8px;margin-top:8px;">
@@ -747,7 +747,7 @@
   <div class="section-label">Board tools</div>
   <div class="panel" id="tools-panel">
     <h2>Buttons on the board's top bar</h2>
-    <p class="hint">Choose which tools <span class="cn">your child</span> can reach. Applies on every device this board is used on. The lock is always there — that one's yours.</p>
+    <p class="hint">Choose which tools <span class="cn">your child</span> can reach. Applies on every device this board is used on. The lock is always there. That one's yours.</p>
     <div style="display:flex;flex-direction:column;gap:10px;max-width:520px;">
       <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <span>🎙 Listening mode <span class="hint" style="display:block;margin:2px 0 0;">Spoken words appear as tiles in the top bar.</span></span>
@@ -766,7 +766,7 @@
         <input type="checkbox" id="tool-sentence">
       </label>
       <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-        <span>✋ Drag words to the sentence bar <span class="hint" style="display:block;margin:2px 0 0;">iPad &amp; Android app: drag any tile up to the top bar to add it — scrolling keeps working. The original, invisible way to build sentences. (Needs the sentence builder enabled.)</span></span>
+        <span>✋ Drag words to the sentence bar <span class="hint" style="display:block;margin:2px 0 0;">iPad &amp; Android app: drag any tile up to the top bar to add it. Scrolling keeps working. The original, invisible way to build sentences. (Needs the sentence builder enabled.)</span></span>
         <input type="checkbox" id="tool-sentence-drag">
       </label>
       <div><button class="btn primary" id="tools-save">Save board tools</button>
@@ -779,7 +779,7 @@
   <div class="section-label admin-access-only" style="display:none;">Access (admin testing)</div>
   <div class="panel admin-access-only" id="access-panel" style="display:none;">
     <h2>Access experiments</h2>
-    <p class="hint">Dark-launched accessibility features — admin-only while in testing.
+    <p class="hint">Dark-launched accessibility features, admin-only while in testing.
       Button navigation replaces every scroll with big page-turn buttons (for eye-tracker
       users). The sentence constructor lets a child drag tiles up to the top bar and play
       them together; on touch screens it works best combined with button navigation.</p>
@@ -826,7 +826,7 @@
   <div class="section-label">Organize the board</div>
   <div class="panel">
     <h2>Categories &amp; tiles</h2>
-    <p class="hint">Drag tiles and categories to rearrange your child's board — like moving files between folders. Opens as a full-screen workspace.</p>
+    <p class="hint">Drag tiles and categories to rearrange your child's board, like moving files between folders. Opens as a full-screen workspace.</p>
     <button class="btn primary" id="org-open">⤢ Open the organizer</button>
   </div>
 
@@ -853,7 +853,7 @@
   <div class="section-label">Family &amp; people</div>
   <div class="panel">
     <h2>Family on <span id="family-child-name">your child</span>'s board</h2>
-    <p class="hint">Who each person is to your child — their name and relationship. We use this to call people by name in slideshows and to describe relationships. Add grandparents, brothers and sisters, anyone.</p>
+    <p class="hint">Who each person is to your child: their name and relationship. We use this to call people by name in slideshows and to describe relationships. Add grandparents, brothers and sisters, anyone.</p>
     <div id="family-list" style="display:flex;flex-direction:column;gap:8px;margin:12px 0;"></div>
     <button class="btn primary" id="family-add">＋ Add family member</button>
     <span id="family-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
@@ -863,14 +863,14 @@
   <div class="section-label therapist-only" style="display:none;">Therapist boards on the tablet</div>
   <div class="panel therapist-only" style="display:none;">
     <h2>Custom boards a therapist has shared</h2>
-    <p class="hint">Anything your therapists make for <span id="shared-child-name">your child</span> appears here. By default they show on the tablet right away. Tap "Remove from view" if you don't want one on the board — the therapist's content is unchanged; it just stops showing for your child.</p>
+    <p class="hint">Anything your therapists make for <span id="shared-child-name">your child</span> appears here. By default they show on the tablet right away. Tap "Remove from view" if you don't want one on the board. The therapist's content is unchanged; it just stops showing for your child.</p>
     <div id="shared-list" style="display:flex;flex-direction:column;gap:8px;margin-top:14px;"></div>
   </div>
 
   <!-- BANNER COLOR (§1 — the child's favorite color) -->
   <div class="panel">
     <h2>Banner color</h2>
-    <p class="hint">Your child's favorite color becomes the banner across the whole app — asked at onboarding, changeable anytime here. Text flips light/dark automatically so it always stays readable.</p>
+    <p class="hint">Your child's favorite color becomes the banner across the whole app. It's asked at onboarding, changeable anytime here. Text flips light/dark automatically so it always stays readable.</p>
     <div class="actions" style="display:flex; gap:10px; align-items:center;">
       <input type="color" id="banner-color" value="#ff1493" style="width:44px;height:44px;border:none;background:none;padding:0;cursor:pointer;">
       <span id="banner-preview" style="padding:8px 16px;border-radius:999px;font-weight:700;background:#ff1493;color:#fff;">My World</span>
@@ -893,7 +893,7 @@
   <div class="section-label">Scheduled prompts</div>
   <div class="panel">
     <h2>Timed games &amp; reminders</h2>
-    <p class="hint">The board can speak a reminder (e.g. "Do you need the potty?") or invite a game on a schedule — only during the active hours you choose, so nothing fires at school. These run while the iPad is awake and showing the board.</p>
+    <p class="hint">The board can speak a reminder (e.g. "Do you need the potty?") or invite a game on a schedule, only during the active hours you choose, so nothing fires at school. These run while the iPad is awake and showing the board.</p>
     <div id="sched-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
     <button class="btn primary" id="sched-add">＋ Add a prompt</button>
     <span id="sched-msg" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
@@ -919,7 +919,7 @@
       <label style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Message / invitation
         <input id="sch-prompt" type="text" maxlength="200" placeholder="Do you need to use the potty?" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;">
       </label>
-      <label style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Picture (optional — shown on the board with the prompt)
+      <label style="display:block;font-size:13px;font-weight:600;color:var(--ink);margin-top:12px;">Picture (optional, shown on the board with the prompt)
         <select id="sch-image" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:4px;box-sizing:border-box;"><option value="">No picture</option></select>
       </label>
       <img id="sch-image-preview" alt="" style="display:none;width:84px;height:84px;object-fit:cover;border-radius:12px;margin-top:8px;border:1px solid var(--line);">
@@ -939,7 +939,7 @@
         <div style="font-size:12px;color:#6b7280;margin-top:8px;">Left empty, the question automatically offers Yes / No / "I don't know" using the child's own tiles when they exist. The question is asked, asked once more after 30 seconds if there's no answer, then quietly puts itself away.</div>
       </div>
       <div id="sch-scope-row" style="display:none;margin-top:12px;">
-        <div style="font-size:13px;font-weight:600;color:var(--ink);">Games (played in order — child taps to start each)</div>
+        <div style="font-size:13px;font-weight:600;color:var(--ink);">Games (played in order, child taps to start each)</div>
         <div id="sch-games" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;"></div>
         <button type="button" class="btn ghost" id="sch-add-game" style="margin-top:8px;">＋ Add a game</button>
       </div>
@@ -990,7 +990,7 @@
       <button class="btn primary" id="cheer-save">Save rewards</button>
       <span id="cheer-msg" style="font-size:13px;color:var(--muted);"></span>
     </div>
-    <div class="note">Default animation: <strong>yellow flowers bursting</strong> 🌼 across the screen. Celebrations are the only place audio + animation reward Fletcher directly — no mode ever shows a wrong-answer cue.</div>
+    <div class="note">Default animation: <strong>yellow flowers bursting</strong> 🌼 across the screen. Celebrations are the only place audio + animation reward Fletcher directly. No mode ever shows a wrong-answer cue.</div>
   </div>
 
   </div>
@@ -1020,14 +1020,14 @@
   <div class="section-label">Help &amp; support</div>
   <div class="panel">
     <h2>Need a hand?</h2>
-    <p class="hint">Tell us what's wrong and we'll fix it — usually by working directly on your board. Responses can take up to 48 hours.</p>
+    <p class="hint">Tell us what's wrong and we'll fix it, usually by working directly on your board. Responses can take up to 48 hours.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       <button class="btn primary" id="support-request">🛟 Request support</button>
       <button class="btn" id="support-bug">🐛 Report a bug</button>
     </div>
     <div id="support-form" style="display:none;margin-top:12px;max-width:520px;">
       <label style="font-size:12px;font-weight:700;color:var(--muted);" id="support-form-label">What do you need help with?</label>
-      <textarea id="support-text" rows="4" maxlength="2000" placeholder="Tell us what's going on — the more detail, the faster we can fix it."
+      <textarea id="support-text" rows="4" maxlength="2000" placeholder="Tell us what's going on. The more detail, the faster we can fix it."
         style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;margin-top:6px;"></textarea>
       <p class="hint" id="support-disclosure" style="margin:8px 0;"></p>
       <div style="display:flex;gap:10px;">
@@ -1077,7 +1077,7 @@
 
     <div style="margin-top:22px;border-top:1px solid #fde2ec;padding-top:16px;">
       <h2 style="color:#b91c1c;">Delete account</h2>
-      <p class="hint">Permanently deletes this account and <strong>everything</strong> on <span class="cn">your child</span>'s board — all tiles, categories, people, and every generated image and voice recording. This cannot be undone.</p>
+      <p class="hint">Permanently deletes this account and <strong>everything</strong> on <span class="cn">your child</span>'s board: all tiles, categories, people, and every generated image and voice recording. This cannot be undone.</p>
       <button class="btn ghost" id="del-start" style="color:#b91c1c;border:1px solid #f3c6da;">Delete account…</button>
       <div id="del-flow" style="display:none;margin-top:14px;max-width:420px;background:#fff5f5;border:1px solid #fecaca;border-radius:12px;padding:14px;">
         <p style="font-size:13px;color:#7f1d1d;margin:0 0 10px;"><strong>Download a backup first?</strong> Once deleted, the images and data are gone for good.</p>
@@ -1105,7 +1105,7 @@
   <div class="modal">
     <button class="x" id="modal-x" aria-label="Close">×</button>
     <h3 class="fred" id="modal-title">Configure mode</h3>
-    <p class="sub" id="modal-sub">Set up this session. (Mockup — nothing is saved yet.)</p>
+    <p class="sub" id="modal-sub">Set up this session. (Mockup. Nothing is saved yet.)</p>
     <div id="modal-body"></div>
     <div class="foot">
       <button class="btn ghost" id="modal-cancel">Cancel</button>
@@ -1130,9 +1130,9 @@
          default = drawn as a portrait in the BOARD's saved art style. -->
     <div style="display:flex;gap:8px;margin:0 0 12px;">
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-        <input type="radio" name="family-look" id="family-look-style" checked style="width:auto;margin:0;">Board art style — ⭐5 portrait</label>
+        <input type="radio" name="family-look" id="family-look-style" checked style="width:auto;margin:0;">Board art style: ⭐5 portrait</label>
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-        <input type="radio" name="family-look" id="family-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
+        <input type="radio" name="family-look" id="family-look-raw" style="width:auto;margin:0;">My exact photo: free</label>
     </div>
     <div id="family-picker"></div>
     <div class="foot">
@@ -1176,7 +1176,7 @@
   <div class="modal" style="max-width:520px;">
     <button class="x" id="rb-x" aria-label="Close">×</button>
     <h3 class="fred">Routine Builder</h3>
-    <p class="sub">Chain modes into one tap — they run in order on Fletcher's tablet.</p>
+    <p class="sub">Chain modes into one tap. They run in order on Fletcher's tablet.</p>
     <div class="field"><label>Routine name</label><input id="rb-name" type="text" placeholder="e.g. Morning warm-up" maxlength="40"></div>
     <div class="field"><label>Steps</label><div id="rb-steps"></div></div>
     <div style="border:1px dashed var(--line); border-radius:12px; padding:12px; margin-bottom:4px;">
@@ -1208,14 +1208,14 @@
     <div class="field"><label>Label</label><input id="tile-label" type="text" maxlength="60" placeholder="e.g. Mom"></div>
     <div style="border:1px solid #f3c6dd;background:#fff5fa;border-radius:12px;padding:12px;margin-bottom:14px;">
       <div style="font-weight:700;color:var(--pink-deep);margin-bottom:4px;">✨ Make from a photo</div>
-      <p class="hint" style="margin:0 0 8px;">Choose a photo — we'll name it, draw it to match the board's art style, add the voice, and put it on the board automatically. Naming it above first is optional.</p>
+      <p class="hint" style="margin:0 0 8px;">Choose a photo. We'll name it, draw it to match the board's art style, add the voice, and put it on the board automatically. Naming it above first is optional.</p>
       <!-- Per-tile art-style choice is gone on purpose (matches the apps):
            every styled tile renders in the BOARD's saved house style. -->
       <div style="display:flex;gap:8px;margin:0 0 8px;">
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="tile-look" id="tile-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1</label>
+          <input type="radio" name="tile-look" id="tile-look-style" checked style="width:auto;margin:0;">Board art style: ⭐1</label>
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="tile-look" id="tile-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
+          <input type="radio" name="tile-look" id="tile-look-raw" style="width:auto;margin:0;">My exact photo: free</label>
       </div>
       <!-- No `capture`: lets iOS offer Take Photo OR Photo Library (camera-only
            forced too narrow a flow). Native app needs NSCameraUsageDescription +
@@ -1372,7 +1372,7 @@
         const dead = s ? (((s.render && s.render.dead) || 0) + ((s.voice && s.voice.dead) || 0)
                         + ((s.place && s.place.dead) || 0) + ((s.chip && s.chip.dead) || 0)) : 0;
         if (dead > 0) {
-          title.textContent = dead + (dead === 1 ? ' piece' : ' pieces') + " of the board didn't finish — tap Fix and we'll redo them (no charge).";
+          title.textContent = dead + (dead === 1 ? ' piece' : ' pieces') + " of the board didn't finish. Tap Fix and we'll redo them (no charge).";
           if (bar) bar.style.width = '100%';
           document.getElementById('build-fix').style.display = '';
           banner.style.display = 'flex';
@@ -1405,7 +1405,7 @@
         if (!timer) timer = setInterval(tick, 12000);
         await tick();
       } catch (_) {
-        title.textContent = 'Could not restart — try again in a minute.';
+        title.textContent = 'Could not restart. Try again in a minute.';
         fixBtn.disabled = false;
       }
     });
@@ -1440,7 +1440,7 @@
         if (++guard > 400) break;
       }
       if (bar) bar.style.width = '100%';
-      if (txt) txt.textContent = 'Done — ' + placed + ' tiles created! Refreshing…';
+      if (txt) txt.textContent = 'Done. ' + placed + ' tiles created! Refreshing…';
       setTimeout(() => location.reload(), 1400);
     } catch (err) {
       if (txt) txt.textContent = 'Could not generate: ' + (err.message || err);
@@ -1468,7 +1468,7 @@
   }
   async function pdConfirmSpend(cost, what) {
     const bal = await refreshStoreBalance();
-    return confirm(what + ' uses ⭐' + cost + (bal == null ? '' : ' — you have ⭐' + bal) + '. Continue?');
+    return confirm(what + ' uses ⭐' + cost + (bal == null ? '' : '. You have ⭐' + bal) + '. Continue?');
   }
   if (storeLink) {
     storeLink.href = '/store.html?child=' + encodeURIComponent(slug);
@@ -1487,7 +1487,7 @@
   const signoutLink = document.getElementById('signout-link');
   if (signoutLink) signoutLink.addEventListener('click', async (e) => {
     e.preventDefault();
-    if (!confirm('Sign out on this device? Everything stays saved — sign back in anytime.')) return;
+    if (!confirm('Sign out on this device? Everything stays saved. Sign back in anytime.')) return;
     try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
     try { localStorage.removeItem('aacToken'); } catch (_) {}
     window.location.href = '/login';
@@ -1671,9 +1671,9 @@
     [['stat-sessions', 'stat-sessions-t'], ['stat-acc', 'stat-acc-t'], ['stat-items', 'stat-items-t'], ['stat-time', 'stat-time-t']]
       .forEach(([n, t]) => { const en = document.getElementById(n), et = document.getElementById(t); if (en) en.textContent = '—'; if (et) et.textContent = ''; });
     const m = document.getElementById('mastery');
-    if (m) m.innerHTML = '<div class="muted" style="padding:14px;color:#888;">No category accuracy yet — it appears after the first scored sessions.</div>';
+    if (m) m.innerHTML = '<div class="muted" style="padding:14px;color:#888;">No category accuracy yet. It appears after the first scored sessions.</div>';
     const tb = document.getElementById('recent-body');
-    if (tb) tb.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No sessions yet — start a learning mode above.</td></tr>';
+    if (tb) tb.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No sessions yet. Start a learning mode above.</td></tr>';
   }
 
   // PRD §6: render the most recent spike events as a chip stack. Each chip
@@ -1682,7 +1682,7 @@
     const el = document.getElementById('spikes-body');
     if (!el) return;
     if (!list.length) {
-      el.innerHTML = '<div class="muted" style="padding:14px;color:#888;">No spike events yet — these appear once ' + pretty + ' has ≥10 sessions in any (skill, mode) bucket and clears the 2σ threshold (or hits 100%).</div>';
+      el.innerHTML = '<div class="muted" style="padding:14px;color:#888;">No spike events yet. These appear once ' + pretty + ' has ≥10 sessions in any (skill, mode) bucket and clears the 2σ threshold (or hits 100%).</div>';
       return;
     }
     const KIND = {
@@ -1716,7 +1716,7 @@
     const body = document.getElementById('exposure-body');
     if (!body) return;
     if (!protocols || !protocols.length) {
-      body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No exposure protocols yet — they appear once a slideshow or scored session runs for a tile with a canonical skill anchor.</td></tr>';
+      body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px;color:#888;">No exposure protocols yet. They appear once a slideshow or scored session runs for a tile with a canonical skill anchor.</td></tr>';
       return;
     }
     const niceSkill = (s) => s.split('.').slice(-1)[0].replace(/_/g, ' ');
@@ -1773,7 +1773,7 @@
     const el = document.getElementById('insights-body');
     if (!el) return;
     if (!list.length) {
-      el.innerHTML = '<div class="muted" style="padding:14px;color:#888;">No skill insights yet — they appear after the first spike events land and the nightly cron runs.</div>';
+      el.innerHTML = '<div class="muted" style="padding:14px;color:#888;">No skill insights yet. They appear after the first spike events land and the nightly cron runs.</div>';
       return;
     }
     const niceSkill = (s) => s ? s.split('.').slice(-1)[0].replace(/_/g, ' ') : '—';
@@ -1913,9 +1913,9 @@
       if (styleGuide && styleGuide.imageUrl) { img.src = styleGuide.imageUrl + '&t=' + Date.now(); img.style.display = ''; }
       else { img.style.display = 'none'; }
       document.getElementById('style-panel-label').textContent = styleGuide ? (styleGuide.label || 'Your style') : 'No style chosen yet';
-      document.getElementById('style-panel-desc').textContent = styleGuide ? (styleGuide.description || '') : 'Pick a built-in style below — every new picture will be drawn to match it.';
+      document.getElementById('style-panel-desc').textContent = styleGuide ? (styleGuide.description || '') : 'Pick a built-in style below. Every new picture will be drawn to match it.';
       document.getElementById('style-panel-source').textContent = !styleGuide ? ''
-        : styleGuide.source === 'family' ? 'Your family\'s own style — from your onboarding, regeneration, or uploads.' : 'A built-in style template.';
+        : styleGuide.source === 'family' ? 'Your family\'s own style, from your onboarding, regeneration, or uploads.' : 'A built-in style template.';
       renderStyleRefs(styleGuide);
       renderStyleChoices(d);
       document.getElementById('style-panel').style.display = '';
@@ -1934,7 +1934,7 @@
       const set = e.target.closest('[data-style-set]');
       if (set) {
         const label = set.dataset.styleLabel || 'this style';
-        if (!confirm('Draw new pictures in "' + label + '"?\n\nTiles already on the board keep their current pictures — you can remake any tile from its editor.')) return;
+        if (!confirm('Draw new pictures in "' + label + '"?\n\nTiles already on the board keep their current pictures. You can remake any tile from its editor.')) return;
         set.disabled = true;
         try {
           const r = await fetch('/api/parent/style?childId=' + encodeURIComponent(slug), {
@@ -1943,7 +1943,7 @@
           });
           const d = await r.json().catch(() => ({}));
           if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
-          styleRefsMsg('Style switched — new pictures use it from now on.');
+          styleRefsMsg('Style switched. New pictures use it from now on.');
           await loadStyle();
         } catch (err) { styleRefsMsg('Could not switch: ' + (err.message || err)); set.disabled = false; }
       }
@@ -1962,7 +1962,7 @@
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
-        styleRefsMsg('Saved — pictures made from now on follow your reference.');
+        styleRefsMsg('Saved. Pictures made from now on follow your reference.');
         await loadStyle();
       } catch (err) { styleRefsMsg('Could not save: ' + (err.message || err)); }
     });
@@ -2003,7 +2003,7 @@
       document.getElementById('style-panel-img').src = d.imageUrl + '&t=' + Date.now();
       document.getElementById('style-panel-source').textContent = 'Generated for your family from your onboarding.';
       document.getElementById('style-draft').style.display = 'none';
-      styleDraftKey = null; styleRegenMsg('Updated — new tiles will use this style.');
+      styleDraftKey = null; styleRegenMsg('Updated. New tiles will use this style.');
       // The board is now MISMATCHED (old tiles wear the old style). Offer the
       // discounted whole-board rebuild right here, while it's top of mind.
       offerRebuildAfterStyleChange();
@@ -2022,19 +2022,19 @@
       const ok = confirm(
         `Heads up: the ${rb.words} pictures already on the board still use the OLD style, so new tiles won't match them.\n\n` +
         `Re-make the whole board in the new style now? ${rb.credits} credits (⭐1 per word). ` +
-        `Every replaced picture is archived — you keep them all.\n\nYou have ${c.balance} credits.`);
-      if (!ok) { styleRegenMsg('Updated — new tiles use the new style. Re-make the rest anytime in the Word Store.'); return; }
+        `Every replaced picture is archived. You keep them all.\n\nYou have ${c.balance} credits.`);
+      if (!ok) { styleRegenMsg('Updated. New tiles use the new style. Re-make the rest anytime in the Word Store.'); return; }
       const r = await fetch('/api/store?action=rebuild', {
         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ childId: slug }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
         styleRegenMsg(r.status === 402
-          ? `Not enough credits (need ${d.needed}, you have ${d.balance}) — grab a pack in the Word Store, then use "Rebuild the board" there.`
+          ? `Not enough credits (need ${d.needed}, you have ${d.balance}). Grab a pack in the Word Store, then use "Rebuild the board" there.`
           : 'Rebuild failed: ' + (d.detail || d.error || r.status));
         return;
       }
-      styleRegenMsg(`Rebuilding ${d.queued} pictures in the new style — they refresh over the next while. ✨`);
+      styleRegenMsg(`Rebuilding ${d.queued} pictures in the new style. They refresh over the next while. ✨`);
       refreshStoreBalance();
     } catch (_) { /* the offer is best-effort; the store always has the rebuild */ }
   }
@@ -2076,7 +2076,7 @@
       forgotBtn.disabled = true; acctMsg('Sending…');
       try {
         await fetch('/api/auth/reset-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: myEmail }) });
-        acctMsg('Sent — check ' + myEmail + ' for the reset link.');
+        acctMsg('Sent. Check ' + myEmail + ' for the reset link.');
       } catch (err) { acctMsg('Could not send: ' + (err.message || err), true); } finally { forgotBtn.disabled = false; }
     });
 
@@ -2156,7 +2156,7 @@
   function catSelect(opts = {}) {
     if (!LAUNCH_CATS.length) {
       return `<div class="field"><label>${opts.label || 'What to practice'}</label>
-        <p class="hint" style="margin:0;">No categories loaded yet — the session will use everything on the board.</p>
+        <p class="hint" style="margin:0;">No categories loaded yet. The session will use everything on the board.</p>
         <input type="hidden" id="lc-scope" value="all"></div>`;
     }
     let html = `<div class="field"><label>${opts.label || 'What to practice'}</label>
@@ -2199,13 +2199,13 @@
     'Teach Me Slideshow': () => catSelect() +
       `<p class="hint" style="margin:0 0 10px;">One pass, no music: each picture shows with its word, the word is spoken, then every teaching clue is read aloud. Ends by itself after the last tile.</p>`,
     'Clue Quiz': () => catSelect() + choicesField() + limitField() +
-      `<p class="hint" style="margin:0 0 10px;">The clue is the prompt — the word is only spoken after a correct tap. Words with clues are quizzed first; each miss reveals another clue.</p>` + musicField(),
+      `<p class="hint" style="margin:0 0 10px;">The clue is the prompt. The word is only spoken after a correct tap. Words with clues are quizzed first; each miss reveals another clue.</p>` + musicField(),
     'Celebration': () => `<p class="hint" style="margin:0 0 6px;">Plays the flowers + your recorded cheer on the tablet right now. Edit the cheer & music under "Reward cheers & game music" below.</p>`,
   };
 
   function openModal(mode, launch) {
     title.textContent = (launch ? 'Start · ' : 'Configure · ') + mode;
-    sub.textContent = "Runs live on " + pretty + "'s tablet — it must be open on the board.";
+    sub.textContent = "Runs live on " + pretty + "'s tablet. It must be open on the board.";
     body.innerHTML = (FORMS[mode] || (() => catSelect() + musicField()))();
     goBtn.textContent = mode === 'Celebration' ? 'Play on tablet' : 'Start on tablet';
     goBtn.dataset.modeName = mode;
@@ -2262,7 +2262,7 @@
     }
     return sawOnline ? 'nostart' : 'offline';
   }
-  const NOSTART_MSG = "⚠ The tablet is on the board but didn't start — the chosen categories may not have 3+ picture tiles. Try “Everything”, or add tiles.";
+  const NOSTART_MSG = "⚠ The tablet is on the board but didn't start. The chosen categories may not have 3+ picture tiles. Try “Everything”, or add tiles.";
   const OFFLINE_MSG = "⚠ " + pretty + "'s tablet isn't on the board right now. Open the app, then tap Start again.";
   function buildLaunchCmd(modeName) {
     const mode = MODE_KEY[modeName] || 'self_paced';
@@ -2312,7 +2312,7 @@
       });
       ok = r.ok;
     } catch (_) {}
-    if (!ok) { sub.textContent = 'Could not reach the server — try again.'; goBtn.textContent = orig; goBtn.disabled = false; return; }
+    if (!ok) { sub.textContent = 'Could not reach the server. Try again.'; goBtn.textContent = orig; goBtn.disabled = false; return; }
     goBtn.textContent = 'Waiting for tablet…';
     const res = await confirmStarted();
     if (res === 'started') { goBtn.textContent = 'Started on tablet ✓'; setTimeout(() => { closeModal(); goBtn.textContent = orig; goBtn.disabled = false; }, 1400); }
@@ -2347,7 +2347,7 @@
       on = next;
       btn.textContent = on ? '⏹ Stop listening' : '🎙️ Start listening on the tablet';
       btn.classList.toggle('primary', on);
-      if (status) status.textContent = on ? 'Tablet is listening — speak near it.' : 'Stopped.';
+      if (status) status.textContent = on ? 'Tablet is listening. Speak near it.' : 'Stopped.';
     });
   })();
   function toast(msg) {
@@ -2362,12 +2362,12 @@
   }
   async function launchSaved(cmd) {
     const ok = await sendCmd(cmd);
-    if (!ok) { toast('Could not reach the server — try again.'); return; }
-    toast('Sent — waiting for the tablet…');
+    if (!ok) { toast('Could not reach the server. Try again.'); return; }
+    toast('Sent. Waiting for the tablet…');
     const res = await confirmStarted();
     if (res === 'started') toast("Started on " + pretty + "'s tablet ✓");
     else if (res.startsWith('error:')) toast('⚠ ' + res.slice(6));
-    else if (res === 'nostart') toast("Tablet didn't start it — try “Everything” or add more tiles.");
+    else if (res === 'nostart') toast("Tablet didn't start it. Try “Everything” or add more tiles.");
     else toast("Tablet isn't on the board. Open his app, then try again.");
   }
 
@@ -2405,7 +2405,7 @@
     childSettings.gamePresets = childSettings.gamePresets || [];
     childSettings.gamePresets.push({ id: uid(), name: name.slice(0, 40), modeName, cmd: buildLaunchCmd(modeName) });
     renderSaved(); await saveSettingsToServer();
-    sub.textContent = 'Saved as "' + name + '" ✓ — find it under Saved games.';
+    sub.textContent = 'Saved as "' + name + '" ✓. Find it under Saved games.';
   });
 
   // ---- Routine Builder ----
@@ -2437,7 +2437,7 @@
   }
   function rbRenderSteps() {
     const el = document.getElementById('rb-steps');
-    if (!rbSteps.length) { el.innerHTML = '<p class="hint" style="margin:0 0 6px;">No steps yet — add one below.</p>'; return; }
+    if (!rbSteps.length) { el.innerHTML = '<p class="hint" style="margin:0 0 6px;">No steps yet. Add one below.</p>'; return; }
     el.innerHTML = rbSteps.map((s, i) => {
       const bits = [RB_MODE_LABEL[s.mode] || s.mode];
       if (s.mode !== 'celebration') { bits.push(rbScopeLabel(s.scope)); if (s.limitMin) bits.push(s.limitMin + ' min'); }
@@ -2536,7 +2536,7 @@
       prev.style.display = 'none'; prev.removeAttribute('src');
     }
     document.getElementById('tile-magic-status').textContent = existing?.imageKey
-      ? 'Current image will be kept — pick a new photo to replace it'
+      ? 'Current image will be kept. Pick a new photo to replace it'
       : '—';
     document.getElementById('tile-sound-status').textContent = existing?.soundKey
       ? 'Current sound will be kept'
@@ -2566,7 +2566,7 @@
       const d = await r.json();
       const rows = d.history || [];
       if (!rows.length) {
-        hist.innerHTML = '<span class="hint">No previous pictures yet — redraws and photo swaps archive here.</span>';
+        hist.innerHTML = '<span class="hint">No previous pictures yet. Redraws and photo swaps archive here.</span>';
         return;
       }
       hist.innerHTML = '';
@@ -2576,7 +2576,7 @@
         img.alt = 'Previous picture';
         img.style.cssText = 'width:72px;height:72px;border-radius:10px;object-fit:cover;border:1px solid var(--line);cursor:pointer;flex:none;';
         img.onclick = async () => {
-          if (!confirm('Bring this picture back? The current one is archived — you can always undo.')) return;
+          if (!confirm('Bring this picture back? The current one is archived. You can always undo.')) return;
           try {
             const r2 = await fetch('/api/items', { method: 'POST', credentials: 'same-origin',
               headers: { 'Content-Type': 'application/json' },
@@ -2590,7 +2590,7 @@
               const prev = document.getElementById('tile-preview');
               prev.src = '/api/media?key=' + encodeURIComponent(shownKey) + '&w=640';
               prev.style.display = 'block';
-              document.getElementById('tile-retry-status').textContent = '✅ Brought back — the swapped-out picture is in Previous pictures.';
+              document.getElementById('tile-retry-status').textContent = '✅ Brought back. The swapped-out picture is in Previous pictures.';
               loadTileHistory(itemId);
               // Refresh the organize tree behind the modal so its thumbnails
               // show the revert too (stale thumbs read as "it didn't work").
@@ -2605,7 +2605,7 @@
   document.getElementById('tile-retry').addEventListener('click', async () => {
     const existing = tileTarget && tileTarget.existing;
     if (!existing || !existing.id) return;
-    const guidance = (prompt('What should change? (e.g. “no cartoon face, make it black like ours”) — your note guides the redraw:') || '').trim();
+    const guidance = (prompt('What should change? (e.g. “no cartoon face, make it black like ours”). Your note guides the redraw:') || '').trim();
     if (!guidance) return;
     const st = document.getElementById('tile-retry-status');
     st.textContent = 'Starting the redraw…';
@@ -2615,10 +2615,10 @@
         body: JSON.stringify({ childId: slug, itemId: existing.id, guidance }) });
       const d = await r.json().catch(() => ({}));
       st.textContent = r.ok
-        ? (d.freeRetry ? '🎨 Redrawing now (free) — the new picture lands in a minute or two.'
-                       : '🎨 Redrawing now (⭐' + (d.charged || 1) + ') — the new picture lands in a minute or two.')
-        : (d.error === 'not_enough_credits' ? 'Not enough credits — add a pack in Credits & Store.'
-          : d.error === 'needs_subscription' ? 'Styled redraws are part of My World memberships — join under Credits & Store.'
+        ? (d.freeRetry ? '🎨 Redrawing now (free). The new picture lands in a minute or two.'
+                       : '🎨 Redrawing now (⭐' + (d.charged || 1) + '). The new picture lands in a minute or two.')
+        : (d.error === 'not_enough_credits' ? 'Not enough credits. Add a pack in Credits & Store.'
+          : d.error === 'needs_subscription' ? 'Styled redraws are part of My World memberships. Join under Credits & Store.'
           : 'Couldn’t start: ' + (d.detail || d.error || r.status));
     } catch (err) { st.textContent = 'Couldn’t start: ' + (err.message || err); }
   });
@@ -2662,7 +2662,7 @@
       if (tileTarget.kind !== 'item') {
         if (raw) {
           tilePendingImage = photo; tileShowPreview(photo);
-          statusEl.textContent = 'Photo ready ✓ — tap Save to apply.';
+          statusEl.textContent = 'Photo ready ✓. Tap Save to apply.';
         } else {
           statusEl.textContent = '🎨 Drawing it to match the board…';
           const ir = await fetch('/api/generate-image?label=' + encodeURIComponent(label)
@@ -2671,13 +2671,13 @@
             { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, credentials: 'same-origin', body: photo });
           if (ir.ok) {
             tilePendingImage = await ir.blob(); tileShowPreview(tilePendingImage);
-            statusEl.textContent = 'Picture ready ✓ — tap Save to apply.';
+            statusEl.textContent = 'Picture ready ✓. Tap Save to apply.';
           } else if (ir.status === 402 && /needs_subscription/.test(await ir.text())) {
             tilePendingImage = photo; tileShowPreview(photo);
-            statusEl.textContent = 'Photo kept as-is (free) — styled pictures are a membership perk.';
+            statusEl.textContent = 'Photo kept as-is (free). Styled pictures are a membership perk.';
           } else {
             tilePendingImage = photo; tileShowPreview(photo);
-            statusEl.textContent = 'Drawing didn’t work — photo kept as-is. Save to apply.';
+            statusEl.textContent = 'Drawing didn’t work. Photo kept as-is. Save to apply.';
           }
         }
         btn.disabled = false; btn.textContent = pv;
@@ -2694,14 +2694,14 @@
       if (!jr.ok) {
         const d = await jr.text();
         if (jr.status === 402 && /needs_subscription/.test(d)) {
-          throw new Error('Styled tiles are a membership feature — pick “My exact photo” (free) and tap again, or join in Credits & Store.');
+          throw new Error('Styled tiles are a membership feature. Pick “My exact photo” (free) and tap again, or join in Credits & Store.');
         }
         throw new Error(d.slice(0, 200));
       }
       const { id: jobId } = await jr.json();
       statusEl.textContent = raw
         ? '📥 Adding the photo to the board…'
-        : '🎨 Drawing it to match the board… (1–3 min). You can close this — it lands on its own.';
+        : '🎨 Drawing it to match the board… (1–3 min). You can close this. It lands on its own.';
       const t0 = Date.now();
       while (Date.now() - t0 < 5 * 60000) {
         await new Promise((r) => setTimeout(r, 4000));
@@ -2718,10 +2718,10 @@
           return;
         }
         if (job.status === 'failed' && job.attempts >= 5) {
-          throw new Error(job.error || 'the picture engine gave up — try again in a bit');
+          throw new Error(job.error || 'the picture engine gave up. Try again in a bit');
         }
       }
-      statusEl.textContent = '⏳ Still rendering — it will appear on the board when it finishes.';
+      statusEl.textContent = '⏳ Still rendering. It will appear on the board when it finishes.';
     } catch (err) { statusEl.textContent = '—'; tileSetErr('Could not make the tile: ' + (err.message || err)); }
     finally { btn.disabled = false; btn.textContent = pv; }
   });
@@ -2751,7 +2751,7 @@
     const existing = tileTarget.existing;
     if (!label) { tileSetErr('Please enter a label'); return; }
     // Image is required on create; on edit, keep the existing one if no new pick.
-    if (!existing && !tilePendingImage) { tileSetErr('Add a picture — make one from a photo or upload an image'); return; }
+    if (!existing && !tilePendingImage) { tileSetErr('Add a picture: make one from a photo or upload an image'); return; }
     const btn = document.getElementById('tile-save'); btn.disabled = true; const pv = btn.textContent; btn.textContent = 'Saving…'; tileSetErr('');
     try {
       // Ratio control retired — omitting keepAspect preserves the stored
@@ -2862,9 +2862,9 @@
       closeInvite();
       // Surface what happened: email sent? account exists?
       const note = !d.sentEmail
-        ? "Invite saved — email delivery isn't configured yet, so let them know directly."
+        ? "Invite saved. Email delivery isn't configured yet, so let them know directly."
         : (d.hasAccount ? 'Invite sent. They\'ll also see it in My World next time they sign in.'
-                        : 'Invite sent — they\'ll get an email to create their account.');
+                        : 'Invite sent. They\'ll get an email to create their account.');
       const msg = document.getElementById('team-msg'); msg.textContent = note;
       setTimeout(() => { msg.textContent = ''; }, 6000);
       await loadTeam();
@@ -2898,7 +2898,7 @@
       if (!r.ok) { el.innerHTML = '<div class="hint">Could not load the team.</div>'; return; }
       const d = await r.json();
       const blocks = d.members.map(teamRowMember).concat(d.pending.map(teamRowPending));
-      el.innerHTML = blocks.length ? blocks.join('') : '<div class="hint" style="font-style:italic;">No therapists on the team yet — tap "Invite a therapist" to add one.</div>';
+      el.innerHTML = blocks.length ? blocks.join('') : '<div class="hint" style="font-style:italic;">No therapists on the team yet. Tap "Invite a therapist" to add one.</div>';
     } catch (_) { el.innerHTML = '<div class="hint">Could not load the team.</div>'; }
   }
   document.getElementById('team-list').addEventListener('click', async (e) => {
@@ -2930,7 +2930,7 @@
       // Therapist-shared categories show up in /sync with childId IS NULL +
       // ownerUserId set. Top-level only (parents see the chip, not each tile).
       const owned = (d.categories || []).filter(c => c.childId == null && c.ownerUserId != null && c.parentId == null);
-      if (!owned.length) { el.innerHTML = '<div class="hint" style="font-style:italic;">Nothing here yet — a therapist hasn\'t shared any boards with ' + schEsc(pretty) + '.</div>'; return; }
+      if (!owned.length) { el.innerHTML = '<div class="hint" style="font-style:italic;">Nothing here yet. A therapist hasn\'t shared any boards with ' + schEsc(pretty) + '.</div>'; return; }
       // Find the inviter/owner email per ownerUserId (via the team endpoint).
       let emailByUid = new Map();
       try {
@@ -3013,7 +3013,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'checkout', childId: slug, taxonomyIds: [wordSlug] }) });
           const d = await r.json().catch(() => ({}));
-          if (!r.ok) { alert(d.detail || d.error || 'Could not add — check your membership and credits in the store.'); return; }
+          if (!r.ok) { alert(d.detail || d.error || 'Could not add. Check your membership and credits in the store.'); return; }
           await act(slug, wordSlug, 'added');
         } else if (e.target.closest('.sg-dismiss')) {
           await act(slug, wordSlug, 'dismiss');
@@ -3022,7 +3022,7 @@
           await act(slug, wordSlug, 'dismiss-forever');
         } else return;
         await loadSuggestions();
-      } catch (_) { alert('Something went wrong — try again.'); }
+      } catch (_) { alert('Something went wrong. Try again.'); }
     });
   })();
   loadSuggestions();
@@ -3232,7 +3232,7 @@
     card.innerHTML =
       '<div style="font-size:19px;font-weight:800;color:#b45309;">⚠️ ' + problems.length + ' picture' + (problems.length === 1 ? '' : 's') + ' didn’t finish</div>' +
       '<div style="font-size:13px;color:#6b7280;margin:8px 0 12px;">The image maker hit a snag on these. Retrying is safe' +
-        ' — failed photo adds never re-charge, and each word’s first redraw is free.</div>' +
+        '. Failed photo adds never re-charge, and each word’s first redraw is free.</div>' +
       '<div id="fu-problem-rows"></div>' +
       '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">' +
         '<button class="btn ghost" id="fu-prob-later">Later</button>' +
@@ -3294,7 +3294,7 @@
       const n = f.affected.length;
       card.innerHTML =
         '<div style="font-size:19px;font-weight:800;color:#ad1457;">🪄 Your ' + schEsc(f.label) + ' shows up in ' + n + ' other picture' + (n === 1 ? '' : 's') + '</div>' +
-        '<div style="font-size:13px;color:#6b7280;margin:8px 0 12px;">Remake ' + (n === 1 ? 'it' : 'them') + ' so they show YOUR ' + schEsc(f.label) + '? ⭐1 each — replaced art is archived in the Album.</div>' +
+        '<div style="font-size:13px;color:#6b7280;margin:8px 0 12px;">Remake ' + (n === 1 ? 'it' : 'them') + ' so they show YOUR ' + schEsc(f.label) + '? ⭐1 each. Replaced art is archived in the Album.</div>' +
         '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">' +
           f.affected.slice(0, 12).map((a) => '<div style="text-align:center;font-size:11px;color:#6b7280;">' + fuThumb(a.previewKey, 64) + '<div>' + schEsc(a.label) + '</div></div>').join('') +
           (n > 12 ? '<div style="align-self:center;font-size:12px;color:#6b7280;">+' + (n - 12) + ' more</div>' : '') +
@@ -3312,7 +3312,7 @@
             body: JSON.stringify({ childId: slug, taxonomyIds: f.affected.map((a) => a.taxonomyId), refItemId: step2Ref }) });
           const d = await r.json();
           card.innerHTML = '<div style="font-size:15px;font-weight:600;color:' + (r.ok ? '#16a34a' : '#9b1c1c') + ';">' +
-            schEsc(r.ok ? (d.note || 'Re-rendering — they pop in over the next few minutes.') : (d.error === 'not_enough_credits' ? 'Not enough credits — add a pack in Credits & Store first.' : 'Could not queue: ' + (d.detail || d.error || r.status))) +
+            schEsc(r.ok ? (d.note || 'Re-rendering. They pop in over the next few minutes.') : (d.error === 'not_enough_credits' ? 'Not enough credits. Add a pack in Credits & Store first.' : 'Could not queue: ' + (d.detail || d.error || r.status))) +
             '</div><div style="text-align:right;margin-top:14px;"><button class="btn" id="fu-close">Done</button></div>';
           card.querySelector('#fu-close').onclick = done;
         } catch (err) {
@@ -3329,7 +3329,7 @@
           '<div style="font-size:20px;color:#6b7280;">→</div>' +
           '<div style="text-align:center;font-size:12px;color:#6b7280;">' + fuThumb(f.imageKey, 96) + '<div>Your new picture</div></div>' +
         '</div>' +
-        '<div style="font-size:13px;color:#6b7280;margin-bottom:14px;">Swap in your picture? The current one ' + (f.existing.isDefault ? 'stays available to every board.' : 'is archived in the Album — you never lose it.') + '</div>' +
+        '<div style="font-size:13px;color:#6b7280;margin-bottom:14px;">Swap in your picture? The current one ' + (f.existing.isDefault ? 'stays available to every board.' : 'is archived in the Album. You never lose it.') + '</div>' +
         '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
           '<button class="btn ghost" id="fu-keep">Keep both</button>' +
           '<button class="btn" id="fu-replace">Replace</button>' +
@@ -3465,7 +3465,7 @@
           // resolves the child's house style itself (the old localStorage
           // 'aacStyle' string could silently fight the saved style guide).
           if (!(await pdConfirmSpend(5, 'A family portrait drawn in the board’s style'))) {
-            mmsg.textContent = 'Not drawn — pick "My exact photo" for a free add, or Save again to confirm.';
+            mmsg.textContent = 'Not drawn. Pick "My exact photo" for a free add, or Save again to confirm.';
             saveBtn.disabled = false;
             return;
           }
@@ -3594,7 +3594,7 @@
         const vid = sel.value;
         if (!vid) { msg.textContent = 'Pick a voice first.'; return; }
         childSettings = { ...childSettings, voiceId: vid };
-        saveSettingsToServer('Voice saved ✓ — new tiles use it right away', 'voice-msg');
+        saveSettingsToServer('Voice saved ✓. New tiles use it right away', 'voice-msg');
       });
     })();
 
@@ -3606,7 +3606,7 @@
       }
       document.getElementById('lang-save').addEventListener('click', () => {
         childSettings = { ...childSettings, language: langSel.value };
-        saveSettingsToServer('Saved ✓ — the board updates on its next sync', 'lang-msg');
+        saveSettingsToServer('Saved ✓. The board updates on its next sync', 'lang-msg');
       });
     }
 
@@ -3625,7 +3625,7 @@
           listenCensor: document.getElementById('touch-listen-censor').checked,
           listenTilesOnly: document.getElementById('touch-listen-tiles').checked,
         };
-        saveSettingsToServer('Saved ✓ — the board picks it up on its next settings sync', 'touch-msg');
+        saveSettingsToServer('Saved ✓. The board picks it up on its next settings sync', 'touch-msg');
       });
     }
 
@@ -3641,7 +3641,7 @@
       seUnlock.checked = !!childSettings.easyUnlock;
       seClose.addEventListener('change', () => {
         childSettings = { ...childSettings, easyClose: seClose.checked };
-        saveSettingsToServer('Saved ✓ — applies on the next settings sync', 'safety-msg');
+        saveSettingsToServer('Saved ✓. Applies on the next settings sync', 'safety-msg');
       });
       seUnlock.addEventListener('change', () => {
         if (!seUnlock.checked) {                 // restoring the password never needs friction
@@ -3670,7 +3670,7 @@
             const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null);
             email = (me && me.user && me.user.email) || '';
           } catch (_) {}
-          if (!email) { seMsg.textContent = 'Could not confirm your account — sign in again and retry.'; return; }
+          if (!email) { seMsg.textContent = 'Could not confirm your account. Sign in again and retry.'; return; }
           const r = await fetch('/api/auth/login', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password: p }),
@@ -3702,7 +3702,7 @@
           toolSentence: document.getElementById('tool-sentence').checked,
           sentenceDrag: document.getElementById('tool-sentence-drag').checked,
         };
-        saveSettingsToServer('Saved ✓ — the board picks it up on its next settings sync', 'tools-msg');
+        saveSettingsToServer('Saved ✓. The board picks it up on its next settings sync', 'tools-msg');
       });
     }
 
@@ -3722,7 +3722,7 @@
           sentenceIdleMin: idleV,
           listenRepeatNav: document.getElementById('acc-listen-nav').checked,
         };
-        saveSettingsToServer('Saved ✓ — the board picks it up on its next settings sync', 'acc-msg');
+        saveSettingsToServer('Saved ✓. The board picks it up on its next settings sync', 'acc-msg');
       });
     }
 
@@ -3730,7 +3730,7 @@
       const hex = bannerColorEl.value;
       childSettings = { ...childSettings, kidDisplay: { ...(childSettings.kidDisplay || {}),
         colorHeaderBg: hex, colorHeaderText: bannerTextFor(hex) } };
-      saveSettingsToServer('Saved ✓ — the board updates within a couple of minutes', 'banner-msg');
+      saveSettingsToServer('Saved ✓. The board updates within a couple of minutes', 'banner-msg');
     });
   }
   async function saveSettingsToServer(okMsg, msgElId) {
@@ -3742,7 +3742,7 @@
         body: JSON.stringify({ settings: childSettings }),
       });
       if (msg) { msg.textContent = r.ok ? (okMsg || 'Saved ✓') : 'Save failed'; setTimeout(() => { msg.textContent = ''; }, 3000); }
-    } catch (_) { if (msg) { msg.textContent = 'Offline — not saved'; setTimeout(() => { msg.textContent = ''; }, 3000); } }
+    } catch (_) { if (msg) { msg.textContent = 'Offline, not saved'; setTimeout(() => { msg.textContent = ''; }, 3000); } }
   }
   window.__schedEditor = (window.ScheduleEditor && document.getElementById('daily-schedule'))
     ? ScheduleEditor.mount({ container: 'daily-schedule', slug, getSettings: () => childSettings, onSave: () => saveSettingsToServer() })
@@ -3760,7 +3760,7 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
         body: JSON.stringify({ settings: childSettings }),
       });
-      if (msg) { msg.textContent = r.ok ? 'Saved ✓ — syncs to the iPad' : 'Saved on this device only'; setTimeout(() => { msg.textContent = ''; }, 3000); }
+      if (msg) { msg.textContent = r.ok ? 'Saved ✓. Syncs to the iPad' : 'Saved on this device only'; setTimeout(() => { msg.textContent = ''; }, 3000); }
     } catch (_) { if (msg) { msg.textContent = 'Saved on this device only'; setTimeout(() => { msg.textContent = ''; }, 3000); } }
   });
 
@@ -3889,7 +3889,7 @@
       document.querySelectorAll('#sch-games .sch-game-scope').forEach(sel => { const cur = sel.value; sel.innerHTML = gameScopeOptsHTML; if (cur && !Array.from(sel.options).some(o => o.value === cur)) { const o = document.createElement('option'); o.value = cur; o.textContent = cur; sel.appendChild(o); } sel.value = cur; });
       // Tile pickers — every tile that has an image (the question picture + the response tiles).
       const tiles = items.filter(it => it.imageKey && it.label);
-      const tileOpts = tiles.map(it => '<option value="' + schEsc(it.imageKey) + '" data-label="' + schEsc(it.label) + '">' + schEsc((it.section ? it.section + ' — ' : '') + it.label) + '</option>').join('');
+      const tileOpts = tiles.map(it => '<option value="' + schEsc(it.imageKey) + '" data-label="' + schEsc(it.label) + '">' + schEsc((it.section ? it.section + ': ' : '') + it.label) + '</option>').join('');
       const imgSel = document.getElementById('sch-image'); if (imgSel) imgSel.innerHTML = '<option value="">No picture</option>' + tileOpts;
       const ra = document.getElementById('sch-resp-a'); if (ra) ra.innerHTML = '<option value="">— none —</option>' + tileOpts;
       const rb = document.getElementById('sch-resp-b'); if (rb) rb.innerHTML = '<option value="">— none —</option>' + tileOpts;
@@ -3952,7 +3952,7 @@
       if (schEditIndex >= 0) arr[schEditIndex] = sch; else arr.push(sch);
       childSettings = { ...childSettings, schedules: arr };
       renderSchedList(); closeSchedEditor();
-      await saveSettingsToServer('Schedule saved ✓ — syncs to the iPad', 'sched-msg');
+      await saveSettingsToServer('Schedule saved ✓. Syncs to the iPad', 'sched-msg');
     });
     document.getElementById('sch-delete').addEventListener('click', async () => {
       if (schEditIndex < 0) return closeSchedEditor();
@@ -3999,14 +3999,14 @@
       if (ab.ok) { const s = await ab.json(); current = s.current; next = s.next; ready = !!s.readyToAdvance; mastery = s.mastery; advanced = s.advanced; }
       document.getElementById('age-current-band').textContent = current
         ? ('· showing ' + ageBandLabel(current) + ' and earlier' + (advanced ? ' · unlocked ahead of age' : ''))
-        : '· (no birth date yet — every band visible)';
+        : '· (no birth date yet, so every band is visible)';
       const card = document.getElementById('age-mastery-card');
       const note = document.getElementById('age-readiness-note');
       if (next && ready) {
         card.style.display = '';
         document.getElementById('age-next-name').textContent = ageBandLabel(next);
         document.getElementById('age-mastery-body').textContent =
-          mastery ? `${mastery.correct} of ${mastery.total} recent attempts in the current band were correct — that's a clean ${Math.round(100 * mastery.correct / Math.max(1, mastery.total))}% over ${mastery.lookbackDays} days. Looks ready to grow.`
+          mastery ? `${mastery.correct} of ${mastery.total} recent attempts in the current band were correct. That's a clean ${Math.round(100 * mastery.correct / Math.max(1, mastery.total))}% over ${mastery.lookbackDays} days. Looks ready to grow.`
                   : 'The board thinks your child is ready for the next set of words.';
         note.textContent = '';
       } else {
@@ -4266,7 +4266,7 @@
   }
   function orgItemsHTML(catId) {
     const items = ORG_ITEMS.filter(i => i.categoryId === catId).sort(orgByOrder);
-    if (!items.length) return '<div style="font-size:12px;color:var(--faint);margin:2px 0 2px 22px;">No tiles — drag one here.</div>';
+    if (!items.length) return '<div style="font-size:12px;color:var(--faint);margin:2px 0 2px 22px;">No tiles. Drag one here.</div>';
     return items.map(i => {
       const sel = orgSelected.has(i.id);
       return '<div class="org-drag-row' + (sel ? ' org-sel' : '') + '" data-type="item" data-id="' + i.id + '" data-cat="' + i.categoryId + '" style="margin-left:18px;">' +
@@ -4286,7 +4286,7 @@
       const lost = ORG_ITEMS.filter(i => i.section === sec && (i.categoryId == null || !orgCatIds.has(i.categoryId))).sort(orgByOrder);
       const lostBlock = !lost.length ? '' :
         '<div style="border:1.5px dashed #f59e0b;background:#fffbeb;border-radius:10px;padding:6px 8px;margin:8px 0;">' +
-          '<div style="font-size:12px;font-weight:700;color:#b45309;margin-bottom:2px;">⚠️ ' + lost.length + ' lost tile' + (lost.length === 1 ? '' : 's') + ' — not in any folder, so the board can\'t show ' + (lost.length === 1 ? 'it' : 'them') + '. Drag each one into a folder below.</div>' +
+          '<div style="font-size:12px;font-weight:700;color:#b45309;margin-bottom:2px;">⚠️ ' + lost.length + ' lost tile' + (lost.length === 1 ? '' : 's') + ': not in any folder, so the board can\'t show ' + (lost.length === 1 ? 'it' : 'them') + '. Drag each one into a folder below.</div>' +
           lost.map(i =>
             '<div class="org-drag-row" data-type="item" data-id="' + i.id + '" data-cat="">' +
               '<span class="org-grip">⠿</span>' + orgThumb(i.imageKey) +
@@ -4681,13 +4681,13 @@
       a.download = slug + '-aac-backup-' + new Date().toISOString().slice(0, 10) + '.zip';
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1500);
-      setMsg('Downloaded ✓ — ' + files.length + ' files' + (missing ? ' (' + missing + ' media file(s) could not be fetched)' : ''));
+      setMsg('Downloaded ✓: ' + files.length + ' files' + (missing ? ' (' + missing + ' media file(s) could not be fetched)' : ''));
     } catch (err) { setMsg('ZIP backup failed: ' + (err.message || err)); }
     zipBtn.disabled = false; zipBtn.textContent = prev;
   });
 })();
 </script>
 
-<div style="text-align:center;font-size:12px;color:#9ca3af;padding:18px 10px;">© My World Tap to Talk LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home — it isn’t a medical device and doesn’t replace your child’s care team.</div>
+<div style="text-align:center;font-size:12px;color:#9ca3af;padding:18px 10px;">© My World Tap to Talk LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home. It isn’t a medical device and doesn’t replace your child’s care team.</div>
 </body>
 </html>
