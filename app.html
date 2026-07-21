@@ -6593,6 +6593,68 @@
     }
     return out;
   }
+  // ── #10 canonical suggestion capture ──────────────────────────────────────
+  // A second, silent pass over heard text against the FULL canonical library
+  // (not the board's lexicon): words the household says that the board lacks
+  // become parent-reviewable suggestions. Strictly consent-gated — the flag
+  // is FALSE until the parent opts in, and the server re-checks it on every
+  // record call, so this whole layer is dormant by default. Never any change
+  // on the child's screen (AC1); dedupe per browsing session so repeated
+  // speech-recognition partials of one utterance can't inflate hit counts.
+  let _canonLex = null, _suggestConsent = null;
+  const _suggestSeen = new Set(); let _suggestQueue = new Set(); let _suggestTimer = null;
+  async function suggestScan(text) {
+    try {
+      if (_suggestConsent === null) {
+        try {
+          const r = await fetch('/api/child-settings?childId=' + encodeURIComponent(CHILD_ID), { credentials: 'same-origin' });
+          const d = await r.json();
+          _suggestConsent = !!(d && d.settings && d.settings.suggestFromListening === true);
+        } catch (_) { _suggestConsent = false; }
+      }
+      if (!_suggestConsent) return;
+      if (!_canonLex) {
+        const r = await fetch('/api/items?lexicon=1', { credentials: 'same-origin' });
+        const d = await r.json();
+        _canonLex = new Map();
+        for (const e of (d.lexicon || [])) {
+          for (const t of [e.label, ...(e.terms || [])]) {
+            const k = normalizeListenWord(t);
+            if (k) _canonLex.set(k, e.slug);
+          }
+        }
+      }
+      // Greedy-longest over the canonical map; a phrase the BOARD already
+      // matches is not a suggestion (the board lexicon wins, same rule as
+      // the strip's index).
+      const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+      let i = 0;
+      while (i < words.length) {
+        let used = 1;
+        for (let w = Math.min(6, words.length - i); w >= 1; w--) {
+          const phrase = normalizeListenWord(words.slice(i, i + w).join(' '));
+          if (_listenLex && _listenLex.has(phrase)) { used = w; break; }   // on the board
+          const slug = _canonLex.get(phrase);
+          if (slug) {
+            if (!_suggestSeen.has(slug)) { _suggestSeen.add(slug); _suggestQueue.add(slug); }
+            used = w; break;
+          }
+        }
+        i += used;
+      }
+      if (_suggestQueue.size && !_suggestTimer) {
+        _suggestTimer = setTimeout(async () => {
+          const slugs = [..._suggestQueue]; _suggestQueue = new Set(); _suggestTimer = null;
+          try {
+            await fetch('/api/items', { method: 'POST', credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ op: 'suggest-record', childId: CHILD_ID, slugs }) });
+          } catch (_) { /* offline: the words will be heard again */ }
+        }, 12000);
+      }
+    } catch (_) { /* capture must never disturb listening itself */ }
+  }
+
   async function renderListenStrip(tokens) {
     const wrap = document.getElementById('listen-tiles');
     if (!wrap) return;
@@ -6700,6 +6762,7 @@
           const toks = tokenizeForListen(text, _listenLex);
           renderListenStrip(toks);
           maybeListenNavigate(toks);
+          suggestScan(text);   // #10: silent, consent-gated, zero UI change
         }
       });
       // iOS ends a recognition session after a pause / ~1 min — restart while on.
