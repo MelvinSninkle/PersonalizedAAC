@@ -626,6 +626,9 @@ private struct OnboardingAccountView: View {
         busy = true; errorText = nil
         defer { busy = false }
         await auth.signIn(email: email.trimmingCharacters(in: .whitespaces), password: password)
+        if auth.demoMode {
+            return                            // ContentView flips to DemoBoardView
+        }
         if auth.isSignedIn {
             finishAuth(created: false)        // existing account → no onboarding
         } else {

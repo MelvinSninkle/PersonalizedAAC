@@ -21,11 +21,16 @@ struct APIClient {
 
     struct LoginResponse: Codable {
         let ok: Bool
-        let user: User
+        /// nil on the demo login (user ID "admin"): that response carries no
+        /// account and sets no cookie — see `demo` below.
+        let user: User?
         /// Only present on /api/auth/apple — true when a brand-new account was
         /// created (vs. signing into an existing one). Drives whether the
         /// onboarding flow continues. nil for the email login/register paths.
         let created: Bool?
+        /// true when "admin" + the server's admin token unlocked the style-demo
+        /// board (#14). Server-validated; no session exists in this state.
+        let demo: Bool?
         struct User: Codable {
             let email: String
             let role: String

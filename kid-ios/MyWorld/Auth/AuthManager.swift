@@ -9,6 +9,12 @@ final class AuthManager {
     var user: SignedInUser?
     var childSlug: String
 
+    /// #14: true after the "admin" + admin-token demo login. Renders the
+    /// style-demo board instead of a family board. Deliberately NOT
+    /// persisted — a relaunch returns to the normal sign-in flow, so a demo
+    /// iPad never stays unlocked by accident.
+    var demoMode = false
+
     /// Holds the last login error so the LoginView can show it inline.
     var lastError: String?
 
@@ -32,7 +38,16 @@ final class AuthManager {
     func signIn(email: String, password: String) async {
         do {
             let resp = try await api.login(email: email, password: password)
-            let u = SignedInUser(email: resp.user.email, role: resp.user.role, slug: resp.user.slug)
+            if resp.demo == true {
+                self.demoMode = true
+                self.lastError = nil
+                return
+            }
+            guard let ru = resp.user else {
+                self.lastError = "Sign-in failed. Please try again."
+                return
+            }
+            let u = SignedInUser(email: ru.email, role: ru.role, slug: ru.slug)
             SessionStore.save(u)
             self.user = u
             self.childSlug = u.slug ?? self.childSlug
@@ -40,6 +55,12 @@ final class AuthManager {
         } catch {
             self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+
+    /// Leave the demo board and return to the sign-in flow.
+    @MainActor
+    func exitDemo() {
+        demoMode = false
     }
 
     @MainActor
