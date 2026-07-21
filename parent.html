@@ -295,6 +295,17 @@
   <!-- BULK-IMPORT REVIEW QUEUE — tiles imported in bulk (iOS app or web) land
        on the board right away but flagged needs_review; surfaced here so the
        parent can confirm / rename / remove. Hidden when the queue is empty. -->
+  <!-- #10: words the household SAYS that the board lacks — captured from
+       listening (parent opt-in only), reviewed here. Hidden when empty. -->
+  <div class="panel" id="suggest-panel" style="display:none;border:2px solid #7c3aed;background:#fff;">
+    <h2>💡 Words your family says
+      <span id="suggest-count" style="display:inline-block;min-width:22px;text-align:center;background:#7c3aed;color:#fff;border-radius:999px;font-size:13px;padding:1px 8px;vertical-align:middle;">0</span>
+    </h2>
+    <p class="hint">Heard while listening was on, matched against our vocabulary library, and not on the board yet.
+      Add draws the word in the board's style and voice (⭐1). Dismiss hides it until it's heard again; Never stops this word being suggested for this child.</p>
+    <div id="suggest-list"></div>
+  </div>
+
   <div class="panel" id="review-panel" style="display:none;border:2px solid var(--pink);background:#fff;">
     <h2>✨ New tiles to review
       <span id="review-count" style="display:inline-block;min-width:22px;text-align:center;background:var(--pink);color:#fff;border-radius:999px;font-size:13px;padding:1px 8px;vertical-align:middle;">0</span>
@@ -2953,6 +2964,68 @@
     await loadSharedBoards();
   });
   loadSharedBoards();
+
+  // ---- #10 Listening word suggestions ----
+  // Same review-queue pattern: cards with the shared default art, hit count,
+  // and the acquisition band (above-band words still surface — the household
+  // using the word is evidence the band filter lacks; the parent decides).
+  async function loadSuggestions() {
+    const panel = document.getElementById('suggest-panel'); if (!panel) return;
+    let list = [];
+    try {
+      const r = await fetch('/api/items', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op: 'suggest-list', childId: slug }) });
+      list = (await r.json()).suggestions || [];
+    } catch (_) {}
+    if (!list.length) { panel.style.display = 'none'; return; }
+    panel.style.display = '';
+    document.getElementById('suggest-count').textContent = list.length;
+    document.getElementById('suggest-list').innerHTML = list.map((s) => {
+      const img = s.imageKey ? '/api/media?key=' + encodeURIComponent(s.imageKey) + '&w=256' : '';
+      const when = s.lastHeardAt ? new Date(s.lastHeardAt).toLocaleDateString() : '';
+      return '<div class="sg-row" data-slug="' + schEsc(s.slug) + '" style="display:flex;gap:12px;align-items:center;background:#faf7ff;border:1px solid #e6dcf8;border-radius:12px;padding:10px;margin-bottom:8px;">'
+        + (img ? '<div style="width:56px;height:56px;border-radius:10px;background-image:url(' + img + ');background-size:cover;background-position:center;flex:none;"></div>'
+               : '<div style="width:56px;height:56px;border-radius:10px;background:#ede9fe;flex:none;"></div>')
+        + '<div style="flex:1;min-width:0;">'
+          + '<div style="font-weight:700;">' + schEsc(s.label) + '</div>'
+          + '<div class="hint" style="margin:2px 0 0;">' + schEsc(s.section || '') + (s.category ? ' · ' + schEsc(s.category) : '')
+            + ' · heard ' + s.hits + '×' + (when ? ' · last ' + when : '')
+            + (s.band ? ' · <span style="color:#7c3aed;font-weight:600;">band ' + schEsc(s.band) + '</span>' : '') + '</div>'
+        + '</div>'
+        + '<button class="btn primary sg-add" style="background:#7c3aed;">Add ⭐1</button>'
+        + '<button class="btn ghost sg-dismiss">Dismiss</button>'
+        + '<button class="btn ghost sg-never" style="color:#dc2626;" title="Never suggest this word for this child again">Never</button>'
+      + '</div>';
+    }).join('');
+  }
+  (function wireSuggestions() {
+    const list = document.getElementById('suggest-list'); if (!list) return;
+    const act = (childSlug, wordSlug, action) => fetch('/api/items', { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ op: 'suggest-act', childId: childSlug, slug: wordSlug, action }) });
+    list.addEventListener('click', async (e) => {
+      const row = e.target.closest('.sg-row'); if (!row) return;
+      const wordSlug = row.dataset.slug;
+      try {
+        if (e.target.closest('.sg-add')) {
+          const r = await fetch('/api/store', { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'checkout', childId: slug, taxonomyIds: [wordSlug] }) });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) { alert(d.detail || d.error || 'Could not add — check your membership and credits in the store.'); return; }
+          await act(slug, wordSlug, 'added');
+        } else if (e.target.closest('.sg-dismiss')) {
+          await act(slug, wordSlug, 'dismiss');
+        } else if (e.target.closest('.sg-never')) {
+          if (!confirm('Never suggest this word for this child again?')) return;
+          await act(slug, wordSlug, 'dismiss-forever');
+        } else return;
+        await loadSuggestions();
+      } catch (_) { alert('Something went wrong — try again.'); }
+    });
+  })();
+  loadSuggestions();
 
   // ---- Bulk-import review queue ----
   // Tiles imported in bulk (iOS app or web) auto-add to the board but carry
