@@ -1292,6 +1292,14 @@
   <div class="modal">
     <h3 id="login-title">Unlock editing</h3>
     <div id="login-desc" style="font-size:13px;color:#666;margin-bottom:8px;">Enter your account password to make changes.</div>
+    <!-- #17: quick-unlock PIN pad — shown instead of the password field when
+         this device has a PIN set (and fewer than 5 failed tries). -->
+    <div id="login-pin-wrap" style="display:none;">
+      <label for="login-pin">Your 4-digit PIN</label>
+      <input type="password" id="login-pin" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off"
+             style="font-size:26px;letter-spacing:14px;text-align:center;">
+      <div style="margin-top:6px;font-size:13px;"><a href="#" id="login-use-pass" style="color:#ad1457;font-weight:600;text-decoration:none;">Use password instead</a></div>
+    </div>
     <label for="login-pass" id="login-label">Your password</label>
     <input type="password" id="login-pass" autocomplete="current-password">
     <input type="hidden" id="login-user" value="admin">
@@ -1640,6 +1648,26 @@
         <button class="secondary" id="disp-unlock-no">Cancel</button>
       </div>
       <div id="disp-unlock-msg" style="font-size:12px;color:#c0392b;margin-top:6px;"></div>
+    </div>
+    <!-- #17: per-device quick-unlock PIN — an alternate key to the same edit
+         gate. Set/change/remove all require the account password. -->
+    <div style="margin-top:10px;">
+      <label style="font-size:13px;text-transform:none;letter-spacing:0;">Quick-unlock PIN (this device only)
+        <span style="display:block;font-size:12px;color:#666;">Unlock editing with a 4-digit PIN instead of typing your whole password. Stored only on this device — other devices keep their own.</span></label>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+        <span id="disp-pin-status" style="font-size:13px;color:#666;">No PIN set</span>
+        <button type="button" class="secondary" id="disp-pin-set" style="width:auto;padding:8px 12px;">Set PIN…</button>
+        <button type="button" class="secondary" id="disp-pin-remove" style="width:auto;padding:8px 12px;display:none;color:#dc2626;">Remove…</button>
+      </div>
+      <div id="disp-pin-confirm" style="display:none;margin-top:8px;border:1px solid #f3c6dd;border-radius:10px;padding:10px;">
+        <input type="password" id="disp-pin-new" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="New 4-digit PIN" style="margin-bottom:6px;">
+        <input type="password" id="disp-pin-pass" autocomplete="current-password" placeholder="Your account password (proves it's you)">
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button type="button" class="primary" id="disp-pin-save" style="flex:1;">Save</button>
+          <button type="button" class="secondary" id="disp-pin-cancel">Cancel</button>
+        </div>
+        <div id="disp-pin-msg" style="font-size:12px;color:#c0392b;margin-top:6px;"></div>
+      </div>
     </div>
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-suggest">
@@ -3310,7 +3338,14 @@
     // Offer a reset link only in password mode (we know the account email then).
     document.getElementById('login-forgot').style.display = (loginMode === 'password' && sessionUser && sessionUser.email) ? 'inline' : 'none';
     loginModal.classList.add('show');
-    document.getElementById('login-pass').focus();
+    // #17: a device PIN (with tries left) makes the pad the default door;
+    // "Use password instead" is always one tap away.
+    if (loginMode === 'password' && pinIsSet() && pinFailCount() < 5) pinShowMode(true);
+    else { pinShowMode(false); }
+  });
+  document.getElementById('login-use-pass').addEventListener('click', (e) => { e.preventDefault(); pinShowMode(false); });
+  document.getElementById('login-pin').addEventListener('input', () => {
+    if (document.getElementById('login-pin').value.length === 4) attemptLogin();   // 4th digit submits
   });
   document.getElementById('login-forgot').addEventListener('click', async (e) => {
     e.preventDefault();
@@ -3327,10 +3362,53 @@
   loginModal.addEventListener('click', (e) => {
     if (e.target === loginModal) loginModal.classList.remove('show');
   });
+  // ── #17 quick-unlock PIN: per-device, hashed, never synced ───────────────
+  // The PIN is an alternate key to the SAME edit gate — full parity with the
+  // password. 5 wrong tries force the password until a successful unlock
+  // resets the counter. Losing the PIN never blocks the child's board — only
+  // edit mode, which the password always opens.
+  const PIN_KEY = 'aacQuickPin', PIN_FAILS = 'aacQuickPinFails';
+  async function pinHash(pin) {
+    const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin + ':' + CHILD_ID));
+    return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
+  }
+  function pinIsSet() { try { return !!localStorage.getItem(PIN_KEY); } catch (_) { return false; } }
+  function pinFailCount() { try { return Number(localStorage.getItem(PIN_FAILS) || 0); } catch (_) { return 0; } }
+  function pinShowMode(usePin) {
+    document.getElementById('login-pin-wrap').style.display = usePin ? '' : 'none';
+    document.getElementById('login-label').style.display = usePin ? 'none' : '';
+    document.getElementById('login-pass').style.display = usePin ? 'none' : '';
+    document.getElementById('login-pin').value = '';
+    loginMode = usePin ? 'pin' : 'password';
+    (usePin ? document.getElementById('login-pin') : document.getElementById('login-pass')).focus();
+  }
+
   async function attemptLogin() {
-    const p = document.getElementById('login-pass').value;   // don't trim — passwords may have spaces
     const errEl = document.getElementById('login-error');
     errEl.textContent = '';
+    if (loginMode === 'pin') {
+      const pin = document.getElementById('login-pin').value;
+      if (!/^\d{4}$/.test(pin)) { errEl.textContent = 'Enter your 4-digit PIN'; return; }
+      try {
+        if ((await pinHash(pin)) === localStorage.getItem(PIN_KEY)) {
+          try { localStorage.setItem(PIN_FAILS, '0'); } catch (_) {}
+          loginModal.classList.remove('show');
+          setEditMode(true);
+          return;
+        }
+      } catch (_) {}
+      const fails = pinFailCount() + 1;
+      try { localStorage.setItem(PIN_FAILS, String(fails)); } catch (_) {}
+      if (fails >= 5) {
+        pinShowMode(false);
+        errEl.textContent = 'Too many PIN tries — use your password.';
+      } else {
+        document.getElementById('login-pin').value = '';
+        errEl.textContent = 'Wrong PIN (' + (5 - fails) + ' tries left)';
+      }
+      return;
+    }
+    const p = document.getElementById('login-pass').value;   // don't trim — passwords may have spaces
     if (!p) { errEl.textContent = loginMode === 'password' ? 'Password required' : 'Token required'; return; }
     const submit = document.getElementById('login-submit');
     submit.disabled = true;
@@ -3345,6 +3423,7 @@
         });
         if (r.status === 401) { errEl.textContent = 'Incorrect password'; return; }
         if (!r.ok) { errEl.textContent = `Server error: ${r.status}`; return; }
+        try { localStorage.setItem(PIN_FAILS, '0'); } catch (_) {}   // password unlock re-arms the PIN
       } else {
         // Legacy fallback: validate an admin token against an auth-gated route.
         const tok = p.trim();
@@ -5119,6 +5198,52 @@
     };
     slider('disp-teach-window', 'disp-teach-window-val', 'teachTapMs', () => TOUCH.teachTapMs);
     slider('disp-exit-hold', 'disp-exit-hold-val', 'exitHoldMs', () => SAFETY.exitHoldMs);
+    // #17 quick-unlock PIN management — device-local; every change proves the
+    // account password first (a child in the panel can't set or alter it).
+    const pinStatus = () => {
+      document.getElementById('disp-pin-status').textContent = pinIsSet() ? 'PIN is set on this device' : 'No PIN set';
+      document.getElementById('disp-pin-remove').style.display = pinIsSet() ? '' : 'none';
+      document.getElementById('disp-pin-set').textContent = pinIsSet() ? 'Change PIN…' : 'Set PIN…';
+    };
+    let pinRemoveMode = false;
+    const pinBox = document.getElementById('disp-pin-confirm');
+    document.getElementById('disp-pin-set').addEventListener('click', () => {
+      pinRemoveMode = false;
+      document.getElementById('disp-pin-new').style.display = '';
+      pinBox.style.display = ''; document.getElementById('disp-pin-msg').textContent = '';
+      document.getElementById('disp-pin-new').focus();
+    });
+    document.getElementById('disp-pin-remove').addEventListener('click', () => {
+      pinRemoveMode = true;
+      document.getElementById('disp-pin-new').style.display = 'none';
+      pinBox.style.display = ''; document.getElementById('disp-pin-msg').textContent = '';
+      document.getElementById('disp-pin-pass').focus();
+    });
+    document.getElementById('disp-pin-cancel').addEventListener('click', () => {
+      pinBox.style.display = 'none';
+      document.getElementById('disp-pin-new').value = ''; document.getElementById('disp-pin-pass').value = '';
+    });
+    document.getElementById('disp-pin-save').addEventListener('click', async () => {
+      const msg = document.getElementById('disp-pin-msg');
+      const newPin = document.getElementById('disp-pin-new').value;
+      const pass = document.getElementById('disp-pin-pass').value;
+      if (!pinRemoveMode && !/^\d{4}$/.test(newPin)) { msg.textContent = 'The PIN must be exactly 4 digits.'; return; }
+      if (!pass) { msg.textContent = 'Your account password is required.'; return; }
+      try {
+        const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: sessionUser.email, password: pass }) });
+        if (r.status === 401) { msg.textContent = 'Incorrect password.'; return; }
+        if (!r.ok) { msg.textContent = 'Server error: ' + r.status; return; }
+        if (pinRemoveMode) { localStorage.removeItem(PIN_KEY); }
+        else { localStorage.setItem(PIN_KEY, await pinHash(newPin)); }
+        localStorage.setItem(PIN_FAILS, '0');
+        pinBox.style.display = 'none';
+        document.getElementById('disp-pin-new').value = ''; document.getElementById('disp-pin-pass').value = '';
+        pinStatus();
+      } catch (e) { msg.textContent = 'Could not save: ' + (e.message || e); }
+    });
+    pinStatus();
+
     // #12 repeat-navigation threshold — synced; writes the legacy boolean in
     // step so native builds that only know listenRepeatNav stay consistent.
     const rnSel = document.getElementById('disp-repeat-nav');
