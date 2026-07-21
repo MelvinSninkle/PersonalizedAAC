@@ -23,6 +23,7 @@ import bulk from './_taxonomy-bulk.js';
 import bulkop from './_taxonomy-bulkop.js';
 import exportCsv from './_taxonomy-export-csv.js';
 import importBoard from './_taxonomy-import-board.js';
+import importCsv from './_taxonomy-import-csv.js';
 import promptVersions from './_taxonomy-prompt-versions.js';
 import snapshots from './_taxonomy-snapshots.js';
 
@@ -36,6 +37,7 @@ const HANDLERS = {
   'bulkop': bulkop,
   'export-csv': exportCsv,
   'import-board': importBoard,
+  'import-csv': importCsv,
   'prompt-versions': promptVersions,
   'snapshots': snapshots,
 };
