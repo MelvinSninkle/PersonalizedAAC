@@ -26,7 +26,7 @@ const VALID_STATUS = new Set(['draft', 'published']);
 const VALID_PHASES = new Set(['v1_core', 'v1_extended', 'v2', 'later']);
 const VALID_GROWTH_STAGES = new Set(['stage_1', 'stage_2', 'stage_3', 'stage_4', 'stage_5plus']);
 const VALID_ACQUISITION_AGES = new Set(['12-18m', '18-30m', '2-3y', '3-4y', '4y+']);
-const VALID_MEAL = new Set(['breakfast', 'lunch', 'dinner', 'snack', 'anytime']);
+const VALID_MEAL = new Set(['breakfast', 'lunch', 'dinner', 'snack', 'anytime', 'drinks', 'treat']);
 const VALID_GESTALT_TYPES = new Set(['compositional', 'category_holding', 'opaque']);
 const VALID_AUDIENCE = new Set(['universal', 'parent', 'therapist', 'school_team', 'family']);
 const VALID_AUTHORING_KIND = new Set(['canonical', 'personal_skeleton']);
@@ -38,7 +38,11 @@ function validateRow(r) {
   if (typeof r.id !== 'string' || !ID_PATTERN.test(r.id)) errs.push('id pattern');
   if (!VALID_COLUMNS.has(r.column)) errs.push('column');
   if (typeof r.label !== 'string' || !r.label.trim()) errs.push('label');
-  if (typeof r.promptTemplate !== 'string' || !r.promptTemplate.trim()) errs.push('promptTemplate');
+  // personal_skeleton rows are PHOTO-ONLY by design (franchise titles render
+  // from the parent's own upload; no AI art is ever prompted) — an empty
+  // prompt_template is correct for them. Mirrors the workbench dialog.
+  if ((typeof r.promptTemplate !== 'string' || !r.promptTemplate.trim())
+      && r.authoringKind !== 'personal_skeleton') errs.push('promptTemplate');
   if (!VALID_SUBJECT_MODES.has(r.subjectMode)) errs.push('subjectMode');
   if (!VALID_PARENT_PHOTO.has(r.parentPhotoBehavior)) errs.push('parentPhotoBehavior');
   if (r.phase && !VALID_PHASES.has(r.phase)) errs.push('phase');

@@ -512,8 +512,8 @@ export default async function handler(req, res) {
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS is_event BOOLEAN NOT NULL DEFAULT FALSE`;
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS event_key TEXT`;
     await db`CREATE INDEX IF NOT EXISTS taxonomy_event_idx ON taxonomy(event_key) WHERE is_event = TRUE`;
-    // meal_context (food only): one of breakfast/lunch/dinner/snack/anytime.
-    // Drives mode-based default-category in the Nouns column (§4.2).
+    // meal_context (food only): breakfast/lunch/dinner/snack/anytime/drinks/
+    // treat. Drives mode-based default-category in the Nouns column (§4.2).
     await db`ALTER TABLE taxonomy ADD COLUMN IF NOT EXISTS meal_context TEXT`;
     // Gestalt track (§4.2A): is_gestalt marks whole-phrase tiles; gestalt_type
     // is the adult-supplied typology; gestalt_meaning is what the gestalt means
