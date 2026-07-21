@@ -3191,15 +3191,23 @@
 
   /// Tap-to-learn: ONE teaching fact per rapid re-tap. Uses the game voice
   /// channel so it can't fight the tile channel's `speaking` bookkeeping.
+  /// While a fact is speaking, ALL board taps are ignored (_clueSpeaking in
+  /// tapSpeak) — facts are deliberately not interruptible, so rapid taps
+  /// can never talk over each other. When the fact ends, the re-tap window
+  /// restarts, so the next tap continues the cycle at the listener's pace.
+  let _clueSpeaking = false;
   async function playClue(item, idx) {
     const clues = (item.descriptiveClues || []).filter(Boolean).slice(0, 3);
     const clue = clues[idx];
     if (!clue) return;
     if (speaking) stopSpeaking();
+    _clueSpeaking = true;
     try {
       const u = await teachAudioURL(clue);
       if (u) await playAwait(u);
     } catch (_) {}
+    _clueSpeaking = false;
+    _lastTapItemAt = Date.now();   // the window counts from END of speech
   }
 
   function tapSpeak(item, categoryName, subcategoryName) {
@@ -3209,6 +3217,8 @@
     // Sentence mode (the pencil): a tap IS the stage — silent, logged by
     // sbStage. Speaking waits for ▶.
     if (SB.mode) { sbStage(item); return; }
+    // A teaching fact mid-speech is not interruptible — taps wait their turn.
+    if (_clueSpeaking) return;
     // Tap-to-learn: the same tile re-tapped inside the window speaks its NEXT
     // fact — tap 2 = fact 1 … tap 4 = fact 3. After the last fact (or when a
     // tile has fewer), the next rapid tap wraps back to the word itself.
