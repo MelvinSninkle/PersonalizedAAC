@@ -44,7 +44,7 @@ struct BatchReviewView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 14) {
-                            Text("Tap ▶ to hear each voice. Fix any name the AI got wrong — what you type wins.")
+                            Text("Tap ▶ to hear each voice. Fix any name the AI got wrong. What you type wins.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(Color(hex: "#888"))
                                 .multilineTextAlignment(.center)
@@ -167,7 +167,7 @@ private struct ReviewRow: View {
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
                         .font(.system(size: 16, weight: .semibold))
-                    Text("Spelled how it should sound — that's what's spoken.")
+                    Text("Spelled how it should sound. That's what's spoken.")
                         .font(.system(size: 12))
                         .foregroundStyle(Color(hex: "#999"))
                 }

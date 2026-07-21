@@ -88,7 +88,7 @@ export default async function handler(req, res) {
           <p style="margin:22px 0;">
             <a href="${link}" style="display:inline-block;background:#ff1493;color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:999px;">${userExists ? 'Sign in to accept' : 'Create your account & accept'}</a>
           </p>
-          <p style="font-size:12px;color:#6b7280;">This invitation expires in 14 days. If you don't recognize this invitation, you can safely ignore this email — no account is created until you accept.</p>
+          <p style="font-size:12px;color:#6b7280;">This invitation expires in 14 days. If you don't recognize this invitation, you can safely ignore this email. No account is created until you accept.</p>
         </div>`;
       emailResult = await sendEmail({ to: email, subject, html });
     }

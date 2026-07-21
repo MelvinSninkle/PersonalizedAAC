@@ -111,18 +111,18 @@ fun BoardTileEditSheet(tile: Tile, onDismiss: () -> Unit) {
 
     fun redraw() {
         if (guidance.isBlank()) {
-            error = "Tell it what to change first — e.g. \"make the cup blue like ours\"."
+            error = "Tell it what to change first, e.g. \"make the cup blue like ours\"."
             return
         }
         busy = true; error = null
         scope.launch {
             try {
                 c.api.storeRetry(c.auth.childSlug, tile.id, guidance.trim())
-                note = "Redrawing with your note — the new picture lands in a couple of minutes. (First retry is free.)"
+                note = "Redrawing with your note. The new picture lands in a couple of minutes. (First retry is free.)"
                 guidance = ""
             } catch (e: Exception) {
                 error = if (e.message?.contains("needs_subscription") == true)
-                    "Styled redraws are part of My World memberships — join under Credits & Store."
+                    "Styled redraws are part of My World memberships. Join under Credits & Store."
                 else "Couldn't start the redraw: ${e.message}"
             } finally { busy = false }
         }
@@ -193,10 +193,10 @@ fun BoardTileEditSheet(tile: Tile, onDismiss: () -> Unit) {
                 scope.launch {
                     try {
                         c.api.storeRetry(c.auth.childSlug, tile.id, "")
-                        note = "Matching your child's style — the new picture lands in a couple of minutes. (First retry per tile is free.)"
+                        note = "Matching your child's style. The new picture lands in a couple of minutes. (First retry per tile is free.)"
                     } catch (e: Exception) {
                         error = if (e.message?.contains("needs_subscription") == true)
-                            "Styled redraws are part of My World memberships — join under Credits & Store."
+                            "Styled redraws are part of My World memberships. Join under Credits & Store."
                         else "Couldn't start: ${e.message}"
                     } finally { busy = false }
                 }
@@ -213,7 +213,7 @@ fun BoardTileEditSheet(tile: Tile, onDismiss: () -> Unit) {
 
             if (history.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                Text("PREVIOUS PICTURES — TAP TO BRING ONE BACK",
+                Text("PREVIOUS PICTURES: TAP TO BRING ONE BACK",
                     fontSize = 11.sp, fontWeight = FontWeight.Black, color = Brand.muted)
                 Spacer(Modifier.height(6.dp))
                 Row(Modifier.horizontalScroll(rememberScrollState())) {
@@ -236,7 +236,7 @@ fun BoardTileEditSheet(tile: Tile, onDismiss: () -> Unit) {
                 androidx.compose.material3.AlertDialog(
                     onDismissRequest = { revertCandidate = null },
                     title = { Text("Bring this picture back?") },
-                    text = { Text("The current picture is archived first — you can always undo.") },
+                    text = { Text("The current picture is archived first. You can always undo.") },
                     confirmButton = {
                         TextButton(onClick = {
                             revertCandidate = null
@@ -244,7 +244,7 @@ fun BoardTileEditSheet(tile: Tile, onDismiss: () -> Unit) {
                             scope.launch {
                                 try {
                                     c.api.revertImage(tile.id, h.key)
-                                    note = "✅ Brought back — the swapped-out picture is in Previous pictures."
+                                    note = "✅ Brought back. The swapped-out picture is in Previous pictures."
                                     history = c.api.imageHistory(tile.id)
                                     c.board.refresh(c.auth.childSlug)
                                 } catch (e: Exception) {
@@ -281,7 +281,7 @@ fun BoardTileEditSheet(tile: Tile, onDismiss: () -> Unit) {
                     }
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                     modifier = Modifier.fillMaxWidth()) {
-                    Text("Yes — delete \"${tile.label}\" forever", fontWeight = FontWeight.Bold)
+                    Text("Yes, delete \"${tile.label}\" forever", fontWeight = FontWeight.Bold)
                 }
             }
             TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {

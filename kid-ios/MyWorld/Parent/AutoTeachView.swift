@@ -142,7 +142,7 @@ struct AutoTeachView: View {
 
     private var quietHoursCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Quiet hours — when NOT to run")
+            Text("Quiet hours: when NOT to run")
                 .font(.system(size: 14, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: Brand.pinkDeep))
             Text("Auto-teach never fires while your child is asleep, at school, or in therapy. Required before it can be turned on.")
@@ -250,13 +250,13 @@ struct AutoTeachView: View {
             if let g = state?.gates {
                 gateLine(ok: g.subscribed ?? true,
                          ok_text: "Membership active",
-                         ko_text: "Automatic teaching is part of My World memberships (from $9.99/mo) — join in Credits & Store")
+                         ko_text: "Automatic teaching is part of My World memberships (from $9.99/mo). Join in Credits & Store")
                 gateLine(ok: g.enabled, ok_text: "Auto-teach is on", ko_text: "Auto-teach is off")
                 gateLine(ok: g.scheduleReady ?? true,
                          ok_text: "Quiet hours are set",
-                         ko_text: "Quiet hours missing — set them below")
+                         ko_text: "Quiet hours missing. Set them below")
                 gateLine(ok: !g.inBlackout, ok_text: "Currently a teachable window", ko_text: "Inside a blackout (sleep / school / meal)")
-                gateLine(ok: !g.recentlyActive, ok_text: "Child isn't actively tapping", ko_text: "Child is using the board — won't interrupt")
+                gateLine(ok: !g.recentlyActive, ok_text: "Child isn't actively tapping", ko_text: "Child is using the board. Auto-teach won't interrupt")
                 if g.cooldownLeftMin > 0 {
                     gateLine(ok: false, ok_text: "", ko_text: "Cooldown: next allowed in \(g.cooldownLeftMin) min")
                 } else {
@@ -356,7 +356,7 @@ struct AutoTeachView: View {
     }
 
     private var helpFootnote: some View {
-        Text("Auto-teach runs short exposure slideshows (~45-90s) at your chosen cadence during teachable windows, plus one game session per day at the time you pick. It honors quiet hours, school, and meal windows from your schedule, and pauses when the child is actively using the board. Mastery follows the clinical 80/90 rule — words move to a biweekly maintenance check rather than disappearing.")
+        Text("Auto-teach runs short exposure slideshows (~45-90s) at your chosen cadence during teachable windows, plus one game session per day at the time you pick. It honors quiet hours, school, and meal windows from your schedule, and pauses when the child is actively using the board. Mastery follows the clinical 80/90 rule: words move to a biweekly maintenance check rather than disappearing.")
             .font(.system(size: 11))
             .foregroundStyle(Color(hex: Brand.muted))
             .multilineTextAlignment(.leading)

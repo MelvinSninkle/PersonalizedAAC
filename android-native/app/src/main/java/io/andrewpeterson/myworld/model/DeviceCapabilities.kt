@@ -26,11 +26,11 @@ object DeviceCapabilities {
         lines += if (speechAvailable(context))
             "✅ Speech-to-text listening works here"
         else
-            "⚠️ No speech-recognition service on this device (normal on Fire tablets) — listening mode is unavailable; everything else works"
+            "⚠️ No speech-recognition service on this device (normal on Fire tablets). Listening mode is unavailable; everything else works"
         lines += if (playBilling)
             "✅ Purchases through Google Play"
         else
-            "ℹ️ No Google Play on this device — purchases use the secure web store instead"
+            "ℹ️ No Google Play on this device. Purchases use the secure web store instead"
         return lines.joinToString("\n")
     }
 }

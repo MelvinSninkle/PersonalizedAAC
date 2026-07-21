@@ -61,7 +61,7 @@ struct BoardView: View {
     @ViewBuilder
     private var editHintOverlay: some View {
         if showEditHint {
-            Text("✋ Hold a tile until it lifts, then drag it onto another tile to reorder — or onto a folder chip to move it.")
+            Text("✋ Hold a tile until it lifts, then drag it onto another tile to reorder, or onto a folder chip to move it.")
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)

@@ -137,7 +137,7 @@ fun ParentHomeView() {
             Column(Modifier.weight(1f)) {
                 Text("My World: ${prettyChildName(c.auth.childSlug).ifEmpty { "your child" }}",
                     fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Text("Tap to talk — parent tools", fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f))
+                Text("Tap to talk: parent tools", fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f))
             }
             Box(
                 Modifier.size(40.dp).background(Color.White.copy(alpha = 0.18f), CircleShape)
@@ -184,7 +184,7 @@ fun ParentHomeView() {
             ) {
                 Text("⚠️ ${problems.size} picture${if (problems.size == 1) "" else "s"} didn't finish",
                     fontSize = 16.sp, fontWeight = FontWeight.Bold, color = hexColor("#b45309"))
-                Text("Retrying is safe — failed photo adds never re-charge, and each word's first redraw is free.",
+                Text("Retrying is safe: failed photo adds never re-charge, and each word's first redraw is free.",
                     fontSize = 12.sp, color = Brand.muted)
                 problems.forEach { p ->
                     val pid = p.kind + "-" + (p.itemId ?: p.jobId ?: 0)
@@ -284,7 +284,7 @@ private fun ComingSoonDialog(id: String, onDismiss: () -> Unit) {
         },
         title = { androidx.compose.material3.Text("On its way") },
         text = { androidx.compose.material3.Text(
-            "This screen lands in an upcoming build — until then, the web dashboard has it (aac.andrewpeterson.io).") },
+            "This screen lands in an upcoming build. Until then, the web dashboard has it (aac.andrewpeterson.io).") },
     )
 }
 
@@ -364,7 +364,7 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
                 } ?: throw Exception("couldn't read that photo")
                 val key = c.api.upload("styleref", "jpg", jpeg, "image/jpeg")
                 c.api.setStyleRef(c.auth.childSlug, kind, key)
-                styleMsg = "Reference saved — new pictures follow it from now on."
+                styleMsg = "Reference saved. New pictures follow it from now on."
                 reloadStyles()
             } catch (e: Exception) {
                 styleMsg = "Upload failed: ${e.message}"
@@ -424,10 +424,10 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
                         StyleRefThumb("Objects", cur.refs?.stuff)
                     }
                 } else {
-                    Text("No style set yet — pick one below.", fontSize = 13.sp, color = Brand.muted)
+                    Text("No style set yet. Pick one below.", fontSize = 13.sp, color = Brand.muted)
                 }
                 Text(
-                    "Every generated picture is drawn from these references. Changes apply to NEW pictures only — tiles already on the board keep their current art.",
+                    "Every generated picture is drawn from these references. Changes apply to NEW pictures only. Tiles already on the board keep their current art.",
                     fontSize = 12.sp, color = Brand.muted,
                 )
                 if (ov.styles.isNotEmpty()) {
@@ -458,7 +458,7 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
                 if (next != null) {
                     val m = b.mastery
                     if (m != null && b.readyToAdvance == true) {
-                        Text("${m.correct} of ${m.total} recent answers correct — looks ready to grow.",
+                        Text("${m.correct} of ${m.total} recent answers correct. Looks ready to grow.",
                             fontSize = 12.sp, color = Brand.muted)
                     }
                     androidx.compose.material3.TextButton(onClick = {
@@ -622,8 +622,8 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
                             r.note ?: "Sent! We'll get back to you within 48 hours."
                         } catch (e: Exception) {
                             if (e.message?.contains("too_many_open_cases") == true)
-                                "You already have open requests — we'll get to them within 48 hours."
-                            else "Couldn't send — check the connection and try again."
+                                "You already have open requests. We'll get to them within 48 hours."
+                            else "Couldn't send. Check the connection and try again."
                         }
                     }
                 }) { androidx.compose.material3.Text("Send") }
@@ -691,7 +691,7 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
             text = {
                 Column {
                     androidx.compose.material3.Text(
-                        "Permanently deletes this account and everything on the board — every tile, photo, generated image, recording, and all history. This cannot be undone.")
+                        "Permanently deletes this account and everything on the board: every tile, photo, generated image, recording, and all history. This cannot be undone.")
                     Spacer(Modifier.height(10.dp))
                     androidx.compose.material3.OutlinedTextField(
                         value = deleteText, onValueChange = { deleteText = it },
@@ -733,7 +733,7 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
             title = { androidx.compose.material3.Text("Draw new pictures in “${pending.label}”?") },
             text = {
                 androidx.compose.material3.Text(
-                    "Tiles already on the board keep their current pictures — the board will mix " +
+                    "Tiles already on the board keep their current pictures. The board will mix " +
                         "styles until you remake them from each tile's editor. New pictures use " +
                         "the new style right away.")
             },
@@ -743,7 +743,7 @@ private fun ParentSettingsView(onDismiss: () -> Unit) {
                     scope.launch {
                         try {
                             c.api.setStyle(c.auth.childSlug, pending.id)
-                            styleMsg = "Style switched — new pictures use “${pending.label}” from now on."
+                            styleMsg = "Style switched. New pictures use “${pending.label}” from now on."
                             reloadStyles()
                         } catch (e: Exception) { styleMsg = "Couldn't switch: ${e.message}" }
                     }

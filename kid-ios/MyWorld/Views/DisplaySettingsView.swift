@@ -113,18 +113,18 @@ struct DisplaySettingsView: View {
                 } header: {
                     Text("Board tools")
                 } footer: {
-                    Text("Which buttons show in the board's header. Everything from here down follows your child — it applies on every device this board is used on.")
+                    Text("Which buttons show in the board's header. Everything from here down follows your child. It applies on every device this board is used on.")
                 }
 
                 // ── 3 · Touch & play (synced) ──
                 Section {
                     Toggle("New taps interrupt the word", isOn: $tapInterrupt)
                         .onChange(of: tapInterrupt) { _, v in saveSynced(["tapInterrupt": v]) }
-                    Text("Off: each word finishes before the next tap counts — steadier for new talkers.")
+                    Text("Off: each word finishes before the next tap counts, steadier for new talkers.")
                         .font(.footnote).foregroundStyle(.secondary)
                     Toggle("Tap again to learn", isOn: $doubleTapTeach)
                         .onChange(of: doubleTapTeach) { _, v in saveSynced(["doubleTapTeach": v]) }
-                    Text("Tap a tile: hear the word. Tap again quickly: hear a fact — up to three facts on back-to-back taps, then the word again.")
+                    Text("Tap a tile: hear the word. Tap again quickly: hear a fact, up to three facts on back-to-back taps, then the word again.")
                         .font(.footnote).foregroundStyle(.secondary)
                     if doubleTapTeach {
                         VStack(alignment: .leading, spacing: 4) {
@@ -211,7 +211,7 @@ struct DisplaySettingsView: View {
                 } header: {
                     Text("Device & account")
                 } footer: {
-                    Text("Signing out removes the board from this device until a parent signs back in. Nothing is deleted — the board lives in your account.")
+                    Text("Signing out removes the board from this device until a parent signs back in. Nothing is deleted. The board lives in your account.")
                 }
             }
             .navigationTitle("Settings")
@@ -235,7 +235,7 @@ struct DisplaySettingsView: View {
                 Button("Cancel", role: .cancel) { unlockPassword = "" }
                 Button("Skip the lock password", role: .destructive) { Task { await confirmUnlockWaiver() } }
             } message: {
-                Text("This only changes the board's lock — your account password stays exactly the same for signing in everywhere. With this on, anyone holding this device — including your child — can open edit mode, change or delete tiles, and reach the parent dashboard. Enter your account password once to confirm.")
+                Text("This only changes the board's lock. Your account password stays exactly the same for signing in everywhere. With this on, anyone holding this device, including your child, can open edit mode, change or delete tiles, and reach the parent dashboard. Enter your account password once to confirm.")
             }
         }
     }
@@ -267,7 +267,7 @@ struct DisplaySettingsView: View {
                 syncedMsg = nil
                 access.refresh()   // the live board applies it without a relaunch
             } else {
-                syncedMsg = "Couldn't save — check your connection."
+                syncedMsg = "Couldn't save. Check your connection."
                 syncedLoaded = false
                 await seedSynced()
             }
@@ -286,7 +286,7 @@ struct DisplaySettingsView: View {
         do {
             _ = try await api.login(email: email, password: pw)
         } catch {
-            syncedMsg = "That password didn't work — the unlock gate stays on."
+            syncedMsg = "That password didn't work. The unlock gate stays on."
             return
         }
         if await api.updateChildSettings(childId: auth.childSlug, patch: ["easyUnlock": true]) {
@@ -295,7 +295,7 @@ struct DisplaySettingsView: View {
             easyUnlock = true
             access.refresh()
         } else {
-            syncedMsg = "Couldn't save — check your connection."
+            syncedMsg = "Couldn't save. Check your connection."
         }
     }
 }

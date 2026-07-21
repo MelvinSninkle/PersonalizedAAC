@@ -127,7 +127,7 @@ struct SentenceActivityView: View {
             Text("No sentences yet")
                 .font(.system(size: 17, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: Brand.ink))
-            Text("When the sentence builder is on and your child plays a sentence with ▶, it lands here — what they said, and when.")
+            Text("When the sentence builder is on and your child plays a sentence with ▶, it lands here: what they said, and when.")
                 .font(.footnote)
                 .foregroundStyle(Color(hex: Brand.muted))
                 .multilineTextAlignment(.center)
@@ -298,7 +298,7 @@ struct UsageView: View {
                 .font(.footnote)
                 .foregroundStyle(Color(hex: Brand.muted))
             if points.allSatisfy({ $0.taps == 0 }) || points.isEmpty {
-                Text("No board activity yet — this lights up as the board gets used.")
+                Text("No board activity yet. This lights up as the board gets used.")
                     .font(.footnote)
                     .foregroundStyle(Color(hex: Brand.muted))
                     .padding(.vertical, 10)

@@ -133,7 +133,7 @@ struct TileEditSheet: View {
         // folder, so don't let a save file it somewhere invisible.
         let effectiveCategory = placementEffectiveCategory(board, section: section, rootId: rootId, subId: subId)
         if section != .needs && effectiveCategory == nil {
-            errorText = "Pick a folder above — tiles only show up on the board inside a folder."
+            errorText = "Pick a folder above. Tiles only show up on the board inside a folder."
             return
         }
         saving = true
@@ -212,7 +212,7 @@ struct TileEditSheet: View {
                     return "You're out of image credits. Open Credits & Store on the parent home to add more, then retry."
                 }
                 return body.isEmpty ? "Server error." : String(body.prefix(160))
-            case .notAuthenticated: return "Signed out — log in and try again."
+            case .notAuthenticated: return "Signed out. Log in and try again."
             case .transport(let e): return "Network problem: \(e.localizedDescription)"
             case .invalidResponse:  return "Unexpected server response."
             case .decoding:         return "Couldn't read the server's response."
@@ -516,7 +516,7 @@ struct BoardTileEditSheet: View {
                         .font(.system(size: 12)).foregroundStyle(Color(hex: "#2e7d32"))
                 }
                 if stagedImage != nil {
-                    Text("New picture ready — tap Save to apply.")
+                    Text("New picture ready. Tap Save to apply.")
                         .font(.system(size: 12)).foregroundStyle(Color(hex: "#2e7d32"))
                 }
             }
@@ -533,7 +533,7 @@ struct BoardTileEditSheet: View {
 
             if !history.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("PREVIOUS PICTURES — TAP TO BRING ONE BACK")
+                    Text("PREVIOUS PICTURES: TAP TO BRING ONE BACK")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(Color(hex: "#999"))
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -556,7 +556,7 @@ struct BoardTileEditSheet: View {
                     Button("Bring it back") { Task { await doRevert(h) } }
                     Button("Cancel", role: .cancel) {}
                 } message: { _ in
-                    Text("The current picture is archived first — you can always undo.")
+                    Text("The current picture is archived first. You can always undo.")
                 }
             }
         }
@@ -608,7 +608,7 @@ struct BoardTileEditSheet: View {
                     Text("Moves to \(placementName()) when you save.")
                         .font(.system(size: 12)).foregroundStyle(Color(hex: "#2e7d32"))
                 } else {
-                    Text("Pick a folder above to finish the move — tiles only show on the board inside a folder. (Selecting the tile's own spot again keeps it where it is.)")
+                    Text("Pick a folder above to finish the move. Tiles only show on the board inside a folder. (Selecting the tile's own spot again keeps it where it is.)")
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(Color(hex: "#b45309"))
                 }
             }
@@ -649,7 +649,7 @@ struct BoardTileEditSheet: View {
     private var descriptionSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             field("Description (optional)")
-            TextField("Used in the listening game — e.g. \"lives in a field, four legs, eats grass\"",
+            TextField("Used in the listening game, e.g. \"lives in a field, four legs, eats grass\"",
                       text: $descriptionText, axis: .vertical)
                 .lineLimit(2...4)
                 .textFieldStyle(.roundedBorder)
@@ -769,7 +769,7 @@ struct BoardTileEditSheet: View {
         let newLabel = label.trimmingCharacters(in: .whitespaces)
         guard !newLabel.isEmpty else { return }
         if placementChanged && !placementReady {
-            errorText = "Pick a folder above to finish the move — tiles only show on the board inside a folder."
+            errorText = "Pick a folder above to finish the move. Tiles only show on the board inside a folder."
             return
         }
         saving = true; errorText = nil
@@ -842,7 +842,7 @@ struct BoardTileEditSheet: View {
         defer { reverting = false }
         do {
             let newKey = try await api.revertImage(itemId: tile.id, key: h.key)
-            redrawNote = "✅ Brought back — the swapped-out picture is in Previous pictures."
+            redrawNote = "✅ Brought back. The swapped-out picture is in Previous pictures."
             if let img = await MediaCache.shared.image(for: h.key, maxPixel: 1024) { currentImage = img }
             // The server re-homes the restored image under a FRESH key — seed
             // that key's cache from the history bytes we just displayed, so
@@ -864,8 +864,8 @@ struct BoardTileEditSheet: View {
         do {
             let r = try await api.storeRetry(childId: auth.childSlug, itemId: tile.id, guidance: guidance)
             redrawNote = (r.freeRetry == true)
-                ? "Redrawing now (free) — the new picture lands on the board in a minute or two."
-                : "Redrawing now (⭐\(r.charged)) — the new picture lands on the board in a minute or two."
+                ? "Redrawing now (free). The new picture lands on the board in a minute or two."
+                : "Redrawing now (⭐\(r.charged)). The new picture lands on the board in a minute or two."
         } catch {
             errorText = friendly(error)
         }
@@ -908,7 +908,7 @@ struct BoardTileEditSheet: View {
                     Button("Redraw") {
                         let g = redrawGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !g.isEmpty else {
-                            redrawGuidanceError = "Tell it what to change first — that's what makes the retry better than a re-roll."
+                            redrawGuidanceError = "Tell it what to change first. That's what makes the retry better than a re-roll."
                             return
                         }
                         showRedrawSheet = false
@@ -968,7 +968,7 @@ struct BoardTileEditSheet: View {
                     return "You're out of image credits. Open Credits & Store on the parent home to add more, then retry."
                 }
                 return body.isEmpty ? "Server error." : String(body.prefix(160))
-            case .notAuthenticated: return "Signed out — log in and try again."
+            case .notAuthenticated: return "Signed out. Log in and try again."
             case .transport(let e): return "Network problem: \(e.localizedDescription)"
             case .invalidResponse:  return "Unexpected server response."
             case .decoding:         return "Couldn't read the server's response."
@@ -1037,7 +1037,7 @@ private struct PlacementPicker: View {
             if section != .needs {
                 let roots = board.roots(in: section)
                 if roots.isEmpty {
-                    Text("This column has no folders yet — add one on the board first. Tiles only show up inside a folder.")
+                    Text("This column has no folders yet. Add one on the board first. Tiles only show up inside a folder.")
                         .font(.system(size: 13))
                         .foregroundStyle(Color(hex: "#b45309"))
                 } else {
@@ -1114,7 +1114,7 @@ private struct PlacementPicker: View {
 
     private func subtitle(_ s: BoardSection) -> String {
         switch s {
-        case .needs:  return "Core words — always visible along the bottom"
+        case .needs:  return "Core words, always visible along the bottom"
         case .people: return "People"
         case .nouns:  return "Gestalts, nouns & adjectives"
         case .verbs:  return "Verbs"

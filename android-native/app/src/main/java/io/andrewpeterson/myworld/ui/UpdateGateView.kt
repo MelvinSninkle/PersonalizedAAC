@@ -99,7 +99,7 @@ private fun UpdateWall(note: String?, url: String?) {
         )
         Text(
             note ?: ("This version is too old to talk to our servers safely. " +
-                "Update and everything — the board, the pictures, the voices — is right where you left it."),
+                "Update and everything is right where you left it: the board, the pictures, the voices."),
             color = Brand.muted, fontSize = 14.sp, textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 10.dp),
         )
@@ -138,7 +138,7 @@ private fun UpdateNudge(note: String?, url: String?, onLater: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text("A new My World is ready", color = Brand.ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             Text(
-                note ?: "Update when convenient — new features and fixes are waiting.",
+                note ?: "Update when convenient. New features and fixes are waiting.",
                 color = Brand.muted, fontSize = 12.sp,
             )
             Row(Modifier.padding(top = 6.dp)) {

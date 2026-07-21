@@ -96,7 +96,7 @@ final class TileJob: Identifiable {
     }
     var phase: Phase = .working
     var progress: Double = 0
-    var statusText = "Saved — making the tile…"
+    var statusText = "Saved. Making the tile…"
 
     var label = ""
     /// Parent's optional "here's more info" detail passed to generation.
@@ -261,12 +261,12 @@ final class AddTileQueue {
                 childId: job.childId,
                 raw: job.raw)
             job.serverId = serverId
-            job.statusText = "Saved — making the tile…"
+            job.statusText = "Saved. Making the tile…"
             job.progress = max(job.progress, 0.15)
         } catch {
             job.phase = .needsAttention
             job.errorText = friendly(error)
-            job.statusText = "Upload failed — tap Retry"
+            job.statusText = "Upload failed. Tap Retry"
         }
     }
 
@@ -320,13 +320,13 @@ final class AddTileQueue {
                                                           imageKey: s.imageKey, childId: job.childId,
                                                           jobId: sid))
                 }
-                job.statusText = s.needsReview ? "✅ On the board — needs review"
-                    : (s.artFailed ? "✅ Saved your photo — art didn't render" : "✅ On the board")
+                job.statusText = s.needsReview ? "✅ On the board, needs review"
+                    : (s.artFailed ? "✅ Saved your photo. The art didn't render" : "✅ On the board")
             case "failed":
                 if s.attempts >= 3 {
                     job.phase = .needsAttention
                     job.errorText = s.error ?? "Didn't finish"
-                    job.statusText = "Didn't finish — tap Retry"
+                    job.statusText = "Didn't finish. Tap Retry"
                 } else {
                     job.statusText = "Trying again…"
                     job.progress = max(job.progress, 0.4)
@@ -421,7 +421,7 @@ final class AddTileQueue {
                     return "OpenAI organization isn't verified for image generation. Open platform.openai.com → Settings → Organization → Verify, then retry."
                 }
                 return body.isEmpty ? "Server error." : String(body.prefix(160))
-            case .notAuthenticated: return "Signed out — log in and retry."
+            case .notAuthenticated: return "Signed out. Log in and retry."
             case .transport(let e): return "Network problem: \(e.localizedDescription)"
             case .invalidResponse:  return "Unexpected server response."
             case .decoding:         return "Couldn't read the server's response."

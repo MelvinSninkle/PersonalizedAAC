@@ -40,7 +40,7 @@ struct StoreView: View {
             VStack(alignment: .leading, spacing: 18) {
                 header
 
-                Text("Every image you make is your family's to keep — stored safely forever, even when you change or regenerate one.")
+                Text("Every image you make is your family's to keep, stored safely forever, even when you change or regenerate one.")
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
                     .padding(14)
@@ -77,7 +77,7 @@ struct StoreView: View {
                         Text("MEMBERSHIPS")
                             .font(.system(size: 12, weight: .heavy))
                             .foregroundStyle(Color(hex: "#ad1457"))
-                        Text("Every membership unlocks speech-to-text mode, automatic teaching, reporting, and data saving — they differ in monthly image credits and voice budget.")
+                        Text("Every membership unlocks speech-to-text mode, automatic teaching, reporting, and data saving. They differ in monthly image credits and voice budget.")
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                         ForEach(memberships, id: \.id) { p in
                             membershipRow(p)
@@ -95,7 +95,7 @@ struct StoreView: View {
                         // checks membership before the wallet, so selling a
                         // free-tier parent credits they can't use would be
                         // taking money for nothing. Point at memberships.
-                        Text("Credit packs top up a membership — join My World Plus or Pro above first, then packs stack on top of your monthly ⭐.")
+                        Text("Credit packs top up a membership. Join My World Plus or Pro above first, then packs stack on top of your monthly ⭐.")
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                             .padding(12)
@@ -161,7 +161,7 @@ struct StoreView: View {
                 // Apple Review 3.1.2: the auto-renew terms + working links to
                 // the Terms and Privacy Policy must live in the app.
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Joining builds your child's personalized starter board right away — 100+ core words plus two family portraits — charged at the lower of the build's credit price or your monthly grant; Plus invests its whole first month in the build, and Pro always finishes enrollment with at least ⭐50 remaining. Cancel anytime: everything you've made stays yours, forever. Memberships: My World Plus is $9.99/month (50 credits monthly) and My World Pro is $19.99/month (150 credits monthly). Payment is charged to your Apple ID at confirmation of purchase. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period — manage, switch tiers, or cancel any time in Settings → Apple ID → Subscriptions. Credits are non-refundable once spent on completed images, and every image you make is yours to keep.")
+                    Text("Joining builds your child's personalized starter board right away, 100+ core words plus two family portraits, charged at the lower of the build's credit price or your monthly grant; Plus invests its whole first month in the build, and Pro always finishes enrollment with at least ⭐50 remaining. Cancel anytime: everything you've made stays yours, forever. Memberships: My World Plus is $9.99/month (50 credits monthly) and My World Pro is $19.99/month (150 credits monthly). Payment is charged to your Apple ID at confirmation of purchase. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period. Manage, switch tiers, or cancel any time in Settings → Apple ID → Subscriptions. Credits are non-refundable once spent on completed images, and every image you make is yours to keep.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     HStack(spacing: 14) {
@@ -205,7 +205,7 @@ struct StoreView: View {
         switch id {
         case "starter.monthly": return "10 image credits/month · speech-to-text · auto-teach · reporting"
         case "plus.monthly":    return "joins with your whole starter board personalized up front (a ⭐120+ value) · ⭐50/month · speech-to-text · auto-teach · reporting"
-        case "pro.monthly":     return "same enrollment build — and ⭐50 still yours after sign-up · ⭐150/month · biggest voice budget · new features first"
+        case "pro.monthly":     return "same enrollment build, and ⭐50 still yours after sign-up · ⭐150/month · biggest voice budget · new features first"
         default:                return "Membership"
         }
     }
@@ -334,7 +334,7 @@ struct StoreView: View {
                 await tx.finish()
                 balance = await api.storeBalance()
                 entitlement = await api.storeEntitlement()
-                if let credited, credited > 0 { note = "Added ⭐\(credited) — thank you!" }
+                if let credited, credited > 0 { note = "Added ⭐\(credited). Thank you!" }
             case .userCancelled, .pending: break
             @unknown default: break
             }
@@ -352,7 +352,7 @@ struct StoreView: View {
             let r = try await api.storeRedeem(code: code)
             balance = r.balance
             couponCode = ""
-            note = "Added ⭐\(r.credited) — enjoy!"
+            note = "Added ⭐\(r.credited). Enjoy!"
         } catch let APIError.badStatus(_, body) {
             note = body.contains("already used") ? "You've already used this code."
                  : body.contains("expired") ? "That code has expired."

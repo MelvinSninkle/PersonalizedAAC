@@ -163,7 +163,7 @@ private fun DemoStep() {
         BrandBar()
         Spacer(Modifier.height(20.dp))
         StepHeader("Welcome", "A board that sounds like the child it belongs to.",
-            "See what My World does for a real family — a board painted in your child's own style that speaks in a voice you pick.")
+            "See what My World does for a real family: a board painted in your child's own style that speaks in a voice you pick.")
         Spacer(Modifier.height(20.dp))
         // Space reserved for the tappable demo board (matches iOS scaffold).
         Column(
@@ -176,7 +176,7 @@ private fun DemoStep() {
         ) {
             Text("▶️", fontSize = 34.sp)
             Text("Live demo board", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Brand.ink)
-            Text("Tap real tiles and hear the magic — coming to this screen soon.",
+            Text("Tap real tiles and hear the magic, coming to this screen soon.",
                 fontSize = 11.sp, color = Brand.muted)
         }
         Spacer(Modifier.height(20.dp))
@@ -350,19 +350,19 @@ private fun ChildStep() {
     var langMenu by remember { mutableStateOf(false) }
 
     val languages = listOf(
-        "en" to "English", "es" to "Español — coming soon", "fr" to "Français — coming soon",
-        "pt" to "Português — coming soon", "de" to "Deutsch — coming soon",
+        "en" to "English", "es" to "Español, coming soon", "fr" to "Français, coming soon",
+        "pt" to "Português, coming soon", "de" to "Deutsch, coming soon",
     )
 
     Column(Modifier.stepPadding.verticalScroll(rememberScrollState())) {
         BrandBar()
         Spacer(Modifier.height(20.dp))
         StepHeader("Step 1 of 4", "Tell us about your child.",
-            "Their birthday lets the board start with the right vocabulary — and grow with them.")
+            "Their birthday lets the board start with the right vocabulary, and grow with them.")
         Spacer(Modifier.height(14.dp))
 
         OutlinedTextField(value = name, onValueChange = { name = it },
-            label = { Text("Name — e.g. Fletcher") }, singleLine = true,
+            label = { Text("Name: e.g. Fletcher") }, singleLine = true,
             modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(value = birth, onValueChange = { birth = it },
@@ -490,7 +490,7 @@ private fun StylePickerRow() {
 
     Column {
         Text("BOARD ART STYLE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Brand.muted)
-        Text("The look for the whole board — the people portraits and the first words all share it.",
+        Text("The look for the whole board: the people portraits and the first words all share it.",
             fontSize = 12.sp, color = Brand.muted)
         Spacer(Modifier.height(6.dp))
         val s = styles
@@ -562,7 +562,7 @@ private fun VoicePickerRow() {
 
     Column {
         Text("BOARD VOICE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Brand.muted)
-        Text("How the board talks — tap ▶ to hear each voice.", fontSize = 12.sp, color = Brand.muted)
+        Text("How the board talks. Tap ▶ to hear each voice.", fontSize = 12.sp, color = Brand.muted)
         Spacer(Modifier.height(6.dp))
         val v = voices
         when {
@@ -678,7 +678,7 @@ private fun PhotoStep(isChild: Boolean) {
             if (isChild) "Step 2 of 4" else "Step 3 of 4",
             if (isChild) "Add a photo of ${c.onboarding.childName.ifEmpty { "your child" }}."
             else "Add a photo of one grown-up.",
-            if (isChild) "Their face becomes the art on every tile that's about them — feelings, actions, social phrases. Plain head-and-shoulders works best."
+            if (isChild) "Their face becomes the art on every tile that's about them: feelings, actions, social phrases. Plain head-and-shoulders works best."
             else "Body parts and comfort phrases are taught with a face the child looks at all day. Pick the grown-up they see most.",
         )
         Spacer(Modifier.height(16.dp))
@@ -693,7 +693,7 @@ private fun PhotoStep(isChild: Boolean) {
                     Text("✅", fontSize = 40.sp)
                     Text(if (addedGrownups == 1) "Grown-up added!" else "$addedGrownups grown-ups added!",
                         fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
-                    Text("Add anyone else the child sees a lot — the other parent, a sibling, a grandparent, a nanny. Each face anchors the tiles about them. You can always add more later from Family & people.",
+                    Text("Add anyone else the child sees a lot: the other parent, a sibling, a grandparent, a nanny. Each face anchors the tiles about them. You can always add more later from Family & people.",
                         fontSize = 13.sp, color = Brand.muted)
                     Spacer(Modifier.height(10.dp))
                     PrimaryButton("Add another grown-up") { showAddMore = false }
@@ -710,7 +710,7 @@ private fun PhotoStep(isChild: Boolean) {
                         modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp).clip(RoundedCornerShape(20.dp)))
                     Spacer(Modifier.height(8.dp))
                     Text("How does this look?", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
-                    Text("Retries are free — try a few rolls and pick the one that feels right.",
+                    Text("Retries are free. Try a few rolls and pick the one that feels right.",
                         fontSize = 12.sp, color = Brand.muted)
                     Spacer(Modifier.height(12.dp))
                     PrimaryButton(if (busy) "Saving…" else "Looks great", busy = busy) {
@@ -776,14 +776,14 @@ private fun PhotoStep(isChild: Boolean) {
                         )
                     }
                     Spacer(Modifier.height(6.dp))
-                    Text("This may take anywhere from 1 to 5 minutes — don't be alarmed.",
+                    Text("This may take anywhere from 1 to 5 minutes. Don't be alarmed.",
                         fontSize = 12.sp, color = Brand.muted)
                 }
             }
             else -> {
                 if (!isChild) {
                     OutlinedTextField(value = subjectName, onValueChange = { subjectName = it },
-                        label = { Text("Name — e.g. Mama, Dada, Grandma Jane") },
+                        label = { Text("Name: e.g. Mama, Dada, Grandma Jane") },
                         singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
                     Box {
@@ -848,7 +848,7 @@ private fun SeedStep() {
         BrandBar()
         Spacer(Modifier.height(20.dp))
         StepHeader("Step 4 of 4", "Let's make the first words.",
-            "We'll generate ${c.onboarding.childName.ifEmpty { "your child" }}'s 13 most useful first words now. Household items — favorite cup, blanket, stuffed animal — you'll snap as you go.")
+            "We'll generate ${c.onboarding.childName.ifEmpty { "your child" }}'s 13 most useful first words now. Household items you'll snap as you go: favorite cup, blanket, stuffed animal.")
         if (c.onboarding.styleLabel.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
             Text("🎨 In your ${c.onboarding.styleLabel} style", fontSize = 13.sp,

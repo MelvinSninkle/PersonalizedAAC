@@ -54,7 +54,7 @@ struct AccuracyView: View {
             }
         }
         return chartCard(title: "Pass rate by category",
-                         emptyMessage: "No games scored yet — accuracy by category lights up here when game data arrives.",
+                         emptyMessage: "No games scored yet. Accuracy by category lights up here when game data arrives.",
                          isEmpty: points.isEmpty) {
             Chart(points) { p in
                 LineMark(x: .value("When", p.bucketIndex),
@@ -96,7 +96,7 @@ struct AccuracyView: View {
             }
         }
         return chartCard(title: "Pass rate by game mode",
-                         emptyMessage: "No matching/slideshow/auditory/expressive sessions yet — each mode gets its own line here.",
+                         emptyMessage: "No matching/slideshow/auditory/expressive sessions yet. Each mode gets its own line here.",
                          isEmpty: points.isEmpty) {
             Chart(points) { p in
                 LineMark(x: .value("When", p.bucketIndex),

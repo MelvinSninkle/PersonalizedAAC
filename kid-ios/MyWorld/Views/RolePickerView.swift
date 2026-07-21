@@ -45,7 +45,7 @@ struct RolePickerView: View {
             if opening != nil {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text(opening == .childBoard ? "Opening the board — loading pictures & voices…"
+                    Text(opening == .childBoard ? "Opening the board, loading pictures & voices…"
                                                 : "Opening the parent app…")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color(hex: "#ad1457"))

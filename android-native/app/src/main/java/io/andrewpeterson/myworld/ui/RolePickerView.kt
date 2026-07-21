@@ -82,7 +82,7 @@ fun RolePickerView() {
                 Spacer(Modifier.widthIn(min = 8.dp))
                 Text(
                     if (opening == DeviceMode.Role.CHILD_BOARD)
-                        "  Opening the board — loading pictures & voices…"
+                        "  Opening the board, loading pictures & voices…"
                     else "  Opening the parent app…",
                     fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Brand.pinkDeep,
                 )

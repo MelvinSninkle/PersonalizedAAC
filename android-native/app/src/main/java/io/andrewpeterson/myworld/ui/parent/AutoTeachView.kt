@@ -197,7 +197,7 @@ fun AutoTeachView(onDismiss: () -> Unit) {
                 Spacer(Modifier.height(14.dp))
 
                 // ── Quiet hours (required before enabling) ──────────────
-                StatCard("Quiet hours — when NOT to run") {
+                StatCard("Quiet hours: when NOT to run") {
                     Text("Auto-teach never fires while your child is asleep, at school, or in therapy. Required before it can be turned on.",
                         fontSize = 12.sp, color = Brand.muted)
                     Spacer(Modifier.height(8.dp))
@@ -247,14 +247,14 @@ fun AutoTeachView(onDismiss: () -> Unit) {
                         Text("Loading status…", fontSize = 12.sp, color = Brand.muted)
                     } else {
                         GateLine(g.subscribed ?: true, "Membership active",
-                            "Automatic teaching is part of My World memberships (from $9.99/mo) — join in Credits & Store")
+                            "Automatic teaching is part of My World memberships (from $9.99/mo). Join in Credits & Store")
                         GateLine(g.enabled, "Auto-teach is on", "Auto-teach is off")
                         GateLine(g.scheduleReady ?: true, "Quiet hours are set",
-                            "Quiet hours missing — set them above")
+                            "Quiet hours missing. Set them above")
                         GateLine(!g.inBlackout, "Currently a teachable window",
                             "Inside a blackout (sleep / school / meal)")
                         GateLine(!g.recentlyActive, "Child isn't actively tapping",
-                            "Child is using the board — won't interrupt")
+                            "Child is using the board. Auto-teach won't interrupt")
                         if (g.cooldownLeftMin > 0)
                             GateLine(false, "", "Cooldown: next allowed in ${g.cooldownLeftMin} min")
                         else GateLine(true, "Cooldown clear", "")
@@ -299,7 +299,7 @@ fun AutoTeachView(onDismiss: () -> Unit) {
 
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Auto-teach runs short exposure slideshows (~45-90s) at your chosen cadence during teachable windows, plus one game session per day at the time you pick. It honors quiet hours, school, and meal windows from your schedule, and pauses when the child is actively using the board. Mastery follows the clinical 80/90 rule — words move to a biweekly maintenance check rather than disappearing.",
+                    "Auto-teach runs short exposure slideshows (~45-90s) at your chosen cadence during teachable windows, plus one game session per day at the time you pick. It honors quiet hours, school, and meal windows from your schedule, and pauses when the child is actively using the board. Mastery follows the clinical 80/90 rule: words move to a biweekly maintenance check rather than disappearing.",
                     fontSize = 11.sp, color = Brand.muted,
                 )
             }

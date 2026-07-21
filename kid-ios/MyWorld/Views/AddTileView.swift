@@ -259,7 +259,7 @@ struct AddTileView: View {
 
             if section != .needs {
                 if sectionRoots.isEmpty {
-                    Text("This column has no folders yet — unlock the board and add one there first. Tiles only show up inside a folder.")
+                    Text("This column has no folders yet. Unlock the board and add one there first. Tiles only show up inside a folder.")
                         .font(.system(size: 13))
                         .foregroundStyle(Color(hex: "#b45309"))
                 } else {
@@ -288,12 +288,12 @@ struct AddTileView: View {
             HStack(spacing: 10) {
                 lookChoice(title: "Board art style",
                            subtitle: board.stylingAllowed
-                               ? (section == .people ? "Drawn to match — ⭐5 portrait" : "Drawn to match — ⭐1")
+                               ? (section == .people ? "Drawn to match: ⭐5 portrait" : "Drawn to match: ⭐1")
                                : "A membership perk",
                            selected: !exactPhoto,
                            disabled: !board.stylingAllowed) { exactPhoto = false }
                 lookChoice(title: "My exact photo",
-                           subtitle: "As taken, no restyle — free",
+                           subtitle: "As taken, no restyle: free",
                            selected: exactPhoto) { exactPhoto = true }
             }
             if !exactPhoto && board.stylingAllowed {
@@ -412,8 +412,8 @@ struct AddTileView: View {
 
             if !destinationReady {
                 Text(rootId == nil
-                     ? "Pick a folder above first — tiles only show up on the board inside a folder."
-                     : "\(selectedRoot?.label ?? "That folder") holds sub-folders — pick one, so the tile has a spot the board can show.")
+                     ? "Pick a folder above first. Tiles only show up on the board inside a folder."
+                     : "\(selectedRoot?.label ?? "That folder") holds sub-folders. Pick one, so the tile has a spot the board can show.")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color(hex: "#b45309"))
                     .multilineTextAlignment(.center)
@@ -456,7 +456,7 @@ struct AddTileView: View {
                             onRemove:{ queue.remove(job) })
                 }
                 if queue.hasActiveJobs {
-                    Text("This takes a few minutes — don't worry. Your photo is already saved; you can close this and a Pending tile marks the spot on the board until the picture lands.")
+                    Text("This takes a few minutes. Don't worry. Your photo is already saved; you can close this and a Pending tile marks the spot on the board until the picture lands.")
                         .font(.system(size: 12))
                         .foregroundStyle(Color(hex: "#9d2463"))
                         .padding(10)
@@ -465,7 +465,7 @@ struct AddTileView: View {
                 }
             }
         } else {
-            Text("Snap a photo of anything — a snack, a toy, a person — and we'll turn it into a tile while you line up the next one.")
+            Text("Snap a photo of anything: a snack, a toy, a person. We'll turn it into a tile while you line up the next one.")
                 .font(.system(size: 14))
                 .foregroundStyle(Color(hex: "#aa7"))
                 .multilineTextAlignment(.center)
@@ -554,7 +554,7 @@ struct AddTileView: View {
 
     private func sectionSubtitle(_ s: BoardSection) -> String {
         switch s {
-        case .needs:  return "Core words — always visible along the bottom"
+        case .needs:  return "Core words, always visible along the bottom"
         case .people: return "People"
         case .nouns:  return "Gestalts, nouns & adjectives"
         case .verbs:  return "Verbs"
@@ -795,7 +795,7 @@ private struct PreGenerateSheet: View {
                             .textInputAutocapitalization(.words)
                             .autocorrectionDisabled()
                             .focused($nameFocused)
-                        Text("Spelled how it should sound — that's what's spoken.")
+                        Text("Spelled how it should sound. That's what's spoken.")
                             .font(.system(size: 12))
                             .foregroundStyle(Color(hex: "#999"))
 
@@ -805,7 +805,7 @@ private struct PreGenerateSheet: View {
                             .lineLimit(2...4)
                             .textFieldStyle(.roundedBorder)
                             .autocorrectionDisabled()
-                        Text("A quick hint helps the art look right — who or what this is.")
+                        Text("A quick hint helps the art look right: who or what this is.")
                             .font(.system(size: 12))
                             .foregroundStyle(Color(hex: "#999"))
 
@@ -813,7 +813,7 @@ private struct PreGenerateSheet: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Use my photo as-is")
                                     .font(.system(size: 15, weight: .semibold))
-                                Text("No restyle — the photo itself becomes the tile. Free.")
+                                Text("No restyle: the photo itself becomes the tile. Free.")
                                     .font(.system(size: 12))
                                     .foregroundStyle(Color(hex: "#999"))
                             }
@@ -827,7 +827,7 @@ private struct PreGenerateSheet: View {
                             // and here's what a membership would add.
                             (Text("✨ Want this drawn in your child's art style? ")
                                 .fontWeight(.bold)
-                             + Text("Styled tiles are part of My World memberships, from $9.99/month — join in the parent app under Credits & Store. Everything you've already made is yours forever."))
+                             + Text("Styled tiles are part of My World memberships, from $9.99/month. Join in the parent app under Credits & Store. Everything you've already made is yours forever."))
                                 .font(.system(size: 12))
                                 .foregroundStyle(Color(hex: "#ad1457"))
                                 .padding(12)
@@ -970,7 +970,7 @@ private struct MagicFollowUpSheet: View {
                 }
                 Text(ex.isDefault
                      ? "Swap in your picture? The classic art stays available to every board."
-                     : "Swap in your new picture? The current one is archived in the Album — you never lose it.")
+                     : "Swap in your new picture? The current one is archived in the Album. You never lose it.")
                     .font(.system(size: 14)).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -1001,7 +1001,7 @@ private struct MagicFollowUpSheet: View {
                                           sourceItemId: candidate.itemId,
                                           targetItemId: ex.itemId)
             refItemId = ex.itemId          // the existing tile now holds the new art
-            note = "Replaced — the old picture is archived in the Album."
+            note = "Replaced. The old picture is archived in the Album."
             await board.refresh(childId: candidate.childId)
             advance(from: .replace)
         } catch {
@@ -1019,7 +1019,7 @@ private struct MagicFollowUpSheet: View {
             Text("Your \(candidate.label) shows up in \(affected.count) other picture\(affected.count == 1 ? "" : "s")")
                 .font(.system(size: 18, weight: .heavy, design: .rounded))
                 .multilineTextAlignment(.center)
-            Text("Remake them so they show YOUR \(candidate.label)? ⭐1 each — replaced art is archived.")
+            Text("Remake them so they show YOUR \(candidate.label)? ⭐1 each. Replaced art is archived.")
                 .font(.system(size: 13)).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             ScrollView {
@@ -1078,11 +1078,11 @@ private struct MagicFollowUpSheet: View {
             let r = try await api.storeRegenWith(childId: candidate.childId,
                                                  taxonomyIds: Array(selected),
                                                  refItemId: refItemId)
-            note = r.note ?? "\(r.queued) pictures re-rendering — they pop in over the next few minutes."
+            note = r.note ?? "\(r.queued) pictures re-rendering. They pop in over the next few minutes."
             phase = .done
         } catch let APIError.badStatus(status, body) {
             note = (status == 402 || body.contains("not_enough_credits"))
-                ? "Not enough credits — add a pack in Credits & Store, then try again."
+                ? "Not enough credits. Add a pack in Credits & Store, then try again."
                 : "Couldn't queue: \(String(body.prefix(120)))"
         } catch {
             note = "Couldn't queue: \(error.localizedDescription)"

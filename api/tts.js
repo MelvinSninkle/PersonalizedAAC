@@ -159,7 +159,7 @@ export default async function handler(req, res) {
         res.status(402).json({
           error: 'voice_limit',
           detail: cap <= 0
-            ? 'Speech mode is part of My World memberships — subscribe to turn spoken words into tiles.'
+            ? 'Speech mode is part of My World memberships. Subscribe to turn spoken words into tiles.'
             : 'This month’s voice budget is used up. Already-spoken words keep working; new ones resume next month (or upgrade for a bigger budget).',
           used, cap: cap <= 0 ? 0 : cap, tier: ent.tier,
         });

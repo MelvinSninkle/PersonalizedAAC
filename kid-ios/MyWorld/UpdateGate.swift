@@ -78,7 +78,7 @@ struct UpdateGate: ViewModifier {
                 .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: Brand.pinkDeep))
                 .multilineTextAlignment(.center)
-            Text(g.note ?? "This version is too old to talk to our servers safely. Update and everything — the board, the pictures, the voices — is right where you left it.")
+            Text(g.note ?? "This version is too old to talk to our servers safely. Update and everything is right where you left it: the board, the pictures, the voices.")
                 .font(.system(size: 14))
                 .foregroundStyle(Color(hex: Brand.muted))
                 .multilineTextAlignment(.center)
@@ -110,7 +110,7 @@ struct UpdateGate: ViewModifier {
                 Text("A new My World is ready")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color(hex: Brand.ink))
-                Text(g.note ?? "Update when convenient — new features and fixes are waiting.")
+                Text(g.note ?? "Update when convenient. New features and fixes are waiting.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color(hex: Brand.muted))
                 HStack(spacing: 14) {

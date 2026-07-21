@@ -72,7 +72,7 @@ struct CameraCapture: View {
                             .fontWeight(.semibold)
                         Text("(You may need the Screen Time passcode.)")
                     } else {
-                        Text("Tap Open Settings below and turn on **Camera** — it's one switch.")
+                        Text("Tap Open Settings below and turn on **Camera**. It's one switch.")
                         Text("Don't see the toggle? Screen Time may be blocking it: Settings → Screen Time → Content & Privacy Restrictions → Allowed Apps & Features → Camera.")
                     }
                     Text("Camera on but the picture is black? Check that the iPad's case isn't covering the camera lens.")

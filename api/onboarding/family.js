@@ -91,7 +91,7 @@ async function stylize({ db, childId, sourceBytes, contentType, actorEmail, atte
     g = await primary().catch((e) => ({ ok: false, detail: String(e.message || e) }));
   }
   if (!g.ok) {
-    const err = new Error('The picture engine is busy right now — your photo is saved, so just tap Try again in a moment. '
+    const err = new Error('The picture engine is busy right now. Your photo is saved, so just tap Try again in a moment. '
       + (g.detail || '').slice(0, 200));
     err.status = g.status || 502; throw err;
   }
@@ -124,7 +124,7 @@ async function loadSourceFromDraft(db, childId, draftKey) {
   const row = (await db`SELECT data FROM onboarding_progress
                         WHERE child_id = ${childId} LIMIT 1`)[0];
   const src = row && row.data && row.data.lastSourceKey;
-  if (!src) throw new Error('No source bytes on file for retry — capture a new photo');
+  if (!src) throw new Error('No source bytes on file for retry. Capture a new photo');
   return await readBlobBytes(src);
 }
 

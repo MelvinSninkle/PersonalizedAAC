@@ -238,7 +238,7 @@ export async function generateCategoryIcon({
   let parentId = null;
   if (parentLabel) {
     const pr = await db`SELECT id FROM categories WHERE child_id = ${childId} AND section = ${section} AND parent_id IS NULL AND lower(label) = lower(${parentLabel}) LIMIT 1`;
-    if (!pr.length) return { ok: false, status: 409, error: `Parent category "${parentLabel}" doesn't exist on ${childId}'s board yet — create it first.` };
+    if (!pr.length) return { ok: false, status: 409, error: `Parent category "${parentLabel}" doesn't exist on ${childId}'s board yet. Create it first.` };
     parentId = pr[0].id;
   }
 

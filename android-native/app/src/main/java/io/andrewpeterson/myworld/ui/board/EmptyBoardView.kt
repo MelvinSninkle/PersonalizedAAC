@@ -55,7 +55,7 @@ fun EmptyBoardView(possessive: String, onRefreshed: () -> Unit) {
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            "The first words are being drawn and voiced right now.\nThey'll appear here as they finish — nothing to do.",
+            "The first words are being drawn and voiced right now.\nThey'll appear here as they finish. Nothing to do.",
             fontSize = 15.sp, color = Brand.muted, textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 32.dp),
         )

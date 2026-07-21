@@ -73,7 +73,7 @@ export default async function handler(req, res) {
       const invCheck = await validateInviteCode(db, typedCode || await inviteCodeFromCookie(req));
       if (!invCheck) {
         res.status(403).json({ error: 'invite_required',
-          detail: 'My World is invite-only right now. Enter the invite code you were given — or write us for one.' });
+          detail: 'My World is invite-only right now. Enter the invite code you were given, or write us for one.' });
         return;
       }
       // A real code whose launch-group slots are all taken: be honest about
@@ -139,7 +139,7 @@ export default async function handler(req, res) {
           throw e;
         }
       }
-      if (!user) { res.status(500).json({ error: 'Could not allocate a board name — please try again.' }); return; }
+      if (!user) { res.status(500).json({ error: 'Could not allocate a board name. Please try again.' }); return; }
       // Pre-authorized tester/therapist emails get their role from signup #1.
       try {
         const { applyRoleGrant } = await import('../_lib/role-grants.js');
@@ -194,11 +194,11 @@ export default async function handler(req, res) {
       if (emailConfigured()) {
         const link = appUrl() + '/onboard';
         const who = childName ? escapeHtml(childName) : 'your child';
-        const subject = childName ? `Welcome to My World — let's build ${childName}'s board` : 'Welcome to My World';
+        const subject = childName ? `Welcome to My World: let's build ${childName}'s board` : 'Welcome to My World';
         const html = `
           <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1f2937;max-width:560px;margin:0 auto;padding:24px;">
             <h2 style="color:#ad1457;margin:0 0 12px;font-family:'Fredoka',system-ui;">Welcome to My World 🌍</h2>
-            <p>Your account is ready. My World turns ${who}'s real food, toys, people, and home into the vocabulary on their AAC board — rendered in a style they love.</p>
+            <p>Your account is ready. My World turns ${who}'s real food, toys, people, and home into the vocabulary on their AAC board, rendered in a style they love.</p>
             <p>Pick up where you are anytime by signing in with this email. To build the first board now:</p>
             <p style="margin:22px 0;">
               <a href="${link}" style="display:inline-block;background:#ff1493;color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:999px;">Set up ${who}'s board →</a>

@@ -24,7 +24,7 @@ struct MessageBoardView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
-                TextField("e.g. I love you — see you after lunch", text: $text, axis: .vertical)
+                TextField("e.g. I love you, see you after lunch", text: $text, axis: .vertical)
                     .lineLimit(2...4)
                     .textFieldStyle(.plain)
                     .padding(12)
@@ -53,7 +53,7 @@ struct MessageBoardView: View {
 
                 if let r = result {
                     VStack(alignment: .leading, spacing: 10) {
-                        Label("Sent — this is how it will play:", systemImage: "checkmark.circle.fill")
+                        Label("Sent. This is how it will play:", systemImage: "checkmark.circle.fill")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Color(hex: "#16a34a"))
                         tokenStrip(r.tokens)
@@ -130,8 +130,8 @@ struct ListeningModeView: View {
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(Color(hex: listeningOn ? "#ef4444" : "#ad1457"))
                 Text(listeningOn
-                     ? "The board is captioning live — everything said near the tablet shows as tiles."
-                     : "Turn the board into a live word-strip: speech near the tablet becomes tiles as it's said. Audio is processed for live transcription only — no recording is kept — and it stops itself after 2 minutes of quiet. Make sure everyone in the room is okay with it.")
+                     ? "The board is captioning live. Everything said near the tablet shows as tiles."
+                     : "Turn the board into a live word-strip: speech near the tablet becomes tiles as it's said. Audio is processed for live transcription only, no recording is kept, and it stops itself after 2 minutes of quiet. Make sure everyone in the room is okay with it.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Button {

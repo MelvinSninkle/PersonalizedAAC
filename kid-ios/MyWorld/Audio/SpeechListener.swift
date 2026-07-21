@@ -58,8 +58,8 @@ final class SpeechListener {
             AVAudioApplication.requestRecordPermission { mic in
                 Task { @MainActor in
                     guard let self else { return }
-                    guard auth == .authorized else { self.status = "Speech permission denied — enable it in Settings › My World."; return }
-                    guard mic else { self.status = "Microphone permission denied — enable it in Settings › My World."; return }
+                    guard auth == .authorized else { self.status = "Speech permission denied. Enable it in Settings › My World."; return }
+                    guard mic else { self.status = "Microphone permission denied. Enable it in Settings › My World."; return }
                     guard self.recognizer?.isAvailable == true else { self.status = "Speech recognizer unavailable (needs network, or a downloaded language)."; return }
                     self.isListening = true
                     self.startCleanup()
@@ -130,7 +130,7 @@ final class SpeechListener {
                 if let error {
                     if self.useOnDevice {                 // fall back to online once
                         self.useOnDevice = false
-                        self.status = "On-device not ready — using online…"
+                        self.status = "On-device not ready, using online…"
                         if self.isListening { self.beginSession() }
                         return
                     }
@@ -141,7 +141,7 @@ final class SpeechListener {
                     if self.isListening && self.restarts < 40 {
                         self.beginSession()
                     } else if self.restarts >= 40 {
-                        self.status = "Stopped — no speech detected."
+                        self.status = "Stopped. No speech detected."
                         self.isListening = false; self.teardown()
                     }
                 }

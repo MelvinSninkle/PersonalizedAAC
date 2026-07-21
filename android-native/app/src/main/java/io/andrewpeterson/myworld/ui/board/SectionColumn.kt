@@ -614,7 +614,7 @@ fun RenderingTileCell(job: AddTileQueue.TileJob, size: Dp, onDismissFailed: () -
         if (failed) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("✕", fontSize = 26.sp, color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
-                Text("Didn't work — tap to clear", fontSize = 10.sp, color = Color(0xFFDC2626),
+                Text("Didn't work. Tap to clear", fontSize = 10.sp, color = Color(0xFFDC2626),
                     modifier = Modifier.padding(horizontal = 6.dp))
             }
         } else {
@@ -624,7 +624,7 @@ fun RenderingTileCell(job: AddTileQueue.TileJob, size: Dp, onDismissFailed: () -
                 if (job.thumbnail == null) Text("🌍", fontSize = 26.sp)
                 CircularProgressIndicator(color = Brand.pink, strokeWidth = 3.dp,
                     modifier = Modifier.size(28.dp))
-                Text(if (job.label.isNotBlank()) "${job.label} — pending" else "Pending",
+                Text(if (job.label.isNotBlank()) "${job.label}, pending" else "Pending",
                     fontSize = 11.sp, color = Brand.pinkDeep,
                     fontWeight = FontWeight.SemiBold, maxLines = 1,
                     modifier = Modifier.padding(horizontal = 4.dp))

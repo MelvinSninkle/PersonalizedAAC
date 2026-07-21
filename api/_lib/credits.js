@@ -260,7 +260,7 @@ export async function requireStyling(db, { user = null, childId = null } = {}) {
 
 export const NEEDS_SUBSCRIPTION_DETAIL =
   'Making pictures in your child’s own art style is part of My World memberships '
-  + '(from $9.99/month). Join in the Store — everything you’ve already made stays yours forever.';
+  + '(from $9.99/month). Join in the Store. Everything you’ve already made stays yours forever.';
 
 // Resolve the account that owns a child's board (cron jobs and board-device
 // requests have no signed-in parent — the entitlement is still the family's).

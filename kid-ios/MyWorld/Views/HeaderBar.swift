@@ -179,7 +179,7 @@ struct HeaderBar: View {
         .alert("Speech-to-text is a membership feature", isPresented: $showSttUpsell) {
             Button("OK") {}
         } message: {
-            Text("Turn spoken words into picture tiles in real time — part of every My World membership, from $9.99/month. Join in the parent app under Credits & Store. Everything you've already made stays yours forever.")
+            Text("Turn spoken words into picture tiles in real time, part of every My World membership, from $9.99/month. Join in the parent app under Credits & Store. Everything you've already made stays yours forever.")
         }
     }
 

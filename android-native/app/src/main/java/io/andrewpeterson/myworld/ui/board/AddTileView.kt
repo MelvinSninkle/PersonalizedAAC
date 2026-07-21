@@ -126,7 +126,7 @@ fun AddTileView(
             title = { Text("“${fu.label}” is already on the board") },
             text = { Text(if (ex.isDefault)
                 "Swap in your new picture? The classic art stays available to every board."
-                else "Swap in your new picture? The current one is archived in the Album — you never lose it.") },
+                else "Swap in your new picture? The current one is archived in the Album. You never lose it.") },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
@@ -145,7 +145,7 @@ fun AddTileView(
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { followups = emptyList() },   // stays pending
             title = { Text("Your ${fu.label} shows up in $n other picture${if (n == 1) "" else "s"}") },
-            text = { Text("Remake ${if (n == 1) "it" else "them"} (${fu.affected.joinToString { it.label }}) so they show YOUR ${fu.label}? ⭐1 each — replaced art is archived in the Album.") },
+            text = { Text("Remake ${if (n == 1) "it" else "them"} (${fu.affected.joinToString { it.label }}) so they show YOUR ${fu.label}? ⭐1 each. Replaced art is archived in the Album.") },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
@@ -174,7 +174,7 @@ fun AddTileView(
             )
             busy = false
             if (id != null) onDone()
-            else error = "Couldn't upload the photo — check the connection and try again. " +
+            else error = "Couldn't upload the photo. Check the connection and try again. " +
                 "(If you're on the Free plan, check \"Use my photo as-is\".)"
         }
     }
@@ -212,7 +212,7 @@ fun AddTileView(
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = name, onValueChange = { name = it },
-                label = { Text("Name (optional — we can name it)") },
+                label = { Text("Name (optional, we can name it)") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
@@ -227,7 +227,7 @@ fun AddTileView(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Use my photo as-is", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Brand.ink)
-                    Text("No restyle — the photo itself becomes the tile. Free.",
+                    Text("No restyle: the photo itself becomes the tile. Free.",
                         fontSize = 12.sp, color = Brand.muted)
                 }
                 Switch(checked = useAsIs, onCheckedChange = { if (stylingAllowed) useAsIs = it },
@@ -237,7 +237,7 @@ fun AddTileView(
             if (!stylingAllowed) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "✨ Want this drawn in your child's art style? Styled tiles are part of My World memberships, from $9.99/month — join under Credits & Store. Everything you've already made is yours forever.",
+                    "✨ Want this drawn in your child's art style? Styled tiles are part of My World memberships, from $9.99/month. Join under Credits & Store. Everything you've already made is yours forever.",
                     fontSize = 12.sp, color = Brand.pinkDeep,
                     modifier = Modifier.background(hexColor("#fce4ec"), RoundedCornerShape(12.dp)).padding(12.dp),
                 )
@@ -275,7 +275,7 @@ fun AddTileView(
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                "The tile takes a few minutes to paint — don't worry. Your photo is saved the moment it uploads, and a Pending tile marks the spot on the board until the picture lands.",
+                "The tile takes a few minutes to paint. Don't worry. Your photo is saved the moment it uploads, and a Pending tile marks the spot on the board until the picture lands.",
                 fontSize = 12.sp, color = Brand.pinkDeep,
                 modifier = Modifier.background(hexColor("#fff7fb"), RoundedCornerShape(12.dp)).padding(10.dp),
             )

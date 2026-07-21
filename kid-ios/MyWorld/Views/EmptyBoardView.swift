@@ -31,7 +31,7 @@ struct EmptyBoardView: View {
                     .font(.system(size: 27, weight: .heavy, design: .rounded))
                     .multilineTextAlignment(.center)
 
-                Text("This board doesn’t have any tiles yet. Generate the starter words — the core vocabulary every new board begins with — and they’ll appear here in your art style and voice.")
+                Text("This board doesn’t have any tiles yet. Generate the starter words, the core vocabulary every new board begins with, and they’ll appear here in your art style and voice.")
                     .font(.system(size: 15))
                     .multilineTextAlignment(.center)
                     .opacity(0.95)

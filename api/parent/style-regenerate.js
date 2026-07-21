@@ -92,7 +92,7 @@ export default async function handler(req, res) {
         : (gKey
             ? await geminiGenerateImage({ apiKey: gKey, model: geminiProModel(), prompt, images, aspectRatio: '1:1' })
             : { ok: false, detail: 'GEMINI_API_KEY not configured (needed when no style image exists yet)' });
-      if (!g.ok) { res.status(g.status || 502).json({ error: 'Render failed — nothing changed, tap again in a moment.', detail: (g.detail || '').slice(0, 200) }); return; }
+      if (!g.ok) { res.status(g.status || 502).json({ error: 'Render failed. Nothing changed. Tap again in a moment.', detail: (g.detail || '').slice(0, 200) }); return; }
       const draftKey = `parent/${childId}/style/${randomUUID()}.png`;
       await put(draftKey, Buffer.from(g.b64, 'base64'), { access: 'private', contentType: 'image/png', addRandomSuffix: false });
       try {

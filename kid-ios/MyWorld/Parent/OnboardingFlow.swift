@@ -127,7 +127,7 @@ private struct OBStylePicker: View {
             Text("BOARD ART STYLE")
                 .font(.system(size: 11, weight: .bold)).tracking(0.6)
                 .foregroundStyle(Color(hex: Brand.muted))
-            Text("The look for the whole board — the people portraits and the first words all share it.")
+            Text("The look for the whole board: the people portraits and the first words all share it.")
                 .font(.system(size: 12))
                 .foregroundStyle(Color(hex: Brand.muted))
 
@@ -240,7 +240,7 @@ private struct OBVoicePicker: View {
             Text("BOARD VOICE")
                 .font(.system(size: 11, weight: .bold)).tracking(0.6)
                 .foregroundStyle(Color(hex: Brand.muted))
-            Text("How the board talks — tap ▶ to hear each voice.")
+            Text("How the board talks. Tap ▶ to hear each voice.")
                 .font(.system(size: 12))
                 .foregroundStyle(Color(hex: Brand.muted))
 
@@ -375,13 +375,13 @@ private struct OnboardingDemoView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     demoPoint(icon: "camera.fill",
                               title: "Photograph their world",
-                              note: "Their snacks, their toys, their people — each photo becomes a talking tile.")
+                              note: "Their snacks, their toys, their people. Each photo becomes a talking tile.")
                     demoPoint(icon: "paintpalette.fill",
                               title: "Drawn in the style they love",
                               note: "Their face stays their face; the whole board shares one look.")
                     demoPoint(icon: "speaker.wave.2.fill",
                               title: "Tap a tile, it talks",
-                              note: "In the voice you pick — plus listening, teaching, and game modes as they grow.")
+                              note: "In the voice you pick, plus listening, teaching, and game modes as they grow.")
                 }
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -635,7 +635,7 @@ private struct OnboardingAccountView: View {
 
     private func createEmailAccount() async {
         guard consented else {
-            errorText = "Please confirm the consent switch above — it covers the Terms, Privacy Policy, and how photos are used."
+            errorText = "Please confirm the consent switch above. It covers the Terms, Privacy Policy, and how photos are used."
             return
         }
         busy = true; errorText = nil
@@ -710,7 +710,7 @@ private struct OnboardingChildView: View {
                 OBBrandBar()
                 OBHeader(eyebrow: "Step 1 of 4",
                          title: "Tell us about your child.",
-                         subtitle: "Their birthday lets the board start with the right vocabulary — and grow with them.")
+                         subtitle: "Their birthday lets the board start with the right vocabulary, and grow with them.")
 
                 fieldCard("Name") {
                     TextField("e.g. Fletcher", text: Binding(
@@ -736,7 +736,7 @@ private struct OnboardingChildView: View {
                         set: { coord.language = $0 }
                     )) {
                         ForEach(languages) { l in
-                            Text(l.comingSoon ? "\(l.label) — coming soon" : l.label).tag(l.id)
+                            Text(l.comingSoon ? "\(l.label), coming soon" : l.label).tag(l.id)
                         }
                     }
                     .pickerStyle(.menu)
@@ -944,7 +944,7 @@ private struct OnboardingPhotoView: View {
                 ? "Add a photo of \(coord.childName.isEmpty ? "your child" : coord.childName)."
                 : "Add a photo of one grown-up.",
             subtitle: role == .child
-                ? "Their face becomes the art on every tile that's about them — feelings, actions, social phrases. Plain head-and-shoulders works best."
+                ? "Their face becomes the art on every tile that's about them: feelings, actions, social phrases. Plain head-and-shoulders works best."
                 : "Body parts and comfort phrases are taught with a face the child looks at all day. Pick the grown-up they see most."
         )
     }
@@ -1088,7 +1088,7 @@ private struct OnboardingPhotoView: View {
                         .foregroundStyle(Color(hex: Brand.muted))
                 }
             }
-            Text("This may take anywhere from 1 to 5 minutes — don't be alarmed.")
+            Text("This may take anywhere from 1 to 5 minutes. Don't be alarmed.")
                 .font(.system(size: 12))
                 .foregroundStyle(Color(hex: Brand.muted))
         }
@@ -1107,7 +1107,7 @@ private struct OnboardingPhotoView: View {
             Text("How does this look?")
                 .font(.system(size: 18, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: Brand.pinkDeep))
-            Text("Retries are free — try a few rolls and pick the one that feels right.")
+            Text("Retries are free. Try a few rolls and pick the one that feels right.")
                 .font(.system(size: 12))
                 .foregroundStyle(Color(hex: Brand.muted))
         }
@@ -1235,7 +1235,7 @@ private struct OnboardingPhotoView: View {
             Text(addedGrownups == 1 ? "Grown-up added!" : "\(addedGrownups) grown-ups added!")
                 .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: Brand.pinkDeep))
-            Text("Add anyone else the child sees a lot — the other parent, a sibling, a grandparent, a nanny. Each face anchors the tiles about them. You can always add more later from Family & people.")
+            Text("Add anyone else the child sees a lot: the other parent, a sibling, a grandparent, a nanny. Each face anchors the tiles about them. You can always add more later from Family & people.")
                 .font(.system(size: 13)).foregroundStyle(Color(hex: Brand.muted))
                 .multilineTextAlignment(.center).padding(.horizontal, 8)
             OBPrimaryButton(title: "Add another grown-up", busy: false) { showAddMore = false }
@@ -1279,7 +1279,7 @@ private struct OnboardingSeedView: View {
                 OBHeader(
                     eyebrow: "Step 4 of 4",
                     title: "Let's make the first words.",
-                    subtitle: "We'll generate \(coord.childName.isEmpty ? "your child" : coord.childName)'s 13 most useful first words now. Household items — favorite cup, blanket, stuffed animal — you'll snap as you go."
+                    subtitle: "We'll generate \(coord.childName.isEmpty ? "your child" : coord.childName)'s 13 most useful first words now. Household items you'll snap as you go: favorite cup, blanket, stuffed animal."
                 )
 
                 if !coord.styleLabel.isEmpty {
@@ -1341,7 +1341,7 @@ private struct OnboardingSeedView: View {
                 Text("Members: your first month's credits build the whole board.")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color(hex: Brand.ink))
-                Text("100+ tiles and two family portraits, personalized up front (Pro finishes with ⭐50 to spare). Without a membership the board starts with our standard artwork — join anytime to personalize it. Everything you make is yours to keep.")
+                Text("100+ tiles and two family portraits, personalized up front (Pro finishes with ⭐50 to spare). Without a membership the board starts with our standard artwork. Join anytime to personalize it. Everything you make is yours to keep.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color(hex: Brand.muted))
             }
@@ -1390,24 +1390,24 @@ private struct OBSettingsWizard: View {
         [
             Question(
                 title: "Does \(name) need to learn what words mean, or mostly say them?",
-                body: "With “Tap again to learn” on, a tap speaks the word — and a quick second tap teaches a fun fact about it, up to three facts, before wrapping back to the word. Great for kids still building meanings. If your child mainly needs their words spoken, leave it off — taps stay simple and fast.",
+                body: "With “Tap again to learn” on, a tap speaks the word, and a quick second tap teaches a fun fact about it, up to three facts, before wrapping back to the word. Great for kids still building meanings. If your child mainly needs their words spoken, leave it off. Taps stay simple and fast.",
                 choices: [
-                    Choice(label: "🎓 Still learning meanings — turn on Tap again to learn", key: "doubleTapTeach", value: true),
-                    Choice(label: "🗣 They know their words — keep taps simple", key: "doubleTapTeach", value: false),
+                    Choice(label: "🎓 Still learning meanings: turn on Tap again to learn", key: "doubleTapTeach", value: true),
+                    Choice(label: "🗣 They know their words: keep taps simple", key: "doubleTapTeach", value: false),
                 ]),
             Question(
                 title: "If a new tile is tapped while another is still talking…",
-                body: "“Let each word finish” is calmer for kids who tap the same button over and over — every word plays to the end instead of restarting. “The new tap wins” feels snappier for quick communicators.",
+                body: "“Let each word finish” is calmer for kids who tap the same button over and over. Every word plays to the end instead of restarting. “The new tap wins” feels snappier for quick communicators.",
                 choices: [
                     Choice(label: "🌊 Let each word finish", key: "tapInterrupt", value: false),
-                    Choice(label: "⚡ The new tap wins — talk right away", key: "tapInterrupt", value: true),
+                    Choice(label: "⚡ The new tap wins: talk right away", key: "tapInterrupt", value: true),
                 ]),
             Question(
                 title: "Is \(name) starting to put words together?",
-                body: "The ✏️ sentence builder in the board header lets a child stage several tiles and play them back as one sentence. If your child is at single words today, hide it — fewer buttons, less clutter. It comes back with one toggle whenever they’re ready.",
+                body: "The ✏️ sentence builder in the board header lets a child stage several tiles and play them back as one sentence. If your child is at single words today, hide it: fewer buttons, less clutter. It comes back with one toggle whenever they’re ready.",
                 choices: [
-                    Choice(label: "✏️ Yes — show the sentence builder", key: "toolSentence", value: true),
-                    Choice(label: "🔤 Single words for now — hide it", key: "toolSentence", value: false),
+                    Choice(label: "✏️ Yes, show the sentence builder", key: "toolSentence", value: true),
+                    Choice(label: "🔤 Single words for now, hide it", key: "toolSentence", value: false),
                 ]),
             Question(
                 title: "Want the board to show the words \(name) hears?",
@@ -1418,7 +1418,7 @@ private struct OBSettingsWizard: View {
                 ]),
             Question(
                 title: "How should the ✕ close button work in games and slideshows?",
-                body: "Hold-to-close is kid-proof: a quick mash does nothing; only a deliberate hold exits. Quick tap is instant — better for older kids who close things on purpose. (You can tune the hold length later in Display settings.)",
+                body: "Hold-to-close is kid-proof: a quick mash does nothing; only a deliberate hold exits. Quick tap is instant, better for older kids who close things on purpose. (You can tune the hold length later in Display settings.)",
                 choices: [
                     Choice(label: "🛡 Hold to close (kid-proof)", key: "easyClose", value: false),
                     Choice(label: "⚡ Quick tap closes right away", key: "easyClose", value: true),
@@ -1429,11 +1429,11 @@ private struct OBSettingsWizard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if declined {
-                Text("No problem — the same choices live in ⚙ Display settings, with the same plain-language explanations.")
+                Text("No problem. The same choices live in ⚙ Display settings, with the same plain-language explanations.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color(hex: Brand.muted))
             } else if !started {
-                Text("While the tiles paint — five quick questions")
+                Text("While the tiles paint: five quick questions")
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(Color(hex: Brand.ink))
                 Text("Every child uses their talker differently. Answer these now and \(name)'s board behaves the right way from day one. Everything can be changed later under ⚙ Display settings.")
@@ -1476,7 +1476,7 @@ private struct OBSettingsWizard: View {
                     .buttonStyle(.plain)
                     .disabled(saving)
                 }
-                Button("Skip — keep the default") { index += 1; errorText = nil }
+                Button("Skip, keep the default") { index += 1; errorText = nil }
                     .font(.system(size: 12))
                     .foregroundStyle(Color(hex: Brand.muted))
                     .disabled(saving)
@@ -1490,7 +1490,7 @@ private struct OBSettingsWizard: View {
                     Text(e).font(.system(size: 12)).foregroundStyle(.red)
                 }
             } else {
-                Label("Board behavior saved — change any of these anytime under ⚙ Display settings.",
+                Label("Board behavior saved. Change any of these anytime under ⚙ Display settings.",
                       systemImage: "checkmark.circle.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color(hex: Brand.good))
@@ -1510,7 +1510,7 @@ private struct OBSettingsWizard: View {
 
     private func answer(_ c: Choice) async {
         guard let id = childId, !id.isEmpty else {
-            errorText = "Still connecting — give it a second and tap again."
+            errorText = "Still connecting. Give it a second and tap again."
             if let st = try? await api.onboardingState() { childId = st.childId }
             return
         }
@@ -1520,7 +1520,7 @@ private struct OBSettingsWizard: View {
             index += 1
             errorText = nil
         } else {
-            errorText = "Could not save — check the connection and tap again."
+            errorText = "Could not save. Check the connection and tap again."
         }
     }
 }

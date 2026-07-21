@@ -349,7 +349,7 @@ async function checkout(req, res, db, auth, uid, body) {
   res.status(200).json({
     ok: true, charged: isAdmin ? 0 : cost, queued,
     balance: uid ? await creditBalance(db, uid) : null,
-    note: `${queued} word${queued === 1 ? '' : 's'} queued — they render in your child's style over the next few minutes.`,
+    note: `${queued} word${queued === 1 ? '' : 's'} queued. They render in your child's style over the next few minutes.`,
   });
   afterResponse(drainRenderJobs(db, childId, 3));
 }
@@ -396,7 +396,7 @@ async function freeBoard(req, res, db, auth, body) {
       placed++;
     }
     res.status(200).json({ ok: true, placed,
-      note: placed ? `${placed} words added with the shared pictures — personalize them any time.`
+      note: placed ? `${placed} words added with the shared pictures. Personalize them any time.`
                    : 'Everything in that set is already on the board.' });
     return;
   }
@@ -467,7 +467,7 @@ async function personalizeAll(req, res, db, auth, uid, body) {
   }
   res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length + chips.length,
     balance: uid ? await creditBalance(db, uid) : null,
-    note: `${remaining.length} tiles + ${chips.length} folder icons queued — the whole board personalizes over the next while.` });
+    note: `${remaining.length} tiles + ${chips.length} folder icons queued. The whole board personalizes over the next while.` });
   afterResponse(drainRenderJobs(db, childId, 3));
 }
 
@@ -510,7 +510,7 @@ async function personalizeCategory(req, res, db, auth, uid, body) {
   for (const r of remaining) await enqueueRenderJob(db, childId, r.taxonomy_slug, { force: true });
   res.status(200).json({ ok: true, charged: isAdmin ? 0 : cost, queued: remaining.length,
     balance: uid ? await creditBalance(db, uid) : null,
-    note: `${remaining.length} picture${remaining.length === 1 ? '' : 's'} queued — they land over the next few minutes.` });
+    note: `${remaining.length} picture${remaining.length === 1 ? '' : 's'} queued. They land over the next few minutes.` });
   afterResponse(drainRenderJobs(db, childId, 3));
 }
 
@@ -690,7 +690,7 @@ async function supportCreate(req, res, db, auth, uid, body) {
                         WHERE child_id = ${childId} AND status != 'resolved'`;
   if (Number(open[0]?.c || 0) >= MAX_OPEN_CASES) {
     res.status(400).json({ error: 'too_many_open_cases',
-      detail: "You already have open requests — we'll get to them within 48 hours." });
+      detail: "You already have open requests. We'll get to them within 48 hours." });
     return;
   }
   const row = (await db`INSERT INTO support_cases (child_id, kind, message, created_by, created_by_email)
@@ -786,7 +786,7 @@ async function adoptImage(req, res, db, auth) {
              needs_review = FALSE, updated_at = NOW() WHERE id = ${tgt.id}`;
   await db`DELETE FROM items WHERE id = ${src.id}`;   // row only — blobs live on with the target
   res.status(200).json({ ok: true, itemId: Number(tgt.id),
-    note: 'Replaced — the old picture is archived in the Album.' });
+    note: 'Replaced. The old picture is archived in the Album.' });
 }
 
 // POST ?action=regen-with { childId, taxonomyIds:[], refItemId }
@@ -925,7 +925,7 @@ async function rebuild(req, res, db, auth, uid, body) {
   res.status(200).json({
     ok: true, charged: isAdmin ? 0 : cost, queued: words.length,
     balance: uid ? await creditBalance(db, uid) : null,
-    note: `Rebuilding ${words.length} words in your child's style. Every replaced image is archived — you keep them all.`,
+    note: `Rebuilding ${words.length} words in your child's style. Every replaced image is archived. You keep them all.`,
   });
   afterResponse(drainRenderJobs(db, childId, 3));
 }
@@ -1078,7 +1078,7 @@ async function stripeCheckout(req, res, db, auth, uid, body) {
     if (ent.tier === 'free') {
       res.status(400).json({
         error: 'membership_required',
-        detail: 'Credit packs top up a membership. Join My World Plus or Pro first — then packs stack on top.',
+        detail: 'Credit packs top up a membership. Join My World Plus or Pro first. Then packs stack on top.',
       });
       return;
     }
@@ -1097,11 +1097,11 @@ async function stripeCheckout(req, res, db, auth, uid, body) {
     form.set('line_items[0][price_data][currency]', 'usd');
     form.set('line_items[0][price_data][unit_amount]', String(sub.cents));
     form.set('line_items[0][price_data][recurring][interval]', 'month');
-    form.set('line_items[0][price_data][product_data][name]', `${sub.label} — ${sub.creditsPerPeriod} credits/month`);
+    form.set('line_items[0][price_data][product_data][name]', `${sub.label}: ${sub.creditsPerPeriod} credits/month`);
   } else {
     form.set('line_items[0][price_data][currency]', 'usd');
     form.set('line_items[0][price_data][unit_amount]', String(pack.cents));
-    form.set('line_items[0][price_data][product_data][name]', `${pack.label} pack — ${pack.credits} image credits`);
+    form.set('line_items[0][price_data][product_data][name]', `${pack.label} pack: ${pack.credits} image credits`);
   }
   const r = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
@@ -1124,7 +1124,7 @@ async function stripePortal(req, res, db, auth, uid) {
   const customer = row && row.stripe_customer_id;
   if (!customer) {
     res.status(404).json({ error: 'no_stripe_customer',
-      detail: 'No web subscription on file for this account. Subscribe here first — or, if you subscribed on the iPad/iPhone, manage it in the App Store settings.' });
+      detail: 'No web subscription on file for this account. Subscribe here first. Or, if you subscribed on the iPad/iPhone, manage it in the App Store settings.' });
     return;
   }
   const origin = `https://${req.headers.host}`;
@@ -1219,8 +1219,8 @@ async function stripeWebhook(req, res, db, raw) {
         if (u && u.email && emailConfigured()) {
           await sendEmail({
             to: u.email,
-            subject: "My World — your payment didn't go through",
-            text: 'Hi — a membership payment for My World: Tap to Talk did not go through. ' +
+            subject: "My World: your payment didn't go through",
+            text: 'Hi, a membership payment for My World: Tap to Talk did not go through. ' +
                   'Your board keeps working while the card retries automatically. ' +
                   'To update your payment method, open the parent dashboard -> Credits & Store -> Manage billing. ' +
                   'Questions? Just reply, or email support@myworldtaptotalk.com.',

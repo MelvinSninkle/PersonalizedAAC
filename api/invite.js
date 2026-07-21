@@ -47,7 +47,7 @@ export default async function handler(req, res) {
         FROM invite_codes ic
         WHERE lower(ic.code) = lower(${code}) AND ic.active = TRUE LIMIT 1`;
       if (cap.length && cap[0].max_uses != null && Number(cap[0].signups) >= Number(cap[0].max_uses)) {
-        res.status(401).json({ error: 'That invite code’s launch group is full — join the waitlist on the home page and we’ll email you a fresh code when spots open.' });
+        res.status(401).json({ error: 'That invite code’s launch group is full. Join the waitlist on the home page and we’ll email you a fresh code when spots open.' });
         return;
       }
     } catch (_) { /* pre-users-table bootstrap: no accounts yet, nothing to cap */ }

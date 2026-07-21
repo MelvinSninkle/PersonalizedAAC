@@ -89,7 +89,7 @@ struct ParentHomeView: View {
                     }
 
                     if addQueue.hasActiveJobs {
-                        Label("Tiles are rendering — they'll land on the board on their own.",
+                        Label("Tiles are rendering. They'll land on the board on their own.",
                               systemImage: "hourglass")
                             .font(.footnote)
                             .foregroundStyle(Color(hex: "#9d174d"))
@@ -103,7 +103,7 @@ struct ParentHomeView: View {
                         let txt = s.render.done < s.render.total
                             ? "Making \(childPossessive(auth.user?.slug)) words… \(s.render.done) of \(s.render.total)"
                             : "Adding \(childPossessive(auth.user?.slug)) voice… \(s.voice.done) of \(s.voice.total)"
-                        Label("\(txt) — keeps going even if you close the app.",
+                        Label("\(txt). It keeps going even if you close the app.",
                               systemImage: "paintbrush.pointed.fill")
                             .font(.footnote)
                             .foregroundStyle(Color(hex: "#9d174d"))
@@ -214,7 +214,7 @@ struct ParentHomeView: View {
                   systemImage: "exclamationmark.triangle.fill")
                 .font(.system(size: 16, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: "#b45309"))
-            Text("The image maker hit a snag on these. Retrying is safe — failed photo adds never re-charge, and each word’s first redraw is free.")
+            Text("The image maker hit a snag on these. Retrying is safe: failed photo adds never re-charge, and each word’s first redraw is free.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
             ForEach(problems) { p in
                 HStack {
@@ -399,7 +399,7 @@ struct ParentSettingsView: View {
                         LabeledContent("Showing", value: bandLabel(b.current))
                         if let next = b.next {
                             if let m = b.mastery, b.readyToAdvance == true {
-                                Text("\(m.correct) of \(m.total) recent answers correct — looks ready to grow.")
+                                Text("\(m.correct) of \(m.total) recent answers correct. Looks ready to grow.")
                                     .font(.footnote).foregroundStyle(.secondary)
                             }
                             Button(advancing ? "Unlocking…" : "Unlock \(bandLabel(next))") {
@@ -535,7 +535,7 @@ struct ParentSettingsView: View {
                     Task { await deleteAccount() }
                 }
             } message: {
-                Text("Permanently deletes this account and everything on the board — every tile, photo, generated image, recording, and all history. This cannot be undone.")
+                Text("Permanently deletes this account and everything on the board: every tile, photo, generated image, recording, and all history. This cannot be undone.")
             }
         }
     }
@@ -549,8 +549,8 @@ struct ParentSettingsView: View {
             supportMsg = r.note ?? "Sent! We'll get back to you within 48 hours."
         } catch let APIError.badStatus(_, body) {
             supportMsg = body.contains("too_many_open_cases")
-                ? "You already have open requests — we'll get to them within 48 hours."
-                : "Couldn't send — check the connection and try again."
+                ? "You already have open requests. We'll get to them within 48 hours."
+                : "Couldn't send. Check the connection and try again."
         } catch {
             supportMsg = "Couldn't send: \(error.localizedDescription)"
         }
@@ -602,7 +602,7 @@ struct ParentSettingsView: View {
                 listenMsg = nil
                 access.refresh()   // the board applies it without a relaunch
             } else {
-                listenMsg = "Couldn't save — check your connection."
+                listenMsg = "Couldn't save. Check your connection."
                 let s = await api.childSettings(childId: auth.childSlug)
                 listenLoaded = false
                 listenCensor = (s["listenCensor"] as? Bool) ?? true
@@ -656,7 +656,7 @@ struct ArtStyleSection: View {
                         StyleRefThumb(title: "Objects", path: cur.refs?.stuff)
                     }
                 } else {
-                    Text("No style set yet — pick one below.").foregroundStyle(.secondary)
+                    Text("No style set yet. Pick one below.").foregroundStyle(.secondary)
                 }
                 if !ov.styles.isEmpty {
                     NavigationLink("Switch to another style…") {
@@ -708,13 +708,13 @@ struct ArtStyleSection: View {
                 }
                 if let msg { Text(msg).font(.footnote).foregroundStyle(.secondary) }
             } else {
-                Text(loaded ? "Couldn't load styles — check your connection." : "Loading…")
+                Text(loaded ? "Couldn't load styles. Check your connection." : "Loading…")
                     .foregroundStyle(.secondary)
             }
         } header: {
             Text("Art style")
         } footer: {
-            Text("Every generated picture is drawn while looking at these references. Changes apply to NEW pictures only — tiles already on the board keep their current art.")
+            Text("Every generated picture is drawn while looking at these references. Changes apply to NEW pictures only. Tiles already on the board keep their current art.")
         }
         .task { await load() }
     }
@@ -729,10 +729,10 @@ struct ArtStyleSection: View {
         defer { switching = false }
         msg = "Switching to \u{201C}\(pick.label)\u{201D}…"
         if await api.setStyle(childId: auth.childSlug, styleGuideId: pick.id) {
-            msg = "Style switched — new pictures use \u{201C}\(pick.label)\u{201D} from now on."
+            msg = "Style switched. New pictures use \u{201C}\(pick.label)\u{201D} from now on."
             await load()
         } else {
-            msg = "Couldn't switch to \u{201C}\(pick.label)\u{201D} — check your connection and try again."
+            msg = "Couldn't switch to \u{201C}\(pick.label)\u{201D}. Check your connection and try again."
         }
     }
 
@@ -749,10 +749,10 @@ struct ArtStyleSection: View {
             let key = try await api.uploadBlob(data, kind: "styleref", ext: "jpg",
                                                contentType: "image/jpeg")
             if await api.setStyleRef(childId: auth.childSlug, kind: kind, blobKey: key) {
-                msg = "Reference saved — new pictures follow it from now on."
+                msg = "Reference saved. New pictures follow it from now on."
                 await load()
             } else {
-                msg = "Couldn't save the reference — check your connection."
+                msg = "Couldn't save the reference. Check your connection."
             }
         } catch {
             msg = "Upload failed: \(error.localizedDescription)"
@@ -838,7 +838,7 @@ struct StyleSwitcherList: View {
                 if let p = pending { pending = nil; onPick(p); dismiss() }
             }
         } message: {
-            Text("Tiles already on the board keep their current pictures — the board will mix styles until you remake them from each tile's editor. New pictures use the new style right away.")
+            Text("Tiles already on the board keep their current pictures. The board will mix styles until you remake them from each tile's editor. New pictures use the new style right away.")
         }
     }
 }
@@ -865,7 +865,7 @@ struct PeopleManagerView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                Text("These faces anchor every tile about each person — feelings, actions, body parts, social phrases. Add a clear head-and-shoulders photo of each one.")
+                Text("These faces anchor every tile about each person: feelings, actions, body parts, social phrases. Add a clear head-and-shoulders photo of each one.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -1126,7 +1126,7 @@ private struct PersonEditorSheet: View {
                 Button { showCamera = true } label: { photoBtn("Take photo", "camera.fill") }.buttonStyle(.plain)
                 Button { showLibrary = true } label: { photoBtn("Choose photo", "photo.on.rectangle") }.buttonStyle(.plain)
             }
-            Text(isNew ? "A clear head-and-shoulders photo works best. Only upload someone who's given you permission — it's used solely to draw their tile."
+            Text(isNew ? "A clear head-and-shoulders photo works best. Only upload someone who's given you permission. It's used solely to draw their tile."
                        : "Pick a new photo to replace their portrait, or leave it.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
 
@@ -1137,15 +1137,15 @@ private struct PersonEditorSheet: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Use my photo as-is")
                             .font(.system(size: 14, weight: .semibold))
-                        Text(useAsIs ? "The photo itself becomes the tile — free."
-                                     : "Drawn as a portrait in the board's art style — ⭐5.")
+                        Text(useAsIs ? "The photo itself becomes the tile. Free."
+                                     : "Drawn as a portrait in the board's art style, ⭐5.")
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                 }
                 .tint(Color(hex: "#ff1493"))
                 .disabled(!board.stylingAllowed)
                 if !board.stylingAllowed {
-                    Text("Styled portraits are part of My World memberships — the exact photo (free) is used on the free plan.")
+                    Text("Styled portraits are part of My World memberships. The exact photo (free) is used on the free plan.")
                         .font(.system(size: 11)).foregroundStyle(Color(hex: "#ad1457"))
                 }
             }
@@ -1212,10 +1212,10 @@ private struct PersonEditorSheet: View {
             switch api {
             case .badStatus(let status, let body):
                 if status == 402 || body.contains("not_enough_credits") {
-                    return "You're out of image credits — open Credits & Store below to add more."
+                    return "You're out of image credits. Open Credits & Store below to add more."
                 }
                 return body.isEmpty ? "Server error." : String(body.prefix(160))
-            case .notAuthenticated: return "Signed out — log in and try again."
+            case .notAuthenticated: return "Signed out. Log in and try again."
             case .transport(let e): return "Network problem: \(e.localizedDescription)"
             case .invalidResponse:  return "Unexpected server response."
             case .decoding:         return "Couldn't read the server's response."

@@ -130,7 +130,7 @@ fun LoginView() {
                 resetMsg = try {
                     c.api.resetRequest(addr)
                     "If that email has an account, a reset link is on its way. Check your inbox."
-                } catch (_: Exception) { "Couldn't send the link — check your connection and try again." }
+                } catch (_: Exception) { "Couldn't send the link. Check your connection and try again." }
                 resetBusy = false
             }
         }, enabled = !resetBusy) {

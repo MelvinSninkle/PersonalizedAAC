@@ -167,7 +167,7 @@ fun StoreView(onDismiss: () -> Unit) {
                                 Modifier.fillMaxWidth().padding(vertical = 2.dp),
                                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                             ) {
-                                Text("⭐ ${p.credits} — ${p.label.ifEmpty { p.sku }}",
+                                Text("⭐ ${p.credits}: ${p.label.ifEmpty { p.sku }}",
                                     fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                                     color = Brand.ink, modifier = Modifier.weight(1f))
                                 TextButton(onClick = {
@@ -233,7 +233,7 @@ fun StoreView(onDismiss: () -> Unit) {
             }
             Text(
                 if (billingAvailable)
-                    "Prices are billed through Google Play. Purchases made on the web appear here right away too — one wallet everywhere."
+                    "Prices are billed through Google Play. Purchases made on the web appear here right away too: one wallet everywhere."
                 else
                     "This device doesn't have Google Play (that's normal on Fire tablets), so purchases open the secure web store instead. Credits bought there land on the board right away.",
                 fontSize = 11.sp, color = Brand.muted,
