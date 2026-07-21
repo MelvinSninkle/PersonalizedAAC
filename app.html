@@ -6655,6 +6655,39 @@
     } catch (_) { /* capture must never disturb listening itself */ }
   }
 
+  // One-time opt-in (AC: asked once, never re-prompted after decline). Shown
+  // only in edit mode — a consent question belongs to the parent, and the
+  // child starts listening himself all the time. "Not now" writes an explicit
+  // false so the key is decided; the Display panel's toggle remains the way
+  // back in either direction.
+  async function maybeOfferSuggestConsent() {
+    try {
+      if (!document.body.classList.contains('edit-mode')) return;
+      if (document.getElementById('suggest-consent')) return;
+      const r = await apiFetch('/api/child-settings?childId=' + encodeURIComponent(CHILD_ID));
+      const s = (await r.json()).settings || {};
+      if (s.suggestFromListening !== undefined) return;   // already decided
+      const o = document.createElement('div');
+      o.id = 'suggest-consent';
+      o.style.cssText = 'position:fixed;inset:0;z-index:2600;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:24px;';
+      o.innerHTML = '<div style="background:#fff;border-radius:22px;max-width:440px;padding:26px;font-family:system-ui,sans-serif;">'
+        + '<div style="font-size:19px;font-weight:700;color:#ad1457;">💡 Suggest new words from listening?</div>'
+        + '<p style="font-size:14px;color:#4b5563;line-height:1.5;">While listening is on, the board can notice words your family says that aren’t on the board yet and save them for your review — with one-tap add. What’s saved: only matches against our vocabulary library (a word name and a count). Never audio, never transcripts — recognition runs on this device.</p>'
+        + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">'
+        + '<button id="sc-no" style="border:2px solid #f3c6dd;background:#fff;color:#ad1457;border-radius:999px;padding:9px 16px;font-weight:600;cursor:pointer;">Not now</button>'
+        + '<button id="sc-yes" style="border:none;background:#ff1493;color:#fff;border-radius:999px;padding:9px 18px;font-weight:700;cursor:pointer;">Enable</button>'
+        + '</div></div>';
+      document.body.appendChild(o);
+      const done = async (val) => {
+        try { await saveSafety({ suggestFromListening: val }); } catch (_) {}
+        _suggestConsent = val;
+        o.remove();
+      };
+      document.getElementById('sc-yes').addEventListener('click', () => done(true));
+      document.getElementById('sc-no').addEventListener('click', () => done(false));
+    } catch (_) {}
+  }
+
   async function renderListenStrip(tokens) {
     const wrap = document.getElementById('listen-tiles');
     if (!wrap) return;
@@ -6795,7 +6828,7 @@
     const lb = document.getElementById('listen-btn');
     if (lb) { lb.classList.toggle('on', on); lb.textContent = on ? '⏹️' : '🎙️'; lb.title = on ? 'Stop listening' : 'Listen — turn spoken words into picture tiles'; }
     const wrap = document.getElementById('listen-tiles'); if (wrap) wrap.innerHTML = '';
-    if (on) { _listenLex = await buildListenLexicon(); await startSpeech(); bumpListenIdle(); }
+    if (on) { _listenLex = await buildListenLexicon(); await startSpeech(); bumpListenIdle(); maybeOfferSuggestConsent(); }
     else {
       if (_listenIdleTimer) { clearTimeout(_listenIdleTimer); _listenIdleTimer = null; }
       await stopSpeech(); _listenLex = null;
