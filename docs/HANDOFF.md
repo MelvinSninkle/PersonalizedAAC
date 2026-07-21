@@ -134,20 +134,39 @@ store_only is flippable per board in Lab → Boards). Status:
   new categories (Food expansion, Movies & Shows, More core words) so the
   ~290 canonical rows never hit default placement / style-build totals;
   publish rows after review; generate store-board art per style.
-- ⬜ **#10 suggestion queue** (the hero): word_suggestions table, canonical
-  lexicon endpoint, capture in listening (opt-in consent in child_settings,
-  off by default), parent review panel, privacy.html line. NOT STARTED.
-- ⬜ **#12** repeat-nav threshold Off/2/3 = graduate listenRepeatNav from the
-  E6 admin gate to parent-writable + threshold; **#13** sentence drag/tap
-  toggle = graduate sentenceDrag/sentenceLift + tune thresholds. NOT STARTED.
-- ⬜ **#11** movie flow (Wikidata find, IMDb link, parent-obtains poster),
-  **#14** admin demo board (SwiftUI, style swap, slug OK'd), **#15** enlarge
-  tiles (stepped, per-device), **#16** three clue fields on add-a-photo
-  (needs items-level clues, small additive migration), **#17** per-device
-  4-digit PIN (Keychain, password-proved setup, 5-fail fallback),
-  **Cleanups A/B** (emoji audit doc; em-dash rewrite in customer copy).
-  NOT STARTED. Requirements text is in the 2026-07-21 requirements doc
-  (owner has it; acceptance criteria are explicit).
+- ✅ **#10 suggestion queue** shipped (web + server): word_suggestions table,
+  suggest ops on /api/items, opt-in consent (off by default, server
+  re-checked), parent review panel, privacy.html line. Native capture ports
+  deferred (server + consent shared).
+- ✅ **#12** shipped (web): listenRepeatCount 0|2|3 parent-writable, E6
+  updated. **#13** resolved: drag staging exists natively (sentenceDrag);
+  web deliberately tap-only; remaining threshold tuning needs Andrew
+  on-device.
+- ✅ **#11** shipped (server + web + iOS): GET /api/items?movieSearch=
+  (Wikidata via api/_lib/movie-search.js — the single interface the licensed
+  TMDB fetch later replaces), items + tile_jobs carry wikidata_qid/imdb_id,
+  web edit-modal find/link/IMDb-link/unlink with keep-aspect poster saves,
+  iOS MovieAddSheet (search → in-app IMDb SFSafariViewController → Photos
+  pick or camera fallback → raw + keep-aspect + "TV & Movies" folder hint).
+  No poster artwork is ever fetched or stored server-side.
+- ✅ **#14** shipped: "admin" + ADMIN_TOKEN login (timing-safe, server-side,
+  NO session minted) → iOS DemoBoardView on the public /api/demo projection
+  with live style/kid/voice swapping; documented in surface-audit A-PUBLIC.
+- ✅ **#15** shipped (web): Display panel "Bigger sizes (low vision)" —
+  listening tiles + top-row buttons, Normal/+50%/+100%, per-device
+  (aacDisplay listenTileSize/topButtonSize → --listen-scale/--topbtn-scale).
+- ✅ **#16** shipped (web + server): items.descriptive_clues, edit-modal clue
+  fields, item clues win over taxonomy overlay in sync.
+- ✅ **#17** shipped (web): per-device 4-digit quick-unlock PIN for the
+  board's edit gate (SHA-256 device-salted, 5-fail password fallback,
+  Set/Change/Remove in Display→Safety re-verifying the account password).
+  Native Keychain PIN deferred.
+- ✅ **Cleanup A**: docs/emoji-audit.md (1,955 lines inventoried, nothing
+  removed). **Cleanup B**: 466 customer-visible em-dashes rewritten across
+  web pages, iOS, Android, and API strings (comments/en-dashes/placeholder
+  glyphs untouched) in five verified slices.
+- Style wizard fix (same day): the 📤 Upload button's style/ blob prefix is
+  now accepted by set-ref/kid-save ("unexpected blobKey" resolved).
 - README update rides with each implemented feature (owner's instruction:
   running code is source of truth; README was stale).
 
