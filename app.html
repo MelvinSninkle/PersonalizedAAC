@@ -1200,13 +1200,13 @@
   </div>
   <div class="hdr-center">
     <button id="login-btn" aria-label="Login" title="Login">🔒</button>
-    <button id="listen-btn" class="btn-listen" aria-label="Listen" title="Listen — turn spoken words into picture tiles">🎙️</button>
-    <button id="sentence-btn" class="btn-listen" style="display:none;" aria-label="Build a sentence" title="Build a sentence — tap words to add them, ▶ speaks the whole thing">✏️</button>
+    <button id="listen-btn" class="btn-listen" aria-label="Listen" title="Listen: turn spoken words into picture tiles">🎙️</button>
+    <button id="sentence-btn" class="btn-listen" style="display:none;" aria-label="Build a sentence" title="Build a sentence: tap words to add them, ▶ speaks the whole thing">✏️</button>
     <h1>
       <img class="hdr-icon" src="/icons/myworld-globe.png" alt="">
       <span class="cwt">My World</span>
     </h1>
-    <button id="teach-btn" class="btn-teach" aria-label="Teach me" title="Watch and listen — the board teaches the words you were just looking at">📖</button>
+    <button id="teach-btn" class="btn-teach" aria-label="Teach me" title="Watch and listen: the board teaches the words you were just looking at">📖</button>
     <button id="play-request-btn" class="btn-play-req" aria-label="Play a game" title="Play a quick game about what you were just looking at">🙋</button>
     <div id="listen-bar" aria-live="polite">
       <div id="listen-tiles"></div>
@@ -1273,7 +1273,7 @@
   <div class="empty-cta-card">
     <div class="empty-cta-emoji">🎨</div>
     <h2 class="empty-cta-title">Let’s build <span class="cwt-pos">your child’s</span> board</h2>
-    <p class="empty-cta-sub" id="empty-cta-sub">This board doesn’t have any tiles yet. Generate the starter words — the core vocabulary every new board begins with — and they’ll appear here in your art style and voice.</p>
+    <p class="empty-cta-sub" id="empty-cta-sub">This board doesn’t have any tiles yet. Generate the starter words, the core vocabulary every new board begins with, and they’ll appear here in your art style and voice.</p>
     <div id="empty-cta-parent">
       <button class="btn primary" id="empty-seed-btn">✨ Generate starter words</button>
       <div id="empty-seed-progress" style="display:none;margin-top:14px;max-width:340px;margin-left:auto;margin-right:auto;">
@@ -1330,12 +1330,12 @@
          board's visual consistency) and lands it on the board by itself. -->
     <div id="magic-box" style="border:1px solid #f3c6dd;background:#fff5fa;border-radius:10px;padding:12px;margin:12px 0;">
       <div style="font-weight:700;color:#ad1457;margin-bottom:4px;">✨ Make a tile from a photo</div>
-      <div style="font-size:12px;color:#666;margin-bottom:8px;">Snap a photo — we'll name it, draw it to match the board, add the voice, and put it on the board automatically. Naming it above first is optional.</div>
+      <div style="font-size:12px;color:#666;margin-bottom:8px;">Snap a photo. We'll name it, draw it to match the board, add the voice, and put it on the board automatically. Naming it above first is optional.</div>
       <div style="display:flex;gap:8px;margin:6px 0 2px;">
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="item-look" id="item-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1</label>
+          <input type="radio" name="item-look" id="item-look-style" checked style="width:auto;margin:0;">Board art style: ⭐1</label>
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="item-look" id="item-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
+          <input type="radio" name="item-look" id="item-look-raw" style="width:auto;margin:0;">My exact photo: free</label>
       </div>
       <!-- No `capture` attr: iOS then offers Take Photo OR Photo Library, which is
            more flexible and avoids the forced-rear-camera failures we hit. The
@@ -1346,7 +1346,7 @@
            any visible footprint. -->
       <input type="file" id="item-photo-capture" accept="image/*" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
       <button type="button" id="item-magic" style="margin-top:10px;width:100%;padding:12px;border:none;border-radius:8px;background:#ff1493;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">📷 Take a photo &amp; we'll do the rest</button>
-      <div class="file-status" id="item-magic-status" style="margin-top:8px;">—</div>
+      <div class="file-status" id="item-magic-status" style="margin-top:8px;">–</div>
       <img id="item-magic-preview" alt="" style="display:none;width:100%;max-width:200px;border-radius:10px;margin-top:8px;">
     </div>
 
@@ -1377,14 +1377,14 @@
       <label for="item-pin">Pin to top (e.g. for <span class="cn">your child</span>)</label>
     </div>
     <label for="item-description" style="margin-top:14px;">Description for Auditory Comprehension game (optional)</label>
-    <textarea id="item-description" rows="2" placeholder='e.g. "Lives in a field, has four legs, eats grass." Spoken aloud — the child picks the matching tile.' style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font:inherit;box-sizing:border-box;"></textarea>
+    <textarea id="item-description" rows="2" placeholder='e.g. "Lives in a field, has four legs, eats grass." Spoken aloud. The child picks the matching tile.' style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font:inherit;box-sizing:border-box;"></textarea>
 
     <!-- #16: the taxonomy's three teaching facts, authorable on any tile —
          so a photo of Grandpa can carry "Grandpa is my mom's dad". -->
-    <label style="margin-top:14px;">Teaching facts (optional) — 3 short clues for Teach me &amp; games</label>
-    <input type="text" id="item-clue1" maxlength="200" placeholder='Fact 1 — e.g. "Grandpa is my mom&#x27;s dad"' style="margin-top:2px;">
-    <input type="text" id="item-clue2" maxlength="200" placeholder='Fact 2 — e.g. "Grandpa takes me out for ham sandwiches"' style="margin-top:6px;">
-    <input type="text" id="item-clue3" maxlength="200" placeholder='Fact 3 — e.g. "Grandpa lives by the lake"' style="margin-top:6px;">
+    <label style="margin-top:14px;">Teaching facts (optional): 3 short clues for Teach me &amp; games</label>
+    <input type="text" id="item-clue1" maxlength="200" placeholder='Fact 1, e.g. "Grandpa is my mom&#x27;s dad"' style="margin-top:2px;">
+    <input type="text" id="item-clue2" maxlength="200" placeholder='Fact 2, e.g. "Grandpa takes me out for ham sandwiches"' style="margin-top:6px;">
+    <input type="text" id="item-clue3" maxlength="200" placeholder='Fact 3, e.g. "Grandpa lives by the lake"' style="margin-top:6px;">
     <div style="font-size:12px;color:#666;margin-top:4px;">If left blank the game falls back to "Who or what is the [tile name]?"</div>
     <div class="error" id="item-error"></div>
     <div id="item-frame-row" style="display:none;margin:6px 0 2px;">
@@ -1400,7 +1400,7 @@
       <div id="item-history-msg" style="font-size:12px;color:#888;margin-top:2px;"></div>
     </div>
     <div id="item-redraw-row" style="display:none;margin:6px 0 2px;">
-      <button class="secondary" id="item-redraw" title="One tap — re-draws this picture in your child's chosen style automatically. The first redo of each tile is free; after that it uses 1 credit. The old picture is archived, never deleted.">✨ Match my child's style</button>
+      <button class="secondary" id="item-redraw" title="One tap re-draws this picture in your child's chosen style automatically. The first redo of each tile is free; after that it uses 1 credit. The old picture is archived, never deleted.">✨ Match my child's style</button>
       <span id="item-redraw-note" style="font-size:12px;color:#2e7d32;margin-left:8px;"></span>
     </div>
     <div class="button-row">
@@ -1423,14 +1423,14 @@
          default = drawn to match the BOARD's saved art style. -->
     <div style="display:flex;gap:8px;margin:6px 0 2px;">
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-        <input type="radio" name="cat-look" id="cat-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1</label>
+        <input type="radio" name="cat-look" id="cat-look-style" checked style="width:auto;margin:0;">Board art style: ⭐1</label>
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-        <input type="radio" name="cat-look" id="cat-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
+        <input type="radio" name="cat-look" id="cat-look-raw" style="width:auto;margin:0;">My exact photo: free</label>
     </div>
     <label for="cat-kind">Category type</label>
     <select id="cat-kind" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font-size:15px;">
       <option value="">Normal</option>
-      <option value="location">📍 Location (a place — speaks its name, shows its rooms)</option>
+      <option value="location">📍 Location (a place: speaks its name, shows its rooms)</option>
       <option value="room">🚪 Room (short-press speaks, long-press opens its contents)</option>
     </select>
     <div class="hint" style="font-size:12px;color:#666;margin-top:4px;">
@@ -1466,9 +1466,9 @@
       <div style="font-weight:700;color:#ad1457;">✨ How should the pictures look?</div>
       <div style="display:flex;gap:8px;margin:8px 0 2px;">
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="bulk-look" id="bulk-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1 each</label>
+          <input type="radio" name="bulk-look" id="bulk-look-style" checked style="width:auto;margin:0;">Board art style: ⭐1 each</label>
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="bulk-look" id="bulk-look-raw" style="width:auto;margin:0;">Keep original photos — free</label>
+          <input type="radio" name="bulk-look" id="bulk-look-raw" style="width:auto;margin:0;">Keep original photos: free</label>
       </div>
       <button type="button" id="bulk-ai" style="margin-top:8px;width:100%;padding:11px;border:none;border-radius:8px;background:#ff1493;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">✨ AI: name, pronounce &amp; make art for all</button>
       <div style="font-size:12px;color:#888;margin-top:6px;">Fills each name + pronunciation automatically and (unless "keep original") redraws the photos to match the board. You can still edit anything before saving.</div>
@@ -1504,7 +1504,7 @@
   <div class="modal" style="max-width:440px;">
     <h3>Adjust framing</h3>
     <div style="font-size:13px;color:#666;margin-bottom:8px;">Drag the photo to choose what shows on the tile; zoom to get closer.
-      Everything outside the square is trimmed. The current picture is archived — Previous pictures brings it back any time.</div>
+      Everything outside the square is trimmed. The current picture is archived. Previous pictures brings it back any time.</div>
     <div id="crop-stage" style="position:relative;width:100%;aspect-ratio:1/1;overflow:hidden;border-radius:12px;background:#111;touch-action:none;cursor:grab;">
       <img id="crop-img" alt="" draggable="false" style="position:absolute;left:0;top:0;max-width:none;user-select:none;-webkit-user-drag:none;pointer-events:none;">
       <div style="position:absolute;inset:0;pointer-events:none;border:2px solid rgba(255,255,255,.9);border-radius:12px;"></div>
@@ -1530,10 +1530,10 @@
     <!-- 1 · Board look — per-device, most-used first (canonical themed order
          shared with parent.html and the native settings screens). -->
     <label style="margin-top:4px;">🎨 Board look</label>
-    <div style="font-size:12px;color:#666;margin:4px 0 2px;">Saved on this device only — size things for this screen.</div>
+    <div style="font-size:12px;color:#666;margin:4px 0 2px;">Saved on this device only, so you can size things for this screen.</div>
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-hide-labels">
-      <label for="disp-hide-labels">Hide all labels — tiles, categories &amp; the People/Nouns/Verbs headers</label>
+      <label for="disp-hide-labels">Hide all labels: tiles, categories &amp; the People/Nouns/Verbs headers</label>
     </div>
     <label style="margin-top:14px;font-size:13px;">Tiles across each section</label>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-top:6px;">
@@ -1584,7 +1584,7 @@
     </div>
 
     <!-- Synced sections: everything below follows the child, not the device. -->
-    <div style="font-size:12px;color:#666;margin:18px 0 2px;border-top:1px solid #eee;padding-top:12px;">Everything below follows your child — it applies on every device this board is used on.</div>
+    <div style="font-size:12px;color:#666;margin:18px 0 2px;border-top:1px solid #eee;padding-top:12px;">Everything below follows your child: it applies on every device this board is used on.</div>
 
     <!-- 2 · Board tools -->
     <label style="margin-top:10px;">🔘 Board tools</label>
@@ -1612,7 +1612,7 @@
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-double-teach">
       <label for="disp-double-teach">Tap again to learn
-        <span style="display:block;font-size:12px;color:#666;">Tap a tile: hear the word. Tap it again quickly: hear a fact about it — up to three facts on back-to-back taps, then the word again.</span></label>
+        <span style="display:block;font-size:12px;color:#666;">Tap a tile: hear the word. Tap it again quickly: hear a fact about it, up to three facts on back-to-back taps, then the word again.</span></label>
     </div>
     <div style="margin:8px 0 0 30px;">
       <label for="disp-teach-window" style="font-size:12px;color:#666;text-transform:none;letter-spacing:0;">How quick "again" has to be: <strong><span id="disp-teach-window-val">2.0</span>s</strong></label>
@@ -1659,8 +1659,8 @@
     </div>
     <div id="disp-unlock-confirm" style="display:none;border:2px solid #f59e0b;background:#fffbeb;border-radius:10px;padding:10px 12px;margin-top:8px;">
       <div style="font-size:13px;color:#92400e;font-weight:700;">⚠️ Skip the password on the board's lock?</div>
-      <div style="font-size:12px;color:#92400e;margin:4px 0 8px;">This only changes the board's lock — <b>your account password stays exactly the same</b> for signing in everywhere.
-        With this on, anyone holding this device — including your child — can open edit mode, change or delete tiles, and reach the parent dashboard.
+      <div style="font-size:12px;color:#92400e;margin:4px 0 8px;">This only changes the board's lock. <b>Your account password stays exactly the same</b> for signing in everywhere.
+        With this on, anyone holding this device, including your child, can open edit mode, change or delete tiles, and reach the parent dashboard.
         Enter your account password once to confirm.</div>
       <input type="password" id="disp-unlock-pass" autocomplete="current-password" placeholder="Your account password" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;box-sizing:border-box;">
       <div style="display:flex;gap:8px;margin-top:8px;">
@@ -1673,7 +1673,7 @@
          gate. Set/change/remove all require the account password. -->
     <div style="margin-top:10px;">
       <label style="font-size:13px;text-transform:none;letter-spacing:0;">Quick-unlock PIN (this device only)
-        <span style="display:block;font-size:12px;color:#666;">Unlock editing with a 4-digit PIN instead of typing your whole password. Stored only on this device — other devices keep their own.</span></label>
+        <span style="display:block;font-size:12px;color:#666;">Unlock editing with a 4-digit PIN instead of typing your whole password. Stored only on this device. Other devices keep their own.</span></label>
       <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
         <span id="disp-pin-status" style="font-size:13px;color:#666;">No PIN set</span>
         <button type="button" class="secondary" id="disp-pin-set" style="width:auto;padding:8px 12px;">Set PIN…</button>
@@ -1737,9 +1737,9 @@
     <h3>Who uses this device?</h3>
     <div style="font-size:14px;color:#666;margin:6px 0 18px;">We'll open straight to the right view next time. You can change this later under ⚙ Display.</div>
     <div style="display:flex;flex-direction:column;gap:10px;">
-      <button class="role-pick" data-role="child" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🧒 <span class="cn">Your child</span> — the communication board</button>
-      <button class="role-pick" data-role="parent" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">👪 Parent — the dashboard</button>
-      <button class="role-pick" data-role="therapist" id="role-therapist" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🩺 Therapist — the facilitator view</button>
+      <button class="role-pick" data-role="child" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🧒 <span class="cn">Your child</span>: the communication board</button>
+      <button class="role-pick" data-role="parent" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">👪 Parent: the dashboard</button>
+      <button class="role-pick" data-role="therapist" id="role-therapist" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🩺 Therapist: the facilitator view</button>
     </div>
   </div>
 </div>
@@ -1775,13 +1775,13 @@
 <div class="modal-backdrop" id="game-setup">
   <div class="modal">
     <h3>Start a game</h3>
-    <div style="font-size:13px;color:#666;margin-bottom:8px;">Self-paced matching: <span class="cn">your child</span> hears a word and taps the matching picture. There are no wrong-answer sounds — ever.</div>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">Self-paced matching: <span class="cn">your child</span> hears a word and taps the matching picture. There are no wrong-answer sounds, ever.</div>
     <label for="game-scope">What to practice</label>
     <select id="game-scope" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
       <option value="all" selected>Everything</option>
     </select>
     <div id="game-range-row" style="display:none;margin-top:10px;">
-      <label>Limit to a range (optional) — e.g. Numbers 1 to 20</label>
+      <label>Limit to a range (optional), e.g. Numbers 1 to 20</label>
       <div style="display:flex;gap:8px;align-items:center;">
         <input id="game-from" type="number" min="1" inputmode="numeric" placeholder="from #" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
         <span style="color:#888;">to</span>
@@ -1812,7 +1812,7 @@
 <div class="modal-backdrop" id="rewards-modal">
   <div class="modal">
     <h3>🎁 Rewards &amp; music</h3>
-    <div style="font-size:13px;color:#666;margin-bottom:8px;">When <span class="cn">your child</span> finishes, flowers burst and they hear one of these cheers in your voice. Type the phrases you want — we record them in your voice and save them so they work offline.</div>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">When <span class="cn">your child</span> finishes, flowers burst and they hear one of these cheers in your voice. Type the phrases you want. We record them in your voice and save them so they work offline.</div>
     <label for="rewards-phrases">Cheer phrases (one per line)</label>
     <textarea id="rewards-phrases" rows="5" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;"></textarea>
     <label for="rewards-music">Background music</label>
@@ -2119,7 +2119,7 @@
       // Token went stale — drop it so the next login can refresh
       authToken = '';
       localStorage.removeItem(TOKEN_KEY);
-      throw new Error('Unauthorized — please log in again');
+      throw new Error('Unauthorized, please log in again');
     }
     return r;
   }
@@ -2422,7 +2422,7 @@
     wrap.appendChild(sq);
     const lbl = document.createElement('div');
     lbl.className = 'tile-label';
-    lbl.textContent = job.label ? job.label + ' — pending' : 'Pending';
+    lbl.textContent = job.label ? job.label + ' – pending' : 'Pending';
     wrap.appendChild(lbl);
     return wrap;
   }
@@ -2915,7 +2915,7 @@
         const styleFolder = document.createElement('div');
         styleFolder.className = 'add-subcat-tile';
         styleFolder.textContent = '✨ Style';
-        styleFolder.title = "Match every picture in this folder to your child's style. Already-matched pictures are skipped — you're never charged twice.";
+        styleFolder.title = "Match every picture in this folder to your child's style. Already-matched pictures are skipped, so you're never charged twice.";
         styleFolder.addEventListener('click', async () => {
           const catId = activeCategoryId[section];
           if (!catId) return;
@@ -2924,7 +2924,7 @@
               method: 'POST', body: JSON.stringify({ childId: CHILD_ID, categoryId: catId, quote: true }),
             });
             if (!q.remaining) { alert("Everything in this folder already matches your child's style. ✓"); return; }
-            if (!confirm(`Match ${q.remaining} picture${q.remaining === 1 ? '' : 's'} in this folder to your child's style for ⭐${q.cost}?\n\nAlready-styled pictures are skipped — you're never charged twice.`)) return;
+            if (!confirm(`Match ${q.remaining} picture${q.remaining === 1 ? '' : 's'} in this folder to your child's style for ⭐${q.cost}?\n\nAlready-styled pictures are skipped, so you're never charged twice.`)) return;
             const r = await apiJSON('/api/store?action=personalize-category', {
               method: 'POST', body: JSON.stringify({ childId: CHILD_ID, categoryId: catId }),
             });
@@ -2932,9 +2932,9 @@
           } catch (err) {
             const m = String(err.message || err);
             alert(m.includes('needs_subscription')
-              ? 'Styled pictures are part of My World memberships (from $9.99/month) — join in the Store. Everything you already made stays yours forever.'
+              ? 'Styled pictures are part of My World memberships (from $9.99/month). Join in the Store. Everything you already made stays yours forever.'
               : m.includes('not_enough_credits')
-                ? 'Not enough credits — add a pack in the Store first.'
+                ? 'Not enough credits. Add a pack in the Store first.'
                 : 'Could not start: ' + m);
           }
         });
@@ -3055,7 +3055,7 @@
         // Only reload when something actually landed — otherwise reloading just
         // flashes back to this same empty screen, which reads as "nothing happened."
         if (placed > 0) {
-          if (txt) txt.textContent = 'Done — ' + placed + ' tiles created! Refreshing…';
+          if (txt) txt.textContent = 'Done: ' + placed + ' tiles created! Refreshing…';
           setTimeout(() => location.reload(), 1400);
         } else {
           if (txt) txt.textContent = total > 0
@@ -3325,7 +3325,7 @@
     if (!h) {
       h = document.createElement('div');
       h.id = 'edit-hint';
-      h.textContent = '✋ Hold a tile until it lifts, then drag it onto another tile to reorder — or onto a folder tab to move it. (With a mouse: just drag.)';
+      h.textContent = '✋ Hold a tile until it lifts, then drag it onto another tile to reorder, or onto a folder tab to move it. (With a mouse: just drag.)';
       h.addEventListener('click', () => h.classList.remove('show'));
       document.body.appendChild(h);
     }
@@ -3431,7 +3431,7 @@
       try { localStorage.setItem(PIN_FAILS, String(fails)); } catch (_) {}
       if (fails >= 5) {
         pinShowMode(false);
-        errEl.textContent = 'Too many PIN tries — use your password.';
+        errEl.textContent = 'Too many PIN tries. Use your password.';
       } else {
         document.getElementById('login-pin').value = '';
         errEl.textContent = 'Wrong PIN (' + (5 - fails) + ' tries left)';
@@ -3532,7 +3532,7 @@
       + '<div style="font-size:19px;font-weight:700;color:#ad1457;margin:6px 0;">A new suggested board layout</div>'
       + '<div style="font-size:14px;color:#4b5563;line-height:1.5;">We’ve improved the standard arrangement of folders and words.'
       + (off.note ? '<br><i>“' + String(off.note).replace(/[<>&]/g, '') + '”</i>' : '')
-      + '<br>Apply it to this board? Only the <b>order</b> changes — every picture, word, and recording stays exactly as it is.</div>'
+      + '<br>Apply it to this board? Only the <b>order</b> changes: every picture, word, and recording stays exactly as it is.</div>'
       + '<div style="display:flex;gap:10px;margin-top:16px;">'
       + '<button id="lo-keep" style="flex:1;padding:12px;border:1.5px solid #e5e7eb;border-radius:12px;background:#fff;font:inherit;font-weight:700;color:#6b7280;cursor:pointer;">Keep my order</button>'
       + '<button id="lo-apply" style="flex:1;padding:12px;border:none;border-radius:12px;background:#ff1493;color:#fff;font:inherit;font-weight:700;cursor:pointer;">Apply new layout</button>'
@@ -3550,7 +3550,7 @@
         o.remove();
         if (action === 'accept') reloadFromServer();
       } catch (e) {
-        msg.textContent = 'Could not save that — try again. (' + (e.message || e) + ')';
+        msg.textContent = 'Could not save that. Try again. (' + (e.message || e) + ')';
       }
     };
     document.getElementById('lo-apply').addEventListener('click', () => respond('accept'));
@@ -3565,7 +3565,7 @@
       const r = await apiFetch('/api/store?action=catalog&childId=' + encodeURIComponent(CHILD_ID));
       if (r.ok) bal = (await r.json()).balance;
     } catch (_) {}
-    return confirm(what + ' uses ⭐' + cost + (bal == null ? '' : ' — you have ⭐' + bal) + '. Continue?');
+    return confirm(what + ' uses ⭐' + cost + (bal == null ? '' : '. You have ⭐' + bal) + '. Continue?');
   }
   function showMembershipUpsell(title, msg) {
     let o = document.getElementById('upsell-overlay');
@@ -3602,13 +3602,13 @@
     let title = null, msg = null;
     if (shell && shell.platform === 'fire') {
       title = 'Welcome to My World on your Fire tablet! 🎉';
-      msg = 'Everything works here — talking tiles, games, Teach Me, automatic teaching, and all of your personalized pictures. '
+      msg = 'Everything works here: talking tiles, games, Teach Me, automatic teaching, and all of your personalized pictures. '
           + 'Two things Fire tablets can’t do: real-time speech-to-text (Fire OS doesn’t include a speech service) and app notifications. '
           + 'Memberships and credits are managed right here on the web store.';
     } else if (shell && shell.platform === 'android') {
       title = 'Welcome to My World on Android! 🎉';
       msg = (shell.speech
-          ? 'Everything works on this device — including speech-to-text listening mode. '
+          ? 'Everything works on this device, including speech-to-text listening mode. '
           : 'Everything works on this device except speech-to-text (no speech service was found). ')
           + 'Memberships and credits are managed right here on the web store.';
     } else if (isAndroidUA) {
@@ -3958,7 +3958,7 @@
 
     // AI-tile section: clear status/preview (the look defaults to board style).
     document.getElementById('item-look-style').checked = true;
-    document.getElementById('item-magic-status').textContent = '—';
+    document.getElementById('item-magic-status').textContent = '–';
     const mp = document.getElementById('item-magic-preview');
     mp.style.display = 'none'; mp.removeAttribute('src');
 
@@ -4092,7 +4092,7 @@
       const photo = await compressImage(file);
       const raw = document.getElementById('item-look-raw').checked;
       if (!raw && !(await confirmSpend(1, 'Drawing this photo in the board’s art style'))) {
-        statusEl.textContent = '—';
+        statusEl.textContent = '–';
         btn.disabled = false; btn.textContent = prevText;
         return;
       }
@@ -4109,15 +4109,15 @@
         const d = await jr.text();
         if (jr.status === 402 && /needs_subscription/.test(d)) {
           showMembershipUpsell('Styled tiles are a membership feature',
-            'Making pictures in ' + (window.CHILD_NAME || 'your child') + '’s own art style is part of every My World membership, from $9.99/month. You can still add the photo as-is for free — pick “My exact photo” and tap again.');
-          throw new Error('Styling needs a membership — pick “My exact photo” (free) and tap again.');
+            'Making pictures in ' + (window.CHILD_NAME || 'your child') + '’s own art style is part of every My World membership, from $9.99/month. You can still add the photo as-is for free. Pick “My exact photo” and tap again.');
+          throw new Error('Styling needs a membership. Pick “My exact photo” (free) and tap again.');
         }
         throw new Error(d.slice(0, 200));
       }
       const { id: jobId } = await jr.json();
       statusEl.textContent = raw
-        ? '📥 Adding the photo to the board… Don’t worry — it’s saved; a 🌍 Pending tile marks the spot.'
-        : '🎨 Drawing it to match the board… This takes a few minutes — don’t worry. Your photo is saved; you can close this, and a 🌍 Pending tile marks the spot until it lands.';
+        ? '📥 Adding the photo to the board… Don’t worry: it’s saved; a 🌍 Pending tile marks the spot.'
+        : '🎨 Drawing it to match the board… This takes a few minutes, don’t worry. Your photo is saved; you can close this, and a 🌍 Pending tile marks the spot until it lands.';
       // Show the placeholder immediately (the poll would catch it in ~15s).
       loadPendingJobs().catch(() => {});
       // Poll until the job lands (or needs a hand). If the modal is closed the
@@ -4138,12 +4138,12 @@
           return;
         }
         if (job.status === 'failed' && job.attempts >= 5) {
-          throw new Error(job.error || 'the picture engine gave up — try again in a bit');
+          throw new Error(job.error || 'the picture engine gave up. Try again in a bit');
         }
       }
-      statusEl.textContent = '⏳ Still rendering — it will appear on the board when it finishes.';
+      statusEl.textContent = '⏳ Still rendering. It will appear on the board when it finishes.';
     } catch (err) {
-      statusEl.textContent = '—';
+      statusEl.textContent = '–';
       errEl.textContent = 'Could not make the tile: ' + (err.message || err);
     } finally {
       btn.disabled = false; btn.textContent = prevText;
@@ -4277,7 +4277,7 @@
         // keepAspect off — the whole point is a filled square tile.
         const saved = await serverUpdateItem(item, { image: blob, keepAspect: false });
         cropModal.classList.remove('show');
-        document.getElementById('item-frame-note').textContent = 'Framed ✓ — the old picture is in Previous pictures.';
+        document.getElementById('item-frame-note').textContent = 'Framed ✓. The old picture is in Previous pictures.';
         if (saved) { editingItem = saved; loadItemHistory(saved); }
         await renderAll();
       } catch (e) {
@@ -4358,12 +4358,12 @@
         method: 'POST', body: JSON.stringify({ childId: CHILD_ID, itemId: editingItem.id }),
       });
       note.textContent = (r.freeRetry ? 'Redrawing (free)' : 'Redrawing (⭐' + r.charged + ')')
-        + ' — the new picture lands in a minute or two.';
+        + '. The new picture lands in a minute or two.';
     } catch (err) {
       note.textContent = '';
       const msg = String(err.message || err);
       document.getElementById('item-error').textContent = msg.includes('not_enough_credits')
-        ? 'Not enough credits — open the Word Store from the parent dashboard to add more.'
+        ? 'Not enough credits. Open the Word Store from the parent dashboard to add more.'
         : msg;
     }
     btn.disabled = false;
@@ -4448,7 +4448,7 @@
       // image add. 402 (free tier) falls back to the exact photo + upsell.
       if (pendingCatImage && document.getElementById('cat-look-style').checked) {
         if (!(await confirmSpend(1, 'Drawing the folder picture in the board’s art style'))) {
-          errEl.textContent = 'Not drawn — pick "My exact photo" for a free add, or save again to confirm.';
+          errEl.textContent = 'Not drawn. Pick "My exact photo" for a free add, or save again to confirm.';
           saveBtn.disabled = false; saveBtn.textContent = prev;
           return;
         }
@@ -4724,7 +4724,7 @@
       showMembershipUpsell('Styled tiles are a membership feature',
         'Your photos were added as-is (free on every plan). Making them into your child’s art style is part of My World memberships, from $9.99/month.');
     }
-    prog.textContent = '✅ AI done — review the names and Save.';
+    prog.textContent = '✅ AI done. Review the names and Save.';
     btn.disabled = false; btn.textContent = prev;
   });
 
@@ -4799,7 +4799,7 @@
           order: Date.now() + i,
         });
       } catch (err) {
-        failures.push(`${it.label}: save failed — ${err.message}`);
+        failures.push(`${it.label}: save failed (${err.message})`);
       }
     }
 
@@ -4988,7 +4988,7 @@
 
   async function wipeAll() {
     const confirmInput = prompt(
-      'This deletes EVERY category, item, image, and audio file — on this device and on the server. Type DELETE to confirm.'
+      'This deletes EVERY category, item, image, and audio file, on this device and on the server. Type DELETE to confirm.'
     );
     if (confirmInput !== 'DELETE') return;
     try {
@@ -5030,7 +5030,7 @@
       const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID) + (showAll ? '&showAllVocab=1' : ''));
       if (!r.ok) throw new Error('server returned ' + r.status);
       const data = await r.json();
-      if (!(data.categories || []).length && !(data.items || []).length) { alert('Server returned an empty board — not reloading.'); return; }
+      if (!(data.categories || []).length && !(data.items || []).length) { alert('Server returned an empty board. Not reloading.'); return; }
       await hydrateFromServer(data);
       _lastSig = structSig(data);
       _precaching = false;
@@ -5159,7 +5159,7 @@
           } catch (_) {}
         }
         await renderAll();
-        nmsg('Done — resized ' + ((d.items || 0) + (d.categories || 0)) + ' tiles.');
+        nmsg('Done: resized ' + ((d.items || 0) + (d.categories || 0)) + ' tiles.');
       } catch (err) { nmsg('Could not resize: ' + (err.message || err), true); }
       finally { normBtn.disabled = false; }
     });
@@ -5332,7 +5332,7 @@
       unlockCb.checked = false;                      // not real until the password confirms it
       if (!sessionUser || !sessionUser.email) {
         box.style.display = '';
-        msg.textContent = 'Sign in on this device first — this needs your account password.';
+        msg.textContent = 'Sign in on this device first. This needs your account password.';
         return;
       }
       msg.textContent = '';
@@ -5419,7 +5419,7 @@
   }
   document.getElementById('display-done').addEventListener('click', () => displayModal.classList.remove('show'));
   document.getElementById('display-signout').addEventListener('click', async () => {
-    if (!confirm('Sign out on this device? The board stays saved — sign back in anytime.')) return;
+    if (!confirm('Sign out on this device? The board stays saved. Sign back in anytime.')) return;
     try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
     try { localStorage.removeItem(TOKEN_KEY); } catch (_) {}
     location.href = '/login';
@@ -5536,8 +5536,8 @@
     topBody.innerHTML = '';
     const topCats = allCats[orgSel.section].filter(c => c.parentId == null);
     if (!topCats.length) topBody.appendChild(orgEmptyHint(orgSel.section === 'needs'
-      ? 'Needs is a flat strip (no folders). Its tiles are in the Items column → — drag to reorder.'
-      : 'No categories yet — drag items here to start.'));
+      ? 'Needs is a flat strip (no folders). Its tiles are in the Items column →. Drag to reorder.'
+      : 'No categories yet. Drag items here to start.'));
     for (const cat of topCats) {
       const subs = allCats[orgSel.section].filter(c => c.parentId === cat.id);
       const row = makeOrgRow({
@@ -6299,9 +6299,9 @@
       add(og, s, 'All ' + s);
       const tops = cats.filter(c => c.parentId == null).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       for (const t of tops) {
-        add(og, 'cat:' + t.id, '— ' + t.label);
+        add(og, 'cat:' + t.id, '– ' + t.label);
         const subs = cats.filter(c => c.parentId === t.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        for (const sub of subs) add(og, 'cat:' + sub.id, '— — ' + sub.label);
+        for (const sub of subs) add(og, 'cat:' + sub.id, '– – ' + sub.label);
       }
       sel.appendChild(og);
     }
@@ -6911,7 +6911,7 @@
       o.style.cssText = 'position:fixed;inset:0;z-index:2600;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:24px;';
       o.innerHTML = '<div style="background:#fff;border-radius:22px;max-width:440px;padding:26px;font-family:system-ui,sans-serif;">'
         + '<div style="font-size:19px;font-weight:700;color:#ad1457;">💡 Suggest new words from listening?</div>'
-        + '<p style="font-size:14px;color:#4b5563;line-height:1.5;">While listening is on, the board can notice words your family says that aren’t on the board yet and save them for your review — with one-tap add. What’s saved: only matches against our vocabulary library (a word name and a count). Never audio, never transcripts — recognition runs on this device.</p>'
+        + '<p style="font-size:14px;color:#4b5563;line-height:1.5;">While listening is on, the board can notice words your family says that aren’t on the board yet and save them for your review, with one-tap add. What’s saved: only matches against our vocabulary library (a word name and a count). Never audio, never transcripts. Recognition runs on this device.</p>'
         + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">'
         + '<button id="sc-no" style="border:2px solid #f3c6dd;background:#fff;color:#ad1457;border-radius:999px;padding:9px 16px;font-weight:600;cursor:pointer;">Not now</button>'
         + '<button id="sc-yes" style="border:none;background:#ff1493;color:#fff;border-radius:999px;padding:9px 18px;font-weight:700;cursor:pointer;">Enable</button>'
@@ -7019,7 +7019,7 @@
         // Say WHY, per device: Fire tablets ship no speech service at all;
         // non-Chrome browsers lack the Web Speech API.
         hint.textContent = (window.MyWorldShell && window.MyWorldShell.speech === false)
-          ? 'This device doesn’t support speech-to-text — everything else works!'
+          ? 'This device doesn’t support speech-to-text, but everything else works!'
           : 'Speech-to-text needs the My World app or the Chrome browser';
       }
       return;
@@ -7057,7 +7057,7 @@
     if (on && (G.running || SLIDE.running || ROUTINE.active || _messagePlaying)) return; // never hijack an activity
     if (on && !entAllows('stt')) {
       showMembershipUpsell('Speech-to-text is a membership feature',
-        'Turn spoken words into picture tiles in real time — part of every My World membership, from $9.99/month. Everything you already made stays yours forever.');
+        'Turn spoken words into picture tiles in real time, part of every My World membership, from $9.99/month. Everything you already made stays yours forever.');
       return;
     }
     if (on === _listening) return;
@@ -7065,7 +7065,7 @@
     if (on) sbSetMode(false);   // listening owns the header — stop any sentence mid-speech
     document.body.classList.toggle('listening', on);
     const lb = document.getElementById('listen-btn');
-    if (lb) { lb.classList.toggle('on', on); lb.textContent = on ? '⏹️' : '🎙️'; lb.title = on ? 'Stop listening' : 'Listen — turn spoken words into picture tiles'; }
+    if (lb) { lb.classList.toggle('on', on); lb.textContent = on ? '⏹️' : '🎙️'; lb.title = on ? 'Stop listening' : 'Listen: turn spoken words into picture tiles'; }
     const wrap = document.getElementById('listen-tiles'); if (wrap) wrap.innerHTML = '';
     if (on) { _listenLex = await buildListenLexicon(); await startSpeech(); bumpListenIdle(); maybeOfferSuggestConsent(); }
     else {
@@ -7765,7 +7765,7 @@
           bootBanner(note, broken);
           if (!broken) setTimeout(() => { const b = document.getElementById('boot-banner'); if (b) b.remove(); }, 3500);
         } else {
-          bootBanner('Sync HTTP ' + r.status + ' — could not load from server.', true);
+          bootBanner('Sync HTTP ' + r.status + ': could not load from server.', true);
         }
       } catch (err) {
         console.error('sync/hydrate failed:', err);
