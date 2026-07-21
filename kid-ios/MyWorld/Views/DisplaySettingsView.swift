@@ -37,12 +37,22 @@ struct DisplaySettingsView: View {
     // like the web Display modal). Turning it OFF is friction-free.
     @State private var confirmEasyUnlock = false
     @State private var unlockPassword = ""
-    // Programmatic easyUnlock writes (snap-back, confirmed enable) must not
-    // re-enter the onChange save path.
-    @State private var suppressUnlockChange = false
+    // The last server-confirmed easyUnlock value. onChange only reacts when
+    // the toggle DIFFERS from this, which makes seeding, snap-backs, and the
+    // confirmed enable all inert without a consumable suppress flag. (The old
+    // one-shot suppressUnlockChange flag raced the async seed: opening the
+    // panel with easyUnlock ON re-fired onChange after syncedLoaded was
+    // already true, snapping the switch off and popping the password dialog —
+    // and desyncing the switch from the server so the gate couldn't be
+    // re-enabled.)
+    @State private var serverEasyUnlock = false
     // Sign-out is disruptive on the child's device (the board goes away until
     // a parent signs back in) — always confirm.
     @State private var confirmSignOut = false
+    // #17 quick-unlock PIN management (per-device; see QuickPin).
+    @State private var pinIsSet = QuickPin.isSet
+    @State private var showPinSheet = false
+    @State private var pinRemoveMode = false
 
     private let columnChoices = [1, 2, 3, 4, 5, 6, 7, 8]
     private let api = APIClient()
@@ -165,18 +175,32 @@ struct DisplaySettingsView: View {
                     }
                     Toggle("Unlock editing without a password", isOn: $easyUnlock)
                         .onChange(of: easyUnlock) { _, v in
-                            guard syncedLoaded else { return }
-                            if suppressUnlockChange { suppressUnlockChange = false; return }
+                            guard syncedLoaded, v != serverEasyUnlock else { return }
                             if v {
-                                suppressUnlockChange = true
                                 easyUnlock = false            // not real until the password confirms it
                                 unlockPassword = ""
                                 confirmEasyUnlock = true
                             } else {
+                                serverEasyUnlock = false      // optimistic; a failed save reseeds truth
                                 saveSynced(["easyUnlock": false])
                             }
                         }
                     Text("For older, more capable kids who edit their own board.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    // #17: per-device quick-unlock PIN management. Setting or
+                    // changing re-verifies the account password inside the
+                    // sheet; the PIN itself never leaves this device.
+                    Button(pinIsSet ? "Change the quick-unlock PIN…" : "Set a quick-unlock PIN…") {
+                        pinRemoveMode = false
+                        showPinSheet = true
+                    }
+                    if pinIsSet {
+                        Button("Remove the PIN", role: .destructive) {
+                            pinRemoveMode = true
+                            showPinSheet = true
+                        }
+                    }
+                    Text("A 4-digit PIN for this device that opens the board's edit lock faster than typing the full password. Your account password always works too.")
                         .font(.footnote).foregroundStyle(.secondary)
                     if let syncedMsg { Text(syncedMsg).font(.footnote).foregroundStyle(.red) }
                 } header: {
@@ -237,6 +261,9 @@ struct DisplaySettingsView: View {
             } message: {
                 Text("This only changes the board's lock. Your account password stays exactly the same for signing in everywhere. With this on, anyone holding this device, including your child, can open edit mode, change or delete tiles, and reach the parent dashboard. Enter your account password once to confirm.")
             }
+            .sheet(isPresented: $showPinSheet, onDismiss: { pinIsSet = QuickPin.isSet }) {
+                PinManageSheet(removeMode: pinRemoveMode)
+            }
         }
     }
 
@@ -254,7 +281,8 @@ struct DisplaySettingsView: View {
         listenTilesOnly = (s["listenTilesOnly"] as? Bool) ?? false
         easyClose = (s["easyClose"] as? Bool) ?? false
         exitHoldSec = Double(TouchConfig.clampMs(s["exitHoldMs"], 300, 3000, 1200)) / 1000.0
-        easyUnlock = (s["easyUnlock"] as? Bool) ?? false
+        serverEasyUnlock = (s["easyUnlock"] as? Bool) ?? false
+        easyUnlock = serverEasyUnlock
         syncedLoaded = true
     }
 
@@ -291,12 +319,92 @@ struct DisplaySettingsView: View {
         }
         if await api.updateChildSettings(childId: auth.childSlug, patch: ["easyUnlock": true]) {
             syncedMsg = nil
-            suppressUnlockChange = true
+            serverEasyUnlock = true
             easyUnlock = true
             access.refresh()
         } else {
             syncedMsg = "Couldn't save. Check your connection."
         }
+    }
+}
+
+/// #17: set, change, or remove this device's quick-unlock PIN. Every action
+/// re-verifies the account password first (POST /api/auth/login — the same
+/// proof the UnlockSheet accepts), so a child holding an unlocked board
+/// can't quietly change the gate. The PIN never leaves the device; only its
+/// device-salted hash is stored (QuickPin).
+private struct PinManageSheet: View {
+    let removeMode: Bool
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AuthManager.self) private var auth
+
+    @State private var password = ""
+    @State private var newPin = ""
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    SecureField("Your account password", text: $password)
+                        .textContentType(.password)
+                } footer: {
+                    Text(removeMode
+                         ? "Confirm with your account password to remove the PIN. The lock goes back to password-only."
+                         : "Confirm with your account password, then pick a 4-digit PIN for this device. The full password always keeps working.")
+                }
+                if !removeMode {
+                    Section {
+                        SecureField("New 4-digit PIN", text: $newPin)
+                            .keyboardType(.numberPad)
+                            .onChange(of: newPin) { _, v in
+                                let digits = String(v.filter(\.isNumber).prefix(4))
+                                if digits != v { newPin = digits }
+                            }
+                    }
+                }
+                if let error {
+                    Text(error).foregroundStyle(.red).font(.callout)
+                }
+                Section {
+                    Button {
+                        Task { await save() }
+                    } label: {
+                        Text(busy ? "Saving…" : (removeMode ? "Remove the PIN" : "Save the PIN"))
+                            .frame(maxWidth: .infinity)
+                            .bold()
+                    }
+                    .disabled(busy || password.isEmpty || (!removeMode && newPin.count != 4))
+                }
+            }
+            .navigationTitle(removeMode ? "Remove PIN" : (QuickPin.isSet ? "Change PIN" : "Set a PIN"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel", role: .cancel) { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func save() async {
+        guard let email = auth.user?.email else { dismiss(); return }
+        busy = true
+        defer { busy = false }
+        do {
+            _ = try await APIClient().login(email: email, password: password)
+        } catch {
+            self.error = "That password didn't work."
+            password = ""
+            return
+        }
+        if removeMode {
+            QuickPin.remove()
+        } else {
+            QuickPin.set(newPin, childId: auth.childSlug)
+        }
+        dismiss()
     }
 }
 

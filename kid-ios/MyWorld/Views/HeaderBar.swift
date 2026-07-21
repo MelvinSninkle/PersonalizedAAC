@@ -127,14 +127,22 @@ struct HeaderBar: View {
 
     // MARK: -- Left: the lock icon
     //
-    // Tap = no-op (kids can mash on it and nothing happens — there's no flash
-    //   of UI, no animation, nothing to "discover").
-    // Tap when unlocked = re-locks immediately (one-tap exit for the parent).
-    // Long-press 0.7s = opens the password sheet → unlock on correct password.
+    // With the password gate ON (default):
+    //   Tap while locked = no-op (kids can mash on it and nothing happens —
+    //   no flash of UI, nothing to "discover"). Long-press 0.7s = password
+    //   sheet → unlock.
+    // With the password gate OFF (easyUnlock, password-confirmed by the
+    //   parent when enabling): a plain TAP toggles edit mode both ways —
+    //   that's the whole point of the setting.
+    // Tap while unlocked always re-locks (one-tap exit for the parent).
 
     private var lockButton: some View {
         Button {
-            if editMode { editMode = false }
+            if editMode {
+                editMode = false
+            } else if TouchConfig.easyUnlock {
+                editMode = true
+            }
         } label: {
             Image(systemName: editMode ? "lock.open.fill" : "lock.fill")
                 .font(.system(size: 18, weight: .semibold))
