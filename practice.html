@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Try the board · My World — Tap to Talk</title>
+<title>Try the board · My World: Tap to Talk</title>
 <link rel="icon" href="/icons/myworld-globe.png">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -152,7 +152,7 @@
 <header>
   <img src="/icons/myworld-globe.png" alt="">
   <h1>My World · Try the board</h1>
-  <span class="foot-note" style="color:#fff;">This is the starter board — your child's becomes <b>theirs</b>.</span>
+  <span class="foot-note" style="color:#fff;">This is the starter board. Your child's becomes <b>theirs</b>.</span>
   <div class="spacer"></div>
   <a class="cta" href="/signup.html">Make it your child's →</a>
 </header>
@@ -161,15 +161,15 @@
      the board below stays the hero. -->
 <div class="toolbar" id="main-toolbar">
   <span class="tl" id="style-wrap" style="display:none;">Style
-    <select class="tsel" id="sel-style" title="Every published art style — your child's whole board renders in the one you pick"></select>
+    <select class="tsel" id="sel-style" title="Every published art style. Your child's whole board renders in the one you pick"></select>
   </span>
   <span class="tl" id="kid-wrap" style="display:none;">Meet
-    <select class="tsel" id="sel-kid" title="Who the demo board is about — person tiles re-render for them"></select>
+    <select class="tsel" id="sel-kid" title="Who the demo board is about. Person tiles re-render for them"></select>
   </span>
   <span class="tl">Voice
-    <select class="tsel" id="sel-voice" title="Their favorite voice — every picture speaks with it"></select>
+    <select class="tsel" id="sel-voice" title="Their favorite voice. Every picture speaks with it"></select>
   </span>
-  <button class="voice-chip" id="disp-btn" title="Labels, tile sizes, sections and colors — just for this visit">⚙ Display</button>
+  <button class="voice-chip" id="disp-btn" title="Labels, tile sizes, sections and colors, just for this visit">⚙ Display</button>
   <button class="voice-chip" id="listen-btn" title="The board that listens: talk nearby and the words you say light up as tiles">🎙 Try listening</button>
   <button class="voice-chip" id="tour-btn" title="What the colored rings mean and everything you can try here">✨ What's personalized?</button>
   <div class="stats" title="On a real board, every tap builds your child's progress charts, word history, and milestone moments.">
@@ -198,7 +198,7 @@
 <div class="pmodal-backdrop" id="disp-modal">
   <div class="pmodal">
     <h3>⚙ Display</h3>
-    <p class="hint">Just for this visit — on a real board these follow your child to every
+    <p class="hint">Just for this visit. On a real board these follow your child to every
       device, along with lots more: board tools, touch behavior, listening filters, and safety controls.</p>
     <label class="grp"><input type="checkbox" id="pd-hide-labels"> Hide labels (tiles, folders &amp; headers)</label>
     <div class="grp">Tiles across:
@@ -231,23 +231,23 @@
      rings say what each one COMFORTABLY personalizes, never a hard gate. -->
 <div class="pmodal-backdrop" id="tour-modal">
   <div class="pmodal">
-    <h3>👋 This is the board — here's what becomes <i>your child's</i></h3>
+    <h3>👋 This is the board. Here's what becomes <i>your child's</i></h3>
     <ul>
-      <li><span class="tier-key plus"></span><b>Pink ring — My World Plus ($9.99/mo).</b>
+      <li><span class="tier-key plus"></span><b>Pink ring: My World Plus ($9.99/mo).</b>
         The heart of the board becomes theirs: your child and family drawn into the art,
         and the everyday actions and needs starring <i>them</i>.</li>
-      <li><span class="tier-key pro"></span><b>Violet ring — My World Pro ($19.99/mo).</b>
+      <li><span class="tier-key pro"></span><b>Violet ring: My World Pro ($19.99/mo).</b>
         Their <i>whole world</i>: every food, toy, animal, and thing in Nouns redrawn as
         their actual stuff, in their style.</li>
       <li>📷 <b>Always free:</b> unlimited tiles from your exact photos, the whole starter
         board, games, and the sentence builder.</li>
       <li>🤝 <b>Try it with a safety net:</b> joining builds the full board up front so you
-        can see it working in the first week — and if you cancel, <b>everything you've made
+        can see it working in the first week, and if you cancel, <b>everything you've made
         stays yours, forever</b>.</li>
     </ul>
     <p class="hint">Things to try right now: pick an <b>art style</b> and <b>voice</b> up top,
       tap <b>🎙 Try listening</b> and just talk, and open <b>⚙ Display</b> to reshape the board.
-      Every tap speaks — go ahead.</p>
+      Every tap speaks. Go ahead.</p>
     <div class="btnrow" style="justify-content:space-between;align-items:center;">
       <a class="cta-link" href="/signup.html">Make it your child's →</a>
       <button class="voice-chip" id="tour-close" style="background:var(--pink);color:#fff;border-color:var(--pink);">Explore the board</button>
@@ -261,7 +261,7 @@
   <div class="pmodal">
     <h3 id="lh-title">🎙 Listening</h3>
     <p id="lh-body" style="font-size:14px;color:#2d2230;line-height:1.5;"></p>
-    <p class="hint">Nothing is recorded or sent anywhere — speech recognition runs right in your
+    <p class="hint">Nothing is recorded or sent anywhere. Speech recognition runs right in your
       browser. On the real board, listening is built into the iPad and Android apps and the web
       board, with the bad-word filter and parent controls included.</p>
     <div class="btnrow">
@@ -520,8 +520,8 @@
   function tierClass(section) { return section === 'nouns' ? 'tier-pro' : 'tier-plus'; }
   function tierTip(section) {
     return section === 'nouns'
-      ? 'Violet ring: personalized comfortably with My World Pro ($19.99/mo) — their whole world of things, redrawn as theirs'
-      : 'Pink ring: personalized comfortably with My World Plus ($9.99/mo) — your child, family, and everyday actions become the art';
+      ? 'Violet ring: personalized comfortably with My World Pro ($19.99/mo). Their whole world of things, redrawn as theirs'
+      : 'Pink ring: personalized comfortably with My World Plus ($9.99/mo). Your child, family, and everyday actions become the art';
   }
 
   function renderNeeds() {
@@ -693,7 +693,7 @@
     if (kind === 'unsupported') {
       title.textContent = '🎙 Listening needs a supported browser';
       body.textContent = 'Live listening on this demo uses your browser’s built-in speech '
-        + 'recognition — Chrome, Edge, and Safari all have it (Firefox doesn’t yet). '
+        + 'recognition. Chrome, Edge, and Safari all have it (Firefox doesn’t yet). '
         + 'On the real board there’s nothing to set up: listening is built into the '
         + 'iPad and Android apps and works out of the box.';
       retry.style.display = 'none';
@@ -701,7 +701,7 @@
       title.textContent = '🎙 The microphone is blocked';
       body.textContent = 'To try listening: click the 🔒 (or 🎤) icon next to the web address, '
         + 'set Microphone to Allow, then press “Try again” below. '
-        + 'That’s the whole setup — one click.';
+        + 'That’s the whole setup: one click.';
       retry.style.display = '';
     }
     document.getElementById('listen-help').classList.add('show');
@@ -816,7 +816,7 @@
       if (!DATA || !Array.isArray(DATA.tiles) || !DATA.tiles.length) throw new Error('empty');
     } catch (_) {
       document.getElementById('loading').textContent =
-        'The practice board isn’t available right now — but the real thing is. Tap "Make it your child’s" above!';
+        'The practice board isn’t available right now, but the real thing is. Tap "Make it your child’s" above!';
       return;
     }
     document.getElementById('loading').style.display = 'none';
