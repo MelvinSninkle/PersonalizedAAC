@@ -211,6 +211,18 @@ async function create(req, res, db, user) {
        ${childId}, ${ownerUserId}, ${description}, ${descriptions}, ${needsReview}, NOW())
     RETURNING *
   `;
+  // #16: teaching facts on create — written separately with a guarded ALTER
+  // so a pre-migration deploy can't fail the whole insert.
+  const rawClues = Array.isArray(b.descriptiveClues)
+    ? b.descriptiveClues.filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim().slice(0, 200)).slice(0, 3)
+    : [];
+  if (rawClues.length) {
+    try {
+      await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS descriptive_clues TEXT[]`;
+      const upd = await db`UPDATE items SET descriptive_clues = ${rawClues} WHERE id = ${rows[0].id} RETURNING *`;
+      if (upd.length) rows[0] = upd[0];
+    } catch (_) { /* clues are additive — never block tile creation */ }
+  }
   res.status(200).json(rowToItem(rows[0]));
 }
 

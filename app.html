@@ -1366,6 +1366,13 @@
     </div>
     <label for="item-description" style="margin-top:14px;">Description for Auditory Comprehension game (optional)</label>
     <textarea id="item-description" rows="2" placeholder='e.g. "Lives in a field, has four legs, eats grass." Spoken aloud — the child picks the matching tile.' style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font:inherit;box-sizing:border-box;"></textarea>
+
+    <!-- #16: the taxonomy's three teaching facts, authorable on any tile —
+         so a photo of Grandpa can carry "Grandpa is my mom's dad". -->
+    <label style="margin-top:14px;">Teaching facts (optional) — 3 short clues for Teach me &amp; games</label>
+    <input type="text" id="item-clue1" maxlength="200" placeholder='Fact 1 — e.g. "Grandpa is my mom&#x27;s dad"' style="margin-top:2px;">
+    <input type="text" id="item-clue2" maxlength="200" placeholder='Fact 2 — e.g. "Grandpa takes me out for ham sandwiches"' style="margin-top:6px;">
+    <input type="text" id="item-clue3" maxlength="200" placeholder='Fact 3 — e.g. "Grandpa lives by the lake"' style="margin-top:6px;">
     <div style="font-size:12px;color:#666;margin-top:4px;">If left blank the game falls back to "Who or what is the [tile name]?"</div>
     <div class="error" id="item-error"></div>
     <div id="item-frame-row" style="display:none;margin:6px 0 2px;">
@@ -3730,7 +3737,7 @@
     }
   }
 
-  async function serverCreateItem({ section, categoryId, label, image, sound, keepAspect, order, pinned, description }) {
+  async function serverCreateItem({ section, categoryId, label, image, sound, keepAspect, order, pinned, description, descriptiveClues }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const saved = await apiJSON('/api/items', {
@@ -3742,6 +3749,7 @@
         soundKey: upSnd?.key || null,
         keepAspect: !!keepAspect,
         description: description ?? null,
+        descriptiveClues: descriptiveClues ?? undefined,   // #16 teaching facts
         childId: CHILD_ID,
       }),
     });
@@ -3751,7 +3759,7 @@
     return saved;
   }
 
-  async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned, description }) {
+  async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned, description, descriptiveClues }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const body = { childId: CHILD_ID };
@@ -3761,6 +3769,7 @@
     if (pinned !== undefined) body.pinned = !!pinned;
     if (keepAspect !== undefined) body.keepAspect = !!keepAspect;
     if (description !== undefined) body.description = description;     // PRD §5 auditory-comp prompt
+    if (descriptiveClues !== undefined) body.descriptiveClues = descriptiveClues;   // #16 teaching facts
     if (upImg) { body.imageKey = upImg.key; }
     if (upSnd) { body.soundKey = upSnd.key; }
     const saved = await apiJSON('/api/items?id=' + old.id + '&childId=' + encodeURIComponent(CHILD_ID), {
@@ -3809,6 +3818,10 @@
     document.getElementById('item-phrase').value = item?.label || '';
     document.getElementById('item-emotion').value = 'default';
     document.getElementById('item-description').value = item?.description || '';
+    const clueVals = Array.isArray(item?.descriptiveClues) ? item.descriptiveClues : [];
+    document.getElementById('item-clue1').value = clueVals[0] || '';
+    document.getElementById('item-clue2').value = clueVals[1] || '';
+    document.getElementById('item-clue3').value = clueVals[2] || '';
     const ist = document.getElementById('item-image-status');
     ist.textContent = item?.imageKey ? 'Current image will be kept' : 'No image selected';
     ist.className = 'file-status' + (item?.imageKey ? ' has-file' : '');
@@ -4187,12 +4200,17 @@
       // (admin's Lab tools still set it for TV/movie posters).
       let image = pendingImage;
       if (image) image = await squareCropBlob(image);
+      // #16: the three teaching facts — an array (possibly empty = clear back
+      // to the canonical overlay) whenever the parent touched the modal.
+      const descriptiveClues = ['item-clue1', 'item-clue2', 'item-clue3']
+        .map((cid) => document.getElementById(cid).value.trim()).filter(Boolean);
       if (editingItem) {
         await serverUpdateItem(editingItem, {
           label,
           image,
           sound: pendingSound,
           description,
+          descriptiveClues,
           pinned: editingItemSection === 'people' ? pinned : undefined,
         });
       } else {
@@ -4203,6 +4221,7 @@
           image,
           sound: pendingSound,
           description,
+          descriptiveClues,
           order: Date.now(),
           pinned: editingItemSection === 'people' ? pinned : false,
         });
