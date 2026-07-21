@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Therapist View — My World</title>
+<title>Therapist View: My World</title>
 <meta name="theme-color" content="#ad1457">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -203,7 +203,7 @@
     <div class="target-cap">Current target on Fletcher's tablet</div>
     <div class="target">
       <div class="thumb" id="live-thumb">🎯</div>
-      <div class="word fred" id="live-word">—<small id="live-sub">not started</small></div>
+      <div class="word fred" id="live-word">–<small id="live-sub">not started</small></div>
     </div>
     <div class="progress-line" id="live-progress">No live session yet.</div>
 
@@ -219,10 +219,10 @@
     </div>
 
     <div class="toggle">
-      <div><div>Fletcher can tap independently</div><div class="desc">Phone control is additive — either input counts as correct.</div></div>
+      <div><div>Fletcher can tap independently</div><div class="desc">Phone control is additive: either input counts as correct.</div></div>
       <label class="switch"><input type="checkbox" checked><span></span></label>
     </div>
-    <div class="note">No wrong-answer cue is ever shown. On a miss the correct tile wiggles, then glows, then the app moves on silently — exactly as in the self-paced game.</div>
+    <div class="note">No wrong-answer cue is ever shown. On a miss the correct tile wiggles, then glows, then the app moves on silently, exactly as in the self-paced game.</div>
   </div>
 
   <!-- TALLY -->
@@ -253,19 +253,19 @@
   <div class="panel">
     <h2>Pick what to focus on</h2>
     <p class="hint">Choose a category and the specific items for this visit. Fletcher's tablet updates instantly.</p>
-    <p class="hint">As long as Fletcher's app is open on the iPad, you can start and run a game from here — choose what to practice and tap Start.</p>
+    <p class="hint">As long as Fletcher's app is open on the iPad, you can start and run a game from here: choose what to practice and tap Start.</p>
     <div class="field"><label>What to practice</label>
       <select id="live-cat"><option value="all">Everything</option></select>
     </div>
     <div class="field" id="live-range-row" style="display:none;">
-      <label>Limit to a range (optional) — e.g. Numbers 1 to 20</label>
+      <label>Limit to a range (optional), e.g. Numbers 1 to 20</label>
       <div style="display:flex;gap:8px;align-items:center;">
         <input id="live-from" type="number" min="1" inputmode="numeric" placeholder="from #" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;">
         <span style="color:var(--muted);">to</span>
         <input id="live-to" type="number" min="1" inputmode="numeric" placeholder="to #" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;">
       </div>
     </div>
-    <div class="field"><label>Pick a few at random (optional) — great for short lessons</label>
+    <div class="field"><label>Pick a few at random (optional), great for short lessons</label>
       <select id="live-sample">
         <option value="">Use all of them, in order</option>
         <option value="3">3 random</option>
@@ -299,7 +299,7 @@
     </div>
     <div class="panel">
       <h2>Session notes</h2>
-      <p class="hint">Private to the care team — never shown to Fletcher.</p>
+      <p class="hint">Private to the care team, never shown to Fletcher.</p>
       <textarea placeholder="e.g. Strong on body parts via physical objects; emerging on 'knee'. Try pairing verbal + object next visit."></textarea>
       <button class="btn primary" style="margin-top:10px;">Save note to session</button>
       <div class="note">Notes attach to the session record so you and Andrew see the same longitudinal history. <a href="#" id="to-parent">Open parent dashboard →</a></div>
@@ -445,17 +445,17 @@
     const p = d && d.payload;
     const setWord = (txt) => { if (word.childNodes[0]) word.childNodes[0].nodeValue = txt; };
     if (p && p.target) {
-      setWord(p.target.label || '—');
+      setWord(p.target.label || '–');
       sub.textContent = d.status === 'ended' ? 'finished 🎉' : 'on screen now';
       thumb.innerHTML = p.target.imageKey
         ? '<img src="/api/media?key=' + encodeURIComponent(p.target.imageKey) + '" style="width:100%;height:100%;object-fit:cover;border-radius:18px;">'
         : '🎯';
-      prog.innerHTML = 'Item <b>' + ((p.i || 0) + 1) + '</b> of <b>' + (p.total || '—') + '</b> · <b>' + (p.correctCount || 0) + '</b> correct';
+      prog.innerHTML = 'Item <b>' + ((p.i || 0) + 1) + '</b> of <b>' + (p.total || '–') + '</b> · <b>' + (p.correctCount || 0) + '</b> correct';
     } else if (d && d.status === 'standby') {
       setWord('Ready'); sub.textContent = 'waiting to start'; thumb.innerHTML = '🎯';
-      prog.textContent = 'Tablet is listening — tap Start below.';
+      prog.textContent = 'Tablet is listening. Tap Start below.';
     } else {
-      setWord('—'); sub.textContent = 'not started'; thumb.innerHTML = '🎯';
+      setWord('–'); sub.textContent = 'not started'; thumb.innerHTML = '🎯';
       prog.textContent = 'On the tablet, tap 📡 Remote (edit mode), then Start here.';
     }
   }
@@ -480,9 +480,9 @@
         add(og, s, 'All ' + s);
         const tops = secCats.filter(c => c.parentId == null).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         for (const t of tops) {
-          add(og, 'cat:' + t.id, '— ' + t.label);
+          add(og, 'cat:' + t.id, '– ' + t.label);
           const subs = secCats.filter(c => c.parentId === t.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-          for (const sub of subs) add(og, 'cat:' + sub.id, '— — ' + sub.label);
+          for (const sub of subs) add(og, 'cat:' + sub.id, '– – ' + sub.label);
         }
         sel.appendChild(og);
       }

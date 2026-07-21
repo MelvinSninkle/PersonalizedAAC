@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Word Store — My World</title>
+<title>Word Store: My World</title>
 <style>
   :root { --pink:#ff1493; --pink-deep:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#f3c6dd; }
   * { box-sizing:border-box; }
@@ -75,7 +75,7 @@
   <a class="back" id="back-link" href="#">← Dashboard</a>
 </header>
 <main>
-  <div class="promise">💛 <span><b>Every image you make is your family's to keep.</b> Images are stored safely forever — even when you change or regenerate one, the earlier version is archived, never deleted.</span></div>
+  <div class="promise">💛 <span><b>Every image you make is your family's to keep.</b> Images are stored safely forever. Even when you change or regenerate one, the earlier version is archived, never deleted.</span></div>
 
   <div class="cards" id="packs"></div>
 
@@ -137,7 +137,7 @@
     // they can't use, so it becomes a pointer to the memberships instead.
     const isMember = c.entitlement && c.entitlement.tier !== 'free';
     if (!isMember && c.packs.length) {
-      html += `<div class="sub" style="margin:2px 0 10px;">Credit packs top up a membership — join one below first, then packs stack on top of your monthly ⭐.</div>`;
+      html += `<div class="sub" style="margin:2px 0 10px;">Credit packs top up a membership. Join one below first, then packs stack on top of your monthly ⭐.</div>`;
     }
     for (const p of c.packs) {
       const per = (p.cents / p.credits).toFixed(1);
@@ -155,12 +155,12 @@
     const PERKS = {
       'starter.monthly': 'speech-to-text · auto-teach · reporting',
       'plus.monthly':    'joins with your whole starter board personalized (a ⭐120+ value) · speech-to-text · auto-teach · reporting',
-      'pro.monthly':     'same enrollment build — and ⭐50 still yours after sign-up · biggest voice budget · new features first',
+      'pro.monthly':     'same enrollment build, and ⭐50 still yours after sign-up · biggest voice budget · new features first',
     };
     // Honest month-one expectation: onboarding (family portraits + first
     // personal touches) uses most of a fresh month's credits by design.
     const HONEST = {
-      'plus.monthly': 'Heads up: building your child’s board usually uses most of month one’s ⭐ — they refresh every month.',
+      'plus.monthly': 'Heads up: building your child’s board usually uses most of month one’s ⭐. They refresh every month.',
     };
     for (const s of subs) {
       const mine = ent && ent.tier === s.sku;
@@ -178,7 +178,7 @@
     if (c.rebuild && c.rebuild.words) {
       html += `<div class="card"><h3>Whole-board rebuild</h3>
         <div class="big">⭐ ${c.rebuild.credits}</div>
-        <div class="sub">${c.rebuild.words} words re-made in your child's style, in one tap — ⭐1 per word, same as one-by-one</div>
+        <div class="sub">${c.rebuild.words} words re-made in your child's style, in one tap: ⭐1 per word, same as one-by-one</div>
         <button class="btn secondary" id="rebuild-btn">Rebuild the board</button></div>`;
     }
     el.innerHTML = html;
@@ -204,7 +204,7 @@
       const d = await api('/api/store?action=stripe-checkout', { method: 'POST', body: JSON.stringify({ sku }) });
       location.href = d.url;
     } catch (e) {
-      if (e.status === 501) toast('Purchases open soon on the web — for now, buy credits in the My World iPhone app.');
+      if (e.status === 501) toast('Purchases open soon on the web. For now, buy credits in the My World iPhone app.');
       else toast(e.message);
       btn.disabled = false;
     }
@@ -212,7 +212,7 @@
 
   async function doRebuild() {
     const c = CATALOG.rebuild;
-    if (!confirm(`Rebuild all ${c.words} words in your child's style for ${c.credits} credits?\n\nEvery current image is archived first — you keep them all.`)) return;
+    if (!confirm(`Rebuild all ${c.words} words in your child's style for ${c.credits} credits?\n\nEvery current image is archived first, so you keep them all.`)) return;
     try {
       const d = await api('/api/store?action=rebuild', { method: 'POST', body: JSON.stringify({ childId: CHILD }) });
       toast(d.note || 'Rebuild started!');
@@ -221,7 +221,7 @@
   }
 
   function handleSpendError(e) {
-    if (e.status === 402) toast(`Not enough credits — you need ${e.data.needed}, you have ${e.data.balance}. Grab a pack above!`);
+    if (e.status === 402) toast(`Not enough credits: you need ${e.data.needed}, you have ${e.data.balance}. Grab a pack above!`);
     else toast(e.message);
   }
 
@@ -273,7 +273,7 @@
       }
       html += '</div>';
     }
-    if (hidden) html += `<div class="empty">…and ${hidden} more — keep typing to narrow the search.</div>`;
+    if (hidden) html += `<div class="empty">…and ${hidden} more. Keep typing to narrow the search.</div>`;
     el.innerHTML = html;
     el.querySelectorAll('.folder').forEach((n) => n.addEventListener('click', () => {
       const k = n.dataset.key;
@@ -292,7 +292,7 @@
     if (!CART.size) { bar.style.display = 'none'; return; }
     bar.style.display = 'flex';
     document.getElementById('cart-info').textContent =
-      `${CART.size} word${CART.size === 1 ? '' : 's'} · ⭐${CART.size} — made in your child's style + voice`;
+      `${CART.size} word${CART.size === 1 ? '' : 's'} · ⭐${CART.size}, made in your child's style + voice`;
   }
   document.getElementById('cart-clear').addEventListener('click', () => { CART.clear(); renderShop(); renderCart(); });
   document.getElementById('cart-buy').addEventListener('click', async () => {
@@ -339,7 +339,7 @@
     const todo = (d.folders || []).filter((f) => f.remaining > 0);
     if (!todo.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
     el.style.display = '';
-    let html = '<div class="group-title">✨ Personalize your board <span style="font-weight:400;color:var(--muted);font-size:12px;">— folders still wearing the shared pictures, and what finishing each costs</span></div>';
+    let html = '<div class="group-title">✨ Personalize your board<span style="font-weight:400;color:var(--muted);font-size:12px;">: folders still wearing the shared pictures, and what finishing each costs</span></div>';
     for (const f of todo) {
       html += `<div style="display:flex;align-items:center;gap:12px;background:#fff;border:2px solid var(--line);border-radius:14px;padding:10px 14px;margin:8px 0;">
         <div style="flex:1;"><b>${esc(f.label)}</b>
@@ -379,7 +379,7 @@
     }
     if (!groups.size) { el.style.display = 'none'; el.innerHTML = ''; return; }
     el.style.display = '';
-    let html = '<div class="group-title">🧩 Add-on boards <span style="font-weight:400;color:var(--muted);font-size:12px;">— extra boards, free to add with the shared pictures; styling them is what uses credits</span></div>';
+    let html = '<div class="group-title">🧩 Add-on boards<span style="font-weight:400;color:var(--muted);font-size:12px;">: extra boards, free to add with the shared pictures; styling them is what uses credits</span></div>';
     for (const [, g] of groups) {
       const img = g.preview ? `<img loading="lazy" src="/api/media?key=${encodeURIComponent(g.preview)}" alt="" style="width:44px;height:44px;border-radius:10px;object-fit:cover;">` : '';
       const full = g.on >= g.total;
@@ -415,7 +415,7 @@
     btn.disabled = true;
     try {
       const d = await api('/api/store?action=redeem', { method: 'POST', body: JSON.stringify({ code }) });
-      toast(`⭐${d.credited} added — enjoy!`);
+      toast(`⭐${d.credited} added. Enjoy!`);
       input.value = '';
       await loadCatalog();
     } catch (e) { toast(e.message); }
@@ -424,7 +424,7 @@
 
   (async () => {
     if (!CHILD) { document.getElementById('shop').innerHTML = '<div class="empty">Open the store from your parent dashboard.</div>'; return; }
-    if (params.get('paid')) toast('Payment received — your credits are ready! ⭐');
+    if (params.get('paid')) toast('Payment received. Your credits are ready! ⭐');
     try { await Promise.all([loadCatalog(), loadShop(), loadPersonalize()]); }
     catch (e) { document.getElementById('shop').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
   })();
@@ -432,12 +432,12 @@
 
 <div style="text-align:center;font-size:12px;color:#9ca3af;padding:18px 10px;max-width:640px;margin:0 auto;">
   Joining builds your child's personalized starter board right away (100+ core words + two family portraits, a ⭐120+ value),
-  charged at the lower of the build's credit price or your monthly grant — Plus invests its whole first month in the build;
+  charged at the lower of the build's credit price or your monthly grant: Plus invests its whole first month in the build;
   Pro always finishes enrollment with at least ⭐50 remaining. Cancel anytime: everything you've made stays yours, forever.
-  Memberships — My World Plus ($9.99/month, ⭐50 monthly) and Pro ($19.99/month, ⭐150) — renew
+  Memberships, My World Plus ($9.99/month, ⭐50 monthly) and Pro ($19.99/month, ⭐150), renew
   automatically each month until cancelled. Cancel anytime: web purchases under "Manage billing" above; App Store purchases in
   your Apple ID subscription settings. Credits are non-refundable once spent on completed images; every image you make is
   yours to keep.
-  <br><br>© My World Tap to Talk LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home — it isn’t a medical device and doesn’t replace your child’s care team.</div>
+  <br><br>© My World Tap to Talk LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home. It isn’t a medical device and doesn’t replace your child’s care team.</div>
 </body>
 </html>

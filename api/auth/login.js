@@ -1,5 +1,6 @@
 // POST /api/auth/login { email, password } — verify credentials, set a signed
 // session cookie. Public (no auth required to attempt a login).
+import { timingSafeEqual } from 'node:crypto';
 import { sql } from '../_lib/db.js';
 import { verifyPassword } from '../_lib/password.js';
 import { signSession, serializeCookie, SESSION_MAX_AGE } from '../../lib/session.js';
@@ -19,6 +20,23 @@ export default async function handler(req, res) {
   const password = typeof body.password === 'string' ? body.password : '';
   if (!email || !password) {
     res.status(400).json({ error: 'Email and password required' });
+    return;
+  }
+  // Demo/test-board login (#14): the literal user ID "admin" plus the
+  // Vercel-set ADMIN_TOKEN unlocks the native style-demo board. Validated
+  // here only (the token is never in the client); NO session is minted,
+  // because the demo board reads exclusively the public /api/demo +
+  // public-prefix media, so a demo iPad handed to a therapist carries no
+  // credentials. Real accounts can't collide: registration requires an
+  // email address, and "admin" is not one.
+  if (email === 'admin') {
+    const adminToken = process.env.ADMIN_TOKEN || '';
+    const a = Buffer.from(password), b = Buffer.from(adminToken);
+    if (adminToken && a.length === b.length && timingSafeEqual(a, b)) {
+      res.status(200).json({ ok: true, demo: true });
+    } else {
+      res.status(401).json({ error: 'Invalid email or password' });
+    }
     return;
   }
   try {

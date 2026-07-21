@@ -113,3 +113,73 @@ Last updated: **2026-07-20**. This is the working-context document for whoever
 - Cost paranoia is a feature, not a bug: he capped his own launch on purpose.
   Frame all pricing/marketing honestly — the audit standard is "no promise
   the server doesn't enforce."
+
+## Reactive-vocabulary wave (requirements #10–#17, started 2026-07-21)
+
+Owner approved the plan: 417-row CSV merges as STORE-ONLY vocabulary
+(discoverable via listening suggestions + Word Shop, never auto-placed —
+store_only is flippable per board in Lab → Boards). Status:
+
+- ✅ **CSV corrected + committed**: `data/taxonomy-additions-2026-07.csv`
+  (190 food labels lowercased; something/nothing/everything/anything refiled
+  People→Nouns; "PB and J" left for owner review). Source batches: 191 food,
+  130 movies (89 personal_skeleton poster-tiles + 41 safe generic canonicals),
+  ~58 core words, 38 gestalts.
+- ✅ **Dedup-aware importer**: `POST /api/admin/taxonomy?fn=import-csv`
+  (`_taxonomy-import-csv.js`) — snapshot first, dry-run plan, exact-label
+  matches donate listen variants to the existing row (the "I missed you"
+  rule systematized), inserts land as drafts. Workbench button
+  "📥 Merge batch…" in admin/taxonomy.html (reuses parseCSVText).
+- ⬜ **After merge (owner, in Lab)**: create store-only boards covering the
+  new categories (Food expansion, Movies & Shows, More core words) so the
+  ~290 canonical rows never hit default placement / style-build totals;
+  publish rows after review; generate store-board art per style.
+- ✅ **#10 suggestion queue** shipped (web + server): word_suggestions table,
+  suggest ops on /api/items, opt-in consent (off by default, server
+  re-checked), parent review panel, privacy.html line. Native capture ports
+  deferred (server + consent shared).
+- ✅ **#12** shipped (web): listenRepeatCount 0|2|3 parent-writable, E6
+  updated. **#13** resolved: drag staging exists natively (sentenceDrag);
+  web deliberately tap-only; remaining threshold tuning needs Andrew
+  on-device.
+- ✅ **#11** shipped (server + web + iOS): GET /api/items?movieSearch=
+  (Wikidata via api/_lib/movie-search.js — the single interface the licensed
+  TMDB fetch later replaces), items + tile_jobs carry wikidata_qid/imdb_id,
+  web edit-modal find/link/IMDb-link/unlink with keep-aspect poster saves,
+  iOS MovieAddSheet (search → in-app IMDb SFSafariViewController → Photos
+  pick or camera fallback → raw + keep-aspect + "TV & Movies" folder hint).
+  No poster artwork is ever fetched or stored server-side.
+- ✅ **#14** shipped: "admin" + ADMIN_TOKEN login (timing-safe, server-side,
+  NO session minted) → iOS DemoBoardView on the public /api/demo projection
+  with live style/kid/voice swapping; documented in surface-audit A-PUBLIC.
+- ✅ **#15** shipped (web): Display panel "Bigger sizes (low vision)" —
+  listening tiles + top-row buttons, Normal/+50%/+100%, per-device
+  (aacDisplay listenTileSize/topButtonSize → --listen-scale/--topbtn-scale).
+- ✅ **#16** shipped (web + server): items.descriptive_clues, edit-modal clue
+  fields, item clues win over taxonomy overlay in sync.
+- ✅ **#17** shipped (web): per-device 4-digit quick-unlock PIN for the
+  board's edit gate (SHA-256 device-salted, 5-fail password fallback,
+  Set/Change/Remove in Display→Safety re-verifying the account password).
+  Native Keychain PIN deferred.
+- ✅ **Cleanup A**: docs/emoji-audit.md (1,955 lines inventoried, nothing
+  removed). **Cleanup B**: 466 customer-visible em-dashes rewritten across
+  web pages, iOS, Android, and API strings (comments/en-dashes/placeholder
+  glyphs untouched) in five verified slices.
+- Style wizard fix (same day): the 📤 Upload button's style/ blob prefix is
+  now accepted by set-ref/kid-save ("unexpected blobKey" resolved).
+- README update rides with each implemented feature (owner's instruction:
+  running code is source of truth; README was stale).
+
+### #12/#13 status (2026-07-21)
+- ✅ #12 shipped (web): listenRepeatNav graduated out of ACCESS_KEYS (E6
+  invariant updated in step), new parent-writable listenRepeatCount 0|2|3,
+  n-consecutive matcher in maybeListenNavigate (absent settings = legacy 2),
+  Display-panel select. Native ports: read listenRepeatCount, same fallback.
+- 🟡 #13 partially: sentence constructor + both modes DOCUMENTED in README
+  (AC6). The tap/drag mode toggle == the existing parent-enabled
+  sentenceDrag setting on natives; web stays tap-only by design. REMAINING:
+  (a) audit that sentenceDrag is exposed as a clear "Tap to add / Pick up
+  and drag" choice in iOS + Android settings UIs, (b) re-tune the native
+  drag pickup thresholds to the spec's "short natural press, light touch
+  still scrolls" balance — needs on-device feel testing with Andrew; the
+  failure mode to avoid is every tile-touch reading as a grab.

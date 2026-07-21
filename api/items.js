@@ -12,7 +12,7 @@ import { del, put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { checkAuth } from './_lib/auth.js';
 import { sql, rowToItem, stampLayoutCustomized } from './_lib/db.js';
-import { canEditContent, isParentOf } from './_lib/access.js';
+import { canEditContent, isParentOf, canAccessChild } from './_lib/access.js';
 import { archivePriorImage } from './_lib/image-history.js';
 import { readBlobBytes } from './_lib/blob.js';
 
@@ -25,11 +25,31 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
-    if (req.method === 'GET')    return await imageHistory(req, res, db, auth.user);
+    if (req.method === 'GET') {
+      // ?lexicon=1 → the canonical suggestion matcher vocabulary (#10).
+      if (String(req.query.lexicon || '') === '1') {
+        const { suggestLexicon } = await import('./_lib/word-suggestions.js');
+        return await suggestLexicon(req, res, db);
+      }
+      // ?movieSearch=<q> → #11 film/TV title lookup (metadata only, no
+      // artwork; see _lib/movie-search.js — the single swap point for TMDB).
+      if (req.query.movieSearch != null) {
+        const { movieSearch } = await import('./_lib/movie-search.js');
+        return await movieSearch(req, res);
+      }
+      return await imageHistory(req, res, db, auth.user);
+    }
     if (req.method === 'POST') {
       const b = (typeof req.body === 'object' && req.body) || {};
       if (b.op === 'revert-image') return await revertImage(req, res, db, auth.user, b);
       if (b.op === 'reorder')      return await reorderBulk(req, res, db, auth.user, b);
+      // #10 canonical suggestion queue — all roster-gated, consent-checked
+      // server-side (see _lib/word-suggestions.js).
+      if (b.op === 'suggest-record' || b.op === 'suggest-list' || b.op === 'suggest-act') {
+        const ws = await import('./_lib/word-suggestions.js');
+        const fn = { 'suggest-record': ws.suggestRecord, 'suggest-list': ws.suggestList, 'suggest-act': ws.suggestAct }[b.op];
+        return await fn(req, res, db, auth.user, b, canAccessChild);
+      }
       return await create(req, res, db, auth.user);
     }
     if (req.method === 'PUT')    return await update(req, res, db, auth.user);
@@ -197,6 +217,32 @@ async function create(req, res, db, user) {
        ${childId}, ${ownerUserId}, ${description}, ${descriptions}, ${needsReview}, NOW())
     RETURNING *
   `;
+  // #16: teaching facts on create — written separately with a guarded ALTER
+  // so a pre-migration deploy can't fail the whole insert.
+  const rawClues = Array.isArray(b.descriptiveClues)
+    ? b.descriptiveClues.filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim().slice(0, 200)).slice(0, 3)
+    : [];
+  if (rawClues.length) {
+    try {
+      await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS descriptive_clues TEXT[]`;
+      const upd = await db`UPDATE items SET descriptive_clues = ${rawClues} WHERE id = ${rows[0].id} RETURNING *`;
+      if (upd.length) rows[0] = upd[0];
+    } catch (_) { /* clues are additive — never block tile creation */ }
+  }
+  // #11: movie/show link ids on create — additive like the clues above.
+  if (b.wikidataQid != null || b.imdbId != null) {
+    try {
+      const { cleanQid, cleanImdbId } = await import('./_lib/movie-search.js');
+      const qid = cleanQid(b.wikidataQid), imdb = cleanImdbId(b.imdbId);
+      if (qid || imdb) {
+        await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS wikidata_qid TEXT`;
+        await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS imdb_id TEXT`;
+        const upd = await db`UPDATE items SET wikidata_qid = ${qid}, imdb_id = ${imdb}
+                             WHERE id = ${rows[0].id} RETURNING *`;
+        if (upd.length) rows[0] = upd[0];
+      }
+    } catch (_) { /* link ids are additive — never block tile creation */ }
+  }
   res.status(200).json(rowToItem(rows[0]));
 }
 
@@ -224,6 +270,34 @@ async function update(req, res, db, user) {
   const descriptions = Array.isArray(rawDescriptions)
     ? rawDescriptions.filter((s) => typeof s === 'string').map((s) => s.slice(0, 240)).slice(0, 6)
     : undefined;
+  // #16: the taxonomy's three descriptive clues, parent-authorable on any
+  // tile (photo tiles included) — same shape as canonical clues, so teaching/
+  // testing/matching modes consume them identically. `undefined` leaves them;
+  // an array replaces (empty array clears back to the canonical overlay).
+  const rawClues = (req.body || {}).descriptiveClues;
+  const clues = Array.isArray(rawClues)
+    ? rawClues.filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim().slice(0, 200)).slice(0, 3)
+    : undefined;
+  if (clues !== undefined) {
+    try { await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS descriptive_clues TEXT[]`; } catch (_) {}
+  }
+  // #11: movie/show link ids. `undefined` leaves them; a value re-links; an
+  // explicit null / '' clears the link. Validated to the id shapes only.
+  // The guarded ALTER runs unconditionally: the UPDATE below always names
+  // these columns, so a pre-migration DB must self-heal on EVERY update, not
+  // only when the ids are in the payload.
+  try {
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS wikidata_qid TEXT`;
+    await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS imdb_id TEXT`;
+  } catch (_) {}
+  const rawQid = (req.body || {}).wikidataQid;
+  const rawImdb = (req.body || {}).imdbId;
+  let qidSet, imdbSet;   // undefined = leave column alone
+  if (rawQid !== undefined || rawImdb !== undefined) {
+    const { cleanQid, cleanImdbId } = await import('./_lib/movie-search.js');
+    if (rawQid !== undefined) qidSet = rawQid ? cleanQid(rawQid) : null;
+    if (rawImdb !== undefined) imdbSet = rawImdb ? cleanImdbId(rawImdb) : null;
+  }
   // Archive the previous picture before we overwrite it — the parent's album
   // depends on us never losing a tile's prior face.
   if (imageKey && old.image_key && imageKey !== old.image_key) {
@@ -248,6 +322,9 @@ async function update(req, res, db, user) {
       pinned        = ${pinned === undefined ? old.pinned : !!pinned},
       description   = ${description === undefined ? old.description : (typeof description === 'string' ? description.slice(0, 500) : null)},
       descriptions  = ${descriptions === undefined ? old.descriptions : descriptions},
+      descriptive_clues = ${clues === undefined ? (old.descriptive_clues ?? null) : (clues.length ? clues : null)},
+      wikidata_qid  = ${qidSet === undefined ? (old.wikidata_qid ?? null) : qidSet},
+      imdb_id       = ${imdbSet === undefined ? (old.imdb_id ?? null) : imdbSet},
       needs_review  = ${needsReview === undefined ? old.needs_review : !!needsReview},
       updated_at    = NOW()
     WHERE id = ${id}

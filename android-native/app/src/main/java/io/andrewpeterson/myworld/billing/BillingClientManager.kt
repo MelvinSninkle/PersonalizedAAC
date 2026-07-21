@@ -156,7 +156,7 @@ class BillingClientManager(
     private fun handle(purchase: Purchase) {
         when (purchase.purchaseState) {
             Purchase.PurchaseState.PENDING -> {
-                _note.value = "Payment pending — your credits arrive as soon as Google confirms."
+                _note.value = "Payment pending. Your credits arrive as soon as Google confirms."
                 return
             }
             Purchase.PurchaseState.PURCHASED -> {}
@@ -190,7 +190,7 @@ class BillingClientManager(
             } catch (e: Exception) {
                 // Leave the purchase unconsumed/unacknowledged — the next
                 // launch re-posts it and the server grants idempotently.
-                _note.value = "Couldn't verify the purchase yet — it will retry automatically. (${e.message})"
+                _note.value = "Couldn't verify the purchase yet. It will retry automatically. (${e.message})"
             }
         }
     }

@@ -153,10 +153,16 @@ export default async function handler(req, res) {
     // renders always anchor on the child's saved house style and the routed
     // default model — per-image style/model picking is banned (C7).
     const isAdmin = auth.user.role === 'admin';
+    // #11: movie/show link ids ride the job and land on the item. Shape-
+    // validated here; metadata only (the pipeline never fetches artwork).
+    const { cleanQid, cleanImdbId } = await import('./_lib/movie-search.js');
+    const movieQid = cleanQid(qs(req, 'wikidataQid'));
+    const movieImdb = cleanImdbId(qs(req, 'imdbId'));
     const rows = await db`
       INSERT INTO tile_jobs
         (child_id, actor_email, status, source_key, source_content_type, label, detail, section,
-         category_id, style, style_guide_id, model, bg, keep_aspect, needs_review, emotion, relationship, raw, age_group, folder)
+         category_id, style, style_guide_id, model, bg, keep_aspect, needs_review, emotion, relationship, raw, age_group, folder,
+         wikidata_qid, imdb_id)
       VALUES
         (${childId}, ${auth.user.email || null}, 'queued', ${sourceKey}, ${contentType},
          ${qs(req, 'label').slice(0, 80) || null}, ${qs(req, 'detail').slice(0, 200) || null},
@@ -165,7 +171,7 @@ export default async function handler(req, res) {
          ${isAdmin ? (qs(req, 'model').slice(0, 60) || null) : null}, ${qs(req, 'bg').slice(0, 16) || null},
          ${qbool(req, 'keepAspect')}, ${qbool(req, 'needsReview')}, ${qs(req, 'emotion') || 'default'},
          ${qs(req, 'relationship').slice(0, 40) || null}, ${qbool(req, 'raw')}, ${ageGroup},
-         ${qs(req, 'folder').slice(0, 80) || null})
+         ${qs(req, 'folder').slice(0, 80) || null}, ${movieQid}, ${movieImdb})
       RETURNING id`;
     id = Number(rows[0].id);
   } catch (err) {

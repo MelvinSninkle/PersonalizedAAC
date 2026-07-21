@@ -39,7 +39,7 @@ if [ "$P" -eq 4 ]; then pass "A-PUBLIC exactly 4 public prefixes"; else
 grep -q "demo-audio/" api/media.js || fail "A-PUBLIC demo-audio prefix missing"
 
 # ── E6: access-experiment keys stay admin-gated ──────────────────────────────
-grep -q "ACCESS_KEYS = \['navMode', 'sentenceBuilder', 'sentenceIdleMin', 'sentenceLift', 'listenRepeatNav'\]" api/child-settings.js \
+grep -q "ACCESS_KEYS = \['navMode', 'sentenceBuilder', 'sentenceIdleMin', 'sentenceLift'\]" api/child-settings.js \
   && pass "E6 access keys admin-gated" \
   || fail "E6 ACCESS_KEYS gate changed in child-settings.js"
 

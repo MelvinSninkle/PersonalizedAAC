@@ -176,7 +176,7 @@ private fun UsagePage() {
                     ChartSeries(prettySkillName(s.name), s.data.map { it.toFloat() })
                 }
                 if (series.isEmpty() || series.all { s -> s.values.all { it == 0f } }) {
-                    Text("No board activity yet — this lights up as the board gets used.",
+                    Text("No board activity yet. This lights up as the board gets used.",
                         fontSize = 12.sp, color = Brand.muted,
                         modifier = Modifier.padding(vertical = 10.dp))
                 } else {
@@ -211,7 +211,7 @@ private fun AccuracyPage() {
                         ChartSeries(prettySkillName(s.name), s.data.map { it.toFloat() })
                     }.filter { s -> s.values.any { it > 0f } }
                     if (series.isEmpty()) {
-                        Text("No games scored yet — accuracy by category lights up here when game data arrives.",
+                        Text("No games scored yet. Accuracy by category lights up here when game data arrives.",
                             fontSize = 12.sp, color = Brand.muted)
                     } else {
                         MultiLineChart(series, d.labels, yMax = 100f)
@@ -225,7 +225,7 @@ private fun AccuracyPage() {
                         ChartSeries(prettySkillName(s.name), s.data.map { it.toFloat() })
                     }.filter { s -> s.values.any { it > 0f } }
                     if (series.isEmpty()) {
-                        Text("No matching/slideshow/auditory/expressive sessions yet — each mode gets its own line here.",
+                        Text("No matching/slideshow/auditory/expressive sessions yet. Each mode gets its own line here.",
                             fontSize = 12.sp, color = Brand.muted)
                     } else {
                         MultiLineChart(series, d.labels, yMax = 100f, chartHeight = 200.dp)
@@ -257,7 +257,7 @@ private fun MasterySessionsPage() {
             else -> {
                 StatCard("Mastery · last 30 days") {
                     if (d.mastery.isEmpty()) {
-                        Text("No game data yet — start a game and this fills in.",
+                        Text("No game data yet. Start a game and this fills in.",
                             fontSize = 12.sp, color = Brand.muted)
                     }
                     d.mastery.forEach { r ->

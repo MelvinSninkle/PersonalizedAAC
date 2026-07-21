@@ -119,7 +119,7 @@ export default async function handler(req, res) {
           try { await grantCredits(db, { userId: Number(auth.user.uid || auth.user.id), credits: COST.person, reason: 'family:add:refund', ref: childId }); } catch (_) {}
         }
         res.status(g.status === 429 ? 429 : 502).json({
-          error: 'Image generation failed — your credits were returned. Please try again in a moment.',
+          error: 'Image generation failed. Your credits were returned. Please try again in a moment.',
           detail: (g.detail || '').slice(0, 400),
         });
         return;

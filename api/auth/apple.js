@@ -135,7 +135,7 @@ export default async function handler(req, res) {
         const invCheck = await validateInviteCode(db, b.inviteCode || await inviteCodeFromCookie(req));
         if (!invCheck) {
           res.status(403).json({ error: 'invite_required',
-            detail: 'My World is invite-only right now. Enter the invite code you were given — or join the waitlist on our website.' });
+            detail: 'My World is invite-only right now. Enter the invite code you were given, or join the waitlist on our website.' });
           return;
         }
         if (invCheck.full) {

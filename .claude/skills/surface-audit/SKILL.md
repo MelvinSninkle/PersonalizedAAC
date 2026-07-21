@@ -103,6 +103,14 @@ non-GET; (3) practice.html contains no add/edit affordances and calls no
 writing or generating API (its network surface is demo + media only —
 tools/surface-audit runtime check covers this); (4) demo audio is
 PRE-RENDERED via Lab → demo-audio; a public live-TTS route must never exist.
+The iOS DemoBoardView (#14) is a native consumer of this same surface: it is
+unlocked by POST /api/auth/login with the literal user ID "admin" + the
+ADMIN_TOKEN env (timing-safe compare, server-side only, NO session cookie
+minted — the response is just {ok, demo:true}), and it reads exclusively
+/api/demo + public-prefix media, same no-live-TTS rule. VERIFY when
+login.js or DemoBoardView changes: the admin branch never calls
+signSession/serializeCookie, and DemoBoardView calls no authenticated or
+writing API.
 
 ## B. Voice pipeline (what speaks, in whose voice, on which device)
 

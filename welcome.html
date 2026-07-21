@@ -43,7 +43,7 @@
       <button type="submit" id="go">Enter →</button>
     </form>
     <div class="msg" id="msg"></div>
-    <p class="foot">Already have an account? <a href="/login">Sign in</a> — no code needed.</p>
+    <p class="foot">Already have an account? <a href="/login">Sign in</a>. No code needed.</p>
     <p class="foot">Don't have a code? <a href="/#waitlist">Join the waitlist</a> and we'll email you one when spots open.</p>
     <p class="foot">Curious what this is? <a href="/">See how My World works →</a></p>
   </div>
@@ -78,13 +78,13 @@
       const d = await r.json().catch(() => ({}));
       msg.textContent = d.error || "That code didn't work.";
     } catch (_) {
-      msg.textContent = 'Network error — please try again.';
+      msg.textContent = 'Network error. Please try again.';
     }
     btn.disabled = false; btn.textContent = prev;
   });
 })();
 </script>
 
-<div style="text-align:center;font-size:12px;color:#9ca3af;padding:18px 10px;">© My World Tap to Talk LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home — it isn’t a medical device and doesn’t replace your child’s care team.</div>
+<div style="text-align:center;font-size:12px;color:#9ca3af;padding:18px 10px;">© My World Tap to Talk LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home. It isn’t a medical device and doesn’t replace your child’s care team.</div>
 </body>
 </html>

@@ -162,15 +162,19 @@
   header button.btn-listen:hover { background: #6d28d9; }
   header button.btn-listen.on { background: #dc2626; }   /* red = listening, tap to stop */
   /* Listen + Teach + Play are icon-only round buttons — big, obvious, kid-tappable. */
+  /* --topbtn-scale / --listen-scale: low-vision enlargement (Display panel,
+     per-device). 1 / 1.5 / 2 — the header is auto-height flex so bigger
+     buttons just make the bar taller, and the listen strip already scrolls. */
   header button.btn-listen, header button.btn-play-req, header button.btn-teach {
-    width: 52px; height: 52px; min-width: 0; border-radius: 50%; padding: 0; font-size: 26px;
+    width: calc(52px * var(--topbtn-scale, 1)); height: calc(52px * var(--topbtn-scale, 1));
+    min-width: 0; border-radius: 50%; padding: 0; font-size: calc(26px * var(--topbtn-scale, 1));
   }
   header button.btn-listen.on { animation: listenBtnPulse 1.1s ease-in-out infinite; }
   @keyframes listenBtnPulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.55); }
     50% { box-shadow: 0 0 0 9px rgba(220,38,38,0); }
   }
-  @media (max-width: 749px) { header button.btn-listen, header button.btn-play-req, header button.btn-teach { width: 44px; height: 44px; font-size: 22px; } }
+  @media (max-width: 749px) { header button.btn-listen, header button.btn-play-req, header button.btn-teach { width: calc(44px * var(--topbtn-scale, 1)); height: calc(44px * var(--topbtn-scale, 1)); font-size: calc(22px * var(--topbtn-scale, 1)); } }
   /* Listening mode TAKES OVER the top bar: title, Teach, Play, and the lock all
      hide (a parent doesn't need to unlock mid-listen), leaving exactly ONE
      control — the red pulsing stop button — followed by the live tile strip.
@@ -197,12 +201,12 @@
   /* Chips are HARD squares: min/max + aspect-ratio so no flex algorithm on
      any engine can compress them; the image fills absolutely (immune to
      Safari's %-height-in-flex quirks) and center-crops. */
-  .listen-chip { position: relative; flex: 0 0 auto; height: 92px; width: 92px; min-width: 92px; min-height: 92px; aspect-ratio: 1; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.14); overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .listen-chip { position: relative; flex: 0 0 auto; height: calc(92px * var(--listen-scale, 1)); width: calc(92px * var(--listen-scale, 1)); min-width: calc(92px * var(--listen-scale, 1)); min-height: calc(92px * var(--listen-scale, 1)); aspect-ratio: 1; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.14); overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .listen-chip img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-  .listen-chip.is-text { width: auto; min-width: 60px; aspect-ratio: auto; padding: 0 14px; font-family: Fredoka, ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: 22px; color: #ad1457; background: #fce4ec; cursor: default; white-space: nowrap; }
+  .listen-chip.is-text { width: auto; min-width: calc(60px * var(--listen-scale, 1)); aspect-ratio: auto; padding: 0 14px; font-family: Fredoka, ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: calc(22px * var(--listen-scale, 1)); color: #ad1457; background: #fce4ec; cursor: default; white-space: nowrap; }
   .listen-chip.is-text.masked { font-style: italic; opacity: .7; }
   #listen-hint { flex: 0 0 auto; font-size: 13px; color: #fff; opacity: .85; white-space: nowrap; }
-  @media (max-width: 820px) { .listen-chip { height: 70px; width: 70px; min-width: 70px; min-height: 70px; } }
+  @media (max-width: 820px) { .listen-chip { height: calc(70px * var(--listen-scale, 1)); width: calc(70px * var(--listen-scale, 1)); min-width: calc(70px * var(--listen-scale, 1)); min-height: calc(70px * var(--listen-scale, 1)); } }
   header button:hover { background: #880e4f; }
   /* Login icon: small + low-contrast so it doesn't distract the kid (and
      so a stray tap isn't tempting). Becomes more visible once the parent
@@ -1196,13 +1200,13 @@
   </div>
   <div class="hdr-center">
     <button id="login-btn" aria-label="Login" title="Login">🔒</button>
-    <button id="listen-btn" class="btn-listen" aria-label="Listen" title="Listen — turn spoken words into picture tiles">🎙️</button>
-    <button id="sentence-btn" class="btn-listen" style="display:none;" aria-label="Build a sentence" title="Build a sentence — tap words to add them, ▶ speaks the whole thing">✏️</button>
+    <button id="listen-btn" class="btn-listen" aria-label="Listen" title="Listen: turn spoken words into picture tiles">🎙️</button>
+    <button id="sentence-btn" class="btn-listen" style="display:none;" aria-label="Build a sentence" title="Build a sentence: tap words to add them, ▶ speaks the whole thing">✏️</button>
     <h1>
       <img class="hdr-icon" src="/icons/myworld-globe.png" alt="">
       <span class="cwt">My World</span>
     </h1>
-    <button id="teach-btn" class="btn-teach" aria-label="Teach me" title="Watch and listen — the board teaches the words you were just looking at">📖</button>
+    <button id="teach-btn" class="btn-teach" aria-label="Teach me" title="Watch and listen: the board teaches the words you were just looking at">📖</button>
     <button id="play-request-btn" class="btn-play-req" aria-label="Play a game" title="Play a quick game about what you were just looking at">🙋</button>
     <div id="listen-bar" aria-live="polite">
       <div id="listen-tiles"></div>
@@ -1269,7 +1273,7 @@
   <div class="empty-cta-card">
     <div class="empty-cta-emoji">🎨</div>
     <h2 class="empty-cta-title">Let’s build <span class="cwt-pos">your child’s</span> board</h2>
-    <p class="empty-cta-sub" id="empty-cta-sub">This board doesn’t have any tiles yet. Generate the starter words — the core vocabulary every new board begins with — and they’ll appear here in your art style and voice.</p>
+    <p class="empty-cta-sub" id="empty-cta-sub">This board doesn’t have any tiles yet. Generate the starter words, the core vocabulary every new board begins with, and they’ll appear here in your art style and voice.</p>
     <div id="empty-cta-parent">
       <button class="btn primary" id="empty-seed-btn">✨ Generate starter words</button>
       <div id="empty-seed-progress" style="display:none;margin-top:14px;max-width:340px;margin-left:auto;margin-right:auto;">
@@ -1292,6 +1296,14 @@
   <div class="modal">
     <h3 id="login-title">Unlock editing</h3>
     <div id="login-desc" style="font-size:13px;color:#666;margin-bottom:8px;">Enter your account password to make changes.</div>
+    <!-- #17: quick-unlock PIN pad — shown instead of the password field when
+         this device has a PIN set (and fewer than 5 failed tries). -->
+    <div id="login-pin-wrap" style="display:none;">
+      <label for="login-pin">Your 4-digit PIN</label>
+      <input type="password" id="login-pin" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off"
+             style="font-size:26px;letter-spacing:14px;text-align:center;">
+      <div style="margin-top:6px;font-size:13px;"><a href="#" id="login-use-pass" style="color:#ad1457;font-weight:600;text-decoration:none;">Use password instead</a></div>
+    </div>
     <label for="login-pass" id="login-label">Your password</label>
     <input type="password" id="login-pass" autocomplete="current-password">
     <input type="hidden" id="login-user" value="admin">
@@ -1318,12 +1330,12 @@
          board's visual consistency) and lands it on the board by itself. -->
     <div id="magic-box" style="border:1px solid #f3c6dd;background:#fff5fa;border-radius:10px;padding:12px;margin:12px 0;">
       <div style="font-weight:700;color:#ad1457;margin-bottom:4px;">✨ Make a tile from a photo</div>
-      <div style="font-size:12px;color:#666;margin-bottom:8px;">Snap a photo — we'll name it, draw it to match the board, add the voice, and put it on the board automatically. Naming it above first is optional.</div>
+      <div style="font-size:12px;color:#666;margin-bottom:8px;">Snap a photo. We'll name it, draw it to match the board, add the voice, and put it on the board automatically. Naming it above first is optional.</div>
       <div style="display:flex;gap:8px;margin:6px 0 2px;">
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="item-look" id="item-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1</label>
+          <input type="radio" name="item-look" id="item-look-style" checked style="width:auto;margin:0;">Board art style: ⭐1</label>
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="item-look" id="item-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
+          <input type="radio" name="item-look" id="item-look-raw" style="width:auto;margin:0;">My exact photo: free</label>
       </div>
       <!-- No `capture` attr: iOS then offers Take Photo OR Photo Library, which is
            more flexible and avoids the forced-rear-camera failures we hit. The
@@ -1334,7 +1346,7 @@
            any visible footprint. -->
       <input type="file" id="item-photo-capture" accept="image/*" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
       <button type="button" id="item-magic" style="margin-top:10px;width:100%;padding:12px;border:none;border-radius:8px;background:#ff1493;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">📷 Take a photo &amp; we'll do the rest</button>
-      <div class="file-status" id="item-magic-status" style="margin-top:8px;">—</div>
+      <div class="file-status" id="item-magic-status" style="margin-top:8px;">–</div>
       <img id="item-magic-preview" alt="" style="display:none;width:100%;max-width:200px;border-radius:10px;margin-top:8px;">
     </div>
 
@@ -1365,8 +1377,35 @@
       <label for="item-pin">Pin to top (e.g. for <span class="cn">your child</span>)</label>
     </div>
     <label for="item-description" style="margin-top:14px;">Description for Auditory Comprehension game (optional)</label>
-    <textarea id="item-description" rows="2" placeholder='e.g. "Lives in a field, has four legs, eats grass." Spoken aloud — the child picks the matching tile.' style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font:inherit;box-sizing:border-box;"></textarea>
+    <textarea id="item-description" rows="2" placeholder='e.g. "Lives in a field, has four legs, eats grass." Spoken aloud. The child picks the matching tile.' style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font:inherit;box-sizing:border-box;"></textarea>
+
+    <!-- #16: the taxonomy's three teaching facts, authorable on any tile —
+         so a photo of Grandpa can carry "Grandpa is my mom's dad". -->
+    <label style="margin-top:14px;">Teaching facts (optional): 3 short clues for Teach me &amp; games</label>
+    <input type="text" id="item-clue1" maxlength="200" placeholder='Fact 1, e.g. "Grandpa is my mom&#x27;s dad"' style="margin-top:2px;">
+    <input type="text" id="item-clue2" maxlength="200" placeholder='Fact 2, e.g. "Grandpa takes me out for ham sandwiches"' style="margin-top:6px;">
+    <input type="text" id="item-clue3" maxlength="200" placeholder='Fact 3, e.g. "Grandpa lives by the lake"' style="margin-top:6px;">
     <div style="font-size:12px;color:#666;margin-top:4px;">If left blank the game falls back to "Who or what is the [tile name]?"</div>
+
+    <!-- #11: movie/show link. Metadata only — the app never fetches poster
+         art; the parent saves the poster themselves and uploads it as this
+         tile's picture (keep exact photo). Search rides GET /api/items
+         ?movieSearch= (Wikidata behind a single swap-ready interface). -->
+    <label style="margin-top:14px;">🎬 Movie or show (optional)</label>
+    <div id="item-movie-unlinked">
+      <div style="display:flex;gap:6px;margin-top:2px;">
+        <input type="text" id="item-movie-q" placeholder="Search a title, e.g. Bluey" style="flex:1;">
+        <button class="secondary" id="item-movie-search" type="button">Find</button>
+      </div>
+      <div id="item-movie-results" style="margin-top:6px;"></div>
+    </div>
+    <div id="item-movie-linked" style="display:none;margin-top:4px;font-size:13px;">
+      <span id="item-movie-title" style="font-weight:600;"></span>
+      <a id="item-movie-imdb" href="#" target="_blank" rel="noopener" style="margin-left:8px;">Open in IMDb ↗</a>
+      <button class="secondary" id="item-movie-clear" type="button" style="margin-left:8px;padding:2px 10px;font-size:12px;">Unlink</button>
+      <div style="font-size:12px;color:#666;margin-top:4px;">To use the real poster: open the IMDb page, save the poster image to this device, then set it as this tile's picture with "keep my exact photo." Poster tiles keep their tall shape.</div>
+    </div>
+    <div id="item-movie-msg" style="font-size:12px;color:#888;margin-top:2px;"></div>
     <div class="error" id="item-error"></div>
     <div id="item-frame-row" style="display:none;margin:6px 0 2px;">
       <button class="secondary" id="item-frame" title="Drag the photo inside a tile-shaped frame to pick exactly what shows. The old picture is archived, never deleted.">🖼 Adjust framing</button>
@@ -1381,7 +1420,7 @@
       <div id="item-history-msg" style="font-size:12px;color:#888;margin-top:2px;"></div>
     </div>
     <div id="item-redraw-row" style="display:none;margin:6px 0 2px;">
-      <button class="secondary" id="item-redraw" title="One tap — re-draws this picture in your child's chosen style automatically. The first redo of each tile is free; after that it uses 1 credit. The old picture is archived, never deleted.">✨ Match my child's style</button>
+      <button class="secondary" id="item-redraw" title="One tap re-draws this picture in your child's chosen style automatically. The first redo of each tile is free; after that it uses 1 credit. The old picture is archived, never deleted.">✨ Match my child's style</button>
       <span id="item-redraw-note" style="font-size:12px;color:#2e7d32;margin-left:8px;"></span>
     </div>
     <div class="button-row">
@@ -1404,14 +1443,14 @@
          default = drawn to match the BOARD's saved art style. -->
     <div style="display:flex;gap:8px;margin:6px 0 2px;">
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-        <input type="radio" name="cat-look" id="cat-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1</label>
+        <input type="radio" name="cat-look" id="cat-look-style" checked style="width:auto;margin:0;">Board art style: ⭐1</label>
       <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-        <input type="radio" name="cat-look" id="cat-look-raw" style="width:auto;margin:0;">My exact photo — free</label>
+        <input type="radio" name="cat-look" id="cat-look-raw" style="width:auto;margin:0;">My exact photo: free</label>
     </div>
     <label for="cat-kind">Category type</label>
     <select id="cat-kind" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font-size:15px;">
       <option value="">Normal</option>
-      <option value="location">📍 Location (a place — speaks its name, shows its rooms)</option>
+      <option value="location">📍 Location (a place: speaks its name, shows its rooms)</option>
       <option value="room">🚪 Room (short-press speaks, long-press opens its contents)</option>
     </select>
     <div class="hint" style="font-size:12px;color:#666;margin-top:4px;">
@@ -1447,9 +1486,9 @@
       <div style="font-weight:700;color:#ad1457;">✨ How should the pictures look?</div>
       <div style="display:flex;gap:8px;margin:8px 0 2px;">
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="bulk-look" id="bulk-look-style" checked style="width:auto;margin:0;">Board art style — ⭐1 each</label>
+          <input type="radio" name="bulk-look" id="bulk-look-style" checked style="width:auto;margin:0;">Board art style: ⭐1 each</label>
         <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border:1.5px solid #f3c6dd;border-radius:8px;padding:8px 10px;cursor:pointer;margin:0;">
-          <input type="radio" name="bulk-look" id="bulk-look-raw" style="width:auto;margin:0;">Keep original photos — free</label>
+          <input type="radio" name="bulk-look" id="bulk-look-raw" style="width:auto;margin:0;">Keep original photos: free</label>
       </div>
       <button type="button" id="bulk-ai" style="margin-top:8px;width:100%;padding:11px;border:none;border-radius:8px;background:#ff1493;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">✨ AI: name, pronounce &amp; make art for all</button>
       <div style="font-size:12px;color:#888;margin-top:6px;">Fills each name + pronunciation automatically and (unless "keep original") redraws the photos to match the board. You can still edit anything before saving.</div>
@@ -1485,7 +1524,7 @@
   <div class="modal" style="max-width:440px;">
     <h3>Adjust framing</h3>
     <div style="font-size:13px;color:#666;margin-bottom:8px;">Drag the photo to choose what shows on the tile; zoom to get closer.
-      Everything outside the square is trimmed. The current picture is archived — Previous pictures brings it back any time.</div>
+      Everything outside the square is trimmed. The current picture is archived. Previous pictures brings it back any time.</div>
     <div id="crop-stage" style="position:relative;width:100%;aspect-ratio:1/1;overflow:hidden;border-radius:12px;background:#111;touch-action:none;cursor:grab;">
       <img id="crop-img" alt="" draggable="false" style="position:absolute;left:0;top:0;max-width:none;user-select:none;-webkit-user-drag:none;pointer-events:none;">
       <div style="position:absolute;inset:0;pointer-events:none;border:2px solid rgba(255,255,255,.9);border-radius:12px;"></div>
@@ -1511,10 +1550,10 @@
     <!-- 1 · Board look — per-device, most-used first (canonical themed order
          shared with parent.html and the native settings screens). -->
     <label style="margin-top:4px;">🎨 Board look</label>
-    <div style="font-size:12px;color:#666;margin:4px 0 2px;">Saved on this device only — size things for this screen.</div>
+    <div style="font-size:12px;color:#666;margin:4px 0 2px;">Saved on this device only, so you can size things for this screen.</div>
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-hide-labels">
-      <label for="disp-hide-labels">Hide all labels — tiles, categories &amp; the People/Nouns/Verbs headers</label>
+      <label for="disp-hide-labels">Hide all labels: tiles, categories &amp; the People/Nouns/Verbs headers</label>
     </div>
     <label style="margin-top:14px;font-size:13px;">Tiles across each section</label>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-top:6px;">
@@ -1547,9 +1586,25 @@
       <span>Background</span><input type="color" id="disp-color-header-bg"   style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
       <span>Text</span>      <input type="color" id="disp-color-header-text" style="width:64px;height:34px;border:1px solid #ccc;border-radius:6px;cursor:pointer;padding:2px;background:white;">
     </div>
+    <label style="margin-top:14px;font-size:13px;">Bigger sizes (low vision)</label>
+    <div style="font-size:12px;color:#666;margin:4px 0 2px;">Make the listening word strip or the big header buttons easier to see and tap.</div>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-top:6px;">
+      <span>Listening tiles</span>
+      <select id="disp-size-listen" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+        <option value="0">Normal</option>
+        <option value="1">Bigger (+50%)</option>
+        <option value="2">Biggest (+100%)</option>
+      </select>
+      <span>Top-row buttons</span>
+      <select id="disp-size-topbtn" style="padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+        <option value="0">Normal</option>
+        <option value="1">Bigger (+50%)</option>
+        <option value="2">Biggest (+100%)</option>
+      </select>
+    </div>
 
     <!-- Synced sections: everything below follows the child, not the device. -->
-    <div style="font-size:12px;color:#666;margin:18px 0 2px;border-top:1px solid #eee;padding-top:12px;">Everything below follows your child — it applies on every device this board is used on.</div>
+    <div style="font-size:12px;color:#666;margin:18px 0 2px;border-top:1px solid #eee;padding-top:12px;">Everything below follows your child: it applies on every device this board is used on.</div>
 
     <!-- 2 · Board tools -->
     <label style="margin-top:10px;">🔘 Board tools</label>
@@ -1577,7 +1632,7 @@
     <div class="checkbox-row" style="margin-top:6px;">
       <input type="checkbox" id="disp-double-teach">
       <label for="disp-double-teach">Tap again to learn
-        <span style="display:block;font-size:12px;color:#666;">Tap a tile: hear the word. Tap it again quickly: hear a fact about it — up to three facts on back-to-back taps, then the word again.</span></label>
+        <span style="display:block;font-size:12px;color:#666;">Tap a tile: hear the word. Tap it again quickly: hear a fact about it, up to three facts on back-to-back taps, then the word again.</span></label>
     </div>
     <div style="margin:8px 0 0 30px;">
       <label for="disp-teach-window" style="font-size:12px;color:#666;text-transform:none;letter-spacing:0;">How quick "again" has to be: <strong><span id="disp-teach-window-val">2.0</span>s</strong></label>
@@ -1595,6 +1650,15 @@
       <input type="checkbox" id="disp-listen-tiles">
       <label for="disp-listen-tiles">Listening shows only words with tiles
         <span style="display:block;font-size:12px;color:#666;">Spoken words that aren't on the board don't appear at all.</span></label>
+    </div>
+    <div style="margin-top:10px;">
+      <label for="disp-repeat-nav" style="font-size:13px;text-transform:none;letter-spacing:0;">Say a word twice to jump to its tile
+        <span style="display:block;font-size:12px;color:#666;">Repeating a word makes the board find and highlight that tile. Raise to 3 for kids who naturally repeat; Off disables the jump.</span></label>
+      <select id="disp-repeat-nav" style="margin-top:4px;padding:8px 10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
+        <option value="0">Off</option>
+        <option value="2">2 in a row</option>
+        <option value="3">3 in a row</option>
+      </select>
     </div>
 
     <!-- 5 · Safety & unlock -->
@@ -1615,8 +1679,8 @@
     </div>
     <div id="disp-unlock-confirm" style="display:none;border:2px solid #f59e0b;background:#fffbeb;border-radius:10px;padding:10px 12px;margin-top:8px;">
       <div style="font-size:13px;color:#92400e;font-weight:700;">⚠️ Skip the password on the board's lock?</div>
-      <div style="font-size:12px;color:#92400e;margin:4px 0 8px;">This only changes the board's lock — <b>your account password stays exactly the same</b> for signing in everywhere.
-        With this on, anyone holding this device — including your child — can open edit mode, change or delete tiles, and reach the parent dashboard.
+      <div style="font-size:12px;color:#92400e;margin:4px 0 8px;">This only changes the board's lock. <b>Your account password stays exactly the same</b> for signing in everywhere.
+        With this on, anyone holding this device, including your child, can open edit mode, change or delete tiles, and reach the parent dashboard.
         Enter your account password once to confirm.</div>
       <input type="password" id="disp-unlock-pass" autocomplete="current-password" placeholder="Your account password" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px;box-sizing:border-box;">
       <div style="display:flex;gap:8px;margin-top:8px;">
@@ -1624,6 +1688,31 @@
         <button class="secondary" id="disp-unlock-no">Cancel</button>
       </div>
       <div id="disp-unlock-msg" style="font-size:12px;color:#c0392b;margin-top:6px;"></div>
+    </div>
+    <!-- #17: per-device quick-unlock PIN — an alternate key to the same edit
+         gate. Set/change/remove all require the account password. -->
+    <div style="margin-top:10px;">
+      <label style="font-size:13px;text-transform:none;letter-spacing:0;">Quick-unlock PIN (this device only)
+        <span style="display:block;font-size:12px;color:#666;">Unlock editing with a 4-digit PIN instead of typing your whole password. Stored only on this device. Other devices keep their own.</span></label>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+        <span id="disp-pin-status" style="font-size:13px;color:#666;">No PIN set</span>
+        <button type="button" class="secondary" id="disp-pin-set" style="width:auto;padding:8px 12px;">Set PIN…</button>
+        <button type="button" class="secondary" id="disp-pin-remove" style="width:auto;padding:8px 12px;display:none;color:#dc2626;">Remove…</button>
+      </div>
+      <div id="disp-pin-confirm" style="display:none;margin-top:8px;border:1px solid #f3c6dd;border-radius:10px;padding:10px;">
+        <input type="password" id="disp-pin-new" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="New 4-digit PIN" style="margin-bottom:6px;">
+        <input type="password" id="disp-pin-pass" autocomplete="current-password" placeholder="Your account password (proves it's you)">
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button type="button" class="primary" id="disp-pin-save" style="flex:1;">Save</button>
+          <button type="button" class="secondary" id="disp-pin-cancel">Cancel</button>
+        </div>
+        <div id="disp-pin-msg" style="font-size:12px;color:#c0392b;margin-top:6px;"></div>
+      </div>
+    </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-suggest">
+      <label for="disp-suggest">Suggest new words from listening
+        <span style="display:block;font-size:12px;color:#666;">While listening, notice words your family says that aren't on the board and save them for your review. Only vocabulary-library matches are recorded, never audio or transcripts.</span></label>
     </div>
 
     <!-- 6 · This device -->
@@ -1668,9 +1757,9 @@
     <h3>Who uses this device?</h3>
     <div style="font-size:14px;color:#666;margin:6px 0 18px;">We'll open straight to the right view next time. You can change this later under ⚙ Display.</div>
     <div style="display:flex;flex-direction:column;gap:10px;">
-      <button class="role-pick" data-role="child" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🧒 <span class="cn">Your child</span> — the communication board</button>
-      <button class="role-pick" data-role="parent" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">👪 Parent — the dashboard</button>
-      <button class="role-pick" data-role="therapist" id="role-therapist" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🩺 Therapist — the facilitator view</button>
+      <button class="role-pick" data-role="child" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🧒 <span class="cn">Your child</span>: the communication board</button>
+      <button class="role-pick" data-role="parent" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">👪 Parent: the dashboard</button>
+      <button class="role-pick" data-role="therapist" id="role-therapist" style="padding:14px;border:1px solid #e0c4d4;border-radius:12px;background:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:left;">🩺 Therapist: the facilitator view</button>
     </div>
   </div>
 </div>
@@ -1706,13 +1795,13 @@
 <div class="modal-backdrop" id="game-setup">
   <div class="modal">
     <h3>Start a game</h3>
-    <div style="font-size:13px;color:#666;margin-bottom:8px;">Self-paced matching: <span class="cn">your child</span> hears a word and taps the matching picture. There are no wrong-answer sounds — ever.</div>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">Self-paced matching: <span class="cn">your child</span> hears a word and taps the matching picture. There are no wrong-answer sounds, ever.</div>
     <label for="game-scope">What to practice</label>
     <select id="game-scope" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
       <option value="all" selected>Everything</option>
     </select>
     <div id="game-range-row" style="display:none;margin-top:10px;">
-      <label>Limit to a range (optional) — e.g. Numbers 1 to 20</label>
+      <label>Limit to a range (optional), e.g. Numbers 1 to 20</label>
       <div style="display:flex;gap:8px;align-items:center;">
         <input id="game-from" type="number" min="1" inputmode="numeric" placeholder="from #" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;">
         <span style="color:#888;">to</span>
@@ -1743,7 +1832,7 @@
 <div class="modal-backdrop" id="rewards-modal">
   <div class="modal">
     <h3>🎁 Rewards &amp; music</h3>
-    <div style="font-size:13px;color:#666;margin-bottom:8px;">When <span class="cn">your child</span> finishes, flowers burst and they hear one of these cheers in your voice. Type the phrases you want — we record them in your voice and save them so they work offline.</div>
+    <div style="font-size:13px;color:#666;margin-bottom:8px;">When <span class="cn">your child</span> finishes, flowers burst and they hear one of these cheers in your voice. Type the phrases you want. We record them in your voice and save them so they work offline.</div>
     <label for="rewards-phrases">Cheer phrases (one per line)</label>
     <textarea id="rewards-phrases" rows="5" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font:inherit;"></textarea>
     <label for="rewards-music">Background music</label>
@@ -1866,7 +1955,12 @@
       needs:  '#ffd400',
     },
     headerColors: { bg: '#ff1493', text: '#ffffff' },
+    // Low-vision enlargement steps: 0 = normal, 1 = +50%, 2 = +100% (#15).
+    listenTileSize: 0,
+    topButtonSize: 0,
   };
+  const SIZE_SCALE = [1, 1.5, 2];
+  function clampSizeStep(v) { const n = parseInt(v, 10); return n === 1 || n === 2 ? n : 0; }
   let display = structuredClone(DISPLAY_DEFAULTS);
   // Phone-mode column defaults (tuned ratio: People 2, Nouns 5, Verbs 2).
   // Applied ONLY when the parent hasn't chosen their own tiles-across on this
@@ -1917,6 +2011,8 @@
           bg:   sanitizeColor(raw.headerColors?.bg,   DISPLAY_DEFAULTS.headerColors.bg),
           text: sanitizeColor(raw.headerColors?.text, DISPLAY_DEFAULTS.headerColors.text),
         },
+        listenTileSize: clampSizeStep(raw.listenTileSize),
+        topButtonSize:  clampSizeStep(raw.topButtonSize),
       };
     } catch (_) { display = structuredClone(DISPLAY_DEFAULTS); }
   }
@@ -1965,6 +2061,9 @@
     // Header bar bg + text — also CSS vars; header CSS uses var(--hdr-bg/--hdr-text).
     document.documentElement.style.setProperty('--hdr-bg', display.headerColors.bg);
     document.documentElement.style.setProperty('--hdr-text', display.headerColors.text);
+    // Low-vision enlargement (#15): the CSS multiplies its base sizes by these.
+    document.documentElement.style.setProperty('--listen-scale', String(SIZE_SCALE[display.listenTileSize] || 1));
+    document.documentElement.style.setProperty('--topbtn-scale', String(SIZE_SCALE[display.topButtonSize] || 1));
     for (const s of SECTIONS) {
       const sectionEl = document.querySelector(`.aac-section[data-section="${s}"]`);
       if (sectionEl) sectionEl.style.display = display.sectionVisible[s] ? '' : 'none';
@@ -2040,7 +2139,7 @@
       // Token went stale — drop it so the next login can refresh
       authToken = '';
       localStorage.removeItem(TOKEN_KEY);
-      throw new Error('Unauthorized — please log in again');
+      throw new Error('Unauthorized, please log in again');
     }
     return r;
   }
@@ -2343,7 +2442,7 @@
     wrap.appendChild(sq);
     const lbl = document.createElement('div');
     lbl.className = 'tile-label';
-    lbl.textContent = job.label ? job.label + ' — pending' : 'Pending';
+    lbl.textContent = job.label ? job.label + ' – pending' : 'Pending';
     wrap.appendChild(lbl);
     return wrap;
   }
@@ -2836,7 +2935,7 @@
         const styleFolder = document.createElement('div');
         styleFolder.className = 'add-subcat-tile';
         styleFolder.textContent = '✨ Style';
-        styleFolder.title = "Match every picture in this folder to your child's style. Already-matched pictures are skipped — you're never charged twice.";
+        styleFolder.title = "Match every picture in this folder to your child's style. Already-matched pictures are skipped, so you're never charged twice.";
         styleFolder.addEventListener('click', async () => {
           const catId = activeCategoryId[section];
           if (!catId) return;
@@ -2845,7 +2944,7 @@
               method: 'POST', body: JSON.stringify({ childId: CHILD_ID, categoryId: catId, quote: true }),
             });
             if (!q.remaining) { alert("Everything in this folder already matches your child's style. ✓"); return; }
-            if (!confirm(`Match ${q.remaining} picture${q.remaining === 1 ? '' : 's'} in this folder to your child's style for ⭐${q.cost}?\n\nAlready-styled pictures are skipped — you're never charged twice.`)) return;
+            if (!confirm(`Match ${q.remaining} picture${q.remaining === 1 ? '' : 's'} in this folder to your child's style for ⭐${q.cost}?\n\nAlready-styled pictures are skipped, so you're never charged twice.`)) return;
             const r = await apiJSON('/api/store?action=personalize-category', {
               method: 'POST', body: JSON.stringify({ childId: CHILD_ID, categoryId: catId }),
             });
@@ -2853,9 +2952,9 @@
           } catch (err) {
             const m = String(err.message || err);
             alert(m.includes('needs_subscription')
-              ? 'Styled pictures are part of My World memberships (from $9.99/month) — join in the Store. Everything you already made stays yours forever.'
+              ? 'Styled pictures are part of My World memberships (from $9.99/month). Join in the Store. Everything you already made stays yours forever.'
               : m.includes('not_enough_credits')
-                ? 'Not enough credits — add a pack in the Store first.'
+                ? 'Not enough credits. Add a pack in the Store first.'
                 : 'Could not start: ' + m);
           }
         });
@@ -2976,7 +3075,7 @@
         // Only reload when something actually landed — otherwise reloading just
         // flashes back to this same empty screen, which reads as "nothing happened."
         if (placed > 0) {
-          if (txt) txt.textContent = 'Done — ' + placed + ' tiles created! Refreshing…';
+          if (txt) txt.textContent = 'Done: ' + placed + ' tiles created! Refreshing…';
           setTimeout(() => location.reload(), 1400);
         } else {
           if (txt) txt.textContent = total > 0
@@ -3246,7 +3345,7 @@
     if (!h) {
       h = document.createElement('div');
       h.id = 'edit-hint';
-      h.textContent = '✋ Hold a tile until it lifts, then drag it onto another tile to reorder — or onto a folder tab to move it. (With a mouse: just drag.)';
+      h.textContent = '✋ Hold a tile until it lifts, then drag it onto another tile to reorder, or onto a folder tab to move it. (With a mouse: just drag.)';
       h.addEventListener('click', () => h.classList.remove('show'));
       document.body.appendChild(h);
     }
@@ -3289,7 +3388,14 @@
     // Offer a reset link only in password mode (we know the account email then).
     document.getElementById('login-forgot').style.display = (loginMode === 'password' && sessionUser && sessionUser.email) ? 'inline' : 'none';
     loginModal.classList.add('show');
-    document.getElementById('login-pass').focus();
+    // #17: a device PIN (with tries left) makes the pad the default door;
+    // "Use password instead" is always one tap away.
+    if (loginMode === 'password' && pinIsSet() && pinFailCount() < 5) pinShowMode(true);
+    else { pinShowMode(false); }
+  });
+  document.getElementById('login-use-pass').addEventListener('click', (e) => { e.preventDefault(); pinShowMode(false); });
+  document.getElementById('login-pin').addEventListener('input', () => {
+    if (document.getElementById('login-pin').value.length === 4) attemptLogin();   // 4th digit submits
   });
   document.getElementById('login-forgot').addEventListener('click', async (e) => {
     e.preventDefault();
@@ -3306,10 +3412,53 @@
   loginModal.addEventListener('click', (e) => {
     if (e.target === loginModal) loginModal.classList.remove('show');
   });
+  // ── #17 quick-unlock PIN: per-device, hashed, never synced ───────────────
+  // The PIN is an alternate key to the SAME edit gate — full parity with the
+  // password. 5 wrong tries force the password until a successful unlock
+  // resets the counter. Losing the PIN never blocks the child's board — only
+  // edit mode, which the password always opens.
+  const PIN_KEY = 'aacQuickPin', PIN_FAILS = 'aacQuickPinFails';
+  async function pinHash(pin) {
+    const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin + ':' + CHILD_ID));
+    return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
+  }
+  function pinIsSet() { try { return !!localStorage.getItem(PIN_KEY); } catch (_) { return false; } }
+  function pinFailCount() { try { return Number(localStorage.getItem(PIN_FAILS) || 0); } catch (_) { return 0; } }
+  function pinShowMode(usePin) {
+    document.getElementById('login-pin-wrap').style.display = usePin ? '' : 'none';
+    document.getElementById('login-label').style.display = usePin ? 'none' : '';
+    document.getElementById('login-pass').style.display = usePin ? 'none' : '';
+    document.getElementById('login-pin').value = '';
+    loginMode = usePin ? 'pin' : 'password';
+    (usePin ? document.getElementById('login-pin') : document.getElementById('login-pass')).focus();
+  }
+
   async function attemptLogin() {
-    const p = document.getElementById('login-pass').value;   // don't trim — passwords may have spaces
     const errEl = document.getElementById('login-error');
     errEl.textContent = '';
+    if (loginMode === 'pin') {
+      const pin = document.getElementById('login-pin').value;
+      if (!/^\d{4}$/.test(pin)) { errEl.textContent = 'Enter your 4-digit PIN'; return; }
+      try {
+        if ((await pinHash(pin)) === localStorage.getItem(PIN_KEY)) {
+          try { localStorage.setItem(PIN_FAILS, '0'); } catch (_) {}
+          loginModal.classList.remove('show');
+          setEditMode(true);
+          return;
+        }
+      } catch (_) {}
+      const fails = pinFailCount() + 1;
+      try { localStorage.setItem(PIN_FAILS, String(fails)); } catch (_) {}
+      if (fails >= 5) {
+        pinShowMode(false);
+        errEl.textContent = 'Too many PIN tries. Use your password.';
+      } else {
+        document.getElementById('login-pin').value = '';
+        errEl.textContent = 'Wrong PIN (' + (5 - fails) + ' tries left)';
+      }
+      return;
+    }
+    const p = document.getElementById('login-pass').value;   // don't trim — passwords may have spaces
     if (!p) { errEl.textContent = loginMode === 'password' ? 'Password required' : 'Token required'; return; }
     const submit = document.getElementById('login-submit');
     submit.disabled = true;
@@ -3324,6 +3473,7 @@
         });
         if (r.status === 401) { errEl.textContent = 'Incorrect password'; return; }
         if (!r.ok) { errEl.textContent = `Server error: ${r.status}`; return; }
+        try { localStorage.setItem(PIN_FAILS, '0'); } catch (_) {}   // password unlock re-arms the PIN
       } else {
         // Legacy fallback: validate an admin token against an auth-gated route.
         const tok = p.trim();
@@ -3402,7 +3552,7 @@
       + '<div style="font-size:19px;font-weight:700;color:#ad1457;margin:6px 0;">A new suggested board layout</div>'
       + '<div style="font-size:14px;color:#4b5563;line-height:1.5;">We’ve improved the standard arrangement of folders and words.'
       + (off.note ? '<br><i>“' + String(off.note).replace(/[<>&]/g, '') + '”</i>' : '')
-      + '<br>Apply it to this board? Only the <b>order</b> changes — every picture, word, and recording stays exactly as it is.</div>'
+      + '<br>Apply it to this board? Only the <b>order</b> changes: every picture, word, and recording stays exactly as it is.</div>'
       + '<div style="display:flex;gap:10px;margin-top:16px;">'
       + '<button id="lo-keep" style="flex:1;padding:12px;border:1.5px solid #e5e7eb;border-radius:12px;background:#fff;font:inherit;font-weight:700;color:#6b7280;cursor:pointer;">Keep my order</button>'
       + '<button id="lo-apply" style="flex:1;padding:12px;border:none;border-radius:12px;background:#ff1493;color:#fff;font:inherit;font-weight:700;cursor:pointer;">Apply new layout</button>'
@@ -3420,7 +3570,7 @@
         o.remove();
         if (action === 'accept') reloadFromServer();
       } catch (e) {
-        msg.textContent = 'Could not save that — try again. (' + (e.message || e) + ')';
+        msg.textContent = 'Could not save that. Try again. (' + (e.message || e) + ')';
       }
     };
     document.getElementById('lo-apply').addEventListener('click', () => respond('accept'));
@@ -3435,7 +3585,7 @@
       const r = await apiFetch('/api/store?action=catalog&childId=' + encodeURIComponent(CHILD_ID));
       if (r.ok) bal = (await r.json()).balance;
     } catch (_) {}
-    return confirm(what + ' uses ⭐' + cost + (bal == null ? '' : ' — you have ⭐' + bal) + '. Continue?');
+    return confirm(what + ' uses ⭐' + cost + (bal == null ? '' : '. You have ⭐' + bal) + '. Continue?');
   }
   function showMembershipUpsell(title, msg) {
     let o = document.getElementById('upsell-overlay');
@@ -3472,13 +3622,13 @@
     let title = null, msg = null;
     if (shell && shell.platform === 'fire') {
       title = 'Welcome to My World on your Fire tablet! 🎉';
-      msg = 'Everything works here — talking tiles, games, Teach Me, automatic teaching, and all of your personalized pictures. '
+      msg = 'Everything works here: talking tiles, games, Teach Me, automatic teaching, and all of your personalized pictures. '
           + 'Two things Fire tablets can’t do: real-time speech-to-text (Fire OS doesn’t include a speech service) and app notifications. '
           + 'Memberships and credits are managed right here on the web store.';
     } else if (shell && shell.platform === 'android') {
       title = 'Welcome to My World on Android! 🎉';
       msg = (shell.speech
-          ? 'Everything works on this device — including speech-to-text listening mode. '
+          ? 'Everything works on this device, including speech-to-text listening mode. '
           : 'Everything works on this device except speech-to-text (no speech service was found). ')
           + 'Memberships and credits are managed right here on the web store.';
     } else if (isAndroidUA) {
@@ -3716,7 +3866,7 @@
     }
   }
 
-  async function serverCreateItem({ section, categoryId, label, image, sound, keepAspect, order, pinned, description }) {
+  async function serverCreateItem({ section, categoryId, label, image, sound, keepAspect, order, pinned, description, descriptiveClues, wikidataQid, imdbId }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const saved = await apiJSON('/api/items', {
@@ -3728,6 +3878,9 @@
         soundKey: upSnd?.key || null,
         keepAspect: !!keepAspect,
         description: description ?? null,
+        descriptiveClues: descriptiveClues ?? undefined,   // #16 teaching facts
+        wikidataQid: wikidataQid ?? undefined,             // #11 movie/show link
+        imdbId: imdbId ?? undefined,
         childId: CHILD_ID,
       }),
     });
@@ -3737,7 +3890,7 @@
     return saved;
   }
 
-  async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned, description }) {
+  async function serverUpdateItem(old, { label, categoryId, image, sound, keepAspect, order, pinned, description, descriptiveClues, wikidataQid, imdbId }) {
     const upImg = await uploadIfBlob('image', image, 'item-image');
     const upSnd = await uploadIfBlob('sound', sound, 'item-sound');
     const body = { childId: CHILD_ID };
@@ -3747,6 +3900,9 @@
     if (pinned !== undefined) body.pinned = !!pinned;
     if (keepAspect !== undefined) body.keepAspect = !!keepAspect;
     if (description !== undefined) body.description = description;     // PRD §5 auditory-comp prompt
+    if (descriptiveClues !== undefined) body.descriptiveClues = descriptiveClues;   // #16 teaching facts
+    if (wikidataQid !== undefined) body.wikidataQid = wikidataQid;     // #11 movie/show link
+    if (imdbId !== undefined) body.imdbId = imdbId;
     if (upImg) { body.imageKey = upImg.key; }
     if (upSnd) { body.soundKey = upSnd.key; }
     const saved = await apiJSON('/api/items?id=' + old.id + '&childId=' + encodeURIComponent(CHILD_ID), {
@@ -3776,6 +3932,22 @@
   let editingItemCategoryId = null;
   let pendingImage = null;
   let pendingSound = null;
+  // #11: the modal's current movie/show link. null qid+imdb = unlinked.
+  let movieLink = { qid: null, imdb: null, title: '' };
+
+  function movieShowLinked() {
+    const linked = !!(movieLink.qid || movieLink.imdb);
+    document.getElementById('item-movie-unlinked').style.display = linked ? 'none' : '';
+    document.getElementById('item-movie-linked').style.display = linked ? '' : 'none';
+    if (linked) {
+      document.getElementById('item-movie-title').textContent = movieLink.title || movieLink.qid || movieLink.imdb;
+      const a = document.getElementById('item-movie-imdb');
+      if (movieLink.imdb) { a.style.display = ''; a.href = 'https://www.imdb.com/title/' + encodeURIComponent(movieLink.imdb) + '/'; }
+      else { a.style.display = 'none'; }
+    }
+    document.getElementById('item-movie-results').innerHTML = '';
+    document.getElementById('item-movie-msg').textContent = '';
+  }
 
   async function openItemModal(section, categoryId, item) {
     editingItemSection = section;
@@ -3795,6 +3967,14 @@
     document.getElementById('item-phrase').value = item?.label || '';
     document.getElementById('item-emotion').value = 'default';
     document.getElementById('item-description').value = item?.description || '';
+    const clueVals = Array.isArray(item?.descriptiveClues) ? item.descriptiveClues : [];
+    document.getElementById('item-clue1').value = clueVals[0] || '';
+    document.getElementById('item-clue2').value = clueVals[1] || '';
+    document.getElementById('item-clue3').value = clueVals[2] || '';
+    // #11: existing movie/show link rides in on the synced item.
+    movieLink = { qid: item?.wikidataQid || null, imdb: item?.imdbId || null, title: item?.label || '' };
+    document.getElementById('item-movie-q').value = '';
+    movieShowLinked();
     const ist = document.getElementById('item-image-status');
     ist.textContent = item?.imageKey ? 'Current image will be kept' : 'No image selected';
     ist.className = 'file-status' + (item?.imageKey ? ' has-file' : '');
@@ -3822,7 +4002,7 @@
 
     // AI-tile section: clear status/preview (the look defaults to board style).
     document.getElementById('item-look-style').checked = true;
-    document.getElementById('item-magic-status').textContent = '—';
+    document.getElementById('item-magic-status').textContent = '–';
     const mp = document.getElementById('item-magic-preview');
     mp.style.display = 'none'; mp.removeAttribute('src');
 
@@ -3956,7 +4136,7 @@
       const photo = await compressImage(file);
       const raw = document.getElementById('item-look-raw').checked;
       if (!raw && !(await confirmSpend(1, 'Drawing this photo in the board’s art style'))) {
-        statusEl.textContent = '—';
+        statusEl.textContent = '–';
         btn.disabled = false; btn.textContent = prevText;
         return;
       }
@@ -3973,15 +4153,15 @@
         const d = await jr.text();
         if (jr.status === 402 && /needs_subscription/.test(d)) {
           showMembershipUpsell('Styled tiles are a membership feature',
-            'Making pictures in ' + (window.CHILD_NAME || 'your child') + '’s own art style is part of every My World membership, from $9.99/month. You can still add the photo as-is for free — pick “My exact photo” and tap again.');
-          throw new Error('Styling needs a membership — pick “My exact photo” (free) and tap again.');
+            'Making pictures in ' + (window.CHILD_NAME || 'your child') + '’s own art style is part of every My World membership, from $9.99/month. You can still add the photo as-is for free. Pick “My exact photo” and tap again.');
+          throw new Error('Styling needs a membership. Pick “My exact photo” (free) and tap again.');
         }
         throw new Error(d.slice(0, 200));
       }
       const { id: jobId } = await jr.json();
       statusEl.textContent = raw
-        ? '📥 Adding the photo to the board… Don’t worry — it’s saved; a 🌍 Pending tile marks the spot.'
-        : '🎨 Drawing it to match the board… This takes a few minutes — don’t worry. Your photo is saved; you can close this, and a 🌍 Pending tile marks the spot until it lands.';
+        ? '📥 Adding the photo to the board… Don’t worry: it’s saved; a 🌍 Pending tile marks the spot.'
+        : '🎨 Drawing it to match the board… This takes a few minutes, don’t worry. Your photo is saved; you can close this, and a 🌍 Pending tile marks the spot until it lands.';
       // Show the placeholder immediately (the poll would catch it in ~15s).
       loadPendingJobs().catch(() => {});
       // Poll until the job lands (or needs a hand). If the modal is closed the
@@ -4002,12 +4182,12 @@
           return;
         }
         if (job.status === 'failed' && job.attempts >= 5) {
-          throw new Error(job.error || 'the picture engine gave up — try again in a bit');
+          throw new Error(job.error || 'the picture engine gave up. Try again in a bit');
         }
       }
-      statusEl.textContent = '⏳ Still rendering — it will appear on the board when it finishes.';
+      statusEl.textContent = '⏳ Still rendering. It will appear on the board when it finishes.';
     } catch (err) {
-      statusEl.textContent = '—';
+      statusEl.textContent = '–';
       errEl.textContent = 'Could not make the tile: ' + (err.message || err);
     } finally {
       btn.disabled = false; btn.textContent = prevText;
@@ -4141,7 +4321,7 @@
         // keepAspect off — the whole point is a filled square tile.
         const saved = await serverUpdateItem(item, { image: blob, keepAspect: false });
         cropModal.classList.remove('show');
-        document.getElementById('item-frame-note').textContent = 'Framed ✓ — the old picture is in Previous pictures.';
+        document.getElementById('item-frame-note').textContent = 'Framed ✓. The old picture is in Previous pictures.';
         if (saved) { editingItem = saved; loadItemHistory(saved); }
         await renderAll();
       } catch (e) {
@@ -4149,6 +4329,45 @@
       } finally { btn.disabled = false; btn.textContent = prev; }
     });
   })();
+
+  // #11: movie/show search + link wiring. The search is metadata-only
+  // (title/year/type/ids from the server's single search interface); the
+  // parent always picks from the list — never auto-selected.
+  document.getElementById('item-movie-search').addEventListener('click', async () => {
+    const q = document.getElementById('item-movie-q').value.trim();
+    const resEl = document.getElementById('item-movie-results');
+    const msgEl = document.getElementById('item-movie-msg');
+    if (q.length < 2) { msgEl.textContent = 'Type at least two letters first.'; return; }
+    msgEl.textContent = 'Searching…'; resEl.innerHTML = '';
+    try {
+      const r = await apiFetch('/api/items?movieSearch=' + encodeURIComponent(q));
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'search failed');
+      const d = await r.json();
+      const rows = d.results || [];
+      msgEl.textContent = rows.length ? 'Pick the right one:' : 'No movies or shows found for that. Try the full title.';
+      for (const m of rows) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'secondary';
+        b.style.cssText = 'display:block;width:100%;text-align:left;margin-top:4px;padding:8px 10px;font-size:13px;';
+        const kind = m.type === 'tv' ? 'TV' : (m.type === 'film' ? 'Film' : 'Title');
+        b.textContent = m.title + (m.year ? ' (' + m.year + ')' : '') + ' · ' + kind + (m.description ? ' · ' + m.description : '');
+        b.addEventListener('click', () => {
+          movieLink = { qid: m.qid || null, imdb: m.imdbId || null, title: m.title || '' };
+          const labelEl = document.getElementById('item-label');
+          if (!labelEl.value.trim()) labelEl.value = m.title || '';
+          movieShowLinked();
+        });
+        resEl.appendChild(b);
+      }
+    } catch (err) {
+      msgEl.textContent = 'Search failed: ' + (err.message || err);
+    }
+  });
+  document.getElementById('item-movie-clear').addEventListener('click', () => {
+    movieLink = { qid: null, imdb: null, title: '' };
+    movieShowLinked();
+  });
 
   document.getElementById('item-save').addEventListener('click', async () => {
     const label = document.getElementById('item-label').value.trim();
@@ -4171,14 +4390,26 @@
       // crop. The old keep-original-ratio control is retired — omitting
       // keepAspect on update preserves whatever the tile already has
       // (admin's Lab tools still set it for TV/movie posters).
+      // #11: poster tiles are the rectangular exception — a linked movie/
+      // show keeps the uploaded image's own shape (the poster IS the
+      // recognizable artifact), so skip the square crop and set keep_aspect.
+      const isMovie = !!(movieLink.qid || movieLink.imdb);
       let image = pendingImage;
-      if (image) image = await squareCropBlob(image);
+      if (image && !isMovie) image = await squareCropBlob(image);
+      // #16: the three teaching facts — an array (possibly empty = clear back
+      // to the canonical overlay) whenever the parent touched the modal.
+      const descriptiveClues = ['item-clue1', 'item-clue2', 'item-clue3']
+        .map((cid) => document.getElementById(cid).value.trim()).filter(Boolean);
       if (editingItem) {
         await serverUpdateItem(editingItem, {
           label,
           image,
           sound: pendingSound,
           description,
+          descriptiveClues,
+          wikidataQid: movieLink.qid || '',   // '' clears an unlinked tile server-side
+          imdbId: movieLink.imdb || '',
+          keepAspect: isMovie && image ? true : undefined,
           pinned: editingItemSection === 'people' ? pinned : undefined,
         });
       } else {
@@ -4189,6 +4420,10 @@
           image,
           sound: pendingSound,
           description,
+          descriptiveClues,
+          wikidataQid: movieLink.qid || undefined,
+          imdbId: movieLink.imdb || undefined,
+          keepAspect: isMovie,
           order: Date.now(),
           pinned: editingItemSection === 'people' ? pinned : false,
         });
@@ -4216,12 +4451,12 @@
         method: 'POST', body: JSON.stringify({ childId: CHILD_ID, itemId: editingItem.id }),
       });
       note.textContent = (r.freeRetry ? 'Redrawing (free)' : 'Redrawing (⭐' + r.charged + ')')
-        + ' — the new picture lands in a minute or two.';
+        + '. The new picture lands in a minute or two.';
     } catch (err) {
       note.textContent = '';
       const msg = String(err.message || err);
       document.getElementById('item-error').textContent = msg.includes('not_enough_credits')
-        ? 'Not enough credits — open the Word Store from the parent dashboard to add more.'
+        ? 'Not enough credits. Open the Word Store from the parent dashboard to add more.'
         : msg;
     }
     btn.disabled = false;
@@ -4306,7 +4541,7 @@
       // image add. 402 (free tier) falls back to the exact photo + upsell.
       if (pendingCatImage && document.getElementById('cat-look-style').checked) {
         if (!(await confirmSpend(1, 'Drawing the folder picture in the board’s art style'))) {
-          errEl.textContent = 'Not drawn — pick "My exact photo" for a free add, or save again to confirm.';
+          errEl.textContent = 'Not drawn. Pick "My exact photo" for a free add, or save again to confirm.';
           saveBtn.disabled = false; saveBtn.textContent = prev;
           return;
         }
@@ -4582,7 +4817,7 @@
       showMembershipUpsell('Styled tiles are a membership feature',
         'Your photos were added as-is (free on every plan). Making them into your child’s art style is part of My World memberships, from $9.99/month.');
     }
-    prog.textContent = '✅ AI done — review the names and Save.';
+    prog.textContent = '✅ AI done. Review the names and Save.';
     btn.disabled = false; btn.textContent = prev;
   });
 
@@ -4657,7 +4892,7 @@
           order: Date.now() + i,
         });
       } catch (err) {
-        failures.push(`${it.label}: save failed — ${err.message}`);
+        failures.push(`${it.label}: save failed (${err.message})`);
       }
     }
 
@@ -4846,7 +5081,7 @@
 
   async function wipeAll() {
     const confirmInput = prompt(
-      'This deletes EVERY category, item, image, and audio file — on this device and on the server. Type DELETE to confirm.'
+      'This deletes EVERY category, item, image, and audio file, on this device and on the server. Type DELETE to confirm.'
     );
     if (confirmInput !== 'DELETE') return;
     try {
@@ -4888,7 +5123,7 @@
       const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID) + (showAll ? '&showAllVocab=1' : ''));
       if (!r.ok) throw new Error('server returned ' + r.status);
       const data = await r.json();
-      if (!(data.categories || []).length && !(data.items || []).length) { alert('Server returned an empty board — not reloading.'); return; }
+      if (!(data.categories || []).length && !(data.items || []).length) { alert('Server returned an empty board. Not reloading.'); return; }
       await hydrateFromServer(data);
       _lastSig = structSig(data);
       _precaching = false;
@@ -4927,10 +5162,14 @@
     }
     const hb = document.getElementById('disp-color-header-bg');     if (hb) hb.value = display.headerColors.bg;
     const ht = document.getElementById('disp-color-header-text');   if (ht) ht.value = display.headerColors.text;
+    const szL = document.getElementById('disp-size-listen'); if (szL) szL.value = String(display.listenTileSize || 0);
+    const szT = document.getElementById('disp-size-topbtn'); if (szT) szT.value = String(display.topButtonSize || 0);
     document.getElementById('disp-easy-close').checked = SAFETY.easyClose;
     document.getElementById('disp-easy-unlock').checked = SAFETY.easyUnlock;
     document.getElementById('disp-listen-censor').checked = LISTEN.censor;
     document.getElementById('disp-listen-tiles').checked = LISTEN.tilesOnly;
+    const rn = document.getElementById('disp-repeat-nav');
+    if (rn) rn.value = String(ACCESS.listenRepeatCount || 0);
     document.getElementById('disp-tool-listen').checked = TOOLS.listen;
     document.getElementById('disp-tool-teach').checked = TOOLS.teach;
     document.getElementById('disp-tool-play').checked = TOOLS.play;
@@ -4944,6 +5183,17 @@
     document.getElementById('disp-unlock-confirm').style.display = 'none';
     document.getElementById('disp-unlock-pass').value = '';
     document.getElementById('disp-unlock-msg').textContent = '';
+    // Suggestion consent is a synced setting fetched lazily (the panel opens
+    // rarely; one read keeps the checkbox honest across devices).
+    (async () => {
+      const cb = document.getElementById('disp-suggest');
+      if (!cb) return;
+      try {
+        const r = await apiFetch('/api/child-settings?childId=' + encodeURIComponent(CHILD_ID));
+        const s = (await r.json()).settings || {};
+        cb.checked = s.suggestFromListening === true;
+      } catch (_) {}
+    })();
     // Account section — only for a signed-in account (not the kid's open board).
     const acct = document.getElementById('disp-account');
     if (acct) {
@@ -5002,7 +5252,7 @@
           } catch (_) {}
         }
         await renderAll();
-        nmsg('Done — resized ' + ((d.items || 0) + (d.categories || 0)) + ' tiles.');
+        nmsg('Done: resized ' + ((d.items || 0) + (d.categories || 0)) + ' tiles.');
       } catch (err) { nmsg('Could not resize: ' + (err.message || err), true); }
       finally { normBtn.disabled = false; }
     });
@@ -5073,6 +5323,84 @@
     };
     slider('disp-teach-window', 'disp-teach-window-val', 'teachTapMs', () => TOUCH.teachTapMs);
     slider('disp-exit-hold', 'disp-exit-hold-val', 'exitHoldMs', () => SAFETY.exitHoldMs);
+    // #17 quick-unlock PIN management — device-local; every change proves the
+    // account password first (a child in the panel can't set or alter it).
+    const pinStatus = () => {
+      document.getElementById('disp-pin-status').textContent = pinIsSet() ? 'PIN is set on this device' : 'No PIN set';
+      document.getElementById('disp-pin-remove').style.display = pinIsSet() ? '' : 'none';
+      document.getElementById('disp-pin-set').textContent = pinIsSet() ? 'Change PIN…' : 'Set PIN…';
+    };
+    let pinRemoveMode = false;
+    const pinBox = document.getElementById('disp-pin-confirm');
+    document.getElementById('disp-pin-set').addEventListener('click', () => {
+      pinRemoveMode = false;
+      document.getElementById('disp-pin-new').style.display = '';
+      pinBox.style.display = ''; document.getElementById('disp-pin-msg').textContent = '';
+      document.getElementById('disp-pin-new').focus();
+    });
+    document.getElementById('disp-pin-remove').addEventListener('click', () => {
+      pinRemoveMode = true;
+      document.getElementById('disp-pin-new').style.display = 'none';
+      pinBox.style.display = ''; document.getElementById('disp-pin-msg').textContent = '';
+      document.getElementById('disp-pin-pass').focus();
+    });
+    document.getElementById('disp-pin-cancel').addEventListener('click', () => {
+      pinBox.style.display = 'none';
+      document.getElementById('disp-pin-new').value = ''; document.getElementById('disp-pin-pass').value = '';
+    });
+    document.getElementById('disp-pin-save').addEventListener('click', async () => {
+      const msg = document.getElementById('disp-pin-msg');
+      const newPin = document.getElementById('disp-pin-new').value;
+      const pass = document.getElementById('disp-pin-pass').value;
+      if (!pinRemoveMode && !/^\d{4}$/.test(newPin)) { msg.textContent = 'The PIN must be exactly 4 digits.'; return; }
+      if (!pass) { msg.textContent = 'Your account password is required.'; return; }
+      try {
+        const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: sessionUser.email, password: pass }) });
+        if (r.status === 401) { msg.textContent = 'Incorrect password.'; return; }
+        if (!r.ok) { msg.textContent = 'Server error: ' + r.status; return; }
+        if (pinRemoveMode) { localStorage.removeItem(PIN_KEY); }
+        else { localStorage.setItem(PIN_KEY, await pinHash(newPin)); }
+        localStorage.setItem(PIN_FAILS, '0');
+        pinBox.style.display = 'none';
+        document.getElementById('disp-pin-new').value = ''; document.getElementById('disp-pin-pass').value = '';
+        pinStatus();
+      } catch (e) { msg.textContent = 'Could not save: ' + (e.message || e); }
+    });
+    pinStatus();
+
+    // #12 repeat-navigation threshold — synced; writes the legacy boolean in
+    // step so native builds that only know listenRepeatNav stay consistent.
+    const rnSel = document.getElementById('disp-repeat-nav');
+    if (rnSel) rnSel.addEventListener('change', async () => {
+      const n = Number(rnSel.value) || 0;
+      try {
+        await saveSafety({ listenRepeatCount: n, listenRepeatNav: n > 0 });
+        ACCESS.listenRepeatCount = n;
+        ACCESS.listenRepeatNav = n > 0;
+      } catch (_) { rnSel.value = String(ACCESS.listenRepeatCount || 0); }
+    });
+
+    // #10 suggestion consent — synced; disabling stops capture immediately
+    // and offers to clear what's pending (spec AC). Not `plain()` because of
+    // the clear-pending step.
+    const sugCb = document.getElementById('disp-suggest');
+    if (sugCb) sugCb.addEventListener('change', async () => {
+      const want = sugCb.checked;
+      try {
+        await saveSafety({ suggestFromListening: want });
+        _suggestConsent = want;
+        if (!want && confirm('Also clear the pending word suggestions collected so far?')) {
+          const r = await apiFetch('/api/items', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ op: 'suggest-list', childId: CHILD_ID }) });
+          const d = await r.json();
+          for (const s of (d.suggestions || [])) {
+            await apiFetch('/api/items', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ op: 'suggest-act', childId: CHILD_ID, slug: s.slug, action: 'dismiss' }) });
+          }
+        }
+      } catch (_) { sugCb.checked = !want; }   // offline — revert
+    });
     // Listening filter toggles (E8) — plain settings, no confirm friction.
     const censorCb = document.getElementById('disp-listen-censor');
     censorCb.addEventListener('change', async () => {
@@ -5097,7 +5425,7 @@
       unlockCb.checked = false;                      // not real until the password confirms it
       if (!sessionUser || !sessionUser.email) {
         box.style.display = '';
-        msg.textContent = 'Sign in on this device first — this needs your account password.';
+        msg.textContent = 'Sign in on this device first. This needs your account password.';
         return;
       }
       msg.textContent = '';
@@ -5184,7 +5512,7 @@
   }
   document.getElementById('display-done').addEventListener('click', () => displayModal.classList.remove('show'));
   document.getElementById('display-signout').addEventListener('click', async () => {
-    if (!confirm('Sign out on this device? The board stays saved — sign back in anytime.')) return;
+    if (!confirm('Sign out on this device? The board stays saved. Sign back in anytime.')) return;
     try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
     try { localStorage.removeItem(TOKEN_KEY); } catch (_) {}
     location.href = '/login';
@@ -5210,6 +5538,10 @@
   if (hdrBgEl) hdrBgEl.addEventListener('input', (e) => { display.headerColors.bg = sanitizeColor(e.target.value, display.headerColors.bg); commitDisplay(); });
   const hdrTxEl = document.getElementById('disp-color-header-text');
   if (hdrTxEl) hdrTxEl.addEventListener('input', (e) => { display.headerColors.text = sanitizeColor(e.target.value, display.headerColors.text); commitDisplay(); });
+  const sizeListenEl = document.getElementById('disp-size-listen');
+  if (sizeListenEl) sizeListenEl.addEventListener('change', (e) => { display.listenTileSize = clampSizeStep(e.target.value); commitDisplay(); });
+  const sizeTopEl = document.getElementById('disp-size-topbtn');
+  if (sizeTopEl) sizeTopEl.addEventListener('change', (e) => { display.topButtonSize = clampSizeStep(e.target.value); commitDisplay(); });
 
   // ---- Organize view (Miller columns) ----
   // Drill state: which section, which top-level cat, which subcategory.
@@ -5297,8 +5629,8 @@
     topBody.innerHTML = '';
     const topCats = allCats[orgSel.section].filter(c => c.parentId == null);
     if (!topCats.length) topBody.appendChild(orgEmptyHint(orgSel.section === 'needs'
-      ? 'Needs is a flat strip (no folders). Its tiles are in the Items column → — drag to reorder.'
-      : 'No categories yet — drag items here to start.'));
+      ? 'Needs is a flat strip (no folders). Its tiles are in the Items column →. Drag to reorder.'
+      : 'No categories yet. Drag items here to start.'));
     for (const cat of topCats) {
       const subs = allCats[orgSel.section].filter(c => c.parentId === cat.id);
       const row = makeOrgRow({
@@ -6060,9 +6392,9 @@
       add(og, s, 'All ' + s);
       const tops = cats.filter(c => c.parentId == null).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       for (const t of tops) {
-        add(og, 'cat:' + t.id, '— ' + t.label);
+        add(og, 'cat:' + t.id, '– ' + t.label);
         const subs = cats.filter(c => c.parentId === t.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        for (const sub of subs) add(og, 'cat:' + sub.id, '— — ' + sub.label);
+        for (const sub of subs) add(og, 'cat:' + sub.id, '– – ' + sub.label);
       }
       sel.appendChild(og);
     }
@@ -6593,6 +6925,101 @@
     }
     return out;
   }
+  // ── #10 canonical suggestion capture ──────────────────────────────────────
+  // A second, silent pass over heard text against the FULL canonical library
+  // (not the board's lexicon): words the household says that the board lacks
+  // become parent-reviewable suggestions. Strictly consent-gated — the flag
+  // is FALSE until the parent opts in, and the server re-checks it on every
+  // record call, so this whole layer is dormant by default. Never any change
+  // on the child's screen (AC1); dedupe per browsing session so repeated
+  // speech-recognition partials of one utterance can't inflate hit counts.
+  let _canonLex = null, _suggestConsent = null;
+  const _suggestSeen = new Set(); let _suggestQueue = new Set(); let _suggestTimer = null;
+  async function suggestScan(text) {
+    try {
+      if (_suggestConsent === null) {
+        try {
+          const r = await fetch('/api/child-settings?childId=' + encodeURIComponent(CHILD_ID), { credentials: 'same-origin' });
+          const d = await r.json();
+          _suggestConsent = !!(d && d.settings && d.settings.suggestFromListening === true);
+        } catch (_) { _suggestConsent = false; }
+      }
+      if (!_suggestConsent) return;
+      if (!_canonLex) {
+        const r = await fetch('/api/items?lexicon=1', { credentials: 'same-origin' });
+        const d = await r.json();
+        _canonLex = new Map();
+        for (const e of (d.lexicon || [])) {
+          for (const t of [e.label, ...(e.terms || [])]) {
+            const k = normalizeListenWord(t);
+            if (k) _canonLex.set(k, e.slug);
+          }
+        }
+      }
+      // Greedy-longest over the canonical map; a phrase the BOARD already
+      // matches is not a suggestion (the board lexicon wins, same rule as
+      // the strip's index).
+      const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+      let i = 0;
+      while (i < words.length) {
+        let used = 1;
+        for (let w = Math.min(6, words.length - i); w >= 1; w--) {
+          const phrase = normalizeListenWord(words.slice(i, i + w).join(' '));
+          if (_listenLex && _listenLex.has(phrase)) { used = w; break; }   // on the board
+          const slug = _canonLex.get(phrase);
+          if (slug) {
+            if (!_suggestSeen.has(slug)) { _suggestSeen.add(slug); _suggestQueue.add(slug); }
+            used = w; break;
+          }
+        }
+        i += used;
+      }
+      if (_suggestQueue.size && !_suggestTimer) {
+        _suggestTimer = setTimeout(async () => {
+          const slugs = [..._suggestQueue]; _suggestQueue = new Set(); _suggestTimer = null;
+          try {
+            await fetch('/api/items', { method: 'POST', credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ op: 'suggest-record', childId: CHILD_ID, slugs }) });
+          } catch (_) { /* offline: the words will be heard again */ }
+        }, 12000);
+      }
+    } catch (_) { /* capture must never disturb listening itself */ }
+  }
+
+  // One-time opt-in (AC: asked once, never re-prompted after decline). Shown
+  // only in edit mode — a consent question belongs to the parent, and the
+  // child starts listening himself all the time. "Not now" writes an explicit
+  // false so the key is decided; the Display panel's toggle remains the way
+  // back in either direction.
+  async function maybeOfferSuggestConsent() {
+    try {
+      if (!document.body.classList.contains('edit-mode')) return;
+      if (document.getElementById('suggest-consent')) return;
+      const r = await apiFetch('/api/child-settings?childId=' + encodeURIComponent(CHILD_ID));
+      const s = (await r.json()).settings || {};
+      if (s.suggestFromListening !== undefined) return;   // already decided
+      const o = document.createElement('div');
+      o.id = 'suggest-consent';
+      o.style.cssText = 'position:fixed;inset:0;z-index:2600;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:24px;';
+      o.innerHTML = '<div style="background:#fff;border-radius:22px;max-width:440px;padding:26px;font-family:system-ui,sans-serif;">'
+        + '<div style="font-size:19px;font-weight:700;color:#ad1457;">💡 Suggest new words from listening?</div>'
+        + '<p style="font-size:14px;color:#4b5563;line-height:1.5;">While listening is on, the board can notice words your family says that aren’t on the board yet and save them for your review, with one-tap add. What’s saved: only matches against our vocabulary library (a word name and a count). Never audio, never transcripts. Recognition runs on this device.</p>'
+        + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">'
+        + '<button id="sc-no" style="border:2px solid #f3c6dd;background:#fff;color:#ad1457;border-radius:999px;padding:9px 16px;font-weight:600;cursor:pointer;">Not now</button>'
+        + '<button id="sc-yes" style="border:none;background:#ff1493;color:#fff;border-radius:999px;padding:9px 18px;font-weight:700;cursor:pointer;">Enable</button>'
+        + '</div></div>';
+      document.body.appendChild(o);
+      const done = async (val) => {
+        try { await saveSafety({ suggestFromListening: val }); } catch (_) {}
+        _suggestConsent = val;
+        o.remove();
+      };
+      document.getElementById('sc-yes').addEventListener('click', () => done(true));
+      document.getElementById('sc-no').addEventListener('click', () => done(false));
+    } catch (_) {}
+  }
+
   async function renderListenStrip(tokens) {
     const wrap = document.getElementById('listen-tiles');
     if (!wrap) return;
@@ -6685,7 +7112,7 @@
         // Say WHY, per device: Fire tablets ship no speech service at all;
         // non-Chrome browsers lack the Web Speech API.
         hint.textContent = (window.MyWorldShell && window.MyWorldShell.speech === false)
-          ? 'This device doesn’t support speech-to-text — everything else works!'
+          ? 'This device doesn’t support speech-to-text, but everything else works!'
           : 'Speech-to-text needs the My World app or the Chrome browser';
       }
       return;
@@ -6700,6 +7127,7 @@
           const toks = tokenizeForListen(text, _listenLex);
           renderListenStrip(toks);
           maybeListenNavigate(toks);
+          suggestScan(text);   // #10: silent, consent-gated, zero UI change
         }
       });
       // iOS ends a recognition session after a pause / ~1 min — restart while on.
@@ -6722,7 +7150,7 @@
     if (on && (G.running || SLIDE.running || ROUTINE.active || _messagePlaying)) return; // never hijack an activity
     if (on && !entAllows('stt')) {
       showMembershipUpsell('Speech-to-text is a membership feature',
-        'Turn spoken words into picture tiles in real time — part of every My World membership, from $9.99/month. Everything you already made stays yours forever.');
+        'Turn spoken words into picture tiles in real time, part of every My World membership, from $9.99/month. Everything you already made stays yours forever.');
       return;
     }
     if (on === _listening) return;
@@ -6730,9 +7158,9 @@
     if (on) sbSetMode(false);   // listening owns the header — stop any sentence mid-speech
     document.body.classList.toggle('listening', on);
     const lb = document.getElementById('listen-btn');
-    if (lb) { lb.classList.toggle('on', on); lb.textContent = on ? '⏹️' : '🎙️'; lb.title = on ? 'Stop listening' : 'Listen — turn spoken words into picture tiles'; }
+    if (lb) { lb.classList.toggle('on', on); lb.textContent = on ? '⏹️' : '🎙️'; lb.title = on ? 'Stop listening' : 'Listen: turn spoken words into picture tiles'; }
     const wrap = document.getElementById('listen-tiles'); if (wrap) wrap.innerHTML = '';
-    if (on) { _listenLex = await buildListenLexicon(); await startSpeech(); bumpListenIdle(); }
+    if (on) { _listenLex = await buildListenLexicon(); await startSpeech(); bumpListenIdle(); maybeOfferSuggestConsent(); }
     else {
       if (_listenIdleTimer) { clearTimeout(_listenIdleTimer); _listenIdleTimer = null; }
       await stopSpeech(); _listenLex = null;
@@ -7083,6 +7511,10 @@
     ACCESS.sentenceIdleMin = (Number.isFinite(m) && m >= 1 && m <= 10) ? m : 1;
     ACCESS.sentenceLift = s.sentenceLift === 'drag' ? 'drag' : 'longpress';
     ACCESS.listenRepeatNav = s.listenRepeatNav !== false;
+    // #12: parent-tunable repeat threshold — 0 (off) / 2 (classic) / 3 (for
+    // kids who naturally repeat). Absent → legacy flag decides at 2.
+    ACCESS.listenRepeatCount = [0, 2, 3].includes(Number(s.listenRepeatCount))
+      ? Number(s.listenRepeatCount) : (s.listenRepeatNav !== false ? 2 : 0);
     document.body.classList.toggle('nav-buttons-mode', ACCESS.navMode === 'buttons' || SB.mode);
     document.body.classList.toggle('sb-on', ACCESS.sentenceBuilder);
     if (!ACCESS.sentenceBuilder) sbSetMode(false);
@@ -7273,10 +7705,19 @@
   // position so re-emitted partial transcripts don't re-trigger.
   let _listenNavKey = '', _listenNavAt = 0;
   function maybeListenNavigate(tokens) {
-    if (!ACCESS.listenRepeatNav) return;
-    for (let i = tokens.length - 1; i >= 1; i--) {
-      const a = tokens[i], b = tokens[i - 1];
-      if (!a.item || !b.item || a.item.id !== b.item.id) continue;
+    // #12: n consecutive repeats trigger the jump (0 = off). The highlight
+    // fade below is deliberately untouched.
+    const need = Number(ACCESS.listenRepeatCount) || 0;
+    if (!need) return;
+    for (let i = tokens.length - 1; i >= need - 1; i--) {
+      const a = tokens[i];
+      if (!a.item) continue;
+      let run = true;
+      for (let k = 1; k < need; k++) {
+        const p = tokens[i - k];
+        if (!p || !p.item || p.item.id !== a.item.id) { run = false; break; }
+      }
+      if (!run) continue;
       const key = a.item.id + '@' + i;
       if (key === _listenNavKey && Date.now() - _listenNavAt < 15000) return;
       _listenNavKey = key; _listenNavAt = Date.now();
@@ -7417,7 +7858,7 @@
           bootBanner(note, broken);
           if (!broken) setTimeout(() => { const b = document.getElementById('boot-banner'); if (b) b.remove(); }, 3500);
         } else {
-          bootBanner('Sync HTTP ' + r.status + ' — could not load from server.', true);
+          bootBanner('Sync HTTP ' + r.status + ': could not load from server.', true);
         }
       } catch (err) {
         console.error('sync/hydrate failed:', err);

@@ -116,8 +116,9 @@ export default async function handler(req, res) {
       const kind = b.kind === 'stuff' ? 'stuff' : 'person';
       const blobKey = String(b.blobKey || '');
       // Accept wizard candidates or Lab uploads only — and verify the blob
-      // actually exists before pointing renders at it.
-      if (!/^(style-wizard|styleref|style-guides|styles)\/[A-Za-z0-9/._-]+$/.test(blobKey)) {
+      // actually exists before pointing renders at it. `style/` is what the
+      // wizard's own 📤 Upload button produces (/api/upload?kind=style).
+      if (!/^(style-wizard|styleref|style-guides|styles|style)\/[A-Za-z0-9/._-]+$/.test(blobKey)) {
         res.status(400).json({ error: 'unexpected blobKey' }); return;
       }
       await readBlobBytes(blobKey);   // throws if missing
@@ -171,7 +172,7 @@ export default async function handler(req, res) {
       const label = String(b.label || '').trim().slice(0, 60);
       const blobKey = String(b.blobKey || '');
       if (!label) { res.status(400).json({ error: 'label required' }); return; }
-      if (!/^(style-wizard|styleref|style-guides|styles)\/[A-Za-z0-9/._-]+$/.test(blobKey)) {
+      if (!/^(style-wizard|styleref|style-guides|styles|style)\/[A-Za-z0-9/._-]+$/.test(blobKey)) {
         res.status(400).json({ error: 'unexpected blobKey' }); return;
       }
       await readBlobBytes(blobKey);   // throws if missing

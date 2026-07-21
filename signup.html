@@ -36,7 +36,7 @@
   <div class="card">
     <div class="brand"><img src="/icons/myworld-globe.png" alt="" style="height:1.5em;width:auto;vertical-align:middle;margin-right:.12em;"> My World</div>
     <div class="tag">Create your account</div>
-    <p class="free">No card needed to start — exact-photo tiles are always free; styled art is part of memberships from $9.99/month.</p>
+    <p class="free">No card needed to start. Exact-photo tiles are always free; styled art is part of memberships from $9.99/month.</p>
 
     <form id="signup-form" novalidate>
       <label for="childName">Your child's first name</label>
@@ -52,7 +52,7 @@
       <label for="inviteCode">Invite code</label>
       <input id="inviteCode" type="text" autocomplete="off" autocapitalize="none" placeholder="e.g. soccer-friends">
       <p class="hint">My World is invite-only during early access. Came here from an invite link?
-        Your code is already applied — you can leave this blank.
+        Your code is already applied, so you can leave this blank.
         No code yet? <a href="/#waitlist">Join the waitlist →</a></p>
 
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;font-weight:500;text-transform:none;letter-spacing:0;line-height:1.45;margin:14px 0 10px;color:#4b5563;">
@@ -90,7 +90,7 @@
       msg.className = 'msg err'; msg.textContent = 'Password must be at least 8 characters.'; return;
     }
     if (!$('consent').checked) {
-      msg.className = 'msg err'; msg.textContent = 'Please confirm the consent box — it covers the Terms, Privacy Policy, and how photos are used.'; return;
+      msg.className = 'msg err'; msg.textContent = 'Please confirm the consent box. It covers the Terms, Privacy Policy, and how photos are used.'; return;
     }
     const btn = $('signup-btn'); const prev = btn.textContent;
     btn.disabled = true; btn.textContent = 'Creating your account…';
@@ -108,7 +108,7 @@
         msg.textContent = data.error || ('Could not create account (HTTP ' + r.status + ').');
         if (r.status === 409) msg.innerHTML = (data.error || 'That email already has an account.') + ' <a href="/login">Sign in →</a>';
         if (data.error === 'invite_required') {
-          msg.innerHTML = (data.detail || 'My World is invite-only right now — enter your invite code above.') +
+          msg.innerHTML = (data.detail || 'My World is invite-only right now. Enter your invite code above.') +
             ' <a href="/#waitlist">Join the waitlist →</a>';
           $('inviteCode').focus();
         }
@@ -131,6 +131,6 @@
   });
 </script>
 
-<div style="text-align:center;font-size:12px;color:#9ca3af;padding:18px 10px;">© My World Tap to Talk LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home — it isn’t a medical device and doesn’t replace your child’s care team.</div>
+<div style="text-align:center;font-size:12px;color:#9ca3af;padding:18px 10px;">© My World Tap to Talk LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home. It isn’t a medical device and doesn’t replace your child’s care team.</div>
 </body>
 </html>

@@ -635,7 +635,7 @@ struct RenderingTileCell: View {
                 RoundedRectangle(cornerRadius: 16)
                     .strokeBorder(Color(hex: "#f3c6dd"), lineWidth: 2)
             )
-            Text(label.isEmpty ? "Pending" : "\(label) — pending")
+            Text(label.isEmpty ? "Pending" : "\(label), pending")
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color(hex: "#9d2463"))
                 .lineLimit(1)

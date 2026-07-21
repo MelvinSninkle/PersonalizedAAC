@@ -42,7 +42,7 @@ struct MasterySessionsView: View {
                 .font(.system(size: 18, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: Brand.pinkDeep))
             if rows.isEmpty {
-                Text("No game data yet — start a game and this fills in.")
+                Text("No game data yet. Start a game and this fills in.")
                     .font(.footnote).foregroundStyle(Color(hex: Brand.muted))
             }
             ForEach(rows) { r in

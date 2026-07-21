@@ -32,14 +32,14 @@ struct StartGameView: View {
         }
         var blurb: String {
             switch self {
-            case .matching:               return "Hear a word, tap the matching picture. No wrong-answer sounds — ever."
-            case .teach_slideshow:        return "Each picture shows with its word — spoken, then every teaching clue read aloud. Watch-and-listen; advances when the speech finishes."
+            case .matching:               return "Hear a word, tap the matching picture. No wrong-answer sounds, ever."
+            case .teach_slideshow:        return "Each picture shows with its word: spoken, then every teaching clue read aloud. Watch-and-listen; advances when the speech finishes."
             case .learn_slideshow:        return "Calm watch-and-listen flashcards (\"This is a dog.\")."
             case .exposure_slideshow:     return "Same pacing, first-person framing (\"This is your dog.\") for self-modeling."
             case .clue_quiz:              return "Hear a teaching clue, tap the picture it describes. Each miss reveals another clue."
             case .auditory_comprehension: return "Hear a clue (\"lives in a field, eats grass\"), find the tile it describes."
             case .expressive_naming:      return "The child sees a picture and names what they see."
-            case .celebration:            return "Flowers and cheers — celebrate a moment."
+            case .celebration:            return "Flowers and cheers. Celebrate a moment."
             }
         }
         var usesChoices: Bool { self == .matching || self == .auditory_comprehension || self == .clue_quiz }
@@ -74,7 +74,7 @@ struct StartGameView: View {
                     Text("Could not start: \(why)")
                         .font(.footnote).foregroundStyle(.red)
                 } else if sendState == .sent {
-                    Text("Sent — the facilitator screen will open the moment the iPad starts.")
+                    Text("Sent. The facilitator screen will open the moment the iPad starts.")
                         .font(.footnote).foregroundStyle(Color(hex: Brand.muted))
                 }
             }
@@ -135,7 +135,7 @@ struct StartGameView: View {
                 }
                 Section("Categories") {
                     ForEach(rootCategories, id: \.id) { c in
-                        Button("\(c.section.label) — \(c.label)") { scope = "cat:\(c.id)" }
+                        Button("\(c.section.label): \(c.label)") { scope = "cat:\(c.id)" }
                     }
                 }
             }

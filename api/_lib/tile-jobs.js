@@ -66,6 +66,14 @@ export async function ensureTileJobs(db) {
   // Folder-by-name hint (onboarding favorites): resolved to a leaf category
   // at process time — see the folder block in processTileJob.
   await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS folder TEXT`;
+  // #11 movie/show link ids — carried on the job, stamped onto the landed
+  // item so parent surfaces can offer the IMDb link. Metadata only; the
+  // pipeline never fetches poster artwork (the source photo IS the parent's
+  // own upload).
+  await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS wikidata_qid TEXT`;
+  await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS imdb_id TEXT`;
+  await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS wikidata_qid TEXT`;
+  await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS imdb_id TEXT`;
   // Magic follow-up bookkeeping (replace-existing / remake-related): NULL =
   // the parent hasn't answered yet — store.js action=followups re-offers it
   // on every surface until answered or auto-closed (nothing to offer).
@@ -372,6 +380,16 @@ export async function processTileJob(db, jobId) {
            ${styledId}, ${styledId ? new Date().toISOString() : null}, NOW())
         RETURNING id`;
       itemId = Number(it[0].id);
+    }
+
+    // #11: stamp the movie/show link ids onto the landed tile. Separate,
+    // best-effort UPDATE (mirrors items.js create) so a pre-migration DB or
+    // odd payload can never fail the tile itself.
+    if (itemId && (job.wikidata_qid || job.imdb_id)) {
+      try {
+        await db`UPDATE items SET wikidata_qid = ${job.wikidata_qid || null},
+                   imdb_id = ${job.imdb_id || null} WHERE id = ${itemId}`;
+      } catch (_) { /* link ids are additive */ }
     }
 
     // A photo added to the People section IS a person — register them (or

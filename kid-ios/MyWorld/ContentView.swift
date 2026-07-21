@@ -24,7 +24,12 @@ struct ContentView: View {
         // A RETURNING parent who logs in has needsOnboarding == false and
         // lands straight on their board / parent home.
         Group {
-            if !auth.isSignedIn || onboarding.needsOnboarding {
+            if auth.demoMode {
+                // #14: the admin/demo test board (style-swapping starter
+                // board). Checked FIRST — demo mode has no signed-in user,
+                // so the branch below would otherwise bounce to onboarding.
+                DemoBoardView()
+            } else if !auth.isSignedIn || onboarding.needsOnboarding {
                 OnboardingFlow()
             } else {
                 switch mode.role {

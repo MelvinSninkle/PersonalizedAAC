@@ -123,7 +123,7 @@ fun ListeningModeView(onDismiss: () -> Unit) {
             Spacer(Modifier.height(10.dp))
             Text(
                 "Turn the board into a live word-strip: speech near the tablet becomes tiles as it's said. " +
-                    "Audio is processed for live transcription only — no recording is kept — and it stops " +
+                    "Audio is processed for live transcription only, no recording is kept, and it stops " +
                     "itself after 2 minutes of quiet. Make sure everyone in the room is okay with it.",
                 fontSize = 13.sp, color = Brand.muted,
             )

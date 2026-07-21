@@ -137,10 +137,10 @@ fun DisplaySettingsView(onDismiss: () -> Unit) {
                     syncedMsg = null
                     confirmEasyUnlock = false
                 } else {
-                    syncedMsg = "That password didn't work — the unlock gate stays on."
+                    syncedMsg = "That password didn't work. The unlock gate stays on."
                 }
             } catch (_: Exception) {
-                syncedMsg = "That password didn't work — the unlock gate stays on."
+                syncedMsg = "That password didn't work. The unlock gate stays on."
             } finally {
                 unlockBusy = false
                 unlockPassword = ""
@@ -187,7 +187,7 @@ fun DisplaySettingsView(onDismiss: () -> Unit) {
 
             // ── Synced sections: everything below follows the child ──
             SectionHeader("BOARD TOOLS")
-            Text("Which buttons show in the board's header. Everything from here down follows your child — it applies on every device this board is used on.",
+            Text("Which buttons show in the board's header. Everything from here down follows your child. It applies on every device this board is used on.",
                 fontSize = 12.sp, color = Brand.muted)
             ToggleRow("🎙 Listening (live word strip)", toolListen) { on ->
                 toolListen = on; saveSynced("toolListen", on)
@@ -206,12 +206,12 @@ fun DisplaySettingsView(onDismiss: () -> Unit) {
             ToggleRow("New taps interrupt the word", tapInterrupt) { on ->
                 tapInterrupt = on; saveSynced("tapInterrupt", on)
             }
-            Text("Off: each word finishes before the next tap counts — steadier for new talkers.",
+            Text("Off: each word finishes before the next tap counts, steadier for new talkers.",
                 fontSize = 12.sp, color = Brand.muted)
             ToggleRow("Tap again to learn", doubleTapTeach) { on ->
                 doubleTapTeach = on; saveSynced("doubleTapTeach", on)
             }
-            Text("Tap a tile: hear the word. Tap again quickly: hear a fact — up to three facts on back-to-back taps, then the word again.",
+            Text("Tap a tile: hear the word. Tap again quickly: hear a fact, up to three facts on back-to-back taps, then the word again.",
                 fontSize = 12.sp, color = Brand.muted)
             if (doubleTapTeach) {
                 Text("How quick \"again\" has to be: ${"%.1f".format(teachTapSec)}s",
@@ -236,7 +236,7 @@ fun DisplaySettingsView(onDismiss: () -> Unit) {
                 easyClose = on; saveSynced("easyClose", on)
             }
             if (!easyClose) {
-                Text("✕ hold length: ${"%.1f".format(exitHoldSec)}s — longer is harder for a child to quit by accident.",
+                Text("✕ hold length: ${"%.1f".format(exitHoldSec)}s. Longer is harder for a child to quit by accident.",
                     fontSize = 12.sp, color = Brand.ink)
                 androidx.compose.material3.Slider(
                     value = exitHoldSec, valueRange = 0.3f..3f, steps = 26,
@@ -287,9 +287,9 @@ fun DisplaySettingsView(onDismiss: () -> Unit) {
                 Text("Skip the password on the board's lock?", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "This only changes the board's lock — your account password stays exactly " +
+                    "This only changes the board's lock. Your account password stays exactly " +
                         "the same for signing in everywhere. With this on, anyone holding this " +
-                        "device — including your child — can open edit mode, change or delete " +
+                        "device, including your child, can open edit mode, change or delete " +
                         "tiles, and reach the parent dashboard. Enter your account password once to confirm.",
                     fontSize = 13.sp, color = Brand.ink,
                 )

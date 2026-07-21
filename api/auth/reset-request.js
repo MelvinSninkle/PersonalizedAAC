@@ -36,11 +36,11 @@ export default async function handler(req, res) {
         const html = `
           <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1f2937;max-width:560px;margin:0 auto;padding:24px;">
             <h2 style="color:#ad1457;margin:0 0 12px;font-family:'Fredoka',system-ui;">Reset your My World password</h2>
-            <p>We got a request to reset the password for this account. Click below to choose a new one — the link expires in 1 hour.</p>
+            <p>We got a request to reset the password for this account. Click below to choose a new one. The link expires in 1 hour.</p>
             <p style="margin:22px 0;">
               <a href="${escapeHtml(url)}" style="display:inline-block;background:#ff1493;color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:999px;">Choose a new password →</a>
             </p>
-            <p style="font-size:12px;color:#6b7280;">If you didn't request this, you can safely ignore this email — your password won't change.</p>
+            <p style="font-size:12px;color:#6b7280;">If you didn't request this, you can safely ignore this email. Your password won't change.</p>
           </div>`;
         try { await sendEmail({ to: email, subject: 'Reset your My World password', html }); } catch (_) {}
       }

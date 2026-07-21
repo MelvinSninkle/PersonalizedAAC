@@ -66,7 +66,7 @@ struct WordShopView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Every image you make is your family's to keep — stored forever, even when you change one.")
+                Text("Every image you make is your family's to keep, stored forever, even when you change one.")
                     .font(.system(size: 13)).foregroundStyle(.secondary)
 
                 if let e = errorText {
@@ -223,11 +223,11 @@ struct WordShopView: View {
                 Text("🧩 ADD-ON BOARDS")
                     .font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(Color(hex: "#7c3aed"))
-                Text("Extra boards beyond the standard set — add them free with the shared pictures; styling them is what uses credits.")
+                Text("Extra boards beyond the standard set. Add them free with the shared pictures; styling them is what uses credits.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
                 ForEach(addonGroups, id: \.key) { g in freeBoardRow(g) }
             }
-            Text("FREE — COMMON USE BOARDS")
+            Text("FREE: COMMON USE BOARDS")
                 .font(.system(size: 12, weight: .heavy))
                 .foregroundStyle(Color(hex: "#047857"))
             Text("Add whole categories with the shared pictures for free. Remove keeps anything you personalized.")
@@ -494,7 +494,7 @@ struct WordShopView: View {
             tiles = await ShopCatalog.refresh(childId: auth.childSlug, api: api) ?? tiles
         } catch let APIError.badStatus(status, body) {
             errorText = (status == 402 || body.contains("not_enough_credits"))
-                ? "Not enough credits — add a pack on the Credits & Store screen first."
+                ? "Not enough credits. Add a pack on the Credits & Store screen first."
                 : "Bundle failed: \(String(body.prefix(120)))"
         } catch { errorText = "Bundle failed: \(error.localizedDescription)" }
     }
@@ -519,7 +519,7 @@ struct WordShopView: View {
             paQuote = try? await api.storePersonalizeAll(childId: auth.childSlug, quote: true)
         } catch let APIError.badStatus(status, body) {
             errorText = (status == 402 || body.contains("not_enough_credits"))
-                ? "Not enough credits — add a pack on the Credits & Store screen first."
+                ? "Not enough credits. Add a pack on the Credits & Store screen first."
                 : "Couldn't start: \(String(body.prefix(120)))"
         } catch { errorText = "Couldn't start: \(error.localizedDescription)" }
     }
@@ -532,11 +532,11 @@ struct WordShopView: View {
             let r = try await api.storeCheckout(childId: auth.childSlug, taxonomyIds: Array(cart))
             cart.removeAll()
             balance = r.balance ?? balance
-            note = r.note ?? "\(r.queued) words queued — they render in your child's style over the next few minutes."
+            note = r.note ?? "\(r.queued) words queued. They render in your child's style over the next few minutes."
             tiles = await ShopCatalog.refresh(childId: auth.childSlug, api: api) ?? tiles
         } catch let APIError.badStatus(status, body) {
             errorText = (status == 402 || body.contains("not_enough_credits"))
-                ? "Not enough credits — add a pack on the Credits & Store screen, then try again."
+                ? "Not enough credits. Add a pack on the Credits & Store screen, then try again."
                 : "Checkout failed: \(String(body.prefix(120)))"
         } catch {
             errorText = "Checkout failed: \(error.localizedDescription)"

@@ -112,7 +112,7 @@ struct LoginView: View {
                                               body: body, contentType: "application/json")
             resetMsg = "If that email has an account, a reset link is on its way. Check your inbox."
         } catch {
-            resetMsg = "Couldn't send the link — check your connection and try again."
+            resetMsg = "Couldn't send the link. Check your connection and try again."
         }
     }
 }

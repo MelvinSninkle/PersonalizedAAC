@@ -96,7 +96,7 @@ final class TileJob: Identifiable {
     }
     var phase: Phase = .working
     var progress: Double = 0
-    var statusText = "Saved — making the tile…"
+    var statusText = "Saved. Making the tile…"
 
     var label = ""
     /// Parent's optional "here's more info" detail passed to generation.
@@ -114,6 +114,13 @@ final class TileJob: Identifiable {
     /// The generated art's blob key once the server job is done — the tray
     /// swaps from the captured photo to the finished tile.
     var generatedImageKey: String?
+    /// #11 movie/show tiles: link ids stamped onto the landed item, the
+    /// keep-tall-poster flag, and a folder-by-name hint ("TV & Movies") the
+    /// server resolves to a leaf folder (creating it if needed).
+    var wikidataQid: String?
+    var imdbId: String?
+    var keepAspect = false
+    var folderHint: String?
 
     init(thumbnail: UIImage, photoJPEG: Data, section: BoardSection,
          categoryId: Int?, style: ArtStyle, model: String, bg: String, emotion: String,
@@ -204,7 +211,11 @@ final class AddTileQueue {
                  childId: String,
                  board: BoardStore,
                  batchId: UUID? = nil,
-                 needsReview: Bool = false) -> TileJob {
+                 needsReview: Bool = false,
+                 wikidataQid: String? = nil,
+                 imdbId: String? = nil,
+                 keepAspect: Bool = false,
+                 folderHint: String? = nil) -> TileJob {
         self.board = board
         self.childId = childId
         let thumb = UIImage(data: photoJPEG) ?? UIImage()
@@ -214,6 +225,10 @@ final class AddTileQueue {
                           needsReview: needsReview, raw: raw)
         job.label = prefilledLabel
         job.detail = prefilledDetail
+        job.wikidataQid = wikidataQid
+        job.imdbId = imdbId
+        job.keepAspect = keepAspect
+        job.folderHint = folderHint
         job.statusText = "Uploading photo…"
         job.progress = 0.05
         jobs.insert(job, at: 0)
@@ -255,18 +270,21 @@ final class AddTileQueue {
                 styleGuideId: nil,                 // server resolves the child's house style
                 model: job.model,
                 bg: job.bg,
-                keepAspect: false,
+                keepAspect: job.keepAspect,
                 needsReview: job.needsReview,
                 emotion: job.emotion,
                 childId: job.childId,
-                raw: job.raw)
+                raw: job.raw,
+                wikidataQid: job.wikidataQid,
+                imdbId: job.imdbId,
+                folder: job.folderHint)
             job.serverId = serverId
-            job.statusText = "Saved — making the tile…"
+            job.statusText = "Saved. Making the tile…"
             job.progress = max(job.progress, 0.15)
         } catch {
             job.phase = .needsAttention
             job.errorText = friendly(error)
-            job.statusText = "Upload failed — tap Retry"
+            job.statusText = "Upload failed. Tap Retry"
         }
     }
 
@@ -320,13 +338,13 @@ final class AddTileQueue {
                                                           imageKey: s.imageKey, childId: job.childId,
                                                           jobId: sid))
                 }
-                job.statusText = s.needsReview ? "✅ On the board — needs review"
-                    : (s.artFailed ? "✅ Saved your photo — art didn't render" : "✅ On the board")
+                job.statusText = s.needsReview ? "✅ On the board, needs review"
+                    : (s.artFailed ? "✅ Saved your photo. The art didn't render" : "✅ On the board")
             case "failed":
                 if s.attempts >= 3 {
                     job.phase = .needsAttention
                     job.errorText = s.error ?? "Didn't finish"
-                    job.statusText = "Didn't finish — tap Retry"
+                    job.statusText = "Didn't finish. Tap Retry"
                 } else {
                     job.statusText = "Trying again…"
                     job.progress = max(job.progress, 0.4)
@@ -421,7 +439,7 @@ final class AddTileQueue {
                     return "OpenAI organization isn't verified for image generation. Open platform.openai.com → Settings → Organization → Verify, then retry."
                 }
                 return body.isEmpty ? "Server error." : String(body.prefix(160))
-            case .notAuthenticated: return "Signed out — log in and retry."
+            case .notAuthenticated: return "Signed out. Log in and retry."
             case .transport(let e): return "Network problem: \(e.localizedDescription)"
             case .invalidResponse:  return "Unexpected server response."
             case .decoding:         return "Couldn't read the server's response."

@@ -68,6 +68,10 @@ export function rowToItem(r) {
     descriptions: Array.isArray(r.descriptions) ? r.descriptions : null,
     // Taxonomy teaching clues (attached in /api/sync) — spoken by "Teach me".
     descriptiveClues: Array.isArray(r.descriptive_clues) && r.descriptive_clues.length ? r.descriptive_clues : null,
+    // #11 movie/show tiles: metadata link only — the app never stores or
+    // serves poster artwork, just the ids the parent surfaces link out with.
+    wikidataQid: r.wikidata_qid || null,
+    imdbId: r.imdb_id || null,
     needsReview: !!r.needs_review,
   };
 }

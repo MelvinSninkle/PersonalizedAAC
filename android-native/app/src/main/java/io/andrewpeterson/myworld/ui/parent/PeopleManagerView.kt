@@ -120,7 +120,7 @@ fun PeopleManagerView(onDismiss: () -> Unit) {
 
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                 Text(
-                    "These faces anchor every tile about each person — feelings, actions, body parts, social phrases. Add a clear head-and-shoulders photo of each one.",
+                    "These faces anchor every tile about each person: feelings, actions, body parts, social phrases. Add a clear head-and-shoulders photo of each one.",
                     fontSize = 13.sp, color = Brand.muted,
                 )
                 Spacer(Modifier.height(12.dp))
@@ -252,9 +252,9 @@ private fun PersonEditorDialog(draft: PersonDraft, onDone: () -> Unit) {
                 error = when {
                     e is ApiClient.ApiError.BadStatus &&
                         (e.code == 402 || e.body.contains("not_enough_credits")) ->
-                        "You're out of image credits — open Credits & Store to add more."
+                        "You're out of image credits. Open Credits & Store to add more."
                     e is ApiClient.ApiError.BadStatus && e.body.contains("needs_subscription") ->
-                        "Adding styled people is part of My World memberships, from $9.99/month — join under Credits & Store."
+                        "Adding styled people is part of My World memberships, from $9.99/month. Join under Credits & Store."
                     else -> "Couldn't save: ${e.message}"
                 }
             } finally { saving = false }
@@ -291,7 +291,7 @@ private fun PersonEditorDialog(draft: PersonDraft, onDone: () -> Unit) {
                     color = Brand.pinkDeep, fontWeight = FontWeight.Bold)
             }
             Text(
-                if (isNew) "A clear head-and-shoulders photo works best. Only upload someone who's given you permission — it's used solely to draw their tile."
+                if (isNew) "A clear head-and-shoulders photo works best. Only upload someone who's given you permission. It's used solely to draw their tile."
                 else "Pick a new photo to replace their portrait, or leave it.",
                 fontSize = 12.sp, color = Brand.muted,
             )
@@ -301,8 +301,8 @@ private fun PersonEditorDialog(draft: PersonDraft, onDone: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Use my photo as-is", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Brand.ink)
-                        Text(if (useAsIs) "The photo itself becomes the tile — free."
-                             else "Drawn as a portrait in the board's art style — ⭐5.",
+                        Text(if (useAsIs) "The photo itself becomes the tile. Free."
+                             else "Drawn as a portrait in the board's art style, ⭐5.",
                             fontSize = 12.sp, color = Brand.muted)
                     }
                     Switch(checked = useAsIs, onCheckedChange = { if (stylingAllowed) useAsIs = it },
@@ -310,14 +310,14 @@ private fun PersonEditorDialog(draft: PersonDraft, onDone: () -> Unit) {
                         colors = SwitchDefaults.colors(checkedTrackColor = Brand.pink))
                 }
                 if (!stylingAllowed) {
-                    Text("Styled portraits are part of My World memberships — the exact photo (free) is used on the free plan.",
+                    Text("Styled portraits are part of My World memberships. The exact photo (free) is used on the free plan.",
                         fontSize = 12.sp, color = Brand.pinkDeep)
                 }
             }
 
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(value = name, onValueChange = { name = it },
-                label = { Text("Name — e.g. Grandma Jane, Dr. Lee") },
+                label = { Text("Name: e.g. Grandma Jane, Dr. Lee") },
                 singleLine = true, modifier = Modifier.fillMaxWidth())
 
             if (!draft.isSelf) {

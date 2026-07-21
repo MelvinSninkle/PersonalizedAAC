@@ -91,14 +91,14 @@ fun WordShopView(onDismiss: () -> Unit) {
         ShopCatalogCache.cached(context, c.auth.childSlug)?.let { if (tiles.isEmpty()) tiles = it }
         // 2) Fresh data streams in behind it.
         refreshCatalog()
-        if (tiles.isEmpty()) error = "Couldn't load the word library — check the connection."
+        if (tiles.isEmpty()) error = "Couldn't load the word library. Check the connection."
         balance = try { c.api.storeCatalog().balance } catch (_: Exception) { null }
         paQuote = try { c.api.storePersonalizeAll(c.auth.childSlug, quote = true) } catch (_: Exception) { null }
     }
 
     fun creditError(e: Exception, prefix: String): String =
         if (e is ApiClient.ApiError.BadStatus && (e.code == 402 || e.body.contains("not_enough_credits")))
-            "Not enough credits — add a pack on the Credits & Store screen first."
+            "Not enough credits. Add a pack on the Credits & Store screen first."
         else "$prefix: ${e.message}"
 
     // Confirm-before-spend rule: every credit spend states its cost + the
@@ -122,7 +122,7 @@ fun WordShopView(onDismiss: () -> Unit) {
                 val r = c.api.storeCheckout(c.auth.childSlug, ids, bundle = bundle)
                 if (!bundle) cart = emptySet()
                 r.balance?.let { balance = it }
-                note = r.note ?: "${r.queued} words queued — they render in your child's style over the next few minutes."
+                note = r.note ?: "${r.queued} words queued. They render in your child's style over the next few minutes."
                 refreshCatalog()
             } catch (e: Exception) { error = creditError(e, "Checkout failed") }
             busy = false
@@ -174,7 +174,7 @@ fun WordShopView(onDismiss: () -> Unit) {
                 if (column.isEmpty() && query.isEmpty()) {
                     // ── SHOP HOME: ribbons render instantly, catalog streams in ──
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-                        Text("Every image you make is your family's to keep — stored forever, even when you change one.",
+                        Text("Every image you make is your family's to keep, stored forever, even when you change one.",
                             fontSize = 13.sp, color = Brand.muted)
                         error?.let { Spacer(Modifier.height(6.dp)); Text(it, fontSize = 13.sp, color = Color(0xFFDC2626)) }
                         note?.let { Spacer(Modifier.height(6.dp)); Text(it, fontSize = 13.sp, color = hexColor("#047857"), fontWeight = FontWeight.SemiBold) }
@@ -205,7 +205,7 @@ fun WordShopView(onDismiss: () -> Unit) {
                                 ) {
                                     Text("✨ Personalize every tile", fontSize = 16.sp,
                                         fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
-                                    Text("${q.remaining} of ${q.total} tiles still wear the shared pictures. Finish the whole set in your child's style — 20% off.",
+                                    Text("${q.remaining} of ${q.total} tiles still wear the shared pictures. Finish the whole set in your child's style, 20% off.",
                                         fontSize = 13.sp, color = Brand.muted)
                                     Spacer(Modifier.height(8.dp))
                                     Button(
@@ -257,13 +257,13 @@ fun WordShopView(onDismiss: () -> Unit) {
                             if (addonGroups.isNotEmpty()) {
                                 Text("🧩 ADD-ON BOARDS", fontSize = 12.sp,
                                     fontWeight = FontWeight.Black, color = hexColor("#7c3aed"))
-                                Text("Extra boards beyond the standard set — add them free with the shared pictures; styling them is what uses credits.",
+                                Text("Extra boards beyond the standard set. Add them free with the shared pictures; styling them is what uses credits.",
                                     fontSize = 12.sp, color = Brand.muted)
                                 Spacer(Modifier.height(6.dp))
                             }
                             (addonGroups + listOf(null) + standardGroups).forEach { entry ->
                                 if (entry == null) {
-                                    Text("FREE — COMMON USE BOARDS", fontSize = 12.sp,
+                                    Text("FREE: COMMON USE BOARDS", fontSize = 12.sp,
                                         fontWeight = FontWeight.Black, color = hexColor("#047857"))
                                     Text("Add whole categories with the shared pictures for free. Remove keeps anything you personalized.",
                                         fontSize = 12.sp, color = Brand.muted)

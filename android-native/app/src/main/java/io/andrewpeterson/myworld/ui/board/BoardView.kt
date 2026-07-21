@@ -245,7 +245,7 @@ fun BoardView() {
             // tap to dismiss early.
             if (showEditHint) {
                 androidx.compose.material3.Text(
-                    "✋ Hold a tile until it lifts, then drag it onto another tile to reorder — or onto a folder chip to move it.",
+                    "✋ Hold a tile until it lifts, then drag it onto another tile to reorder, or onto a folder chip to move it.",
                     color = androidx.compose.ui.graphics.Color.White,
                     fontSize = 13.sp,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
@@ -304,7 +304,7 @@ fun BoardView() {
             },
             title = { androidx.compose.material3.Text("Speech-to-text is a membership feature") },
             text = { androidx.compose.material3.Text(
-                "Turn spoken words into picture tiles in real time — part of every My World membership, from $9.99/month. Join in the parent app under Credits & Store. Everything you've already made stays yours forever.") },
+                "Turn spoken words into picture tiles in real time, part of every My World membership, from $9.99/month. Join in the parent app under Credits & Store. Everything you've already made stays yours forever.") },
         )
     }
     if (showSttUnavailable) {
@@ -317,7 +317,7 @@ fun BoardView() {
             },
             title = { androidx.compose.material3.Text("Speech isn't supported on this device") },
             text = { androidx.compose.material3.Text(
-                "This device has no speech-recognition service (that's normal on Fire tablets). Everything else works — the board, games, Teach Me, and all of your personalized tiles.") },
+                "This device has no speech-recognition service (that's normal on Fire tablets). Everything else works: the board, games, Teach Me, and all of your personalized tiles.") },
         )
     }
 
