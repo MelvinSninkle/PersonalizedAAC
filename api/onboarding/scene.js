@@ -86,6 +86,19 @@ export default async function handler(req, res) {
     if (action === 'draft' || action === 'retry') {
       const b = (typeof req.body === 'object' && req.body) || {};
       const attempt = action === 'retry' ? (Number(b.attempt) > 0 ? Math.min(5, Math.floor(b.attempt)) : 1) : 0;
+      // Built-in template styles already carry an APPROVED objects reference
+      // (the style wizard's stuff ref) — show that instantly instead of making
+      // the parent wait 1-5 minutes for a fresh scene that proves the same
+      // thing. Retry still draws fresh (the parent asked for another look),
+      // and uploaded (ephemeral) styles always generate: their approved scene
+      // BECOMES the permanent anchor at commit.
+      if (action === 'draft' && styleGuideId) {
+        const sg0 = (await db`SELECT ephemeral, stuff_ref_key FROM style_guides WHERE id = ${styleGuideId} LIMIT 1`)[0];
+        if (sg0 && !sg0.ephemeral && sg0.stuff_ref_key) {
+          res.status(200).json({ ok: true, draftKey: sg0.stuff_ref_key, reused: true });
+          return;
+        }
+      }
       const styleGuide = await loadStyleGuide(db, styleGuideId);
       const draftKey = await generateScene({ db, childId, styleGuide, actorEmail: auth.user.email, attempt });
       res.status(200).json({ ok: true, draftKey });

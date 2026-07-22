@@ -588,12 +588,12 @@ export async function seedStatus(db, childId) {
   let recentImages = [];
   try {
     recentImages = (await db`
-      SELECT sj.image_key AS key, t.label
+      SELECT sj.image_key AS key, t.label, lower(t.column_name) AS section
       FROM seed_jobs sj LEFT JOIN taxonomy t ON t.id = sj.taxonomy_id
       WHERE sj.child_id = ${childId} AND sj.kind = 'render'
         AND sj.status = 'done' AND sj.image_key IS NOT NULL
       ORDER BY sj.updated_at DESC LIMIT 48`)
-      .map((r) => ({ key: r.key, label: r.label || '' }));
+      .map((r) => ({ key: r.key, label: r.label || '', section: r.section || '' }));
   } catch (_) { /* gallery is best-effort */ }
   return { active, recentImages, ...agg };
 }

@@ -2000,6 +2000,12 @@
   const SIZE_SCALE = [1, 1.5, 2];
   function clampSizeStep(v) { const n = parseInt(v, 10); return n === 1 || n === 2 ? n : 0; }
   let display = structuredClone(DISPLAY_DEFAULTS);
+  // The child's favorite-color banner from synced settings (kidDisplay).
+  // applyDisplay uses it as the header baseline UNLESS this device's parent
+  // explicitly picked header colors here — previously applyDisplay stamped
+  // its own default pink on every render, clobbering the onboarding pick.
+  let KID_HEADER = null;                 // { bg, text } | null
+  let headerSetByDevice = false;
   // Phone-mode column defaults (tuned ratio: People 2, Nouns 5, Verbs 2).
   // Applied ONLY when the parent hasn't chosen their own tiles-across on this
   // device — an explicit Display-panel choice always wins, phone or tablet.
@@ -2052,6 +2058,7 @@
         listenTileSize: clampSizeStep(raw.listenTileSize),
         topButtonSize:  clampSizeStep(raw.topButtonSize),
       };
+      headerSetByDevice = !!(raw.headerColors && (raw.headerColors.bg || raw.headerColors.text));
     } catch (_) { display = structuredClone(DISPLAY_DEFAULTS); }
   }
   function saveDisplay() { localStorage.setItem(DISPLAY_KEY, JSON.stringify(display)); }
@@ -2097,8 +2104,11 @@
       document.documentElement.style.setProperty(`--bg-${s}`, display.sectionColors[s]);
     }
     // Header bar bg + text — also CSS vars; header CSS uses var(--hdr-bg/--hdr-text).
-    document.documentElement.style.setProperty('--hdr-bg', display.headerColors.bg);
-    document.documentElement.style.setProperty('--hdr-text', display.headerColors.text);
+    // Baseline is the child's synced favorite color (KID_HEADER); an explicit
+    // header pick on THIS device wins over it.
+    const hdr = headerSetByDevice || !KID_HEADER ? display.headerColors : KID_HEADER;
+    document.documentElement.style.setProperty('--hdr-bg', hdr.bg);
+    document.documentElement.style.setProperty('--hdr-text', hdr.text);
     // Low-vision enlargement (#15): the CSS multiplies its base sizes by these.
     document.documentElement.style.setProperty('--listen-scale', String(SIZE_SCALE[display.listenTileSize] || 1));
     document.documentElement.style.setProperty('--topbtn-scale', String(SIZE_SCALE[display.topButtonSize] || 1));
@@ -5632,6 +5642,7 @@
   });
   document.getElementById('display-reset').addEventListener('click', () => {
     display = structuredClone(DISPLAY_DEFAULTS);
+    headerSetByDevice = false;   // back to the child's synced favorite color
     commitDisplay();
     populateDisplayModal();
   });
@@ -5648,9 +5659,9 @@
     });
   }
   const hdrBgEl = document.getElementById('disp-color-header-bg');
-  if (hdrBgEl) hdrBgEl.addEventListener('input', (e) => { display.headerColors.bg = sanitizeColor(e.target.value, display.headerColors.bg); commitDisplay(); });
+  if (hdrBgEl) hdrBgEl.addEventListener('input', (e) => { display.headerColors.bg = sanitizeColor(e.target.value, display.headerColors.bg); headerSetByDevice = true; commitDisplay(); });
   const hdrTxEl = document.getElementById('disp-color-header-text');
-  if (hdrTxEl) hdrTxEl.addEventListener('input', (e) => { display.headerColors.text = sanitizeColor(e.target.value, display.headerColors.text); commitDisplay(); });
+  if (hdrTxEl) hdrTxEl.addEventListener('input', (e) => { display.headerColors.text = sanitizeColor(e.target.value, display.headerColors.text); headerSetByDevice = true; commitDisplay(); });
   const sizeListenEl = document.getElementById('disp-size-listen');
   if (sizeListenEl) sizeListenEl.addEventListener('change', (e) => { display.listenTileSize = clampSizeStep(e.target.value); commitDisplay(); });
   const sizeTopEl = document.getElementById('disp-size-topbtn');
@@ -6084,9 +6095,11 @@
       applyTools();
       const kd = s.kidDisplay;
       if (kd && /^#[0-9a-fA-F]{6}$/.test(String(kd.colorHeaderBg || ''))) {
-        document.documentElement.style.setProperty('--hdr-bg', kd.colorHeaderBg);
-        document.documentElement.style.setProperty('--hdr-text',
-          /^#[0-9a-fA-F]{6}$/.test(String(kd.colorHeaderText || '')) ? kd.colorHeaderText : '#ffffff');
+        KID_HEADER = {
+          bg: kd.colorHeaderBg,
+          text: /^#[0-9a-fA-F]{6}$/.test(String(kd.colorHeaderText || '')) ? kd.colorHeaderText : '#ffffff',
+        };
+        applyDisplay();   // re-stamps the header vars through the baseline rule
       }
     } catch (_) {}
   }
