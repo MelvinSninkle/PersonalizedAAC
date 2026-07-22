@@ -129,19 +129,31 @@
 
   /* Try-it section (style picker + tile slots) */
   .try { background: white; border-top: 1px solid #fce4ec; border-bottom: 1px solid #fce4ec; }
+  /* Style cards, the onboarding look: image + name per card, equal sizes
+     (name lengths no longer set the shape), pink ring + gentle lift on the
+     selected one, which "blows up" into the big showcase image below. */
   .style-picker {
-    display: flex; flex-wrap: wrap; gap: 10px;
-    margin: 24px 0 36px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 14px; margin: 24px 0 36px;
   }
   .style-chip {
-    background: #fff7fb; color: #4b5563;
-    border: 2px solid #fce4ec; padding: 10px 18px;
-    border-radius: 999px; font-weight: 600; font-size: 14px;
+    background: white; color: #374151;
+    border: 2px solid #fce4ec; border-radius: 16px;
+    padding: 10px; text-align: center;
+    font-weight: 700; font-size: 14px; font-family: inherit;
     cursor: pointer;
-    transition: all .15s ease;
+    transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+  }
+  .style-chip img {
+    width: 100%; aspect-ratio: 16 / 10; object-fit: cover;
+    border-radius: 10px; display: block; margin-bottom: 8px;
   }
   .style-chip:hover { border-color: #f48fb1; }
-  .style-chip.active { background: #ff1493; color: white; border-color: #ff1493; }
+  .style-chip.active {
+    border-color: #ff1493;
+    transform: scale(1.04);
+    box-shadow: 0 8px 22px rgba(255, 20, 147, .18);
+  }
   .style-showcase { margin: 0; }
   .style-showcase img {
     width: 100%; max-width: 940px; height: auto; display: block; margin: 0 auto;
@@ -311,15 +323,20 @@
 
     <div class="style-picker" id="style-picker">
       <button class="style-chip active" data-style="3D animated" data-img="/styles/style-3d.jpg"
-        data-caption="3D Animated: bright, dimensional characters, like a still from an animated film.">3D Animated</button>
+        data-caption="3D Animated: bright, dimensional characters, like a still from an animated film.">
+        <img src="/styles/style-3d.jpg" alt="" loading="lazy">3D Animated</button>
       <button class="style-chip" data-style="picture book" data-img="/styles/style-picturebook.jpg"
-        data-caption="Picture Book: clean, flat illustration with friendly outlines.">Picture Book</button>
+        data-caption="Picture Book: clean, flat illustration with friendly outlines.">
+        <img src="/styles/style-picturebook.jpg" alt="" loading="lazy">Picture Book</button>
       <button class="style-chip" data-style="watercolor" data-img="/styles/style-watercolor.jpg"
-        data-caption="Watercolor: soft, painterly washes in vivid color.">Watercolor</button>
+        data-caption="Watercolor: soft, painterly washes in vivid color.">
+        <img src="/styles/style-watercolor.jpg" alt="" loading="lazy">Watercolor</button>
       <button class="style-chip" data-style="soft storybook" data-img="/styles/style-soft.jpg"
-        data-caption="Soft Storybook: gentle, muted tones for a calm, cozy feel.">Soft Storybook</button>
+        data-caption="Soft Storybook: gentle, muted tones for a calm, cozy feel.">
+        <img src="/styles/style-soft.jpg" alt="" loading="lazy">Soft Storybook</button>
       <button class="style-chip" data-style="felted" data-img="/styles/style-felted.jpg"
-        data-caption="Felted: warm, tactile needle-felt textures you almost want to touch.">Felted</button>
+        data-caption="Felted: warm, tactile needle-felt textures you almost want to touch.">
+        <img src="/styles/style-felted.jpg" alt="" loading="lazy">Felted</button>
     </div>
 
     <figure class="style-showcase">

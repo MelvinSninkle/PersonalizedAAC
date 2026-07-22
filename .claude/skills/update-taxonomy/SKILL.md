@@ -33,6 +33,11 @@ never a label rewrite.
   audit trail and validation are bypassed.
 - Migrations live in `api/init.js`; endpoints that read new columns must keep
   a pre-migration fallback query (try new-column SELECT, catch → old SELECT).
+- **Adding a taxonomy COLUMN: update the snapshot-restore INSERT in
+  `api/admin/_taxonomy-snapshots.js` in the same commit.** Snapshots store
+  full rows, but restore writes an explicit column list — a column missing
+  from that list is silently WIPED on every restore (this deleted all
+  descriptive_clues from production on 2026-07-21).
 
 ## Checklist for a NEW word (run every section)
 
