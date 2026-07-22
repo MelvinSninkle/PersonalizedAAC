@@ -20,9 +20,20 @@ export async function ensureProgress(db, user) {
   const existing = await db`SELECT user_id, child_id, step, data FROM onboarding_progress WHERE user_id = ${uid} LIMIT 1`;
   if (existing.length) return existing[0];
   const childId = user.slug || `parent-${uid}`;
+  // Legacy detection: accounts from before progress-tracking (or boards an
+  // admin hand-built) have no row but a fully populated board. Creating
+  // their first row at 'account' would read as "never onboarded" and
+  // auto-resume flows would bounce ESTABLISHED families into the wizard.
+  // A board only gains items at the seed step (the end of onboarding), so
+  // any real item count means they finished.
+  let firstStep = 'account';
+  try {
+    const n = (await db`SELECT COUNT(*)::int AS n FROM items WHERE child_id = ${childId}`)[0]?.n || 0;
+    if (n > 12) firstStep = 'complete';
+  } catch (_) { /* items table missing pre-init — 'account' is right */ }
   const created = await db`
     INSERT INTO onboarding_progress (user_id, child_id, step, data)
-    VALUES (${uid}, ${childId}, 'account', '{}'::jsonb)
+    VALUES (${uid}, ${childId}, ${firstStep}, '{}'::jsonb)
     RETURNING user_id, child_id, step, data`;
   return created[0];
 }

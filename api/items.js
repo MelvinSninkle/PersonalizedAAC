@@ -177,7 +177,8 @@ async function create(req, res, db, user) {
     childId = parents[0].child_id;
     ownerUserId = parents[0].owner_user_id;
   } else {
-    childId = String(((req.body && req.body.childId) || (req.query && req.query.childId) || 'fletcher')).slice(0, 64);
+    childId = String(((req.body && req.body.childId) || (req.query && req.query.childId) || '')).slice(0, 64);
+    if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
   }
 
   // Permission. Child-scoped → parent-of-child / admin. Template → owner / admin.

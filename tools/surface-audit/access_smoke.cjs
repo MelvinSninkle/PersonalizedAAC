@@ -26,7 +26,10 @@ const fails = [];
   page.on('pageerror', (e) => fails.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') console.log('  [console.error]', m.text().slice(0, 300)); });
 
-  await page.goto('http://127.0.0.1:8765/app.html', { waitUntil: 'networkidle' });
+  // /u/<slug> (not bare app.html): the board now REQUIRES a slug in the URL —
+  // a slugless load redirects to the launchpad instead of defaulting to any
+  // real child's board (the fletcherpeterson-default leak, fixed 2026-07-21).
+  await page.goto('http://127.0.0.1:8765/u/testchild', { waitUntil: 'networkidle' });
   await page.waitForFunction(() => document.querySelectorAll('.items-grid .tile-wrap').length > 3, { timeout: 15000 });
   // First-boot role picker covers the page in a fresh profile — enter kid mode.
   const roleBtn = page.locator('#role-modal .role-pick[data-role="child"]');

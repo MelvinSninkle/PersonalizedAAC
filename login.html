@@ -126,23 +126,29 @@
   // we show a launchpad so you can choose (e.g. go to onboarding or the admin
   // taxonomy instead of being forced into a child's view). `?next=` still wins.
   function linksFor(user) {
-    const slug = user.slug || 'fletcherpeterson';
+    // NEVER a fallback slug here. This once defaulted to a real child's
+    // board ('fletcherpeterson'), so any account the role branches missed
+    // (language_tester!) got a "Go to the board" link pointing at that
+    // family's board. No slug on the account = no board link, period —
+    // the only door is finishing setup.
+    const slug = user.slug || '';
     const out = [];
     if (user.role === 'therapist' || user.role === 'school_team') {
       const label = user.role === 'school_team' ? '🏫 My children' : '🧑‍⚕️ My children';
       out.push([label, '/therapist']);
     }
-    if (user.role === 'admin' || user.role === 'parent') {
-      if (user.slug) {
-        out.push(['👪 ' + slug + ' — parent dashboard', '/parent/' + encodeURIComponent(slug)]);
-        out.push(["🧒 " + slug + " — child board", '/u/' + encodeURIComponent(slug)]);
-      }
-      out.push(['📸 Set up a new child (onboard)', '/onboard']);
+    // Every account that owns a board gets its links — parent, admin, and
+    // feature-flag roles like language_tester alike (they're parents too).
+    if (slug && user.role !== 'therapist' && user.role !== 'school_team') {
+      out.push(['👪 ' + slug + ' — parent dashboard', '/parent/' + encodeURIComponent(slug)]);
+      out.push(["🧒 " + slug + " — child board", '/u/' + encodeURIComponent(slug)]);
     }
+    // /onboard RESUMES this signed-in account's setup where it left off — it
+    // never creates another account.
+    out.push([slug ? '📸 Set up or resume the board (onboarding)' : '📸 Finish setting up your child’s board', '/onboard']);
     if (user.role === 'admin') {
       out.push(['🧬 Taxonomy (admin)', '/admin/taxonomy.html']);
     }
-    if (!out.length) out.push(['🧒 Go to the board', '/u/' + encodeURIComponent(slug)]);
     return out;
   }
 
@@ -162,6 +168,25 @@
       // Honor an explicit ?next= (e.g. middleware bounced you here from a page),
       // otherwise show the launchpad instead of auto-redirecting.
       if (next) { msg.className = 'msg ok'; msg.textContent = 'Welcome! Continuing…'; location.assign(next); return; }
+      // Graceful resume: a family account that never FINISHED onboarding goes
+      // straight back into the flow (which resumes at their saved step) —
+      // no launchpad detour, no way to wander into an empty or wrong board.
+      // Admin/therapist/school accounts skip this (they manage many children,
+      // their own progress row is meaningless). Legacy completed accounts are
+      // safe: the server reports step 'complete' for any populated board.
+      const familyRole = !['admin', 'therapist', 'school_team'].includes(data.user.role);
+      if (familyRole) {
+        try {
+          const sr = await fetch('/api/onboarding/state', { credentials: 'same-origin' });
+          const sd = sr.ok ? await sr.json() : null;
+          if (sd && sd.step && sd.step !== 'complete') {
+            msg.className = 'msg ok';
+            msg.textContent = "Welcome back! Picking up your child's setup where you left off…";
+            location.assign('/onboard');
+            return;
+          }
+        } catch (_) { /* state unavailable — fall through to the launchpad */ }
+      }
       msg.textContent = '';
       $('login-form').style.display = 'none';
       $('show-forgot').parentElement.style.display = 'none';
