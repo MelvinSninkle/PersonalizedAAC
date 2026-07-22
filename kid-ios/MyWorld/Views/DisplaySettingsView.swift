@@ -153,10 +153,19 @@ struct DisplaySettingsView: View {
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 } header: {
-                    Text("Board tools")
+                    HStack(spacing: 6) {
+                        Text("Board tools")
+                        if !syncedLoaded { ProgressView().controlSize(.mini) }
+                    }
                 } footer: {
                     Text("Which buttons show in the board's header. Everything from here down follows your child. It applies on every device this board is used on.")
                 }
+                // Flips made before the server seed lands were silently
+                // DISCARDED (saveSynced guards on syncedLoaded) and then
+                // visually snapped back when the seed arrived — "the toggle
+                // won't flip." Disabled-until-loaded makes the wait honest
+                // and the first flip always real.
+                .disabled(!syncedLoaded)
 
                 // ── 3 · Touch & play (synced) ──
                 Section {
@@ -180,6 +189,7 @@ struct DisplaySettingsView: View {
                 } header: {
                     Text("Touch & play")
                 }
+                .disabled(!syncedLoaded)
 
                 // ── 4 · Listening (synced, E8) ──
                 Section("Listening") {
@@ -204,6 +214,7 @@ struct DisplaySettingsView: View {
                     Text("While listening runs, words your family says that aren't on the board yet appear in the parent dashboard to add, dismiss, or block. Only matched words are kept, never audio or transcripts.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                .disabled(!syncedLoaded)
 
                 // ── 5 · Safety & unlock (synced; enabling easyUnlock re-verifies
                 //      the account password — never a one-tap waiver) ──
@@ -254,6 +265,7 @@ struct DisplaySettingsView: View {
                 } header: {
                     Text("Safety & unlock")
                 }
+                .disabled(!syncedLoaded)
 
                 Section {
                     Button("Reset look to defaults") { prefs.resetToDefaults() }
