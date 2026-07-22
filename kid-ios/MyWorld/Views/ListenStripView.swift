@@ -156,17 +156,21 @@ struct ListenStripView: View {
         .frame(height: 92 * prefs.listenScale)
     }
 
-    /// A word matched twice IN A ROW = "show me": open that tile's category,
-    /// flash it yellow (BoardNav drives the section columns). Keyed by the
-    /// pair's stable source-word id so re-emitted partial transcripts don't
-    /// re-trigger. Mirrors the web board's maybeListenNavigate.
+    /// A word matched N times IN A ROW = "show me": open that tile's category,
+    /// flash it yellow (BoardNav drives the section columns). N is the
+    /// parent's listenRepeatCount (#12: Off/2/3; legacy blobs derive 2 from
+    /// the old boolean). Keyed by the run's last stable source-word id so
+    /// re-emitted partial transcripts don't re-trigger. Mirrors the web
+    /// board's maybeListenNavigate.
     private func maybeRepeatNavigate() {
-        guard access.listenRepeatNav else { return }
+        let n = access.listenRepeatCount
+        guard n >= 2 else { return }
         let toks = tokens
-        guard toks.count >= 2 else { return }
+        guard toks.count >= n else { return }
         var i = toks.count - 1
-        while i >= 1 {
-            if let a = toks[i].tile, let b = toks[i - 1].tile, a.id == b.id {
+        while i >= n - 1 {
+            if let a = toks[i].tile,
+               (1..<n).allSatisfy({ toks[i - $0].tile?.id == a.id }) {
                 let key = "\(a.id)@\(toks[i].id)"
                 if key == lastNavKey { return }
                 lastNavKey = key

@@ -46,6 +46,10 @@ final class AccessPrefs {
     var sentenceIdleMin: Int = 1              // 1–10 minutes
     var sentenceLift: String = "longpress"    // legacy — the pencil replaced lift gestures
     var listenRepeatNav: Bool = true
+    /// #12: how many times IN A ROW a word must be heard to jump to its tile.
+    /// 0 = off, 2 or 3. Absent on older settings blobs → derived from the
+    /// legacy listenRepeatNav boolean (true = 2). Parent-writable.
+    var listenRepeatCount: Int = 2
     // Header tools, parent-configurable for every family (default ON).
     var toolListen = true
     var toolTeach = true
@@ -81,6 +85,8 @@ final class AccessPrefs {
             sentenceIdleMin = (1...10).contains(m) ? m : 1
             sentenceLift = (s["sentenceLift"] as? String) == "drag" ? "drag" : "longpress"
             listenRepeatNav = (s["listenRepeatNav"] as? Bool) ?? true
+            let rc = (s["listenRepeatCount"] as? Int) ?? Int(s["listenRepeatCount"] as? Double ?? -1)
+            listenRepeatCount = [0, 2, 3].contains(rc) ? rc : (listenRepeatNav ? 2 : 0)
             toolListen = (s["toolListen"] as? Bool) ?? true
             toolTeach = (s["toolTeach"] as? Bool) ?? true
             toolPlay = (s["toolPlay"] as? Bool) ?? true

@@ -902,6 +902,18 @@
     border-radius: 6px;
     font-size: 16px;
   }
+  /* #17 quick-unlock PIN pad: tappable keys (no keyboard) + progress dots. */
+  .pin-key {
+    height: 60px; border-radius: 12px; border: 1px solid #eee;
+    background: #fdf2f8; color: #ad1457; font-size: 24px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+  }
+  .pin-key:active { background: #fce4ec; }
+  .pin-dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid #ad1457; background: transparent;
+  }
+  .pin-dot.filled { background: #ad1457; }
   .modal input[type="file"] {
     width: 100%;
     padding: 8px 0;
@@ -1297,12 +1309,29 @@
     <h3 id="login-title">Unlock editing</h3>
     <div id="login-desc" style="font-size:13px;color:#666;margin-bottom:8px;">Enter your account password to make changes.</div>
     <!-- #17: quick-unlock PIN pad — shown instead of the password field when
-         this device has a PIN set (and fewer than 5 failed tries). -->
+         this device has a PIN set (and fewer than 5 failed tries). A TAPPABLE
+         keypad, not a text input: no keyboard slides up, the unlock is
+         immediate (4th digit submits). -->
     <div id="login-pin-wrap" style="display:none;">
-      <label for="login-pin">Your 4-digit PIN</label>
-      <input type="password" id="login-pin" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off"
-             style="font-size:26px;letter-spacing:14px;text-align:center;">
-      <div style="margin-top:6px;font-size:13px;"><a href="#" id="login-use-pass" style="color:#ad1457;font-weight:600;text-decoration:none;">Use password instead</a></div>
+      <div style="text-align:center;font-size:13px;color:#666;">Enter this device's 4-digit PIN</div>
+      <div id="login-pin-dots" style="display:flex;justify-content:center;gap:16px;margin:14px 0;">
+        <span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span>
+      </div>
+      <div id="login-pin-pad" style="display:grid;grid-template-columns:repeat(3, 76px);gap:10px;justify-content:center;">
+        <button type="button" class="pin-key" data-d="1">1</button>
+        <button type="button" class="pin-key" data-d="2">2</button>
+        <button type="button" class="pin-key" data-d="3">3</button>
+        <button type="button" class="pin-key" data-d="4">4</button>
+        <button type="button" class="pin-key" data-d="5">5</button>
+        <button type="button" class="pin-key" data-d="6">6</button>
+        <button type="button" class="pin-key" data-d="7">7</button>
+        <button type="button" class="pin-key" data-d="8">8</button>
+        <button type="button" class="pin-key" data-d="9">9</button>
+        <span></span>
+        <button type="button" class="pin-key" data-d="0">0</button>
+        <button type="button" class="pin-key" id="login-pin-del" aria-label="Delete">⌫</button>
+      </div>
+      <div style="margin-top:10px;font-size:13px;text-align:center;"><a href="#" id="login-use-pass" style="color:#ad1457;font-weight:600;text-decoration:none;">Use password instead</a></div>
     </div>
     <label for="login-pass" id="login-label">Your password</label>
     <input type="password" id="login-pass" autocomplete="current-password">
@@ -3404,8 +3433,27 @@
     else { pinShowMode(false); }
   });
   document.getElementById('login-use-pass').addEventListener('click', (e) => { e.preventDefault(); pinShowMode(false); });
-  document.getElementById('login-pin').addEventListener('input', () => {
-    if (document.getElementById('login-pin').value.length === 4) attemptLogin();   // 4th digit submits
+  // Tappable keypad: digits accumulate in pinEntry (no text input, so no
+  // keyboard slides up); the 4th digit submits immediately.
+  let pinEntry = '';
+  function pinRenderDots() {
+    document.querySelectorAll('#login-pin-dots .pin-dot').forEach((d, i) => {
+      d.classList.toggle('filled', i < pinEntry.length);
+    });
+  }
+  document.getElementById('login-pin-pad').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.id === 'login-pin-del') {
+      pinEntry = pinEntry.slice(0, -1);
+      pinRenderDots();
+      return;
+    }
+    const d = btn.dataset.d;
+    if (d == null || pinEntry.length >= 4) return;
+    pinEntry += d;
+    pinRenderDots();
+    if (pinEntry.length === 4) attemptLogin();
   });
   document.getElementById('login-forgot').addEventListener('click', async (e) => {
     e.preventDefault();
@@ -3438,16 +3486,17 @@
     document.getElementById('login-pin-wrap').style.display = usePin ? '' : 'none';
     document.getElementById('login-label').style.display = usePin ? 'none' : '';
     document.getElementById('login-pass').style.display = usePin ? 'none' : '';
-    document.getElementById('login-pin').value = '';
+    pinEntry = '';
+    pinRenderDots();
     loginMode = usePin ? 'pin' : 'password';
-    (usePin ? document.getElementById('login-pin') : document.getElementById('login-pass')).focus();
+    if (!usePin) document.getElementById('login-pass').focus();   // pad needs no focus (no keyboard)
   }
 
   async function attemptLogin() {
     const errEl = document.getElementById('login-error');
     errEl.textContent = '';
     if (loginMode === 'pin') {
-      const pin = document.getElementById('login-pin').value;
+      const pin = pinEntry;
       if (!/^\d{4}$/.test(pin)) { errEl.textContent = 'Enter your 4-digit PIN'; return; }
       try {
         if ((await pinHash(pin)) === localStorage.getItem(PIN_KEY)) {
@@ -3463,7 +3512,8 @@
         pinShowMode(false);
         errEl.textContent = 'Too many PIN tries. Use your password.';
       } else {
-        document.getElementById('login-pin').value = '';
+        pinEntry = '';
+        pinRenderDots();
         errEl.textContent = 'Wrong PIN (' + (5 - fails) + ' tries left)';
       }
       return;
