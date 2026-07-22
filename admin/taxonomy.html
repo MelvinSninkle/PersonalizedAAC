@@ -150,6 +150,8 @@
   }
   .snap-row .restore { background: #4a90e2; color: white; }
   .snap-row .restore:hover { background: #3a7bc8; }
+  .snap-row .heal { background: #2f9e63; color: white; }
+  .snap-row .heal:hover { background: #268554; }
   .snap-row .delete { background: #fee2e2; color: #991b1b; }
   .snap-row .delete:hover { background: #fecaca; }
   .snap-row .diff   { background: #f0f9ff; color: #0c4a6e; }
@@ -691,7 +693,7 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
 <div class="modal-backdrop" id="snapshots-modal">
   <div class="modal">
     <h3>Snapshots</h3>
-    <div class="help">Every import auto-creates a snapshot. Snapshots are immutable; restoring one auto-creates a pre-restore snapshot first.</div>
+    <div class="help">Every import auto-creates a snapshot. Snapshots are immutable; restoring one auto-creates a pre-restore snapshot first. <b>Heal</b> is the gentle option: it fills back only wiped/empty columns (art keys, facts, variants, metadata) on rows that still exist — nothing is added, removed, or overwritten, so rows and edits made after the snapshot survive.</div>
 
     <div class="row2" style="margin-top:14px;">
       <div>
@@ -1497,13 +1499,14 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
     const list = document.getElementById('snap-list');
     if (!snaps.length) { list.innerHTML = '<div style="padding:16px;color:#888;font-size:13px;">No snapshots yet.</div>'; return; }
     list.innerHTML = snaps.map(s => `
-      <div class="snap-row" data-id="${s.id}" style="grid-template-columns: 1fr auto auto auto;">
+      <div class="snap-row" data-id="${s.id}" style="grid-template-columns: 1fr auto auto auto auto;">
         <div>
           <div class="label">${escapeHtml(s.label || '(no label)')}</div>
           ${s.note ? `<div class="note">${escapeHtml(s.note)}</div>` : ''}
           <div class="meta">#${s.id} · ${s.rowCount} rows · ${new Date(s.createdAt).toLocaleString()}</div>
         </div>
         <button class="diff"    data-action="diff">Diff</button>
+        <button class="heal"    data-action="heal">Heal</button>
         <button class="restore" data-action="restore">Restore</button>
         <button class="delete"  data-action="delete">Delete</button>
       </div>
@@ -1558,6 +1561,27 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
         const { snapshots } = await api('/api/admin/taxonomy?fn=snapshots');
         renderSnapshots(snapshots);
         alert(`Restored ${result.restored} rows.\nPre-restore snapshot: ${result.preRestoreSnapshot}`);
+      } else if (action === 'heal') {
+        // Dry-run first so the confirm shows exactly what would be filled.
+        const plan = await api('/api/admin/taxonomy?fn=snapshots&action=heal&id=' + id + '&dryRun=1', { method: 'POST' });
+        if (!plan.rowsToHeal) {
+          alert(`Nothing to heal from snapshot #${id} — every column it could fill is already set on all ${plan.matched} matching rows.`);
+          return;
+        }
+        const fieldLines = Object.entries(plan.fields || {})
+          .sort((a, b) => b[1] - a[1])
+          .map(([k, v]) => `  · ${k}: ${v} rows`).join('\n');
+        const msg = `Heal from snapshot #${id}?\n\n`
+          + `Non-destructive: fills wiped/empty columns on ${plan.rowsToHeal} of ${plan.matched} matching rows. `
+          + `No rows are added or removed; labels, statuses, prompts, and anything set since the snapshot stay as they are `
+          + `(${plan.liveUntouched} newer rows untouched).\n\nColumns to fill:\n${fieldLines}\n\n`
+          + `A pre-heal snapshot is taken first. Proceed?`;
+        if (!confirm(msg)) return;
+        const result = await api('/api/admin/taxonomy?fn=snapshots&action=heal&id=' + id, { method: 'POST' });
+        await loadRows();
+        const { snapshots } = await api('/api/admin/taxonomy?fn=snapshots');
+        renderSnapshots(snapshots);
+        alert(`Healed ${result.rowsToHeal} rows.\nPre-heal snapshot: ${result.preHealSnapshot}`);
       } else if (action === 'delete') {
         if (!confirm(`Delete snapshot #${id}? Cannot be undone.`)) return;
         await api('/api/admin/taxonomy?fn=snapshots&id=' + id, { method: 'DELETE' });
