@@ -29,6 +29,8 @@ struct DisplaySettingsView: View {
     @State private var teachTapSec = 2.0     // tap-to-learn rapid-tap window
     @State private var listenCensor = true
     @State private var listenTilesOnly = false
+    @State private var repeatCount = 2       // #12: 0 off / 2 / 3 in a row
+    @State private var suggestListening = false   // #10 consent (off by default)
     @State private var easyClose = false
     @State private var exitHoldSec = 1.2     // ✕ hold length when easyClose off
     @State private var easyUnlock = false
@@ -185,6 +187,22 @@ struct DisplaySettingsView: View {
                         .onChange(of: listenCensor) { _, v in saveSynced(["listenCensor": v]) }
                     Toggle("Only show words with tiles", isOn: $listenTilesOnly)
                         .onChange(of: listenTilesOnly) { _, v in saveSynced(["listenTilesOnly": v]) }
+                    // #12: hearing a word N times in a row jumps to its tile.
+                    Picker("Say a word twice to jump to its tile", selection: $repeatCount) {
+                        Text("Off").tag(0)
+                        Text("Twice in a row").tag(2)
+                        Text("3 times in a row").tag(3)
+                    }
+                    .onChange(of: repeatCount) { _, n in
+                        guard [0, 2, 3].contains(n) else { return }
+                        saveSynced(["listenRepeatCount": n, "listenRepeatNav": n > 0])
+                    }
+                    // #10: opt-in consent for the suggestion queue. Matched
+                    // words only (name + count), never audio or transcripts.
+                    Toggle("Suggest words your family says", isOn: $suggestListening)
+                        .onChange(of: suggestListening) { _, v in saveSynced(["suggestFromListening": v]) }
+                    Text("While listening runs, words your family says that aren't on the board yet appear in the parent dashboard to add, dismiss, or block. Only matched words are kept, never audio or transcripts.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
 
                 // ── 5 · Safety & unlock (synced; enabling easyUnlock re-verifies
@@ -310,6 +328,9 @@ struct DisplaySettingsView: View {
         teachTapSec = Double(TouchConfig.clampMs(s["teachTapMs"], 500, 5000, 2000)) / 1000.0
         listenCensor = (s["listenCensor"] as? Bool) ?? true
         listenTilesOnly = (s["listenTilesOnly"] as? Bool) ?? false
+        let rc = (s["listenRepeatCount"] as? Int) ?? Int(s["listenRepeatCount"] as? Double ?? -1)
+        repeatCount = [0, 2, 3].contains(rc) ? rc : (((s["listenRepeatNav"] as? Bool) ?? true) ? 2 : 0)
+        suggestListening = (s["suggestFromListening"] as? Bool) == true
         easyClose = (s["easyClose"] as? Bool) ?? false
         exitHoldSec = Double(TouchConfig.clampMs(s["exitHoldMs"], 300, 3000, 1200)) / 1000.0
         serverEasyUnlock = (s["easyUnlock"] as? Bool) ?? false

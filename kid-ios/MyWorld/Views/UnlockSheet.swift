@@ -42,20 +42,40 @@ struct UnlockSheet: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
 
-                    SecureField("PIN", text: $pin)
-                        .keyboardType(.numberPad)
-                        .multilineTextAlignment(.center)
-                        .font(.title2.monospaced())
-                        .padding(14)
-                        .background(.thinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                        .frame(maxWidth: 180)
-                        .onChange(of: pin) { _, v in
-                            let digits = v.filter(\.isNumber)
-                            if digits != v { pin = digits; return }
-                            if digits.count > 4 { pin = String(digits.prefix(4)); return }
-                            if digits.count == 4 { submitPin() }
+                    // Tappable pad, not a text field: no keyboard slides up,
+                    // the unlock is immediate (4th digit submits).
+                    HStack(spacing: 16) {
+                        ForEach(0..<4, id: \.self) { i in
+                            Circle()
+                                .strokeBorder(Color(hex: "#ad1457"), lineWidth: 2)
+                                .background(Circle().fill(i < pin.count ? Color(hex: "#ad1457") : .clear))
+                                .frame(width: 16, height: 16)
                         }
+                    }
+
+                    let keys: [[String]] = [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["", "0", "⌫"]]
+                    VStack(spacing: 10) {
+                        ForEach(keys, id: \.self) { row in
+                            HStack(spacing: 10) {
+                                ForEach(row, id: \.self) { key in
+                                    if key.isEmpty {
+                                        Color.clear.frame(width: 76, height: 60)
+                                    } else {
+                                        Button {
+                                            tapKey(key)
+                                        } label: {
+                                            Text(key)
+                                                .font(.system(size: 24, weight: .bold, design: .rounded))
+                                                .frame(width: 76, height: 60)
+                                                .foregroundStyle(Color(hex: "#ad1457"))
+                                                .background(Color(hex: "#fdf2f8"), in: RoundedRectangle(cornerRadius: 12))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     Button("Use password instead") {
                         pinMode = false
@@ -119,6 +139,16 @@ struct UnlockSheet: View {
                 pinMode = QuickPin.isSet && !QuickPin.lockedOut
             }
         }
+    }
+
+    private func tapKey(_ key: String) {
+        if key == "⌫" {
+            if !pin.isEmpty { pin.removeLast() }
+            return
+        }
+        guard pin.count < 4 else { return }
+        pin += key
+        if pin.count == 4 { submitPin() }
     }
 
     private func submitPin() {
