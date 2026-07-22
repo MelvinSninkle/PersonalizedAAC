@@ -1404,15 +1404,19 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
         const plan = await post(true);
         const mergeLines = (plan.mergedIntoExisting || []).slice(0, 12)
           .map((m) => `  ${m.from} → variants onto "${m.id}"`).join('\n');
+        const conflictLines = (plan.labelConflicts || []).slice(0, 12)
+          .map((c) => `  ${c.id}: "${c.from}" ≠ "${c.to}"`).join('\n');
         const msg = `Merge plan for ${rows.length} rows:\n\n`
-          + `INSERT as drafts: ${plan.inserted}\n`
+          + `INSERT as drafts (new ids): ${plan.inserted}\n`
+          + `ENRICH existing rows (clues/prompts/variants only; status, art & order untouched): ${plan.enriched || 0}`
+          + ` (+${plan.enrichedVariantAdds || 0} new listen variants)\n`
           + `Merge variants into existing labels: ${(plan.mergedIntoExisting || []).length}\n${mergeLines}\n`
-          + `Skip (id already exists): ${(plan.skippedExistingIds || []).length}\n`
+          + `REFUSED — label differs from the live row (renames are migrations, not imports): ${(plan.labelConflicts || []).length}\n${conflictLines}\n`
           + `Invalid rows: ${(plan.invalid || []).length}\n\n`
           + `A snapshot is taken first. Proceed?`;
         if (!confirm(msg)) return;
         const done = await post(false);
-        alert(`Merged: ${done.inserted} drafts inserted, ${(done.mergedIntoExisting || []).length} variant merges, ${(done.skippedExistingIds || []).length} skipped.`);
+        alert(`Merged: ${done.inserted} drafts inserted, ${done.enriched || 0} rows enriched (+${done.enrichedVariantAdds || 0} variants), ${(done.mergedIntoExisting || []).length} variant merges, ${(done.labelConflicts || []).length} label conflicts refused.`);
         location.reload();
       } catch (e) { alert('Merge failed: ' + (e.message || e)); }
     });

@@ -218,15 +218,29 @@
   </div>
 
   <style>
-    /* Founder letter + magic gallery (Phase 4) */
-    #magic-wrap { display:flex; gap:14px; align-items:stretch; margin-top:16px; text-align:left; }
-    #founder-letter { flex:1; background:#fff; border:1px solid var(--line); border-radius:14px;
-                      padding:18px 20px; font-size:14.5px; line-height:1.55; }
-    .magic-rail { width:78px; display:flex; flex-direction:column; gap:8px; justify-content:flex-start; }
-    @media (max-width: 900px) { .magic-rail { display:none; } }
-    #magic-strip { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:12px; }
-    .magic-thumb { width:78px; height:78px; border-radius:12px; border:1px solid var(--line);
-                   background:#fff center/cover no-repeat; opacity:0; transform:scale(.8);
+    /* Founder letter + the board filling itself in (Phase 4) */
+    #magic-wrap { margin-top:16px; text-align:left; }
+    #founder-letter { background:#fff; border:1px solid var(--line); border-radius:14px;
+                      padding:18px 20px; font-size:14.5px; line-height:1.55; max-width:640px; margin:0 auto; }
+    /* The mini board: the child's actual board shape — People | Things |
+       Actions columns + the needs strip — with each tile popping into ITS
+       place as the render finishes. Fills to a complete-looking board and
+       then stops (the real board holds the rest). */
+    #magic-board { margin-top:16px; background:#fff; border:1px solid var(--line);
+                   border-radius:16px; overflow:hidden; box-shadow:0 10px 28px rgba(0,0,0,.07); }
+    #magic-board .mb-header { background:var(--pink); color:#fff; font-family:Fredoka,ui-rounded,system-ui,sans-serif;
+                   font-weight:600; text-align:center; padding:8px 12px; font-size:15px; }
+    #magic-board .mb-cols { display:grid; grid-template-columns:1fr 2fr 1fr; }
+    #magic-board .mb-col { padding:8px; border-right:1px solid #f3f4f6; min-height:210px; }
+    #magic-board .mb-col:last-child { border-right:none; }
+    #magic-board .mb-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+                   color:var(--muted); text-align:center; margin-bottom:6px; }
+    #magic-board .mb-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(52px, 1fr)); gap:6px; }
+    #magic-board .mb-needs { display:flex; gap:6px; padding:8px; background:#fff7e6;
+                   border-top:1px solid #f3f4f6; overflow:hidden; }
+    #magic-board .mb-needs .magic-thumb { width:52px; flex:0 0 auto; }
+    .magic-thumb { aspect-ratio:1; width:100%; border-radius:10px; border:1px solid var(--line);
+                   background:#fff center/cover no-repeat; opacity:0; transform:scale(.6);
                    animation:magicIn .7s ease forwards; }
     @keyframes magicIn { to { opacity:1; transform:scale(1); } }
   </style>
@@ -243,11 +257,11 @@
       <div class="note" id="board-count"></div>
     </div>
 
-    <!-- Founder letter + live "magic gallery": each of the child's words
-         appears around the letter the moment its picture finishes rendering
-         server-side (keys from seed-core status → recentImages). -->
+    <!-- Founder letter + the board filling itself in: each of the child's
+         words pops into ITS spot on a mini board the moment its picture
+         finishes rendering server-side (seed-core status → recentImages,
+         routed by section). -->
     <div id="magic-wrap">
-      <div class="magic-rail" id="magic-left"></div>
       <div id="founder-letter">
         <h3 class="fred" style="font-size:17px;margin:0 0 10px;">A note from Andrew, while the magic happens</h3>
         <p>Hi, I'm Andrew. My son Fletcher is why this exists. He's bright and funny and
@@ -268,9 +282,16 @@
         <p style="margin-bottom:0;">– Andrew Peterson<br>
            <span class="note" style="font-size:12px;">Founder, My World Tap to Talk, and Fletcher's dad</span></p>
       </div>
-      <div class="magic-rail" id="magic-right"></div>
+      <div id="magic-board">
+        <div class="mb-header">🌍 <span class="magic-child-name">Your child</span>'s World</div>
+        <div class="mb-cols">
+          <div class="mb-col"><div class="mb-title">People</div><div class="mb-grid" id="mb-people"></div></div>
+          <div class="mb-col"><div class="mb-title">Things</div><div class="mb-grid" id="mb-nouns"></div></div>
+          <div class="mb-col"><div class="mb-title">Actions</div><div class="mb-grid" id="mb-verbs"></div></div>
+        </div>
+        <div class="mb-needs" id="mb-needs"></div>
+      </div>
     </div>
-    <div id="magic-strip"></div>
 
     <!-- Personal touches: while the board paints, capture the child's REAL
          favorites. Foods + toys each carry a ⭐3 gift (granted when the card
@@ -1108,20 +1129,22 @@
     } catch (err) { $('scene-msg').textContent = 'Could not save: ' + (err.message || err); $('scene-approve').disabled = false; $('scene-retry').disabled = false; }
   });
 
-  // ---- PHASE 4: the live magic gallery -------------------------------------
-  // Polls seed status for freshly finished renders and fades each one in
-  // around the founder letter: left rail → right rail → bottom strip.
-  const MAGIC = { timer: null, seen: new Set(), railCap: 7, stripCap: 30 };
+  // ---- PHASE 4: the board fills itself in ----------------------------------
+  // Polls seed status for freshly finished renders and pops each one into
+  // ITS place on the mini board (routed by taxonomy section). Each zone has
+  // a cap so the board fills to complete-looking and then holds — the real
+  // board carries the rest. Nothing appends forever.
+  const MAGIC = { timer: null, seen: new Set(),
+                  caps: { people: 12, nouns: 30, verbs: 12, needs: 9 } };
   function magicAdd(img) {
-    const left = $('magic-left'), right = $('magic-right'), strip = $('magic-strip');
-    if (!left || !strip) return;
+    const sec = ['people', 'verbs', 'needs'].includes(img.section) ? img.section : 'nouns';
+    const zone = $('mb-' + sec);
+    if (!zone || zone.children.length >= MAGIC.caps[sec]) return;
     const el = document.createElement('div');
     el.className = 'magic-thumb';
     el.title = img.label || '';
     el.style.backgroundImage = 'url("/api/media?key=' + encodeURIComponent(img.key) + '")';
-    if (left.children.length < MAGIC.railCap) left.appendChild(el);
-    else if (right.children.length < MAGIC.railCap) right.appendChild(el);
-    else if (strip.children.length < MAGIC.stripCap) strip.appendChild(el);
+    zone.appendChild(el);
   }
   function startMagicWatch() {
     if (MAGIC.timer) return;
