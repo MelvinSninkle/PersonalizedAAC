@@ -39,7 +39,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
   const b = (typeof req.body === 'object' && req.body) || {};
   const rows = Array.isArray(b.rows) ? b.rows : [];
-  if (!rows.length || rows.length > 1000) { res.status(400).json({ error: 'rows required (1-1000)' }); return; }
+  // 3000 covers a full master overlay (the live table is ~1,600 rows); the
+  // dispatcher runs at maxDuration 300 so ~1,300 sequential enrich UPDATEs
+  // fit comfortably.
+  if (!rows.length || rows.length > 3000) { res.status(400).json({ error: 'rows required (1-3000)' }); return; }
   const dryRun = b.dryRun === true;
 
   try {
