@@ -29,7 +29,9 @@ import snapshots from './_taxonomy-snapshots.js';
 
 // Modest bump over the platform default for the row-iterating ops
 // (bulk / import-board / snapshots). The original handlers had no config.
-export const config = { maxDuration: 60 };
+// 300s: the CSV merge's enrich pass runs one UPDATE per matched row — a
+// full master overlay (~1,300 rows) needs the headroom.
+export const config = { maxDuration: 300 };
 
 const HANDLERS = {
   'audit': audit,
