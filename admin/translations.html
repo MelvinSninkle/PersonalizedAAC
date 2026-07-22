@@ -53,8 +53,8 @@
   </select>
   <button id="seed">Seed bundled dictionary</button>
   <button id="export">Export CSV</button>
-  <button id="import">Import CSV…</button>
-  <input type="file" id="import-file" accept=".csv,text/csv" style="display:none;">
+  <button id="import">Import CSV/JSON…</button>
+  <input type="file" id="import-file" accept=".csv,.json,text/csv,application/json" style="display:none;">
   <span id="msg"></span>
   <div class="spacer"></div>
   <a class="back" href="/admin/">← Back to admin</a>
@@ -172,8 +172,34 @@
   $('import-file').addEventListener('change', async () => {
     const f = $('import-file').files[0];
     if (!f) return;
-    // Tiny CSV parser (quotes + commas) — headers: en,section,category,translation,pronunciation[,status]
     const text = await f.text();
+    // JSON: either the bundled-dictionary shape { entries: [{en, zh|t, ...}] }
+    // or a bare array of entries. The server's upsert already understands the
+    // t/zh/translation and pron/pronunciation aliases, so entries pass through.
+    if (/\.json$/i.test(f.name) || text.trim().startsWith('{') || text.trim().startsWith('[')) {
+      let entries = null;
+      try {
+        const parsed = JSON.parse(text);
+        entries = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.entries) ? parsed.entries : null);
+      } catch (_) { /* fall through to CSV if it wasn't JSON after all */ }
+      if (entries) {
+        const jrows = entries.filter((e) => e && typeof e.en === 'string' && e.en.trim());
+        if (!jrows.length) { $('msg').textContent = 'JSON has no usable entries (need objects with an "en" key)'; $('import-file').value = ''; return; }
+        if (!confirm('Import ' + jrows.length + ' JSON entries into ' + $('lang').value + '? Rows land as REVIEWED (an empty translation deletes the row).')) { $('import-file').value = ''; return; }
+        $('msg').textContent = 'Importing…';
+        try {
+          const d = await api('/api/admin/lab?action=translations', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ op: 'import', lang: $('lang').value, rows: jrows }),
+          });
+          $('msg').textContent = '✓ ' + d.upserted + ' upserted, ' + d.deleted + ' deleted, ' + d.skipped + ' skipped';
+          load();
+        } catch (e) { $('msg').textContent = String(e.message || e); }
+        $('import-file').value = '';
+        return;
+      }
+    }
+    // Tiny CSV parser (quotes + commas) — headers: en,section,category,translation,pronunciation[,status]
     const rows = [];
     let cur = [''], inQ = false, line = cur;
     const out = [line];
