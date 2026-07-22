@@ -168,6 +168,25 @@
       // Honor an explicit ?next= (e.g. middleware bounced you here from a page),
       // otherwise show the launchpad instead of auto-redirecting.
       if (next) { msg.className = 'msg ok'; msg.textContent = 'Welcome! Continuing…'; location.assign(next); return; }
+      // Graceful resume: a family account that never FINISHED onboarding goes
+      // straight back into the flow (which resumes at their saved step) —
+      // no launchpad detour, no way to wander into an empty or wrong board.
+      // Admin/therapist/school accounts skip this (they manage many children,
+      // their own progress row is meaningless). Legacy completed accounts are
+      // safe: the server reports step 'complete' for any populated board.
+      const familyRole = !['admin', 'therapist', 'school_team'].includes(data.user.role);
+      if (familyRole) {
+        try {
+          const sr = await fetch('/api/onboarding/state', { credentials: 'same-origin' });
+          const sd = sr.ok ? await sr.json() : null;
+          if (sd && sd.step && sd.step !== 'complete') {
+            msg.className = 'msg ok';
+            msg.textContent = "Welcome back! Picking up your child's setup where you left off…";
+            location.assign('/onboard');
+            return;
+          }
+        } catch (_) { /* state unavailable — fall through to the launchpad */ }
+      }
       msg.textContent = '';
       $('login-form').style.display = 'none';
       $('show-forgot').parentElement.style.display = 'none';
