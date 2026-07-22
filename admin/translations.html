@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Translations — admin</title>
+<style>
+  :root { --pink:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#faf7f9; }
+  header {
+    position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--line);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; padding:12px 18px;
+  }
+  header h1 { font-size:18px; margin:0; margin-right:6px; }
+  .spacer { flex:1; }
+  a.back { color:var(--pink); text-decoration:none; font-size:13px; }
+  select, button, input[type="text"] { font:inherit; padding:7px 11px; border:1px solid var(--line); border-radius:9px; background:#fff; }
+  button { cursor:pointer; }
+  button.primary { background:var(--pink); color:#fff; border-color:var(--pink); }
+  main { padding:16px 18px 80px; max-width:1180px; margin:0 auto; }
+  .chips { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; }
+  .chip { background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 14px; font-size:12px; color:var(--muted); }
+  .chip b { display:block; font-size:19px; color:var(--ink); margin-bottom:1px; }
+  .chip.warn b { color:#b45309; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:12px; margin-bottom:16px; overflow:hidden; }
+  .panel .head { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); background:#fdf7fa; }
+  .panel h2 { margin:0; font-size:13px; font-weight:700; color:var(--pink); text-transform:uppercase; letter-spacing:.04em; }
+  .panel .sub { font-size:12px; color:var(--muted); }
+  .tablewrap { overflow-x:auto; max-height:60vh; overflow-y:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { text-align:left; padding:6px 12px; border-bottom:1px solid #f3f4f6; white-space:nowrap; }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); background:#fbfbfc; position:sticky; top:0; }
+  td input { width:140px; padding:4px 8px; font-size:13px; }
+  .tag { font-size:11px; font-weight:700; border-radius:999px; padding:2px 9px; }
+  .tag.machine { background:#eff6ff; color:#1d4ed8; }
+  .tag.reviewed { background:#ecfdf5; color:#047857; }
+  .missing { padding:12px 14px; font-size:13px; line-height:1.9; }
+  .missing code { background:#fef2f2; color:#b91c1c; border-radius:6px; padding:1px 7px; margin-right:4px; display:inline-block; }
+  .note { font-size:12px; color:var(--muted); padding:8px 14px; border-top:1px solid #f3f4f6; }
+  #msg { font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌐 Translations</h1>
+  <select id="lang">
+    <option value="zh">Chinese (Simplified)</option>
+    <option value="es">Spanish</option>
+    <option value="fr">French</option>
+    <option value="pt">Portuguese</option>
+    <option value="de">German</option>
+  </select>
+  <button id="seed">Seed bundled dictionary</button>
+  <button id="export">Export CSV</button>
+  <button id="import">Import CSV…</button>
+  <input type="file" id="import-file" accept=".csv,text/csv" style="display:none;">
+  <span id="msg"></span>
+  <div class="spacer"></div>
+  <a class="back" href="/admin/">← Back to admin</a>
+</header>
+<main>
+  <div class="chips" id="chips"></div>
+
+  <div class="panel">
+    <div class="head"><h2>Missing words</h2><span class="sub">Taxonomy labels with no translation yet. New batches show up here until covered.</span></div>
+    <div class="missing" id="missing">Loading…</div>
+  </div>
+
+  <div class="panel">
+    <div class="head">
+      <h2>Dictionary</h2>
+      <span class="sub">Edit a translation or pronunciation and press Enter to save. Your edits become <b>reviewed</b>; the machine seed never overwrites reviewed rows.</span>
+      <input type="text" id="filter" placeholder="filter…" style="margin-left:auto;font-size:12px;padding:4px 10px;">
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>English</th><th>Section</th><th>Category</th><th>Translation</th><th>Pronunciation (spoken)</th><th>Status</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="note">English is the identity, never edited here. The CSV round-trip is the native-reviewer loop: Export → they correct the translation/pronunciation columns → Import. Imported rows land as reviewed. After changing translations, re-push sounds from Publish so existing boards pick up new audio.</div>
+  </div>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  let data = null;
+
+  async function api(path, opts) {
+    const r = await fetch(path, { credentials: 'same-origin', ...opts });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    return d;
+  }
+
+  function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+  async function load() {
+    $('msg').textContent = 'Loading…';
+    try {
+      data = await api('/api/admin/lab?action=translations&lang=' + $('lang').value);
+      render();
+      $('msg').textContent = '';
+    } catch (e) { $('msg').textContent = String(e.message || e); }
+  }
+
+  function render() {
+    const c = data.coverage || {};
+    $('chips').innerHTML =
+      '<div class="chip"><b>' + (data.entries || []).length + '</b>dictionary rows</div>' +
+      '<div class="chip"><b>' + (c.translated ?? '–') + ' / ' + (c.taxonomyLabels ?? '–') + '</b>taxonomy labels covered</div>' +
+      '<div class="chip' + ((c.missingWords || []).length ? ' warn' : '') + '"><b>' + (c.missingWords || []).length + '</b>missing words</div>' +
+      '<div class="chip"><b>' + (data.entries || []).filter((e) => e.status === 'reviewed').length + '</b>native-reviewed</div>';
+    $('missing').innerHTML = (c.missingWords || []).length
+      ? c.missingWords.map((w) => '<code>' + esc(w) + '</code>').join(' ')
+      : 'None. Every live taxonomy label has a translation. 🎉';
+    drawRows();
+  }
+
+  function drawRows() {
+    const f = $('filter').value.trim().toLowerCase();
+    const rows = (data.entries || []).filter((e) => !f
+      || e.en.includes(f) || (e.label || '').toLowerCase().includes(f)
+      || (e.section || '').includes(f) || (e.category || '').includes(f));
+    $('rows').innerHTML = rows.slice(0, 800).map((e, i) =>
+      '<tr data-i="' + i + '">'
+      + '<td>' + esc(e.en) + '</td><td>' + esc(e.section || '') + '</td><td>' + esc(e.category || '') + '</td>'
+      + '<td><input class="tr" data-en="' + esc(e.en) + '" data-section="' + esc(e.section || '') + '" data-category="' + esc(e.category || '') + '" value="' + esc(e.label || '') + '"></td>'
+      + '<td><input class="pr" data-en="' + esc(e.en) + '" data-section="' + esc(e.section || '') + '" data-category="' + esc(e.category || '') + '" value="' + esc(e.pronunciation || '') + '"></td>'
+      + '<td><span class="tag ' + esc(e.status) + '">' + esc(e.status) + '</span></td></tr>'
+    ).join('') || '<tr><td colspan="6">No rows. Seed the bundled dictionary to start.</td></tr>';
+  }
+
+  $('rows').addEventListener('keydown', async (ev) => {
+    if (ev.key !== 'Enter') return;
+    const inp = ev.target.closest('input');
+    if (!inp) return;
+    const row = inp.closest('tr');
+    const tr = row.querySelector('.tr'), pr = row.querySelector('.pr');
+    $('msg').textContent = 'Saving…';
+    try {
+      await api('/api/admin/lab?action=translations', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op: 'set', lang: $('lang').value, en: inp.dataset.en,
+          section: inp.dataset.section, category: inp.dataset.category,
+          zh: tr.value.trim(), pron: pr.value.trim() }),
+      });
+      $('msg').textContent = '✓ Saved';
+      row.querySelector('.tag').className = 'tag reviewed';
+      row.querySelector('.tag').textContent = 'reviewed';
+    } catch (e) { $('msg').textContent = String(e.message || e); }
+  });
+
+  $('seed').addEventListener('click', async () => {
+    $('msg').textContent = 'Seeding…';
+    try {
+      const d = await api('/api/admin/lab?action=translations', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op: 'seed', lang: $('lang').value }),
+      });
+      $('msg').textContent = '✓ ' + d.added + ' added, ' + d.keptReviewed + ' reviewed kept';
+      load();
+    } catch (e) { $('msg').textContent = String(e.message || e); }
+  });
+
+  $('export').addEventListener('click', () => {
+    window.open('/api/admin/lab?action=translations&lang=' + $('lang').value + '&csv=1', '_blank');
+  });
+
+  $('import').addEventListener('click', () => $('import-file').click());
+  $('import-file').addEventListener('change', async () => {
+    const f = $('import-file').files[0];
+    if (!f) return;
+    // Tiny CSV parser (quotes + commas) — headers: en,section,category,translation,pronunciation[,status]
+    const text = await f.text();
+    const rows = [];
+    let cur = [''], inQ = false, line = cur;
+    const out = [line];
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQ) {
+        if (ch === '"' && text[i + 1] === '"') { line[line.length - 1] += '"'; i++; }
+        else if (ch === '"') inQ = false;
+        else line[line.length - 1] += ch;
+      } else if (ch === '"') inQ = true;
+      else if (ch === ',') line.push('');
+      else if (ch === '\n' || ch === '\r') { if (line.length > 1 || line[0]) { line = ['']; out.push(line); } }
+      else line[line.length - 1] += ch;
+    }
+    const head = out[0].map((h) => h.trim().toLowerCase());
+    const idx = (n) => head.indexOf(n);
+    for (const l of out.slice(1)) {
+      if (!l.some((c) => c.trim())) continue;
+      rows.push({ en: l[idx('en')] || '', section: l[idx('section')] || '', category: l[idx('category')] || '',
+        zh: l[idx('translation')] || '', pron: l[idx('pronunciation')] || '' });
+    }
+    if (!rows.length) { $('msg').textContent = 'CSV looks empty'; return; }
+    if (!confirm('Import ' + rows.length + ' rows into ' + $('lang').value + '? Rows land as REVIEWED (an empty translation deletes the row).')) return;
+    $('msg').textContent = 'Importing…';
+    try {
+      const d = await api('/api/admin/lab?action=translations', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op: 'import', lang: $('lang').value, rows }),
+      });
+      $('msg').textContent = '✓ ' + d.upserted + ' upserted, ' + d.deleted + ' deleted, ' + d.skipped + ' skipped';
+      load();
+    } catch (e) { $('msg').textContent = String(e.message || e); }
+    $('import-file').value = '';
+  });
+
+  $('filter').addEventListener('input', drawRows);
+  $('lang').addEventListener('change', load);
+  load();
+})();
+</script>
+</body>
+</html>
