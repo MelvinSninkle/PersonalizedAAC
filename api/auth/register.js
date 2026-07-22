@@ -181,10 +181,15 @@ export default async function handler(req, res) {
       await applyInvitePerks(db, Number(user.id), req, invCode);
 
       // Drop a session cookie so they walk straight into /onboard signed in.
+      // The role MUST come from the user row, not a literal: applyRoleGrant
+      // above may have just made this account a language_tester/therapist,
+      // and a 'parent'-stamped cookie would hide their unlocks (non-English
+      // voices, the language picker) for the entire first session — the
+      // exact "pre-designated tester sees no Chinese voice at signup" bug.
       const secret = process.env.SESSION_SECRET;
       if (secret) {
         const exp = Date.now() + SESSION_MAX_AGE * 1000;
-        const token = await signSession({ uid: Number(user.id), email: user.email, role: 'parent', slug, exp }, secret);
+        const token = await signSession({ uid: Number(user.id), email: user.email, role: user.role || 'parent', slug, exp }, secret);
         res.setHeader('Set-Cookie', serializeCookie(token));
       }
       try { await db`UPDATE users SET last_login_at = NOW() WHERE id = ${user.id}`; } catch (_) {}
