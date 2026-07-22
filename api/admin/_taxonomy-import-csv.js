@@ -86,7 +86,7 @@ export default async function handler(req, res) {
           ${txt(r.phase) || 'v1_extended'}, ${bool(r.core)}, ${txt(r.growth_stage)}, ${txt(r.meal_context)},
           ${bool(r.is_gestalt)}, ${txt(r.gestalt_type)}, ${txt(r.gestalt_meaning)}, ${txt(r.gestalt_target_words)},
           ${txt(r.descriptive_clues)}, ${txt(r.audience) || 'universal'}, ${txt(r.authoring_kind) || 'canonical'},
-          'draft', ${txt(r.notes)}, ${txt(r.prompt_template)},
+          'draft', ${txt(r.notes)}, ${txt(r.prompt_template) ?? ''},
           ${Number.isFinite(parseInt(r.sort_order, 10)) ? parseInt(r.sort_order, 10) : null}
         ) ON CONFLICT (id) DO NOTHING`;
     }

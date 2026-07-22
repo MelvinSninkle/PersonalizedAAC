@@ -107,22 +107,53 @@ async function write(req, res, db) {
     // because the Neon serverless API issues each statement separately; if a
     // partial state is left behind, the pre-restore snapshot above is the
     // recovery path.
+    //
+    // ⚠️ EVERY taxonomy column must be written back here. Snapshots STORE
+    // full rows (SELECT *), but this INSERT once listed only the original 18
+    // columns — restoring silently WIPED everything added since
+    // (descriptive_clues, match_terms, sort_order, default_image_key, the
+    // age/growth/meal metadata, gestalt + personalization fields). That
+    // exact failure deleted the teaching facts from production on
+    // 2026-07-21. When a migration adds a taxonomy column, add it HERE in
+    // the same commit (the update-taxonomy skill checklist says so too).
     await db`DELETE FROM taxonomy`;
     for (const r of payload) {
       await db`
         INSERT INTO taxonomy (
           id, column_name, category, subcategory, label, pronunciation,
           prompt_template, subject_mode, parent_photo_behavior, phase, notes,
-          status, archived, created_at, created_by, updated_at, updated_by, published_at
+          status, archived, created_at, created_by, updated_at, updated_by, published_at,
+          core, growth_stage, acquisition_age, is_event, event_key, meal_context,
+          is_gestalt, gestalt_type, gestalt_meaning, gestalt_target_words,
+          descriptive_clues, representation_levels, place_kind,
+          audience, authoring_kind, roles_present, objects_present,
+          has_relationship, related_images, personalized,
+          default_image_key, sort_order, match_terms
         ) VALUES (
           ${r.id}, ${r.column_name}, ${r.category ?? null}, ${r.subcategory ?? null},
           ${r.label}, ${r.pronunciation ?? null},
-          ${r.prompt_template}, ${r.subject_mode}, ${r.parent_photo_behavior},
+          ${r.prompt_template ?? ''}, ${r.subject_mode}, ${r.parent_photo_behavior},
           ${r.phase ?? 'v1_core'}, ${r.notes ?? null},
           ${r.status ?? 'draft'}, ${!!r.archived},
           ${r.created_at ?? new Date().toISOString()}, ${r.created_by ?? ACTOR},
           ${r.updated_at ?? new Date().toISOString()}, ${r.updated_by ?? ACTOR},
-          ${r.published_at ?? null}
+          ${r.published_at ?? null},
+          ${r.core === false ? false : true}, ${r.growth_stage ?? null}, ${r.acquisition_age ?? null},
+          ${!!r.is_event}, ${r.event_key ?? null}, ${r.meal_context ?? null},
+          ${!!r.is_gestalt}, ${r.gestalt_type ?? null}, ${r.gestalt_meaning ?? null},
+          ${Array.isArray(r.gestalt_target_words) ? r.gestalt_target_words : null},
+          ${Array.isArray(r.descriptive_clues) ? r.descriptive_clues : null},
+          ${r.representation_levels == null ? null : JSON.stringify(r.representation_levels)}::jsonb,
+          ${r.place_kind ?? null},
+          ${r.audience ?? 'universal'}, ${r.authoring_kind ?? 'canonical'},
+          ${Array.isArray(r.roles_present) ? r.roles_present : null},
+          ${Array.isArray(r.objects_present) ? r.objects_present : null},
+          ${!!r.has_relationship},
+          ${Array.isArray(r.related_images) ? r.related_images : null},
+          ${!!r.personalized},
+          ${r.default_image_key ?? null},
+          ${Number.isFinite(Number(r.sort_order)) && r.sort_order !== null ? Number(r.sort_order) : null},
+          ${Array.isArray(r.match_terms) ? r.match_terms : null}
         )
       `;
     }
