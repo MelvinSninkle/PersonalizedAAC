@@ -47,9 +47,13 @@ export default async function handler(req, res) {
       clientId: typeof e.clientId === 'string' ? e.clientId.slice(0, 64) : null,
       childId: (typeof e.childId === 'string' && e.childId) ? e.childId.slice(0, 64)
              : (typeof body.childId === 'string' && body.childId) ? body.childId.slice(0, 64)
-             : 'fletcher',
+             : null,
       occurredAt,
     });
+    // No fallback child — an event with no child attribution can't be
+    // access-checked or usefully stored, so it's dropped, never defaulted
+    // onto a real family's analytics.
+    if (!rows[rows.length - 1].childId) rows.pop();
   }
   if (rows.length === 0) {
     res.status(200).json({ ok: true, count: 0 });

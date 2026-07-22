@@ -85,7 +85,8 @@ async function create(req, res, db, user) {
   } else {
     // Top-level category. Templates use /api/therapist/boards; this falls back
     // to legacy per-child scoping (the existing parent organizer + kid board).
-    childId = String((b.childId || (req.query && req.query.childId) || 'fletcher')).slice(0, 64);
+    childId = String((b.childId || (req.query && req.query.childId) || '')).slice(0, 64);
+    if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
   }
 
   if (childId != null) {

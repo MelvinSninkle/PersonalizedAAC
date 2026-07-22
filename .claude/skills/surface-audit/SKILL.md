@@ -42,6 +42,21 @@ admin`; "the Lab" = admin pages under /admin backed by
 ## A. Cross-family media isolation (the one that can never fail)
 
 **A1. Every child-scoped endpoint verifies roster access before touching data.**
+- **A1b. No childId ever DEFAULTS to a real child, anywhere.** Server: a
+  missing childId is a 400 (sync/items/categories) or the event is dropped
+  (events) — grep `|| 'fletcher'` in api/ must return only the legacy
+  init.js column DEFAULTs. Client: app.html requires a /u/<slug> URL
+  (slugless loads redirect to the launchpad); login.html's launchpad emits
+  NO board link for slugless accounts. The 2026-07-21 incident: the
+  launchpad's `user.slug || 'fletcherpeterson'` fallback plus app.html's
+  identical default sent a language_tester to the operator's family board,
+  where the shared-device IndexedDB cache rendered it. Which is why:
+- **A1c. The local board cache is bound to ONE account.** app.html stores
+  `aacCacheOwner` (the signed-in email); a different email on the same
+  device wipes IndexedDB + aac* localStorage before anything renders, and a
+  403 from /api/sync wipes and bounces to the launchpad instead of leaving
+  cached tiles on screen. VERIFY both paths exist whenever loadSession /
+  resyncIfChanged change.
 - Enforced: `canAccessChild(auth.user, childId)` from `api/_lib/access.js`
   (deny-by-default; admin bypasses; roster row required otherwise).
 - Verify: for every routed file in `api/` that reads `childId` from

@@ -26,7 +26,10 @@ export default async function handler(req, res) {
     return;
   }
 
-  const childId = String((req.query && req.query.childId) || 'fletcher').slice(0, 64);
+  // No fallback child — a missing childId is a caller bug, never a license
+  // to serve a real family's board.
+  const childId = String((req.query && req.query.childId) || '').slice(0, 64);
+  if (!childId) { res.status(400).json({ error: 'childId required' }); return; }
 
   try {
     const db = sql();

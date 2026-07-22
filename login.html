@@ -126,23 +126,29 @@
   // we show a launchpad so you can choose (e.g. go to onboarding or the admin
   // taxonomy instead of being forced into a child's view). `?next=` still wins.
   function linksFor(user) {
-    const slug = user.slug || 'fletcherpeterson';
+    // NEVER a fallback slug here. This once defaulted to a real child's
+    // board ('fletcherpeterson'), so any account the role branches missed
+    // (language_tester!) got a "Go to the board" link pointing at that
+    // family's board. No slug on the account = no board link, period —
+    // the only door is finishing setup.
+    const slug = user.slug || '';
     const out = [];
     if (user.role === 'therapist' || user.role === 'school_team') {
       const label = user.role === 'school_team' ? '🏫 My children' : '🧑‍⚕️ My children';
       out.push([label, '/therapist']);
     }
-    if (user.role === 'admin' || user.role === 'parent') {
-      if (user.slug) {
-        out.push(['👪 ' + slug + ' — parent dashboard', '/parent/' + encodeURIComponent(slug)]);
-        out.push(["🧒 " + slug + " — child board", '/u/' + encodeURIComponent(slug)]);
-      }
-      out.push(['📸 Set up a new child (onboard)', '/onboard']);
+    // Every account that owns a board gets its links — parent, admin, and
+    // feature-flag roles like language_tester alike (they're parents too).
+    if (slug && user.role !== 'therapist' && user.role !== 'school_team') {
+      out.push(['👪 ' + slug + ' — parent dashboard', '/parent/' + encodeURIComponent(slug)]);
+      out.push(["🧒 " + slug + " — child board", '/u/' + encodeURIComponent(slug)]);
     }
+    // /onboard RESUMES this signed-in account's setup where it left off — it
+    // never creates another account.
+    out.push([slug ? '📸 Set up or resume the board (onboarding)' : '📸 Finish setting up your child’s board', '/onboard']);
     if (user.role === 'admin') {
       out.push(['🧬 Taxonomy (admin)', '/admin/taxonomy.html']);
     }
-    if (!out.length) out.push(['🧒 Go to the board', '/u/' + encodeURIComponent(slug)]);
     return out;
   }
 

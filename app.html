@@ -1910,7 +1910,16 @@
   // future bookmarks land on a clean URL.
   const SLUG_RE = /^\/u\/([^\/]+)/;
   const __slugMatch = window.location.pathname.match(SLUG_RE);
-  const CHILD_ID = __slugMatch ? decodeURIComponent(__slugMatch[1]) : 'fletcherpeterson';
+  // No slug in the URL → this device's remembered board, else the launchpad.
+  // NEVER a literal fallback: this used to default to a real child's slug,
+  // which pointed every slugless load (and its cached render) at that
+  // family's board.
+  const __rememberedSlug = (() => { try { return localStorage.getItem('aacChildSlug') || ''; } catch (_) { return ''; } })();
+  if (!__slugMatch) {
+    window.location.replace(__rememberedSlug ? '/u/' + encodeURIComponent(__rememberedSlug) : '/login');
+    throw new Error('redirecting to a scoped board URL');
+  }
+  const CHILD_ID = decodeURIComponent(__slugMatch[1]);
 
   // The child's first name — drives "<Name>'s World" titles, role labels, and
   // reward cheers. Comes from the persons row with is_self (the canonical source),
@@ -2120,12 +2129,46 @@
   let sessionUser = null;   // { email, role, slug } from /api/auth/me, or null
   let loginMode = 'password';
 
+  // Cross-account cache isolation: the local board cache (IndexedDB + aac*
+  // keys) belongs to ONE signed-in account. If a DIFFERENT account signs in
+  // on this device (shared iPad, a tester on the family machine), the old
+  // family's cached tiles must never render — the server's 403 protects the
+  // network, this protects the disk. Wipes everything aac* except the
+  // device-role marker, then reloads clean.
+  async function wipeLocalBoardCache() {
+    try { if (db) { db.close(); db = null; } } catch (_) {}
+    await new Promise((resolve) => {
+      try {
+        const req = indexedDB.deleteDatabase(DB_NAME);
+        req.onsuccess = req.onerror = req.onblocked = () => resolve();
+      } catch (_) { resolve(); }
+    });
+    try {
+      const keep = new Set(['aacDeviceRole']);
+      for (const k of Object.keys(localStorage)) {
+        if (k.startsWith('aac') && !keep.has(k)) localStorage.removeItem(k);
+      }
+    } catch (_) {}
+  }
+
   // Who's logged in on this device. Editing is gated to admin/parent roles.
   async function loadSession() {
     try {
       const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
       if (r.ok) { const d = await r.json(); sessionUser = (d && d.user) || null; }
     } catch (_) { sessionUser = null; }
+    try {
+      const OWNER_KEY = 'aacCacheOwner';
+      const owner = (localStorage.getItem(OWNER_KEY) || '').toLowerCase();
+      const email = sessionUser && sessionUser.email ? String(sessionUser.email).toLowerCase() : '';
+      if (email && owner && owner !== email) {
+        await wipeLocalBoardCache();
+        try { localStorage.setItem(OWNER_KEY, email); } catch (_) {}
+        window.location.replace('/login');   // launchpad routes them to THEIR board
+        return;
+      }
+      if (email && !owner) localStorage.setItem(OWNER_KEY, email);
+    } catch (_) {}
     // Therapist view is a day-two feature — admin only. Hide the option to make
     // it (or open it) from this device for everyone else.
     try {
@@ -2136,7 +2179,9 @@
       }
     } catch (_) {}
   }
-  function canEdit() { return !!sessionUser && (sessionUser.role === 'admin' || sessionUser.role === 'parent'); }
+  // language_tester is a parent with a feature flag — same edit rights on
+  // their own board (the server enforces the roster either way).
+  function canEdit() { return !!sessionUser && ['admin', 'parent', 'language_tester'].includes(sessionUser.role); }
   const objectURLs = new Map();
   const activeCategoryId = { people: null, nouns: null, verbs: null };
 
@@ -3810,6 +3855,14 @@
     try {
       const showAll = (() => { try { return localStorage.getItem('aacShowAllVocab') === '1'; } catch (_) { return false; } })();
       const r = await apiFetch('/api/sync?childId=' + encodeURIComponent(CHILD_ID) + (showAll ? '&showAllVocab=1' : ''));
+      if (r.status === 403) {
+        // This account is NOT on this board's roster. Cached tiles must not
+        // outlive that answer — wipe this device's board cache and bounce to
+        // the launchpad, which routes them to THEIR board.
+        await wipeLocalBoardCache();
+        window.location.replace('/login');
+        return;
+      }
       if (!r.ok) return;
       const data = await r.json();
       noteEntitlement(data);   // tier flags refresh even when the board itself is unchanged
