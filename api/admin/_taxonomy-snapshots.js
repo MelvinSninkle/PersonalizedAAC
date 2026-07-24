@@ -266,6 +266,10 @@ async function heal(req, res, db) {
     matched: payload.length - notInLive.length,
     rowsToHeal: updates.length,
     fields,
+    // Which of the reported columns take the snapshot's value outright rather
+    // than filling a NULL — the confirm dialog flags these, because a
+    // deliberate post-snapshot edit to one of them IS reverted by a heal.
+    defaultedColumns: Object.keys(HEAL_DEFAULTED),
     notInLiveCount: notInLive.length,
     notInLive: notInLive.slice(0, 50),
     liveUntouched: live.length - (payload.length - notInLive.length),

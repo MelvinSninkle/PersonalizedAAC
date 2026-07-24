@@ -1,6 +1,6 @@
 # Session handoff — read me first in a new thread
 
-Last updated: **2026-07-20**. This is the working-context document for whoever
+Last updated: **2026-07-24**. This is the working-context document for whoever
 (human or agent) picks up the project next. Deep product docs live in
 `docs/OWNERS-MANUAL.md` and `docs/runbooks/`; this file is the *state of play*.
 
@@ -8,18 +8,22 @@ Last updated: **2026-07-20**. This is the working-context document for whoever
 
 - **Branch**: all work on `claude/onboarding-photo-upload-huw9jx` in
   MelvinSninkle/PersonalizedAAC. Commit + push **every wave** — containers
-  recycle. If the open PR has merged, restart the branch from `origin/main`
-  (same name) before new work.
-- **Commit trailers** (exact):
-  `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` and the
-  `Claude-Session:` link the harness provides. Never put a model ID in
-  commits, PRs, code comments, or any pushed artifact.
+  recycle.
+- **⚠️ The branch is currently FULLY MERGED into main (0 commits ahead).**
+  Per the rule above, the first action in a new thread is to restart it from
+  main before any new work:
+  `git fetch origin main && git checkout -B claude/onboarding-photo-upload-huw9jx origin/main`
+  Do NOT stack new commits on the already-merged history.
+- **Commit trailers** (exact): the `Co-Authored-By:` and `Claude-Session:`
+  trailers the harness provides. Never put a model ID in commits, PRs, code
+  comments, or any pushed artifact.
 - **Verify before every commit**: `node --check` on touched API files; the
   inline-JS `new Function()` check on touched HTML; brace/paren deltas vs
   HEAD on touched Swift/Kotlin; `bash tools/surface-audit/invariants.sh`
   (expect **18 PASS**); both Playwright smokes (`access_smoke.cjs`,
   `practice_smoke.cjs`) against `python3 tools/surface-audit/stub_server.py`
-  (start with a PID file, `sleep 3`, never `pkill -f`).
+  (start with a PID file, `sleep 3`, never `pkill -f` — it matches your own
+  shell and kills the session).
 - **Skills**: `surface-audit` after touching api//app.html/parent.html/
   onboard.html/store.html/kid-ios//android-native/; `new-endpoint` before any
   new route (89/100 Vercel functions used — prefer actions on dispatchers);
@@ -29,14 +33,38 @@ Last updated: **2026-07-20**. This is the working-context document for whoever
   picks up new Swift files; `localStorage` keys keep their `aac*` names
   (renaming breaks installed devices); A-PUBLIC = exactly four public media
   prefixes; the practice board must never expose live TTS.
+- **No native compiler exists in this environment.** No `swiftc`/`xcodebuild`,
+  no committed `gradlew`, and CI never touches `kid-ios/` or
+  `android-native/`. ~36K lines of Swift/Kotlin are verifiable here only by
+  reading + brace/paren deltas. Every native change needs Andrew's Xcode or
+  Android Studio to be *actually* proven. Say so plainly when you ship one.
 
 ## State of play
 
-- **PR #141** (branch → main) is OPEN with ~35 commits: landing refresh +
-  marketing images + middleware `marketing/` exclusion (fixes the broken
-  production hero), two-tier pricing, launch gating, waitlist, practice-board
-  polish, enrollment economics, App Store prep fixes. **Everything below the
-  merge line is blocked on the owner clicking merge.**
+- **All branch work through PR #156 is merged and deployed** (merge commits,
+  original SHAs preserved — `d727c08` is in main). Nothing is pending review.
+  Web/server deploys the moment main moves (Vercel Git integration: merging
+  IS deploying), so everything below is live.
+- **Two production incidents on 2026-07-21, both fixed in code:**
+  1. **Lossy snapshot restore.** The restore INSERT listed only the original
+     18 taxonomy columns while snapshots store full `SELECT *` rows, so every
+     restore silently WIPED every column added since launch —
+     `default_image_key`, `descriptive_clues`, `match_terms`, `sort_order`,
+     and the growth/meal/gestalt/audience metadata. This is what deleted the
+     tap-to-learn facts from production. Fixed in `2bfb979` (restore now
+     writes all ~40 columns) and `d727c08` (new non-destructive **heal** mode,
+     `?fn=snapshots&action=heal`, which repairs columns in place instead of
+     wipe-and-replace). **The code fix does not undo the data loss — see the
+     next section.**
+  2. **Cross-family board exposure.** `login.html` and `app.html` both
+     defaulted a slugless user to the literal `'fletcherpeterson'`, so a
+     tester account's "Go to the board" rendered the operator's own family
+     board from the shared-device IndexedDB cache (the server 403 held; the
+     leak was client-side). Fixed in `c7af7ad`: no fallback slug, app.html
+     requires `/u/<slug>`, `aacCacheOwner` wipes the local cache when the
+     signed-in email changes, sync 403 wipes and bounces, and
+     sync/items/categories now 400 on a missing childId. Recorded as
+     standing invariants **A1b/A1c** in the surface-audit skill.
 - **Pricing (owner decisions, enforced in code)**: Plus $9.99/⭐50, Pro
   $19.99/⭐150; Starter hidden (`hidden: true`, sku valid for comps); no
   discounts; packs need a membership; enrollment debit
@@ -72,20 +100,80 @@ Last updated: **2026-07-20**. This is the working-context document for whoever
   fallbacks) + env/Resend/Stripe-webhook steps. Must land BEFORE the final
   Xcode archive if it's going in this build.
 
+## ⚠️ Production data state — UNVERIFIED, check this first
+
+As of **2026-07-22**, production taxonomy was still carrying the damage from
+the lossy restore. Evidence: `GET /api/demo` returned `"tiles": []` with a
+healthy `folders`, `voices`, and `styles` payload — meaning **no taxonomy row
+had a `default_image_key`**, so the practice board's filter
+(`styledTiles.get(r.id) || r.default_image_key` in `api/demo.js`) dropped all
+~1,613 rows. The public practice board rendered empty with the message "The
+practice board isn't available right now" and no style picker (`boot()` in
+`practice.html` returns before `renderStyles()` when tiles are empty — the
+missing picker is a symptom, not a second bug).
+
+**Whether the recovery has been run is UNKNOWN.** The heal code deployed
+2026-07-22; the button is Andrew's to click. Verify before assuming:
+
+1. `GET /api/demo` → is `tiles` populated? (Response is CDN-cached ~1h:
+   `s-maxage=3600`, so allow for staleness right after a fix.)
+2. Admin → Taxonomy → Snapshots, or the `taxonomy_audit` table → is there a
+   `heal` row?
+
+If not yet done, the recovery sequence is:
+
+1. **Snapshots → Heal** from a snapshot dated **before 2026-07-21**. Not
+   Restore — restore is wipe-and-replace and would delete the 417 rows added
+   since. Not the newer auto-snapshots (`pre-csv-import-*`, `pre-restore-*`)
+   — those captured the already-wiped state.
+2. **Merge batch** the 1,237-row master overlay (enrich mode: expect ~1,196
+   enriched / ~41 inserted / 0 refused). Run it AFTER the heal so the
+   overlay's improved dinosaur/insect facts and listen variants win.
+3. Confirm `/api/demo` returns tiles, and that tapping a tile twice on a real
+   board cycles its three facts again.
+
+**Heal caveat worth reading before confirming**: `HEAL_DEFAULTED` in
+`api/admin/_taxonomy-snapshots.js` (`core`, `is_event`, `is_gestalt`,
+`audience`, `authoring_kind`, `has_relationship`, `personalized`) always takes
+the snapshot's value, because a wipe stamps the NOT NULL DDL default and a
+NULL check cannot detect the damage. Correct for recovery, but it means a
+deliberate edit to one of those seven fields made *after* the snapshot gets
+reverted. The dry-run surfaces this as a per-column row count — read those
+seven numbers before confirming. The nullable columns are safe (they fill
+only where currently NULL) and `match_terms` merges as a union.
+
+**The 1,237-row overlay CSV is NOT in the repo** — it lived only in the
+session upload dir and dies with the container. Andrew holds the original.
+Only the 417-row batch is committed (`data/taxonomy-additions-2026-07.csv`).
+
 ## Owner's next actions (in order)
 
-1. **Merge PR #141** → Vercel deploys → images/waitlist/pricing live.
-2. Create the three invite codes; run the Stripe sandbox test-card loop
+1. **Run the taxonomy recovery above** (heal → overlay merge → verify demo).
+   This is the release blocker: the public practice board is the top of the
+   funnel and it is currently empty.
+2. Check for duplicate-label rows from the 417-row batch — it merged with an
+   exact `+417` row delta, which suggests it inserted without label-merge
+   donation. Search "go" and "eat" in the taxonomy workbench.
+3. Register store-only boards in Lab → Boards (Food expansion, Movies & Shows,
+   More core words) **before** publishing the new draft rows, so ~290
+   canonical rows never hit default placement or style-build totals.
+4. Chinese tester: seed `zh` in Admin → Translations (or import the JSON
+   dictionary), confirm the board language, then Lab → Publish → push sounds
+   for that child. Tile taps play pre-rendered clips only, so an existing
+   board needs the push to speak Chinese.
+5. Create the three invite codes; run the Stripe sandbox test-card loop
    (4242… → ⭐50 lands → pack unlocks → portal cancel).
-3. Decide the domain flip (tell the agent; it's a code batch).
-4. Xcode: bump build, archive, upload → TestFlight on the family iPads.
-5. Version 1.0 page: screenshots (iPhone + iPad, from the NEW build),
+6. Decide the domain flip (tell the agent; it's a code batch).
+7. Xcode: bump build, archive, upload → TestFlight on the family iPads. **A
+   large batch of Swift has accumulated with no compile verification** (see
+   the wave list below) — expect to fix build errors on this pass.
+8. Version 1.0 page: screenshots (iPhone + iPad, from the NEW build),
    description/keywords, support URL, copyright "2026 My World Tap to Talk
    LLC", review notes with **bypass invite code + demo account**.
-6. Each of the 7 IAPs: review screenshot + "Add for Review".
-7. Submit. (US-only availability; Free app price.)
+9. Each of the 7 IAPs: review screenshot + "Add for Review". Then submit.
+   (US-only availability; Free app price.)
 
-## Known open items (from the pre-payments audit, still unfixed)
+## Known open items
 
 - Web Sign-in-with-Apple needs the Services ID updated with the new domain.
 - store.html "Manage billing" 404s for Apple-billed subs before explaining.
@@ -97,89 +185,85 @@ Last updated: **2026-07-20**. This is the working-context document for whoever
 - One taxonomy render was blocked as "prohibited": **Marlin** reads as the
   Finding Nemo character in 3D-animation styles — fix by prompting the fish's
   anatomy, then check for similar name-collision words.
+- Native drag-pickup thresholds still need on-device tuning with Andrew (the
+  failure mode to avoid: every tile-touch reading as a grab).
+- Deferred native ports: #10 listening-suggestion capture, #16 clue fields,
+  and the Android mirrors of several iOS-only additions from this wave.
+- Deferred iOS polish (previously planned in detail): split `CameraCapture`'s
+  `.blocked` phase into `.blocked(restricted:)` from
+  `AVCaptureDevice.authorizationStatus(for: .video)`, leading the copy with
+  the Screen Time steps when `.restricted` and with the Open Settings button
+  when `.denied` (`kid-ios/MyWorld/Views/CameraPicker.swift`).
+
+## What shipped 2026-07-21 → 07-22 (since the last handoff)
+
+Requirements queue #10–#17 finished earlier; this wave is the field-bug and
+polish run on top of it, driven by Andrew's real device testing and the first
+Chinese tester onboarding.
+
+- **Taxonomy importer, enrich mode** (`5d8ba33`, `3f6e6ef`): an id match now
+  performs a targeted COALESCE-only UPDATE (clues, prompt, pronunciation,
+  category, growth, meal, notes, sort) with `match_terms` merged, instead of
+  skipping. A differing label is refused as a rename/migration, never applied.
+  Row cap 1000 → 3000 and dispatcher `maxDuration` 60 → 300 so a full master
+  overlay fits. Also fixed: skeleton rows don't require a prompt, drinks/treat
+  meal contexts accepted, and a `text[]` insert bug (`cluesArr`/`wordsArr`).
+- **Snapshot safety** (`2bfb979`, `d727c08`): full-column restore + heal mode
+  (above). The `update-taxonomy` skill now requires new columns to be added to
+  BOTH the restore INSERT and the heal lists in the same commit.
+- **Cross-family exposure fix** (`c7af7ad`) and **granted-role signup cookie**
+  (`d846142` — `register.js` signed sessions with a hardcoded `'parent'` after
+  applying the role grant, which is why the Chinese voice was invisible at
+  signup; affected accounts self-heal on re-login).
+- **Onboarding**: incomplete family accounts resume at their saved step after
+  login (`fc364d5`, admin/therapist/school keep the launchpad; legacy accounts
+  detected by item count); favorite-color banner no longer clobbered by the
+  per-device display default; built-in style samples reuse `stuff_ref_key`
+  instantly; the magic gallery became a mini board filling in by section with
+  per-section caps (`80744d8`).
+- **Translations workbench** (`47e773b`, `d14bd3f`): the admin surface that
+  was missing entirely — seed, coverage, missing-words, inline edit, CSV
+  **and** JSON import.
+- **Tap-to-learn** (`8dde6f2`): facts cycle one at a time and are
+  non-interruptible on all three platforms; the repeat window restarts at the
+  END of speech. (The "facts are missing" report was the restore wipe, not
+  this code — the data path was verified end to end.)
+- **iOS**: native quick PIN + keypad entry on both surfaces, easy-unlock
+  toggle desync fixed (seed/onChange race), synced settings sections disabled
+  until the seed lands, sentence-drag toggle surfaced, #15 low-vision
+  enlargement, #12 repeat-nav picker and #10 suggest toggle ported
+  (`8978187`, `de854b5`, `cba52d5`, `6449e9c`, `4bd5b20`).
+- **Landing**: style picker became the onboarding-style card grid (`5bea398`).
+
+## Documentation accuracy notes
+
+- **`docs/native-parity-backlog.md` is stale (last touched 2026-07-02) and now
+  actively wrong.** Its headline item A1 claims kid-ios has "no drag code at
+  all"; iOS has since shipped `DragGesture`-based reorder (`SectionColumn`,
+  `CategoryStrips`, `BoardStore`, `APIClient`). Re-verify every item against
+  the source before building from it — do not rebuild shipped work.
+- The skills in `.claude/skills/` ARE current and are the most reliable
+  documentation in the repo; `surface-audit` in particular carries the
+  invariants with their enforcement points and verify commands. Prefer them
+  over any narrative doc, this one included, when the two disagree.
 
 ## Owner context (useful for tone + priorities)
 
 - Andrew Peterson (peterson.andrew.a@gmail.com); son Fletcher is the first
-  user; wife Amanda + tester Anne run iPads via Xcode/TestFlight. Business:
-  **My World Tap to Talk LLC** (Washington, single-member/disregarded — W-9 in
-  Andrew's name, LLC as DBA). Registered-agent address preferred over home
-  address anywhere public; `[BUSINESS ADDRESS]` in privacy.html still awaits
-  his choice.
+  user; wife Amanda + tester Anne run iPads via Xcode/TestFlight. A Chinese
+  tester family (Yixuan) onboarded 2026-07-22 — the first non-English board.
+  Business: **My World Tap to Talk LLC** (Washington, single-member/
+  disregarded — W-9 in Andrew's name, LLC as DBA). Registered-agent address
+  preferred over home address anywhere public; `[BUSINESS ADDRESS]` in
+  privacy.html still awaits his choice.
 - **Interview at Substack** (on-site) — case-study deck reviewed and updated
   (typo fixes + speaker-note upgrades incl. the live practice-board demo cue
   and the "I don't trust the agent; I trust the harness" answer). Remind him:
-  fresh stats the morning of; practice board open in a tab.
+  fresh stats the morning of; practice board open in a tab — **which is
+  another reason the empty practice board is urgent.**
 - Cost paranoia is a feature, not a bug: he capped his own launch on purpose.
   Frame all pricing/marketing honestly — the audit standard is "no promise
   the server doesn't enforce."
-
-## Reactive-vocabulary wave (requirements #10–#17, started 2026-07-21)
-
-Owner approved the plan: 417-row CSV merges as STORE-ONLY vocabulary
-(discoverable via listening suggestions + Word Shop, never auto-placed —
-store_only is flippable per board in Lab → Boards). Status:
-
-- ✅ **CSV corrected + committed**: `data/taxonomy-additions-2026-07.csv`
-  (190 food labels lowercased; something/nothing/everything/anything refiled
-  People→Nouns; "PB and J" left for owner review). Source batches: 191 food,
-  130 movies (89 personal_skeleton poster-tiles + 41 safe generic canonicals),
-  ~58 core words, 38 gestalts.
-- ✅ **Dedup-aware importer**: `POST /api/admin/taxonomy?fn=import-csv`
-  (`_taxonomy-import-csv.js`) — snapshot first, dry-run plan, exact-label
-  matches donate listen variants to the existing row (the "I missed you"
-  rule systematized), inserts land as drafts. Workbench button
-  "📥 Merge batch…" in admin/taxonomy.html (reuses parseCSVText).
-- ⬜ **After merge (owner, in Lab)**: create store-only boards covering the
-  new categories (Food expansion, Movies & Shows, More core words) so the
-  ~290 canonical rows never hit default placement / style-build totals;
-  publish rows after review; generate store-board art per style.
-- ✅ **#10 suggestion queue** shipped (web + server): word_suggestions table,
-  suggest ops on /api/items, opt-in consent (off by default, server
-  re-checked), parent review panel, privacy.html line. Native capture ports
-  deferred (server + consent shared).
-- ✅ **#12** shipped (web): listenRepeatCount 0|2|3 parent-writable, E6
-  updated. **#13** resolved: drag staging exists natively (sentenceDrag);
-  web deliberately tap-only; remaining threshold tuning needs Andrew
-  on-device.
-- ✅ **#11** shipped (server + web + iOS): GET /api/items?movieSearch=
-  (Wikidata via api/_lib/movie-search.js — the single interface the licensed
-  TMDB fetch later replaces), items + tile_jobs carry wikidata_qid/imdb_id,
-  web edit-modal find/link/IMDb-link/unlink with keep-aspect poster saves,
-  iOS MovieAddSheet (search → in-app IMDb SFSafariViewController → Photos
-  pick or camera fallback → raw + keep-aspect + "TV & Movies" folder hint).
-  No poster artwork is ever fetched or stored server-side.
-- ✅ **#14** shipped: "admin" + ADMIN_TOKEN login (timing-safe, server-side,
-  NO session minted) → iOS DemoBoardView on the public /api/demo projection
-  with live style/kid/voice swapping; documented in surface-audit A-PUBLIC.
-- ✅ **#15** shipped (web): Display panel "Bigger sizes (low vision)" —
-  listening tiles + top-row buttons, Normal/+50%/+100%, per-device
-  (aacDisplay listenTileSize/topButtonSize → --listen-scale/--topbtn-scale).
-- ✅ **#16** shipped (web + server): items.descriptive_clues, edit-modal clue
-  fields, item clues win over taxonomy overlay in sync.
-- ✅ **#17** shipped (web): per-device 4-digit quick-unlock PIN for the
-  board's edit gate (SHA-256 device-salted, 5-fail password fallback,
-  Set/Change/Remove in Display→Safety re-verifying the account password).
-  Native Keychain PIN deferred.
-- ✅ **Cleanup A**: docs/emoji-audit.md (1,955 lines inventoried, nothing
-  removed). **Cleanup B**: 466 customer-visible em-dashes rewritten across
-  web pages, iOS, Android, and API strings (comments/en-dashes/placeholder
-  glyphs untouched) in five verified slices.
-- Style wizard fix (same day): the 📤 Upload button's style/ blob prefix is
-  now accepted by set-ref/kid-save ("unexpected blobKey" resolved).
-- README update rides with each implemented feature (owner's instruction:
-  running code is source of truth; README was stale).
-
-### #12/#13 status (2026-07-21)
-- ✅ #12 shipped (web): listenRepeatNav graduated out of ACCESS_KEYS (E6
-  invariant updated in step), new parent-writable listenRepeatCount 0|2|3,
-  n-consecutive matcher in maybeListenNavigate (absent settings = legacy 2),
-  Display-panel select. Native ports: read listenRepeatCount, same fallback.
-- 🟡 #13 partially: sentence constructor + both modes DOCUMENTED in README
-  (AC6). The tap/drag mode toggle == the existing parent-enabled
-  sentenceDrag setting on natives; web stays tap-only by design. REMAINING:
-  (a) audit that sentenceDrag is exposed as a clear "Tap to add / Pick up
-  and drag" choice in iOS + Android settings UIs, (b) re-tune the native
-  drag pickup thresholds to the spec's "short natural press, light touch
-  still scrolls" balance — needs on-device feel testing with Andrew; the
-  failure mode to avoid is every tile-touch reading as a grab.
+- He merges to main himself and deploys via Vercel; iOS ships from his Xcode
+  archive. Work in waves, commit and push each one, and tell him plainly what
+  was verified mechanically vs what needs his device.
