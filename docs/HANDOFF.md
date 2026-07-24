@@ -187,8 +187,11 @@ Only the 417-row batch is committed (`data/taxonomy-additions-2026-07.csv`).
   anatomy, then check for similar name-collision words.
 - Native drag-pickup thresholds still need on-device tuning with Andrew (the
   failure mode to avoid: every tile-touch reading as a grab).
-- Deferred native ports: #10 listening-suggestion capture, #16 clue fields,
-  and the Android mirrors of several iOS-only additions from this wave.
+- Deferred native ports (full detail + a re-verification probe in
+  `docs/native-parity-backlog.md`): Android is missing #17 PIN, #15 low-vision
+  sizes, #12 repeat count and #11 movie linking; both natives read clues but
+  can't author them (#16); #10 capture lives only in app.html, so the iOS
+  consent toggle currently has nothing behind it.
 - Deferred iOS polish (previously planned in detail): split `CameraCapture`'s
   `.blocked` phase into `.blocked(restricted:)` from
   `AVCaptureDevice.authorizationStatus(for: .video)`, leading the copy with
@@ -237,11 +240,15 @@ Chinese tester onboarding.
 
 ## Documentation accuracy notes
 
-- **`docs/native-parity-backlog.md` is stale (last touched 2026-07-02) and now
-  actively wrong.** Its headline item A1 claims kid-ios has "no drag code at
-  all"; iOS has since shipped `DragGesture`-based reorder (`SectionColumn`,
-  `CategoryStrips`, `BoardStore`, `APIClient`). Re-verify every item against
-  the source before building from it — do not rebuild shipped work.
+- **`docs/native-parity-backlog.md` was re-verified against source on
+  2026-07-24 and rewritten.** Its entire original backlog (A1–A4, B1–B6) had
+  shipped and is now recorded as closed with evidence anchors. The live gaps
+  are different: **android-native missed most of the 2026-07 wave** (#17 PIN,
+  #15 low-vision sizes, #12 repeat count, #11 movie linking), both natives can
+  read clues but not author them (#16), and #10 suggestion capture exists only
+  in app.html — iOS ships the consent toggle with nothing behind it. The doc
+  now carries a re-verification probe; run it before opening an item and
+  update the doc in the commit that closes one.
 - The skills in `.claude/skills/` ARE current and are the most reliable
   documentation in the repo; `surface-audit` in particular carries the
   invariants with their enforcement points and verify commands. Prefer them
