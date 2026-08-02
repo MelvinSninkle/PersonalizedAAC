@@ -18,6 +18,7 @@ import { describePhotoLabel } from './vision.js';
 import { grantCredits, COST } from './credits.js';
 import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, buildPortraitPrompt, SQUARE_RULE, captionRule } from './onboarding-render.js';
 import { relationshipAgeGroup } from './relationships.js';
+import { childLanguage } from './i18n.js';
 import { archivePriorImage } from './image-history.js';
 
 // 5 attempts with a growing gap between them (see claimRunnableJobs) rides out
@@ -101,7 +102,7 @@ async function describeLabel(buffer, contentType) {
 // { ok, b64, prompt, costCents } or { ok:false, detail }.
 // (`bg` is still accepted from old app builds but no longer shapes the prompt —
 // the photo's real setting, translated into the style, is the background now.)
-export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, section, ageGroup = null }) {
+export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, section, ageGroup = null, suppressBakedText = false }) {
   const subject = label ? `"${label}"` : 'the main subject';
   const isPerson = String(section || '').toLowerCase() === 'people';
 
@@ -145,7 +146,12 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
   // lettering on a solid white band) — this pipeline used to hand-roll its
   // own vaguer wording, so photo-added tiles drifted in band color and font
   // from the rest of the board.
-  const captionClause = label
+  //
+  // suppressBakedText mirrors renderTaxonomyTile (audit C5): a NON-ENGLISH
+  // board bakes no text into its art, because image models mangle CJK and
+  // other non-Latin scripts — a family typing 饺子 must not get garbled
+  // characters painted into their tile. The app's own label carries the word.
+  const captionClause = (label && !suppressBakedText)
     ? captionRule(label)
     : ` Do not include any text, words, or letters in the image.`;
   const styleClause = (styleGuide && styleGuide.image)
@@ -251,10 +257,17 @@ export async function processTileJob(db, jobId) {
       imageCT = ct;
       costCents = 0;
     } else {
+    // Board language decides the caption: non-English boards render with NO
+    // baked text (C5) — same rule the seeded board follows — so a tile added
+    // by a Chinese-board family doesn't come back with mangled characters
+    // painted into the art. The clip below still speaks the typed label.
+    let boardLang = 'en';
+    try { boardLang = await childLanguage(db, job.child_id); } catch (_) {}
     const r = await renderStyledPhoto({
       db, photo: src.buffer, contentType: ct, label, detail: job.detail,
       style: job.style, styleGuide, model: job.model, bg: job.bg,
       section: job.section,
+      suppressBakedText: boardLang !== 'en',
       // Relationship decides the age treatment when it can; the job's explicit
       // age_group (the capture UI's kid/grown-up choice) covers the rest.
       ageGroup: relationshipAgeGroup(job.relationship) || job.age_group || null,

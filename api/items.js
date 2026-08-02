@@ -343,6 +343,42 @@ async function update(req, res, db, user) {
   // push skips it from now on unless the admin explicitly overrides.
   if (order != null && old.child_id) await stampLayoutCustomized(db, old.child_id);
 
+  // Renaming a tile re-voices it: the clip must SAY the new word — before
+  // this, a tile renamed from "dumpling" to "饺子" kept speaking "dumpling"
+  // forever. Only app-generated audio is replaced (seeded onboarding clips
+  // and tile-jobs synth); a parent's own recording or generated phrase (any
+  // other key shape) survives a rename untouched — the same replaceability
+  // rule sound pushes follow. The typed label is the spoken text verbatim,
+  // in the board's saved voice, so a Chinese-board family typing Chinese
+  // gets a Chinese clip with no extra step. Best-effort: the rename already
+  // landed above; a synth failure just keeps the old clip.
+  const renamed = typeof label === 'string' && label.trim()
+    && label.trim() !== String(old.label || '').trim();
+  const clientSentSound = soundKey !== undefined || soundUrl !== undefined;
+  const appGeneratedSound = (k) => !k
+    || (String(k).startsWith('onboarding/') && String(k).includes('/voice/'))
+    || (String(k).startsWith('tile-jobs/') && String(k).endsWith('.mp3'));
+  if (renamed && !clientSentSound && appGeneratedSound(old.sound_key)) {
+    try {
+      const { loadChildVoiceId, synthesizeVoice } = await import('./_lib/onboarding-render.js');
+      const voiceId = await loadChildVoiceId(db, old.child_id);
+      const mp3 = await synthesizeVoice({ text: label.trim().slice(0, 300), voiceId, db,
+                                          childId: old.child_id, kind: 'tile' });
+      if (mp3) {
+        const newKey = `tile-jobs/${old.child_id}/${randomUUID()}.mp3`;
+        await put(newKey, mp3, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false });
+        await db`UPDATE items SET sound_key = ${newKey}, updated_at = NOW() WHERE id = ${id}`;
+        rows[0].sound_key = newKey;
+        // Old tile-jobs clips are unique to this tile — reclaim them. Seeded
+        // keys are NOT deleted: the same seeded clip is shared by every tile
+        // of that word on this board.
+        if (old.sound_key && String(old.sound_key).startsWith('tile-jobs/')) {
+          try { await del(old.sound_key); } catch (_) {}
+        }
+      }
+    } catch (_) { /* re-voicing is best-effort; the rename itself succeeded */ }
+  }
+
   res.status(200).json(rowToItem(rows[0]));
 }
 

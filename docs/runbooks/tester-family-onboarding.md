@@ -70,6 +70,18 @@ including the dark-launched extras (language testers, access experiments).
    default layers were **rendered in English with the word painted into the
    image**. Only tiles seeded after the language was set render text-free.
    Fixing those means re-rendering art, which costs credits.
+9. The parent can work in their own language directly — no admin needed:
+   - **Add a tile** and type the word in their language (e.g. 饺子): the clip
+     is synthesized from exactly what they typed, in the board's saved voice,
+     and on a non-English board the art renders with **no baked text**.
+   - **Rename a tile** to their language: the clip re-generates automatically
+     to speak the new word. Only app-generated audio is replaced — a parent's
+     own recording survives a rename.
+   - **Custom phrases**: board ✏️ → edit a tile → type any phrase → Generate
+     — previews and saves a clip in the board voice; that clip is treated as
+     the parent's own and is never overwritten by pushes or renames.
+   These are per-tile family words — they live outside the taxonomy, so they
+   don't need (and don't get) dictionary entries or the review bench.
 
 ## 3. Access-experiment family (eye tracker / sentence builder)
 
