@@ -64,18 +64,24 @@ for _c in CATS:
 # Translations workbench fixtures. Four translated words covering every clip
 # state plus one untranslated word — the 'english' state is the one that
 # matters most, because such a tile SPEAKS ENGLISH on a translated board.
+#
+# Like the real dictionary, MOST rows are wildcards (no section/category);
+# the clip projection's rows carry the word's actual taxonomy section and
+# category and line up with their dictionary row via dictKey — the key of the
+# entry that translated them. An exact-triple join once stranded every
+# wildcard row with no clip column; the smoke guards that now.
 TR_ENTRIES = [
     {'en': 'pizza',  'section': 'nouns', 'category': 'food', 'label': '披萨',   'pronunciation': None, 'status': 'reviewed'},
-    {'en': 'cookie', 'section': 'nouns', 'category': 'food', 'label': '饼干',   'pronunciation': None, 'status': 'machine'},
-    {'en': 'eat',    'section': 'verbs', 'category': '',     'label': '吃',     'pronunciation': None, 'status': 'machine'},
+    {'en': 'cookie', 'section': '',      'category': '',     'label': '饼干',   'pronunciation': None, 'status': 'machine'},
+    {'en': 'eat',    'section': '',      'category': '',     'label': '吃',     'pronunciation': None, 'status': 'machine'},
     {'en': 'help',   'section': 'needs', 'category': '',     'label': '帮帮我', 'pronunciation': None, 'status': 'reviewed'},
 ]
 LANG_AUDIO_ROWS = [
-    {'en': 'pizza',       'section': 'nouns', 'category': 'food', 'translation': '披萨',   'pron': None, 'text': '披萨',   'status': 'ready'},
-    {'en': 'cookie',      'section': 'nouns', 'category': 'food', 'translation': '饼干',   'pron': None, 'text': '饼干',   'status': 'missing'},
-    {'en': 'eat',         'section': 'verbs', 'category': '',     'translation': '吃',     'pron': None, 'text': '吃',     'status': 'stale'},
-    {'en': 'help',        'section': 'needs', 'category': '',     'translation': '帮帮我', 'pron': None, 'text': '帮帮我', 'status': 'ready'},
-    {'en': 'wonton soup', 'section': 'nouns', 'category': 'food', 'translation': None,     'pron': None, 'text': 'wonton soup', 'status': 'english'},
+    {'en': 'pizza',       'section': 'nouns', 'category': 'food', 'dictKey': 'nouns|food|pizza', 'translation': '披萨',   'pron': None, 'text': '披萨',   'status': 'ready'},
+    {'en': 'cookie',      'section': 'nouns', 'category': 'food', 'dictKey': '||cookie',         'translation': '饼干',   'pron': None, 'text': '饼干',   'status': 'missing'},
+    {'en': 'eat',         'section': 'verbs', 'category': '',     'dictKey': '||eat',            'translation': '吃',     'pron': None, 'text': '吃',     'status': 'stale'},
+    {'en': 'help',        'section': 'needs', 'category': '',     'dictKey': 'needs||help',      'translation': '帮帮我', 'pron': None, 'text': '帮帮我', 'status': 'ready'},
+    {'en': 'wonton soup', 'section': 'nouns', 'category': 'food', 'dictKey': None,               'translation': None,     'pron': None, 'text': 'wonton soup', 'status': 'english'},
 ]
 
 class H(http.server.SimpleHTTPRequestHandler):

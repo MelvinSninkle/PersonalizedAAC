@@ -80,14 +80,18 @@ async function ensureQc(db) {
 
 // Translation-map lookup precedence, mirroring i18n.js translate(): the map
 // here is keyed the same way, but built from rows we already fetched so the
-// projection is one query instead of one per word.
+// projection is one query instead of one per word. Returns the MATCHED KEY
+// too — most dictionary rows are wildcards (no section/category), so the
+// client can only line a clip row up with its dictionary row if we say which
+// row actually translated it. Joining by exact (section|category|label)
+// equality instead is the bug that left every wildcard row with no ▶ button.
 function pick(map, { label, section, category }) {
   const l = norm(label), s = norm(section), c = norm(category);
-  return map.get(`${s}|${c}|${l}`)
-      || map.get(`${s}||${l}`)
-      || map.get(`|${c}|${l}`)
-      || map.get(`||${l}`)
-      || null;
+  for (const k of [`${s}|${c}|${l}`, `${s}||${l}`, `|${c}|${l}`, `||${l}`]) {
+    const hit = map.get(k);
+    if (hit) return { label: hit.label, pronunciation: hit.pronunciation, key: k };
+  }
+  return null;
 }
 
 /// Resolve `child` (board slug or account email) → slug, or '' when unknown.
@@ -170,6 +174,7 @@ async function project(db, { lang, voiceId, childId }) {
     }
     counts[status]++;
     rows.push({ en: w.label, section: s, category: c,
+                dictKey: (tr && tr.key) || null,
                 translation: (tr && tr.label) || null,
                 pron: (tr && tr.pronunciation) || null,
                 text, status });

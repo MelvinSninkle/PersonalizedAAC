@@ -133,6 +133,11 @@
     `${String(section || '').toLowerCase()}|${String(category || '').toLowerCase()}|${String(en || '').trim().toLowerCase()}`;
 
   const GLYPH = { ready: '●', stale: '◐', missing: '○', english: '⚠' };
+  // When one wildcard dictionary row translates several taxonomy words (the
+  // normal case — most rows have no section/category), its dot shows the
+  // WORST of their clip states, so remaining work is never hidden behind a
+  // sibling that happens to be built.
+  const SEVERITY = { ready: 0, missing: 1, stale: 2, english: 3 };
   const TITLE = {
     ready:   'Ready — cached in this voice for exactly this text. A push copies it for free.',
     stale:   'Stale — the translation changed after the clip was built. Rebuild before pushing.',
@@ -212,7 +217,17 @@
     $('amsg').textContent = 'Checking clips…';
     try {
       audio = await api('/api/admin/lab?' + params.toString());
-      audioMap = new Map((audio.rows || []).map((r) => [akey(r.en, r.section, r.category), r]));
+      // Key each clip row by the DICTIONARY row that translated it (dictKey),
+      // not by its own taxonomy section/category — dictionary rows are mostly
+      // wildcards, so an exact-triple join would strand them with no clip
+      // column at all. Untranslated rows keep their own key (no dictionary
+      // row exists to decorate anyway).
+      audioMap = new Map();
+      for (const r of (audio.rows || [])) {
+        const k = r.dictKey || akey(r.en, r.section, r.category);
+        const prev = audioMap.get(k);
+        if (!prev || (SEVERITY[r.status] || 0) > (SEVERITY[prev.status] || 0)) audioMap.set(k, r);
+      }
       if (child && audio.childFound === false) {
         $('amsg').innerHTML = '<span class="pill warn">No board found for “' + esc(child) + '”.</span>';
         $('child').dataset.active = '';
@@ -246,9 +261,9 @@
 
   function clipCell(e) {
     const a = audioMap.get(akey(e.en, e.section, e.category));
-    // In child mode the projection IS the board, so a dictionary row with no
-    // match simply isn't on that board — drawRows filters those out first.
-    if (!a) return '<td><span class="st none" title="Not a live taxonomy word on this board.">–</span></td>';
+    // No clip row points at this dictionary row: either no live taxonomy
+    // word uses it, or (in child mode) it isn't on this board.
+    if (!a) return '<td><span class="st none" title="No live taxonomy word uses this dictionary row.">–</span></td>';
     const st = a.status;
     return '<td><span class="st ' + esc(st) + '" title="' + esc(TITLE[st] || '') + '">' + (GLYPH[st] || '–') + '</span>'
       + (st === 'english' ? ''
@@ -380,7 +395,7 @@
       const ok = await playText(a.text, akey(a.en, a.section, a.category));
       if (!ok) break;
     }
-    if (playAllStop === token) { playAllStop = null; $('amsg').textContent = '✓ Played ' + queue.length + ' words'; }
+    if (playAllStop === token) { playAllStop = null; $('amsg').textContent = '✓ Played ' + queue.length + ' word' + (queue.length === 1 ? '' : 's'); }
     $('playall').textContent = '▶ Play all';
   });
 
