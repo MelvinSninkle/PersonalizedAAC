@@ -88,9 +88,14 @@ const fails = [];
   // Play all must walk EVERY translated row (wildcards included) — the
   // symptom of the join bug was "✓ Played 1 word" over a fully built set.
   await page.click('#playall');
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(2500);
   ok('play-all walks every translated word', await page.evaluate(() =>
     /Played 4 words/.test(document.getElementById('amsg').textContent)));
+  // The stub's "clips" are 64 bytes of noise — a real review must be told the
+  // audio contains no speech, not just that a file played. This is the
+  // "I hear nothing and it takes no time" report, made visible.
+  ok('empty/near-silent clips are called out after play-all', await page.evaluate(() =>
+    /EMPTY\/near-silent/.test(document.getElementById('amsg').textContent)));
 
   // A language with no tagged voice must say so — this is the step whose
   // absence makes a translated board fall back to an English-language voice.
@@ -114,6 +119,13 @@ const fails = [];
   ok('building an unseeded language says seed-first', /No es translations yet/.test(seedMsg)
     && /Seed the bundled dictionary/.test(seedMsg));
   ok('the unseeded case never claims clips are ready', !/current clip/.test(seedMsg));
+  // The es fixture also reports an English-only ELEVENLABS_MODEL_ID — the
+  // misconfiguration that renders a whole language as silence must be named
+  // on the page, not discovered by listening to 1,100 empty clips.
+  ok('an English-only TTS model is warned about', await page.evaluate(() => {
+    const w = document.getElementById('model-warn').textContent;
+    return /English-only/.test(w) && /eleven_turbo_v2/.test(w) && /rebuild/i.test(w);
+  }));
 
   // Child mode: the board's own settings win over both pickers, and the row
   // set narrows to the tiles that board actually has.

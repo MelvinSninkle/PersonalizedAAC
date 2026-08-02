@@ -51,6 +51,18 @@ const VOICE_RE = /^[A-Za-z0-9]{8,40}$/;
 // instead of being killed mid-pass (same budget the demo-audio builder uses).
 const BUILD_DEADLINE_MS = 240_000;
 
+// ElevenLabs models that only speak English. Fed CJK (or any non-Latin) text
+// they strip what they can't say and return a fraction of a second of
+// SILENCE — a valid, cacheable, playable, empty MP3. A whole-language build
+// through one of these "succeeds" and every clip is soundless, so the bench
+// names the server's model and the build refuses to render a non-English
+// language through an English-only one. Exact ids, checked by equality —
+// eleven_turbo_v2 is English-only while eleven_turbo_v2_5 is multilingual.
+const ENGLISH_ONLY_MODELS = new Set([
+  'eleven_monolingual_v1', 'eleven_turbo_v2', 'eleven_flash_v2', 'eleven_english_sts_v2',
+]);
+const ttsModel = () => process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
+
 async function ensureIndex(db) {
   // What has been synthesized, per (language, voice, word). Deliberately stores
   // the spoken TEXT rather than the blob cache key: staleness is then just a
@@ -67,6 +79,13 @@ async function ensureIndex(db) {
       built_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (lang, voice_id, section, category_norm, label_norm)
     )`;
+  // The model is part of the cache key, so a clip is only "ready" if it was
+  // built by the CURRENT model — after an ELEVENLABS_MODEL_ID change (e.g.
+  // recovering from an English-only model that rendered silence) every clip
+  // must flip to stale, not keep claiming ready against files that no key
+  // will ever reach again. Rows from before this column re-stamp as stale
+  // once; rebuilding them is a free cache pass when the model didn't change.
+  await db`ALTER TABLE lang_clip_index ADD COLUMN IF NOT EXISTS model TEXT NOT NULL DEFAULT ''`;
 }
 
 async function ensureQc(db) {
@@ -152,10 +171,10 @@ async function project(db, { lang, voiceId, childId, boardVoice, withBoard = fal
   }
 
   const idxRows = voiceId
-    ? await db`SELECT section, category_norm, label_norm, text
+    ? await db`SELECT section, category_norm, label_norm, text, model
                FROM lang_clip_index WHERE lang = ${lang} AND voice_id = ${voiceId}`
     : [];
-  const idx = new Map(idxRows.map((r) => [`${r.section}|${r.category_norm}|${r.label_norm}`, r.text]));
+  const idx = new Map(idxRows.map((r) => [`${r.section}|${r.category_norm}|${r.label_norm}`, r]));
 
   // The board's real tiles, grouped by word — the ground truth the child-mode
   // comparison runs against.
@@ -196,7 +215,8 @@ async function project(db, { lang, voiceId, childId, boardVoice, withBoard = fal
     else if (!voiceId) status = 'missing';
     else {
       const built = idx.get(dedupe);
-      status = built == null ? 'missing' : (built === text ? 'ready' : 'stale');
+      status = built == null ? 'missing'
+        : (built.text === text && built.model === ttsModel() ? 'ready' : 'stale');
     }
     counts[status]++;
 
@@ -285,6 +305,7 @@ export default async function handler(req, res) {
         // An English board has no translation layer at all — say so plainly
         // rather than reporting 1,600 words as "speaks English".
         englishBoard: lang === 'en',
+        model: ttsModel(), modelEnglishOnly: ENGLISH_ONLY_MODELS.has(ttsModel()),
         rows, counts, boardCounts: boardCounts || null, approved });
       return;
     }
@@ -324,6 +345,15 @@ export default async function handler(req, res) {
     // so a stale picker in the caller can't build the wrong dictionary.
     if (childId) lang = await childLanguage(db, childId);
     if (lang === 'en') { res.status(400).json({ error: 'pick a non-English language' }); return; }
+    if (ENGLISH_ONLY_MODELS.has(ttsModel())) {
+      // Refuse rather than warn: rendering a language through a model that
+      // cannot speak it caches thousands of silent clips that then LOOK
+      // ready everywhere downstream.
+      res.status(400).json({ error: `The server's TTS model '${ttsModel()}' is English-only — `
+        + `'${lang}' text would render as silence. Set ELEVENLABS_MODEL_ID to a multilingual model `
+        + `(eleven_turbo_v2_5 or eleven_multilingual_v2), redeploy, then build again.` });
+      return;
+    }
     const force = b.force === true;
 
     const { rows, counts } = await project(db, { lang, voiceId, childId });
@@ -344,10 +374,10 @@ export default async function handler(req, res) {
       if (!mp3) { failed++; continue; }
       built++;
       await db`
-        INSERT INTO lang_clip_index (lang, voice_id, section, category_norm, label_norm, text)
-        VALUES (${lang}, ${voiceId}, ${r.section}, ${r.category}, ${norm(r.en)}, ${r.text})
+        INSERT INTO lang_clip_index (lang, voice_id, section, category_norm, label_norm, text, model)
+        VALUES (${lang}, ${voiceId}, ${r.section}, ${r.category}, ${norm(r.en)}, ${r.text}, ${ttsModel()})
         ON CONFLICT (lang, voice_id, section, category_norm, label_norm)
-        DO UPDATE SET text = ${r.text}, built_at = NOW()`;
+        DO UPDATE SET text = ${r.text}, model = ${ttsModel()}, built_at = NOW()`;
     }
 
     // Failures come back with their cause, plus a hint for the known cases —
