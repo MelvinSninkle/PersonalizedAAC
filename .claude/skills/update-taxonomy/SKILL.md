@@ -117,6 +117,14 @@ Verify coverage: `GET /api/admin/lab?action=translations&lang=<l>` returns
 five languages). The CSV export/import loop is how native testers correct
 entries; imported rows become `reviewed`.
 
+**Then hear it.** Lab → Translations → Board audio: pick a voice tagged for the
+language and read the counts. A word left out of the dictionary is not merely
+untranslated — it reports as *speaks English*, because `spokenTextFor` falls
+through to the English label, and that is exactly what a child hears. Build the
+missing clips there (`action=lang-audio`, `op:'build'`) so the shared TTS cache
+is warm BEFORE any board is pushed; a push then copies instead of generating.
+Editing a translation marks its clip stale — rebuild and re-listen.
+
 If translated later than shipped: existing tiles keep their English audio
 until re-pushed — see step 6.
 
@@ -134,6 +142,10 @@ need nothing — section membership covers them.
 - After changing a label's pronunciation or its translation, re-push sounds to
   affected children: Lab → Publish (pushSounds translates per-child board
   language before the cache stamp, so stale English audio gets replaced).
+  For non-English boards, audition first: Lab → Translations → "check a child's
+  board" reports that board's own language, saved voice and tiles, word by
+  word. Push only once every row reads *ready* — then the push is a free copy
+  instead of a slow, metered generation run that reports `partial`.
 
 ### 7. Store / board placement
 - If the word belongs on a themed/store board, manage it in the defaults view

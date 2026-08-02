@@ -1568,13 +1568,26 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
           alert(`Nothing to heal from snapshot #${id} — every column it could fill is already set on all ${plan.matched} matching rows.`);
           return;
         }
+        // Two column classes, and the difference matters: most fill only where
+        // the live value is NULL, but the NOT NULL defaulted ones take the
+        // snapshot's value outright (a wipe stamps their DDL default, so a
+        // NULL check can't spot the damage) — which also reverts a deliberate
+        // edit made since. Flag those explicitly rather than calling the whole
+        // run "fills empty columns".
+        const reverts = new Set(plan.defaultedColumns || []);
         const fieldLines = Object.entries(plan.fields || {})
           .sort((a, b) => b[1] - a[1])
-          .map(([k, v]) => `  · ${k}: ${v} rows`).join('\n');
+          .map(([k, v]) => `  · ${k}: ${v} rows${reverts.has(k) ? '   ← takes snapshot value' : ''}`).join('\n');
+        const anyRevert = Object.keys(plan.fields || {}).some((k) => reverts.has(k));
         const msg = `Heal from snapshot #${id}?\n\n`
-          + `Non-destructive: fills wiped/empty columns on ${plan.rowsToHeal} of ${plan.matched} matching rows. `
-          + `No rows are added or removed; labels, statuses, prompts, and anything set since the snapshot stay as they are `
-          + `(${plan.liveUntouched} newer rows untouched).\n\nColumns to fill:\n${fieldLines}\n\n`
+          + `Non-destructive: repairs ${plan.rowsToHeal} of ${plan.matched} matching rows. `
+          + `No rows are added or removed, and labels, statuses, and prompts are never touched `
+          + `(${plan.liveUntouched} newer rows untouched).\n\nColumns to repair:\n${fieldLines}\n\n`
+          + (anyRevert
+              ? `Columns marked "takes snapshot value" are restored from the snapshot even if they are\n`
+                + `currently set, so an intentional edit to one of those since the snapshot would be\n`
+                + `reverted. Everything else fills only where the value is currently empty.\n\n`
+              : `Every column above fills only where the value is currently empty.\n\n`)
           + `A pre-heal snapshot is taken first. Proceed?`;
         if (!confirm(msg)) return;
         const result = await api('/api/admin/taxonomy?fn=snapshots&action=heal&id=' + id, { method: 'POST' });

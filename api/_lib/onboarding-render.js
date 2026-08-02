@@ -420,7 +420,7 @@ export async function loadChildStyleGuideId(db, childId) {
 // `stats` (optional): a mutable {cached, generated} counter the caller owns —
 // lets bulk jobs (the demo-clip builder) report how much of a run was free
 // cache copies vs fresh ElevenLabs spend. Null = no accounting, no change.
-export async function synthesizeVoice({ text, voiceId, db = null, childId = null, kind = 'tile', stats = null } = {}) {
+export async function synthesizeVoice({ text, voiceId, db = null, childId = null, kind = 'tile', stats = null, errs = null } = {}) {
   const key = process.env.Fletchers_AAC_Device;
   if (!key || !text || !String(text).trim()) return null;
   const vid = voiceId || process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
@@ -452,7 +452,16 @@ export async function synthesizeVoice({ text, voiceId, db = null, childId = null
       headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
       body: JSON.stringify({ text: body, model_id: mid }),
     });
-    if (!r.ok) return null;
+    if (!r.ok) {
+      // A null return tells the caller "no audio", but the REASON (key lacks
+      // permissions, voice not in the workspace, quota) is what an admin
+      // needs to fix a whole batch failing — capture it when asked to.
+      if (errs && errs.length < 5) {
+        const detail = await r.text().catch(() => '');
+        errs.push(`HTTP ${r.status}: ${detail.slice(0, 200)}`);
+      }
+      return null;
+    }
     if (db) {
       try {
         const { logVoiceGeneration } = await import('./voice-usage.js');
@@ -465,5 +474,8 @@ export async function synthesizeVoice({ text, voiceId, db = null, childId = null
     try { await blobPut(cacheKey, buf, { access: 'private', contentType: 'audio/mpeg', addRandomSuffix: false }); } catch (_) {}
     if (stats) stats.generated = (stats.generated || 0) + 1;
     return buf;
-  } catch (_) { return null; }
+  } catch (err) {
+    if (errs && errs.length < 5) errs.push(String(err && err.message || err));
+    return null;
+  }
 }

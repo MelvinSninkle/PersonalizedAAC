@@ -61,6 +61,23 @@ for _it in ITEMS:
 for _c in CATS:
     if _c['label'] == 'Food': _c['displayLabel'] = '食物'
 
+# Translations workbench fixtures. Four translated words covering every clip
+# state plus one untranslated word — the 'english' state is the one that
+# matters most, because such a tile SPEAKS ENGLISH on a translated board.
+TR_ENTRIES = [
+    {'en': 'pizza',  'section': 'nouns', 'category': 'food', 'label': '披萨',   'pronunciation': None, 'status': 'reviewed'},
+    {'en': 'cookie', 'section': 'nouns', 'category': 'food', 'label': '饼干',   'pronunciation': None, 'status': 'machine'},
+    {'en': 'eat',    'section': 'verbs', 'category': '',     'label': '吃',     'pronunciation': None, 'status': 'machine'},
+    {'en': 'help',   'section': 'needs', 'category': '',     'label': '帮帮我', 'pronunciation': None, 'status': 'reviewed'},
+]
+LANG_AUDIO_ROWS = [
+    {'en': 'pizza',       'section': 'nouns', 'category': 'food', 'translation': '披萨',   'pron': None, 'text': '披萨',   'status': 'ready'},
+    {'en': 'cookie',      'section': 'nouns', 'category': 'food', 'translation': '饼干',   'pron': None, 'text': '饼干',   'status': 'missing'},
+    {'en': 'eat',         'section': 'verbs', 'category': '',     'translation': '吃',     'pron': None, 'text': '吃',     'status': 'stale'},
+    {'en': 'help',        'section': 'needs', 'category': '',     'translation': '帮帮我', 'pron': None, 'text': '帮帮我', 'status': 'ready'},
+    {'en': 'wonton soup', 'section': 'nouns', 'category': 'food', 'translation': None,     'pron': None, 'text': 'wonton soup', 'status': 'english'},
+]
+
 class H(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
@@ -163,10 +180,69 @@ class H(http.server.SimpleHTTPRequestHandler):
                 'counts': {'tiles': 5, 'tilesDone': 3, 'chips': 4, 'chipsDone': 3}})
         if u.path.startswith('/api/admin/lab') and 'action=voices' in (u.query or ''):
             return self.send_json({'ok': True, 'voices': [
-                {'id': 'sB7vwSCyX0tQmU24cW2C', 'name': 'Jon', 'gender': 'Male', 'accent': 'American', 'active': True, 'sortOrder': 0},
-                {'id': 'LZAcK8Cx5QjdQhfBsJQZ', 'name': 'Grace', 'gender': 'Female', 'accent': 'British', 'active': True, 'sortOrder': 1},
-                {'id': 'oO7sLA3dWfQXsKeSAjpA', 'name': 'Sia', 'gender': 'Female', 'accent': 'Indian', 'active': False, 'sortOrder': 2},
+                {'id': 'sB7vwSCyX0tQmU24cW2C', 'name': 'Jon', 'gender': 'Male', 'accent': 'American', 'lang': 'en', 'active': True, 'sortOrder': 0},
+                {'id': 'LZAcK8Cx5QjdQhfBsJQZ', 'name': 'Grace', 'gender': 'Female', 'accent': 'British', 'lang': 'en', 'active': True, 'sortOrder': 1},
+                {'id': 'oO7sLA3dWfQXsKeSAjpA', 'name': 'Sia', 'gender': 'Female', 'accent': 'Indian', 'lang': 'en', 'active': False, 'sortOrder': 2},
+                # Non-English voices: German has none, so the translations
+                # smoke can assert both the picker and the "no voice tagged"
+                # warning that gates the whole chain. Spanish has a voice but
+                # an EMPTY dictionary (below), exercising the seed-first path.
+                {'id': 'zhVoiceIdAAAAAAAA', 'name': 'Mei', 'gender': 'Female', 'accent': 'Chinese', 'lang': 'zh', 'active': True, 'sortOrder': 3},
+                {'id': 'esVoiceIdAAAAAAAA', 'name': 'Lola', 'gender': 'Female', 'accent': 'Castilian', 'lang': 'es', 'active': True, 'sortOrder': 4},
             ]})
+        if u.path.startswith('/api/admin/lab') and 'action=translations' in (u.query or ''):
+            lang = parse_qs(u.query).get('lang', ['zh'])[0]
+            if lang == 'es':
+                # Never seeded: no dictionary rows, every taxonomy label missing.
+                return self.send_json({'ok': True, 'lang': lang, 'entries': [],
+                                       'coverage': {'taxonomyLabels': 5, 'translated': 0,
+                                                    'missingWords': ['cookie', 'eat', 'help', 'pizza', 'wonton soup'],
+                                                    'missingCategories': []}})
+            return self.send_json({'ok': True, 'lang': lang, 'entries': TR_ENTRIES,
+                                   'coverage': {'taxonomyLabels': 5, 'translated': 4,
+                                                'missingWords': ['wonton soup'], 'missingCategories': []}})
+        if u.path.startswith('/api/admin/lab') and 'action=lang-audio' in (u.query or ''):
+            q = parse_qs(u.query)
+            lang = q.get('lang', ['zh'])[0]
+            child = q.get('child', [''])[0]
+            voice = q.get('voiceId', [''])[0]
+            voice_lang = None
+            if child:
+                # A child board resolves its OWN language + saved voice and
+                # carries only the tiles it actually has (cookie is absent).
+                # 'yixuan' is well-configured; 'mismatch-kid' saved an
+                # ENGLISH-tagged voice on a zh board — the audible-wrong case
+                # the bench must call out.
+                lang = 'zh'
+                if child == 'mismatch-kid':
+                    voice, voice_lang = 'sB7vwSCyX0tQmU24cW2C', 'en'
+                else:
+                    voice, voice_lang = 'zhVoiceIdAAAAAAAA', 'zh'
+            elif lang == 'es':
+                # Spanish: voice exists, dictionary never seeded — every word
+                # falls through to English.
+                rows = [{'en': r['en'], 'section': r['section'], 'category': r['category'],
+                         'translation': None, 'pron': None, 'text': r['en'], 'status': 'english'}
+                        for r in LANG_AUDIO_ROWS]
+                counts = {'english': len(rows), 'missing': 0, 'stale': 0, 'ready': 0}
+                return self.send_json({'ok': True, 'lang': lang, 'voiceId': voice or None,
+                                       'voiceLang': 'es' if voice else None, 'child': None,
+                                       'englishBoard': False, 'rows': rows, 'counts': counts,
+                                       'approved': []})
+            rows = [dict(r) for r in LANG_AUDIO_ROWS if not (child and r['en'] == 'cookie')]
+            if not voice:
+                for r in rows:
+                    if r['status'] != 'english':
+                        r['status'] = 'missing'
+            counts = {k: sum(1 for r in rows if r['status'] == k)
+                      for k in ('english', 'missing', 'stale', 'ready')}
+            out = {'ok': True, 'lang': lang, 'voiceId': voice or None,
+                   'voiceLang': voice_lang, 'child': child or None,
+                   'englishBoard': lang == 'en',
+                   'rows': rows, 'counts': counts, 'approved': []}
+            if child:
+                out['childFound'] = True
+            return self.send_json(out)
         if u.path.startswith('/api/admin/lab') and 'action=defaults-view' in (u.query or ''):
             return self.send_json({'ok': True, 'tiles': [
                 {'id': 't1', 'label': 'yes', 'column': 'needs', 'category': 'Core'},
@@ -285,6 +361,30 @@ class H(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        if u.path.startswith('/api/tts'):
+            # Auditioning a word: the bytes don't have to decode (the page only
+            # needs the fetch to succeed), but X-TTS-Cache does the real work —
+            # a HIT proves the clip already exists, which is what flips a row's
+            # status dot without spending anything.
+            n = int(self.headers.get('Content-Length', 0))
+            self.rfile.read(n)
+            body = b'\xff\xfb\x90\x00' * 16
+            self.send_response(200)
+            self.send_header('Content-Type', 'audio/mpeg')
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('X-TTS-Cache', 'HIT')
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if u.path.startswith('/api/admin/lab') and 'action=lang-audio' in (u.query or ''):
+            n = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(n) or b'{}')
+            if body.get('op') == 'qc':
+                return self.send_json({'ok': True})
+            return self.send_json({'ok': True, 'built': 2, 'failed': 0, 'remaining': 0,
+                                   'total': 2, 'fromCache': 1, 'generated': 1,
+                                   'note': '1 copied free from your existing voice cache, '
+                                           '1 newly generated. Complete.'})
         if u.path.startswith('/api/onboarding/seed-core'):
             return self.send_json({'done': True, 'total': 13, 'placed': 13, 'failed': 0})
         if u.path.startswith('/api/admin/lab') and 'action=publish' in (u.query or ''):

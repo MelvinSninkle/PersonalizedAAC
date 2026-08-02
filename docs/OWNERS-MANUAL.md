@@ -87,6 +87,13 @@ blob and the next request rebuilds it.
 - **Board languages** (en/zh/es/fr/pt/de): dictionaries in `api/_lib/i18n/`,
   seeded via Lab → Translations, tester loop = CSV export → native review →
   import. Non-English art renders with no baked text.
+  Same page, Board audio bar: pick a voice tagged for the language and it
+  reports, word by word, what a child would actually hear — *ready* (cached,
+  a push copies it free), *stale*, *no clip yet*, or **speaks English** (no
+  translation, so the tile says the English word). Build missing clips there,
+  ▶ or Play all to listen, and "check a child's board" to confirm one specific
+  board before Publish → push sounds. See runbooks/tester-family-onboarding.md
+  §2.
 - **Access experiments** (parent dashboard → Access panel, admin-only):
   `navMode` buttons paging (eye tracker), `sentenceBuilder` (+`sentenceLift`
   hold/drag, `sentenceIdleMin`; staging is silent — ▶ speaks, ✕ clears),
