@@ -38,7 +38,15 @@ including the dark-launched extras (language testers, access experiments).
      it reports Complete. Words this voice has already spoken anywhere in the
      product are copied free; the run tells you the free-vs-generated split.
    - Spot-check with ▶ on individual rows, or **Play all** to walk the whole
-     filtered list hands-free.
+     filtered list hands-free. Every play reports the clip's duration and
+     size — a "clip" under ~0.3s / 2 KB is flagged as **empty/near-silent**.
+   - **Clips exist but you hear nothing?** Check the model warning next to
+     the voice picker: an English-only `ELEVENLABS_MODEL_ID` (e.g.
+     `eleven_turbo_v2` — note the multilingual one is `eleven_turbo_v2_5`)
+     renders non-English text as valid, cacheable SILENCE. Fix the env var,
+     redeploy, and rebuild — the model is part of the cache key, so every
+     clip flips to *stale* and rebuilds cleanly; silent junk is left behind
+     unreferenced.
 6. The parent (now a tester) sees the language picker in onboarding and in
    the dashboard Board tab. New tiles render with NO baked text and speak
    translated audio. **A newly granted role only takes effect on their next

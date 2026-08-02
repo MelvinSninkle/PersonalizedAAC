@@ -231,9 +231,13 @@ class H(http.server.SimpleHTTPRequestHandler):
                          'translation': None, 'pron': None, 'text': r['en'], 'status': 'english'}
                         for r in LANG_AUDIO_ROWS]
                 counts = {'english': len(rows), 'missing': 0, 'stale': 0, 'ready': 0}
+                # es also models the English-only-model misconfiguration, so
+                # the smoke can assert the silent-clips warning pill.
                 return self.send_json({'ok': True, 'lang': lang, 'voiceId': voice or None,
                                        'voiceLang': 'es' if voice else None, 'child': None,
-                                       'englishBoard': False, 'rows': rows, 'counts': counts,
+                                       'englishBoard': False,
+                                       'model': 'eleven_turbo_v2', 'modelEnglishOnly': True,
+                                       'rows': rows, 'counts': counts,
                                        'approved': []})
             rows = [dict(r) for r in LANG_AUDIO_ROWS if not (child and r['en'] == 'cookie')]
             if not voice:
@@ -255,6 +259,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             out = {'ok': True, 'lang': lang, 'voiceId': voice or None,
                    'voiceLang': voice_lang, 'child': child or None,
                    'englishBoard': lang == 'en',
+                   'model': 'eleven_turbo_v2_5', 'modelEnglishOnly': False,
                    'rows': rows, 'counts': counts,
                    'boardCounts': board_counts, 'approved': []}
             if child:
