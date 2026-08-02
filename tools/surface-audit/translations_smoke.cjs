@@ -89,6 +89,20 @@ const fails = [];
     return /No voice tagged/.test(w.textContent) && !!w.querySelector('a[href="/admin/voices.html"]');
   }));
 
+  // A voice with an EMPTY dictionary: Build must say "seed first", never the
+  // green "everything has a clip" message — which is vacuously true (zero
+  // translated words all have clips) and operationally a lie.
+  await page.selectOption('#lang', 'es');
+  await page.waitForTimeout(500);
+  await page.selectOption('#voice', 'esVoiceIdAAAAAAAA');
+  await page.waitForTimeout(400);
+  await page.click('#build');
+  await page.waitForTimeout(300);
+  const seedMsg = await page.evaluate(() => document.getElementById('amsg').textContent);
+  ok('building an unseeded language says seed-first', /No es translations yet/.test(seedMsg)
+    && /Seed the bundled dictionary/.test(seedMsg));
+  ok('the unseeded case never claims clips are ready', !/current clip/.test(seedMsg));
+
   // Child mode: the board's own settings win over both pickers, and the row
   // set narrows to the tiles that board actually has.
   await page.selectOption('#lang', 'zh');
@@ -107,6 +121,16 @@ const fails = [];
   await page.waitForTimeout(500);
   ok('clearing child mode restores the full dictionary', await page.evaluate(() =>
     document.querySelectorAll('#rows tr').length === 4));
+
+  // A zh board whose SAVED voice is English-tagged: the bench must say the
+  // words will come out in an English voice, not just report clip states.
+  await page.fill('#child', 'mismatch-kid');
+  await page.click('#checkchild');
+  await page.waitForTimeout(600);
+  ok('a wrong-language saved voice is called out', await page.evaluate(() => {
+    const t = document.getElementById('amsg').textContent;
+    return /saved voice is tagged/.test(t) && /en/.test(t) && /parent dashboard/.test(t);
+  }));
 
   await browser.close();
   console.log(fails.length ? '\nFAILURES:\n' + fails.join('\n') : '\nALL PASS');

@@ -198,6 +198,7 @@ export default async function handler(req, res) {
       let childId = await resolveChild(db, q.child);
       let voiceId = VOICE_RE.test(String(q.voiceId || '')) ? String(q.voiceId) : '';
       let childFound = false;
+      let voiceLang = null;
       if (childId) {
         const exists = (await db`SELECT 1 AS ok FROM items WHERE child_id = ${childId} LIMIT 1`)[0];
         childFound = !!exists;
@@ -206,6 +207,17 @@ export default async function handler(req, res) {
           lang = await childLanguage(db, childId);
           const v = await loadChildVoiceId(db, childId);
           if (v && VOICE_RE.test(v)) voiceId = v;
+          // The saved voice's language tag, so the UI can warn when a family
+          // picked an English voice and later flipped the board's language —
+          // Chinese words in an English voice is exactly the class of wrong
+          // this bench exists to make audible. Null when the voice isn't in
+          // the catalog (e.g. a private clone): unknown, so no warning.
+          if (voiceId) {
+            try {
+              const vr = (await db`SELECT lang FROM voices WHERE id = ${voiceId} LIMIT 1`)[0];
+              voiceLang = vr ? (vr.lang || 'en') : null;
+            } catch (_) { voiceLang = null; }
+          }
         }
       }
 
@@ -218,6 +230,7 @@ export default async function handler(req, res) {
 
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ ok: true, lang, voiceId: voiceId || null,
+        voiceLang,
         child: childId || null,
         childFound: q.child ? childFound : undefined,
         // An English board has no translation layer at all — say so plainly
@@ -251,6 +264,12 @@ export default async function handler(req, res) {
 
     const voiceId = String(b.voiceId || '').trim();
     if (!VOICE_RE.test(voiceId)) { res.status(400).json({ error: 'voiceId required' }); return; }
+    // Without the key EVERY synthesis returns null — say so once, up front,
+    // instead of reporting N anonymous failures.
+    if (!process.env.Fletchers_AAC_Device) {
+      res.status(500).json({ error: 'ElevenLabs API key not configured on the server (Fletchers_AAC_Device)' });
+      return;
+    }
     const childId = await resolveChild(db, b.child);
     // Same rule as the GET: a named board's own settings decide its language,
     // so a stale picker in the caller can't build the wrong dictionary.
@@ -258,7 +277,7 @@ export default async function handler(req, res) {
     if (lang === 'en') { res.status(400).json({ error: 'pick a non-English language' }); return; }
     const force = b.force === true;
 
-    const { rows } = await project(db, { lang, voiceId, childId });
+    const { rows, counts } = await project(db, { lang, voiceId, childId });
     // Untranslated words are deliberately NOT synthesized: rendering the
     // English word in a Chinese voice would bake the reported bug into the
     // cache and make the bench report ✅ for a tile that speaks English. Fix
@@ -268,10 +287,11 @@ export default async function handler(req, res) {
 
     const deadline = Date.now() + BUILD_DEADLINE_MS;
     const stats = { cached: 0, generated: 0 };
+    const errs = [];
     let built = 0, failed = 0, remaining = 0;
     for (const r of todo) {
       if (Date.now() > deadline) { remaining++; continue; }
-      const mp3 = await synthesizeVoice({ text: r.text, voiceId, db, kind: 'lang-review', stats });
+      const mp3 = await synthesizeVoice({ text: r.text, voiceId, db, kind: 'lang-review', stats, errs });
       if (!mp3) { failed++; continue; }
       built++;
       await db`
@@ -281,8 +301,24 @@ export default async function handler(req, res) {
         DO UPDATE SET text = ${r.text}, built_at = NOW()`;
     }
 
+    // Failures come back with their cause, plus a hint for the known cases —
+    // the voice lab's lookup taught us which ElevenLabs errors actually
+    // happen: a key without permissions, a voice never added to the
+    // workspace, and quota.
+    const firstError = errs[0] || null;
+    let hint = '';
+    if (failed > 0 && firstError) {
+      if (/HTTP 401|missing_permissions/i.test(firstError)) {
+        hint = 'The API key was rejected — check it in ElevenLabs → Developers → API Keys.';
+      } else if (/HTTP 40[34]|voice_not_found|does not exist/i.test(firstError)) {
+        hint = 'ElevenLabs doesn’t recognize this voice id for your account — open the voice in ElevenLabs and add it to My Voices first.';
+      } else if (/HTTP 429|quota|too_many/i.test(firstError)) {
+        hint = 'ElevenLabs quota/rate limit hit — wait and run build again; already-built clips are kept.';
+      }
+    }
     res.status(200).json({ ok: true, lang, voiceId, built, failed, remaining,
       total: todo.length, fromCache: stats.cached, generated: stats.generated,
+      skippedEnglish: counts.english, firstError, hint: hint || null,
       note: (built > 0
         ? `${stats.cached} copied free from your existing voice cache, ${stats.generated} newly generated. `
         : '') + (remaining > 0 ? 'Run build again to finish the rest.' : 'Complete.') });

@@ -224,8 +224,17 @@
         if (data && data.lang !== audio.lang) {
           data = await api('/api/admin/lab?action=translations&lang=' + audio.lang);
         }
+        // A saved voice tagged for a different language than the board is the
+        // audible version of this page's whole reason to exist — Chinese words
+        // spoken by an English voice. Say it; don't block it (a build/push is
+        // still faithful to what the board would do).
+        const mismatch = audio.voiceLang && audio.lang !== 'en' && audio.voiceLang !== audio.lang
+          ? ' <span class="pill warn">Their saved voice is tagged <b>' + esc(audio.voiceLang)
+            + '</b> — ' + esc(audio.lang) + ' words will be spoken by a ' + esc(audio.voiceLang)
+            + ' voice. Change the voice in their parent dashboard first.</span>'
+          : '';
         $('amsg').innerHTML = '<span class="pill on">Showing <b>' + esc(audio.child) + '</b>’s board — '
-          + esc(audio.lang) + ', their saved voice, their tiles only.</span>';
+          + esc(audio.lang) + ', their saved voice, their tiles only.</span>' + mismatch;
         $('clearchild').style.display = '';
       } else {
         $('amsg').textContent = audio.voiceId ? '' : 'Pick a voice to see clip status.';
@@ -381,7 +390,21 @@
     if (!audio || !audio.voiceId) { $('amsg').textContent = 'Pick a voice first.'; return; }
     const c = audio.counts || {};
     const todo = (c.missing || 0) + (c.stale || 0);
-    if (!todo) { $('amsg').textContent = 'Every translated word already has a current clip. ✓'; return; }
+    if (!todo) {
+      // Three very different "nothing to build" states — never show the
+      // green ✓ when the real situation is an empty dictionary.
+      if ((c.english || 0) > 0 && !(c.ready || 0)) {
+        $('amsg').innerHTML = '<span class="pill warn">No ' + esc(audio.lang) + ' translations yet — '
+          + c.english + ' words would all speak English. Seed the bundled dictionary '
+          + '(or import a CSV) first; there is nothing to build.</span>';
+      } else if ((c.english || 0) > 0) {
+        $('amsg').innerHTML = 'All translated words have current clips ✓ — <span class="pill warn">but '
+          + c.english + ' words still speak English</span>.';
+      } else {
+        $('amsg').textContent = 'Every translated word already has a current clip. ✓';
+      }
+      return;
+    }
     if (!confirm('Build clips for up to ' + todo + ' words in this voice?\n\n'
       + 'Words this voice has already spoken anywhere in the product are copied free from the '
       + 'cache; the rest are newly generated and cost ElevenLabs credits. The run reports the split.\n\n'
@@ -389,6 +412,7 @@
           + 'Translate them first.\n\n') : '')
       + 'Nothing reaches a child’s board until you run Publish → push sounds.')) return;
     const totals = { built: 0, failed: 0, fromCache: 0, generated: 0 };
+    let summary = '';
     for (let pass = 0; pass < 40; pass++) {
       $('amsg').textContent = 'Building… ' + totals.built + ' done';
       let d;
@@ -398,18 +422,28 @@
           body: JSON.stringify({ op: 'build', lang: audio.lang, voiceId: audio.voiceId,
                                  child: audio.child || undefined }),
         });
-      } catch (e) { $('amsg').textContent = String(e.message || e); break; }
+      } catch (e) { summary = '<span class="pill warn">' + esc(String(e.message || e)) + '</span>'; break; }
       totals.built += d.built; totals.failed += d.failed;
       totals.fromCache += d.fromCache; totals.generated += d.generated;
       if (!d.remaining || !d.built) {
-        $('amsg').textContent = '✓ ' + totals.built + ' built (' + totals.fromCache
+        // A failed run names its cause — an anonymous "N failed" is exactly
+        // the kind of dead end this bench exists to remove.
+        const failLine = totals.failed
+          ? ' · <span class="pill warn">' + totals.failed + ' failed'
+            + (d.firstError ? ' — ' + esc(d.firstError) : '')
+            + (d.hint ? '<br>' + esc(d.hint) : '') + '</span>'
+          : '';
+        summary = (totals.built && !totals.failed ? '✓ ' : '') + totals.built + ' built (' + totals.fromCache
           + ' copied free from your existing voice cache, ' + totals.generated + ' newly generated)'
-          + (totals.failed ? ' · ' + totals.failed + ' failed' : '')
+          + failLine
           + (d.remaining ? ' · ' + d.remaining + ' still pending — run again' : '');
         break;
       }
     }
-    loadAudio();
+    // Refresh the projection, then put the run's summary back — loadAudio
+    // writes its own status into #amsg and would otherwise eat the result.
+    await loadAudio();
+    if (summary) $('amsg').innerHTML = summary + ($('amsg').innerHTML ? '<br>' + $('amsg').innerHTML : '');
   });
 
   // ---- Child check --------------------------------------------------------

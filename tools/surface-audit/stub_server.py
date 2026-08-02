@@ -183,13 +183,21 @@ class H(http.server.SimpleHTTPRequestHandler):
                 {'id': 'sB7vwSCyX0tQmU24cW2C', 'name': 'Jon', 'gender': 'Male', 'accent': 'American', 'lang': 'en', 'active': True, 'sortOrder': 0},
                 {'id': 'LZAcK8Cx5QjdQhfBsJQZ', 'name': 'Grace', 'gender': 'Female', 'accent': 'British', 'lang': 'en', 'active': True, 'sortOrder': 1},
                 {'id': 'oO7sLA3dWfQXsKeSAjpA', 'name': 'Sia', 'gender': 'Female', 'accent': 'Indian', 'lang': 'en', 'active': False, 'sortOrder': 2},
-                # Exactly one non-English voice: German has none, so the
-                # translations smoke can assert both the picker and the
-                # "no voice tagged" warning that gates the whole chain.
+                # Non-English voices: German has none, so the translations
+                # smoke can assert both the picker and the "no voice tagged"
+                # warning that gates the whole chain. Spanish has a voice but
+                # an EMPTY dictionary (below), exercising the seed-first path.
                 {'id': 'zhVoiceIdAAAAAAAA', 'name': 'Mei', 'gender': 'Female', 'accent': 'Chinese', 'lang': 'zh', 'active': True, 'sortOrder': 3},
+                {'id': 'esVoiceIdAAAAAAAA', 'name': 'Lola', 'gender': 'Female', 'accent': 'Castilian', 'lang': 'es', 'active': True, 'sortOrder': 4},
             ]})
         if u.path.startswith('/api/admin/lab') and 'action=translations' in (u.query or ''):
             lang = parse_qs(u.query).get('lang', ['zh'])[0]
+            if lang == 'es':
+                # Never seeded: no dictionary rows, every taxonomy label missing.
+                return self.send_json({'ok': True, 'lang': lang, 'entries': [],
+                                       'coverage': {'taxonomyLabels': 5, 'translated': 0,
+                                                    'missingWords': ['cookie', 'eat', 'help', 'pizza', 'wonton soup'],
+                                                    'missingCategories': []}})
             return self.send_json({'ok': True, 'lang': lang, 'entries': TR_ENTRIES,
                                    'coverage': {'taxonomyLabels': 5, 'translated': 4,
                                                 'missingWords': ['wonton soup'], 'missingCategories': []}})
@@ -198,10 +206,29 @@ class H(http.server.SimpleHTTPRequestHandler):
             lang = q.get('lang', ['zh'])[0]
             child = q.get('child', [''])[0]
             voice = q.get('voiceId', [''])[0]
+            voice_lang = None
             if child:
                 # A child board resolves its OWN language + saved voice and
                 # carries only the tiles it actually has (cookie is absent).
-                lang, voice = 'zh', 'zhVoiceIdAAAAAAAA'
+                # 'yixuan' is well-configured; 'mismatch-kid' saved an
+                # ENGLISH-tagged voice on a zh board — the audible-wrong case
+                # the bench must call out.
+                lang = 'zh'
+                if child == 'mismatch-kid':
+                    voice, voice_lang = 'sB7vwSCyX0tQmU24cW2C', 'en'
+                else:
+                    voice, voice_lang = 'zhVoiceIdAAAAAAAA', 'zh'
+            elif lang == 'es':
+                # Spanish: voice exists, dictionary never seeded — every word
+                # falls through to English.
+                rows = [{'en': r['en'], 'section': r['section'], 'category': r['category'],
+                         'translation': None, 'pron': None, 'text': r['en'], 'status': 'english'}
+                        for r in LANG_AUDIO_ROWS]
+                counts = {'english': len(rows), 'missing': 0, 'stale': 0, 'ready': 0}
+                return self.send_json({'ok': True, 'lang': lang, 'voiceId': voice or None,
+                                       'voiceLang': 'es' if voice else None, 'child': None,
+                                       'englishBoard': False, 'rows': rows, 'counts': counts,
+                                       'approved': []})
             rows = [dict(r) for r in LANG_AUDIO_ROWS if not (child and r['en'] == 'cookie')]
             if not voice:
                 for r in rows:
@@ -210,7 +237,8 @@ class H(http.server.SimpleHTTPRequestHandler):
             counts = {k: sum(1 for r in rows if r['status'] == k)
                       for k in ('english', 'missing', 'stale', 'ready')}
             out = {'ok': True, 'lang': lang, 'voiceId': voice or None,
-                   'child': child or None, 'englishBoard': lang == 'en',
+                   'voiceLang': voice_lang, 'child': child or None,
+                   'englishBoard': lang == 'en',
                    'rows': rows, 'counts': counts, 'approved': []}
             if child:
                 out['childFound'] = True
