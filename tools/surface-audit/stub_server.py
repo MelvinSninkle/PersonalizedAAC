@@ -242,10 +242,21 @@ class H(http.server.SimpleHTTPRequestHandler):
                         r['status'] = 'missing'
             counts = {k: sum(1 for r in rows if r['status'] == k)
                       for k in ('english', 'missing', 'stale', 'ready')}
+            board_counts = None
+            if child:
+                # Board truth per word: pizza's tile already points at the
+                # push-target clip, eat's tile still carries an OLD clip (the
+                # "board still speaks English" case), help is a parent
+                # recording pushes never touch.
+                board_by_word = {'pizza': 'current', 'eat': 'outdated', 'help': 'custom'}
+                for r in rows:
+                    r['board'] = board_by_word.get(r['en'])
+                board_counts = {'current': 1, 'outdated': 1, 'custom': 1}
             out = {'ok': True, 'lang': lang, 'voiceId': voice or None,
                    'voiceLang': voice_lang, 'child': child or None,
                    'englishBoard': lang == 'en',
-                   'rows': rows, 'counts': counts, 'approved': []}
+                   'rows': rows, 'counts': counts,
+                   'boardCounts': board_counts, 'approved': []}
             if child:
                 out['childFound'] = True
             return self.send_json(out)
@@ -396,6 +407,13 @@ class H(http.server.SimpleHTTPRequestHandler):
         if u.path.startswith('/api/admin/lab') and 'action=publish' in (u.query or ''):
             n = int(self.headers.get('Content-Length', 0))
             body = json.loads(self.rfile.read(n) or b'{}')
+            if body.get('scope') == 'child':
+                # The bench's push loop: one board, sounds only, done in one
+                # pass — 1 tile updated (eat's old clip), 1 already current.
+                return self.send_json({'ok': True, 'total': 1,
+                                       'results': [{'childId': body.get('child') or '',
+                                                    'sounds': {'updated': 1, 'failed': 0, 'already': 1, 'partial': False}}],
+                                       'nextOffset': 1, 'done': True})
             kids = ['kid-a', 'kid-b', 'kid-c', 'kid-d', 'kid-e']
             off = int(body.get('offset', 0))
             what = body.get('what', {})

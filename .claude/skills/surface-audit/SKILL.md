@@ -176,8 +176,10 @@ out-of-date one (`stale`), nothing yet (`missing`), or **the English label**
 text chain is `translation.pronunciation || translation.label ||
 taxonomy.pronunciation || taxonomy.label` — a bench that auditions different
 text than a board speaks is worse than no bench; (2) it calls `synthesizeVoice`
-rather than deriving its own blob key, so B3 keeps exactly THREE cache-key
-sites; (3) it never synthesizes `english`-status words — caching an English
+rather than deriving its own blob key, and its child-mode board comparison
+IMPORTS `derivedSoundKey` from `_lab-publish.js` rather than re-hashing, so B3
+keeps exactly THREE cache-key sites; (3) it never synthesizes `english`-status
+words — caching an English
 render under a non-English board's voice would bake the bug in and make the
 bench report ✅ for a tile that says the wrong word. `lang_clip_index` stores
 the spoken TEXT, not the key; staleness is a string compare. QC marks reuse

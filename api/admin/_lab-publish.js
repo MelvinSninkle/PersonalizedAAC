@@ -122,12 +122,24 @@ export async function pushLayout(db, childId, { overwriteCustomized = false } = 
   return { cats: catUpdates, tiles: tileUpdates };
 }
 
-async function pushSounds(db, childId) {
-  const voiceId = await loadChildVoiceId(db, childId);
-  // Same default chain synthesizeVoice uses, so the derived key names the
-  // audio that would actually be generated.
+/// The per-child clip key a sound push would write for this spoken text —
+/// derived from the same (model|voice|default|text) recipe as the shared TTS
+/// cache. Exported so the language review bench can compare a board's ACTUAL
+/// sound_keys against what a push would install, using this one derivation
+/// instead of growing a fourth cache-key site (invariant B3).
+export function derivedSoundKey(childId, voiceId, text) {
   const vid = voiceId || process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
   const mid = process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
+  const stamp = createHash('sha256').update(`${mid}|${vid}|default|${text}`).digest('hex').slice(0, 16);
+  return `onboarding/${childId}/voice/tts-${stamp}.mp3`;
+}
+
+/// Is this sound_key one a push may replace? Seeded clips + empty slots only;
+/// any other shape is a parent's own recording and is never overwritten.
+export const seededSoundKey = (k) => !k || (String(k).startsWith('onboarding/') && String(k).includes('/voice/'));
+
+async function pushSounds(db, childId) {
+  const voiceId = await loadChildVoiceId(db, childId);
 
   const rows = await db`
     SELECT i.id, i.sound_key, i.section, t.label, t.pronunciation, t.category
@@ -141,22 +153,17 @@ async function pushSounds(db, childId) {
     const lang = await childLanguage(db, childId);
     if (lang !== 'en') trMap = await loadTranslationMap(db, lang);
   } catch (_) {}
-  // Replace only seeded clips + empty slots; a parent's own recording (any
-  // other key) is theirs and never overwritten.
-  const seeded = (k) => !k || (String(k).startsWith('onboarding/') && String(k).includes('/voice/'));
-
   const byKey = new Map();   // target soundKey → { text, ids:[…] }
   let already = 0;
   for (const r of rows) {
-    if (!seeded(r.sound_key)) continue;
+    if (!seededSoundKey(r.sound_key)) continue;
     let text = String(r.pronunciation || r.label || '').trim().slice(0, 300);
     if (trMap) {
       const t = translate(trMap, { label: r.label, section: r.section, category: r.category || '' });
       if (t) text = String(t.pronunciation || t.label).trim().slice(0, 300);
     }
     if (!text) continue;
-    const stamp = createHash('sha256').update(`${mid}|${vid}|default|${text}`).digest('hex').slice(0, 16);
-    const soundKey = `onboarding/${childId}/voice/tts-${stamp}.mp3`;
+    const soundKey = derivedSoundKey(childId, voiceId, text);
     if (r.sound_key === soundKey) { already++; continue; }
     if (!byKey.has(soundKey)) byKey.set(soundKey, { text, ids: [] });
     byKey.get(soundKey).ids.push(r.id);

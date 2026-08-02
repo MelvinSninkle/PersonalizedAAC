@@ -47,11 +47,16 @@ including the dark-launched extras (language testers, access experiments).
 7. Review loop: Lab → Translations → CSV export → they correct → import
    (their rows become `reviewed` and re-seeds never overwrite them). Editing a
    translation marks its clip **stale** — rebuild and re-listen.
-8. If they enable language AFTER tiles exist: Lab → Publish → push sounds to
-   the child (regenerates clips in the board language). Check the child's
-   board first — Translations → "check a child's board" reports THAT board's
-   language, saved voice and tiles, so you can confirm every word reads
-   *ready* before you push. Every row ready ⇒ the push is a fast, free copy.
+8. If they enable language AFTER tiles exist: check first, then push, all
+   from Translations. "check a child's board" reports THAT board's language,
+   saved voice and tiles, plus the ground truth — **"old clips on board"**
+   counts tiles whose `sound_key` still points at the previous language's
+   audio (this is "still speaks English after I changed the language"; ↻ on
+   the row). When the clip states read *ready*, click **Push clips to this
+   board** — it runs the same publish op as Lab → Publish (sounds only, so
+   no layout-checkbox mistakes), loops until done, and re-verifies. The board
+   itself picks the new clips up on its next sync: reload the web board or
+   relaunch the app.
 
    Note what a sound push cannot fix: tiles whose art came from the shared
    default layers were **rendered in English with the word painted into the
