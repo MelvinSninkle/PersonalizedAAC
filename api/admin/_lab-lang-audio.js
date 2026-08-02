@@ -39,6 +39,7 @@ import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { synthesizeVoice, loadChildVoiceId } from '../_lib/onboarding-render.js';
 import { childLanguage } from '../_lib/i18n.js';
+import { derivedSoundKey, seededSoundKey } from './_lab-publish.js';
 
 export const config = { maxDuration: 300 };
 
@@ -132,7 +133,15 @@ async function reviewWords(db, childId) {
 }
 
 /// One row per word: the exact text a board would speak + its clip state.
-async function project(db, { lang, voiceId, childId }) {
+/// With withBoard (child mode), each translated row also reports what is
+/// ACTUALLY on the board's tiles right now, by comparing their sound_keys
+/// against the key a push would write (derivedSoundKey — the push's own
+/// derivation, imported, so there is no second recipe to drift):
+///   current   every tile for this word already points at the push-target clip
+///   outdated  at least one seeded tile still points at an old clip (this is
+///             "the board still speaks English after I changed the language")
+///   custom    all tiles carry a parent recording — pushes never touch these
+async function project(db, { lang, voiceId, childId, boardVoice, withBoard = false }) {
   const trRows = await db`
     SELECT section, category_norm, label_norm, label, pronunciation
     FROM label_translations WHERE lang = ${lang}`;
@@ -148,8 +157,25 @@ async function project(db, { lang, voiceId, childId }) {
     : [];
   const idx = new Map(idxRows.map((r) => [`${r.section}|${r.category_norm}|${r.label_norm}`, r.text]));
 
+  // The board's real tiles, grouped by word — the ground truth the child-mode
+  // comparison runs against.
+  let boardKeys = null;
+  if (withBoard && childId) {
+    const its = await db`
+      SELECT i.sound_key, i.section, t.label, t.category
+      FROM items i JOIN taxonomy t ON t.id = i.taxonomy_slug
+      WHERE i.child_id = ${childId}`;
+    boardKeys = new Map();
+    for (const it of its) {
+      const k = `${norm(it.section)}|${norm(it.category)}|${norm(it.label)}`;
+      if (!boardKeys.has(k)) boardKeys.set(k, []);
+      boardKeys.get(k).push(it.sound_key || '');
+    }
+  }
+
   const words = await reviewWords(db, childId);
   const counts = { english: 0, missing: 0, stale: 0, ready: 0 };
+  const boardCounts = boardKeys ? { current: 0, outdated: 0, custom: 0 } : null;
   const rows = [];
   const seen = new Set();
   for (const w of words) {
@@ -173,14 +199,30 @@ async function project(db, { lang, voiceId, childId }) {
       status = built == null ? 'missing' : (built === text ? 'ready' : 'stale');
     }
     counts[status]++;
+
+    // What the board's own tiles carry vs what a push would install. The
+    // spoken text drives the expected key, so this stays honest for
+    // untranslated words too: their expected clip IS the English one.
+    let board = null;
+    if (boardKeys) {
+      const keys = boardKeys.get(dedupe) || [];
+      if (keys.length && text) {
+        const expected = derivedSoundKey(childId, boardVoice, text);
+        if (keys.every((k) => k === expected)) board = 'current';
+        else if (keys.some((k) => seededSoundKey(k))) board = 'outdated';
+        else board = 'custom';
+        if (boardCounts) boardCounts[board]++;
+      }
+    }
+
     rows.push({ en: w.label, section: s, category: c,
                 dictKey: (tr && tr.key) || null,
                 translation: (tr && tr.label) || null,
                 pron: (tr && tr.pronunciation) || null,
-                text, status });
+                text, status, board });
   }
   rows.sort((a, b) => a.en.localeCompare(b.en));
-  return { rows, counts };
+  return { rows, counts, boardCounts };
 }
 
 export default async function handler(req, res) {
@@ -203,7 +245,7 @@ export default async function handler(req, res) {
       let childId = await resolveChild(db, q.child);
       let voiceId = VOICE_RE.test(String(q.voiceId || '')) ? String(q.voiceId) : '';
       let childFound = false;
-      let voiceLang = null;
+      let voiceLang = null, boardVoice = null;
       if (childId) {
         const exists = (await db`SELECT 1 AS ok FROM items WHERE child_id = ${childId} LIMIT 1`)[0];
         childFound = !!exists;
@@ -211,7 +253,7 @@ export default async function handler(req, res) {
         else {
           lang = await childLanguage(db, childId);
           const v = await loadChildVoiceId(db, childId);
-          if (v && VOICE_RE.test(v)) voiceId = v;
+          if (v && VOICE_RE.test(v)) { voiceId = v; boardVoice = v; }
           // The saved voice's language tag, so the UI can warn when a family
           // picked an English voice and later flipped the board's language —
           // Chinese words in an English voice is exactly the class of wrong
@@ -226,7 +268,9 @@ export default async function handler(req, res) {
         }
       }
 
-      const { rows, counts } = await project(db, { lang, voiceId, childId });
+      const { rows, counts, boardCounts } = await project(db, {
+        lang, voiceId, childId, boardVoice, withBoard: !!childId,
+      });
       const approved = voiceId
         ? (await db`SELECT label_norm FROM voice_qc WHERE voice_id = ${voiceId}
                     AND label_norm LIKE ${lang + '|%'}`)
@@ -241,7 +285,7 @@ export default async function handler(req, res) {
         // An English board has no translation layer at all — say so plainly
         // rather than reporting 1,600 words as "speaks English".
         englishBoard: lang === 'en',
-        rows, counts, approved });
+        rows, counts, boardCounts: boardCounts || null, approved });
       return;
     }
 

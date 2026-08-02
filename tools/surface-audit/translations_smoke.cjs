@@ -129,6 +129,39 @@ const fails = [];
   ok('child mode resolves that board\'s saved voice', await page.evaluate(() =>
     document.getElementById('voice').value === 'zhVoiceIdAAAAAAAA'));
 
+  // Board truth: the chips must separate "the clip exists in the cache" from
+  // "the child's tile actually points at it" — the gap between those two is
+  // the whole "published but still speaks English" mystery.
+  ok('child mode counts tiles still holding old clips', await page.evaluate(() =>
+    /1oldclipsonboard/.test(document.getElementById('chips').textContent.replace(/\s+/g, ''))));
+  ok('an outdated tile is badged on its row', await page.evaluate(() => {
+    for (const tr of document.querySelectorAll('#rows tr')) {
+      if (tr.children[0] && tr.children[0].textContent.trim() === 'eat') {
+        return /↻/.test(tr.lastElementChild.innerHTML);
+      }
+    }
+    return false;
+  }));
+  ok('a parent recording is badged as untouchable', await page.evaluate(() => {
+    for (const tr of document.querySelectorAll('#rows tr')) {
+      if (tr.children[0] && tr.children[0].textContent.trim() === 'help') {
+        return /🎙/.test(tr.lastElementChild.innerHTML);
+      }
+    }
+    return false;
+  }));
+
+  // Push from the bench: loops the publish action for this one board, then
+  // re-verifies and reports what changed.
+  ok('the push button appears only in child mode', await page.evaluate(() =>
+    document.getElementById('pushchild').style.display !== 'none'));
+  await page.click('#pushchild');
+  await page.waitForTimeout(800);
+  ok('pushing reports what it updated', await page.evaluate(() => {
+    const t = document.getElementById('amsg').textContent;
+    return /push complete/.test(t) && /1 clips updated/.test(t) && /Reload the board/.test(t);
+  }));
+
   await page.click('#clearchild');
   await page.waitForTimeout(500);
   ok('clearing child mode restores the full dictionary', await page.evaluate(() =>

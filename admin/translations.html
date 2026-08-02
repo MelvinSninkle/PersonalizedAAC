@@ -91,6 +91,7 @@
       <input type="text" id="child" placeholder="check a child's board (email or slug)">
       <button id="checkchild">Check</button>
       <button id="clearchild" style="display:none;">Clear</button>
+      <button id="pushchild" class="primary" style="display:none;">Push clips to this board</button>
       <span id="amsg"></span>
     </div>
     <div class="note" id="audionote">
@@ -177,6 +178,14 @@
         '<div class="chip' + (a.stale ? ' warn' : '') + '"><b>' + a.stale + '</b>stale clips</div>' +
         '<div class="chip' + (a.missing ? ' warn' : '') + '"><b>' + a.missing + '</b>no clip yet</div>' +
         '<div class="chip' + (a.english ? ' warn' : '') + '"><b>' + a.english + '</b>speak English</div>'
+      ) : '') +
+      // Child mode only: what the board's tiles ACTUALLY point at, compared
+      // against the clip a push would install. "old clips on the board" is
+      // the number that answers "why does it still speak English".
+      (audio && audio.child && audio.boardCounts ? (
+        '<div class="chip"><b>' + audio.boardCounts.current + '</b>tiles current on board</div>' +
+        '<div class="chip' + (audio.boardCounts.outdated ? ' warn' : '') + '"><b>' + audio.boardCounts.outdated + '</b>old clips on board</div>' +
+        '<div class="chip"><b>' + audio.boardCounts.custom + '</b>parent-recorded</div>'
       ) : '');
     $('missing').innerHTML = (c.missingWords || []).length
       ? c.missingWords.map((w) => '<code>' + esc(w) + '</code>').join(' ')
@@ -232,6 +241,7 @@
         $('amsg').innerHTML = '<span class="pill warn">No board found for “' + esc(child) + '”.</span>';
         $('child').dataset.active = '';
         $('clearchild').style.display = 'none';
+        $('pushchild').style.display = 'none';
       } else if (child) {
         // The child's own settings win over both pickers — reload the
         // dictionary if their board isn't in the language that was selected.
@@ -251,6 +261,7 @@
         $('amsg').innerHTML = '<span class="pill on">Showing <b>' + esc(audio.child) + '</b>’s board — '
           + esc(audio.lang) + ', their saved voice, their tiles only.</span>' + mismatch;
         $('clearchild').style.display = '';
+        $('pushchild').style.display = '';
       } else {
         $('amsg').textContent = audio.voiceId ? '' : 'Pick a voice to see clip status.';
       }
@@ -265,10 +276,16 @@
     // word uses it, or (in child mode) it isn't on this board.
     if (!a) return '<td><span class="st none" title="No live taxonomy word uses this dictionary row.">–</span></td>';
     const st = a.status;
+    // Child mode: a second badge for what the BOARD carries, so the row
+    // distinguishes "the clip exists" from "the child's tile points at it".
+    const boardBadge = audio && audio.child && a.board === 'outdated'
+      ? ' <span class="st stale" title="This board’s tile still points at an old clip — push clips to update it.">↻</span>'
+      : audio && audio.child && a.board === 'custom'
+        ? ' <span class="st none" title="Parent-recorded sound — pushes never overwrite it.">🎙</span>' : '';
     return '<td><span class="st ' + esc(st) + '" title="' + esc(TITLE[st] || '') + '">' + (GLYPH[st] || '–') + '</span>'
       + (st === 'english' ? ''
         : ' <button class="mini play" data-text="' + esc(a.text) + '" data-key="' + esc(akey(e.en, e.section, e.category)) + '">▶</button>')
-      + '</td>';
+      + boardBadge + '</td>';
   }
 
   function visibleRows() {
@@ -322,11 +339,15 @@
 
   // ---- Audition -----------------------------------------------------------
 
+  // ONE reusable <audio> element for every playback. This is what makes Play
+  // all actually audible past the first word: the browser grants playback to
+  // the element that was played from a user gesture, and a NEW Audio() per
+  // word loses that grant a few seconds in — every play() then rejects
+  // instantly and a 1,100-word review "finishes" in silence.
+  let playUrl = null;
   function stopPlayer() {
-    if (!player) return;
-    try { player.pause(); } catch (_) {}
-    if (player.src) URL.revokeObjectURL(player.src);
-    player = null;
+    if (player) { try { player.pause(); } catch (_) {} }
+    if (playUrl) { URL.revokeObjectURL(playUrl); playUrl = null; }
     for (const el of document.querySelectorAll('tr.playing')) el.classList.remove('playing');
   }
 
@@ -339,9 +360,11 @@
 
   /// Play one word in the selected voice. Admins may name any voice on
   /// /api/tts, so this needs no extra endpoint — and the response's
-  /// X-TTS-Cache header tells us for free whether the clip already existed.
+  /// X-TTS-Cache header is the per-word PROOF: HIT means this exact text
+  /// already exists in this voice (a push copies it free); MISS means it did
+  /// not, and /api/tts just generated it. Returns { ok, cache, blocked }.
   async function playText(text, key) {
-    if (!audio || !audio.voiceId) { $('amsg').textContent = 'Pick a voice first.'; return false; }
+    if (!audio || !audio.voiceId) { $('amsg').textContent = 'Pick a voice first.'; return { ok: false }; }
     stopPlayer();
     let r;
     try {
@@ -349,34 +372,45 @@
         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, voiceId: audio.voiceId, emotion: 'default' }),
       });
-    } catch (e) { $('amsg').textContent = String(e.message || e); return false; }
+    } catch (e) { $('amsg').textContent = String(e.message || e); return { ok: false }; }
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
       $('amsg').textContent = d.error ? (d.error + (d.detail ? ': ' + d.detail : '')) : ('HTTP ' + r.status);
-      return false;
+      return { ok: false };
     }
-    // A HIT means the shared cache already holds this exact text in this
-    // voice, so a push would copy it free — even if our index hasn't recorded
-    // it yet. Build will then record it at no cost.
-    if (key && r.headers.get('X-TTS-Cache') === 'HIT') markClip(key, 'ready');
-    const url = URL.createObjectURL(await r.blob());
-    player = new Audio(url);
+    const cache = r.headers.get('X-TTS-Cache') || '';
+    if (key && cache === 'HIT') markClip(key, 'ready');
+    if (!player) player = new Audio();
+    playUrl = URL.createObjectURL(await r.blob());
+    player.src = playUrl;
     const tr = document.querySelector('tr[data-key="' + (window.CSS && CSS.escape ? CSS.escape(key || '') : key) + '"]');
-    if (tr) tr.classList.add('playing');
+    if (tr) { tr.classList.add('playing'); tr.scrollIntoView({ block: 'nearest' }); }
+    let blocked = '';
     await new Promise((done) => {
       player.onended = done; player.onerror = done;
-      player.play().catch(done);
+      player.play().then(() => {}, (e) => {
+        if (e && e.name === 'NotAllowedError') { blocked = 'autoplay'; }
+        done();
+      });
     });
     if (tr) tr.classList.remove('playing');
-    return true;
+    if (blocked) return { ok: false, blocked: true };
+    return { ok: true, cache };
   }
 
   $('rows').addEventListener('click', async (ev) => {
     const btn = ev.target.closest('button.play');
     if (!btn) return;
     $('amsg').textContent = 'Playing…';
-    const ok = await playText(btn.dataset.text, btn.dataset.key);
-    if (ok) $('amsg').textContent = '';
+    const res = await playText(btn.dataset.text, btn.dataset.key);
+    if (res.ok) {
+      // Spot-check verdict: was this clip already rendered, or did playing it
+      // just create it? Both play the same audio; only one proves a push
+      // would have been a free copy.
+      $('amsg').textContent = res.cache === 'HIT'
+        ? '✓ played the CACHED clip — this file already exists; a push copies it free.'
+        : '⚠ this word was NOT cached — /api/tts generated it just now (it is cached from here on).';
+    }
   });
 
   $('playall').addEventListener('click', async () => {
@@ -388,14 +422,31 @@
     if (!queue.length) { $('amsg').textContent = 'Nothing to play in this filter.'; return; }
     const token = {}; playAllStop = token;
     $('playall').textContent = '■ Stop';
+    let played = 0, misses = 0, softFails = 0;
     for (let i = 0; i < queue.length; i++) {
       if (playAllStop !== token) break;
       const a = queue[i];
       $('amsg').textContent = 'Playing ' + (i + 1) + ' / ' + queue.length + ' — ' + a.en + ' → ' + a.text;
-      const ok = await playText(a.text, akey(a.en, a.section, a.category));
-      if (!ok) break;
+      const res = await playText(a.text, a.dictKey || akey(a.en, a.section, a.category));
+      if (res.blocked) {
+        // The browser revoked autoplay mid-run — every later word would fail
+        // the same way, so stop and SAY so instead of sprinting silently
+        // through the rest (which read as "the clips don't exist").
+        $('amsg').innerHTML = '<span class="pill warn">Playback stopped at word ' + (i + 1)
+          + ' — the browser blocked autoplay. Click ▶ Play all again to continue from here.</span>';
+        playAllStop = null; $('playall').textContent = '▶ Play all';
+        return;
+      }
+      if (!res.ok) { softFails++; continue; }
+      played++;
+      if (res.cache && res.cache !== 'HIT') misses++;
     }
-    if (playAllStop === token) { playAllStop = null; $('amsg').textContent = '✓ Played ' + queue.length + ' word' + (queue.length === 1 ? '' : 's'); }
+    if (playAllStop === token) {
+      playAllStop = null;
+      $('amsg').textContent = '✓ Played ' + played + ' word' + (played === 1 ? '' : 's')
+        + (misses ? ' — ⚠ ' + misses + ' were NOT cached and got generated during playback' : ' — all from cache')
+        + (softFails ? ' · ' + softFails + ' failed to play' : '');
+    }
     $('playall').textContent = '▶ Play all';
   });
 
@@ -473,11 +524,56 @@
   $('clearchild').addEventListener('click', () => {
     $('child').value = ''; $('child').dataset.active = '';
     $('clearchild').style.display = 'none';
+    $('pushchild').style.display = 'none';
     loadAudio();
   });
   $('voice').addEventListener('change', () => {
     if ($('child').dataset.active) return;   // the child's saved voice wins
     loadAudio();
+  });
+
+  // ---- Push to the board (child mode) -------------------------------------
+  //
+  // The same publish action Lab → Publish drives (scope=child, sounds only),
+  // looped here until the board reports done — a partial pass resumes at the
+  // same offset and the derived-key skip makes re-runs idempotent. Doing it
+  // from the bench closes the loop: verify → push → re-verify on one screen,
+  // and removes the "pushed layout but not sounds" checkbox mistake entirely.
+  $('pushchild').addEventListener('click', async () => {
+    if (!audio || !audio.child) return;
+    const bc = audio.boardCounts || {};
+    if (!(bc.outdated || 0) && !confirm('Every tile already points at its current clip. Push anyway?')) return;
+    else if ((bc.outdated || 0) && !confirm('Push voice clips to “' + audio.child + '”?\n\n'
+      + bc.outdated + ' tiles point at old clips and will be updated. Parent recordings ('
+      + (bc.custom || 0) + ') are never touched.'
+      + ((audio.counts && audio.counts.english) ? '\n\n' + audio.counts.english
+        + ' untranslated words will keep speaking English until translated.' : ''))) return;
+    const totals = { updated: 0, failed: 0, already: 0 };
+    let offset = 0, summary = '';
+    for (let pass = 0; pass < 60; pass++) {
+      $('amsg').textContent = 'Pushing… ' + totals.updated + ' clips updated';
+      let d;
+      try {
+        d = await api('/api/admin/lab?action=publish', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scope: 'child', child: audio.child, what: { sounds: true }, offset }),
+        });
+      } catch (e) { summary = '<span class="pill warn">' + esc(String(e.message || e)) + '</span>'; break; }
+      for (const r of (d.results || [])) {
+        const s = r.sounds || {};
+        totals.updated += s.updated || 0; totals.failed += s.failed || 0; totals.already += s.already || 0;
+      }
+      if (d.done) {
+        summary = '✓ push complete — ' + totals.updated + ' clips updated, ' + totals.already
+          + ' already current' + (totals.failed ? ', <span class="pill warn">' + totals.failed + ' failed</span>' : '')
+          + '. Reload the board (or relaunch the app) to hear them.';
+        break;
+      }
+      offset = d.nextOffset || 0;
+    }
+    // Re-verify against the board so the chips show the post-push truth.
+    await loadAudio();
+    if (summary) $('amsg').innerHTML = summary + ($('amsg').innerHTML ? '<br>' + $('amsg').innerHTML : '');
   });
 
   $('seed').addEventListener('click', async () => {
@@ -569,6 +665,7 @@
     // whatever language the child's own settings say.
     $('child').value = ''; $('child').dataset.active = '';
     $('clearchild').style.display = 'none';
+    $('pushchild').style.display = 'none';
     stopPlayer(); playAllStop = null;
     load();
   });
