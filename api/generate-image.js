@@ -8,6 +8,7 @@ import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
 import { geminiKey, geminiDefaultModel, isGeminiModel, geminiCostCents, geminiGenerateImage } from './_lib/gemini.js';
 import { loadStyleGuide, loadChildStyleGuideId, SQUARE_RULE } from './_lib/onboarding-render.js';
+import { childLanguage } from './_lib/i18n.js';
 import { chargeForGeneration, requireStyling, NEEDS_SUBSCRIPTION_DETAIL, COST } from './_lib/credits.js';
 
 // gpt-image-1.5 / -2 at high quality + input_fidelity:high can legitimately run
@@ -72,7 +73,7 @@ async function describePhotoNeutral(apiKey, buffer, contentType) {
 // NOT seed the prompt with example subjects (that is what made a Mario playset
 // come back with a superhero next to it). No input photo (that tripped the
 // block). Returns { ok, data?, prompt?, detail? }.
-async function generateGenericPlaceholder(apiKey, model, label, style, buffer, contentType) {
+async function generateGenericPlaceholder(apiKey, model, label, style, buffer, contentType, noText = false) {
   const neutral = await describePhotoNeutral(apiKey, buffer, contentType);
   const subject = label ? `"${label}"` : 'the subject';
   const resemble = neutral ? ` Make it closely resemble this real object: ${neutral}` : '';
@@ -82,8 +83,9 @@ async function generateGenericPlaceholder(apiKey, model, label, style, buffer, c
     `trademarked, or branded character, mascot, logo, or product, and do NOT add any extra characters, ` +
     `figures, or mascots that are not physically part of the object itself. Center the subject on a ` +
     `soft, uncluttered background with bright friendly colors and a gentle, age-appropriate look. ` +
-    // Match the main edit prompt: caption the word into the art, spelled exactly.
-    (label
+    // Match the main edit prompt: caption the word into the art, spelled
+    // exactly — except on non-English boards (noText), which bake no text.
+    ((label && !noText)
       ? `At the very bottom, add a clean caption band with the word or phrase “${label}”, spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered and easy to read; put no other text anywhere else. `
       : `Do not include any text, words, or letters. `) +
     // No face on an inanimate object unless the real thing has one.
@@ -242,7 +244,13 @@ export default async function handler(req, res) {
   // cleanly), instead of a separate text band under the tile, which looked bad.
   // The `label` field stays the canonical source for speech/games/teaching;
   // this caption is purely visual. Spell it exactly to avoid a misspelled tile.
-  const captionClause = label
+  //
+  // Non-English boards bake NO text (audit C5, same rule as seeding and
+  // tile-jobs): image models mangle CJK and other non-Latin scripts, so a
+  // family typing 饺子 gets clean art and the app's label carries the word.
+  let boardLang = 'en';
+  try { boardLang = await childLanguage(db, childId); } catch (_) {}
+  const captionClause = (label && boardLang === 'en')
     ? ` At the very bottom of the image, add a clean horizontal caption band and write the word or phrase “${label}” in it — spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered and large enough for a young child to read. Put NO other text, words, or letters anywhere else in the image.`
     : ` Do not include any text, words, or letters in the image.`;
   // Background: parent-pickable preset (or hex). If unset, the model picks
@@ -325,7 +333,7 @@ export default async function handler(req, res) {
           res.status(upstream.status).json({ error: 'Image generation failed', detail: detail.slice(0, 500) });
           return;
         }
-        const fb = await generateGenericPlaceholder(apiKey, model, label, style, buffer, req.headers['content-type'] || 'image/jpeg');
+        const fb = await generateGenericPlaceholder(apiKey, model, label, style, buffer, req.headers['content-type'] || 'image/jpeg', boardLang !== 'en');
         if (!fb.ok) {
           res.status(upstream.status).json({
             error: 'Image generation failed',
