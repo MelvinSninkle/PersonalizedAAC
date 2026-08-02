@@ -26,14 +26,37 @@ including the dark-launched extras (language testers, access experiments).
    empty for the language.
 4. Add at least one voice for the language: admin/voices.html → add voice by
    ElevenLabs ID with the language tag. Non-English voices only show to
-   admins/testers.
-5. The parent (now a tester) sees the language picker in onboarding and in
+   admins/testers. **Skip this and everything downstream silently falls back
+   to an English-language voice** — the Translations page warns when a
+   language has no tagged voice.
+5. **Listen to it yourself before they do** (Lab → Translations, Board audio
+   bar): pick the voice, then read the four counts.
+   - *speak English* — words with no translation. A tile like this says the
+     English word on a Chinese board. Fix the translation first; Build skips
+     them on purpose rather than caching the wrong audio.
+   - *no clip yet* / *stale* — click **Build missing clips** and repeat until
+     it reports Complete. Words this voice has already spoken anywhere in the
+     product are copied free; the run tells you the free-vs-generated split.
+   - Spot-check with ▶ on individual rows, or **Play all** to walk the whole
+     filtered list hands-free.
+6. The parent (now a tester) sees the language picker in onboarding and in
    the dashboard Board tab. New tiles render with NO baked text and speak
-   translated audio.
-6. Review loop: Lab → Translations → CSV export → they correct → import
-   (their rows become `reviewed` and re-seeds never overwrite them).
-7. If they enable language AFTER tiles exist: Lab → Publish → push sounds to
-   the child (regenerates clips in the board language).
+   translated audio. **A newly granted role only takes effect on their next
+   sign-in** — the session cookie carries the role from when it was signed,
+   so have them sign out and back in if they were already logged in.
+7. Review loop: Lab → Translations → CSV export → they correct → import
+   (their rows become `reviewed` and re-seeds never overwrite them). Editing a
+   translation marks its clip **stale** — rebuild and re-listen.
+8. If they enable language AFTER tiles exist: Lab → Publish → push sounds to
+   the child (regenerates clips in the board language). Check the child's
+   board first — Translations → "check a child's board" reports THAT board's
+   language, saved voice and tiles, so you can confirm every word reads
+   *ready* before you push. Every row ready ⇒ the push is a fast, free copy.
+
+   Note what a sound push cannot fix: tiles whose art came from the shared
+   default layers were **rendered in English with the word painted into the
+   image**. Only tiles seeded after the language was set render text-free.
+   Fixing those means re-rendering art, which costs credits.
 
 ## 3. Access-experiment family (eye tracker / sentence builder)
 

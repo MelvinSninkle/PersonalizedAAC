@@ -39,6 +39,22 @@
   .missing code { background:#fef2f2; color:#b91c1c; border-radius:6px; padding:1px 7px; margin-right:4px; display:inline-block; }
   .note { font-size:12px; color:var(--muted); padding:8px 14px; border-top:1px solid #f3f4f6; }
   #msg { font-size:12px; color:var(--muted); }
+  .audiobar { display:flex; flex-wrap:wrap; align-items:center; gap:9px; padding:12px 14px; }
+  .audiobar input[type="text"] { width:250px; }
+  .pill { font-size:12px; border-radius:999px; padding:4px 11px; }
+  .pill.warn { background:#fef3c7; color:#92400e; }
+  .pill.warn a { color:#92400e; }
+  .pill.on { background:#ecfdf5; color:#047857; }
+  /* Clip state, one glyph per word. Colours match the chips so the counts and
+     the rows read as the same vocabulary. */
+  .st { font-size:14px; line-height:1; }
+  .st.ready   { color:#047857; }
+  .st.stale   { color:#b45309; }
+  .st.missing { color:#9ca3af; }
+  .st.english { color:#b91c1c; }
+  .st.none    { color:#d1d5db; }
+  button.mini { padding:2px 8px; font-size:12px; border-radius:7px; }
+  tr.playing { background:#fdf2f8; }
 </style>
 </head>
 <body>
@@ -63,7 +79,29 @@
   <div class="chips" id="chips"></div>
 
   <div class="panel">
-    <div class="head"><h2>Missing words</h2><span class="sub">Taxonomy labels with no translation yet. New batches show up here until covered.</span></div>
+    <div class="head">
+      <h2>Board audio</h2>
+      <span class="sub">Hear the language before any family does. Clips come from the same cache a push copies from.</span>
+    </div>
+    <div class="audiobar">
+      <select id="voice"><option value="">— pick a voice —</option></select>
+      <span id="voice-warn"></span>
+      <button id="build">Build missing clips</button>
+      <button id="playall">▶ Play all</button>
+      <input type="text" id="child" placeholder="check a child's board (email or slug)">
+      <button id="checkchild">Check</button>
+      <button id="clearchild" style="display:none;">Clear</button>
+      <span id="amsg"></span>
+    </div>
+    <div class="note" id="audionote">
+      A tile speaks <b>translation pronunciation → translation → English label</b>, so an
+      untranslated word speaks English on a translated board. Build fills the shared voice
+      cache; only then is Publish → push sounds a fast, free copy.
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="head"><h2>Missing words</h2><span class="sub">Taxonomy labels with no translation yet — each one <b>speaks English</b> on a board in this language.</span></div>
     <div class="missing" id="missing">Loading…</div>
   </div>
 
@@ -75,17 +113,32 @@
     </div>
     <div class="tablewrap">
       <table>
-        <thead><tr><th>English</th><th>Section</th><th>Category</th><th>Translation</th><th>Pronunciation (spoken)</th><th>Status</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="6">Loading…</td></tr></tbody>
+        <thead><tr><th>English</th><th>Section</th><th>Category</th><th>Translation</th><th>Pronunciation (spoken)</th><th>Status</th><th>Clip</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7">Loading…</td></tr></tbody>
       </table>
     </div>
-    <div class="note">English is the identity, never edited here. The CSV round-trip is the native-reviewer loop: Export → they correct the translation/pronunciation columns → Import. Imported rows land as reviewed. After changing translations, re-push sounds from Publish so existing boards pick up new audio.</div>
+    <div class="note">English is the identity, never edited here. The CSV round-trip is the native-reviewer loop: Export → they correct the translation/pronunciation columns → Import. Imported rows land as reviewed. Editing a translation marks its clip <b>◐ stale</b> — rebuild, listen, then re-push sounds from Publish so existing boards pick up the new audio.</div>
   </div>
 </main>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
   let data = null;
+  // Audio review state. `audio.rows` is keyed by the SAME triple the server
+  // translates on (section|category|english) so a dictionary row and its clip
+  // always line up, including homonyms like drink-the-noun vs drink-the-verb.
+  let audio = null, audioMap = new Map(), voices = [], player = null, playAllStop = null;
+
+  const akey = (en, section, category) =>
+    `${String(section || '').toLowerCase()}|${String(category || '').toLowerCase()}|${String(en || '').trim().toLowerCase()}`;
+
+  const GLYPH = { ready: '●', stale: '◐', missing: '○', english: '⚠' };
+  const TITLE = {
+    ready:   'Ready — cached in this voice for exactly this text. A push copies it for free.',
+    stale:   'Stale — the translation changed after the clip was built. Rebuild before pushing.',
+    missing: 'No clip yet in this voice. A push would have to generate it.',
+    english: 'No translation — this tile SPEAKS ENGLISH on a board in this language.',
+  };
 
   async function api(path, opts) {
     const r = await fetch(path, { credentials: 'same-origin', ...opts });
@@ -103,33 +156,118 @@
       render();
       $('msg').textContent = '';
     } catch (e) { $('msg').textContent = String(e.message || e); }
+    await loadAudio();
   }
 
   function render() {
     const c = data.coverage || {};
+    const a = (audio && audio.counts) || null;
     $('chips').innerHTML =
       '<div class="chip"><b>' + (data.entries || []).length + '</b>dictionary rows</div>' +
       '<div class="chip"><b>' + (c.translated ?? '–') + ' / ' + (c.taxonomyLabels ?? '–') + '</b>taxonomy labels covered</div>' +
       '<div class="chip' + ((c.missingWords || []).length ? ' warn' : '') + '"><b>' + (c.missingWords || []).length + '</b>missing words</div>' +
-      '<div class="chip"><b>' + (data.entries || []).filter((e) => e.status === 'reviewed').length + '</b>native-reviewed</div>';
+      '<div class="chip"><b>' + (data.entries || []).filter((e) => e.status === 'reviewed').length + '</b>native-reviewed</div>' +
+      (a ? (
+        '<div class="chip"><b>' + a.ready + '</b>clips ready</div>' +
+        '<div class="chip' + (a.stale ? ' warn' : '') + '"><b>' + a.stale + '</b>stale clips</div>' +
+        '<div class="chip' + (a.missing ? ' warn' : '') + '"><b>' + a.missing + '</b>no clip yet</div>' +
+        '<div class="chip' + (a.english ? ' warn' : '') + '"><b>' + a.english + '</b>speak English</div>'
+      ) : '');
     $('missing').innerHTML = (c.missingWords || []).length
       ? c.missingWords.map((w) => '<code>' + esc(w) + '</code>').join(' ')
       : 'None. Every live taxonomy label has a translation. 🎉';
     drawRows();
   }
 
-  function drawRows() {
+  // ---- Board audio --------------------------------------------------------
+
+  async function loadVoices() {
+    try {
+      const d = await api('/api/admin/lab?action=voices');
+      voices = (d.voices || []).filter((v) => v.active);
+    } catch (_) { voices = []; }
+  }
+
+  function drawVoicePicker() {
+    const lang = (audio && audio.lang) || $('lang').value;
+    const forLang = voices.filter((v) => (v.lang || 'en') === lang);
+    const want = (audio && audio.voiceId) || $('voice').value;
+    $('voice').innerHTML = '<option value="">— pick a voice —</option>' + forLang.map((v) =>
+      '<option value="' + esc(v.id) + '"' + (v.id === want ? ' selected' : '') + '>'
+      + esc(v.name) + (v.accent ? ' · ' + esc(v.accent) : '') + '</option>').join('');
+    // A voice tagged for the language is the step that silently breaks the
+    // whole chain — a board with none falls back to an English-language voice.
+    $('voice-warn').innerHTML = forLang.length
+      ? ''
+      : '<span class="pill warn">No voice tagged <b>' + esc(lang) + '</b> — '
+        + '<a href="/admin/voices.html">add one in the voice lab</a> first.</span>';
+  }
+
+  async function loadAudio() {
+    if (!voices.length) await loadVoices();
+    const child = $('child').dataset.active || '';
+    const params = new URLSearchParams({ action: 'lang-audio', lang: $('lang').value });
+    if (child) params.set('child', child);
+    else if ($('voice').value) params.set('voiceId', $('voice').value);
+    $('amsg').textContent = 'Checking clips…';
+    try {
+      audio = await api('/api/admin/lab?' + params.toString());
+      audioMap = new Map((audio.rows || []).map((r) => [akey(r.en, r.section, r.category), r]));
+      if (child && audio.childFound === false) {
+        $('amsg').innerHTML = '<span class="pill warn">No board found for “' + esc(child) + '”.</span>';
+        $('child').dataset.active = '';
+        $('clearchild').style.display = 'none';
+      } else if (child) {
+        // The child's own settings win over both pickers — reload the
+        // dictionary if their board isn't in the language that was selected.
+        $('lang').value = audio.lang;
+        if (data && data.lang !== audio.lang) {
+          data = await api('/api/admin/lab?action=translations&lang=' + audio.lang);
+        }
+        $('amsg').innerHTML = '<span class="pill on">Showing <b>' + esc(audio.child) + '</b>’s board — '
+          + esc(audio.lang) + ', their saved voice, their tiles only.</span>';
+        $('clearchild').style.display = '';
+      } else {
+        $('amsg').textContent = audio.voiceId ? '' : 'Pick a voice to see clip status.';
+      }
+      drawVoicePicker();
+      render();
+    } catch (e) { $('amsg').textContent = String(e.message || e); }
+  }
+
+  function clipCell(e) {
+    const a = audioMap.get(akey(e.en, e.section, e.category));
+    // In child mode the projection IS the board, so a dictionary row with no
+    // match simply isn't on that board — drawRows filters those out first.
+    if (!a) return '<td><span class="st none" title="Not a live taxonomy word on this board.">–</span></td>';
+    const st = a.status;
+    return '<td><span class="st ' + esc(st) + '" title="' + esc(TITLE[st] || '') + '">' + (GLYPH[st] || '–') + '</span>'
+      + (st === 'english' ? ''
+        : ' <button class="mini play" data-text="' + esc(a.text) + '" data-key="' + esc(akey(e.en, e.section, e.category)) + '">▶</button>')
+      + '</td>';
+  }
+
+  function visibleRows() {
     const f = $('filter').value.trim().toLowerCase();
-    const rows = (data.entries || []).filter((e) => !f
-      || e.en.includes(f) || (e.label || '').toLowerCase().includes(f)
-      || (e.section || '').includes(f) || (e.category || '').includes(f));
+    const childMode = !!(audio && audio.child);
+    return (data.entries || []).filter((e) => {
+      if (childMode && !audioMap.has(akey(e.en, e.section, e.category))) return false;
+      return !f || e.en.includes(f) || (e.label || '').toLowerCase().includes(f)
+        || (e.section || '').includes(f) || (e.category || '').includes(f);
+    });
+  }
+
+  function drawRows() {
+    if (!data) return;
+    const rows = visibleRows();
     $('rows').innerHTML = rows.slice(0, 800).map((e, i) =>
-      '<tr data-i="' + i + '">'
+      '<tr data-i="' + i + '" data-key="' + esc(akey(e.en, e.section, e.category)) + '">'
       + '<td>' + esc(e.en) + '</td><td>' + esc(e.section || '') + '</td><td>' + esc(e.category || '') + '</td>'
       + '<td><input class="tr" data-en="' + esc(e.en) + '" data-section="' + esc(e.section || '') + '" data-category="' + esc(e.category || '') + '" value="' + esc(e.label || '') + '"></td>'
       + '<td><input class="pr" data-en="' + esc(e.en) + '" data-section="' + esc(e.section || '') + '" data-category="' + esc(e.category || '') + '" value="' + esc(e.pronunciation || '') + '"></td>'
-      + '<td><span class="tag ' + esc(e.status) + '">' + esc(e.status) + '</span></td></tr>'
-    ).join('') || '<tr><td colspan="6">No rows. Seed the bundled dictionary to start.</td></tr>';
+      + '<td><span class="tag ' + esc(e.status) + '">' + esc(e.status) + '</span></td>'
+      + clipCell(e) + '</tr>'
+    ).join('') || '<tr><td colspan="7">No rows. Seed the bundled dictionary to start.</td></tr>';
   }
 
   $('rows').addEventListener('keydown', async (ev) => {
@@ -149,7 +287,148 @@
       $('msg').textContent = '✓ Saved';
       row.querySelector('.tag').className = 'tag reviewed';
       row.querySelector('.tag').textContent = 'reviewed';
+      // The saved text is what a board would now speak, so any clip built from
+      // the old text is stale — re-check rather than leave a green dot lying.
+      const idx = (data.entries || []).find((x) => x.en === inp.dataset.en
+        && (x.section || '') === inp.dataset.section && (x.category || '') === inp.dataset.category);
+      if (idx) { idx.label = tr.value.trim(); idx.pronunciation = pr.value.trim(); idx.status = 'reviewed'; }
+      loadAudio();
     } catch (e) { $('msg').textContent = String(e.message || e); }
+  });
+
+  // ---- Audition -----------------------------------------------------------
+
+  function stopPlayer() {
+    if (!player) return;
+    try { player.pause(); } catch (_) {}
+    if (player.src) URL.revokeObjectURL(player.src);
+    player = null;
+    for (const el of document.querySelectorAll('tr.playing')) el.classList.remove('playing');
+  }
+
+  function markClip(key, status) {
+    const row = audioMap.get(key);
+    if (row) row.status = status;
+    const cell = document.querySelector('tr[data-key="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"] .st');
+    if (cell) { cell.className = 'st ' + status; cell.textContent = GLYPH[status] || '–'; cell.title = TITLE[status] || ''; }
+  }
+
+  /// Play one word in the selected voice. Admins may name any voice on
+  /// /api/tts, so this needs no extra endpoint — and the response's
+  /// X-TTS-Cache header tells us for free whether the clip already existed.
+  async function playText(text, key) {
+    if (!audio || !audio.voiceId) { $('amsg').textContent = 'Pick a voice first.'; return false; }
+    stopPlayer();
+    let r;
+    try {
+      r = await fetch('/api/tts', {
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voiceId: audio.voiceId, emotion: 'default' }),
+      });
+    } catch (e) { $('amsg').textContent = String(e.message || e); return false; }
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      $('amsg').textContent = d.error ? (d.error + (d.detail ? ': ' + d.detail : '')) : ('HTTP ' + r.status);
+      return false;
+    }
+    // A HIT means the shared cache already holds this exact text in this
+    // voice, so a push would copy it free — even if our index hasn't recorded
+    // it yet. Build will then record it at no cost.
+    if (key && r.headers.get('X-TTS-Cache') === 'HIT') markClip(key, 'ready');
+    const url = URL.createObjectURL(await r.blob());
+    player = new Audio(url);
+    const tr = document.querySelector('tr[data-key="' + (window.CSS && CSS.escape ? CSS.escape(key || '') : key) + '"]');
+    if (tr) tr.classList.add('playing');
+    await new Promise((done) => {
+      player.onended = done; player.onerror = done;
+      player.play().catch(done);
+    });
+    if (tr) tr.classList.remove('playing');
+    return true;
+  }
+
+  $('rows').addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('button.play');
+    if (!btn) return;
+    $('amsg').textContent = 'Playing…';
+    const ok = await playText(btn.dataset.text, btn.dataset.key);
+    if (ok) $('amsg').textContent = '';
+  });
+
+  $('playall').addEventListener('click', async () => {
+    if (playAllStop) { playAllStop = null; stopPlayer(); $('playall').textContent = '▶ Play all'; return; }
+    if (!audio || !audio.voiceId) { $('amsg').textContent = 'Pick a voice first.'; return; }
+    const queue = visibleRows()
+      .map((e) => audioMap.get(akey(e.en, e.section, e.category)))
+      .filter((a) => a && a.status !== 'english');
+    if (!queue.length) { $('amsg').textContent = 'Nothing to play in this filter.'; return; }
+    const token = {}; playAllStop = token;
+    $('playall').textContent = '■ Stop';
+    for (let i = 0; i < queue.length; i++) {
+      if (playAllStop !== token) break;
+      const a = queue[i];
+      $('amsg').textContent = 'Playing ' + (i + 1) + ' / ' + queue.length + ' — ' + a.en + ' → ' + a.text;
+      const ok = await playText(a.text, akey(a.en, a.section, a.category));
+      if (!ok) break;
+    }
+    if (playAllStop === token) { playAllStop = null; $('amsg').textContent = '✓ Played ' + queue.length + ' words'; }
+    $('playall').textContent = '▶ Play all';
+  });
+
+  // ---- Build --------------------------------------------------------------
+
+  $('build').addEventListener('click', async () => {
+    if (!audio || !audio.voiceId) { $('amsg').textContent = 'Pick a voice first.'; return; }
+    const c = audio.counts || {};
+    const todo = (c.missing || 0) + (c.stale || 0);
+    if (!todo) { $('amsg').textContent = 'Every translated word already has a current clip. ✓'; return; }
+    if (!confirm('Build clips for up to ' + todo + ' words in this voice?\n\n'
+      + 'Words this voice has already spoken anywhere in the product are copied free from the '
+      + 'cache; the rest are newly generated and cost ElevenLabs credits. The run reports the split.\n\n'
+      + ((c.english || 0) ? (c.english + ' untranslated words are skipped — they would speak English. '
+          + 'Translate them first.\n\n') : '')
+      + 'Nothing reaches a child’s board until you run Publish → push sounds.')) return;
+    const totals = { built: 0, failed: 0, fromCache: 0, generated: 0 };
+    for (let pass = 0; pass < 40; pass++) {
+      $('amsg').textContent = 'Building… ' + totals.built + ' done';
+      let d;
+      try {
+        d = await api('/api/admin/lab?action=lang-audio', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'build', lang: audio.lang, voiceId: audio.voiceId,
+                                 child: audio.child || undefined }),
+        });
+      } catch (e) { $('amsg').textContent = String(e.message || e); break; }
+      totals.built += d.built; totals.failed += d.failed;
+      totals.fromCache += d.fromCache; totals.generated += d.generated;
+      if (!d.remaining || !d.built) {
+        $('amsg').textContent = '✓ ' + totals.built + ' built (' + totals.fromCache
+          + ' copied free from your existing voice cache, ' + totals.generated + ' newly generated)'
+          + (totals.failed ? ' · ' + totals.failed + ' failed' : '')
+          + (d.remaining ? ' · ' + d.remaining + ' still pending — run again' : '');
+        break;
+      }
+    }
+    loadAudio();
+  });
+
+  // ---- Child check --------------------------------------------------------
+
+  $('checkchild').addEventListener('click', () => {
+    const v = $('child').value.trim();
+    if (!v) { $('amsg').textContent = 'Enter an email or board slug.'; return; }
+    $('child').dataset.active = v;
+    loadAudio();
+  });
+  $('child').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') $('checkchild').click(); });
+  $('clearchild').addEventListener('click', () => {
+    $('child').value = ''; $('child').dataset.active = '';
+    $('clearchild').style.display = 'none';
+    loadAudio();
+  });
+  $('voice').addEventListener('change', () => {
+    if ($('child').dataset.active) return;   // the child's saved voice wins
+    loadAudio();
   });
 
   $('seed').addEventListener('click', async () => {
@@ -236,7 +515,14 @@
   });
 
   $('filter').addEventListener('input', drawRows);
-  $('lang').addEventListener('change', load);
+  $('lang').addEventListener('change', () => {
+    // Picking a language by hand leaves child-scoped mode — that view reports
+    // whatever language the child's own settings say.
+    $('child').value = ''; $('child').dataset.active = '';
+    $('clearchild').style.display = 'none';
+    stopPlayer(); playAllStop = null;
+    load();
+  });
   load();
 })();
 </script>

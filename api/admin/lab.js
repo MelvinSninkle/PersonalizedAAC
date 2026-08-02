@@ -40,6 +40,7 @@ import publish from './_lab-publish.js';
 import boards from './_lab-boards.js';
 import reports from './_lab-reports.js';
 import translations from './_lab-translations.js';
+import langAudio from './_lab-lang-audio.js';
 import role from './_lab-role.js';
 import demoAudio from './_lab-demo-audio.js';
 import backup from './_lab-backup.js';
@@ -82,6 +83,7 @@ const HANDLERS = {
   'boards': boards,
   'reports': reports,
   'translations': translations,
+  'lang-audio': langAudio,
   'role': role,
 };
 

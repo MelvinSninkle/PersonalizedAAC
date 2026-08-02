@@ -5,10 +5,11 @@
 #   2. invariants: the mechanical subset of the surface-audit skill (label
 #      writes, TTS cache-key lockstep, media ownership union, public-prefix
 #      whitelist, admin gates, Vercel function ceiling).
-#   3. smoke: real Chromium drives app.html and practice.html against the
-#      stub server — button navigation paging, the sentence-bar drag
-#      lifecycle (both lift styles), repeat-navigate highlight, and the
-#      practice board's read-only network surface.
+#   3. smoke: real Chromium drives app.html, practice.html and the
+#      translations workbench against the stub server — button navigation
+#      paging, the sentence-bar drag lifecycle (both lift styles),
+#      repeat-navigate highlight, the practice board's read-only network
+#      surface, and the language review bench's clip-state reporting.
 name: CI
 
 on:
@@ -40,11 +41,12 @@ jobs:
         run: |
           npm install --no-save playwright
           npx playwright install --with-deps chromium
-      - name: Board + practice smoke suites
+      - name: Board + practice + translations smoke suites
         run: |
           python3 tools/surface-audit/stub_server.py &
           STUB_PID=$!
           sleep 2
           node tools/surface-audit/access_smoke.cjs
           node tools/surface-audit/practice_smoke.cjs
+          node tools/surface-audit/translations_smoke.cjs
           kill $STUB_PID

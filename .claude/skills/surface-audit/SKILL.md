@@ -167,6 +167,23 @@ taxonomy.pronunciation → taxonomy.label (translation map loaded only when
 Clips are copied per child under `onboarding/<childId>/voice/` — parent
 RECORDINGS (any other key shape) are never overwritten by pushes.
 
+**B4b. The language review bench derives spoken text the same way.**
+`api/admin/_lab-lang-audio.js` (Lab action `lang-audio`, driving the Board
+audio bar in `admin/translations.html`) is the pre-flight for B4: it reports,
+per word, whether a <lang> board would speak a translated clip (`ready`), an
+out-of-date one (`stale`), nothing yet (`missing`), or **the English label**
+(`english`, i.e. no `label_translations` row). VERIFY three things: (1) its
+text chain is `translation.pronunciation || translation.label ||
+taxonomy.pronunciation || taxonomy.label` — a bench that auditions different
+text than a board speaks is worse than no bench; (2) it calls `synthesizeVoice`
+rather than deriving its own blob key, so B3 keeps exactly THREE cache-key
+sites; (3) it never synthesizes `english`-status words — caching an English
+render under a non-English board's voice would bake the bug in and make the
+bench report ✅ for a tile that says the wrong word. `lang_clip_index` stores
+the spoken TEXT, not the key; staleness is a string compare. QC marks reuse
+`voice_qc` namespaced `'<lang>|<en>'`, alongside the existing `'clue|…'`.
+Runtime: `node tools/surface-audit/translations_smoke.cjs` against the stub.
+
 **B5. Device matrix.** Tap-to-speak plays the item's `sound_key` clip on all
 three clients (web `playSound`, iOS TilePlayer, Android TilePlayer) — no
 label-TTS fallback in the tap path, so a translated board speaks its clips.
