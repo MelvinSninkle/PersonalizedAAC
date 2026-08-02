@@ -65,9 +65,14 @@ const fails = [];
   ok('the English-speaking word is named in the missing panel', await page.evaluate(() =>
     /wonton soup/.test(document.getElementById('missing').textContent)));
 
+  // pizza's dictionary row is section/category-scoped; eat and cookie are
+  // WILDCARD rows (no section/category), the shape most of the real
+  // dictionary has. All three must line up with their clips — the launch bug
+  // was an exact-key join that stranded every wildcard row with no dot and
+  // no ▶, leaving Play all a queue of one.
   ok('a built word reads ready', (await dotFor('pizza')) === 'ready');
-  ok('an edited translation reads stale', (await dotFor('eat')) === 'stale');
-  ok('an unbuilt word reads no-clip', (await dotFor('cookie')) === 'missing');
+  ok('a wildcard dictionary row still gets its clip state', (await dotFor('eat')) === 'stale');
+  ok('an unbuilt wildcard word reads no-clip', (await dotFor('cookie')) === 'missing');
 
   // Auditioning: the stub answers X-TTS-Cache: HIT, which proves the clip
   // already exists in the shared cache even though the index hadn't recorded
@@ -79,6 +84,13 @@ const fails = [];
   });
   await page.waitForTimeout(500);
   ok('a cache HIT on audition flips the word to ready', (await dotFor('cookie')) === 'ready');
+
+  // Play all must walk EVERY translated row (wildcards included) — the
+  // symptom of the join bug was "✓ Played 1 word" over a fully built set.
+  await page.click('#playall');
+  await page.waitForTimeout(1500);
+  ok('play-all walks every translated word', await page.evaluate(() =>
+    /Played 4 words/.test(document.getElementById('amsg').textContent)));
 
   // A language with no tagged voice must say so — this is the step whose
   // absence makes a translated board fall back to an English-language voice.
