@@ -19,6 +19,7 @@
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { ensureTranslations, bundledDictionary } from '../_lib/i18n.js';
+import { UI_PHRASES } from '../_lib/ui-phrases.js';
 
 export const config = { maxDuration: 60 };
 
@@ -73,21 +74,43 @@ export default async function handler(req, res) {
       const have = new Set(entries.map((e) => e.en));
       const missingWords = tax.map((r) => r.l).filter((l) => l && !have.has(l)).sort();
       const missingCategories = cats.map((r) => r.l).filter((l) => l && !have.has(l)).sort();
+      // The child-facing prose frames (quiz questions, slideshow captions,
+      // scheduler nudges) — stored under section 'ui', keyed by the English
+      // sentence. Until translated, these speak/show ENGLISH on a translated
+      // board, so they count as gaps exactly like words do.
+      const haveUi = new Set(entries.filter((e) => e.section === 'ui').map((e) => e.en));
+      const missingPhrases = UI_PHRASES
+        .filter((p) => !haveUi.has(norm(p.en)))
+        .map((p) => ({ en: p.en, hint: p.hint }));
 
       if (String(q.csv || '') === '1') {
         const cell = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-        const lines = ['en,section,category,translation,pronunciation,status'];
-        for (const e of entries) lines.push([e.en, e.section, e.category, e.label, e.pronunciation, e.status].map(cell).join(','));
-        for (const m of missingWords) lines.push([m, '', '', '', '', 'MISSING'].map(cell).join(','));
+        // gaps=1 → ONLY the rows needing work, prefilled and import-ready:
+        // the translator fills the translation column (pronunciation optional)
+        // and imports the same file back; the note column is ignored by
+        // import. The full export keeps its shape and appends the same gaps.
+        const gapsOnly = String(q.gaps || '') === '1';
+        const lines = ['en,section,category,translation,pronunciation,status,note'];
+        if (!gapsOnly) {
+          for (const e of entries) lines.push([e.en, e.section, e.category, e.label, e.pronunciation, e.status, ''].map(cell).join(','));
+        }
+        for (const m of missingWords) lines.push([m, '', '', '', '', 'MISSING', ''].map(cell).join(','));
+        for (const p of missingPhrases) {
+          lines.push([p.en, 'ui', '', '', '', 'MISSING',
+            (p.hint || '') + (p.en.includes('{word}') ? ' — keep {word} exactly; the tile word is substituted into it' : '')].map(cell).join(','));
+        }
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="myworld-translations-${lang}.csv"`);
+        res.setHeader('Content-Disposition',
+          `attachment; filename="myworld-translations-${lang}${gapsOnly ? '-gaps' : ''}.csv"`);
         res.status(200).send(lines.join('\n'));
         return;
       }
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ ok: true, lang, entries,
         coverage: { taxonomyLabels: tax.length, translated: tax.length - missingWords.length,
-                    missingWords: missingWords.slice(0, 500), missingCategories: missingCategories.slice(0, 200) } });
+                    missingWords: missingWords.slice(0, 500), missingCategories: missingCategories.slice(0, 200),
+                    phrases: UI_PHRASES.length, phrasesTranslated: UI_PHRASES.length - missingPhrases.length,
+                    missingPhrases } });
       return;
     }
 

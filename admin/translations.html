@@ -69,6 +69,7 @@
   </select>
   <button id="seed">Seed bundled dictionary</button>
   <button id="export">Export CSV</button>
+  <button id="export-gaps">Export gaps CSV</button>
   <button id="import">Import CSV/JSON…</button>
   <input type="file" id="import-file" accept=".csv,.json,text/csv,application/json" style="display:none;">
   <span id="msg"></span>
@@ -178,6 +179,10 @@
       '<div class="chip"><b>' + (c.translated ?? '–') + ' / ' + (c.taxonomyLabels ?? '–') + '</b>taxonomy labels covered</div>' +
       '<div class="chip' + ((c.missingWords || []).length ? ' warn' : '') + '"><b>' + (c.missingWords || []).length + '</b>missing words</div>' +
       '<div class="chip"><b>' + (data.entries || []).filter((e) => e.status === 'reviewed').length + '</b>native-reviewed</div>' +
+      (c.phrases != null
+        ? '<div class="chip' + ((c.missingPhrases || []).length ? ' warn' : '') + '"><b>'
+          + (c.phrasesTranslated ?? 0) + ' / ' + c.phrases + '</b>quiz &amp; prompt phrases</div>'
+        : '') +
       (a ? (
         '<div class="chip"><b>' + a.ready + '</b>clips ready</div>' +
         '<div class="chip' + (a.stale ? ' warn' : '') + '"><b>' + a.stale + '</b>stale clips</div>' +
@@ -192,9 +197,17 @@
         '<div class="chip' + (audio.boardCounts.outdated ? ' warn' : '') + '"><b>' + audio.boardCounts.outdated + '</b>old clips on board</div>' +
         '<div class="chip"><b>' + audio.boardCounts.custom + '</b>parent-recorded</div>'
       ) : '');
-    $('missing').innerHTML = (c.missingWords || []).length
+    // Untranslated PHRASES speak English prose inside quizzes/slideshows/
+    // nudges on a translated board — the same failure mode as a missing word,
+    // listed in the same panel so nothing hides.
+    const phraseGaps = (c.missingPhrases || []).length
+      ? '<div style="margin-top:8px;"><b>Quiz &amp; prompt phrases still English:</b> '
+        + c.missingPhrases.map((p) => '<code title="' + esc(p.hint || '') + '">' + esc(p.en) + '</code>').join(' ')
+        + ' <span style="color:var(--muted);">(translate via Export gaps CSV — keep <code>{word}</code> exactly)</span></div>'
+      : '';
+    $('missing').innerHTML = ((c.missingWords || []).length
       ? c.missingWords.map((w) => '<code>' + esc(w) + '</code>').join(' ')
-      : 'None. Every live taxonomy label has a translation. 🎉';
+      : 'None. Every live taxonomy label has a translation. 🎉') + phraseGaps;
     drawRows();
   }
 
@@ -284,6 +297,11 @@
   }
 
   function clipCell(e) {
+    // UI phrases are spoken LIVE through /api/tts at play time (and cached on
+    // first use) — there is no pre-built clip to report on.
+    if ((e.section || '') === 'ui') {
+      return '<td><span class="st none" title="Quiz/prompt phrase — spoken live via TTS, cached on first use. No pre-built clip.">💬</span></td>';
+    }
     const a = audioMap.get(akey(e.en, e.section, e.category));
     // No clip row points at this dictionary row: either no live taxonomy
     // word uses it, or (in child mode) it isn't on this board.
@@ -621,6 +639,12 @@
 
   $('export').addEventListener('click', () => {
     window.open('/api/admin/lab?action=translations&lang=' + $('lang').value + '&csv=1', '_blank');
+  });
+  // Gaps only: every row that still needs work (untranslated taxonomy words +
+  // untranslated quiz/prompt phrases), import-ready — fill the translation
+  // column and Import the same file.
+  $('export-gaps').addEventListener('click', () => {
+    window.open('/api/admin/lab?action=translations&lang=' + $('lang').value + '&csv=1&gaps=1', '_blank');
   });
 
   $('import').addEventListener('click', () => $('import-file').click());

@@ -246,13 +246,20 @@ export default async function handler(req, res) {
     // English stays the identity for shop/style/analytics; clients render
     // displayLabel when present). Text the family typed in their own language
     // simply won't match the dictionary and passes through untouched.
-    let langOut = null;
+    let langOut = null, uiPhrases = null;
     if (boardLang !== 'en') {
       try {
         const { loadTranslationMap, translate } = await import('./_lib/i18n.js');
         const trMap = await loadTranslationMap(db, boardLang);
         if (trMap) {
           langOut = boardLang;
+          // The frames the board SPEAKS around the words (quiz questions,
+          // slideshow captions, scheduler nudges) — translated rows under
+          // section 'ui'. Missing keys = clients keep the English default.
+          try {
+            const { uiPhrasesFrom } = await import('./_lib/ui-phrases.js');
+            uiPhrases = uiPhrasesFrom(trMap);
+          } catch (_) {}
           const catById = new Map(cats.map((c) => [c.id, c]));
           for (const c of cats) {
             const t = translate(trMap, { label: c.label, section: c.section });
@@ -282,6 +289,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
       language: langOut,
+      uiPhrases,
       categories: cats.map(rowToCategory),
       items: outItems.map(rowToItem),
       ageFilter: { applied: !!appliedBand, band: appliedBand, hiddenCount: items.length - outItems.length },
