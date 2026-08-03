@@ -49,4 +49,5 @@ jobs:
           node tools/surface-audit/access_smoke.cjs
           node tools/surface-audit/practice_smoke.cjs
           node tools/surface-audit/translations_smoke.cjs
+          node tools/surface-audit/label_lab_smoke.cjs
           kill $STUB_PID
