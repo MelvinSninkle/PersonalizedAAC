@@ -25,6 +25,29 @@ Parent dashboard → **Emergency beacon** panel (a red nag shows until done):
    (board → Display settings): it is the only way to stop the beacon ON the
    device while it's offline.
 
+## Safe zones (geofence auto-activation)
+
+Same panel: stand where the zone should be (usually home) and tap **Add a
+zone here**, pick a radius, then **Arm** the fence and Save. When armed, the
+tablet watches its own GPS — the check runs ON the device, so it works with
+no internet, which is exactly the gap remote activation can't cover.
+
+- On exit the response is **staged**: the parents are alerted (dashboard +
+  push where configured) and a countdown runs on the device (default 10
+  minutes; configurable down to instant). **Re-entering the zone cancels
+  it.** A caregiver can cancel on the device with the PIN/password.
+- Against GPS jitter: a fix only counts as "out" past the radius by
+  75m-or-accuracy, an exit needs several consecutive fixes over two minutes,
+  and bad fixes (>150m accuracy) are ignored.
+- **Arm it for the risky hours, not always** — children leave home with
+  their parents every day; an always-armed fence cries wolf.
+- Monitoring health is visible on the dashboard ("fence armed · device
+  reports: inside"). If it says **no-permission**, the tablet never granted
+  location — open the board there and allow it.
+- Web reality: the board only watches while it is open and on-screen. There
+  is no background geolocation on the web; the native ports get true
+  background region monitoring (and will ask for location at setup).
+
 ## In an emergency
 
 1. Parent dashboard → 🔴 **Activate Emergency Beacon** → type `CONFIRM`.

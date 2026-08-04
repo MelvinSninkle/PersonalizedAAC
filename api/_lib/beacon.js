@@ -79,6 +79,15 @@ export async function ensureBeacon(db) {
       last_seen    TIMESTAMPTZ,
       updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
+  // Safe zones (geofencing): the fence check runs ON the device from GPS, so
+  // a device with no network can still light its own beacon on zone exit —
+  // this closes the "activation can't reach an offline device" gap.
+  await db`ALTER TABLE beacon_state ADD COLUMN IF NOT EXISTS zones JSONB`;
+  await db`ALTER TABLE beacon_state ADD COLUMN IF NOT EXISTS armed BOOLEAN NOT NULL DEFAULT FALSE`;
+  await db`ALTER TABLE beacon_state ADD COLUMN IF NOT EXISTS alert_minutes INT NOT NULL DEFAULT 10`;
+  await db`ALTER TABLE beacon_state ADD COLUMN IF NOT EXISTS staged_at TIMESTAMPTZ`;
+  await db`ALTER TABLE beacon_state ADD COLUMN IF NOT EXISTS staged_zone TEXT`;
+  await db`ALTER TABLE beacon_state ADD COLUMN IF NOT EXISTS zone_state TEXT`;
   // Per-child pre-rendered clips. A table (not just settings JSON) because
   // /api/media's ownership union must know these child-scoped blob keys
   // belong to this child (audit A2 — a key in no table is served as a shared
@@ -139,8 +148,8 @@ export async function buildBeaconClips(db, childId, { phone, langs }) {
 export async function beaconFor(db, childId) {
   try {
     await ensureBeacon(db);
-    const st = (await db`SELECT phone, langs, active, activated_at FROM beacon_state
-                         WHERE child_id = ${childId}`)[0];
+    const st = (await db`SELECT phone, langs, active, activated_at, zones, armed, alert_minutes
+                         FROM beacon_state WHERE child_id = ${childId}`)[0];
     if (!st || !st.phone) return null;
     const clips = await db`SELECT lang, kind, sound_key FROM beacon_clips WHERE child_id = ${childId}`;
     const langs = Array.isArray(st.langs) ? st.langs : ['en'];
@@ -153,6 +162,9 @@ export async function beaconFor(db, childId) {
       activatedAt: st.activated_at || null,
       phone: st.phone,
       langs, titles,
+      zones: Array.isArray(st.zones) ? st.zones : [],
+      armed: !!st.armed,
+      alertMinutes: Number.isFinite(Number(st.alert_minutes)) ? Number(st.alert_minutes) : 10,
       clips: clips.map((c) => ({ lang: c.lang, kind: c.kind, key: c.sound_key })),
     };
   } catch (_) { return null; }

@@ -391,6 +391,36 @@
       <span id="beacon-langs" style="display:flex;gap:4px 10px;flex-wrap:wrap;font-size:13px;"></span>
       <button class="btn" id="beacon-save">Save &amp; prepare voice clips</button>
     </div>
+    <div style="border-top:1px dashed #e5e7eb;margin:10px 0;padding-top:10px;">
+      <div style="font-weight:700;font-size:14px;margin-bottom:4px;">Safe zones (auto-activation)</div>
+      <p class="hint" style="margin:0 0 8px;">
+        Draw a circle around home (stand there and tap “add here”). When
+        <b>armed</b>, the tablet watches its own location — if it leaves the
+        zone, it alerts you and counts down before starting the beacon by
+        itself, <b>even with no internet</b> (the fence check runs on the
+        device). Re-entering the zone cancels the countdown. Arm it for the
+        risky hours — children leave home with their parents every day, so an
+        always-armed fence would cry wolf. Web boards only watch while the
+        board is on-screen; the native apps will watch in the background.
+      </p>
+      <div id="beacon-zones" style="display:flex;flex-direction:column;gap:4px;font-size:13px;margin-bottom:8px;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input id="beacon-zone-name" type="text" placeholder="Zone name (Home)" style="padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;width:130px;">
+        <select id="beacon-zone-radius" style="padding:7px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+          <option value="100">100 m</option><option value="200" selected>200 m</option>
+          <option value="400">400 m</option><option value="800">800 m</option><option value="1600">1.6 km</option>
+        </select>
+        <button class="btn" id="beacon-zone-add">📍 Add a zone here</button>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="beacon-armed"> <b>Armed</b></label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;">Beacon starts
+          <select id="beacon-alert-mins" style="padding:6px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+            <option value="0">immediately</option><option value="5">after 5 min</option>
+            <option value="10" selected>after 10 min</option><option value="20">after 20 min</option>
+          </select> after leaving</label>
+      </div>
+      <div class="hint" style="margin-top:6px;">Changes apply when you press <b>Save &amp; prepare voice clips</b> above. The first time the tablet monitors, it will ask for location permission — approve it on the tablet.</div>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <button class="btn" id="beacon-activate" style="background:#b91c1c;color:#fff;border-color:#b91c1c;font-weight:700;">🔴 Activate Emergency Beacon</button>
       <button class="btn" id="beacon-deactivate" style="display:none;">Deactivate</button>
@@ -2370,7 +2400,19 @@
     const $ = (id) => document.getElementById(id);
     if (!$('beacon-save')) return;
     const LANGS = [['en', 'English'], ['zh', '中文'], ['es', 'Español'], ['fr', 'Français'], ['pt', 'Português'], ['de', 'Deutsch']];
-    let state = null, pollT = null;
+    let state = null, pollT = null, zones = [];
+
+    function drawZones() {
+      $('beacon-zones').innerHTML = zones.length ? zones.map((z, i) =>
+        '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<span>🛡 <b>' + z.name.replace(/</g, '&lt;') + '</b> · ' + z.radius + ' m · '
+        + '<a href="https://maps.google.com/?q=' + z.lat + ',' + z.lng + '" target="_blank">map ↗</a></span>'
+        + '<button data-i="' + i + '" class="beacon-zone-x" style="border:none;background:transparent;color:#b91c1c;cursor:pointer;font-weight:700;">✕ remove</button></div>').join('')
+        : '<span style="color:var(--muted);">No zones yet.</span>';
+      for (const b of document.querySelectorAll('.beacon-zone-x')) {
+        b.addEventListener('click', () => { zones.splice(Number(b.dataset.i), 1); drawZones(); });
+      }
+    }
 
     function drawLangs(selected) {
       $('beacon-langs').innerHTML = LANGS.map(([code, label]) =>
@@ -2389,24 +2431,42 @@
       if (b) {
         if (!$('beacon-phone').value) $('beacon-phone').value = b.phone || '';
         drawLangs(b.langs || ['en']);
+        zones = Array.isArray(b.zones) ? b.zones.slice() : zones;
+        $('beacon-armed').checked = !!b.armed;
+        if (b.alertMinutes != null) $('beacon-alert-mins').value = String(b.alertMinutes);
       } else drawLangs(['en']);
+      drawZones();
       const active = !!(b && b.active);
       $('beacon-activate').style.display = active ? 'none' : '';
       $('beacon-deactivate').style.display = active ? '' : 'none';
-      if (active) {
+      const staged = !active && st.stagedAt
+        && (Date.now() - new Date(st.stagedAt).getTime()) < 2 * 3600_000;
+      if (active || staged) {
         const loc = (st.lat != null && st.lng != null)
           ? ' · <a href="https://maps.google.com/?q=' + st.lat + ',' + st.lng + '" target="_blank" style="color:#7f1d1d;font-weight:700;">last location ↗</a>'
             + (st.accuracy ? ' (±' + Math.round(st.accuracy) + 'm)' : '')
           : ' · location not reported yet';
         $('beacon-live').style.display = '';
-        $('beacon-live').innerHTML = '<b>🔴 BEACON ACTIVE</b> since ' + fmtAgo(b.activatedAt)
-          + ' · device last seen ' + fmtAgo(st.lastSeen)
-          + (st.battery != null ? ' · battery ' + st.battery + '%' + (st.charging ? ' ⚡charging' : '') : ' · battery unknown')
-          + loc;
+        $('beacon-live').innerHTML = active
+          ? '<b>🔴 BEACON ACTIVE</b>' + (st.activatedBy && st.activatedBy.indexOf('geofence') === 0 ? ' (auto — left safe zone)' : '')
+            + ' since ' + fmtAgo(b.activatedAt)
+            + ' · device last seen ' + fmtAgo(st.lastSeen)
+            + (st.battery != null ? ' · battery ' + st.battery + '%' + (st.charging ? ' ⚡charging' : '') : ' · battery unknown')
+            + loc
+          : '<b>⚠️ SAFE-ZONE ALERT</b> — the device left “' + (st.stagedZone || 'the safe zone') + '” '
+            + fmtAgo(st.stagedAt) + '. The beacon starts automatically unless cancelled on the device '
+            + 'or the zone is re-entered. Deactivate here after you have your child.' + loc;
         if (!pollT) pollT = setInterval(load, 15000);
       } else {
         $('beacon-live').style.display = 'none';
         if (pollT) { clearInterval(pollT); pollT = null; }
+      }
+      // Monitoring health while armed: a fence that isn't actually watching
+      // (permission never granted on the tablet) must be visible here.
+      if (b && b.armed && !active) {
+        $('beacon-status').textContent = st.zoneState === 'no-permission'
+          ? '⚠ The tablet has not granted location — the fence is NOT monitoring. Open the board on the tablet and allow location.'
+          : st.zoneState ? ('Fence armed · device reports: ' + st.zoneState) : 'Fence armed · waiting for the tablet to report.';
       }
     }
     async function load() {
@@ -2423,13 +2483,30 @@
       return d;
     }
 
+    $('beacon-zone-add').addEventListener('click', () => {
+      if (!navigator.geolocation) { $('beacon-status').textContent = 'This device has no location access.'; return; }
+      $('beacon-status').textContent = 'Getting this spot…';
+      navigator.geolocation.getCurrentPosition((pos) => {
+        zones.push({ name: $('beacon-zone-name').value.trim() || 'Safe zone',
+                     lat: pos.coords.latitude, lng: pos.coords.longitude,
+                     radius: Number($('beacon-zone-radius').value) || 200 });
+        $('beacon-zone-name').value = '';
+        drawZones();
+        $('beacon-status').textContent = 'Zone added — press Save to apply it.';
+      }, () => { $('beacon-status').textContent = 'Could not get a location fix — allow location on THIS device (stand where the zone should be).'; },
+      { enableHighAccuracy: true, timeout: 15000 });
+    });
+
     $('beacon-save').addEventListener('click', async () => {
       const phone = $('beacon-phone').value.trim();
       const langs = [...document.querySelectorAll('#beacon-langs input:checked')].map((i) => i.value);
       $('beacon-status').textContent = 'Preparing voice clips…';
       try {
-        const d = await post({ op: 'config', phone, langs });
-        $('beacon-status').textContent = '✓ ' + d.note;
+        const d = await post({ op: 'config', phone, langs, zones,
+                               armed: $('beacon-armed').checked,
+                               alertMinutes: Number($('beacon-alert-mins').value) });
+        $('beacon-status').textContent = '✓ ' + d.note
+          + (d.armed ? ' Fence ARMED.' : (zones.length ? ' Fence saved but not armed.' : ''));
         load();
       } catch (e) { $('beacon-status').textContent = String(e.message || e); }
     });

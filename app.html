@@ -3700,8 +3700,9 @@
     // activation timestamp) — otherwise the next sync would relight a beacon
     // an officer just stopped with the parent on the phone.
     if (b.active && !BEACON.active && activatedAt > BEACON.stoppedAt) beaconStart('sync');
-    if (!b.active && BEACON.active) beaconStop({ silent: true });
+    if (!b.active && BEACON.active && BEACON.source !== 'geofence') beaconStop({ silent: true });
     beaconPersist();
+    zoneSync();
   }
 
   // Battery — Chromium exposes navigator.getBattery (Fire/Android tablets,
@@ -3804,7 +3805,17 @@
       if (pos) { body.lat = pos.coords.latitude; body.lng = pos.coords.longitude; body.accuracy = pos.coords.accuracy; }
       apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => { if (d && d.ok && d.active === false) beaconStop({ silent: true }); })
+        .then((d) => {
+          if (!(d && d.ok && d.active === false)) return;
+          // A geofence-lit beacon reconciles UP, not off: the server just
+          // hasn't heard about the local firing yet (the device was offline
+          // when the countdown expired). zone-fire raises the server state;
+          // remote/sync-lit beacons obey the server as before.
+          if (BEACON.source === 'geofence') {
+            apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ childId: CHILD_ID, op: 'zone-fire' }) }).catch(() => {});
+          } else beaconStop({ silent: true });
+        })
         .catch(() => {});
     };
     if (navigator.geolocation) {
@@ -3895,12 +3906,13 @@
       for (const c of (BEACON.cfg.clips || [])) getMediaURL(c.key).catch(() => {});
     }
     if (source === 'remote') BEACON.stoppedAt = 0;   // an explicit new push overrides any local stop
-    BEACON.active = true; BEACON.drill = false; BEACON.samples = [];
+    BEACON.active = true; BEACON.drill = false; BEACON.samples = []; BEACON.source = source;
     beaconPersist();
+    if (typeof zoneSync === 'function') zoneSync();   // the fence's job is done while lit
     beaconBanner(true); beaconWake(); beaconAnnounce(); beaconTick(); beaconPing();
   }
   function beaconStop(opts = {}) {
-    BEACON.active = false; BEACON.drill = false;
+    BEACON.active = false; BEACON.drill = false; BEACON.source = null;
     if (opts.localStop) BEACON.stoppedAt = Date.now();
     beaconPersist();
     if (BEACON.timer) { clearTimeout(BEACON.timer); BEACON.timer = null; }
@@ -3908,6 +3920,10 @@
     try { if (BEACON.wakeLock) { BEACON.wakeLock.release(); BEACON.wakeLock = null; } } catch (_) {}
     beaconOverlay(false); beaconBanner(false);
     try { gVoice().pause(); } catch (_) {}
+    // Re-arm the fence, but never restage instantly while still outside — a
+    // verified stop means a caregiver is present.
+    if (typeof ZONE === 'object') { ZONE.clearedUntilReenter = true; }
+    if (typeof zoneSync === 'function') zoneSync();
   }
   async function beaconDrill() {
     if (BEACON.active || !BEACON.cfg) return;
@@ -3916,6 +3932,24 @@
     BEACON.drill = false;
     setTimeout(() => beaconOverlay(false), 4000);
   }
+  // Caregiver credential: the quick PIN (works offline) or the account
+  // password (verified against the server when online). Used by the beacon
+  // stop pane and the safe-zone countdown cancel.
+  async function beaconVerifyCredential(val) {
+    if (!val) return false;
+    try { if (pinIsSet() && (await pinHash(val)) === localStorage.getItem(PIN_KEY)) return true; } catch (_) {}
+    try {
+      let email = (typeof sessionUser === 'object' && sessionUser && sessionUser.email) || null;
+      if (!email) { const r = await apiFetch('/api/auth/me'); if (r.ok) email = (((await r.json()) || {}).user || {}).email; }
+      if (email) {
+        const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin', body: JSON.stringify({ email, password: val }) });
+        return r.ok;
+      }
+    } catch (_) {}
+    return false;
+  }
+
   // On-device stop: the child cannot stop it, but a parent — or an officer
   // with the parent on the phone — can, with the quick PIN (works offline)
   // or the account password (verified against the server when online).
@@ -3938,19 +3972,7 @@
       const val = p.querySelector('#beacon-stop-secret').value;
       const err = p.querySelector('#beacon-stop-err');
       if (!val) return;
-      let ok = false;
-      try { if (pinIsSet() && (await pinHash(val)) === localStorage.getItem(PIN_KEY)) ok = true; } catch (_) {}
-      if (!ok) {
-        try {
-          let email = (typeof sessionUser === 'object' && sessionUser && sessionUser.email) || null;
-          if (!email) { const r = await apiFetch('/api/auth/me'); if (r.ok) email = (((await r.json()) || {}).user || {}).email; }
-          if (email) {
-            const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-              credentials: 'same-origin', body: JSON.stringify({ email, password: val }) });
-            ok = r.ok;
-          }
-        } catch (_) {}
-      }
+      const ok = await beaconVerifyCredential(val);
       if (!ok) { err.textContent = 'That didn’t match. (Offline devices need the quick PIN.)'; return; }
       beaconStop({ localStop: true });
       // Best-effort server stand-down; if this session isn't the parent's,
@@ -3958,6 +3980,163 @@
       apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ childId: CHILD_ID, op: 'deactivate' }) }).catch(() => {});
     });
+  }
+
+  // ── SAFE ZONES — geofence auto-activation ────────────────────────────────
+  // The fence check runs ON THIS DEVICE from GPS, so a device with no network
+  // can still light its own beacon when it leaves the safe area — the one
+  // case remote activation can't reach. Web reality: monitoring runs only
+  // while the board is open and awake (there is no background geolocation on
+  // the web); the native ports get true background region monitoring.
+  //
+  // Against GPS jitter: a fix only counts as "out" when it's past the radius
+  // by max(75m, its own accuracy), an exit needs several such fixes over two
+  // minutes, and terrible-accuracy fixes are ignored entirely. The default
+  // response is STAGED: alert the parents, count down (re-entering cancels),
+  // then fire — because children leave home with their parents every day.
+  const ZONE = { timer: null, outs: [], staged: null, stageTimer: null, stageTick: null,
+                 clearedUntilReenter: false, state: 'off', lastPing: 0 };
+  const ZONE_TEST = (() => { try { return localStorage.getItem('aacZoneTestFast') === '1'; } catch (_) { return false; } })();
+  const ZONE_OUT_FIXES = ZONE_TEST ? 1 : 3;
+  const ZONE_OUT_SPAN = ZONE_TEST ? 0 : 120000;
+  const ZONE_POLL_NEAR = ZONE_TEST ? 2000 : 45000;
+  const ZONE_POLL_FAR = ZONE_TEST ? 2000 : 180000;
+
+  function zoneArmedCfg() {
+    const c = BEACON.cfg;
+    return (c && c.armed && Array.isArray(c.zones) && c.zones.length && !BEACON.active) ? c : null;
+  }
+  function zoneDistM(lat1, lon1, lat2, lon2) {
+    const R = 6371000, toR = Math.PI / 180;
+    const dLat = (lat2 - lat1) * toR, dLon = (lon2 - lon1) * toR;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toR) * Math.cos(lat2 * toR) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+  function zoneSync() {
+    const armed = !!zoneArmedCfg();
+    if (!armed) {
+      if (ZONE.timer) { clearTimeout(ZONE.timer); ZONE.timer = null; }
+      if (ZONE.staged) zoneCancelStage({ silent: true });
+      ZONE.state = 'off'; ZONE.outs = [];
+      return;
+    }
+    if (!ZONE.timer) zoneTick();
+  }
+  function zoneTick() {
+    ZONE.timer = null;
+    const cfg = zoneArmedCfg();
+    if (!cfg) { zoneSync(); return; }
+    if (!navigator.geolocation) { ZONE.state = 'no-gps'; return; }
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const acc = pos.coords.accuracy || 0;
+      let next = ZONE_POLL_FAR;
+      if (acc <= 150) {
+        // Signed distance past the NEAREST zone edge (negative = inside).
+        let minOver = Infinity, nearestName = 'safe zone';
+        for (const z of cfg.zones) {
+          const over = zoneDistM(pos.coords.latitude, pos.coords.longitude, z.lat, z.lng) - z.radius;
+          if (over < minOver) { minOver = over; nearestName = z.name; }
+        }
+        const exitMargin = Math.max(75, acc);
+        if (minOver <= 0) {
+          ZONE.state = 'inside'; ZONE.outs = []; ZONE.clearedUntilReenter = false;
+          if (ZONE.staged) zoneCancelStage({ reentered: true });
+        } else if (minOver > exitMargin) {
+          ZONE.state = 'outside';
+          const now = Date.now();
+          ZONE.outs.push(now);
+          while (ZONE.outs.length > 10) ZONE.outs.shift();
+          if (!ZONE.staged && !ZONE.clearedUntilReenter
+              && ZONE.outs.length >= ZONE_OUT_FIXES && now - ZONE.outs[0] >= ZONE_OUT_SPAN) {
+            zoneStageExit(nearestName);
+          }
+        }
+        // Poll fast near the boundary or outside; slow deep inside.
+        next = (minOver > -2 * exitMargin) ? ZONE_POLL_NEAR : ZONE_POLL_FAR;
+      }
+      zoneHealthPing();
+      ZONE.timer = setTimeout(zoneTick, next);
+    }, () => {
+      // Denied/unavailable: surface it to the parent dashboard via the
+      // health ping and retry slowly — an unmonitored fence must be visible.
+      ZONE.state = 'no-permission';
+      zoneHealthPing();
+      ZONE.timer = setTimeout(zoneTick, ZONE_TEST ? 3000 : 300000);
+    }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 });
+  }
+  // Monitoring health, every ~5 min while armed: the dashboard shows
+  // "inside Home ✓" / "no-permission" so a silently broken fence is visible.
+  async function zoneHealthPing() {
+    if (Date.now() - ZONE.lastPing < (ZONE_TEST ? 2000 : 300000)) return;
+    ZONE.lastPing = Date.now();
+    try {
+      const batt = await beaconBattery();
+      apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: CHILD_ID, op: 'ping', battery: batt.level,
+                               charging: !!batt.charging, zoneState: ZONE.staged ? 'staged' : ZONE.state }) })
+        .catch(() => {});
+    } catch (_) {}
+  }
+  function zoneStageExit(zoneName) {
+    const cfg = BEACON.cfg || {};
+    const mins = Number.isFinite(Number(cfg.alertMinutes)) ? Number(cfg.alertMinutes) : 10;
+    ZONE.staged = { zone: zoneName, at: Date.now(), mins };
+    // Alert the parents immediately (dashboard + push), independent of the
+    // countdown — best-effort, the countdown runs regardless.
+    apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ childId: CHILD_ID, op: 'zone-exit', zone: zoneName, alertMinutes: mins }) })
+      .catch(() => {});
+    if (mins <= 0) { zoneFire(); return; }
+    zoneStageBanner();
+    ZONE.stageTimer = setTimeout(zoneFire, mins * 60000);
+    ZONE.stageTick = setInterval(zoneStageBanner, 1000);
+  }
+  function zoneStageBanner() {
+    if (!ZONE.staged) return;
+    let el = document.getElementById('zone-stage-banner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'zone-stage-banner';
+      el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99997;background:#c2410c;color:#fff;'
+        + 'text-align:center;font-weight:700;font-size:15px;padding:9px 12px;display:flex;'
+        + 'align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;';
+      el.innerHTML = '<span id="zone-stage-text"></span>'
+        + '<button id="zone-stage-cancel" style="border:none;border-radius:8px;padding:6px 12px;background:rgba(255,255,255,.2);color:#fff;font-weight:700;cursor:pointer;">Caregiver cancel</button>';
+      document.body.appendChild(el);
+      el.querySelector('#zone-stage-cancel').addEventListener('click', async () => {
+        const val = window.prompt('Enter the parent PIN or account password to cancel:');
+        if (val == null) return;
+        if (await beaconVerifyCredential(val)) zoneCancelStage({ verified: true });
+      });
+    }
+    const left = Math.max(0, ZONE.staged.at + ZONE.staged.mins * 60000 - Date.now());
+    const mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
+    const t = el.querySelector('#zone-stage-text');
+    if (t) t.textContent = '⚠️ Left safe zone “' + ZONE.staged.zone + '” — Emergency Beacon starts in '
+      + mm + ':' + String(ss).padStart(2, '0');
+  }
+  function zoneCancelStage(opts = {}) {
+    if (ZONE.stageTimer) { clearTimeout(ZONE.stageTimer); ZONE.stageTimer = null; }
+    if (ZONE.stageTick) { clearInterval(ZONE.stageTick); ZONE.stageTick = null; }
+    ZONE.staged = null;
+    const el = document.getElementById('zone-stage-banner'); if (el) el.remove();
+    // A verified caregiver cancel while still OUTSIDE must not restage on the
+    // very next fix — suppressed until the device re-enters a zone.
+    if (opts.verified) ZONE.clearedUntilReenter = true;
+    if (!opts.silent) {
+      apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: CHILD_ID, op: 'zone-clear' }) }).catch(() => {});
+    }
+  }
+  function zoneFire() {
+    const zone = ZONE.staged && ZONE.staged.zone;
+    zoneCancelStage({ silent: true });
+    beaconStart('geofence');
+    // Raise the server state to match the locally-lit beacon (guarded op:
+    // only honored for an armed fence with a recent staged exit). Offline is
+    // fine — the beacon runs locally and reconciles on reconnect.
+    apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ childId: CHILD_ID, op: 'zone-fire', zone }) }).catch(() => {});
   }
   // ── Layout offer: the admin curated a new default arrangement and chose
   //    "ask families" — the FAMILY approves or keeps their own order. The
@@ -7637,6 +7816,15 @@
     if (a === 'beacon-start') { beaconStart('remote'); return; }
     if (a === 'beacon-stop') { beaconStop({ silent: true }); return; }
     if (a === 'beacon-drill') { beaconDrill(); return; }
+    if (a === 'beacon-cfg') {
+      // Config changed (zones armed/disarmed, number updated) — refetch and
+      // apply as if it arrived on sync.
+      apiFetch('/api/beacon?childId=' + encodeURIComponent(CHILD_ID))
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d) noteBeacon({ beacon: d.beacon }); })
+        .catch(() => {});
+      return;
+    }
     if (a === 'end') {
       abortRoutine();
       if (SLIDE.running) { stopSlideshow({ manual: true }); return; }

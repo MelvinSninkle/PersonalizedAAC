@@ -78,6 +78,32 @@ const fails = [];
     document.getElementById('beacon-overlay').style.display === 'none'
     && !!document.getElementById('beacon-banner')
     && document.querySelectorAll('.items-grid .tile-wrap').length > 3));
+  await context.close();
+
+  // ── Safe zones: the fence lights the beacon LOCALLY ──────────────────────
+  // Server says NOT active; the fence is armed around a "Home" 100km from the
+  // mocked GPS position; instant-fire mode. The board must detect the exit
+  // and start its own beacon with no server activation — the offline-child
+  // path made testable.
+  const ctx2 = await browser.newContext({
+    viewport: { width: 1100, height: 800 },
+    geolocation: { latitude: 41.0, longitude: -75.0 },
+    permissions: ['geolocation'],
+  });
+  await ctx2.addCookies([{ name: 'beacon', value: 'zone', url: 'http://127.0.0.1:8765' }]);
+  await ctx2.addInitScript(() => { try { localStorage.setItem('aacZoneTestFast', '1'); } catch (_) {} });
+  const p2 = await ctx2.newPage();
+  p2.on('pageerror', (e) => fails.push('zone pageerror: ' + e.message));
+  await p2.goto('http://127.0.0.1:8765/u/testchild', { waitUntil: 'networkidle' });
+  await p2.waitForFunction(() => document.querySelectorAll('.items-grid .tile-wrap').length > 3, { timeout: 15000 });
+  const role2 = p2.locator('#role-modal .role-pick[data-role="child"]');
+  if (await role2.isVisible().catch(() => false)) { await role2.click(); await p2.waitForTimeout(300); }
+  await p2.waitForFunction(() => !!document.getElementById('beacon-banner'), { timeout: 20000 }).catch(() => {});
+  ok('leaving an armed safe zone lights the beacon locally', await p2.evaluate(() =>
+    !!document.getElementById('beacon-banner')));
+  ok('the geofence-lit beacon shows the emergency screen content', await p2.evaluate(() =>
+    /\(555\) 010-4477/.test((document.getElementById('beacon-overlay') || {}).textContent || '')));
+  await ctx2.close();
 
   await browser.close();
   console.log(fails.length ? '\nFAILURES:\n' + fails.join('\n') : '\nALL PASS');
