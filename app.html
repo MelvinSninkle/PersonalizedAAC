@@ -3645,11 +3645,20 @@
   const LISTEN = {
     censor: true, tilesOnly: false,
     blocklist: new Set((() => { try { return JSON.parse(localStorage.getItem('aacListenBlocklist') || '[]'); } catch (_) { return []; } })()),
+    // Spoken-word captions on matched chips — server-owned dark-launch flag
+    // (SYNONYMS_PUBLIC): sync says whether this board draws them. Persisted
+    // so an offline board keeps its last-known answer; default OFF.
+    captions: (() => { try { return localStorage.getItem('aacListenCaptions') === '1'; } catch (_) { return false; } })(),
   };
   function noteListenBlocklist(data) {
     if (!data || !Array.isArray(data.listenBlocklist) || !data.listenBlocklist.length) return;
     LISTEN.blocklist = new Set(data.listenBlocklist);
     try { localStorage.setItem('aacListenBlocklist', JSON.stringify(data.listenBlocklist)); } catch (_) {}
+  }
+  function noteListenCaptions(data) {
+    if (!data || !('listenCaptions' in data)) return;   // older server → keep last known
+    LISTEN.captions = !!data.listenCaptions;            // false CLEARS (gate can re-close)
+    try { localStorage.setItem('aacListenCaptions', LISTEN.captions ? '1' : '0'); } catch (_) {}
   }
   // ── Translated UI phrases: the prose the board speaks AROUND the words —
   //    quiz questions, slideshow frames, scheduler nudges. Served by sync for
@@ -4267,6 +4276,7 @@
   async function hydrateFromServer(data) {
     noteEntitlement(data);
     noteListenBlocklist(data);
+    noteListenCaptions(data);
     noteUiPhrases(data);
     noteBeacon(data);
     noteLayoutOffer(data);
@@ -4370,6 +4380,7 @@
       const data = await r.json();
       noteEntitlement(data);   // tier flags refresh even when the board itself is unchanged
       noteListenBlocklist(data);
+      noteListenCaptions(data);
       noteUiPhrases(data);
       noteBeacon(data);
       noteLayoutOffer(data);
@@ -7551,8 +7562,10 @@
       if (matched) {
         // Keep what was actually SAID: a synonym match borrows the tile's
         // image but the transcript stays honest — "hi" captions hello's
-        // picture rather than silently becoming "hello".
-        const spoken = words.slice(i, i + used).join(' ').replace(/[.,!?;:"()\[\]{}]/g, '');
+        // picture rather than silently becoming "hello". Gated on the
+        // server-shipped listenCaptions flag while dark-launched.
+        const spoken = LISTEN.captions
+          ? words.slice(i, i + used).join(' ').replace(/[.,!?;:"()\[\]{}]/g, '') : null;
         out.push({ word: matched.label, spoken,
                    imageKey: matched.imageKey, soundKey: matched.soundKey, item: matched });
       }
@@ -8417,6 +8430,7 @@
     setListenPrefs: (p) => {
       if (p && 'censor' in p) LISTEN.censor = !!p.censor;
       if (p && 'tilesOnly' in p) LISTEN.tilesOnly = !!p.tilesOnly;
+      if (p && 'captions' in p) LISTEN.captions = !!p.captions;
       if (p && Array.isArray(p.blocklist)) LISTEN.blocklist = new Set(p.blocklist);
     } };
 

@@ -92,7 +92,9 @@ what generation can't produce:
   listen strips caption a synonym match with the SPOKEN word over the tile's
   image. Extend the set there for words every family shares; use curated
   matchTerms only for one-off, per-row synonyms. Only true same-tile words
-  in either place ("soda" is not juice).
+  in either place ("soda" is not juice). DARK-LAUNCHED: while
+  `SYNONYMS_PUBLIC = false` in word-match.js, only admin sync callers get
+  set expansion and captions (surface-audit F2) — one flip graduates it.
 - Multi-word labels ("all done", "ice cream") get NO generated inflections —
   curate any variants you want matched.
 - Comparatives (-er/-est) are never generated (junk like "cookier") — curate

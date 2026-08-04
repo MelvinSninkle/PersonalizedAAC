@@ -122,8 +122,12 @@ class H(http.server.SimpleHTTPRequestHandler):
             # The beacon payload appears only when the smoke opts in via a
             # cookie — an always-armed beacon would take over every other
             # board smoke's screen.
+            # listenCaptions: the dark-launch flag arrives TRUE here (the stub
+            # stands in for an admin-enabled board) so the smoke exercises the
+            # caption path; the smoke also flips it off via the test hook.
             out = {'categories': CATS, 'items': ITEMS,
-                   'listenBlocklist': ['damn', 'heck']}
+                   'listenBlocklist': ['damn', 'heck'],
+                   'listenCaptions': True}
             cookie = self.headers.get('Cookie') or ''
             if 'beacon=1' in cookie:
                 out['beacon'] = BEACON_FIXTURE

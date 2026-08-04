@@ -49,13 +49,20 @@ EOF
 # spoken-synonym matching everywhere with no visible error.
 node -e '
 import("./api/_lib/word-match.js").then((m) => {
-  const hello = m.expandMatchTerms("hello", []);
-  const dog = m.expandMatchTerms("dog", []);
+  // Explicit {synonyms} both ways so this guard survives the SYNONYMS_PUBLIC
+  // graduation flip: on = sets expand; off = they must stay out.
+  const hello = m.expandMatchTerms("hello", [], { synonyms: true });
+  const dog = m.expandMatchTerms("dog", [], { synonyms: true });
+  const dark = m.expandMatchTerms("hello", [], { synonyms: false });
   if (!hello.includes("hi") || !hello.includes("hey") || !dog.includes("puppy")) {
     console.error("FAIL word-match synonyms: hello →", hello.join(","), "dog →", dog.join(","));
     process.exit(1);
   }
-  console.log("word-match synonyms: PASS (hello → hi/hey, dog → puppy)");
+  if (dark.includes("hi") || dark.includes("hey")) {
+    console.error("FAIL word-match gate: {synonyms:false} still expanded →", dark.join(","));
+    process.exit(1);
+  }
+  console.log("word-match synonyms: PASS (hello → hi/hey, dog → puppy; gate off excludes)");
 })' || exit 1
 
 echo "ALL SYNTAX CHECKS PASS"

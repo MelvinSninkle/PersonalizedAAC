@@ -20,6 +20,9 @@ final class BoardStore {
     /// Listening display filter (E8): server-owned bad-word list from the
     /// last sync. Persisted with the board cache so offline keeps filtering.
     var listenBlocklist: Set<String> = []
+    /// Spoken-word captions on matched listen chips — server-owned dark-launch
+    /// flag from the last sync (rides the board cache like the blocklist).
+    var listenCaptions: Bool = false
 
     /// Convenience gates for the UI. Unknown = allowed, so an offline board
     /// never locks features it can't verify.
@@ -157,6 +160,7 @@ final class BoardStore {
             self.tiles = resp.items
             self.entitlement = resp.entitlement ?? self.entitlement
             if let bl = resp.listenBlocklist, !bl.isEmpty { self.listenBlocklist = Set(bl) }
+            if let lc = resp.listenCaptions { self.listenCaptions = lc }   // false re-closes the gate
             self.lastError = nil
             persistToDisk(resp)
             precacheMedia()
@@ -201,6 +205,7 @@ final class BoardStore {
         self.tiles = resp.items
         self.entitlement = resp.entitlement
         if let bl = resp.listenBlocklist, !bl.isEmpty { self.listenBlocklist = Set(bl) }
+        if let lc = resp.listenCaptions { self.listenCaptions = lc }
         precacheMedia()   // start warming from the cached board on cold launch
     }
 

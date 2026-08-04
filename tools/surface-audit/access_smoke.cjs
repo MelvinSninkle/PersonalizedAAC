@@ -172,6 +172,17 @@ const fails = [];
   ok('synonym keeps the spoken word as caption', syn[0].spoken === 'za');
   ok('an exact label match carries no caption',
     !(syn[1].spoken && syn[1].spoken.toLowerCase() !== 'pizza'));
+  // Dark-launch gate: with the server-shipped listenCaptions flag OFF the
+  // tile still matches, but no spoken caption is attached (SYNONYMS_PUBLIC).
+  const gated = await page.evaluate(async () => {
+    const H = window.__accessHooks;
+    H.setListenPrefs({ captions: false });
+    const toks = await H.listenTokens('za pizza');
+    H.setListenPrefs({ captions: true });   // restore the stub's synced state
+    return toks;
+  });
+  ok('captions gate off: match survives, caption does not',
+    gated.length === 2 && gated.every(t => t.item) && !gated.some(t => t.spoken));
 
   await browser.close();
   console.log(fails.length ? '\nFAILURES: ' + JSON.stringify(fails) : '\nALL PASS');

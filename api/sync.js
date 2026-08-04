@@ -159,11 +159,18 @@ export default async function handler(req, res) {
     // Listening-mode match terms: curated taxonomy.match_terms + generated
     // English inflections, expanded ONCE here so every client's tokenizer
     // just indexes strings (the morphology never gets ported to devices).
+    // Synonym sets are DARK-LAUNCHED (SYNONYMS_PUBLIC in word-match.js):
+    // until the flip, only admin callers get them — owner field-testing on
+    // his own child's device. listenCaptionsOut rides the response so client
+    // caption rendering follows the same gate.
+    let listenCaptionsOut = false;
     try {
-      const { expandMatchTerms } = await import('./_lib/word-match.js');
+      const { expandMatchTerms, SYNONYMS_PUBLIC } = await import('./_lib/word-match.js');
+      const synOn = SYNONYMS_PUBLIC || (auth.user && auth.user.role === 'admin');
+      listenCaptionsOut = !!synOn;
       for (const i of items) {
         const tax = i.taxonomy_slug ? taxBySlug.get(i.taxonomy_slug) : null;
-        const terms = expandMatchTerms(i.label, (tax && tax.match_terms) || []);
+        const terms = expandMatchTerms(i.label, (tax && tax.match_terms) || [], { synonyms: synOn });
         if (terms.length) i.match_terms_out = terms;
       }
     } catch (_) { /* matching enrichment is best-effort */ }
@@ -308,6 +315,10 @@ export default async function handler(req, res) {
       // "Bad Word" on the child's screen. Server-owned like match terms —
       // extend _lib/bad-words.js and every device updates on next sync.
       listenBlocklist: BAD_WORDS,
+      // Spoken-word captions on matched listen chips ("hi" under hello's
+      // picture) — dark-launched with the synonym sets; server-owned so
+      // graduation is one flip (SYNONYMS_PUBLIC), no client release.
+      listenCaptions: listenCaptionsOut,
       layoutOffer,
     });
   } catch (err) {

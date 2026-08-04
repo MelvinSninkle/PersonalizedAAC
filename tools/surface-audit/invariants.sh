@@ -172,6 +172,18 @@ grep -q "isParentOf" api/beacon.js || { fail "F1 beacon control lost the parent-
 grep -q "BEACON_PUBLIC" api/beacon.js || { fail "F1 beacon lost its BEACON_PUBLIC launch flag — the release gate must be an explicit flip"; F1=1; }
 [ "$F1" -eq 0 ] && pass "F1 emergency beacon unpaywalled, parent-controlled, media-owned"
 
+# ── F2: listening synonyms are dark-launched behind SYNONYMS_PUBLIC ──────────
+# Until the owner field-tests on his own child's device, only admin sync
+# callers get synonym expansion, and clients draw the spoken-word caption
+# only when sync said to (listenCaptions). Removing the flag or the sync
+# gate = accidental ship to every family; removing listenCaptions from the
+# sync payload = captions stuck at each device's last-known state.
+F2=0
+grep -q "SYNONYMS_PUBLIC" api/_lib/word-match.js || { fail "F2 word-match.js lost its SYNONYMS_PUBLIC launch flag — the release gate must be an explicit flip"; F2=1; }
+grep -q "SYNONYMS_PUBLIC" api/sync.js || { fail "F2 sync.js stopped consulting SYNONYMS_PUBLIC — synonym expansion would follow only the default"; F2=1; }
+grep -q "listenCaptions" api/sync.js || { fail "F2 sync.js no longer ships the listenCaptions flag — client captions can't follow the gate"; F2=1; }
+[ "$F2" -eq 0 ] && pass "F2 listening synonyms dark-launched (SYNONYMS_PUBLIC + synced listenCaptions)"
+
 # ── Vercel function ceiling (~100 routed functions) ──────────────────────────
 COUNT=$(find api -name '*.js' ! -name '_*' ! -path 'api/_lib/*' | wc -l)
 echo "INFO: routed Vercel functions: $COUNT / 100"

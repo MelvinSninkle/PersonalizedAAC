@@ -54,6 +54,14 @@ export const IRREGULAR = {
   child: ['children'],
 };
 
+// DARK LAUNCH: synonym matching + spoken captions are being field-tested on
+// the owner's device first. While false, /api/sync expands synonyms only for
+// admin callers (and ships listenCaptions=false to everyone else, so no
+// client draws the caption band). Flip to true to ship to every family —
+// this one flip also turns synonyms on for the practice board (api/demo.js)
+// and parent message matching (api/message-to-board.js), which default to it.
+export const SYNONYMS_PUBLIC = false;
+
 // Synonym SETS — words that should land on the SAME tile in listening mode:
 // someone says "hi" and the board's "hello" tile renders (with "hi" as the
 // spoken caption). Sets, not pairs, and symmetric on purpose: whichever word
@@ -152,7 +160,10 @@ export function inflections(word) {
 
 /// Full match set for a tile: curated terms + generated inflections.
 /// Returns normalized variants EXCLUDING the label itself, deduped, capped.
-export function expandMatchTerms(label, curated = []) {
+/// `synonyms` defaults to the launch flag so callers with no opinion (demo,
+/// message-to-board) go live in the same flip; sync passes its own value
+/// (admin callers get them early for field testing).
+export function expandMatchTerms(label, curated = [], { synonyms = SYNONYMS_PUBLIC } = {}) {
   const base = norm(label);
   const out = new Set();
   for (const c of Array.isArray(curated) ? curated : []) {
@@ -161,7 +172,7 @@ export function expandMatchTerms(label, curated = []) {
   }
   // Engine synonyms: every tile whose label sits in a SYNONYM_SET matches
   // the set's other words ("hello" tile hears "hi"/"hey").
-  for (const s of SYNONYMS[base] || []) out.add(s);
+  if (synonyms) for (const s of SYNONYMS[base] || []) out.add(s);
   // Single words inflect; multi-word labels rely on curated terms (inflecting
   // "all done" or "ice cream" makes nothing useful).
   if (base && !base.includes(' ')) {

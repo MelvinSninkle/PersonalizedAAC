@@ -61,6 +61,10 @@ struct APIClient {
         /// Listening display filter (E8): server-owned bad-word list; words
         /// on it render as "Bad Word" in the listening strip.
         var listenBlocklist: [String]? = nil
+        /// Spoken-word captions on matched listen chips ("hi" under hello's
+        /// picture) — server-owned dark-launch flag (SYNONYMS_PUBLIC); the
+        /// strip draws captions only when the last sync said to.
+        var listenCaptions: Bool? = nil
     }
 
     /// POST /api/auth/login — captures the Set-Cookie session.

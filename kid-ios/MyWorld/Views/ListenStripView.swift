@@ -59,7 +59,8 @@ enum ListenTokenizer {
 
     static func tokenize(_ words: [TimedWord], lexicon: [String: Tile],
                          censor: Bool = true, tilesOnly: Bool = false,
-                         blocklist: Set<String> = []) -> [ListenToken] {
+                         blocklist: Set<String> = [],
+                         captions: Bool = false) -> [ListenToken] {
         var out: [ListenToken] = []
         var i = 0
         while i < words.count {
@@ -77,10 +78,11 @@ enum ListenTokenizer {
             if let matched {
                 // A synonym/variant match borrows the tile's image but the
                 // transcript stays honest: keep what was said as the caption.
+                // `captions` is the server-shipped dark-launch flag.
                 let said = src.map { $0.text }.joined(separator: " ")
                 let differs = normalize(said) != normalize(matched.label)
                 out.append(ListenToken(id: id, word: matched.label, tile: matched, at: at,
-                                       spoken: differs ? said : nil))
+                                       spoken: (captions && differs) ? said : nil))
             } else if !tilesOnly {
                 // Display filter (E8): a blocklisted word never renders as
                 // itself; tilesOnly hides every non-tile word outright.
@@ -111,7 +113,8 @@ struct ListenStripView: View {
     private var tokens: [ListenToken] {
         ListenTokenizer.tokenize(speech.words, lexicon: ListenTokenizer.lexicon(from: board.tiles),
                                  censor: access.listenCensor, tilesOnly: access.listenTilesOnly,
-                                 blocklist: board.listenBlocklist)
+                                 blocklist: board.listenBlocklist,
+                                 captions: board.listenCaptions)
     }
 
     var body: some View {

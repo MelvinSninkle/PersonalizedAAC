@@ -122,6 +122,9 @@ data class SyncResponse(
     /** Listening display filter (E8): server-owned bad-word list; words on
      *  it render as "Bad Word" in the listening strip. */
     val listenBlocklist: List<String>? = null,
+    /** Spoken-word captions on matched listen chips ("hi" under hello's
+     *  picture) — server-owned dark-launch flag (SYNONYMS_PUBLIC). */
+    val listenCaptions: Boolean? = null,
 )
 
 /**

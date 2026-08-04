@@ -290,6 +290,19 @@ child-dismissable. Screen flashing is a slow ~0.3Hz pulse, NEVER ≥3Hz
 (photosensitive-seizure threshold). VERIFY: `bash invariants.sh` F1 +
 `node tools/surface-audit/beacon_smoke.cjs` against the stub.
 
+**F2. Listening synonyms are dark-launched behind `SYNONYMS_PUBLIC`.**
+The engine synonym sets (`SYNONYM_SETS` in `api/_lib/word-match.js`) and the
+spoken-word captions on matched listen chips are being field-tested on the
+owner's device first. While `SYNONYMS_PUBLIC = false`: `/api/sync` passes
+`{ synonyms }` into `expandMatchTerms` only for ADMIN callers, and ships
+`listenCaptions` (same boolean) so all three clients draw the caption band
+only when told to — web persists it (`aacListenCaptions`), iOS/Android carry
+it on BoardStore beside the blocklist. `api/demo.js` (public practice board)
+and `api/message-to-board.js` take the expandMatchTerms DEFAULT, which is the
+flag itself — so graduation is ONE flip in word-match.js, no client release.
+VERIFY: `invariants.sh` F2 greps + the access_smoke caption-gate assertion
+(match survives with captions off, caption does not).
+
 ## D. Admin containment
 
 **D1. Every Lab/taxonomy handler self-gates.** The dispatcher

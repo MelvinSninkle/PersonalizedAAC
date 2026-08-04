@@ -54,10 +54,12 @@ fun ListenStripView() {
 
     val access by c.access.data.collectAsState()
     val blocklist by c.board.listenBlocklist.collectAsState()
+    val captions by c.board.listenCaptions.collectAsState()
     val tokens = ListenTokenizer.tokenize(
         words, ListenTokenizer.lexicon(tiles),
         censor = access.listenCensor, tilesOnly = access.listenTilesOnly,
         blocklist = blocklist,
+        captions = captions,
     )
     val listState = rememberLazyListState()
 

@@ -42,6 +42,10 @@ class BoardStore(context: Context, private val api: ApiClient, private val media
      *  persisted with the board cache so offline keeps filtering. */
     private val _listenBlocklist = MutableStateFlow<Set<String>>(emptySet())
     val listenBlocklist: StateFlow<Set<String>> = _listenBlocklist
+    /** Spoken-word captions on matched listen chips — server-owned dark-launch
+     *  flag from the last sync (rides the board cache like the blocklist). */
+    private val _listenCaptions = MutableStateFlow(false)
+    val listenCaptions: StateFlow<Boolean> = _listenCaptions
 
     /** Unknown = permissive; the server enforces regardless (iOS parity). */
     val sttAllowed: Boolean get() = _entitlement.value?.stt ?: true
@@ -140,6 +144,7 @@ class BoardStore(context: Context, private val api: ApiClient, private val media
             _tiles.value = resp.items
             resp.entitlement?.let { _entitlement.value = it }
             resp.listenBlocklist?.takeIf { it.isNotEmpty() }?.let { _listenBlocklist.value = it.toSet() }
+            resp.listenCaptions?.let { _listenCaptions.value = it }   // false re-closes the gate
             _lastError.value = null
             persistToDisk(resp)
             precacheMedia()
@@ -180,6 +185,7 @@ class BoardStore(context: Context, private val api: ApiClient, private val media
         _tiles.value = resp.items
         _entitlement.value = resp.entitlement
         resp.listenBlocklist?.takeIf { it.isNotEmpty() }?.let { _listenBlocklist.value = it.toSet() }
+        resp.listenCaptions?.let { _listenCaptions.value = it }
         precacheMedia()
     }
 
