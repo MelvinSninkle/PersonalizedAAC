@@ -21,6 +21,12 @@ import { ensureBeacon, buildBeaconClips, beaconFor, BEACON_LANGS } from './_lib/
 
 export const config = { maxDuration: 120 };   // clip synthesis on save
 
+// DARK LAUNCH: while the owner field-tests the beacon on his own child's
+// device, control ops are ADMIN-ONLY. Flip this to true (and un-hide the
+// parent.html panel) to ship it to every family — the parent gate below is
+// already written and waiting.
+const BEACON_PUBLIC = false;
+
 const CMD_ACTIONS = { activate: 'beacon-start', deactivate: 'beacon-stop', drill: 'beacon-drill' };
 
 async function pushLiveCmd(db, childId, action) {
@@ -145,8 +151,16 @@ export default async function handler(req, res) {
 
     // Everything below changes the beacon itself: parents (or admin) only —
     // a therapist or school login must not be able to trigger or silence it.
-    const isParent = auth.user.role === 'admin' || await isParentOf(auth.user, childId, db);
-    if (!isParent) { res.status(403).json({ error: 'Only a parent can control the beacon' }); return; }
+    // While dark-launched (BEACON_PUBLIC=false) the parent path is off and
+    // only the admin can control any beacon.
+    const isParent = auth.user.role === 'admin'
+      || (BEACON_PUBLIC && await isParentOf(auth.user, childId, db));
+    if (!isParent) {
+      res.status(403).json({ error: BEACON_PUBLIC
+        ? 'Only a parent can control the beacon'
+        : 'The Emergency Beacon is in admin testing and not yet released' });
+      return;
+    }
 
     if (b.op === 'config') {
       const phone = String(b.phone || '').replace(/[^\d+() .-]/g, '').trim().slice(0, 24);

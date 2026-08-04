@@ -167,6 +167,9 @@ if grep -Eq "entitlementFor|requireStyling|chargeForGeneration|voiceCharsThisMon
   fail "F1 a beacon path consults entitlements/budgets — the beacon must never be paywalled"; F1=1; fi
 grep -q "beacon_clips" api/media.js || { fail "F1 media.js ownership union lost beacon_clips — beacon audio would serve as a shared asset"; F1=1; }
 grep -q "isParentOf" api/beacon.js || { fail "F1 beacon control lost the parent-only gate"; F1=1; }
+# Dark-launch flag: while BEACON_PUBLIC=false only the admin can control any
+# beacon (owner field-testing). Removing the flag entirely = accidental ship.
+grep -q "BEACON_PUBLIC" api/beacon.js || { fail "F1 beacon lost its BEACON_PUBLIC launch flag — the release gate must be an explicit flip"; F1=1; }
 [ "$F1" -eq 0 ] && pass "F1 emergency beacon unpaywalled, parent-controlled, media-owned"
 
 # ── Vercel function ceiling (~100 routed functions) ──────────────────────────

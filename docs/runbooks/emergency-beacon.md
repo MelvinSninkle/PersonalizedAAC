@@ -1,5 +1,13 @@
 # Emergency Beacon — the lost-child mode
 
+> **DARK-LAUNCHED (admin only).** While the owner field-tests it on his own
+> child's device, beacon control is admin-only: the dashboard panel is
+> hidden for non-admins (`admin-access-only`) and the server rejects
+> non-admin control ops (`BEACON_PUBLIC = false` in `api/beacon.js`). To
+> ship to families: flip `BEACON_PUBLIC` to `true`, remove the
+> `admin-access-only` hiding from the panel in parent.html, and rename its
+> section label — the parent gate is already written and waiting.
+
 What it is: a parent-activated mode where the child's device intermittently
 speaks a caretaker broadcast in the board's voice ("Please pay attention. The
 person holding this device is a vulnerable person…"), flashes a screen of the

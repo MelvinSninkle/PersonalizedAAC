@@ -365,9 +365,12 @@
     <span id="listen-status" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
   </div>
 
-  <!-- EMERGENCY BEACON — never paywalled -->
-  <div class="section-label">Emergency beacon</div>
-  <div class="panel" style="padding:14px;border-left:4px solid #b91c1c;">
+  <!-- EMERGENCY BEACON — never paywalled. Dark-launched: admin-only while
+       the owner field-tests it; the server enforces the same gate
+       (BEACON_PUBLIC in api/beacon.js). To ship: flip that flag and swap
+       these admin-access-only classes/display for the plain panel. -->
+  <div class="section-label admin-access-only" style="display:none;">Emergency beacon (admin testing)</div>
+  <div class="panel admin-access-only" style="display:none;padding:14px;border-left:4px solid #b91c1c;">
     <div id="beacon-nag" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#7f1d1d;">
       <b>Set this up now, before you ever need it.</b> If your child is ever
       missing with their device, the beacon makes it speak for them: it
