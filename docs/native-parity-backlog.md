@@ -91,7 +91,23 @@ Verified by call site, not by keyword:
 iOS is the intended name (Settings, with sign-out inside). Mirror it on web and
 Android when convenient.
 
-### 2E. Needs a device, not a diff
+### 2E. Emergency Beacon — the most important port on this list  ⭐⭐
+
+The lost-child mode shipped on web + server (2026-08-04: `api/beacon.js`,
+`api/_lib/beacon.js`, BEACON module in app.html). iPads run the NATIVE app,
+so until this is ported a native board cannot light the beacon. The port is
+client-only (server ops are shared): consume `beacon` from /api/sync +
+`beacon-start|stop|drill` live commands; pre-cache clips via MediaCache;
+announcement loop with `UIDevice.batteryLevel` / `BatteryManager` feeding
+the same adaptive schedule (tiers + measured-drain stretch to a 12h target,
+touch/motion burst); slow-pulse overlay (family People tiles + phone, family
+language first, never ≥3Hz); idle-timer disable; quick-PIN/password stop;
+battery+location pings to `op:'ping'`. Native advantages to use: real
+background audio, settable system brightness, CoreLocation/FusedLocation
+with the permission requested at beacon SETUP (web can only ask at
+activation).
+
+### 2F. Needs a device, not a diff
 
 Native drag-pickup thresholds still want on-device tuning with Andrew. The
 failure mode to avoid is every tile-touch reading as a grab; the target is
@@ -117,7 +133,11 @@ from a code read.
    #12 repeat count, then #11 movie linking.
 3. **2B** — clue authoring in both native tile editors.
 4. **2D** — label alignment.
-5. **2E** — drag thresholds, with Andrew on-device.
+5. **2F** — drag thresholds, with Andrew on-device.
+
+(Ordering note: **2E — the Emergency Beacon port — jumps this whole queue.**
+A safety feature that only works on the web board is a promise the native
+apps quietly break.)
 
 ---
 

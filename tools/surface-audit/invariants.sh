@@ -156,6 +156,19 @@ grep -q "validateInviteCode" api/auth/register.js || { fail "E10 register.js no 
 grep -q "invite_required" api/auth/register.js || { fail "E10 register.js lost the invite_required rejection"; E10=1; }
 [ "$E10" -eq 0 ] && pass "E10 self-signup enforces the invite code inline"
 
+# ── F1: the Emergency Beacon is NEVER paywalled and its clips stay owned ─────
+# The lost-child mode must work for every family forever: no beacon path may
+# consult entitlements, tiers, budgets, or charge helpers — a lapsed
+# subscription must not silence a lost child's device. And beacon clips are
+# child-scoped blobs that contain the family's phone number: media.js must
+# own them (audit A2) or they'd serve as shared library assets.
+F1=0
+if grep -Eq "entitlementFor|requireStyling|chargeForGeneration|voiceCharsThisMonth|NEEDS_SUBSCRIPTION" api/beacon.js api/_lib/beacon.js; then
+  fail "F1 a beacon path consults entitlements/budgets — the beacon must never be paywalled"; F1=1; fi
+grep -q "beacon_clips" api/media.js || { fail "F1 media.js ownership union lost beacon_clips — beacon audio would serve as a shared asset"; F1=1; }
+grep -q "isParentOf" api/beacon.js || { fail "F1 beacon control lost the parent-only gate"; F1=1; }
+[ "$F1" -eq 0 ] && pass "F1 emergency beacon unpaywalled, parent-controlled, media-owned"
+
 # ── Vercel function ceiling (~100 routed functions) ──────────────────────────
 COUNT=$(find api -name '*.js' ! -name '_*' ! -path 'api/_lib/*' | wc -l)
 echo "INFO: routed Vercel functions: $COUNT / 100"

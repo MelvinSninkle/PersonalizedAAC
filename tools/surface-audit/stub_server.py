@@ -84,6 +84,18 @@ LANG_AUDIO_ROWS = [
     {'en': 'wonton soup', 'section': 'nouns', 'category': 'food', 'dictKey': None,               'translation': None,     'pron': None, 'text': 'wonton soup', 'status': 'english'},
 ]
 
+# Emergency Beacon fixture: active, zh-led languages, pre-rendered clip keys.
+BEACON_FIXTURE = {
+    'active': True, 'activatedAt': '2026-08-04T12:00:00Z',
+    'phone': '(555) 010-4477', 'langs': ['zh', 'en'],
+    'titles': {'zh': {'family': '这是我的家人', 'phone': '请拨打这个电话联系我的家人'},
+               'en': {'family': 'This is My Family', 'phone': 'This is a Phone Number to Call my Family'}},
+    'clips': [{'lang': 'zh', 'kind': 'message', 'key': 'onboarding/testkid/beacon/zh-message-a.mp3'},
+              {'lang': 'zh', 'kind': 'phone', 'key': 'onboarding/testkid/beacon/zh-phone-a.mp3'},
+              {'lang': 'en', 'kind': 'message', 'key': 'onboarding/testkid/beacon/en-message-a.mp3'},
+              {'lang': 'en', 'kind': 'phone', 'key': 'onboarding/testkid/beacon/en-phone-a.mp3'}],
+}
+
 class H(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
@@ -96,8 +108,19 @@ class H(http.server.SimpleHTTPRequestHandler):
         if u.path.startswith('/api/sync'):
             # listenBlocklist: mild stand-ins for the real bad-words list so
             # the smoke can assert masking without profanity in the repo tests.
-            return self.send_json({'categories': CATS, 'items': ITEMS,
-                                   'listenBlocklist': ['damn', 'heck']})
+            # The beacon payload appears only when the smoke opts in via a
+            # cookie — an always-armed beacon would take over every other
+            # board smoke's screen.
+            out = {'categories': CATS, 'items': ITEMS,
+                   'listenBlocklist': ['damn', 'heck']}
+            if 'beacon=1' in (self.headers.get('Cookie') or ''):
+                out['beacon'] = BEACON_FIXTURE
+            return self.send_json(out)
+        if u.path.startswith('/api/beacon'):
+            return self.send_json({'ok': True, 'beacon': BEACON_FIXTURE,
+                                   'status': {'battery': 61, 'charging': False,
+                                              'lat': None, 'lng': None, 'accuracy': None,
+                                              'lastSeen': None, 'activatedBy': 'parent@example.com'}})
         if u.path.startswith('/api/media'):
             key = parse_qs(u.query).get('key', ['x'])[0]
             body = png_solid(color_for(key))

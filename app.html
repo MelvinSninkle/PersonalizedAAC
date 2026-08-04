@@ -3665,6 +3665,300 @@
     const t = UIP && UIP[key];
     return t ? t.replace('{word}', word == null ? '' : String(word)) : null;
   }
+
+  // ═══ EMERGENCY BEACON — lost-child mode ═══════════════════════════════════
+  // A parent activates it remotely; this device then intermittently speaks a
+  // caretaker broadcast (family language first) and flashes a screen of family
+  // photos + an emergency phone number, adapting its cadence to the battery.
+  // Everything needed was cached at SETUP time via sync (clips, phone, titles,
+  // and the family art already on the board), so the beacon runs fully offline
+  // once lit — activation is the only step that needs network. NEVER paywalled.
+  const BEACON = { cfg: null, active: false, drill: false, timer: null, pingTimer: null,
+                   lastAnnounce: 0, announcing: false, samples: [], wakeLock: null,
+                   stoppedAt: 0 };
+  const BEACON_LS = 'aacBeacon';
+  try {
+    const s = JSON.parse(localStorage.getItem(BEACON_LS) || 'null');
+    if (s) { BEACON.cfg = s.cfg || null; BEACON.stoppedAt = s.stoppedAt || 0; if (s.active) setTimeout(() => beaconStart('restore'), 1500); }
+  } catch (_) {}
+  function beaconPersist() {
+    try { localStorage.setItem(BEACON_LS, JSON.stringify({ cfg: BEACON.cfg, active: BEACON.active, stoppedAt: BEACON.stoppedAt })); } catch (_) {}
+  }
+  function noteBeacon(data) {
+    if (!data || !('beacon' in data)) return;
+    const b = data.beacon;
+    if (!b) {
+      BEACON.cfg = null;
+      if (BEACON.active) beaconStop({ silent: true });
+      beaconPersist(); return;
+    }
+    BEACON.cfg = b;
+    // Pre-cache every clip NOW — the emergency may find this device offline.
+    for (const c of (b.clips || [])) { getMediaURL(c.key).catch(() => {}); }
+    const activatedAt = b.activatedAt ? new Date(b.activatedAt).getTime() : 0;
+    // An on-device verified stop holds until the parent re-activates (a NEWER
+    // activation timestamp) — otherwise the next sync would relight a beacon
+    // an officer just stopped with the parent on the phone.
+    if (b.active && !BEACON.active && activatedAt > BEACON.stoppedAt) beaconStart('sync');
+    if (!b.active && BEACON.active) beaconStop({ silent: true });
+    beaconPersist();
+  }
+
+  // Battery — Chromium exposes navigator.getBattery (Fire/Android tablets,
+  // desktop Chrome); where unreadable the schedule falls back to a steady
+  // conservative cadence. Native apps read it directly when they port this.
+  let _battMgr = null;
+  async function beaconBattery() {
+    try { if (!_battMgr && navigator.getBattery) _battMgr = await navigator.getBattery(); } catch (_) {}
+    return _battMgr ? { level: Math.round(_battMgr.level * 100), charging: !!_battMgr.charging }
+                    : { level: null, charging: null };
+  }
+  // The optimal-balance schedule: base cadence by battery tier, then stretch
+  // intervals whenever MEASURED drain projects the device dying before the
+  // survival target — searches run long, and a beacon that's still alive in
+  // hour ten beats one that shouted itself dead in hour two. Touch/motion
+  // bursts (below) cover the "someone is near RIGHT NOW" case regardless.
+  const BEACON_TARGET_HOURS = 12;
+  function beaconInterval(batt) {
+    let sec;
+    if (batt.charging) sec = 30;
+    else if (batt.level == null) sec = 120;
+    else if (batt.level > 50) sec = 45;
+    else if (batt.level > 25) sec = 120;
+    else if (batt.level > 10) sec = 300;
+    else sec = 600;
+    if (batt.level != null && !batt.charging) {
+      const now = Date.now(), s = BEACON.samples;
+      if (!s.length || now - s[s.length - 1].t > 60000) { s.push({ t: now, lv: batt.level }); if (s.length > 60) s.shift(); }
+      const old = s.find((x) => now - x.t > 10 * 60000) || s[0];
+      if (old && old.lv > batt.level && now - old.t > 5 * 60000) {
+        const drainPerHour = (old.lv - batt.level) / ((now - old.t) / 3600000);
+        if (drainPerHour > 0.5) {
+          const hoursLeft = batt.level / drainPerHour;
+          if (hoursLeft < BEACON_TARGET_HOURS) {
+            sec = Math.min(900, Math.round(sec * (BEACON_TARGET_HOURS / Math.max(hoursLeft, 0.5))));
+          }
+        }
+      }
+    }
+    return sec * 1000;
+  }
+
+  function beaconClipKey(lang, kind) {
+    const c = ((BEACON.cfg && BEACON.cfg.clips) || []).find((x) => x.lang === lang && x.kind === kind);
+    return c ? c.key : null;
+  }
+  async function beaconAnnounce() {
+    if (BEACON.announcing || !BEACON.cfg) return;
+    BEACON.announcing = true;
+    BEACON.lastAnnounce = Date.now();
+    beaconOverlay(true);
+    try {
+      const langs = BEACON.cfg.langs || ['en'];   // family language leads
+      for (const lang of langs) {
+        for (const kind of ['message', 'phone']) {
+          if (!BEACON.active && !BEACON.drill) return;
+          const key = beaconClipKey(lang, kind);
+          if (!key) continue;
+          const u = await getMediaURL(key);
+          if (!u) continue;
+          const v = gVoice(); v.volume = 1; v.src = u; v.currentTime = 0;
+          await new Promise((done) => { v.onended = done; v.onerror = done; v.play().catch(done); });
+        }
+      }
+    } finally {
+      BEACON.announcing = false;
+      // Recede to the banner after a beat — the board is the child's voice
+      // and stays usable between announcements.
+      setTimeout(() => { if (!BEACON.announcing) beaconOverlay(false); }, 8000);
+    }
+  }
+  async function beaconTick() {
+    if (!BEACON.active) return;
+    const batt = await beaconBattery();
+    if (Date.now() - BEACON.lastAnnounce >= beaconInterval(batt)) beaconAnnounce();
+    BEACON.timer = setTimeout(beaconTick, 5000);
+  }
+  // Burst on human presence: any touch means someone is HERE — announce now,
+  // whatever the battery schedule says. (Capture-phase so board taps count.)
+  document.addEventListener('pointerdown', () => {
+    if (BEACON.active && !BEACON.announcing && Date.now() - BEACON.lastAnnounce > 20000) beaconAnnounce();
+  }, true);
+
+  async function beaconWake() {
+    try { if (navigator.wakeLock) BEACON.wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (BEACON.active && document.visibilityState === 'visible') { beaconWake(); beaconAnnounce(); }
+  });
+
+  // While lit, report in: battery + (when the device grants it) location.
+  // "Alive 4 minutes ago at 61%, roughly here" is what a parent standing in a
+  // police station needs. Location is requested only while the beacon is
+  // active — the tightest possible scope.
+  async function beaconPing() {
+    if (!BEACON.active) return;
+    const batt = await beaconBattery();
+    const body = { childId: CHILD_ID, op: 'ping', battery: batt.level, charging: !!batt.charging };
+    const send = (pos) => {
+      if (pos) { body.lat = pos.coords.latitude; body.lng = pos.coords.longitude; body.accuracy = pos.coords.accuracy; }
+      apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d && d.ok && d.active === false) beaconStop({ silent: true }); })
+        .catch(() => {});
+    };
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(send, () => send(null),
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 });
+    } else send(null);
+    BEACON.pingTimer = setTimeout(beaconPing, 120000);
+  }
+
+  function beaconOverlay(show) {
+    let o = document.getElementById('beacon-overlay');
+    if (!show) { if (o) o.style.display = 'none'; return; }
+    if (!o) {
+      o = document.createElement('div');
+      o.id = 'beacon-overlay';
+      o.style.cssText = 'position:fixed;inset:0;z-index:99998;display:flex;flex-direction:column;align-items:center;'
+        + 'justify-content:center;gap:14px;padding:28px;text-align:center;color:#fff;'
+        + 'animation:beaconPulse 1.6s ease-in-out infinite alternate;';
+      const st = document.createElement('style');
+      // Slow pulse only — never a fast strobe (photosensitive-seizure
+      // thresholds start around 3Hz; this is ~0.3Hz).
+      st.textContent = '@keyframes beaconPulse { from { background:#7f1d1d; } to { background:#b91c1c; } }'
+        + '@keyframes beaconBannerPulse { from { background:#b91c1c; } to { background:#ef4444; } }';
+      document.head.appendChild(st);
+      document.body.appendChild(o);
+    }
+    const cfg = BEACON.cfg || {};
+    const langs = cfg.langs || ['en'];
+    const titles = cfg.titles || {};
+    const lead = titles[langs[0]] || { family: 'This is My Family', phone: 'This is a Phone Number to Call my Family' };
+    const second = langs[0] !== 'en' && titles.en ? titles.en : null;
+    o.innerHTML =
+      (BEACON.drill ? '<div style="font-size:15px;letter-spacing:.2em;opacity:.85;">DRILL — PRACTICE ONLY</div>' : '')
+      + '<div style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:clamp(26px,4.5vw,44px);">' + lead.family + '</div>'
+      + (second ? '<div style="font-size:clamp(16px,2.4vw,22px);opacity:.9;">' + second.family + '</div>' : '')
+      + '<div id="beacon-photos" style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;max-width:900px;"></div>'
+      + '<div style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:clamp(20px,3.4vw,32px);margin-top:6px;">' + lead.phone + '</div>'
+      + (second ? '<div style="font-size:clamp(14px,2vw,19px);opacity:.9;">' + second.phone + '</div>' : '')
+      + '<div style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:clamp(34px,7vw,72px);letter-spacing:.06em;background:#fff;color:#7f1d1d;border-radius:18px;padding:10px 26px;">' + (cfg.phone || '') + '</div>'
+      + '<button id="beacon-dismiss" style="position:absolute;bottom:14px;left:14px;border:none;border-radius:10px;padding:9px 14px;background:rgba(255,255,255,.14);color:#fff;font-size:13px;cursor:pointer;">▾ Board</button>'
+      + '<button id="beacon-stop" style="position:absolute;bottom:14px;right:14px;border:none;border-radius:10px;padding:9px 14px;background:rgba(255,255,255,.14);color:#fff;font-size:13px;cursor:pointer;">✕ Caregiver stop</button>';
+    o.style.display = 'flex';
+    o.querySelector('#beacon-dismiss').addEventListener('click', () => beaconOverlay(false));
+    o.querySelector('#beacon-stop').addEventListener('click', beaconStopPrompt);
+    // Family photos: the child's own People tiles, already cached offline as
+    // board art — no network needed to show a rescuer their family. Retries
+    // briefly: a beacon that lights during first boot can outrun the sync
+    // transaction that writes the tiles into IndexedDB.
+    (async function fillPhotos(attempt) {
+      try {
+        const ppl = (await getAllItems('people')).filter((it) => it.imageKey).slice(0, 6);
+        if (!ppl.length && attempt < 4) { setTimeout(() => fillPhotos(attempt + 1), 2000); return; }
+        const wrap = o.querySelector('#beacon-photos');
+        for (const it of ppl) {
+          const u = await getMediaURL(it.imageKey);
+          if (!u || !wrap) continue;
+          const d = document.createElement('div');
+          d.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;';
+          d.innerHTML = '<img src="' + u + '" alt="" style="width:clamp(90px,12vw,150px);height:clamp(90px,12vw,150px);'
+            + 'object-fit:cover;border-radius:16px;border:3px solid #fff;">'
+            + '<div style="font-size:14px;font-weight:700;">' + (it.displayLabel || it.label || '') + '</div>';
+          wrap.appendChild(d);
+        }
+      } catch (_) {}
+    })(0);
+  }
+  function beaconBanner(show) {
+    let el = document.getElementById('beacon-banner');
+    if (!show) { if (el) el.remove(); return; }
+    if (el) return;
+    el = document.createElement('div');
+    el.id = 'beacon-banner';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99997;color:#fff;text-align:center;'
+      + 'font-weight:700;font-size:15px;padding:9px 12px;cursor:pointer;'
+      + 'animation:beaconBannerPulse 1.6s ease-in-out infinite alternate;';
+    el.textContent = '🔴 EMERGENCY BEACON ACTIVE — tap for family + phone number';
+    el.addEventListener('click', () => beaconOverlay(true));
+    document.body.appendChild(el);
+  }
+
+  async function beaconStart(source) {
+    if (BEACON.active) return;
+    if (!BEACON.cfg) {
+      // Activated before this device ever synced the config — pull it now.
+      try { const r = await apiFetch('/api/beacon?childId=' + encodeURIComponent(CHILD_ID));
+            if (r.ok) BEACON.cfg = ((await r.json()) || {}).beacon; } catch (_) {}
+      if (!BEACON.cfg) return;
+      for (const c of (BEACON.cfg.clips || [])) getMediaURL(c.key).catch(() => {});
+    }
+    if (source === 'remote') BEACON.stoppedAt = 0;   // an explicit new push overrides any local stop
+    BEACON.active = true; BEACON.drill = false; BEACON.samples = [];
+    beaconPersist();
+    beaconBanner(true); beaconWake(); beaconAnnounce(); beaconTick(); beaconPing();
+  }
+  function beaconStop(opts = {}) {
+    BEACON.active = false; BEACON.drill = false;
+    if (opts.localStop) BEACON.stoppedAt = Date.now();
+    beaconPersist();
+    if (BEACON.timer) { clearTimeout(BEACON.timer); BEACON.timer = null; }
+    if (BEACON.pingTimer) { clearTimeout(BEACON.pingTimer); BEACON.pingTimer = null; }
+    try { if (BEACON.wakeLock) { BEACON.wakeLock.release(); BEACON.wakeLock = null; } } catch (_) {}
+    beaconOverlay(false); beaconBanner(false);
+    try { gVoice().pause(); } catch (_) {}
+  }
+  async function beaconDrill() {
+    if (BEACON.active || !BEACON.cfg) return;
+    BEACON.drill = true;
+    await beaconAnnounce();
+    BEACON.drill = false;
+    setTimeout(() => beaconOverlay(false), 4000);
+  }
+  // On-device stop: the child cannot stop it, but a parent — or an officer
+  // with the parent on the phone — can, with the quick PIN (works offline)
+  // or the account password (verified against the server when online).
+  function beaconStopPrompt() {
+    const o = document.getElementById('beacon-overlay');
+    if (!o) return;
+    let p = o.querySelector('#beacon-stop-pane');
+    if (p) { p.remove(); return; }
+    p = document.createElement('div');
+    p.id = 'beacon-stop-pane';
+    p.style.cssText = 'position:absolute;bottom:60px;right:14px;background:#fff;color:#1f2937;border-radius:14px;'
+      + 'padding:14px;max-width:270px;text-align:left;box-shadow:0 12px 40px rgba(0,0,0,.35);';
+    p.innerHTML = '<div style="font-size:13px;margin-bottom:8px;font-weight:700;">Caregiver stop</div>'
+      + '<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">Enter the parent PIN or account password.</div>'
+      + '<input id="beacon-stop-secret" type="password" inputmode="text" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:15px;box-sizing:border-box;">'
+      + '<div id="beacon-stop-err" style="font-size:12px;color:#b91c1c;min-height:16px;margin-top:4px;"></div>'
+      + '<button id="beacon-stop-go" style="width:100%;margin-top:4px;padding:9px;border:none;border-radius:9px;background:#b91c1c;color:#fff;font-weight:700;cursor:pointer;">Stop the beacon</button>';
+    o.appendChild(p);
+    p.querySelector('#beacon-stop-go').addEventListener('click', async () => {
+      const val = p.querySelector('#beacon-stop-secret').value;
+      const err = p.querySelector('#beacon-stop-err');
+      if (!val) return;
+      let ok = false;
+      try { if (pinIsSet() && (await pinHash(val)) === localStorage.getItem(PIN_KEY)) ok = true; } catch (_) {}
+      if (!ok) {
+        try {
+          let email = (typeof sessionUser === 'object' && sessionUser && sessionUser.email) || null;
+          if (!email) { const r = await apiFetch('/api/auth/me'); if (r.ok) email = (((await r.json()) || {}).user || {}).email; }
+          if (email) {
+            const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin', body: JSON.stringify({ email, password: val }) });
+            ok = r.ok;
+          }
+        } catch (_) {}
+      }
+      if (!ok) { err.textContent = 'That didn’t match. (Offline devices need the quick PIN.)'; return; }
+      beaconStop({ localStop: true });
+      // Best-effort server stand-down; if this session isn't the parent's,
+      // the dashboard still shows active until the parent turns it off.
+      apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: CHILD_ID, op: 'deactivate' }) }).catch(() => {});
+    });
+  }
   // ── Layout offer: the admin curated a new default arrangement and chose
   //    "ask families" — the FAMILY approves or keeps their own order. The
   //    answer is recorded server-side, so the popup never nags twice.
@@ -3793,6 +4087,7 @@
     noteEntitlement(data);
     noteListenBlocklist(data);
     noteUiPhrases(data);
+    noteBeacon(data);
     noteLayoutOffer(data);
     // Clear + write the whole server snapshot in ONE transaction. Writing each
     // tile as its own transaction floods iOS Safari's IndexedDB and can stall
@@ -3895,6 +4190,7 @@
       noteEntitlement(data);   // tier flags refresh even when the board itself is unchanged
       noteListenBlocklist(data);
       noteUiPhrases(data);
+      noteBeacon(data);
       noteLayoutOffer(data);
       if (!(data.categories || []).length && !(data.items || []).length) return;   // never wipe to empty
       const sig = structSig(data);
@@ -7336,6 +7632,11 @@
     if (a === 'message') { playMessageSequence(cmd); return; }
     if (a === 'listen-start') { setListenMode(true); return; }
     if (a === 'listen-stop') { setListenMode(false); return; }
+    // Emergency Beacon — the fast path (this poll runs every ~2.5s), so a
+    // parent's activation reaches an online board in seconds.
+    if (a === 'beacon-start') { beaconStart('remote'); return; }
+    if (a === 'beacon-stop') { beaconStop({ silent: true }); return; }
+    if (a === 'beacon-drill') { beaconDrill(); return; }
     if (a === 'end') {
       abortRoutine();
       if (SLIDE.running) { stopSlideshow({ manual: true }); return; }

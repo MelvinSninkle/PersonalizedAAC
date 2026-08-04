@@ -275,6 +275,15 @@ export default async function handler(req, res) {
       } catch (_) { /* translation is best-effort — sync must never fail over it */ }
     }
 
+    // Emergency Beacon: config + PRE-RENDERED clips ride every sync so the
+    // device caches everything long before an emergency — a lost device may
+    // have no network, so activation is the only step allowed to need one.
+    let beacon = null;
+    try {
+      const { beaconFor } = await import('./_lib/beacon.js');
+      beacon = await beaconFor(db, childId);
+    } catch (_) { /* beacon is best-effort on sync; /api/beacon is the source of truth */ }
+
     // Pending layout offer (admin curated a new default arrangement and chose
     // "ask families" instead of applying): the board shows an approve/keep
     // popup; /api/layout-offer records the answer.
@@ -290,6 +299,7 @@ export default async function handler(req, res) {
     res.status(200).json({
       language: langOut,
       uiPhrases,
+      beacon,
       categories: cats.map(rowToCategory),
       items: outItems.map(rowToItem),
       ageFilter: { applied: !!appliedBand, band: appliedBand, hiddenCount: items.length - outItems.length },

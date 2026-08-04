@@ -365,6 +365,41 @@
     <span id="listen-status" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
   </div>
 
+  <!-- EMERGENCY BEACON — never paywalled -->
+  <div class="section-label">Emergency beacon</div>
+  <div class="panel" style="padding:14px;border-left:4px solid #b91c1c;">
+    <div id="beacon-nag" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#7f1d1d;">
+      <b>Set this up now, before you ever need it.</b> If your child is ever
+      missing with their device, the beacon makes it speak for them: it
+      announces that they are a vulnerable person, shows their family's
+      photos, and shows and speaks your phone number — over and over,
+      pacing itself to preserve the battery. Setup takes one minute.
+    </div>
+    <p class="hint" style="margin:0 0 10px;">
+      When activated, the tablet intermittently announces — in your family's
+      language first — that the person holding it is vulnerable and cannot be
+      located by their caretaker, shows <b>This is My Family</b> with your
+      photos, and displays and speaks your emergency number. It adapts how
+      often it speaks to the battery, bursts when someone touches the device,
+      and reports battery, last-seen and (if the device allows) location back
+      to this page. Voice clips are prepared now and stored on the device, so
+      the beacon works even with no internet. This feature is free for
+      everyone, forever.
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <input id="beacon-phone" type="tel" placeholder="Emergency phone number" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;width:200px;">
+      <span id="beacon-langs" style="display:flex;gap:4px 10px;flex-wrap:wrap;font-size:13px;"></span>
+      <button class="btn" id="beacon-save">Save &amp; prepare voice clips</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button class="btn" id="beacon-activate" style="background:#b91c1c;color:#fff;border-color:#b91c1c;font-weight:700;">🔴 Activate Emergency Beacon</button>
+      <button class="btn" id="beacon-deactivate" style="display:none;">Deactivate</button>
+      <button class="btn" id="beacon-drill" title="One quiet practice cycle on the tablet — it stops itself.">Run a 20-second drill</button>
+      <span id="beacon-status" style="font-size:13px;color:var(--muted);"></span>
+    </div>
+    <div id="beacon-live" style="display:none;margin-top:10px;background:#fef2f2;border-radius:10px;padding:10px 12px;font-size:14px;color:#7f1d1d;"></div>
+  </div>
+
   <!-- MODE LAUNCHER -->
   <div class="section-label">Start a mode</div>
   <div class="modes" id="modes">
@@ -2329,6 +2364,111 @@
       body: JSON.stringify(cmd),
     }).then(r => r.ok).catch(() => false);
   }
+
+  // ---- EMERGENCY BEACON — never paywalled --------------------------------
+  (function () {
+    const $ = (id) => document.getElementById(id);
+    if (!$('beacon-save')) return;
+    const LANGS = [['en', 'English'], ['zh', '中文'], ['es', 'Español'], ['fr', 'Français'], ['pt', 'Português'], ['de', 'Deutsch']];
+    let state = null, pollT = null;
+
+    function drawLangs(selected) {
+      $('beacon-langs').innerHTML = LANGS.map(([code, label]) =>
+        '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;">'
+        + '<input type="checkbox" value="' + code + '"' + (selected.includes(code) ? ' checked' : '') + '>' + label + '</label>').join('');
+    }
+    function fmtAgo(ts) {
+      if (!ts) return 'never';
+      const m = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
+      return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago';
+    }
+    function render() {
+      const b = (state && state.beacon) || null;
+      const st = (state && state.status) || {};
+      $('beacon-nag').style.display = b && b.phone ? 'none' : '';
+      if (b) {
+        if (!$('beacon-phone').value) $('beacon-phone').value = b.phone || '';
+        drawLangs(b.langs || ['en']);
+      } else drawLangs(['en']);
+      const active = !!(b && b.active);
+      $('beacon-activate').style.display = active ? 'none' : '';
+      $('beacon-deactivate').style.display = active ? '' : 'none';
+      if (active) {
+        const loc = (st.lat != null && st.lng != null)
+          ? ' · <a href="https://maps.google.com/?q=' + st.lat + ',' + st.lng + '" target="_blank" style="color:#7f1d1d;font-weight:700;">last location ↗</a>'
+            + (st.accuracy ? ' (±' + Math.round(st.accuracy) + 'm)' : '')
+          : ' · location not reported yet';
+        $('beacon-live').style.display = '';
+        $('beacon-live').innerHTML = '<b>🔴 BEACON ACTIVE</b> since ' + fmtAgo(b.activatedAt)
+          + ' · device last seen ' + fmtAgo(st.lastSeen)
+          + (st.battery != null ? ' · battery ' + st.battery + '%' + (st.charging ? ' ⚡charging' : '') : ' · battery unknown')
+          + loc;
+        if (!pollT) pollT = setInterval(load, 15000);
+      } else {
+        $('beacon-live').style.display = 'none';
+        if (pollT) { clearInterval(pollT); pollT = null; }
+      }
+    }
+    async function load() {
+      try {
+        const r = await fetch('/api/beacon?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+        if (r.ok) { state = await r.json(); render(); }
+      } catch (_) {}
+    }
+    async function post(body) {
+      const r = await fetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin', body: JSON.stringify({ childId: slug, ...body }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      return d;
+    }
+
+    $('beacon-save').addEventListener('click', async () => {
+      const phone = $('beacon-phone').value.trim();
+      const langs = [...document.querySelectorAll('#beacon-langs input:checked')].map((i) => i.value);
+      $('beacon-status').textContent = 'Preparing voice clips…';
+      try {
+        const d = await post({ op: 'config', phone, langs });
+        $('beacon-status').textContent = '✓ ' + d.note;
+        load();
+      } catch (e) { $('beacon-status').textContent = String(e.message || e); }
+    });
+
+    // Activation is deliberately heavy: a typed CONFIRM, exactly — this makes
+    // a very loud, very public thing happen on the child's device.
+    $('beacon-activate').addEventListener('click', async () => {
+      const typed = prompt('This will make the tablet repeatedly announce that your child is a '
+        + 'vulnerable person who cannot be located, show your family photos, and display and '
+        + 'speak your phone number — until you deactivate it.\n\nType CONFIRM to activate.');
+      if (typed !== 'CONFIRM') { if (typed != null) $('beacon-status').textContent = 'Not activated — you must type CONFIRM exactly.'; return; }
+      $('beacon-status').textContent = 'Activating…';
+      try {
+        const d = await post({ op: 'activate' });
+        await sendCmd({ kind: 'cmd', action: 'beacon-start' });   // fast path (~seconds when online)
+        $('beacon-status').textContent = '✓ ' + d.note;
+        load();
+      } catch (e) { $('beacon-status').textContent = String(e.message || e); }
+    });
+    $('beacon-deactivate').addEventListener('click', async () => {
+      $('beacon-status').textContent = 'Deactivating…';
+      try {
+        const d = await post({ op: 'deactivate' });
+        await sendCmd({ kind: 'cmd', action: 'beacon-stop' });
+        $('beacon-status').textContent = '✓ ' + d.note;
+        load();
+      } catch (e) { $('beacon-status').textContent = String(e.message || e); }
+    });
+    $('beacon-drill').addEventListener('click', async () => {
+      $('beacon-status').textContent = 'Sending drill…';
+      try {
+        const d = await post({ op: 'drill' });
+        await sendCmd({ kind: 'cmd', action: 'beacon-drill' });
+        $('beacon-status').textContent = '✓ ' + d.note;
+      } catch (e) { $('beacon-status').textContent = String(e.message || e); }
+    });
+
+    load();
+  })();
 
   // ---- Listening mode: flip the tablet's branding strip into a live word-board ----
   (function () {
