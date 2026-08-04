@@ -36,6 +36,12 @@ struct DisplaySettingsView: View {
     @State private var easyUnlock = false
     @State private var syncedLoaded = false
     @State private var syncedMsg: String?
+    @State private var syncedMsgIsError = false
+    /// True when the seed came from the on-device cache with no server reach —
+    /// the toggles still work; flips queue and sync when the network returns.
+    @State private var offlineSeed = false
+    /// #B: the onboarding setup questions, launchable for existing accounts.
+    @State private var showWizard = false
     // easyUnlock enable = re-type the account password first (E6b, exactly
     // like the web Display modal). Turning it OFF is friction-free.
     @State private var confirmEasyUnlock = false
@@ -158,13 +164,15 @@ struct DisplaySettingsView: View {
                         if !syncedLoaded { ProgressView().controlSize(.mini) }
                     }
                 } footer: {
-                    Text("Which buttons show in the board's header. Everything from here down follows your child. It applies on every device this board is used on.")
+                    Text("Which buttons show in the board's header. Everything from here down follows your child. It applies on every device this board is used on."
+                         + (offlineSeed ? "\n\nYou're offline right now — changes still work, save on this device, and sync to your other devices when the connection returns." : ""))
                 }
-                // Flips made before the server seed lands were silently
-                // DISCARDED (saveSynced guards on syncedLoaded) and then
-                // visually snapped back when the seed arrived — "the toggle
-                // won't flip." Disabled-until-loaded makes the wait honest
-                // and the first flip always real.
+                // Flips made before the seed lands would be silently discarded
+                // (saveSynced guards on syncedLoaded) then snapped back when
+                // the seed arrived. The seed is now cache-first (instant, and
+                // offline-capable once the device has synced once) — this
+                // disabled state survives only for a FIRST-EVER open with no
+                // network and no cache, where there's truly nothing to show.
                 .disabled(!syncedLoaded)
 
                 // ── 3 · Touch & play (synced) ──
@@ -261,11 +269,30 @@ struct DisplaySettingsView: View {
                     }
                     Text("A 4-digit PIN for this device that opens the board's edit lock faster than typing the full password. Your account password always works too.")
                         .font(.footnote).foregroundStyle(.secondary)
-                    if let syncedMsg { Text(syncedMsg).font(.footnote).foregroundStyle(.red) }
+                    if let syncedMsg {
+                        Text(syncedMsg).font(.footnote)
+                            .foregroundStyle(syncedMsgIsError ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                    }
                 } header: {
                     Text("Safety & unlock")
                 }
                 .disabled(!syncedLoaded)
+
+                // The five onboarding setup questions, for accounts that
+                // already existed before the wizard (or want a do-over):
+                // same questions, same plain-language explanations, saving
+                // the same synced keys as the toggles above.
+                Section {
+                    Button {
+                        showWizard = true
+                    } label: {
+                        Label("Run the 5 setup questions", systemImage: "wand.and.stars")
+                    }
+                } header: {
+                    Text("Set up the board together")
+                } footer: {
+                    Text("The same five questions new families answer during onboarding — learning taps, interruptions, the sentence builder, listening, and the close button. Answers save as you go; everything stays changeable right here.")
+                }
 
                 Section {
                     Button("Reset look to defaults") { prefs.resetToDefaults() }
@@ -324,12 +351,36 @@ struct DisplaySettingsView: View {
             .sheet(isPresented: $showPinSheet, onDismiss: { pinIsSet = QuickPin.isSet }) {
                 PinManageSheet(removeMode: pinRemoveMode)
             }
+            .sheet(isPresented: $showWizard, onDismiss: {
+                // The wizard saved real keys — re-seed so the toggles agree,
+                // and let the live board apply them without a relaunch.
+                Task { syncedLoaded = false; await seedSynced(); access.refresh() }
+            }) {
+                NavigationStack {
+                    ScrollView {
+                        OBSettingsWizard(childName: "", standalone: true, childId: auth.childSlug)
+                            .padding()
+                    }
+                    .navigationTitle("Setup questions")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { showWizard = false }.bold()
+                        }
+                    }
+                }
+            }
         }
     }
 
-    /// Seed the synced toggles from the server blob (once per open).
+    /// Seed the synced toggles — cache-first via ChildSettingsStore, so the
+    /// switches are usable immediately and OFFLINE once the device has synced
+    /// this board even once. Only a first-ever open with no network and no
+    /// cache stays disabled (there is truly nothing to show yet).
     private func seedSynced() async {
-        let s = await api.childSettings(childId: auth.childSlug)
+        let (s, live) = await ChildSettingsStore.shared.load(childId: auth.childSlug)
+        offlineSeed = !live
+        if s.isEmpty && !live { syncedLoaded = false; return }
         toolListen = (s["toolListen"] as? Bool) ?? true
         toolTeach = (s["toolTeach"] as? Bool) ?? true
         toolPlay = (s["toolPlay"] as? Bool) ?? true
@@ -350,19 +401,19 @@ struct DisplaySettingsView: View {
         syncedLoaded = true
     }
 
-    /// Merge-write one root key; on failure re-seed so the switch snaps back
-    /// to the truth instead of lying (same contract as ParentSettingsView).
+    /// Local-first write: the flip applies to this device IMMEDIATELY (cache +
+    /// pending queue in ChildSettingsStore — never lost, never snapped back)
+    /// and reaches the server now or on the next reconnect. The only message
+    /// left is the honest offline note; there is no failure path a parent
+    /// has to retry by hand.
     private func saveSynced(_ patch: [String: Any]) {
         guard syncedLoaded else { return }
         Task {
-            if await api.updateChildSettings(childId: auth.childSlug, patch: patch) {
-                syncedMsg = nil
-                access.refresh()   // the live board applies it without a relaunch
-            } else {
-                syncedMsg = "Couldn't save. Check your connection."
-                syncedLoaded = false
-                await seedSynced()
-            }
+            let synced = await ChildSettingsStore.shared.apply(childId: auth.childSlug, patch: patch)
+            syncedMsgIsError = false
+            syncedMsg = synced ? nil : "Saved on this device — it syncs when you're back online."
+            offlineSeed = !synced
+            access.refresh()   // the live board applies it without a relaunch
         }
     }
 
@@ -372,23 +423,26 @@ struct DisplaySettingsView: View {
         let pw = unlockPassword
         unlockPassword = ""
         guard let email = auth.user?.email, !pw.isEmpty else {
+            syncedMsgIsError = true
             syncedMsg = "Password required."
             return
         }
+        // The password check itself REQUIRES the network (deliberately: a
+        // safety waiver is never granted offline) — but once it passes, the
+        // save rides the same local-first path as every other flip.
         do {
             _ = try await api.login(email: email, password: pw)
         } catch {
+            syncedMsgIsError = true
             syncedMsg = "That password didn't work. The unlock gate stays on."
             return
         }
-        if await api.updateChildSettings(childId: auth.childSlug, patch: ["easyUnlock": true]) {
-            syncedMsg = nil
-            serverEasyUnlock = true
-            easyUnlock = true
-            access.refresh()
-        } else {
-            syncedMsg = "Couldn't save. Check your connection."
-        }
+        let synced = await ChildSettingsStore.shared.apply(childId: auth.childSlug, patch: ["easyUnlock": true])
+        syncedMsgIsError = false
+        syncedMsg = synced ? nil : "Saved on this device — it syncs when you're back online."
+        serverEasyUnlock = true
+        easyUnlock = true
+        access.refresh()
     }
 }
 

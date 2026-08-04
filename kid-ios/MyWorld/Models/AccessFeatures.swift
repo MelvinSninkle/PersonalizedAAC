@@ -74,11 +74,14 @@ final class AccessPrefs {
         refresh()
     }
 
-    /// Re-read from the server (board .refreshable / relaunch pick changes up).
+    /// Re-read settings (board .refreshable / relaunch pick changes up).
+    /// Reads THROUGH ChildSettingsStore, not the network directly: offline
+    /// flips apply to the live board immediately (cache + pending overlay),
+    /// and every refresh doubles as a flush attempt for queued changes.
     func refresh() {
         guard let childId else { return }
         Task { @MainActor in
-            let s = await APIClient().childSettings(childId: childId)
+            let (s, _) = await ChildSettingsStore.shared.load(childId: childId)
             navMode = (s["navMode"] as? String) == "buttons" ? "buttons" : "scroll"
             sentenceBuilder = (s["sentenceBuilder"] as? Bool) ?? false
             let m = (s["sentenceIdleMin"] as? Int) ?? Int(s["sentenceIdleMin"] as? Double ?? 1)

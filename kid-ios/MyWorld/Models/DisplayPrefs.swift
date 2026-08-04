@@ -186,7 +186,14 @@ final class DisplayPrefs {
         saveTask = Task {
             try? await Task.sleep(nanoseconds: 800_000_000)
             guard !Task.isCancelled else { return }
-            await APIClient().saveDisplayPrefs(childId: childId, data: data)
+            // Local-first (ChildSettingsStore): offline look-edits queue on
+            // this device and follow to the other devices at the next
+            // reconnect — kidDisplay is one root settings key, so it rides
+            // the same merge-safe patch path as the toggles.
+            if let encoded = try? JSONEncoder().encode(data),
+               let obj = try? JSONSerialization.jsonObject(with: encoded) {
+                _ = await ChildSettingsStore.shared.apply(childId: childId, patch: ["kidDisplay": obj])
+            }
         }
     }
 

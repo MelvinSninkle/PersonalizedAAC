@@ -370,7 +370,7 @@
        (BEACON_PUBLIC in api/beacon.js). To ship: flip that flag and swap
        these admin-access-only classes/display for the plain panel. -->
   <div class="section-label admin-access-only" style="display:none;">Emergency beacon (admin testing)</div>
-  <div class="panel admin-access-only" style="display:none;padding:14px;border-left:4px solid #b91c1c;">
+  <div class="panel admin-access-only" id="beacon-panel" style="display:none;padding:14px;border-left:4px solid #b91c1c;">
     <div id="beacon-nag" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#7f1d1d;">
       <b>Set this up now, before you ever need it.</b> If your child is ever
       missing with their device, the beacon makes it speak for them: it
@@ -1356,6 +1356,13 @@
         const el = document.getElementById('admin-taxonomy'); if (el) el.style.display = '';
         const ts = document.getElementById('therapist-switch'); if (ts) ts.style.display = '';
         document.querySelectorAll('.therapist-only').forEach(n => { n.style.display = ''; });
+        // Deep link from the board's ⚙ settings ("Set up Emergency Beacon"):
+        // the panel only exists once the reveal above has run, so the scroll
+        // waits for it here rather than on page load.
+        if (location.hash === '#beacon') {
+          const bp = document.getElementById('beacon-panel');
+          if (bp) setTimeout(() => bp.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+        }
 
         // ---- Tier simulator (admin only) — sets users.sub_override on THIS
         // account so the whole product behaves like that membership level:

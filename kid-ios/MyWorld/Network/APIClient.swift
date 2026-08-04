@@ -520,15 +520,33 @@ struct APIClient {
         _ = try? await request(method: "POST", path: path, body: nil)
     }
 
-    /// Read the full child_settings blob (empty dict on any failure).
-    func childSettings(childId: String) async -> [String: Any] {
+    /// Read the full child_settings blob, or NIL on any failure — distinct
+    /// from an empty blob, so offline-first callers (ChildSettingsStore)
+    /// never mistake "unreachable" for "empty" and flush a wipe.
+    func fetchChildSettings(childId: String) async -> [String: Any]? {
         guard let (data, _) = try? await request(
                 method: "GET",
                 path: "/api/child-settings?childId=\(percentEscape(childId))",
                 body: nil),
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        else { return [:] }
+        else { return nil }
         return (root["settings"] as? [String: Any]) ?? [:]
+    }
+
+    /// Read the full child_settings blob (empty dict on any failure).
+    func childSettings(childId: String) async -> [String: Any] {
+        await fetchChildSettings(childId: childId) ?? [:]
+    }
+
+    /// Write a COMPLETE settings blob (the offline flush path — the caller
+    /// has already merged against a fresh server read).
+    func writeChildSettings(childId: String, settings: [String: Any]) async -> Bool {
+        guard let body = try? JSONSerialization.data(withJSONObject: ["settings": settings]) else { return false }
+        return (try? await request(
+            method: "POST",
+            path: "/api/child-settings?childId=\(percentEscape(childId))",
+            body: body, contentType: "application/json"
+        )) != nil
     }
 
     /// Schedules the parent set in the web Schedules panel (timed reminders,

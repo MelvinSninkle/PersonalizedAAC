@@ -1775,6 +1775,13 @@
       <div style="font-size:12px;color:#666;margin:4px 0 8px;">One-time fix: make every tile's image fill its square uniformly.</div>
       <button class="secondary" id="disp-normalize">Resize all tiles to fill</button>
       <div id="disp-normalize-msg" style="font-size:12px;color:#666;margin-top:6px;"></div>
+      <!-- Emergency Beacon setup, launchable for EXISTING accounts (the ask
+           that will live in onboarding never fires for a board that predates
+           it). Opens this child's parent dashboard scrolled to the beacon
+           panel. Admin-only while the beacon is dark-launched (BEACON_PUBLIC);
+           when it graduates this moves out of admin tools to a parent row. -->
+      <div style="font-size:12px;color:#666;margin:12px 0 6px;">Emergency Beacon (testing): set this board's family phone number, languages, and safe zones — the setup new families will get at onboarding.</div>
+      <button class="secondary" id="disp-beacon-setup">🚨 Set up Emergency Beacon</button>
     </div>
     <div class="button-row">
       <button class="secondary" id="display-reset">Reset to defaults</button>
@@ -5833,6 +5840,13 @@
     }
     const adminTools = document.getElementById('disp-admin');
     if (adminTools) adminTools.style.display = (sessionUser && sessionUser.role === 'admin') ? '' : 'none';
+    const beaconBtn = document.getElementById('disp-beacon-setup');
+    if (beaconBtn && !beaconBtn.dataset.wired) {
+      beaconBtn.dataset.wired = '1';
+      beaconBtn.addEventListener('click', () => {
+        window.location.href = '/parent/' + encodeURIComponent(CHILD_ID) + '#beacon';
+      });
+    }
   }
   function openDisplayModal() { populateDisplayModal(); displayModal.classList.add('show'); }
   // Change password / email reset link from the iOS app's Display Settings.

@@ -18,7 +18,13 @@ paywalled** — enforced by invariant F1.
 
 ## Setup (do this at onboarding, not in an emergency)
 
-Parent dashboard → **Emergency beacon** panel (a red nag shows until done):
+Two ways in — both land on the same panel:
+
+- Parent dashboard → **Emergency beacon** panel (a red nag shows until done).
+- From the board itself (existing accounts that never saw an onboarding ask):
+  board ⚙ Display Settings → Admin tools → **Set up Emergency Beacon** —
+  opens that child's dashboard scrolled to the panel. Admin-only while
+  dark-launched; when the beacon graduates this becomes a parent-visible row.
 
 1. Enter the emergency phone number — this is what a rescuer sees and hears.
 2. Pick announcement languages. The **family's language always leads**; add
