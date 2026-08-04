@@ -205,6 +205,8 @@
   .listen-chip img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .listen-chip.is-text { width: auto; min-width: calc(60px * var(--listen-scale, 1)); aspect-ratio: auto; padding: 0 14px; font-family: Fredoka, ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: calc(22px * var(--listen-scale, 1)); color: #ad1457; background: #fce4ec; cursor: default; white-space: nowrap; }
   .listen-chip.is-text.masked { font-style: italic; opacity: .7; }
+  /* Spoken-word caption on a synonym match: the tile's art, the SAID word. */
+  .listen-chip .cap { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.92); color: #1f2937; font-family: Fredoka, ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: calc(14px * var(--listen-scale, 1)); text-align: center; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #listen-hint { flex: 0 0 auto; font-size: 13px; color: #fff; opacity: .85; white-space: nowrap; }
   @media (max-width: 820px) { .listen-chip { height: calc(70px * var(--listen-scale, 1)); width: calc(70px * var(--listen-scale, 1)); min-width: calc(70px * var(--listen-scale, 1)); min-height: calc(70px * var(--listen-scale, 1)); } }
   header button:hover { background: #880e4f; }
@@ -7546,7 +7548,14 @@
         const phrase = normalizeListenWord(words.slice(i, i + w).join(' '));
         if (lex.has(phrase)) { matched = lex.get(phrase); used = w; break; }
       }
-      if (matched) out.push({ word: matched.label, imageKey: matched.imageKey, soundKey: matched.soundKey, item: matched });
+      if (matched) {
+        // Keep what was actually SAID: a synonym match borrows the tile's
+        // image but the transcript stays honest — "hi" captions hello's
+        // picture rather than silently becoming "hello".
+        const spoken = words.slice(i, i + used).join(' ').replace(/[.,!?;:"()\[\]{}]/g, '');
+        out.push({ word: matched.label, spoken,
+                   imageKey: matched.imageKey, soundKey: matched.soundKey, item: matched });
+      }
       else if (!LISTEN.tilesOnly) {
         // Display filter (E8): blocklisted words never render as themselves.
         const raw = words[i].replace(/[.,!?;:"()\[\]{}]/g, '');
@@ -7661,9 +7670,18 @@
       chip.className = 'listen-chip' + (t.imageKey ? '' : ' is-text') + (t.masked ? ' masked' : '');
       if (t.imageKey) {
         const img = document.createElement('img');
-        img.alt = t.word || '';
+        img.alt = t.spoken || t.word || '';
         try { const u = await getMediaURL(t.imageKey); if (u) img.src = u; } catch (_) {}
         chip.appendChild(img);
+        // Synonym match: the image is borrowed from the tile, but the strip
+        // shows what was SAID — "hi" captioned under hello's picture.
+        if (t.spoken && t.word
+            && normalizeListenWord(t.spoken) !== normalizeListenWord(t.word)) {
+          const cap = document.createElement('div');
+          cap.className = 'cap';
+          cap.textContent = t.spoken;
+          chip.appendChild(cap);
+        }
         if (t.soundKey) chip.addEventListener('click', async () => {
           try { const u = await getMediaURL(t.soundKey); if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } } catch (_) {}
         });

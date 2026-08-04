@@ -54,6 +54,69 @@ export const IRREGULAR = {
   child: ['children'],
 };
 
+// Synonym SETS — words that should land on the SAME tile in listening mode:
+// someone says "hi" and the board's "hello" tile renders (with "hi" as the
+// spoken caption). Sets, not pairs, and symmetric on purpose: whichever word
+// of a set a family's tile is labeled with, the others become its variants.
+// Same philosophy as IRREGULAR: curate HERE (every board benefits, zero DB
+// writes, clients pick it up on next sync) and keep per-row match_terms for
+// one-off words. Label-first indexing makes overlaps safe by construction —
+// a real "puppy" tile always beats "dog"'s variant claim on the word.
+// Conservative by design: true same-tile words only, no near-synonyms that
+// would misrepresent what the child heard ("want" is not "need").
+export const SYNONYM_SETS = [
+  ['hello', 'hi', 'hey'],
+  ['bye', 'goodbye', 'bye bye'],
+  ['mom', 'mommy', 'mama', 'momma', 'mum'],
+  ['dad', 'daddy', 'dada', 'papa'],
+  ['grandma', 'grandmother', 'granny', 'nana', 'grammy'],
+  ['grandpa', 'grandfather', 'grandad', 'granddad', 'gramps'],
+  ['yes', 'yeah', 'yep', 'yup'],
+  ['no', 'nope', 'nah'],
+  ['big', 'large', 'huge', 'giant'],
+  ['little', 'small', 'tiny'],
+  ['happy', 'glad'],
+  ['mad', 'angry'],
+  ['sad', 'unhappy'],
+  ['scared', 'afraid', 'frightened'],
+  ['tired', 'sleepy'],
+  ['tummy', 'belly', 'stomach'],
+  ['bathroom', 'potty', 'toilet', 'restroom'],
+  ['couch', 'sofa'],
+  ['trash', 'garbage', 'rubbish'],
+  ['blanket', 'blankie'],
+  ['pacifier', 'paci', 'binky'],
+  ['tv', 'telly', 'television'],
+  ['phone', 'telephone'],
+  ['picture', 'photo', 'pic'],
+  ['airplane', 'plane', 'aeroplane'],
+  ['bicycle', 'bike'],
+  ['motorcycle', 'motorbike'],
+  ['rabbit', 'bunny'],
+  ['dog', 'doggy', 'puppy', 'pup'],
+  ['cat', 'kitty', 'kitten'],
+  ['bird', 'birdie'],
+  ['duck', 'ducky'],
+  ['pig', 'piggy'],
+  ['frog', 'froggy'],
+  ['horse', 'horsey'],
+  ['candy', 'sweets'],
+  ['pants', 'trousers'],
+  ['diaper', 'nappy'],
+  ['stroller', 'pram', 'buggy'],
+];
+
+// label → the other words of its set (derived once; sets stay the source).
+export const SYNONYMS = (() => {
+  const map = {};
+  for (const set of SYNONYM_SETS) {
+    for (const word of set) {
+      map[word] = set.filter((w) => w !== word);
+    }
+  }
+  return map;
+})();
+
 const VOWELS = new Set(['a', 'e', 'i', 'o', 'u']);
 const isCVC = (w) =>
   w.length >= 3 && w.length <= 5 &&
@@ -96,6 +159,9 @@ export function expandMatchTerms(label, curated = []) {
     const n = norm(c);
     if (n && n !== base) out.add(n);
   }
+  // Engine synonyms: every tile whose label sits in a SYNONYM_SET matches
+  // the set's other words ("hello" tile hears "hi"/"hey").
+  for (const s of SYNONYMS[base] || []) out.add(s);
   // Single words inflect; multi-word labels rely on curated terms (inflecting
   // "all done" or "ice cream" makes nothing useful).
   if (base && !base.includes(' ')) {

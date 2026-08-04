@@ -165,6 +165,14 @@ const fails = [];
     lt.tilesOnly.length >= 1 && lt.tilesOnly.every(t => !!t.item));
   ok('E8: censor off renders the raw word', lt.uncensored.some(t => t.word === 'damn'));
 
+  // ── Synonym display: a spoken variant borrows the tile's image but keeps
+  //    the SAID word as its caption (spoken), never silently renaming it. ──
+  const syn = await page.evaluate(async () => window.__accessHooks.listenTokens('za pizza'));
+  ok('synonym matches the tile', syn.length === 2 && syn.every(t => t.item && /pizza/i.test(t.word)));
+  ok('synonym keeps the spoken word as caption', syn[0].spoken === 'za');
+  ok('an exact label match carries no caption',
+    !(syn[1].spoken && syn[1].spoken.toLowerCase() !== 'pizza'));
+
   await browser.close();
   console.log(fails.length ? '\nFAILURES: ' + JSON.stringify(fails) : '\nALL PASS');
   process.exit(fails.length ? 1 : 0);

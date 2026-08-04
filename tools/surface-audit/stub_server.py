@@ -54,8 +54,11 @@ ITEMS = (
 
 
 # simulate a zh board: translated display layer on a few entries
+# (Pizza also carries a matchTerm, standing in for the server-expanded
+#  synonym/inflection list — the listening smoke asserts a spoken variant
+#  borrows the tile's image while keeping the SAID word as its caption.)
 for _it in ITEMS:
-    if _it['label'] == 'Pizza': _it['displayLabel'] = '披萨'
+    if _it['label'] == 'Pizza': _it['displayLabel'] = '披萨'; _it['matchTerms'] = ['za']
     if _it['label'] == 'Cookie': _it['displayLabel'] = '饼干'
     if _it['label'] == 'Eat': _it['displayLabel'] = '吃'
 for _c in CATS:

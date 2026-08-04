@@ -104,7 +104,7 @@ fun ListenStripView() {
             items(tokens, key = { it.id }) { tok ->
                 Row {
                     val tile = tok.tile
-                    if (tile != null) ListenTileChip(tile)
+                    if (tile != null) ListenTileChip(tile, spoken = tok.spoken)
                     else Text(
                         tok.word, fontSize = 20.sp, fontWeight = FontWeight.Bold,
                         fontStyle = if (tok.masked) androidx.compose.ui.text.font.FontStyle.Italic else null,
@@ -127,9 +127,11 @@ fun ListenStripView() {
     }
 }
 
-/** A tile thumbnail chip; tap speaks it (recorded voice / TTS). */
+/** A tile thumbnail chip; tap speaks it (recorded voice / TTS).
+ *  `spoken` — a synonym match borrows this tile's image; the caption shows
+ *  what was actually SAID ("hi" under hello's picture). null = no caption. */
 @Composable
-private fun ListenTileChip(tile: Tile) {
+private fun ListenTileChip(tile: Tile, spoken: String? = null) {
     val c = LocalAppContainer.current
     val image by produceState<Bitmap?>(initialValue = null, tile.imageKey) {
         val key = tile.imageKey
@@ -146,11 +148,23 @@ private fun ListenTileChip(tile: Tile) {
     ) {
         val img = image
         if (img != null) {
-            Image(img.asImageBitmap(), contentDescription = tile.label,
+            Image(img.asImageBitmap(), contentDescription = spoken ?: tile.label,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(76.dp))
         } else {
             Text(tile.label, fontSize = 11.sp, color = Brand.pinkDeep, fontWeight = FontWeight.Bold)
+        }
+        if (!spoken.isNullOrEmpty()) {
+            Text(
+                spoken, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                color = hexColor("#1f2937"),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color.White.copy(alpha = 0.92f))
+                    .padding(vertical = 1.dp),
+            )
         }
     }
 }
