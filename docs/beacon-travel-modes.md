@@ -16,6 +16,31 @@ safe. So the rule that governs everything here:
 And its corollary: the correct end-state suppressor is not "vehicle" but
 **"a parent is with them"** — which is a different signal (see Phase 2).
 
+## Why in-vehicle means QUIET, not off (owner's insight, 2026-08-04)
+
+The beacon's audience is **bystanders** — the announcement asks a nearby
+stranger to help. An abductor is not swayed by it, a moving private car has
+no bystanders to hear it, and an alarming device is a device that gets
+smashed or thrown out a window — **which destroys the one asset still
+working for the family: the tracking.** So in a vehicle the beacon goes
+audio-silent BY DESIGN, to protect the breadcrumb trail, while:
+
+- the parents are alerted the moment the vehicle exit is detected,
+- breadcrumbs keep flowing (route on the dashboard),
+- the SCREEN stays in visual-beacon mode (flashing family/phone screen with
+  no sound) — this covers the bus/train case, where bystanders DO exist and
+  can see it,
+- any human TOUCH restores full audio instantly (a person touching the
+  device is a bystander, wherever it is),
+- and audio resumes automatically once the device has been out of vehicle
+  motion for `resumeMinutes` (default 5) — "they're out of the car, start
+  playing again."
+
+This same quiet-while-moving behavior applies to an ALREADY-ACTIVE beacon
+that enters sustained vehicle motion (configurable, `vehicleQuiet`, default
+on). The beacon is never DOWNGRADED — state stays active, screen stays lit,
+tracking continues — only the audio pauses where it can't help and can hurt.
+
 ## Two thresholds, not one
 
 Today one hysteresis gate controls both the parent alert and the beacon
@@ -85,11 +110,37 @@ doesn't expect — the countdown starts there.
 
 ## Config surface (added to the existing beacon config)
 
+Everything configurable, everything with a sane default — parents differ
+and the settings screen must explain each knob in plain words:
+
 - `walkMinutes` (default 2, 0 = instant) — countdown for a walking exit.
 - `alertMinutes` (existing, default 10) — countdown after a vehicle STOP.
+- `resumeMinutes` (default 5) — how long out of vehicle motion before audio
+  resumes/starts.
+- `vehicleQuiet` (default on) — pause announcements during sustained
+  vehicle motion (visual beacon + touch-restore always stay on).
 - `togetherUntil` (server-side timestamp) — Together mode.
 - Per the trap rule: there is deliberately NO "suppress vehicle exits
-  entirely" option.
+  entirely" option, and no option to stop parent alerts on exit.
+
+## Disclosures & consent (required, part of Phase 1)
+
+The setup flow must present — and record acknowledgment of (timestamp on
+the beacon config) — plain-language disclosures:
+
+- **This does not call 911.** The beacon never contacts emergency services,
+  and it is not a substitute for calling them. If a child is missing, call
+  911 first, then activate the beacon.
+- It only works while the device is on, charged, and (for web boards) open
+  on screen; location and alerts need the device to reach the internet;
+  GPS accuracy varies.
+- Location is collected only while the fence is armed or the beacon is
+  active, is visible only to the child's parents, and is not shared with
+  anyone else.
+- The same "call 911 first" line appears in the activation CONFIRM dialog
+  itself — the moment of activation is the moment the family most needs
+  the reminder. (Shipped ahead of this design: the live parent panel and
+  activation prompt already carry it.)
 
 ## Battery notes
 

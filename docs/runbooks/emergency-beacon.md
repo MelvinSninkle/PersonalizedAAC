@@ -50,6 +50,9 @@ no internet, which is exactly the gap remote activation can't cover.
 
 ## In an emergency
 
+0. **Call 911 first.** The beacon does not contact emergency services and is
+   not a substitute for doing so — this disclosure is shown at setup and in
+   the activation dialog, and support must repeat it any time it comes up.
 1. Parent dashboard → 🔴 **Activate Emergency Beacon** → type `CONFIRM`.
 2. Online device: starts within seconds (the live channel the listening
    remote uses). Offline device: starts the moment it reconnects.

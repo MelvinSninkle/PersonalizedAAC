@@ -386,6 +386,14 @@
       the beacon works even with no internet. This feature is free for
       everyone, forever.
     </p>
+    <p class="hint" style="margin:0 0 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;color:#92400e;">
+      <b>Important:</b> the beacon does <b>not</b> call 911 or contact any
+      emergency service, and it is not a substitute for doing so. If your
+      child is missing, <b>call 911 first</b>, then activate the beacon. It
+      works only while the device is on and charged (web boards: with the
+      board open on screen); alerts and location need an internet connection
+      on the device.
+    </p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
       <input id="beacon-phone" type="tel" placeholder="Emergency phone number" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;width:200px;">
       <span id="beacon-langs" style="display:flex;gap:4px 10px;flex-wrap:wrap;font-size:13px;"></span>
@@ -2514,7 +2522,8 @@
     // Activation is deliberately heavy: a typed CONFIRM, exactly — this makes
     // a very loud, very public thing happen on the child's device.
     $('beacon-activate').addEventListener('click', async () => {
-      const typed = prompt('This will make the tablet repeatedly announce that your child is a '
+      const typed = prompt('If your child is missing, CALL 911 FIRST — the beacon does not '
+        + 'contact emergency services.\n\nThis will make the tablet repeatedly announce that your child is a '
         + 'vulnerable person who cannot be located, show your family photos, and display and '
         + 'speak your phone number — until you deactivate it.\n\nType CONFIRM to activate.');
       if (typed !== 'CONFIRM') { if (typed != null) $('beacon-status').textContent = 'Not activated — you must type CONFIRM exactly.'; return; }
