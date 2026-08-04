@@ -187,18 +187,38 @@ final class SentenceBar {
     /// when composing / 48 idle) plus slack so a child needn't be pixel-exact.
     static let dropZoneMaxY: CGFloat = 140
 
+    /// Watchdog on the floating lift. Two real failure modes leave the ghost
+    /// stranded mid-screen without it: a ScrollView stealing the gesture
+    /// CANCELS it (SwiftUI then calls neither onChanged nor onEnded, so
+    /// nothing ever clears `drag`), and a child who lifts a tile halfway and
+    /// just… stops. Every dragUpdate re-arms it; ~2s of silence dismisses the
+    /// ghost. Resuming movement simply lifts again.
+    @ObservationIgnored private var dragWatchdog: Task<Void, Never>?
+    private func armDragWatchdog() {
+        dragWatchdog?.cancel()
+        dragWatchdog = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            if !Task.isCancelled { drag = nil }
+        }
+    }
+
     func dragUpdate(_ tile: Tile, at point: CGPoint) {
         drag = Drag(tile: tile, point: point, overHeader: point.y <= Self.dropZoneMaxY)
+        armDragWatchdog()
     }
 
     /// Ends the drag; returns true when the tile landed on the bar.
     func dragEnd(at point: CGPoint) -> Bool {
+        dragWatchdog?.cancel(); dragWatchdog = nil
         let hit = point.y <= Self.dropZoneMaxY
         drag = nil
         return hit
     }
 
-    func dragCancel() { drag = nil }
+    func dragCancel() {
+        dragWatchdog?.cancel(); dragWatchdog = nil
+        drag = nil
+    }
 
     static let maxWords = 25   // a sentence, not a filibuster
 
