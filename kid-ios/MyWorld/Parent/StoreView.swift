@@ -39,6 +39,7 @@ struct StoreView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                subscriptionStatusCard
 
                 Text("Every image you make is your family's to keep, stored safely forever, even when you change or regenerate one.")
                     .font(.system(size: 14))
@@ -199,6 +200,60 @@ struct StoreView: View {
                 }
             }
         }
+    }
+
+    /// The at-a-glance answer at the top of the store. Members see WHEN the
+    /// next credits land and how many (renewsAt = the server's last-grant + 1
+    /// month estimate); free-tier parents see what a membership actually buys.
+    @ViewBuilder
+    private var subscriptionStatusCard: some View {
+        if let e = entitlement {
+            if e.tier != "free", (e.creditsPerPeriod ?? 0) > 0 {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(Color(hex: "#047857"))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(e.label) — active")
+                            .font(.system(size: 15, weight: .heavy, design: .rounded))
+                            .foregroundStyle(Color(hex: "#047857"))
+                        Text(renewLine(e))
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(hex: "#ecfdf5"), in: RoundedRectangle(cornerRadius: 14))
+            } else if e.tier == "free" {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Unlock the whole world")
+                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Color(hex: "#ad1457"))
+                    Text("A membership turns everything on: speech-to-text listening mode, automatic daily teaching, progress reporting, and data saving — plus fresh image credits every month (⭐50 on Plus, ⭐150 on Pro) to keep growing the board with new personalized words. Cancel anytime; everything you've made stays yours forever.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(hex: "#fff0f7"), in: RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#f3c6dd"), lineWidth: 1.5))
+            }
+        }
+    }
+
+    private func renewLine(_ e: APIClient.StoreEntitlement) -> String {
+        let per = e.creditsPerPeriod ?? 0
+        // Server sends toISOString (fractional seconds) — parse both shapes.
+        if let iso = e.renewsAt {
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let plain = ISO8601DateFormatter()
+            if let d = f.date(from: iso) ?? plain.date(from: iso) {
+                return "⭐\(per) fresh credits arrive around \(d.formatted(date: .abbreviated, time: .omitted)), with your renewal."
+            }
+        }
+        return "⭐\(per) fresh credits arrive with each monthly renewal."
     }
 
     private func membershipBlurb(_ id: String) -> String {

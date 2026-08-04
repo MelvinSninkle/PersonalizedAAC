@@ -706,6 +706,10 @@ struct APIClient {
         struct Voice: Decodable { let used: Int; let cap: Int? }
         let tier: String; let label: String; let source: String
         let voice: Voice?
+        /// Monthly credit grant + the server's estimate of when the next one
+        /// lands (last grant + 1 month). Optionals so older servers decode.
+        let creditsPerPeriod: Int?
+        let renewsAt: String?
     }
     func storeEntitlement() async -> StoreEntitlement? {
         struct R: Decodable { let entitlement: StoreEntitlement? }
