@@ -47,6 +47,16 @@ const fails = [];
   ok('dictionary rows render', await page.evaluate(() =>
     document.querySelectorAll('#rows tr').length === 4));
 
+  // The prose the board speaks AROUND the words (quiz questions, slideshow
+  // frames, scheduler nudges) counts as coverage too — untranslated phrases
+  // speak English inside quizzes on a translated board.
+  ok('phrase coverage has its own chip', await page.evaluate(() =>
+    /3\/5quiz&promptphrases/.test(document.getElementById('chips').textContent.replace(/\s+/g, ''))));
+  ok('untranslated phrases are listed as gaps', await page.evaluate(() =>
+    /I can see a \{word\}/.test(document.getElementById('missing').textContent)));
+  ok('a gaps-only CSV export button exists', await page.evaluate(() =>
+    !!document.getElementById('export-gaps')));
+
   // The Chinese voice is the only zh-tagged one in the catalog.
   ok('voice picker offers only the language\'s voices', await page.evaluate(() => {
     const opts = [...document.getElementById('voice').options].map((o) => o.textContent);

@@ -3649,6 +3649,22 @@
     LISTEN.blocklist = new Set(data.listenBlocklist);
     try { localStorage.setItem('aacListenBlocklist', JSON.stringify(data.listenBlocklist)); } catch (_) {}
   }
+  // ── Translated UI phrases: the prose the board speaks AROUND the words —
+  //    quiz questions, slideshow frames, scheduler nudges. Served by sync for
+  //    non-English boards ({key: text} with a {word} placeholder), persisted
+  //    like the blocklist so an offline board keeps its language. A missing
+  //    key falls back to the English default (same graceful degradation as
+  //    displayLabel).
+  let UIP = (() => { try { return JSON.parse(localStorage.getItem('aacUiPhrases') || 'null'); } catch (_) { return null; } })();
+  function noteUiPhrases(data) {
+    if (!data || !('uiPhrases' in data)) return;
+    UIP = data.uiPhrases || null;   // an English board clears any stale set
+    try { localStorage.setItem('aacUiPhrases', JSON.stringify(UIP)); } catch (_) {}
+  }
+  function uiPhrase(key, word) {
+    const t = UIP && UIP[key];
+    return t ? t.replace('{word}', word == null ? '' : String(word)) : null;
+  }
   // ── Layout offer: the admin curated a new default arrangement and chose
   //    "ask families" — the FAMILY approves or keeps their own order. The
   //    answer is recorded server-side, so the popup never nags twice.
@@ -3776,6 +3792,7 @@
   async function hydrateFromServer(data) {
     noteEntitlement(data);
     noteListenBlocklist(data);
+    noteUiPhrases(data);
     noteLayoutOffer(data);
     // Clear + write the whole server snapshot in ONE transaction. Writing each
     // tile as its own transaction floods iOS Safari's IndexedDB and can stall
@@ -3877,6 +3894,7 @@
       const data = await r.json();
       noteEntitlement(data);   // tier flags refresh even when the board itself is unchanged
       noteListenBlocklist(data);
+      noteUiPhrases(data);
       noteLayoutOffer(data);
       if (!(data.categories || []).length && !(data.items || []).length) return;   // never wipe to empty
       const sig = structSig(data);
@@ -6241,7 +6259,12 @@
   }
   async function schedFire(s) {
     if (G.running || speaking) return;
-    const text = (s.prompt || '').trim() || (s.type === 'game' ? "Let's do a game!" : (s.type === 'question' ? 'A quick question.' : 'Time for a check-in.'));
+    // Default nudges follow the board language (uiPhrases) — before this
+    // they spoke English on every board. A parent-typed prompt always wins.
+    const text = (s.prompt || '').trim()
+      || (s.type === 'game' ? (uiPhrase('sched_game') || "Let's do a game!")
+        : (s.type === 'question' ? (uiPhrase('sched_question') || 'A quick question.')
+          : (uiPhrase('sched_checkin') || 'Time for a check-in.')));
     if (s.type === 'game') { schedGameNudge(s, text); return; }
     if (s.type === 'question') { schedQuestion(s, text); return; }
     schedToast(text, s.imageKey);
@@ -6621,10 +6644,12 @@
     // fill in for tiles without clues.
     if (G.clueQuiz) {
       // Clues/descriptions are English taxonomy prose — on a translated
-      // board the prompt is the word itself, in the board's language.
+      // board the prompt is the translated question frame when the admin has
+      // provided one (uiPhrases), else the word itself in the board language.
       const clues = t.displayLabel ? [] : (t.descriptiveClues || []).filter(Boolean);
       const text = clues.length ? clues[Math.min(G.misses || 0, clues.length - 1)]
-                 : (t.displayLabel || t.description || ('Who or what is the ' + t.label + '?'));
+                 : t.displayLabel ? (uiPhrase('quiz_who_what', t.displayLabel) || t.displayLabel)
+                 : (t.description || ('Who or what is the ' + t.label + '?'));
       const url = await teachAudioURL(text);
       if (url) { const v = gVoice(); v.src = url; v.currentTime = 0; v.play().catch(() => {}); }
       return;
@@ -6753,10 +6778,16 @@
       const it = SLIDE.items[SLIDE.i]; SLIDE.i++;
       const img = document.getElementById('slide-img'), lab = document.getElementById('slide-label');
       const url = await getMediaURL(it.imageKey); if (url && img) img.src = url;
-      // Translated boards show the board-language word and skip the English
-      // sentence frame — the frame is English prose, not a translatable label.
+      // First-person frame: English boards use the built-in sentence;
+      // translated boards use the TRANSLATED frame when the admin has
+      // provided one (uiPhrases via sync), else degrade to the bare word —
+      // never English prose around a translated word.
       const word = it.displayLabel || it.label;
-      if (lab) lab.textContent = (SLIDE.labelStyle === 'first_person' && !it.displayLabel) ? ('I can see a ' + it.label) : word;
+      if (lab) {
+        lab.textContent = SLIDE.labelStyle !== 'first_person' ? word
+          : it.displayLabel ? (uiPhrase('slide_first_person', it.displayLabel) || word)
+          : ('I can see a ' + it.label);
+      }
       if (it.soundKey) { const su = await getMediaURL(it.soundKey); if (su) { const v = gVoice(); v.src = su; v.currentTime = 0; v.play().catch(() => {}); } }
     };
     await showOne();

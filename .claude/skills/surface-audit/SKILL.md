@@ -342,7 +342,17 @@ kinds of English-only prose when `displayLabel` is set: sentence frames
 `description`. This includes double-tap teach (web `tapSpeak`, native
 `TilePlayer.play`) — its clue playback is gated on `displayLabel` being
 unset, same rule as the games. On translated boards the prompt degrades to the word itself
-in the board's language. VERIFY: grep the game views for raw `.label` /
+in the board's language — UNLESS a translated frame exists: the fixed
+child-facing prose (quiz question, slideshow first-person frame, scheduler
+nudge defaults) is translatable via `api/_lib/ui-phrases.js` → rows in
+`label_translations` under section `'ui'` (keyed by the English sentence,
+`{word}` placeholder) → served as `uiPhrases` on /api/sync for non-English
+boards → web substitutes the word into the translated frame, falling back to
+the bare word when untranslated. Per-row clues/descriptions remain gated
+(they are content, not fixed phrases). New child-facing prose in any client
+MUST be added to the UI_PHRASES catalog or gated on displayLabel — a raw
+English literal spoken on a translated board is the failure E5 exists to
+prevent. VERIFY: grep the game views for raw `.label` /
 `${t.label}` / `tile.label` in any string that is spoken or rendered —
 `kid-ios/MyWorld/Views/{Slideshow,Matching,ExpressiveNaming}View.swift`,
 `android-native/.../ui/game/*.kt`, and app.html's SLIDE / TEACH / playPrompt

@@ -203,10 +203,16 @@ class H(http.server.SimpleHTTPRequestHandler):
                 return self.send_json({'ok': True, 'lang': lang, 'entries': [],
                                        'coverage': {'taxonomyLabels': 5, 'translated': 0,
                                                     'missingWords': ['cookie', 'eat', 'help', 'pizza', 'wonton soup'],
-                                                    'missingCategories': []}})
+                                                    'missingCategories': [],
+                                                    'phrases': 5, 'phrasesTranslated': 0,
+                                                    'missingPhrases': [{'en': 'I can see a {word}', 'hint': 'Slideshow frame'}]}})
             return self.send_json({'ok': True, 'lang': lang, 'entries': TR_ENTRIES,
                                    'coverage': {'taxonomyLabels': 5, 'translated': 4,
-                                                'missingWords': ['wonton soup'], 'missingCategories': []}})
+                                                'missingWords': ['wonton soup'], 'missingCategories': [],
+                                                'phrases': 5, 'phrasesTranslated': 3,
+                                                'missingPhrases': [
+                                                    {'en': 'I can see a {word}', 'hint': 'Slideshow frame'},
+                                                    {'en': "Let's do a game!", 'hint': 'Scheduled game nudge'}]}})
         if u.path.startswith('/api/admin/lab') and 'action=lang-audio' in (u.query or ''):
             q = parse_qs(u.query)
             lang = q.get('lang', ['zh'])[0]

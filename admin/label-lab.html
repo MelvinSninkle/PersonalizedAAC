@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Label Lab — admin</title>
+<!-- Fonts to audition. Noto Sans SC is the CJK candidate — the whole point of
+     compositing labels instead of baking them into the art is that a real
+     font renders 饺子 perfectly where image models mangle it. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Baloo+2:wght@500;600;700&family=Nunito:wght@600;700;800&family=Noto+Sans+SC:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --pink:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#faf7f9; }
+  header {
+    position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--line);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; padding:12px 18px;
+  }
+  header h1 { font-size:18px; margin:0; }
+  .spacer { flex:1; }
+  a.back { color:var(--pink); text-decoration:none; font-size:13px; }
+  main { padding:16px 18px 80px; max-width:1240px; margin:0 auto; display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .panel .head { padding:10px 14px; border-bottom:1px solid var(--line); background:#fdf7fa; }
+  .panel h2 { margin:0; font-size:13px; font-weight:700; color:var(--pink); text-transform:uppercase; letter-spacing:.04em; }
+  .panel .body { padding:14px; }
+  select, button, input[type="text"] { font:inherit; padding:7px 11px; border:1px solid var(--line); border-radius:9px; background:#fff; }
+  button { cursor:pointer; }
+  button.primary { background:var(--pink); color:#fff; border-color:var(--pink); }
+  label.ctl { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px; margin-bottom:11px; }
+  label.ctl > span:first-child { color:var(--muted); }
+  label.ctl input[type="range"] { width:180px; }
+  label.ctl .val { font-variant-numeric:tabular-nums; width:52px; text-align:right; font-size:12px; }
+  .controls { width:340px; }
+  .previews { flex:1; min-width:520px; }
+  .stage { display:flex; gap:22px; align-items:flex-start; flex-wrap:wrap; }
+  canvas { border-radius:14px; background:#e9eef5; box-shadow:0 4px 14px rgba(0,0,0,.10); }
+  /* Board-size preview replicates the app's tile clip exactly (14px radius at
+     ~150px display), so what you see is what the board shows. */
+  #cv-main  { width:340px; height:340px; }
+  #cv-board { width:150px; height:150px; }
+  .strip { display:flex; gap:12px; flex-wrap:wrap; margin-top:16px; }
+  .strip canvas { width:150px; height:150px; }
+  .cap { font-size:12px; color:var(--muted); margin-top:6px; text-align:center; }
+  .note { font-size:12px; color:var(--muted); line-height:1.6; margin-top:12px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:11px; }
+  #msg { font-size:12px; color:var(--muted); }
+  input[type="color"] { padding:0; width:40px; height:30px; border:1px solid var(--line); border-radius:7px; background:#fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏷️ Label Lab</h1>
+  <span style="font-size:12px;color:var(--muted);">Composite a caption band onto finished tile art — no re-render, no credits, any language.</span>
+  <div class="spacer"></div>
+  <a class="back" href="/admin/">← Back to admin</a>
+</header>
+<main>
+  <div class="panel controls">
+    <div class="head"><h2>Band</h2></div>
+    <div class="body">
+      <label class="ctl"><span>Band height</span>
+        <input type="range" id="height" min="60" max="320" step="2" value="160">
+        <span class="val" id="height-v">160px</span></label>
+      <label class="ctl"><span>Bottom corner radius</span>
+        <input type="range" id="radius" min="0" max="140" step="2" value="56">
+        <span class="val" id="radius-v">56px</span></label>
+      <label class="ctl"><span>Font</span>
+        <select id="font">
+          <option value="Fredoka" selected>Fredoka (the app's font)</option>
+          <option value="Baloo 2">Baloo 2</option>
+          <option value="Nunito">Nunito</option>
+          <option value="Noto Sans SC">Noto Sans SC (CJK)</option>
+          <option value="system-ui">System</option>
+        </select></label>
+      <label class="ctl"><span>Weight</span>
+        <select id="weight"><option value="500">500</option><option value="600">600</option><option value="700" selected>700</option></select></label>
+      <label class="ctl"><span>Max font size</span>
+        <input type="range" id="fontsize" min="40" max="220" step="2" value="112">
+        <span class="val" id="fontsize-v">112px</span></label>
+      <label class="ctl"><span>Band color</span><input type="color" id="band-color" value="#ffffff"></label>
+      <label class="ctl"><span>Text color</span><input type="color" id="text-color" value="#000000"></label>
+      <div class="row">
+        <button id="copy-settings">Copy settings JSON</button>
+        <button id="download">Download PNG</button>
+        <span id="msg"></span>
+      </div>
+      <div class="note">
+        All sizes are in source pixels on the standard 1024×1024 tile. Text
+        auto-shrinks below the max size until it fits the band. The board clips
+        tiles at 14px radius at ~150px display (≈96px here) — the small preview
+        applies that exact clip, so judge seams there. Nothing here touches
+        production: when a recipe wins, copy the settings JSON into the thread
+        and it becomes the render pipeline.
+      </div>
+    </div>
+  </div>
+
+  <div class="panel previews">
+    <div class="head"><h2>Preview</h2></div>
+    <div class="body">
+      <div class="row">
+        <select id="style"><option value="">Generic default art</option></select>
+        <input type="text" id="search" list="words" placeholder="find a word…" style="width:170px;">
+        <datalist id="words"></datalist>
+        <button id="random" class="primary">🎲 Random word</button>
+        <input type="text" id="text" placeholder="label text (type 饺子 to test CJK)" style="width:220px;">
+        <label style="font-size:12px;color:var(--muted);cursor:pointer;">or <u>use my image</u>
+          <input type="file" id="file" accept="image/*" style="display:none;"></label>
+      </div>
+      <div class="stage">
+        <div><canvas id="cv-main" width="1024" height="1024"></canvas><div class="cap" id="cap-main">–</div></div>
+        <div><canvas id="cv-board" width="1024" height="1024"></canvas><div class="cap">board size (app's 14px clip)</div></div>
+      </div>
+      <div class="head" style="margin:18px -14px 0;"><h2>Uniformity check — same settings, six random tiles</h2></div>
+      <div class="strip" id="strip"></div>
+    </div>
+  </div>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const S = 1024;
+  let tiles = [];          // { label, imageKey } from /api/demo
+  let current = null;      // the tile in the main preview
+  let currentImg = null;   // its loaded Image
+  let stripTiles = [];     // six fixed random tiles for the uniformity strip
+  const imgCache = new Map();
+
+  const DEFAULT_CFG = { height: 160, radius: 56, font: 'Fredoka', weight: '700',
+                        fontSize: 112, bandColor: '#ffffff', textColor: '#000000' };
+  let cfg = { ...DEFAULT_CFG };
+  try { cfg = { ...DEFAULT_CFG, ...(JSON.parse(localStorage.getItem('labelLabCfg') || '{}')) }; } catch (_) {}
+
+  function pushCfgToControls() {
+    $('height').value = cfg.height; $('radius').value = cfg.radius;
+    $('font').value = cfg.font; $('weight').value = cfg.weight;
+    $('fontsize').value = cfg.fontSize;
+    $('band-color').value = cfg.bandColor; $('text-color').value = cfg.textColor;
+    $('height-v').textContent = cfg.height + 'px';
+    $('radius-v').textContent = cfg.radius + 'px';
+    $('fontsize-v').textContent = cfg.fontSize + 'px';
+  }
+
+  function readControls() {
+    cfg = { height: +$('height').value, radius: +$('radius').value,
+            font: $('font').value, weight: $('weight').value,
+            fontSize: +$('fontsize').value,
+            bandColor: $('band-color').value, textColor: $('text-color').value };
+    $('height-v').textContent = cfg.height + 'px';
+    $('radius-v').textContent = cfg.radius + 'px';
+    $('fontsize-v').textContent = cfg.fontSize + 'px';
+    try { localStorage.setItem('labelLabCfg', JSON.stringify(cfg)); } catch (_) {}
+  }
+
+  // ---- Compositing --------------------------------------------------------
+  // The band: sharp horizontal top edge, rounded bottom corners — drawn onto
+  // the finished art so it reads as part of the image, not an overlay.
+  function drawTile(canvas, img, text) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, S, S);
+    if (img) {
+      // cover-crop any aspect into the square (uploads may not be square)
+      const s = Math.max(S / img.width, S / img.height);
+      const w = img.width * s, h = img.height * s;
+      ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+    }
+    const bh = cfg.height, r = Math.min(cfg.radius, bh);
+    ctx.beginPath();
+    ctx.moveTo(0, S - bh);
+    ctx.lineTo(S, S - bh);
+    ctx.lineTo(S, S - r);
+    ctx.quadraticCurveTo(S, S, S - r, S);
+    ctx.lineTo(r, S);
+    ctx.quadraticCurveTo(0, S, 0, S - r);
+    ctx.closePath();
+    ctx.fillStyle = cfg.bandColor;
+    ctx.fill();
+    if (text) {
+      // Auto-fit: start at the max size, shrink until the text fits the band
+      // with side margins; floor keeps degenerate strings visible.
+      let size = Math.min(cfg.fontSize, Math.round(bh * 0.72));
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = cfg.textColor;
+      const family = cfg.font === 'system-ui' ? 'system-ui' : `"${cfg.font}", system-ui`;
+      while (size > 24) {
+        ctx.font = `${cfg.weight} ${size}px ${family}`;
+        if (ctx.measureText(text).width <= S * 0.90) break;
+        size -= 4;
+      }
+      // tiny optical lift — glyphs sit a touch low at middle baseline
+      ctx.fillText(text, S / 2, S - bh / 2 - size * 0.03);
+    }
+  }
+
+  async function loadImg(url) {
+    if (imgCache.has(url)) return imgCache.get(url);
+    const p = new Promise((resolve) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => resolve(null);
+      im.src = url;
+    });
+    imgCache.set(url, p);
+    return p;
+  }
+
+  const mediaURL = (key) => '/api/media?key=' + encodeURIComponent(key);
+
+  async function renderAll() {
+    // Fonts must be loaded before canvas text or the first draw uses a
+    // fallback face silently.
+    try { await document.fonts.load(`${cfg.weight} 100px "${cfg.font}"`); } catch (_) {}
+    const text = $('text').value.trim() || (current && current.label) || '';
+    drawTile($('cv-main'), currentImg, text);
+    drawTile($('cv-board'), currentImg, text);
+    $('cap-main').textContent = current ? (current.label + ' → “' + (text || '–') + '”') : (text || '–');
+    const strip = $('strip');
+    strip.innerHTML = '';
+    for (const t of stripTiles) {
+      const c = document.createElement('canvas');
+      c.width = S; c.height = S;
+      const wrap = document.createElement('div');
+      wrap.appendChild(c);
+      const cap = document.createElement('div');
+      cap.className = 'cap'; cap.textContent = t.label;
+      wrap.appendChild(cap);
+      strip.appendChild(wrap);
+      loadImg(mediaURL(t.imageKey)).then((im) => drawTile(c, im, t.label));
+    }
+  }
+
+  async function pickTile(t) {
+    current = t;
+    currentImg = t ? await loadImg(mediaURL(t.imageKey)) : currentImg;
+    renderAll();
+  }
+
+  function randomTiles(n, not) {
+    const pool = tiles.filter((t) => t.imageKey && t !== not);
+    const out = [];
+    while (out.length < n && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    return out;
+  }
+
+  async function loadBoard() {
+    $('msg').textContent = 'Loading board…';
+    try {
+      const style = $('style').value;
+      const r = await fetch('/api/demo' + (style ? '?style=' + encodeURIComponent(style) : ''), { credentials: 'same-origin' });
+      const d = await r.json();
+      tiles = (d.tiles || []).filter((t) => t.imageKey);
+      if (!$('style').options.length || $('style').options.length === 1) {
+        for (const s of (d.styles || [])) {
+          const o = document.createElement('option');
+          o.value = s.id; o.textContent = s.label;
+          $('style').appendChild(o);
+        }
+      }
+      $('words').innerHTML = tiles.map((t) => '<option value="' + t.label.replace(/"/g, '&quot;') + '">').join('');
+      stripTiles = randomTiles(6);
+      const first = tiles[Math.floor(Math.random() * tiles.length)];
+      $('msg').textContent = tiles.length + ' tiles with art loaded';
+      if (first) await pickTile(first);
+      else renderAll();
+    } catch (e) { $('msg').textContent = String(e.message || e); }
+  }
+
+  // ---- Wiring -------------------------------------------------------------
+  for (const id of ['height', 'radius', 'fontsize']) {
+    $(id).addEventListener('input', () => { readControls(); renderAll(); });
+  }
+  for (const id of ['font', 'weight', 'band-color', 'text-color']) {
+    $(id).addEventListener('change', () => { readControls(); renderAll(); });
+  }
+  $('text').addEventListener('input', () => renderAll());
+  $('random').addEventListener('click', () => {
+    const t = randomTiles(1, current)[0];
+    if (t) { $('text').value = ''; pickTile(t); }
+  });
+  $('search').addEventListener('change', () => {
+    const q = $('search').value.trim().toLowerCase();
+    const t = tiles.find((x) => x.label.toLowerCase() === q)
+           || tiles.find((x) => x.label.toLowerCase().includes(q));
+    if (t) { $('text').value = ''; pickTile(t); }
+  });
+  $('file').addEventListener('change', async () => {
+    const f = $('file').files[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    currentImg = await loadImg(url);
+    current = null;
+    renderAll();
+    $('file').value = '';
+  });
+  $('style').addEventListener('change', loadBoard);
+  $('copy-settings').addEventListener('click', async () => {
+    const json = JSON.stringify(cfg, null, 2);
+    try { await navigator.clipboard.writeText(json); $('msg').textContent = '✓ settings copied'; }
+    catch (_) { $('msg').textContent = json; }
+  });
+  $('download').addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.download = 'label-' + ((current && current.label) || 'tile').replace(/[^a-z0-9一-鿿]+/gi, '-') + '.png';
+    a.href = $('cv-main').toDataURL('image/png');
+    a.click();
+  });
+
+  pushCfgToControls();
+  loadBoard();
+})();
+</script>
+</body>
+</html>

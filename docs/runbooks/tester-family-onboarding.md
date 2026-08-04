@@ -47,6 +47,15 @@ including the dark-launched extras (language testers, access experiments).
      redeploy, and rebuild — the model is part of the cache key, so every
      clip flips to *stale* and rebuilds cleanly; silent junk is left behind
      unreferenced.
+5b. **Fill the gaps with one CSV.** Translations → **Export gaps CSV**
+   downloads only the rows still needing work: every untranslated taxonomy
+   word AND the quiz/prompt phrases ("I can see a {word}", "Who or what is
+   the {word}?", the scheduler nudges — section `ui`, keep `{word}` exactly).
+   Fill the translation column, Import the same file, done — the coverage
+   chips and the phrase chip go green, then Build clips for the new words.
+   Until a phrase is translated, quizzes/slideshows degrade to the bare word
+   (never English prose around a translated word); untranslated scheduler
+   nudges still speak English, so they're listed as gaps too.
 6. The parent (now a tester) sees the language picker in onboarding and in
    the dashboard Board tab. New tiles render with NO baked text and speak
    translated audio. **A newly granted role only takes effect on their next
