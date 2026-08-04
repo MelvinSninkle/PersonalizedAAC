@@ -81,6 +81,14 @@
         <span class="val" id="fontsize-v">112px</span></label>
       <label class="ctl"><span>Band color</span><input type="color" id="band-color" value="#ffffff"></label>
       <label class="ctl"><span>Text color</span><input type="color" id="text-color" value="#000000"></label>
+      <div class="head" style="margin:6px -14px 12px;"><h2>Art is its own label</h2></div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+        Categories whose tiles get <b>no band</b> — letters, numbers, movie
+        posters, clock faces already ARE their words. Ships in the settings
+        JSON; the production home for this is an <code>own_label</code> flag
+        per taxonomy row, bulk-set by category in the Default board tab.
+      </div>
+      <div id="skip-cats" style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;"></div>
       <div class="row">
         <button id="copy-settings">Copy settings JSON</button>
         <button id="download">Download PNG</button>
@@ -113,6 +121,14 @@
         <div><canvas id="cv-main" width="1024" height="1024"></canvas><div class="cap" id="cap-main">–</div></div>
         <div><canvas id="cv-board" width="1024" height="1024"></canvas><div class="cap">board size (app's 14px clip)</div></div>
       </div>
+      <div class="head" style="margin:18px -14px 0;"><h2>Board width sweep — the same tile at every size a family can make it</h2></div>
+      <div style="font-size:12px;color:var(--muted);margin:10px 0 2px;">
+        A band baked into the bitmap scales with the tile — this row is what
+        that costs at each board width. If the small end is unreadable, the
+        production answer is a LIVE overlay (same look, text sized in screen
+        pixels), not baking.
+      </div>
+      <div class="strip" id="sweep" style="align-items:flex-end;"></div>
       <div class="head" style="margin:18px -14px 0;"><h2>Uniformity check — same settings, six random tiles</h2></div>
       <div class="strip" id="strip"></div>
     </div>
@@ -128,8 +144,10 @@
   let stripTiles = [];     // six fixed random tiles for the uniformity strip
   const imgCache = new Map();
 
-  const DEFAULT_CFG = { height: 160, radius: 56, font: 'Fredoka', weight: '700',
-                        fontSize: 112, bandColor: '#ffffff', textColor: '#000000' };
+  // Andrew's converged recipe (2026-08-04) is the shipped default.
+  const DEFAULT_CFG = { height: 180, radius: 56, font: 'Fredoka', weight: '700',
+                        fontSize: 112, bandColor: '#ffffff', textColor: '#000000',
+                        skipCategories: ['alphabet', 'letters', 'numbers', 'movies & shows', 'movies', 'shows', 'clock', 'time'] };
   let cfg = { ...DEFAULT_CFG };
   try { cfg = { ...DEFAULT_CFG, ...(JSON.parse(localStorage.getItem('labelLabCfg') || '{}')) }; } catch (_) {}
 
@@ -147,17 +165,39 @@
     cfg = { height: +$('height').value, radius: +$('radius').value,
             font: $('font').value, weight: $('weight').value,
             fontSize: +$('fontsize').value,
-            bandColor: $('band-color').value, textColor: $('text-color').value };
+            bandColor: $('band-color').value, textColor: $('text-color').value,
+            skipCategories: [...document.querySelectorAll('#skip-cats input:checked')].map((i) => i.value)
+              // keep skip entries whose category isn't on this demo board
+              .concat((cfg.skipCategories || []).filter((c) => !knownCats.has(c))) };
     $('height-v').textContent = cfg.height + 'px';
     $('radius-v').textContent = cfg.radius + 'px';
     $('fontsize-v').textContent = cfg.fontSize + 'px';
     try { localStorage.setItem('labelLabCfg', JSON.stringify(cfg)); } catch (_) {}
   }
 
+  let knownCats = new Set();
+  const catOf = (t) => String(t.category || '').trim().toLowerCase();
+  const subOf = (t) => String(t.subcategory || '').trim().toLowerCase();
+  const isSkipped = (t) => !!t && ((cfg.skipCategories || []).includes(catOf(t))
+                                || (subOf(t) && (cfg.skipCategories || []).includes(subOf(t))));
+
+  function drawSkipCats() {
+    // Checkboxes for every category on this board, plus the configured skips
+    // that aren't on it (clock, movies…) so the list survives board switches.
+    const cats = new Set([...knownCats, ...(cfg.skipCategories || [])]);
+    $('skip-cats').innerHTML = [...cats].sort().map((c) =>
+      '<label style="display:flex;gap:5px;align-items:center;cursor:pointer;">'
+      + '<input type="checkbox" value="' + c.replace(/"/g, '&quot;') + '"'
+      + ((cfg.skipCategories || []).includes(c) ? ' checked' : '') + '>' + c + '</label>').join('');
+    for (const i of document.querySelectorAll('#skip-cats input')) {
+      i.addEventListener('change', () => { readControls(); renderAll(); });
+    }
+  }
+
   // ---- Compositing --------------------------------------------------------
   // The band: sharp horizontal top edge, rounded bottom corners — drawn onto
   // the finished art so it reads as part of the image, not an overlay.
-  function drawTile(canvas, img, text) {
+  function drawTile(canvas, img, text, opts = {}) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, S, S);
     if (img) {
@@ -166,6 +206,7 @@
       const w = img.width * s, h = img.height * s;
       ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
     }
+    if (opts.noBand) return;   // "art is its own label" — letters, posters, clocks
     const bh = cfg.height, r = Math.min(cfg.radius, bh);
     ctx.beginPath();
     ctx.moveTo(0, S - bh);
@@ -213,9 +254,34 @@
     // fallback face silently.
     try { await document.fonts.load(`${cfg.weight} 100px "${cfg.font}"`); } catch (_) {}
     const text = $('text').value.trim() || (current && current.label) || '';
-    drawTile($('cv-main'), currentImg, text);
-    drawTile($('cv-board'), currentImg, text);
-    $('cap-main').textContent = current ? (current.label + ' → “' + (text || '–') + '”') : (text || '–');
+    const skip = isSkipped(current);
+    drawTile($('cv-main'), currentImg, text, { noBand: skip });
+    drawTile($('cv-board'), currentImg, text, { noBand: skip });
+    $('cap-main').textContent = (current ? (current.label + ' → “' + (text || '–') + '”') : (text || '–'))
+      + (skip ? '   · art is its own label — no band' : '');
+
+    // Width sweep: the exact same composited bitmap at every tile size a
+    // family's board-width setting can produce. Numbers under each are the
+    // EFFECTIVE on-screen band/text pixels — the readability budget baking
+    // spends as tiles shrink.
+    const sweep = $('sweep');
+    sweep.innerHTML = '';
+    const estText = Math.min(cfg.fontSize, Math.round(cfg.height * 0.72));
+    for (const px of [260, 200, 150, 110, 80]) {
+      const c = document.createElement('canvas');
+      c.width = S; c.height = S;
+      c.style.width = c.style.height = px + 'px';
+      c.style.borderRadius = Math.round(14 * px / 150) + 'px';
+      const wrap = document.createElement('div');
+      wrap.appendChild(c);
+      const cap = document.createElement('div');
+      cap.className = 'cap';
+      cap.textContent = px + 'px · band ' + Math.round(cfg.height * px / S) + 'px · text ~' + Math.round(estText * px / S) + 'px';
+      wrap.appendChild(cap);
+      sweep.appendChild(wrap);
+      drawTile(c, currentImg, text, { noBand: skip });
+    }
+
     const strip = $('strip');
     strip.innerHTML = '';
     for (const t of stripTiles) {
@@ -224,10 +290,10 @@
       const wrap = document.createElement('div');
       wrap.appendChild(c);
       const cap = document.createElement('div');
-      cap.className = 'cap'; cap.textContent = t.label;
+      cap.className = 'cap'; cap.textContent = t.label + (isSkipped(t) ? ' · no band' : '');
       wrap.appendChild(cap);
       strip.appendChild(wrap);
-      loadImg(mediaURL(t.imageKey)).then((im) => drawTile(c, im, t.label));
+      loadImg(mediaURL(t.imageKey)).then((im) => drawTile(c, im, t.label, { noBand: isSkipped(t) }));
     }
   }
 
@@ -259,6 +325,8 @@
         }
       }
       $('words').innerHTML = tiles.map((t) => '<option value="' + t.label.replace(/"/g, '&quot;') + '">').join('');
+      knownCats = new Set(tiles.map(catOf).filter(Boolean));
+      drawSkipCats();
       stripTiles = randomTiles(6);
       const first = tiles[Math.floor(Math.random() * tiles.length)];
       $('msg').textContent = tiles.length + ' tiles with art loaded';
