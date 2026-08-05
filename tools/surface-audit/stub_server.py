@@ -187,6 +187,11 @@ class H(http.server.SimpleHTTPRequestHandler):
                     if label == 'pizza':
                         t['matchTerms'] = ['pizzas']   # server-expanded inflections
                     tiles.append(t)
+            # An own-label category (art IS the label): the caption band must
+            # skip it. Appended last so the Toys→Food curated-order assertion
+            # keeps its first two chips.
+            tiles.append(dict(label='B', section='nouns', category='Letters',
+                              subcategory='', imageKey='demo-letters-b'))
             return self.send_json({'ok': True, 'tiles': tiles, 'folders': [],
                                    'voices': [{'id': 'v1', 'name': 'Bella'}],
                                    'styles': [{'id': 7, 'label': 'Watercolor'}],
