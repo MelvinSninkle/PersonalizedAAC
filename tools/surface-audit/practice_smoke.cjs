@@ -137,6 +137,8 @@ const fails = [];
       .some((el) => decodeURIComponent(el.style.backgroundImage || '').includes('style-defaults/'))));
   ok('board still renders after the switch', await page.evaluate(() =>
     document.querySelectorAll('.tile').length > 10));
+  ok('caption bands survive a style switch', await page.evaluate(() =>
+    document.querySelectorAll('#board .tile.banded .sq .band').length > 3));
 
   // ── Demo-kid switcher (styles can offer more than one demo child) ──
   ok('kid switcher renders in styled mode', await page.evaluate(() => {
@@ -153,6 +155,8 @@ const fails = [];
   ok('switching kid re-renders person tiles', await page.evaluate(() =>
     [...document.querySelectorAll('#board .tile .sq')]
       .some((el) => decodeURIComponent(el.style.backgroundImage || '').includes('kid-3-people'))));
+  ok('caption bands survive a kid switch', await page.evaluate(() =>
+    document.querySelectorAll('#board .tile.banded .sq .band').length > 3));
 
   // ── Board-parity layout: fixed viewport, pinned needs strip, verbs live ──
   ok('fixed viewport (page never scrolls)', await page.evaluate(() =>
