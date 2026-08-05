@@ -61,6 +61,10 @@ struct APIClient {
         /// Listening display filter (E8): server-owned bad-word list; words
         /// on it render as "Bad Word" in the listening strip.
         var listenBlocklist: [String]? = nil
+        /// Spoken-word captions on matched listen chips ("hi" under hello's
+        /// picture) — server-owned dark-launch flag (SYNONYMS_PUBLIC); the
+        /// strip draws captions only when the last sync said to.
+        var listenCaptions: Bool? = nil
     }
 
     /// POST /api/auth/login — captures the Set-Cookie session.
@@ -516,15 +520,33 @@ struct APIClient {
         _ = try? await request(method: "POST", path: path, body: nil)
     }
 
-    /// Read the full child_settings blob (empty dict on any failure).
-    func childSettings(childId: String) async -> [String: Any] {
+    /// Read the full child_settings blob, or NIL on any failure — distinct
+    /// from an empty blob, so offline-first callers (ChildSettingsStore)
+    /// never mistake "unreachable" for "empty" and flush a wipe.
+    func fetchChildSettings(childId: String) async -> [String: Any]? {
         guard let (data, _) = try? await request(
                 method: "GET",
                 path: "/api/child-settings?childId=\(percentEscape(childId))",
                 body: nil),
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        else { return [:] }
+        else { return nil }
         return (root["settings"] as? [String: Any]) ?? [:]
+    }
+
+    /// Read the full child_settings blob (empty dict on any failure).
+    func childSettings(childId: String) async -> [String: Any] {
+        await fetchChildSettings(childId: childId) ?? [:]
+    }
+
+    /// Write a COMPLETE settings blob (the offline flush path — the caller
+    /// has already merged against a fresh server read).
+    func writeChildSettings(childId: String, settings: [String: Any]) async -> Bool {
+        guard let body = try? JSONSerialization.data(withJSONObject: ["settings": settings]) else { return false }
+        return (try? await request(
+            method: "POST",
+            path: "/api/child-settings?childId=\(percentEscape(childId))",
+            body: body, contentType: "application/json"
+        )) != nil
     }
 
     /// Schedules the parent set in the web Schedules panel (timed reminders,
@@ -706,6 +728,10 @@ struct APIClient {
         struct Voice: Decodable { let used: Int; let cap: Int? }
         let tier: String; let label: String; let source: String
         let voice: Voice?
+        /// Monthly credit grant + the server's estimate of when the next one
+        /// lands (last grant + 1 month). Optionals so older servers decode.
+        let creditsPerPeriod: Int?
+        let renewsAt: String?
     }
     func storeEntitlement() async -> StoreEntitlement? {
         struct R: Decodable { let entitlement: StoreEntitlement? }

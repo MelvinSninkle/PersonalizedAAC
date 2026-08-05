@@ -428,7 +428,7 @@ struct ParentSettingsView: View {
                         .onChange(of: listenTilesOnly) { _, v in saveListen(["listenTilesOnly": v]) }
                     Text("Spoken words that aren't on the board don't appear at all.")
                         .font(.footnote).foregroundStyle(.secondary)
-                    if let listenMsg { Text(listenMsg).font(.footnote).foregroundStyle(.red) }
+                    if let listenMsg { Text(listenMsg).font(.footnote).foregroundStyle(.secondary) }
                 }
                 // Admin-only rescue for older boards with stray aspect flags —
                 // new boards are always square, so parents never need this.
@@ -505,7 +505,9 @@ struct ParentSettingsView: View {
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
             .task {
                 band = try? await api.bandStatus(childId: auth.childSlug)
-                let s = await api.childSettings(childId: auth.childSlug)
+                // Cache-first (ChildSettingsStore): the toggles work offline
+                // once this board has synced anywhere on the device.
+                let (s, _) = await ChildSettingsStore.shared.load(childId: auth.childSlug)
                 listenCensor = (s["listenCensor"] as? Bool) ?? true
                 listenTilesOnly = (s["listenTilesOnly"] as? Bool) ?? false
                 listenLoaded = true
@@ -593,22 +595,15 @@ struct ParentSettingsView: View {
         deleteText = ""
     }
 
-    /// Merge-write one listening toggle; on failure re-seed from the server
-    /// so the switch snaps back to the truth instead of lying.
+    /// Local-first write (ChildSettingsStore): the flip sticks on this device
+    /// immediately and reaches the server now or at the next reconnect — no
+    /// snap-back, no lost change.
     private func saveListen(_ patch: [String: Any]) {
         guard listenLoaded else { return }
         Task {
-            if await api.updateChildSettings(childId: auth.childSlug, patch: patch) {
-                listenMsg = nil
-                access.refresh()   // the board applies it without a relaunch
-            } else {
-                listenMsg = "Couldn't save. Check your connection."
-                let s = await api.childSettings(childId: auth.childSlug)
-                listenLoaded = false
-                listenCensor = (s["listenCensor"] as? Bool) ?? true
-                listenTilesOnly = (s["listenTilesOnly"] as? Bool) ?? false
-                listenLoaded = true
-            }
+            let synced = await ChildSettingsStore.shared.apply(childId: auth.childSlug, patch: patch)
+            listenMsg = synced ? nil : "Saved on this device — it syncs when you're back online."
+            access.refresh()   // the board applies it without a relaunch
         }
     }
 

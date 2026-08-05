@@ -86,8 +86,15 @@ what generation can't produce:
   common verb/noun with irregular inflection, prefer ADDING IT TO THE MAP in
   word-match.js (base-form key) so every tile with that label benefits — use
   curated terms for one-off rows.
-- Synonyms & regional words ("soda" for juice? no — only true same-tile words:
-  "granny"→grandma, "telly"→tv, "paci"→pacifier).
+- Synonyms & regional words: check `SYNONYM_SETS` in word-match.js FIRST —
+  the engine-level sets (hello/hi/hey, dog/puppy, granny/grandma…) already
+  expand for every tile whose label is in a set, on every board, and the
+  listen strips caption a synonym match with the SPOKEN word over the tile's
+  image. Extend the set there for words every family shares; use curated
+  matchTerms only for one-off, per-row synonyms. Only true same-tile words
+  in either place ("soda" is not juice). DARK-LAUNCHED: while
+  `SYNONYMS_PUBLIC = false` in word-match.js, only admin sync callers get
+  set expansion and captions (surface-audit F2) — one flip graduates it.
 - Multi-word labels ("all done", "ice cream") get NO generated inflections —
   curate any variants you want matched.
 - Comparatives (-er/-est) are never generated (junk like "cookier") — curate

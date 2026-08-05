@@ -205,6 +205,8 @@
   .listen-chip img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .listen-chip.is-text { width: auto; min-width: calc(60px * var(--listen-scale, 1)); aspect-ratio: auto; padding: 0 14px; font-family: Fredoka, ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: calc(22px * var(--listen-scale, 1)); color: #ad1457; background: #fce4ec; cursor: default; white-space: nowrap; }
   .listen-chip.is-text.masked { font-style: italic; opacity: .7; }
+  /* Spoken-word caption on a synonym match: the tile's art, the SAID word. */
+  .listen-chip .cap { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.92); color: #1f2937; font-family: Fredoka, ui-rounded, system-ui, sans-serif; font-weight: 700; font-size: calc(14px * var(--listen-scale, 1)); text-align: center; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #listen-hint { flex: 0 0 auto; font-size: 13px; color: #fff; opacity: .85; white-space: nowrap; }
   @media (max-width: 820px) { .listen-chip { height: calc(70px * var(--listen-scale, 1)); width: calc(70px * var(--listen-scale, 1)); min-width: calc(70px * var(--listen-scale, 1)); min-height: calc(70px * var(--listen-scale, 1)); } }
   header button:hover { background: #880e4f; }
@@ -1773,6 +1775,13 @@
       <div style="font-size:12px;color:#666;margin:4px 0 8px;">One-time fix: make every tile's image fill its square uniformly.</div>
       <button class="secondary" id="disp-normalize">Resize all tiles to fill</button>
       <div id="disp-normalize-msg" style="font-size:12px;color:#666;margin-top:6px;"></div>
+      <!-- Emergency Beacon setup, launchable for EXISTING accounts (the ask
+           that will live in onboarding never fires for a board that predates
+           it). Opens this child's parent dashboard scrolled to the beacon
+           panel. Admin-only while the beacon is dark-launched (BEACON_PUBLIC);
+           when it graduates this moves out of admin tools to a parent row. -->
+      <div style="font-size:12px;color:#666;margin:12px 0 6px;">Emergency Beacon (testing): set this board's family phone number, languages, and safe zones — the setup new families will get at onboarding.</div>
+      <button class="secondary" id="disp-beacon-setup">🚨 Set up Emergency Beacon</button>
     </div>
     <div class="button-row">
       <button class="secondary" id="display-reset">Reset to defaults</button>
@@ -3643,11 +3652,20 @@
   const LISTEN = {
     censor: true, tilesOnly: false,
     blocklist: new Set((() => { try { return JSON.parse(localStorage.getItem('aacListenBlocklist') || '[]'); } catch (_) { return []; } })()),
+    // Spoken-word captions on matched chips — server-owned dark-launch flag
+    // (SYNONYMS_PUBLIC): sync says whether this board draws them. Persisted
+    // so an offline board keeps its last-known answer; default OFF.
+    captions: (() => { try { return localStorage.getItem('aacListenCaptions') === '1'; } catch (_) { return false; } })(),
   };
   function noteListenBlocklist(data) {
     if (!data || !Array.isArray(data.listenBlocklist) || !data.listenBlocklist.length) return;
     LISTEN.blocklist = new Set(data.listenBlocklist);
     try { localStorage.setItem('aacListenBlocklist', JSON.stringify(data.listenBlocklist)); } catch (_) {}
+  }
+  function noteListenCaptions(data) {
+    if (!data || !('listenCaptions' in data)) return;   // older server → keep last known
+    LISTEN.captions = !!data.listenCaptions;            // false CLEARS (gate can re-close)
+    try { localStorage.setItem('aacListenCaptions', LISTEN.captions ? '1' : '0'); } catch (_) {}
   }
   // ── Translated UI phrases: the prose the board speaks AROUND the words —
   //    quiz questions, slideshow frames, scheduler nudges. Served by sync for
@@ -3664,6 +3682,479 @@
   function uiPhrase(key, word) {
     const t = UIP && UIP[key];
     return t ? t.replace('{word}', word == null ? '' : String(word)) : null;
+  }
+
+  // ═══ EMERGENCY BEACON — lost-child mode ═══════════════════════════════════
+  // A parent activates it remotely; this device then intermittently speaks a
+  // caretaker broadcast (family language first) and flashes a screen of family
+  // photos + an emergency phone number, adapting its cadence to the battery.
+  // Everything needed was cached at SETUP time via sync (clips, phone, titles,
+  // and the family art already on the board), so the beacon runs fully offline
+  // once lit — activation is the only step that needs network. NEVER paywalled.
+  const BEACON = { cfg: null, active: false, drill: false, timer: null, pingTimer: null,
+                   lastAnnounce: 0, announcing: false, samples: [], wakeLock: null,
+                   stoppedAt: 0 };
+  const BEACON_LS = 'aacBeacon';
+  try {
+    const s = JSON.parse(localStorage.getItem(BEACON_LS) || 'null');
+    if (s) { BEACON.cfg = s.cfg || null; BEACON.stoppedAt = s.stoppedAt || 0; if (s.active) setTimeout(() => beaconStart('restore'), 1500); }
+  } catch (_) {}
+  function beaconPersist() {
+    try { localStorage.setItem(BEACON_LS, JSON.stringify({ cfg: BEACON.cfg, active: BEACON.active, stoppedAt: BEACON.stoppedAt })); } catch (_) {}
+  }
+  function noteBeacon(data) {
+    if (!data || !('beacon' in data)) return;
+    const b = data.beacon;
+    if (!b) {
+      BEACON.cfg = null;
+      if (BEACON.active) beaconStop({ silent: true });
+      beaconPersist(); return;
+    }
+    BEACON.cfg = b;
+    // Pre-cache every clip NOW — the emergency may find this device offline.
+    for (const c of (b.clips || [])) { getMediaURL(c.key).catch(() => {}); }
+    const activatedAt = b.activatedAt ? new Date(b.activatedAt).getTime() : 0;
+    // An on-device verified stop holds until the parent re-activates (a NEWER
+    // activation timestamp) — otherwise the next sync would relight a beacon
+    // an officer just stopped with the parent on the phone.
+    if (b.active && !BEACON.active && activatedAt > BEACON.stoppedAt) beaconStart('sync');
+    if (!b.active && BEACON.active && BEACON.source !== 'geofence') beaconStop({ silent: true });
+    beaconPersist();
+    zoneSync();
+  }
+
+  // Battery — Chromium exposes navigator.getBattery (Fire/Android tablets,
+  // desktop Chrome); where unreadable the schedule falls back to a steady
+  // conservative cadence. Native apps read it directly when they port this.
+  let _battMgr = null;
+  async function beaconBattery() {
+    try { if (!_battMgr && navigator.getBattery) _battMgr = await navigator.getBattery(); } catch (_) {}
+    return _battMgr ? { level: Math.round(_battMgr.level * 100), charging: !!_battMgr.charging }
+                    : { level: null, charging: null };
+  }
+  // The optimal-balance schedule: base cadence by battery tier, then stretch
+  // intervals whenever MEASURED drain projects the device dying before the
+  // survival target — searches run long, and a beacon that's still alive in
+  // hour ten beats one that shouted itself dead in hour two. Touch/motion
+  // bursts (below) cover the "someone is near RIGHT NOW" case regardless.
+  const BEACON_TARGET_HOURS = 12;
+  function beaconInterval(batt) {
+    let sec;
+    if (batt.charging) sec = 30;
+    else if (batt.level == null) sec = 120;
+    else if (batt.level > 50) sec = 45;
+    else if (batt.level > 25) sec = 120;
+    else if (batt.level > 10) sec = 300;
+    else sec = 600;
+    if (batt.level != null && !batt.charging) {
+      const now = Date.now(), s = BEACON.samples;
+      if (!s.length || now - s[s.length - 1].t > 60000) { s.push({ t: now, lv: batt.level }); if (s.length > 60) s.shift(); }
+      const old = s.find((x) => now - x.t > 10 * 60000) || s[0];
+      if (old && old.lv > batt.level && now - old.t > 5 * 60000) {
+        const drainPerHour = (old.lv - batt.level) / ((now - old.t) / 3600000);
+        if (drainPerHour > 0.5) {
+          const hoursLeft = batt.level / drainPerHour;
+          if (hoursLeft < BEACON_TARGET_HOURS) {
+            sec = Math.min(900, Math.round(sec * (BEACON_TARGET_HOURS / Math.max(hoursLeft, 0.5))));
+          }
+        }
+      }
+    }
+    return sec * 1000;
+  }
+
+  function beaconClipKey(lang, kind) {
+    const c = ((BEACON.cfg && BEACON.cfg.clips) || []).find((x) => x.lang === lang && x.kind === kind);
+    return c ? c.key : null;
+  }
+  async function beaconAnnounce() {
+    if (BEACON.announcing || !BEACON.cfg) return;
+    BEACON.announcing = true;
+    BEACON.lastAnnounce = Date.now();
+    beaconOverlay(true);
+    try {
+      const langs = BEACON.cfg.langs || ['en'];   // family language leads
+      for (const lang of langs) {
+        for (const kind of ['message', 'phone']) {
+          if (!BEACON.active && !BEACON.drill) return;
+          const key = beaconClipKey(lang, kind);
+          if (!key) continue;
+          const u = await getMediaURL(key);
+          if (!u) continue;
+          const v = gVoice(); v.volume = 1; v.src = u; v.currentTime = 0;
+          await new Promise((done) => { v.onended = done; v.onerror = done; v.play().catch(done); });
+        }
+      }
+    } finally {
+      BEACON.announcing = false;
+      // Recede to the banner after a beat — the board is the child's voice
+      // and stays usable between announcements.
+      setTimeout(() => { if (!BEACON.announcing) beaconOverlay(false); }, 8000);
+    }
+  }
+  async function beaconTick() {
+    if (!BEACON.active) return;
+    const batt = await beaconBattery();
+    if (Date.now() - BEACON.lastAnnounce >= beaconInterval(batt)) beaconAnnounce();
+    BEACON.timer = setTimeout(beaconTick, 5000);
+  }
+  // Burst on human presence: any touch means someone is HERE — announce now,
+  // whatever the battery schedule says. (Capture-phase so board taps count.)
+  document.addEventListener('pointerdown', () => {
+    if (BEACON.active && !BEACON.announcing && Date.now() - BEACON.lastAnnounce > 20000) beaconAnnounce();
+  }, true);
+
+  async function beaconWake() {
+    try { if (navigator.wakeLock) BEACON.wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (BEACON.active && document.visibilityState === 'visible') { beaconWake(); beaconAnnounce(); }
+  });
+
+  // While lit, report in: battery + (when the device grants it) location.
+  // "Alive 4 minutes ago at 61%, roughly here" is what a parent standing in a
+  // police station needs. Location is requested only while the beacon is
+  // active — the tightest possible scope.
+  async function beaconPing() {
+    if (!BEACON.active) return;
+    const batt = await beaconBattery();
+    const body = { childId: CHILD_ID, op: 'ping', battery: batt.level, charging: !!batt.charging };
+    const send = (pos) => {
+      if (pos) { body.lat = pos.coords.latitude; body.lng = pos.coords.longitude; body.accuracy = pos.coords.accuracy; }
+      apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!(d && d.ok && d.active === false)) return;
+          // A geofence-lit beacon reconciles UP, not off: the server just
+          // hasn't heard about the local firing yet (the device was offline
+          // when the countdown expired). zone-fire raises the server state;
+          // remote/sync-lit beacons obey the server as before.
+          if (BEACON.source === 'geofence') {
+            apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ childId: CHILD_ID, op: 'zone-fire' }) }).catch(() => {});
+          } else beaconStop({ silent: true });
+        })
+        .catch(() => {});
+    };
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(send, () => send(null),
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 });
+    } else send(null);
+    BEACON.pingTimer = setTimeout(beaconPing, 120000);
+  }
+
+  function beaconOverlay(show) {
+    let o = document.getElementById('beacon-overlay');
+    if (!show) { if (o) o.style.display = 'none'; return; }
+    if (!o) {
+      o = document.createElement('div');
+      o.id = 'beacon-overlay';
+      o.style.cssText = 'position:fixed;inset:0;z-index:99998;display:flex;flex-direction:column;align-items:center;'
+        + 'justify-content:center;gap:14px;padding:28px;text-align:center;color:#fff;'
+        + 'animation:beaconPulse 1.6s ease-in-out infinite alternate;';
+      const st = document.createElement('style');
+      // Slow pulse only — never a fast strobe (photosensitive-seizure
+      // thresholds start around 3Hz; this is ~0.3Hz).
+      st.textContent = '@keyframes beaconPulse { from { background:#7f1d1d; } to { background:#b91c1c; } }'
+        + '@keyframes beaconBannerPulse { from { background:#b91c1c; } to { background:#ef4444; } }';
+      document.head.appendChild(st);
+      document.body.appendChild(o);
+    }
+    const cfg = BEACON.cfg || {};
+    const langs = cfg.langs || ['en'];
+    const titles = cfg.titles || {};
+    const lead = titles[langs[0]] || { family: 'This is My Family', phone: 'This is a Phone Number to Call my Family' };
+    const second = langs[0] !== 'en' && titles.en ? titles.en : null;
+    o.innerHTML =
+      (BEACON.drill ? '<div style="font-size:15px;letter-spacing:.2em;opacity:.85;">DRILL — PRACTICE ONLY</div>' : '')
+      + '<div style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:clamp(26px,4.5vw,44px);">' + lead.family + '</div>'
+      + (second ? '<div style="font-size:clamp(16px,2.4vw,22px);opacity:.9;">' + second.family + '</div>' : '')
+      + '<div id="beacon-photos" style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;max-width:900px;"></div>'
+      + '<div style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:clamp(20px,3.4vw,32px);margin-top:6px;">' + lead.phone + '</div>'
+      + (second ? '<div style="font-size:clamp(14px,2vw,19px);opacity:.9;">' + second.phone + '</div>' : '')
+      + '<div style="font-family:Fredoka,ui-rounded,system-ui,sans-serif;font-weight:700;font-size:clamp(34px,7vw,72px);letter-spacing:.06em;background:#fff;color:#7f1d1d;border-radius:18px;padding:10px 26px;">' + (cfg.phone || '') + '</div>'
+      + '<button id="beacon-dismiss" style="position:absolute;bottom:14px;left:14px;border:none;border-radius:10px;padding:9px 14px;background:rgba(255,255,255,.14);color:#fff;font-size:13px;cursor:pointer;">▾ Board</button>'
+      + '<button id="beacon-stop" style="position:absolute;bottom:14px;right:14px;border:none;border-radius:10px;padding:9px 14px;background:rgba(255,255,255,.14);color:#fff;font-size:13px;cursor:pointer;">✕ Caregiver stop</button>';
+    o.style.display = 'flex';
+    o.querySelector('#beacon-dismiss').addEventListener('click', () => beaconOverlay(false));
+    o.querySelector('#beacon-stop').addEventListener('click', beaconStopPrompt);
+    // Family photos: the child's own People tiles, already cached offline as
+    // board art — no network needed to show a rescuer their family. Retries
+    // briefly: a beacon that lights during first boot can outrun the sync
+    // transaction that writes the tiles into IndexedDB.
+    (async function fillPhotos(attempt) {
+      try {
+        const ppl = (await getAllItems('people')).filter((it) => it.imageKey).slice(0, 6);
+        if (!ppl.length && attempt < 4) { setTimeout(() => fillPhotos(attempt + 1), 2000); return; }
+        const wrap = o.querySelector('#beacon-photos');
+        for (const it of ppl) {
+          const u = await getMediaURL(it.imageKey);
+          if (!u || !wrap) continue;
+          const d = document.createElement('div');
+          d.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;';
+          d.innerHTML = '<img src="' + u + '" alt="" style="width:clamp(90px,12vw,150px);height:clamp(90px,12vw,150px);'
+            + 'object-fit:cover;border-radius:16px;border:3px solid #fff;">'
+            + '<div style="font-size:14px;font-weight:700;">' + (it.displayLabel || it.label || '') + '</div>';
+          wrap.appendChild(d);
+        }
+      } catch (_) {}
+    })(0);
+  }
+  function beaconBanner(show) {
+    let el = document.getElementById('beacon-banner');
+    if (!show) { if (el) el.remove(); return; }
+    if (el) return;
+    el = document.createElement('div');
+    el.id = 'beacon-banner';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99997;color:#fff;text-align:center;'
+      + 'font-weight:700;font-size:15px;padding:9px 12px;cursor:pointer;'
+      + 'animation:beaconBannerPulse 1.6s ease-in-out infinite alternate;';
+    el.textContent = '🔴 EMERGENCY BEACON ACTIVE — tap for family + phone number';
+    el.addEventListener('click', () => beaconOverlay(true));
+    document.body.appendChild(el);
+  }
+
+  async function beaconStart(source) {
+    if (BEACON.active) return;
+    if (!BEACON.cfg) {
+      // Activated before this device ever synced the config — pull it now.
+      try { const r = await apiFetch('/api/beacon?childId=' + encodeURIComponent(CHILD_ID));
+            if (r.ok) BEACON.cfg = ((await r.json()) || {}).beacon; } catch (_) {}
+      if (!BEACON.cfg) return;
+      for (const c of (BEACON.cfg.clips || [])) getMediaURL(c.key).catch(() => {});
+    }
+    if (source === 'remote') BEACON.stoppedAt = 0;   // an explicit new push overrides any local stop
+    BEACON.active = true; BEACON.drill = false; BEACON.samples = []; BEACON.source = source;
+    beaconPersist();
+    if (typeof zoneSync === 'function') zoneSync();   // the fence's job is done while lit
+    beaconBanner(true); beaconWake(); beaconAnnounce(); beaconTick(); beaconPing();
+  }
+  function beaconStop(opts = {}) {
+    BEACON.active = false; BEACON.drill = false; BEACON.source = null;
+    if (opts.localStop) BEACON.stoppedAt = Date.now();
+    beaconPersist();
+    if (BEACON.timer) { clearTimeout(BEACON.timer); BEACON.timer = null; }
+    if (BEACON.pingTimer) { clearTimeout(BEACON.pingTimer); BEACON.pingTimer = null; }
+    try { if (BEACON.wakeLock) { BEACON.wakeLock.release(); BEACON.wakeLock = null; } } catch (_) {}
+    beaconOverlay(false); beaconBanner(false);
+    try { gVoice().pause(); } catch (_) {}
+    // Re-arm the fence, but never restage instantly while still outside — a
+    // verified stop means a caregiver is present.
+    if (typeof ZONE === 'object') { ZONE.clearedUntilReenter = true; }
+    if (typeof zoneSync === 'function') zoneSync();
+  }
+  async function beaconDrill() {
+    if (BEACON.active || !BEACON.cfg) return;
+    BEACON.drill = true;
+    await beaconAnnounce();
+    BEACON.drill = false;
+    setTimeout(() => beaconOverlay(false), 4000);
+  }
+  // Caregiver credential: the quick PIN (works offline) or the account
+  // password (verified against the server when online). Used by the beacon
+  // stop pane and the safe-zone countdown cancel.
+  async function beaconVerifyCredential(val) {
+    if (!val) return false;
+    try { if (pinIsSet() && (await pinHash(val)) === localStorage.getItem(PIN_KEY)) return true; } catch (_) {}
+    try {
+      let email = (typeof sessionUser === 'object' && sessionUser && sessionUser.email) || null;
+      if (!email) { const r = await apiFetch('/api/auth/me'); if (r.ok) email = (((await r.json()) || {}).user || {}).email; }
+      if (email) {
+        const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin', body: JSON.stringify({ email, password: val }) });
+        return r.ok;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  // On-device stop: the child cannot stop it, but a parent — or an officer
+  // with the parent on the phone — can, with the quick PIN (works offline)
+  // or the account password (verified against the server when online).
+  function beaconStopPrompt() {
+    const o = document.getElementById('beacon-overlay');
+    if (!o) return;
+    let p = o.querySelector('#beacon-stop-pane');
+    if (p) { p.remove(); return; }
+    p = document.createElement('div');
+    p.id = 'beacon-stop-pane';
+    p.style.cssText = 'position:absolute;bottom:60px;right:14px;background:#fff;color:#1f2937;border-radius:14px;'
+      + 'padding:14px;max-width:270px;text-align:left;box-shadow:0 12px 40px rgba(0,0,0,.35);';
+    p.innerHTML = '<div style="font-size:13px;margin-bottom:8px;font-weight:700;">Caregiver stop</div>'
+      + '<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">Enter the parent PIN or account password.</div>'
+      + '<input id="beacon-stop-secret" type="password" inputmode="text" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:15px;box-sizing:border-box;">'
+      + '<div id="beacon-stop-err" style="font-size:12px;color:#b91c1c;min-height:16px;margin-top:4px;"></div>'
+      + '<button id="beacon-stop-go" style="width:100%;margin-top:4px;padding:9px;border:none;border-radius:9px;background:#b91c1c;color:#fff;font-weight:700;cursor:pointer;">Stop the beacon</button>';
+    o.appendChild(p);
+    p.querySelector('#beacon-stop-go').addEventListener('click', async () => {
+      const val = p.querySelector('#beacon-stop-secret').value;
+      const err = p.querySelector('#beacon-stop-err');
+      if (!val) return;
+      const ok = await beaconVerifyCredential(val);
+      if (!ok) { err.textContent = 'That didn’t match. (Offline devices need the quick PIN.)'; return; }
+      beaconStop({ localStop: true });
+      // Best-effort server stand-down; if this session isn't the parent's,
+      // the dashboard still shows active until the parent turns it off.
+      apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: CHILD_ID, op: 'deactivate' }) }).catch(() => {});
+    });
+  }
+
+  // ── SAFE ZONES — geofence auto-activation ────────────────────────────────
+  // The fence check runs ON THIS DEVICE from GPS, so a device with no network
+  // can still light its own beacon when it leaves the safe area — the one
+  // case remote activation can't reach. Web reality: monitoring runs only
+  // while the board is open and awake (there is no background geolocation on
+  // the web); the native ports get true background region monitoring.
+  //
+  // Against GPS jitter: a fix only counts as "out" when it's past the radius
+  // by max(75m, its own accuracy), an exit needs several such fixes over two
+  // minutes, and terrible-accuracy fixes are ignored entirely. The default
+  // response is STAGED: alert the parents, count down (re-entering cancels),
+  // then fire — because children leave home with their parents every day.
+  const ZONE = { timer: null, outs: [], staged: null, stageTimer: null, stageTick: null,
+                 clearedUntilReenter: false, state: 'off', lastPing: 0 };
+  const ZONE_TEST = (() => { try { return localStorage.getItem('aacZoneTestFast') === '1'; } catch (_) { return false; } })();
+  const ZONE_OUT_FIXES = ZONE_TEST ? 1 : 3;
+  const ZONE_OUT_SPAN = ZONE_TEST ? 0 : 120000;
+  const ZONE_POLL_NEAR = ZONE_TEST ? 2000 : 45000;
+  const ZONE_POLL_FAR = ZONE_TEST ? 2000 : 180000;
+
+  function zoneArmedCfg() {
+    const c = BEACON.cfg;
+    return (c && c.armed && Array.isArray(c.zones) && c.zones.length && !BEACON.active) ? c : null;
+  }
+  function zoneDistM(lat1, lon1, lat2, lon2) {
+    const R = 6371000, toR = Math.PI / 180;
+    const dLat = (lat2 - lat1) * toR, dLon = (lon2 - lon1) * toR;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toR) * Math.cos(lat2 * toR) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+  function zoneSync() {
+    const armed = !!zoneArmedCfg();
+    if (!armed) {
+      if (ZONE.timer) { clearTimeout(ZONE.timer); ZONE.timer = null; }
+      if (ZONE.staged) zoneCancelStage({ silent: true });
+      ZONE.state = 'off'; ZONE.outs = [];
+      return;
+    }
+    if (!ZONE.timer) zoneTick();
+  }
+  function zoneTick() {
+    ZONE.timer = null;
+    const cfg = zoneArmedCfg();
+    if (!cfg) { zoneSync(); return; }
+    if (!navigator.geolocation) { ZONE.state = 'no-gps'; return; }
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const acc = pos.coords.accuracy || 0;
+      let next = ZONE_POLL_FAR;
+      if (acc <= 150) {
+        // Signed distance past the NEAREST zone edge (negative = inside).
+        let minOver = Infinity, nearestName = 'safe zone';
+        for (const z of cfg.zones) {
+          const over = zoneDistM(pos.coords.latitude, pos.coords.longitude, z.lat, z.lng) - z.radius;
+          if (over < minOver) { minOver = over; nearestName = z.name; }
+        }
+        const exitMargin = Math.max(75, acc);
+        if (minOver <= 0) {
+          ZONE.state = 'inside'; ZONE.outs = []; ZONE.clearedUntilReenter = false;
+          if (ZONE.staged) zoneCancelStage({ reentered: true });
+        } else if (minOver > exitMargin) {
+          ZONE.state = 'outside';
+          const now = Date.now();
+          ZONE.outs.push(now);
+          while (ZONE.outs.length > 10) ZONE.outs.shift();
+          if (!ZONE.staged && !ZONE.clearedUntilReenter
+              && ZONE.outs.length >= ZONE_OUT_FIXES && now - ZONE.outs[0] >= ZONE_OUT_SPAN) {
+            zoneStageExit(nearestName);
+          }
+        }
+        // Poll fast near the boundary or outside; slow deep inside.
+        next = (minOver > -2 * exitMargin) ? ZONE_POLL_NEAR : ZONE_POLL_FAR;
+      }
+      zoneHealthPing();
+      ZONE.timer = setTimeout(zoneTick, next);
+    }, () => {
+      // Denied/unavailable: surface it to the parent dashboard via the
+      // health ping and retry slowly — an unmonitored fence must be visible.
+      ZONE.state = 'no-permission';
+      zoneHealthPing();
+      ZONE.timer = setTimeout(zoneTick, ZONE_TEST ? 3000 : 300000);
+    }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 });
+  }
+  // Monitoring health, every ~5 min while armed: the dashboard shows
+  // "inside Home ✓" / "no-permission" so a silently broken fence is visible.
+  async function zoneHealthPing() {
+    if (Date.now() - ZONE.lastPing < (ZONE_TEST ? 2000 : 300000)) return;
+    ZONE.lastPing = Date.now();
+    try {
+      const batt = await beaconBattery();
+      apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: CHILD_ID, op: 'ping', battery: batt.level,
+                               charging: !!batt.charging, zoneState: ZONE.staged ? 'staged' : ZONE.state }) })
+        .catch(() => {});
+    } catch (_) {}
+  }
+  function zoneStageExit(zoneName) {
+    const cfg = BEACON.cfg || {};
+    const mins = Number.isFinite(Number(cfg.alertMinutes)) ? Number(cfg.alertMinutes) : 10;
+    ZONE.staged = { zone: zoneName, at: Date.now(), mins };
+    // Alert the parents immediately (dashboard + push), independent of the
+    // countdown — best-effort, the countdown runs regardless.
+    apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ childId: CHILD_ID, op: 'zone-exit', zone: zoneName, alertMinutes: mins }) })
+      .catch(() => {});
+    if (mins <= 0) { zoneFire(); return; }
+    zoneStageBanner();
+    ZONE.stageTimer = setTimeout(zoneFire, mins * 60000);
+    ZONE.stageTick = setInterval(zoneStageBanner, 1000);
+  }
+  function zoneStageBanner() {
+    if (!ZONE.staged) return;
+    let el = document.getElementById('zone-stage-banner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'zone-stage-banner';
+      el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99997;background:#c2410c;color:#fff;'
+        + 'text-align:center;font-weight:700;font-size:15px;padding:9px 12px;display:flex;'
+        + 'align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;';
+      el.innerHTML = '<span id="zone-stage-text"></span>'
+        + '<button id="zone-stage-cancel" style="border:none;border-radius:8px;padding:6px 12px;background:rgba(255,255,255,.2);color:#fff;font-weight:700;cursor:pointer;">Caregiver cancel</button>';
+      document.body.appendChild(el);
+      el.querySelector('#zone-stage-cancel').addEventListener('click', async () => {
+        const val = window.prompt('Enter the parent PIN or account password to cancel:');
+        if (val == null) return;
+        if (await beaconVerifyCredential(val)) zoneCancelStage({ verified: true });
+      });
+    }
+    const left = Math.max(0, ZONE.staged.at + ZONE.staged.mins * 60000 - Date.now());
+    const mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
+    const t = el.querySelector('#zone-stage-text');
+    if (t) t.textContent = '⚠️ Left safe zone “' + ZONE.staged.zone + '” — Emergency Beacon starts in '
+      + mm + ':' + String(ss).padStart(2, '0');
+  }
+  function zoneCancelStage(opts = {}) {
+    if (ZONE.stageTimer) { clearTimeout(ZONE.stageTimer); ZONE.stageTimer = null; }
+    if (ZONE.stageTick) { clearInterval(ZONE.stageTick); ZONE.stageTick = null; }
+    ZONE.staged = null;
+    const el = document.getElementById('zone-stage-banner'); if (el) el.remove();
+    // A verified caregiver cancel while still OUTSIDE must not restage on the
+    // very next fix — suppressed until the device re-enters a zone.
+    if (opts.verified) ZONE.clearedUntilReenter = true;
+    if (!opts.silent) {
+      apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: CHILD_ID, op: 'zone-clear' }) }).catch(() => {});
+    }
+  }
+  function zoneFire() {
+    const zone = ZONE.staged && ZONE.staged.zone;
+    zoneCancelStage({ silent: true });
+    beaconStart('geofence');
+    // Raise the server state to match the locally-lit beacon (guarded op:
+    // only honored for an armed fence with a recent staged exit). Offline is
+    // fine — the beacon runs locally and reconciles on reconnect.
+    apiFetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ childId: CHILD_ID, op: 'zone-fire', zone }) }).catch(() => {});
   }
   // ── Layout offer: the admin curated a new default arrangement and chose
   //    "ask families" — the FAMILY approves or keeps their own order. The
@@ -3792,7 +4283,9 @@
   async function hydrateFromServer(data) {
     noteEntitlement(data);
     noteListenBlocklist(data);
+    noteListenCaptions(data);
     noteUiPhrases(data);
+    noteBeacon(data);
     noteLayoutOffer(data);
     // Clear + write the whole server snapshot in ONE transaction. Writing each
     // tile as its own transaction floods iOS Safari's IndexedDB and can stall
@@ -3894,7 +4387,9 @@
       const data = await r.json();
       noteEntitlement(data);   // tier flags refresh even when the board itself is unchanged
       noteListenBlocklist(data);
+      noteListenCaptions(data);
       noteUiPhrases(data);
+      noteBeacon(data);
       noteLayoutOffer(data);
       if (!(data.categories || []).length && !(data.items || []).length) return;   // never wipe to empty
       const sig = structSig(data);
@@ -5345,6 +5840,13 @@
     }
     const adminTools = document.getElementById('disp-admin');
     if (adminTools) adminTools.style.display = (sessionUser && sessionUser.role === 'admin') ? '' : 'none';
+    const beaconBtn = document.getElementById('disp-beacon-setup');
+    if (beaconBtn && !beaconBtn.dataset.wired) {
+      beaconBtn.dataset.wired = '1';
+      beaconBtn.addEventListener('click', () => {
+        window.location.href = '/parent/' + encodeURIComponent(CHILD_ID) + '#beacon';
+      });
+    }
   }
   function openDisplayModal() { populateDisplayModal(); displayModal.classList.add('show'); }
   // Change password / email reset link from the iOS app's Display Settings.
@@ -7071,7 +7573,16 @@
         const phrase = normalizeListenWord(words.slice(i, i + w).join(' '));
         if (lex.has(phrase)) { matched = lex.get(phrase); used = w; break; }
       }
-      if (matched) out.push({ word: matched.label, imageKey: matched.imageKey, soundKey: matched.soundKey, item: matched });
+      if (matched) {
+        // Keep what was actually SAID: a synonym match borrows the tile's
+        // image but the transcript stays honest — "hi" captions hello's
+        // picture rather than silently becoming "hello". Gated on the
+        // server-shipped listenCaptions flag while dark-launched.
+        const spoken = LISTEN.captions
+          ? words.slice(i, i + used).join(' ').replace(/[.,!?;:"()\[\]{}]/g, '') : null;
+        out.push({ word: matched.label, spoken,
+                   imageKey: matched.imageKey, soundKey: matched.soundKey, item: matched });
+      }
       else if (!LISTEN.tilesOnly) {
         // Display filter (E8): blocklisted words never render as themselves.
         const raw = words[i].replace(/[.,!?;:"()\[\]{}]/g, '');
@@ -7186,9 +7697,18 @@
       chip.className = 'listen-chip' + (t.imageKey ? '' : ' is-text') + (t.masked ? ' masked' : '');
       if (t.imageKey) {
         const img = document.createElement('img');
-        img.alt = t.word || '';
+        img.alt = t.spoken || t.word || '';
         try { const u = await getMediaURL(t.imageKey); if (u) img.src = u; } catch (_) {}
         chip.appendChild(img);
+        // Synonym match: the image is borrowed from the tile, but the strip
+        // shows what was SAID — "hi" captioned under hello's picture.
+        if (t.spoken && t.word
+            && normalizeListenWord(t.spoken) !== normalizeListenWord(t.word)) {
+          const cap = document.createElement('div');
+          cap.className = 'cap';
+          cap.textContent = t.spoken;
+          chip.appendChild(cap);
+        }
         if (t.soundKey) chip.addEventListener('click', async () => {
           try { const u = await getMediaURL(t.soundKey); if (u) { const v = gVoice(); v.src = u; v.currentTime = 0; v.play().catch(() => {}); } } catch (_) {}
         });
@@ -7336,6 +7856,20 @@
     if (a === 'message') { playMessageSequence(cmd); return; }
     if (a === 'listen-start') { setListenMode(true); return; }
     if (a === 'listen-stop') { setListenMode(false); return; }
+    // Emergency Beacon — the fast path (this poll runs every ~2.5s), so a
+    // parent's activation reaches an online board in seconds.
+    if (a === 'beacon-start') { beaconStart('remote'); return; }
+    if (a === 'beacon-stop') { beaconStop({ silent: true }); return; }
+    if (a === 'beacon-drill') { beaconDrill(); return; }
+    if (a === 'beacon-cfg') {
+      // Config changed (zones armed/disarmed, number updated) — refetch and
+      // apply as if it arrived on sync.
+      apiFetch('/api/beacon?childId=' + encodeURIComponent(CHILD_ID))
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d) noteBeacon({ beacon: d.beacon }); })
+        .catch(() => {});
+      return;
+    }
     if (a === 'end') {
       abortRoutine();
       if (SLIDE.running) { stopSlideshow({ manual: true }); return; }
@@ -7910,6 +8444,7 @@
     setListenPrefs: (p) => {
       if (p && 'censor' in p) LISTEN.censor = !!p.censor;
       if (p && 'tilesOnly' in p) LISTEN.tilesOnly = !!p.tilesOnly;
+      if (p && 'captions' in p) LISTEN.captions = !!p.captions;
       if (p && Array.isArray(p.blocklist)) LISTEN.blocklist = new Set(p.blocklist);
     } };
 

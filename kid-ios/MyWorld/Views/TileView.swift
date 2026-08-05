@@ -26,7 +26,12 @@ struct TileView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 18)
                         .fill(Color(.systemBackground))
-                    if let img = image {
+                    // Synchronous decoded-cache lookup first: lazy grids
+                    // re-create this view on every scroll-in, and without this
+                    // every appearance flashed the gray placeholder while the
+                    // async decode re-ran. Anything ever decoded renders on
+                    // the FIRST frame now; `image` covers the true cold path.
+                    if let img = image ?? MediaCache.decodedImage(for: tile.imageKey, maxPixel: 640) {
                         Image(uiImage: img)
                             .resizable()
                             .aspectRatio(contentMode: posterMode ? .fit : .fill)   // guillotine everywhere but the TV folder
@@ -99,6 +104,8 @@ struct TileView: View {
 
     private func loadImage() async {
         guard let key = tile.imageKey, !key.isEmpty else { return }
+        // Already rendering synchronously from the decoded cache → no work.
+        if MediaCache.decodedImage(for: key, maxPixel: 640) != nil { return }
         if let img = await MediaCache.shared.image(for: key, maxPixel: 640) {
             // NO automatic pixel trimming — auto blank-space removal was the
             // board's most-complained-about behavior and is deliberately gone.

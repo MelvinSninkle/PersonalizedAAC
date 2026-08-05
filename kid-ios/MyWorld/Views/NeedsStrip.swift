@@ -27,6 +27,9 @@ struct NeedsStrip: View {
     /// the landing slot while a strip tile is lifted.
     @State private var dragSourceId: Int? = nil
     @State private var previewIds: [Int]? = nil
+    /// A sentence lift is in progress from this strip: freeze its scrolling
+    /// so the horizontal pan can't steal the drag mid-flight (see quickLift).
+    @State private var stripLift = false
 
     private var tiles: [Tile] {
         board.tiles
@@ -102,6 +105,9 @@ struct NeedsStrip: View {
                 .padding(.horizontal, BoardMetrics.columnPad)
                 .padding(.vertical, 8)
             }
+            // Frozen while a sentence lift is in progress — the pan gesture
+            // is what was stealing every drag out of this strip.
+            .scrollDisabled(stripLift)
             .frame(height: stripHeight)
             .background(Color(hex: prefs.colorNeeds))
             .onChange(of: editMode) { _, _ in previewIds = nil; dragSourceId = nil }
@@ -162,11 +168,35 @@ struct NeedsStrip: View {
 
     private var dragStaging: Bool { access.sentenceDrag && access.sentenceBuilder && !editMode }
 
-    /// See SectionColumn.quickLift — the original drag-to-bar stage gesture.
+    /// HOLD-then-drag, not plain drag: this strip lives inside a horizontal
+    /// ScrollView whose pan claims any moving touch first, so the old
+    /// 24pt DragGesture was practically un-triggerable here — every attempt
+    /// read as a scroll, however long the finger stayed down (a cancelled
+    /// gesture also stranded the lift ghost; the SentenceBar watchdog covers
+    /// that). The fix has two halves: a short long-press (finger STILL, so
+    /// the scroll pan never engages) lifts the tile with a haptic, and while
+    /// lifted `stripLift` freezes the strip's scrolling entirely so the
+    /// follow-on drag cannot be stolen mid-flight. Scrolling the strip works
+    /// exactly as before when nothing is lifted.
     private func quickLift(_ tile: Tile) -> some Gesture {
-        DragGesture(minimumDistance: 24, coordinateSpace: .named("board"))
-            .onChanged { sentence.dragUpdate(tile, at: $0.location) }
-            .onEnded { if sentence.dragEnd(at: $0.location) { stageTile(tile) } }
+        LongPressGesture(minimumDuration: 0.3, maximumDistance: 12)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("board")))
+            .onChanged { value in
+                guard case .second(true, let dragValue) = value else { return }
+                if !stripLift {
+                    stripLift = true
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                }
+                if let dragValue { sentence.dragUpdate(tile, at: dragValue.location) }
+            }
+            .onEnded { value in
+                stripLift = false
+                if case .second(true, let dragValue) = value, let dragValue {
+                    if sentence.dragEnd(at: dragValue.location) { stageTile(tile) }
+                } else {
+                    sentence.dragCancel()
+                }
+            }
     }
 
     private func stageTile(_ tile: Tile) {

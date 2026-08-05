@@ -271,6 +271,38 @@ nudge and family callers send a fixed neutral phrase. VERIFY:
 `localStorage aacStyle` reads in parent.html) plus code review of any new
 capture surface.
 
+## F. Emergency Beacon (lost-child mode)
+
+**F1. Never paywalled, parent-controlled, media-owned.** `api/beacon.js` +
+`api/_lib/beacon.js` may never import or consult entitlements, tiers,
+budgets, or charge helpers — a lapsed subscription must not silence a lost
+child's device (`invariants.sh` F1 greps for the known gate symbols).
+Control ops (config/activate/deactivate/drill) require `isParentOf` or
+admin — a therapist/school login must not trigger or silence it; the `ping`
+op is roster-gated (the board device reports in). `beacon_clips` rows exist
+so `/api/media`'s ownership union owns the clip blobs (they contain the
+family's phone number) — the union carries a pre-migration fallback because
+that union FAILS OPEN on error. Clips are synthesized at SETUP time and
+cached on-device via sync: the beacon must run fully offline once lit;
+activation is the only step allowed to need network. On-device stop demands
+the parent quick PIN (offline) or account password (online) — never
+child-dismissable. Screen flashing is a slow ~0.3Hz pulse, NEVER ≥3Hz
+(photosensitive-seizure threshold). VERIFY: `bash invariants.sh` F1 +
+`node tools/surface-audit/beacon_smoke.cjs` against the stub.
+
+**F2. Listening synonyms are dark-launched behind `SYNONYMS_PUBLIC`.**
+The engine synonym sets (`SYNONYM_SETS` in `api/_lib/word-match.js`) and the
+spoken-word captions on matched listen chips are being field-tested on the
+owner's device first. While `SYNONYMS_PUBLIC = false`: `/api/sync` passes
+`{ synonyms }` into `expandMatchTerms` only for ADMIN callers, and ships
+`listenCaptions` (same boolean) so all three clients draw the caption band
+only when told to — web persists it (`aacListenCaptions`), iOS/Android carry
+it on BoardStore beside the blocklist. `api/demo.js` (public practice board)
+and `api/message-to-board.js` take the expandMatchTerms DEFAULT, which is the
+flag itself — so graduation is ONE flip in word-match.js, no client release.
+VERIFY: `invariants.sh` F2 greps + the access_smoke caption-gate assertion
+(match survives with captions off, caption does not).
+
 ## D. Admin containment
 
 **D1. Every Lab/taxonomy handler self-gates.** The dispatcher

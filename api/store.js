@@ -152,6 +152,24 @@ async function catalog(req, res, db, auth, uid) {
   const ent = await entitlementFor(db, auth.user);
   const voiceUsed = uid ? await voiceCharsThisMonth(db, uid) : 0;
   const voiceCap = ent.features.voiceCharsPerMonth;
+  // When the next credit grant lands. We don't store the platform's exact
+  // period end; renewals RE-GRANT monthly anchored on the purchase rows
+  // (activeSubscription's model), so last-grant + 1 month is the honest
+  // estimate both storefronts show ("~Aug 28 — 50 credits arrive").
+  let renewsAt = null;
+  if (uid && ent.sub) {
+    try {
+      const skus = SUBSCRIPTIONS.flatMap((s) => [s.sku, s.appleProductId, s.googleProductId]);
+      const r = await db`SELECT created_at FROM purchases
+                         WHERE user_id = ${uid} AND product_id = ANY(${skus})
+                         ORDER BY created_at DESC LIMIT 1`;
+      if (r.length) {
+        const d = new Date(r[0].created_at);
+        d.setMonth(d.getMonth() + 1);
+        renewsAt = d.toISOString();
+      }
+    } catch (_) { /* renewal estimate is display-only */ }
+  }
 
   res.setHeader('Cache-Control', 'no-store');
   res.status(200).json({
@@ -170,6 +188,7 @@ async function catalog(req, res, db, auth, uid) {
                   reporting: ent.features.reporting, dataSaving: ent.features.dataSaving },
       voice: { used: voiceUsed, cap: Number.isFinite(voiceCap) ? voiceCap : null },
       creditsPerPeriod: ent.sub ? ent.sub.creditsPerPeriod : 0,
+      renewsAt,
     },
     cost: COST,
     rebuild,

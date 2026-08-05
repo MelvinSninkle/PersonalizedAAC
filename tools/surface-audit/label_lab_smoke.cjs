@@ -64,6 +64,30 @@ const fails = [];
   ok('uniformity strip renders six tiles', await page.evaluate(() =>
     document.querySelectorAll('#strip canvas').length === 6));
 
+  ok('width sweep renders five sizes with effective pixel captions', await page.evaluate(() => {
+    const caps = [...document.querySelectorAll('#sweep .cap')].map((c) => c.textContent);
+    return caps.length === 5 && /80px · band \d+px · text ~\d+px/.test(caps[4]);
+  }));
+
+  // "Art is its own label": skipping a category must remove the band from its
+  // tiles. Pick pizza (category Food), skip Food, and the band pixel must no
+  // longer be the band color.
+  await page.fill('#search', 'pizza');
+  await page.evaluate(() => document.getElementById('search').dispatchEvent(new Event('change')));
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const box = [...document.querySelectorAll('#skip-cats input')].find((i) => i.value === 'food');
+    if (box && !box.checked) { box.checked = true; box.dispatchEvent(new Event('change')); }
+  });
+  await page.waitForTimeout(500);
+  const skipped = await px(512, 990);
+  ok('a skipped category renders with no band',
+    !(skipped[0] === 255 && skipped[1] === 0 && skipped[2] === 170));
+  ok('the skip list travels in the settings JSON', await page.evaluate(() => {
+    const cfg = JSON.parse(localStorage.getItem('labelLabCfg') || '{}');
+    return Array.isArray(cfg.skipCategories) && cfg.skipCategories.includes('food');
+  }));
+
   await browser.close();
   console.log(fails.length ? '\nFAILURES:\n' + fails.join('\n') : '\nALL PASS');
   process.exit(fails.length ? 1 : 0);

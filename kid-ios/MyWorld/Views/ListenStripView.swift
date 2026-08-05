@@ -10,6 +10,10 @@ struct ListenToken: Identifiable {
     let at: Date
     /// Display filter (E8): a blocklisted word, shown as the pill "Bad Word".
     var masked = false
+    /// What was actually SAID when a variant/synonym matched the tile —
+    /// "hi" borrowing hello's picture keeps its own caption. nil when the
+    /// spoken word IS the tile's label.
+    var spoken: String? = nil
 }
 
 /// Greedy-longest tokenizer — the SAME rule as `api/message-to-board.js`: try the
@@ -55,7 +59,8 @@ enum ListenTokenizer {
 
     static func tokenize(_ words: [TimedWord], lexicon: [String: Tile],
                          censor: Bool = true, tilesOnly: Bool = false,
-                         blocklist: Set<String> = []) -> [ListenToken] {
+                         blocklist: Set<String> = [],
+                         captions: Bool = false) -> [ListenToken] {
         var out: [ListenToken] = []
         var i = 0
         while i < words.count {
@@ -71,7 +76,13 @@ enum ListenTokenizer {
             let id = src.first?.id ?? i
             let at = src.map { $0.at }.max() ?? Date()
             if let matched {
-                out.append(ListenToken(id: id, word: matched.label, tile: matched, at: at))
+                // A synonym/variant match borrows the tile's image but the
+                // transcript stays honest: keep what was said as the caption.
+                // `captions` is the server-shipped dark-launch flag.
+                let said = src.map { $0.text }.joined(separator: " ")
+                let differs = normalize(said) != normalize(matched.label)
+                out.append(ListenToken(id: id, word: matched.label, tile: matched, at: at,
+                                       spoken: (captions && differs) ? said : nil))
             } else if !tilesOnly {
                 // Display filter (E8): a blocklisted word never renders as
                 // itself; tilesOnly hides every non-tile word outright.
@@ -102,7 +113,8 @@ struct ListenStripView: View {
     private var tokens: [ListenToken] {
         ListenTokenizer.tokenize(speech.words, lexicon: ListenTokenizer.lexicon(from: board.tiles),
                                  censor: access.listenCensor, tilesOnly: access.listenTilesOnly,
-                                 blocklist: board.listenBlocklist)
+                                 blocklist: board.listenBlocklist,
+                                 captions: board.listenCaptions)
     }
 
     var body: some View {
@@ -184,7 +196,7 @@ struct ListenStripView: View {
     @ViewBuilder
     private func chip(_ tok: ListenToken) -> some View {
         if let tile = tok.tile {
-            ListenTileChip(tile: tile, scale: prefs.listenScale)
+            ListenTileChip(tile: tile, scale: prefs.listenScale, spoken: tok.spoken)
         } else {
             Text(tok.word)
                 .font(.system(size: 20 * prefs.listenScale, weight: .bold, design: .rounded))
@@ -201,6 +213,9 @@ struct ListenStripView: View {
 private struct ListenTileChip: View {
     let tile: Tile
     var scale: Double = 1
+    /// A synonym match borrows this tile's image; the caption shows what was
+    /// actually SAID ("hi" under hello's picture). nil = no caption.
+    var spoken: String? = nil
     @State private var image: UIImage?
 
     var body: some View {
@@ -215,6 +230,19 @@ private struct ListenTileChip: View {
                 }
             }
             .frame(width: 76 * scale, height: 76 * scale)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(alignment: .bottom) {
+                if let spoken, !spoken.isEmpty {
+                    Text(spoken)
+                        .font(.system(size: 12 * scale, weight: .bold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .foregroundStyle(Color(hex: "#1f2937"))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 1)
+                        .background(.white.opacity(0.92))
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.06)))
         }

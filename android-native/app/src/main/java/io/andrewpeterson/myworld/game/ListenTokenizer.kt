@@ -11,6 +11,12 @@ data class ListenToken(
     val at: Long,
     /** Display filter (E8): a blocklisted word, shown as the pill "Bad Word". */
     val masked: Boolean = false,
+    /**
+     * What was actually SAID when a variant/synonym matched the tile — "hi"
+     * borrowing hello's picture keeps its own caption. null when the spoken
+     * word IS the tile's label.
+     */
+    val spoken: String? = null,
 )
 
 /**
@@ -58,6 +64,7 @@ object ListenTokenizer {
         words: List<TimedWord>, lexicon: Map<String, Tile>,
         censor: Boolean = true, tilesOnly: Boolean = false,
         blocklist: Set<String> = emptySet(),
+        captions: Boolean = false,
     ): List<ListenToken> {
         val out = mutableListOf<ListenToken>()
         var i = 0
@@ -75,7 +82,13 @@ object ListenTokenizer {
             val id = src.first().id
             val at = src.maxOf { it.at }
             if (matched != null) {
-                out.add(ListenToken(id = id, word = matched.label, tile = matched, at = at))
+                // A synonym/variant match borrows the tile's image but the
+                // transcript stays honest: keep what was said as the caption.
+                // `captions` is the server-shipped dark-launch flag.
+                val said = src.joinToString(" ") { it.text }
+                val differs = normalize(said) != normalize(matched.label)
+                out.add(ListenToken(id = id, word = matched.label, tile = matched, at = at,
+                                    spoken = if (captions && differs) said else null))
             } else if (!tilesOnly) {
                 // Display filter (E8): a blocklisted word never renders as
                 // itself; tilesOnly hides every non-tile word outright.

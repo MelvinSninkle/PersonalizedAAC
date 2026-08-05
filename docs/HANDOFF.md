@@ -20,13 +20,14 @@ Last updated: **2026-07-24**. This is the working-context document for whoever
 - **Verify before every commit**: `node --check` on touched API files; the
   inline-JS `new Function()` check on touched HTML; brace/paren deltas vs
   HEAD on touched Swift/Kotlin; `bash tools/surface-audit/invariants.sh`
-  (expect **18 PASS**); both Playwright smokes (`access_smoke.cjs`,
-  `practice_smoke.cjs`) against `python3 tools/surface-audit/stub_server.py`
+  (expect **20 PASS**); the Playwright smokes (`access_smoke.cjs`,
+  `practice_smoke.cjs`, `translations_smoke.cjs`, `label_lab_smoke.cjs`,
+  `beacon_smoke.cjs`) against `python3 tools/surface-audit/stub_server.py`
   (start with a PID file, `sleep 3`, never `pkill -f` — it matches your own
   shell and kills the session).
 - **Skills**: `surface-audit` after touching api//app.html/parent.html/
   onboard.html/store.html/kid-ios//android-native/; `new-endpoint` before any
-  new route (89/100 Vercel functions used — prefer actions on dispatchers);
+  new route (90/100 Vercel functions used — prefer actions on dispatchers);
   `release` for deploys; `update-taxonomy` + `aac-prompt-author` for
   vocabulary work.
 - **Repo quirks**: deliberately NO package-lock.json; XcodeGen (`project.yml`)

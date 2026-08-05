@@ -46,16 +46,34 @@ export default async function handler(req, res) {
   // fail OPEN (log + serve) so a hiccup never blanks the child's board.
   try {
     const db = sql();
-    const owners = await db`
-      SELECT DISTINCT child_id FROM (
-        SELECT child_id FROM items WHERE image_key = ${key} OR sound_key = ${key}
-        UNION ALL SELECT child_id FROM categories WHERE image_key = ${key}
-        UNION ALL SELECT child_id FROM persons WHERE reference_key = ${key} OR voice_key = ${key}
-        UNION ALL SELECT child_id FROM reference_images WHERE blob_key = ${key}
-        UNION ALL SELECT child_id FROM pending_tiles WHERE source_key = ${key} OR image_key = ${key} OR sound_key = ${key}
-        UNION ALL SELECT child_id FROM item_image_history WHERE blob_key = ${key}
-        UNION ALL SELECT child_id FROM tile_jobs WHERE source_key = ${key} OR image_key = ${key} OR sound_key = ${key}
-      ) t WHERE child_id IS NOT NULL LIMIT 20`;
+    let owners;
+    try {
+      owners = await db`
+        SELECT DISTINCT child_id FROM (
+          SELECT child_id FROM items WHERE image_key = ${key} OR sound_key = ${key}
+          UNION ALL SELECT child_id FROM categories WHERE image_key = ${key}
+          UNION ALL SELECT child_id FROM persons WHERE reference_key = ${key} OR voice_key = ${key}
+          UNION ALL SELECT child_id FROM reference_images WHERE blob_key = ${key}
+          UNION ALL SELECT child_id FROM pending_tiles WHERE source_key = ${key} OR image_key = ${key} OR sound_key = ${key}
+          UNION ALL SELECT child_id FROM item_image_history WHERE blob_key = ${key}
+          UNION ALL SELECT child_id FROM tile_jobs WHERE source_key = ${key} OR image_key = ${key} OR sound_key = ${key}
+          UNION ALL SELECT child_id FROM beacon_clips WHERE sound_key = ${key}
+        ) t WHERE child_id IS NOT NULL LIMIT 20`;
+    } catch (_) {
+      // Pre-migration fallback: beacon_clips appears with the first beacon
+      // setup. Without this retry a missing table would error the union and
+      // FAIL OPEN for every child key — the exact widening A2 forbids.
+      owners = await db`
+        SELECT DISTINCT child_id FROM (
+          SELECT child_id FROM items WHERE image_key = ${key} OR sound_key = ${key}
+          UNION ALL SELECT child_id FROM categories WHERE image_key = ${key}
+          UNION ALL SELECT child_id FROM persons WHERE reference_key = ${key} OR voice_key = ${key}
+          UNION ALL SELECT child_id FROM reference_images WHERE blob_key = ${key}
+          UNION ALL SELECT child_id FROM pending_tiles WHERE source_key = ${key} OR image_key = ${key} OR sound_key = ${key}
+          UNION ALL SELECT child_id FROM item_image_history WHERE blob_key = ${key}
+          UNION ALL SELECT child_id FROM tile_jobs WHERE source_key = ${key} OR image_key = ${key} OR sound_key = ${key}
+        ) t WHERE child_id IS NOT NULL LIMIT 20`;
+    }
     if (owners.length) {
       let allowed = false;
       for (const o of owners) {

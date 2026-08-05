@@ -45,6 +45,11 @@ struct BoardView: View {
     /// Gate the empty-board welcome so it only appears AFTER the first server
     /// refresh (never flashes during the initial cold-launch paint).
     @State private var didInitialLoad = false
+    /// First-paint curtain: the board stays behind a brief "getting your
+    /// pictures ready" veil while the first screenful of tile art pre-decodes,
+    /// then pops in COMPLETE — no tile-by-tile placeholder flicker on open.
+    /// Hard-capped at 2.5s so a cold cache can never hold the board hostage.
+    @State private var boardReady = false
     /// Board-build progress ("Making Simon's words… 34 of 108") while the
     /// server-side seed jobs are still rendering. nil = not building.
     @State private var seedStatus: APIClient.SeedStatus?
@@ -159,6 +164,7 @@ struct BoardView: View {
         .overlay(alignment: .top) { autoTeachOverlay }
         .overlay(alignment: .bottom) { reviewBanner }
         .overlay(alignment: .bottomLeading) { seedProgressPill }
+        .overlay { firstPaintCurtain }
         .fullScreenCover(isPresented: Binding(
             get: { pendingMessage != nil },
             set: { if !$0 { pendingMessage = nil } }
@@ -208,6 +214,8 @@ struct BoardView: View {
             access.attach(childId: auth.childSlug)
             await board.refresh(childId: auth.childSlug)
             didInitialLoad = true
+            await warmFirstPaint()
+            withAnimation(.easeOut(duration: 0.25)) { boardReady = true }
             live.start(childId: auth.childSlug)
             scheduler.start(childId: auth.childSlug)
             autoTeach.start(childId: auth.childSlug)
@@ -412,6 +420,50 @@ struct BoardView: View {
             .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
             .padding(.leading, 12).padding(.bottom, 10)
             .transition(.opacity)
+        }
+    }
+
+    /// The first-paint curtain: a soft branded veil that holds until the
+    /// first screenful of art is decoded, then fades. It never blocks input
+    /// for long — warmFirstPaint is hard-capped — and an empty board (or one
+    /// with no art yet) skips it entirely.
+    @ViewBuilder
+    private var firstPaintCurtain: some View {
+        if !boardReady {
+            ZStack {
+                Color(hex: "#fdf2f8").ignoresSafeArea()
+                VStack(spacing: 14) {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(Color(hex: "#ff1493"))
+                    Text("One moment — getting your pictures ready…")
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(hex: "#9d2463"))
+                }
+            }
+            .transition(.opacity)
+        }
+    }
+
+    /// Pre-decode the art the first paint will show — every category chip and
+    /// the first two rows of each section — so the board pops in COMPLETE.
+    /// Bytes are already on disk (BoardStore.warm runs at sync); this is pure
+    /// decode into MediaCache's decoded-image cache. Hard 2.5s cap: whichever
+    /// of (decode finished | timer) wins, the curtain lifts, and anything
+    /// still undecoded loads the old way.
+    private func warmFirstPaint() async {
+        var keys: [String] = board.categories.compactMap { $0.imageKey }
+        for section in BoardSection.allCases {
+            let secTiles = board.tiles.filter { $0.section == section }
+            keys += secTiles.prefix(14).compactMap { $0.imageKey }
+        }
+        let work = keys.filter { !$0.isEmpty }
+        guard !work.isEmpty else { return }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await MediaCache.shared.predecode(work) }
+            group.addTask { try? await Task.sleep(nanoseconds: 2_500_000_000) }
+            _ = await group.next()      // first finisher lifts the curtain
+            group.cancelAll()           // …and cancels the loser
         }
     }
 

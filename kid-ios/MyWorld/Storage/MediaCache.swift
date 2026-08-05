@@ -64,6 +64,25 @@ actor MediaCache {
         }
     }
 
+    /// DECODED-image cache. Disk gives us the bytes without the network, but
+    /// SwiftUI's lazy grids re-create tile views every time they scroll in,
+    /// and re-decoding on every appearance is exactly the gray-placeholder
+    /// flash families see on a fully-synced board. Once decoded at a size, an
+    /// image renders SYNCHRONOUSLY forever after via `decodedImage` — no
+    /// placeholder, ever again. NSCache evicts automatically under memory
+    /// pressure, so this cannot become the jetsam vector C7 guards against
+    /// (thumbnails at 640px are ~1 MB each; the count limit caps worst-case
+    /// resident decode memory well under what a board scroll already uses).
+    private static let decodedCache: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.countLimit = 500
+        return c
+    }()
+    nonisolated static func decodedImage(for key: String?, maxPixel: Int) -> UIImage? {
+        guard let key, !key.isEmpty else { return nil }
+        return decodedCache.object(forKey: "\(key)#\(maxPixel)" as NSString)
+    }
+
     /// Convenience: load + decode a UIImage. Returns nil if the bytes don't
     /// decode (corrupt cache entry → caller can re-fetch by deleting + retrying).
     ///
@@ -71,16 +90,39 @@ actor MediaCache {
     /// decodes every source at full resolution (~4 MB of RAM per 1024² image)
     /// is what jetsams the app when a search opens hundreds of thumbnails.
     /// ImageIO's thumbnailing decodes straight to the target size, so memory
-    /// scales with what's on screen. Pass nil for full resolution (slideshow).
+    /// scales with what's on screen. Pass nil for full resolution (slideshow —
+    /// full-res decodes are deliberately NOT retained in the decoded cache).
     func image(for key: String, maxPixel: Int? = nil) async -> UIImage? {
+        if let maxPixel, let hit = MediaCache.decodedImage(for: key, maxPixel: maxPixel) {
+            return hit
+        }
         do {
             let data = try await data(for: key)
             if let maxPixel, let small = MediaCache.downsampled(data, maxPixel: maxPixel) {
+                MediaCache.decodedCache.setObject(small, forKey: "\(key)#\(maxPixel)" as NSString)
                 return small
             }
             return UIImage(data: data)
         } catch {
             return nil
+        }
+    }
+
+    /// Pre-DECODE a batch into the decoded-image cache (the bytes are usually
+    /// already on disk from warm()). This is what makes the first paint pop
+    /// in complete instead of tile-by-tile. Bounded concurrency; respects
+    /// task cancellation between items so a timeout race can cut it short.
+    func predecode(_ keys: [String], maxPixel: Int = 640, concurrency: Int = 4) async {
+        var seen = Set<String>()
+        let ordered = keys.filter { !$0.isEmpty && seen.insert($0).inserted }
+        var it = ordered.makeIterator()
+        await withTaskGroup(of: Void.self) { group in
+            func addNext() {
+                guard !Task.isCancelled, let key = it.next() else { return }
+                group.addTask { _ = await self.image(for: key, maxPixel: maxPixel) }
+            }
+            for _ in 0..<max(1, concurrency) { addNext() }
+            while await group.next() != nil { addNext() }
         }
     }
 

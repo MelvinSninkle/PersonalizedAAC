@@ -365,6 +365,82 @@
     <span id="listen-status" style="font-size:13px;color:var(--muted);margin-left:10px;"></span>
   </div>
 
+  <!-- EMERGENCY BEACON — never paywalled. Dark-launched: admin-only while
+       the owner field-tests it; the server enforces the same gate
+       (BEACON_PUBLIC in api/beacon.js). To ship: flip that flag and swap
+       these admin-access-only classes/display for the plain panel. -->
+  <div class="section-label admin-access-only" style="display:none;">Emergency beacon (admin testing)</div>
+  <div class="panel admin-access-only" id="beacon-panel" style="display:none;padding:14px;border-left:4px solid #b91c1c;">
+    <div id="beacon-nag" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#7f1d1d;">
+      <b>Set this up now, before you ever need it.</b> If your child is ever
+      missing with their device, the beacon makes it speak for them: it
+      announces that they are a vulnerable person, shows their family's
+      photos, and shows and speaks your phone number — over and over,
+      pacing itself to preserve the battery. Setup takes one minute.
+    </div>
+    <p class="hint" style="margin:0 0 10px;">
+      When activated, the tablet intermittently announces — in your family's
+      language first — that the person holding it is vulnerable and cannot be
+      located by their caretaker, shows <b>This is My Family</b> with your
+      photos, and displays and speaks your emergency number. It adapts how
+      often it speaks to the battery, bursts when someone touches the device,
+      and reports battery, last-seen and (if the device allows) location back
+      to this page. Voice clips are prepared now and stored on the device, so
+      the beacon works even with no internet. This feature is free for
+      everyone, forever.
+    </p>
+    <p class="hint" style="margin:0 0 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;color:#92400e;">
+      <b>Important:</b> the beacon does <b>not</b> call 911 or contact any
+      emergency service, and it is not a substitute for doing so. If your
+      child is missing, <b>call 911 first</b>, then activate the beacon. It
+      works only while the device is on and charged (web boards: with the
+      board open on screen); alerts and location need an internet connection
+      on the device.
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <input id="beacon-phone" type="tel" placeholder="Emergency phone number" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;width:200px;">
+      <span id="beacon-langs" style="display:flex;gap:4px 10px;flex-wrap:wrap;font-size:13px;"></span>
+      <button class="btn" id="beacon-save">Save &amp; prepare voice clips</button>
+    </div>
+    <div style="border-top:1px dashed #e5e7eb;margin:10px 0;padding-top:10px;">
+      <div style="font-weight:700;font-size:14px;margin-bottom:4px;">Safe zones (auto-activation)</div>
+      <p class="hint" style="margin:0 0 8px;">
+        Draw a circle around home (stand there and tap “add here”). When
+        <b>armed</b>, the tablet watches its own location — if it leaves the
+        zone, it alerts you and counts down before starting the beacon by
+        itself, <b>even with no internet</b> (the fence check runs on the
+        device). Re-entering the zone cancels the countdown. Arm it for the
+        risky hours — children leave home with their parents every day, so an
+        always-armed fence would cry wolf. Web boards only watch while the
+        board is on-screen; the native apps will watch in the background.
+      </p>
+      <div id="beacon-zones" style="display:flex;flex-direction:column;gap:4px;font-size:13px;margin-bottom:8px;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input id="beacon-zone-name" type="text" placeholder="Zone name (Home)" style="padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;width:130px;">
+        <select id="beacon-zone-radius" style="padding:7px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+          <option value="100">100 m</option><option value="200" selected>200 m</option>
+          <option value="400">400 m</option><option value="800">800 m</option><option value="1600">1.6 km</option>
+        </select>
+        <button class="btn" id="beacon-zone-add">📍 Add a zone here</button>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="beacon-armed"> <b>Armed</b></label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;">Beacon starts
+          <select id="beacon-alert-mins" style="padding:6px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+            <option value="0">immediately</option><option value="5">after 5 min</option>
+            <option value="10" selected>after 10 min</option><option value="20">after 20 min</option>
+          </select> after leaving</label>
+      </div>
+      <div class="hint" style="margin-top:6px;">Changes apply when you press <b>Save &amp; prepare voice clips</b> above. The first time the tablet monitors, it will ask for location permission — approve it on the tablet.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button class="btn" id="beacon-activate" style="background:#b91c1c;color:#fff;border-color:#b91c1c;font-weight:700;">🔴 Activate Emergency Beacon</button>
+      <button class="btn" id="beacon-deactivate" style="display:none;">Deactivate</button>
+      <button class="btn" id="beacon-drill" title="One quiet practice cycle on the tablet — it stops itself.">Run a 20-second drill</button>
+      <span id="beacon-status" style="font-size:13px;color:var(--muted);"></span>
+    </div>
+    <div id="beacon-live" style="display:none;margin-top:10px;background:#fef2f2;border-radius:10px;padding:10px 12px;font-size:14px;color:#7f1d1d;"></div>
+  </div>
+
   <!-- MODE LAUNCHER -->
   <div class="section-label">Start a mode</div>
   <div class="modes" id="modes">
@@ -1280,6 +1356,13 @@
         const el = document.getElementById('admin-taxonomy'); if (el) el.style.display = '';
         const ts = document.getElementById('therapist-switch'); if (ts) ts.style.display = '';
         document.querySelectorAll('.therapist-only').forEach(n => { n.style.display = ''; });
+        // Deep link from the board's ⚙ settings ("Set up Emergency Beacon"):
+        // the panel only exists once the reveal above has run, so the scroll
+        // waits for it here rather than on page load.
+        if (location.hash === '#beacon') {
+          const bp = document.getElementById('beacon-panel');
+          if (bp) setTimeout(() => bp.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+        }
 
         // ---- Tier simulator (admin only) — sets users.sub_override on THIS
         // account so the whole product behaves like that membership level:
@@ -2329,6 +2412,159 @@
       body: JSON.stringify(cmd),
     }).then(r => r.ok).catch(() => false);
   }
+
+  // ---- EMERGENCY BEACON — never paywalled --------------------------------
+  (function () {
+    const $ = (id) => document.getElementById(id);
+    if (!$('beacon-save')) return;
+    const LANGS = [['en', 'English'], ['zh', '中文'], ['es', 'Español'], ['fr', 'Français'], ['pt', 'Português'], ['de', 'Deutsch']];
+    let state = null, pollT = null, zones = [];
+
+    function drawZones() {
+      $('beacon-zones').innerHTML = zones.length ? zones.map((z, i) =>
+        '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<span>🛡 <b>' + z.name.replace(/</g, '&lt;') + '</b> · ' + z.radius + ' m · '
+        + '<a href="https://maps.google.com/?q=' + z.lat + ',' + z.lng + '" target="_blank">map ↗</a></span>'
+        + '<button data-i="' + i + '" class="beacon-zone-x" style="border:none;background:transparent;color:#b91c1c;cursor:pointer;font-weight:700;">✕ remove</button></div>').join('')
+        : '<span style="color:var(--muted);">No zones yet.</span>';
+      for (const b of document.querySelectorAll('.beacon-zone-x')) {
+        b.addEventListener('click', () => { zones.splice(Number(b.dataset.i), 1); drawZones(); });
+      }
+    }
+
+    function drawLangs(selected) {
+      $('beacon-langs').innerHTML = LANGS.map(([code, label]) =>
+        '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;">'
+        + '<input type="checkbox" value="' + code + '"' + (selected.includes(code) ? ' checked' : '') + '>' + label + '</label>').join('');
+    }
+    function fmtAgo(ts) {
+      if (!ts) return 'never';
+      const m = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
+      return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago';
+    }
+    function render() {
+      const b = (state && state.beacon) || null;
+      const st = (state && state.status) || {};
+      $('beacon-nag').style.display = b && b.phone ? 'none' : '';
+      if (b) {
+        if (!$('beacon-phone').value) $('beacon-phone').value = b.phone || '';
+        drawLangs(b.langs || ['en']);
+        zones = Array.isArray(b.zones) ? b.zones.slice() : zones;
+        $('beacon-armed').checked = !!b.armed;
+        if (b.alertMinutes != null) $('beacon-alert-mins').value = String(b.alertMinutes);
+      } else drawLangs(['en']);
+      drawZones();
+      const active = !!(b && b.active);
+      $('beacon-activate').style.display = active ? 'none' : '';
+      $('beacon-deactivate').style.display = active ? '' : 'none';
+      const staged = !active && st.stagedAt
+        && (Date.now() - new Date(st.stagedAt).getTime()) < 2 * 3600_000;
+      if (active || staged) {
+        const loc = (st.lat != null && st.lng != null)
+          ? ' · <a href="https://maps.google.com/?q=' + st.lat + ',' + st.lng + '" target="_blank" style="color:#7f1d1d;font-weight:700;">last location ↗</a>'
+            + (st.accuracy ? ' (±' + Math.round(st.accuracy) + 'm)' : '')
+          : ' · location not reported yet';
+        $('beacon-live').style.display = '';
+        $('beacon-live').innerHTML = active
+          ? '<b>🔴 BEACON ACTIVE</b>' + (st.activatedBy && st.activatedBy.indexOf('geofence') === 0 ? ' (auto — left safe zone)' : '')
+            + ' since ' + fmtAgo(b.activatedAt)
+            + ' · device last seen ' + fmtAgo(st.lastSeen)
+            + (st.battery != null ? ' · battery ' + st.battery + '%' + (st.charging ? ' ⚡charging' : '') : ' · battery unknown')
+            + loc
+          : '<b>⚠️ SAFE-ZONE ALERT</b> — the device left “' + (st.stagedZone || 'the safe zone') + '” '
+            + fmtAgo(st.stagedAt) + '. The beacon starts automatically unless cancelled on the device '
+            + 'or the zone is re-entered. Deactivate here after you have your child.' + loc;
+        if (!pollT) pollT = setInterval(load, 15000);
+      } else {
+        $('beacon-live').style.display = 'none';
+        if (pollT) { clearInterval(pollT); pollT = null; }
+      }
+      // Monitoring health while armed: a fence that isn't actually watching
+      // (permission never granted on the tablet) must be visible here.
+      if (b && b.armed && !active) {
+        $('beacon-status').textContent = st.zoneState === 'no-permission'
+          ? '⚠ The tablet has not granted location — the fence is NOT monitoring. Open the board on the tablet and allow location.'
+          : st.zoneState ? ('Fence armed · device reports: ' + st.zoneState) : 'Fence armed · waiting for the tablet to report.';
+      }
+    }
+    async function load() {
+      try {
+        const r = await fetch('/api/beacon?childId=' + encodeURIComponent(slug), { credentials: 'same-origin' });
+        if (r.ok) { state = await r.json(); render(); }
+      } catch (_) {}
+    }
+    async function post(body) {
+      const r = await fetch('/api/beacon', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin', body: JSON.stringify({ childId: slug, ...body }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      return d;
+    }
+
+    $('beacon-zone-add').addEventListener('click', () => {
+      if (!navigator.geolocation) { $('beacon-status').textContent = 'This device has no location access.'; return; }
+      $('beacon-status').textContent = 'Getting this spot…';
+      navigator.geolocation.getCurrentPosition((pos) => {
+        zones.push({ name: $('beacon-zone-name').value.trim() || 'Safe zone',
+                     lat: pos.coords.latitude, lng: pos.coords.longitude,
+                     radius: Number($('beacon-zone-radius').value) || 200 });
+        $('beacon-zone-name').value = '';
+        drawZones();
+        $('beacon-status').textContent = 'Zone added — press Save to apply it.';
+      }, () => { $('beacon-status').textContent = 'Could not get a location fix — allow location on THIS device (stand where the zone should be).'; },
+      { enableHighAccuracy: true, timeout: 15000 });
+    });
+
+    $('beacon-save').addEventListener('click', async () => {
+      const phone = $('beacon-phone').value.trim();
+      const langs = [...document.querySelectorAll('#beacon-langs input:checked')].map((i) => i.value);
+      $('beacon-status').textContent = 'Preparing voice clips…';
+      try {
+        const d = await post({ op: 'config', phone, langs, zones,
+                               armed: $('beacon-armed').checked,
+                               alertMinutes: Number($('beacon-alert-mins').value) });
+        $('beacon-status').textContent = '✓ ' + d.note
+          + (d.armed ? ' Fence ARMED.' : (zones.length ? ' Fence saved but not armed.' : ''));
+        load();
+      } catch (e) { $('beacon-status').textContent = String(e.message || e); }
+    });
+
+    // Activation is deliberately heavy: a typed CONFIRM, exactly — this makes
+    // a very loud, very public thing happen on the child's device.
+    $('beacon-activate').addEventListener('click', async () => {
+      const typed = prompt('If your child is missing, CALL 911 FIRST — the beacon does not '
+        + 'contact emergency services.\n\nThis will make the tablet repeatedly announce that your child is a '
+        + 'vulnerable person who cannot be located, show your family photos, and display and '
+        + 'speak your phone number — until you deactivate it.\n\nType CONFIRM to activate.');
+      if (typed !== 'CONFIRM') { if (typed != null) $('beacon-status').textContent = 'Not activated — you must type CONFIRM exactly.'; return; }
+      $('beacon-status').textContent = 'Activating…';
+      try {
+        const d = await post({ op: 'activate' });
+        await sendCmd({ kind: 'cmd', action: 'beacon-start' });   // fast path (~seconds when online)
+        $('beacon-status').textContent = '✓ ' + d.note;
+        load();
+      } catch (e) { $('beacon-status').textContent = String(e.message || e); }
+    });
+    $('beacon-deactivate').addEventListener('click', async () => {
+      $('beacon-status').textContent = 'Deactivating…';
+      try {
+        const d = await post({ op: 'deactivate' });
+        await sendCmd({ kind: 'cmd', action: 'beacon-stop' });
+        $('beacon-status').textContent = '✓ ' + d.note;
+        load();
+      } catch (e) { $('beacon-status').textContent = String(e.message || e); }
+    });
+    $('beacon-drill').addEventListener('click', async () => {
+      $('beacon-status').textContent = 'Sending drill…';
+      try {
+        const d = await post({ op: 'drill' });
+        await sendCmd({ kind: 'cmd', action: 'beacon-drill' });
+        $('beacon-status').textContent = '✓ ' + d.note;
+      } catch (e) { $('beacon-status').textContent = String(e.message || e); }
+    });
+
+    load();
+  })();
 
   // ---- Listening mode: flip the tablet's branding strip into a live word-board ----
   (function () {

@@ -156,6 +156,34 @@ grep -q "validateInviteCode" api/auth/register.js || { fail "E10 register.js no 
 grep -q "invite_required" api/auth/register.js || { fail "E10 register.js lost the invite_required rejection"; E10=1; }
 [ "$E10" -eq 0 ] && pass "E10 self-signup enforces the invite code inline"
 
+# ── F1: the Emergency Beacon is NEVER paywalled and its clips stay owned ─────
+# The lost-child mode must work for every family forever: no beacon path may
+# consult entitlements, tiers, budgets, or charge helpers — a lapsed
+# subscription must not silence a lost child's device. And beacon clips are
+# child-scoped blobs that contain the family's phone number: media.js must
+# own them (audit A2) or they'd serve as shared library assets.
+F1=0
+if grep -Eq "entitlementFor|requireStyling|chargeForGeneration|voiceCharsThisMonth|NEEDS_SUBSCRIPTION" api/beacon.js api/_lib/beacon.js; then
+  fail "F1 a beacon path consults entitlements/budgets — the beacon must never be paywalled"; F1=1; fi
+grep -q "beacon_clips" api/media.js || { fail "F1 media.js ownership union lost beacon_clips — beacon audio would serve as a shared asset"; F1=1; }
+grep -q "isParentOf" api/beacon.js || { fail "F1 beacon control lost the parent-only gate"; F1=1; }
+# Dark-launch flag: while BEACON_PUBLIC=false only the admin can control any
+# beacon (owner field-testing). Removing the flag entirely = accidental ship.
+grep -q "BEACON_PUBLIC" api/beacon.js || { fail "F1 beacon lost its BEACON_PUBLIC launch flag — the release gate must be an explicit flip"; F1=1; }
+[ "$F1" -eq 0 ] && pass "F1 emergency beacon unpaywalled, parent-controlled, media-owned"
+
+# ── F2: listening synonyms are dark-launched behind SYNONYMS_PUBLIC ──────────
+# Until the owner field-tests on his own child's device, only admin sync
+# callers get synonym expansion, and clients draw the spoken-word caption
+# only when sync said to (listenCaptions). Removing the flag or the sync
+# gate = accidental ship to every family; removing listenCaptions from the
+# sync payload = captions stuck at each device's last-known state.
+F2=0
+grep -q "SYNONYMS_PUBLIC" api/_lib/word-match.js || { fail "F2 word-match.js lost its SYNONYMS_PUBLIC launch flag — the release gate must be an explicit flip"; F2=1; }
+grep -q "SYNONYMS_PUBLIC" api/sync.js || { fail "F2 sync.js stopped consulting SYNONYMS_PUBLIC — synonym expansion would follow only the default"; F2=1; }
+grep -q "listenCaptions" api/sync.js || { fail "F2 sync.js no longer ships the listenCaptions flag — client captions can't follow the gate"; F2=1; }
+[ "$F2" -eq 0 ] && pass "F2 listening synonyms dark-launched (SYNONYMS_PUBLIC + synced listenCaptions)"
+
 # ── Vercel function ceiling (~100 routed functions) ──────────────────────────
 COUNT=$(find api -name '*.js' ! -name '_*' ! -path 'api/_lib/*' | wc -l)
 echo "INFO: routed Vercel functions: $COUNT / 100"

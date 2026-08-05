@@ -1374,8 +1374,13 @@ private struct OnboardingSeedView: View {
 /// tapInterrupt, toolSentence, toolListen, easyClose); every answer saves
 /// immediately via the merge-safe child-settings write, and the same toggles
 /// live under ⚙ Display settings afterwards.
-private struct OBSettingsWizard: View {
+struct OBSettingsWizard: View {
     let childName: String
+    /// Standalone mode: launched from the board's ⚙ Display settings for an
+    /// account that already exists (it never saw onboarding's version). The
+    /// child is known up front and there is no seed painting to wait for, so
+    /// the wizard opens straight on question 1.
+    var standalone: Bool = false
     @State private var childId: String?
     @State private var started = false
     @State private var declined = false
@@ -1383,6 +1388,13 @@ private struct OBSettingsWizard: View {
     @State private var saving = false
     @State private var errorText: String?
     private let api = APIClient()
+
+    init(childName: String, standalone: Bool = false, childId: String? = nil) {
+        self.childName = childName
+        self.standalone = standalone
+        _childId = State(initialValue: childId)
+        _started = State(initialValue: standalone)
+    }
 
     private struct Choice { let label: String; let key: String; let value: Bool }
     private struct Question { let title: String; let body: String; let choices: [Choice] }
@@ -1519,12 +1531,11 @@ private struct OBSettingsWizard: View {
         }
         saving = true
         defer { saving = false }
-        if await api.updateChildSettings(childId: id, patch: [c.key: c.value]) {
-            index += 1
-            errorText = nil
-        } else {
-            errorText = "Could not save. Check the connection and tap again."
-        }
+        // Local-first (ChildSettingsStore): the answer always sticks — on the
+        // device at once, on the server now or at the next reconnect.
+        let synced = await ChildSettingsStore.shared.apply(childId: id, patch: [c.key: c.value])
+        index += 1
+        errorText = synced ? nil : "Saved on this device — it syncs when you're back online."
     }
 }
 

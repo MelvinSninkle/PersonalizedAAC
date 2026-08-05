@@ -159,11 +159,18 @@ export default async function handler(req, res) {
     // Listening-mode match terms: curated taxonomy.match_terms + generated
     // English inflections, expanded ONCE here so every client's tokenizer
     // just indexes strings (the morphology never gets ported to devices).
+    // Synonym sets are DARK-LAUNCHED (SYNONYMS_PUBLIC in word-match.js):
+    // until the flip, only admin callers get them — owner field-testing on
+    // his own child's device. listenCaptionsOut rides the response so client
+    // caption rendering follows the same gate.
+    let listenCaptionsOut = false;
     try {
-      const { expandMatchTerms } = await import('./_lib/word-match.js');
+      const { expandMatchTerms, SYNONYMS_PUBLIC } = await import('./_lib/word-match.js');
+      const synOn = SYNONYMS_PUBLIC || (auth.user && auth.user.role === 'admin');
+      listenCaptionsOut = !!synOn;
       for (const i of items) {
         const tax = i.taxonomy_slug ? taxBySlug.get(i.taxonomy_slug) : null;
-        const terms = expandMatchTerms(i.label, (tax && tax.match_terms) || []);
+        const terms = expandMatchTerms(i.label, (tax && tax.match_terms) || [], { synonyms: synOn });
         if (terms.length) i.match_terms_out = terms;
       }
     } catch (_) { /* matching enrichment is best-effort */ }
@@ -275,6 +282,15 @@ export default async function handler(req, res) {
       } catch (_) { /* translation is best-effort — sync must never fail over it */ }
     }
 
+    // Emergency Beacon: config + PRE-RENDERED clips ride every sync so the
+    // device caches everything long before an emergency — a lost device may
+    // have no network, so activation is the only step allowed to need one.
+    let beacon = null;
+    try {
+      const { beaconFor } = await import('./_lib/beacon.js');
+      beacon = await beaconFor(db, childId);
+    } catch (_) { /* beacon is best-effort on sync; /api/beacon is the source of truth */ }
+
     // Pending layout offer (admin curated a new default arrangement and chose
     // "ask families" instead of applying): the board shows an approve/keep
     // popup; /api/layout-offer records the answer.
@@ -290,6 +306,7 @@ export default async function handler(req, res) {
     res.status(200).json({
       language: langOut,
       uiPhrases,
+      beacon,
       categories: cats.map(rowToCategory),
       items: outItems.map(rowToItem),
       ageFilter: { applied: !!appliedBand, band: appliedBand, hiddenCount: items.length - outItems.length },
@@ -298,6 +315,10 @@ export default async function handler(req, res) {
       // "Bad Word" on the child's screen. Server-owned like match terms —
       // extend _lib/bad-words.js and every device updates on next sync.
       listenBlocklist: BAD_WORDS,
+      // Spoken-word captions on matched listen chips ("hi" under hello's
+      // picture) — dark-launched with the synonym sets; server-owned so
+      // graduation is one flip (SYNONYMS_PUBLIC), no client release.
+      listenCaptions: listenCaptionsOut,
       layoutOffer,
     });
   } catch (err) {

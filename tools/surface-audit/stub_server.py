@@ -54,8 +54,11 @@ ITEMS = (
 
 
 # simulate a zh board: translated display layer on a few entries
+# (Pizza also carries a matchTerm, standing in for the server-expanded
+#  synonym/inflection list — the listening smoke asserts a spoken variant
+#  borrows the tile's image while keeping the SAID word as its caption.)
 for _it in ITEMS:
-    if _it['label'] == 'Pizza': _it['displayLabel'] = '披萨'
+    if _it['label'] == 'Pizza': _it['displayLabel'] = '披萨'; _it['matchTerms'] = ['za']
     if _it['label'] == 'Cookie': _it['displayLabel'] = '饼干'
     if _it['label'] == 'Eat': _it['displayLabel'] = '吃'
 for _c in CATS:
@@ -84,6 +87,26 @@ LANG_AUDIO_ROWS = [
     {'en': 'wonton soup', 'section': 'nouns', 'category': 'food', 'dictKey': None,               'translation': None,     'pron': None, 'text': 'wonton soup', 'status': 'english'},
 ]
 
+# Emergency Beacon fixture: active, zh-led languages, pre-rendered clip keys.
+BEACON_FIXTURE = {
+    'active': True, 'activatedAt': '2026-08-04T12:00:00Z',
+    'zones': [], 'armed': False, 'alertMinutes': 10,
+    'phone': '(555) 010-4477', 'langs': ['zh', 'en'],
+    'titles': {'zh': {'family': '这是我的家人', 'phone': '请拨打这个电话联系我的家人'},
+               'en': {'family': 'This is My Family', 'phone': 'This is a Phone Number to Call my Family'}},
+    'clips': [{'lang': 'zh', 'kind': 'message', 'key': 'onboarding/testkid/beacon/zh-message-a.mp3'},
+              {'lang': 'zh', 'kind': 'phone', 'key': 'onboarding/testkid/beacon/zh-phone-a.mp3'},
+              {'lang': 'en', 'kind': 'message', 'key': 'onboarding/testkid/beacon/en-message-a.mp3'},
+              {'lang': 'en', 'kind': 'phone', 'key': 'onboarding/testkid/beacon/en-phone-a.mp3'}],
+}
+
+# Safe-zone fixture: NOT active, fence ARMED around a "Home" the mocked GPS
+# is far outside of, instant fire — the geofence smoke asserts the board
+# lights its own beacon locally with no server activation.
+ZONE_FIXTURE = dict(BEACON_FIXTURE)
+ZONE_FIXTURE.update({'active': False, 'activatedAt': None, 'armed': True, 'alertMinutes': 0,
+                     'zones': [{'name': 'Home', 'lat': 40.0, 'lng': -75.0, 'radius': 200}]})
+
 class H(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
@@ -96,8 +119,26 @@ class H(http.server.SimpleHTTPRequestHandler):
         if u.path.startswith('/api/sync'):
             # listenBlocklist: mild stand-ins for the real bad-words list so
             # the smoke can assert masking without profanity in the repo tests.
-            return self.send_json({'categories': CATS, 'items': ITEMS,
-                                   'listenBlocklist': ['damn', 'heck']})
+            # The beacon payload appears only when the smoke opts in via a
+            # cookie — an always-armed beacon would take over every other
+            # board smoke's screen.
+            # listenCaptions: the dark-launch flag arrives TRUE here (the stub
+            # stands in for an admin-enabled board) so the smoke exercises the
+            # caption path; the smoke also flips it off via the test hook.
+            out = {'categories': CATS, 'items': ITEMS,
+                   'listenBlocklist': ['damn', 'heck'],
+                   'listenCaptions': True}
+            cookie = self.headers.get('Cookie') or ''
+            if 'beacon=1' in cookie:
+                out['beacon'] = BEACON_FIXTURE
+            elif 'beacon=zone' in cookie:
+                out['beacon'] = ZONE_FIXTURE
+            return self.send_json(out)
+        if u.path.startswith('/api/beacon'):
+            return self.send_json({'ok': True, 'beacon': BEACON_FIXTURE,
+                                   'status': {'battery': 61, 'charging': False,
+                                              'lat': None, 'lng': None, 'accuracy': None,
+                                              'lastSeen': None, 'activatedBy': 'parent@example.com'}})
         if u.path.startswith('/api/media'):
             key = parse_qs(u.query).get('key', ['x'])[0]
             body = png_solid(color_for(key))

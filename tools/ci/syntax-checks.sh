@@ -43,4 +43,26 @@ for lang in ['zh', 'es', 'fr', 'pt', 'de']:
 sys.exit(1 if fails else 0)
 EOF
 
+# ── word-match engine sanity: the synonym sets actually expand ──────────────
+# The SYNONYM_SETS live in code (like IRREGULAR) and feed every board's
+# listening lexicon at sync; a refactor that silently drops them would break
+# spoken-synonym matching everywhere with no visible error.
+node -e '
+import("./api/_lib/word-match.js").then((m) => {
+  // Explicit {synonyms} both ways so this guard survives the SYNONYMS_PUBLIC
+  // graduation flip: on = sets expand; off = they must stay out.
+  const hello = m.expandMatchTerms("hello", [], { synonyms: true });
+  const dog = m.expandMatchTerms("dog", [], { synonyms: true });
+  const dark = m.expandMatchTerms("hello", [], { synonyms: false });
+  if (!hello.includes("hi") || !hello.includes("hey") || !dog.includes("puppy")) {
+    console.error("FAIL word-match synonyms: hello →", hello.join(","), "dog →", dog.join(","));
+    process.exit(1);
+  }
+  if (dark.includes("hi") || dark.includes("hey")) {
+    console.error("FAIL word-match gate: {synonyms:false} still expanded →", dark.join(","));
+    process.exit(1);
+  }
+  console.log("word-match synonyms: PASS (hello → hi/hey, dog → puppy; gate off excludes)");
+})' || exit 1
+
 echo "ALL SYNTAX CHECKS PASS"
