@@ -250,7 +250,7 @@ function noFaceRule(category) {
 // Render one taxonomy tile. `styleGuide` is the loaded { image, label } (or null),
 // `childAnchor` the loaded { buffer, contentType, name } (or null), `settings`
 // the lab_settings row. Returns { ok, b64?, contentType?, prompt?, costCents?, model?, detail? }.
-export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], objectRefKeys = [], worldRefKeys = [], guidance = '', priorKey = null, model = null, suppressBakedText = false }) {
+export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], objectRefKeys = [], worldRefKeys = [], guidance = '', priorKey = null, model = null, suppressBakedText = false, familyRender = false }) {
   const section = String(tax.column_name || '').toLowerCase();
   let content = tax.prompt_template || `A friendly illustration of ${tax.label}.`;
   const mentionsRef = /\{reference\}/i.test(content);
@@ -312,8 +312,20 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
   // on the "stuff" scene — the same anchors the Lab uses for the default
   // boards, honored for family renders too (parents can see and replace them
   // in the parent dashboard's Art style panel).
+  // The person exemplar is a picture of a SAMPLE child drawn in this style.
+  // On a FAMILY render with no likeness anchor attached (photo missing or
+  // unreadable), it must NOT ride along: the prompt says "a friendly young
+  // child" and the only child the model can see is the sample kid — so it
+  // draws HIM, and another family's board sprouts the demo child (audit C4).
+  // Fall back to the stuff exemplar: the style stays anchored by materials
+  // and rendering, with no wrong face to copy. Lab/default-board builds
+  // (familyRender false) keep the person exemplar — there the sample child
+  // IS the subject.
+  const subjectAttached = !!(subject && subject.buffer);
   const kindRefKey = (usePerson
-    ? (styleGuide && styleGuide.person_ref_key)
+    ? ((familyRender && !subjectAttached)
+        ? (styleGuide && styleGuide.stuff_ref_key)
+        : (styleGuide && styleGuide.person_ref_key))
     : (styleGuide && styleGuide.stuff_ref_key)) || null;
   const allWorldRefs = (kindRefKey && !(worldRefKeys || []).includes(kindRefKey))
     ? [kindRefKey, ...(worldRefKeys || [])]
@@ -322,7 +334,14 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
     try {
       const bytes = await readBlobBytes(key);
       images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
-      legend.push(`Image ${images.length} is ANOTHER STYLE reference from the same world — match how it renders objects, materials, and backgrounds; do not copy its content.`);
+      // The person exemplar gets an explicit disclaimer: the child in it is
+      // a style sample, never the subject — the likeness comes ONLY from the
+      // reference photo above. Copying the sample kid's face is exactly the
+      // leak this legend exists to stop.
+      const isPersonExemplar = usePerson && styleGuide && key === styleGuide.person_ref_key;
+      legend.push(isPersonExemplar
+        ? `Image ${images.length} is a STYLE reference showing a SAMPLE character drawn in this art style — copy the rendering technique only. The person in it is NOT the subject: never copy that child's face, hair, or clothing.${subjectAttached ? ` The real subject is ${subject.name}, from the reference photo above.` : ''}`
+        : `Image ${images.length} is ANOTHER STYLE reference from the same world — match how it renders objects, materials, and backgrounds; do not copy its content.`);
     } catch (_) { /* a missing reference never blocks generation */ }
   }
   // Related already-generated tiles (paired concepts like open/close, big/little

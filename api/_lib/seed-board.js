@@ -494,6 +494,7 @@ export async function processSeedJob(db, job, getCtx) {
         // verb render mimic a lone-object composition).
         const isGuidedRetry = !!job.guidance;
         const r = await renderTaxonomyTile({ tax, styleGuide: c.styleGuide, childAnchor: c.childAnchor, settings: c.settings,
+                                             familyRender: true,
                                              suppressBakedText: !!c.trMap,
                                              referenceImageKeys: (!isGuidedRetry && job.ref_key && cur) ? [cur] : [],
                                              objectRefKeys: (!isGuidedRetry && job.ref_key) ? [job.ref_key] : [],

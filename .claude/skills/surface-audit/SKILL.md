@@ -221,6 +221,14 @@ Since the style-reference gallery, `renderTaxonomyTile` auto-attaches the
 subject-matched ref (person tiles → `person_ref_key`, everything else →
 `stuff_ref_key`) on FAMILY renders too — so a bad public person ref now
 reaches every family on that style, raising the stakes on this review.
+GUARD (2026-08-05, after sample-kid leak on a family board): family renders
+(`familyRender: true`, passed by seed-board's drain) attach the person
+exemplar ONLY when a real likeness anchor is attached — with no anchor, the
+stuff ref rides instead (no wrong face to copy), and when the exemplar does
+attach its legend explicitly says the pictured child is a SAMPLE, never the
+subject. VERIFY: `familyRender` reaches renderTaxonomyTile from
+seed-board.js, and the `subjectAttached` gate + sample-character legend
+survive any prompt refactor.
 
 **C5. Non-English boards bake NO text into art.** `renderTaxonomyTile`
 appends a hard no-text override when `suppressBakedText` (seed passes
