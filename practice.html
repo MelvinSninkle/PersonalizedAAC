@@ -65,12 +65,24 @@
           grid-template-columns:repeat(var(--across,2),minmax(0,1fr));
           gap:10px; padding:8px 4px; align-content:start; }
   .tile { cursor:pointer; display:flex; flex-direction:column; }
-  .tile .sq { width:100%; aspect-ratio:1; border-radius:14px; background:#e9eef5 center/cover no-repeat;
+  .tile .sq { position:relative; overflow:hidden; width:100%; aspect-ratio:1; border-radius:14px; background:#e9eef5 center/cover no-repeat;
               box-shadow: inset 0 2px 0 rgba(255,255,255,.55), inset 0 -2px 0 rgba(0,0,0,.10), 0 2px 5px rgba(0,0,0,.15);
               transition:transform .08s ease; }
   .tile:active .sq { transform:scale(.96); }
   .tile .lb { font-size:15px; font-weight:700; text-align:center; margin-top:3px; color:#000;
               overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* Label band — the Label Lab recipe as a LIVE overlay on the art (no
+     re-render, any language). The .sq's own radius + overflow clip give the
+     band its rounded bottom / sharp top for free. The word rides IN the
+     band, so the separate .lb underneath hides on banded tiles. */
+  .tile .sq .band { position:absolute; left:0; right:0; bottom:0; height:17.6%;
+                    background:#ffffff; color:#000; font-family:'Fredoka',ui-rounded,system-ui,sans-serif;
+                    font-weight:700; display:flex; align-items:center; justify-content:center;
+                    white-space:nowrap; overflow:hidden; pointer-events:none; }
+  /* Hide-labels mode keeps bands: the band emulates a caption baked into the
+     art, and baked captions don't disappear when labels hide. The separate
+     .lb under the tile is redundant with the band, so it hides always. */
+  .tile.banded .lb { display:none; }
 
   /* Needs — the board's pinned yellow single-row strip. */
   .needs { flex:0 0 auto; background:var(--bg-needs); padding:6px 8px 10px; }
@@ -463,6 +475,53 @@
 
   function tilesFor(section) { return DATA.tiles.filter((t) => t.section === section); }
 
+  // ── Label band — the Label Lab recipe deployed live ───────────────────────
+  // Converged settings (band 180px, text 112px on the 1024px source tile) as
+  // RATIOS of the tile's rendered width, so the band scales with the board —
+  // the dynamic-width answer baked pixels can't give. Categories that ARE
+  // their own label (letters, numbers, posters, clock faces) skip the band;
+  // 'section:<name>' entries skip a whole section (needs has no categories
+  // to target). ?bands=0 shows the old look for comparison.
+  const BAND = {
+    on: new URLSearchParams(location.search).get('bands') !== '0',
+    heightR: 180 / 1024, fontR: 112 / 1024,
+    skip: ['alphabet', 'letters', 'numbers', 'movies & shows', 'movies', 'shows', 'clock', 'time'],
+  };
+  function bandSkipped(t, section) {
+    const c = String(t.category || '').trim().toLowerCase();
+    const sub = String(t.subcategory || '').trim().toLowerCase();
+    return BAND.skip.includes(c) || (sub && BAND.skip.includes(sub))
+        || BAND.skip.includes('section:' + section);
+  }
+  function attachBand(el, sq, t, section) {
+    if (!BAND.on || !t.imageKey || bandSkipped(t, section)) return;
+    const b = document.createElement('div');
+    b.className = 'band';
+    b.textContent = t.displayLabel || t.label;
+    sq.appendChild(b);
+    el.classList.add('banded');
+  }
+  // Size every band from its tile's real rendered width (text auto-shrinks
+  // until it fits, exactly like the lab preview). Re-runs on resize.
+  function fitBands() {
+    for (const b of document.querySelectorAll('.tile .sq .band')) {
+      const w = b.parentElement.clientWidth;
+      if (!w) continue;
+      let size = Math.max(8, Math.round(w * BAND.fontR));
+      b.style.fontSize = size + 'px';
+      let guard = 8;
+      while (b.scrollWidth > w - 6 && size > 8 && guard--) {
+        size = Math.floor(size * 0.9);
+        b.style.fontSize = size + 'px';
+      }
+    }
+  }
+  let bandFitTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(bandFitTimer);
+    bandFitTimer = setTimeout(fitBands, 150);
+  });
+
   function renderSection(section, host) {
     const tiles = tilesFor(section);
     const cats = [...new Set(tiles.map((t) => t.category).filter(Boolean))];
@@ -506,11 +565,13 @@
       sq.style.backgroundImage = 'url("' + media(t.imageKey) + '")';
       const lb = document.createElement('div');
       lb.className = 'lb'; lb.textContent = t.label;
+      attachBand(el, sq, t, section);
       el.appendChild(sq); el.appendChild(lb);
       el.addEventListener('click', () => speak(t.label));
       grid.appendChild(el);
     }
     host.appendChild(grid);
+    requestAnimationFrame(fitBands);
   }
 
   // Tier color code — Nouns (the big vocabulary of THEIR things) is the Pro
@@ -542,10 +603,12 @@
       sq.style.backgroundImage = 'url("' + media(t.imageKey) + '")';
       const lb = document.createElement('div');
       lb.className = 'lb'; lb.textContent = t.label;
+      attachBand(el, sq, t, 'needs');
       el.appendChild(sq); el.appendChild(lb);
       el.addEventListener('click', () => speak(t.label));
       grid.appendChild(el);
     }
+    requestAnimationFrame(fitBands);
   }
 
   // ── ⚙ Display panel wiring ────────────────────────────────────────────────

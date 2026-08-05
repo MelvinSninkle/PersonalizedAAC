@@ -166,9 +166,15 @@
             font: $('font').value, weight: $('weight').value,
             fontSize: +$('fontsize').value,
             bandColor: $('band-color').value, textColor: $('text-color').value,
-            skipCategories: [...document.querySelectorAll('#skip-cats input:checked')].map((i) => i.value)
-              // keep skip entries whose category isn't on this demo board
-              .concat((cfg.skipCategories || []).filter((c) => !knownCats.has(c))) };
+            skipCategories: (() => {
+              // The checkboxes are the truth for everything they show;
+              // configured entries with NO checkbox on this board (other
+              // boards' categories, their section rows) survive untouched.
+              const boxes = [...document.querySelectorAll('#skip-cats input')];
+              const rendered = new Set(boxes.map((i) => i.value));
+              return boxes.filter((i) => i.checked).map((i) => i.value)
+                .concat((cfg.skipCategories || []).filter((c) => !rendered.has(c)));
+            })() };
     $('height-v').textContent = cfg.height + 'px';
     $('radius-v').textContent = cfg.radius + 'px';
     $('fontsize-v').textContent = cfg.fontSize + 'px';
@@ -176,19 +182,36 @@
   }
 
   let knownCats = new Set();
+  let catSections = new Map();   // category → section it lives in (for the grouped list)
+  let knownSections = new Set(); // sections on this board — each gets a whole-section skip
   const catOf = (t) => String(t.category || '').trim().toLowerCase();
   const subOf = (t) => String(t.subcategory || '').trim().toLowerCase();
+  const secOf = (t) => String(t.section || '').trim().toLowerCase();
   const isSkipped = (t) => !!t && ((cfg.skipCategories || []).includes(catOf(t))
-                                || (subOf(t) && (cfg.skipCategories || []).includes(subOf(t))));
+                                || (subOf(t) && (cfg.skipCategories || []).includes(subOf(t)))
+                                // 'section:needs' etc. — whole-section skips, the only
+                                // handle for flat sections that have no categories.
+                                || (cfg.skipCategories || []).includes('section:' + secOf(t)));
 
   function drawSkipCats() {
-    // Checkboxes for every category on this board, plus the configured skips
-    // that aren't on it (clock, movies…) so the list survives board switches.
-    const cats = new Set([...knownCats, ...(cfg.skipCategories || [])]);
-    $('skip-cats').innerHTML = [...cats].sort().map((c) =>
+    // Whole-section rows first (people/verbs/needs/nouns — needs has no
+    // categories at all, so the section row is its only handle), then every
+    // category on this board grouped under its section, plus configured
+    // skips that aren't on it (clock, movies…) so the list survives board
+    // switches. Categories from ALL tiles, not just art-bearing ones — a
+    // section whose art is still rendering must stay skippable.
+    const row = (value, text) =>
       '<label style="display:flex;gap:5px;align-items:center;cursor:pointer;">'
-      + '<input type="checkbox" value="' + c.replace(/"/g, '&quot;') + '"'
-      + ((cfg.skipCategories || []).includes(c) ? ' checked' : '') + '>' + c + '</label>').join('');
+      + '<input type="checkbox" value="' + value.replace(/"/g, '&quot;') + '"'
+      + ((cfg.skipCategories || []).includes(value) ? ' checked' : '') + '>' + text + '</label>';
+    const secRows = [...knownSections].sort().map((s) =>
+      row('section:' + s, '<b>' + s + '</b> — whole section'));
+    const cats = new Set([...knownCats, ...(cfg.skipCategories || []).filter((c) => !c.startsWith('section:'))]);
+    const catRows = [...cats].sort((a, b) => {
+      const sa = catSections.get(a) || '~', sb = catSections.get(b) || '~';
+      return sa === sb ? (a < b ? -1 : 1) : (sa < sb ? -1 : 1);
+    }).map((c) => row(c, (catSections.has(c) ? catSections.get(c) + ' · ' : '') + c));
+    $('skip-cats').innerHTML = secRows.concat(catRows).join('');
     for (const i of document.querySelectorAll('#skip-cats input')) {
       i.addEventListener('change', () => { readControls(); renderAll(); });
     }
@@ -316,7 +339,8 @@
       const style = $('style').value;
       const r = await fetch('/api/demo' + (style ? '?style=' + encodeURIComponent(style) : ''), { credentials: 'same-origin' });
       const d = await r.json();
-      tiles = (d.tiles || []).filter((t) => t.imageKey);
+      const all = d.tiles || [];
+      tiles = all.filter((t) => t.imageKey);
       if (!$('style').options.length || $('style').options.length === 1) {
         for (const s of (d.styles || [])) {
           const o = document.createElement('option');
@@ -325,7 +349,13 @@
         }
       }
       $('words').innerHTML = tiles.map((t) => '<option value="' + t.label.replace(/"/g, '&quot;') + '">').join('');
-      knownCats = new Set(tiles.map(catOf).filter(Boolean));
+      // Categories come from ALL tiles (people/verbs/needs included, art or
+      // not) — the skip list must be able to target every section the band
+      // will deploy onto, not just the ones whose art happens to be loaded.
+      knownCats = new Set(all.map(catOf).filter(Boolean));
+      knownSections = new Set(all.map(secOf).filter(Boolean));
+      catSections = new Map();
+      for (const t of all) { const c = catOf(t); if (c && !catSections.has(c)) catSections.set(c, secOf(t)); }
       drawSkipCats();
       stripTiles = randomTiles(6);
       const first = tiles[Math.floor(Math.random() * tiles.length)];

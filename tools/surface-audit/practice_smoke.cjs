@@ -70,6 +70,41 @@ const fails = [];
     return labels[0] === 'Toys' && labels[1] === 'Food';
   }));
 
+  // ── Label band: the Label Lab recipe deployed live on the demo board ──
+  await page.waitForFunction(() => document.querySelectorAll('#board .tile .sq .band').length > 3, { timeout: 8000 });
+  ok('caption bands render on art tiles', await page.evaluate(() => {
+    const b = document.querySelector('#board .tile.banded .sq .band');
+    return !!b && b.textContent.length > 0;
+  }));
+  ok('band carries the word; the separate label stays hidden', await page.evaluate(() => {
+    const t = document.querySelector('#board .tile.banded');
+    return t.querySelector('.sq .band').textContent === t.querySelector('.lb').textContent
+      && getComputedStyle(t.querySelector('.lb')).display === 'none';
+  }));
+  ok('band text sized from the tile width (fit pass ran)', await page.evaluate(() => {
+    const b = document.querySelector('#board .tile.banded .sq .band');
+    return parseFloat(b.style.fontSize || '0') > 6;
+  }));
+  ok('needs strip tiles carry bands too', await page.evaluate(() =>
+    document.querySelectorAll('#needs-grid .tile .sq .band').length >= 1));
+  ok('own-label category (Letters) skips the band', await page.evaluate(() => {
+    const col = [...document.querySelectorAll('#board .col')].find((c) => c.dataset.section === 'nouns');
+    const chip = [...col.querySelectorAll('.chips .chip')].find((c) => c.querySelector('.lb').textContent === 'Letters');
+    if (!chip) return false;
+    chip.click();
+    return new Promise((res) => setTimeout(() => {
+      const col2 = [...document.querySelectorAll('#board .col')].find((c) => c.dataset.section === 'nouns');
+      const tiles = [...col2.querySelectorAll('.grid .tile')];
+      res(tiles.length >= 1 && tiles.every((t) => !t.querySelector('.band')));
+    }, 200));
+  }));
+  // Put the nouns column back on Toys so later assertions see the usual grid.
+  await page.evaluate(() => {
+    const col = [...document.querySelectorAll('#board .col')].find((c) => c.dataset.section === 'nouns');
+    [...col.querySelectorAll('.chips .chip')].find((c) => c.querySelector('.lb').textContent === 'Toys').click();
+  });
+  await page.waitForTimeout(250);
+
   // ── Single-strip toolbar + live listening demo (driven micless via hook) ──
   ok('toolbar strip carries the listening button', await page.evaluate(() => {
     const bar = document.getElementById('main-toolbar');
@@ -137,9 +172,12 @@ const fails = [];
     document.getElementById('disp-modal').classList.contains('show')));
   await page.locator('#pd-hide-labels').uncheck();
   await page.waitForTimeout(300);
-  ok('unhiding labels shows tile words again', await page.evaluate(() =>
+  // With bands live, every art tile's word rides IN the band (its .lb stays
+  // hidden by design) — unhiding labels brings back the word CHROME: the
+  // section headers and chip labels.
+  ok('unhiding labels shows the word chrome again', await page.evaluate(() =>
     !document.body.classList.contains('hide-labels')
-      && getComputedStyle(document.querySelector('#board .tile .lb')).display !== 'none'));
+      && getComputedStyle(document.querySelector('#board .col h2')).display !== 'none'));
   ok('tiles across re-shapes a column', await page.evaluate(() => {
     const el = document.getElementById('pd-across-nouns');
     el.value = '3';
@@ -157,6 +195,12 @@ const fails = [];
     !document.body.classList.contains('hide-labels')   // the labels-ON override persisted
       && sessionStorage.getItem('practiceDisplay') !== null
       && localStorage.getItem('practiceDisplay') === null));
+
+  // ── ?bands=0 kill switch: the pre-band look for comparison ──
+  await page.goto('http://127.0.0.1:8765/practice.html?bands=0', { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => document.querySelectorAll('#board .tile').length > 3, { timeout: 8000 });
+  ok('?bands=0 renders no bands', await page.evaluate(() =>
+    document.querySelectorAll('.tile .sq .band').length === 0));
 
   ok('only demo/media/style-thumb APIs touched', reqs.length > 0 && reqs.every((u) =>
     u.includes('/api/media') || u.includes('/api/demo') || u.includes('/api/style-guides/public')));
