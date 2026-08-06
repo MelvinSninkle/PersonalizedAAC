@@ -148,8 +148,9 @@ async function catalog(req, res, db, auth, uid) {
     try { await ensureSeedJobs(db); rebuild = { ...rebuild, status: await seedStatus(db, childId) }; } catch (_) {}
   }
   // Effective entitlement (honors the admin tier-override simulator) + this
-  // month's voice budget so both storefronts can show tier state.
-  const ent = await entitlementFor(db, auth.user);
+  // month's voice budget so both storefronts can show tier state. Multi-child:
+  // scoped to the board being shopped for when the client names one.
+  const ent = await entitlementFor(db, auth.user, { childId: childId || null });
   const voiceUsed = uid ? await voiceCharsThisMonth(db, uid) : 0;
   const voiceCap = ent.features.voiceCharsPerMonth;
   // When the next credit grant lands. We don't store the platform's exact
@@ -978,6 +979,7 @@ async function iapVerify(req, res, db, uid, body) {
     credits: grant.credits, amountCents: null,
     externalId: 'apple:' + transactionId,
     raw: payload && payload.jws ? null : payload,
+    childId: String(body.childId || '').slice(0, 64) || null,   // multi-child sub stamp
   });
   res.status(200).json({
     ok: true, credited: r.granted ? grant.credits : 0, duplicate: r.duplicate,
@@ -1066,6 +1068,7 @@ async function playVerify(req, res, db, uid, body) {
   const r2 = await recordPurchase(db, {
     userId: uid, platform: 'google', productId: grant.sku || productId,
     credits: grant.credits, amountCents: null, externalId, raw,
+    childId: String(body.childId || '').slice(0, 64) || null,   // multi-child sub stamp
   });
   res.status(200).json({
     ok: true, credited: r2.granted ? grant.credits : 0, duplicate: r2.duplicate,
@@ -1111,6 +1114,10 @@ async function stripeCheckout(req, res, db, auth, uid, body) {
   form.set('client_reference_id', String(uid));
   form.set('metadata[userId]', String(uid));
   form.set('metadata[sku]', sku);
+  // Multi-child: which board this purchase is FOR — flows back through the
+  // webhook so the recorded purchase (and every renewal) stamps that child.
+  const forChild = String(body.childId || '').slice(0, 64);
+  if (forChild) form.set('metadata[childId]', forChild);
   form.set('line_items[0][quantity]', '1');
   if (sub) {
     form.set('line_items[0][price_data][currency]', 'usd');
@@ -1177,20 +1184,25 @@ async function stripeWebhook(req, res, db, raw) {
       const s = event.data.object;
       const uid = Number(s.metadata && s.metadata.userId) || Number(s.client_reference_id) || null;
       const sku = (s.metadata && s.metadata.sku) || '';
+      const forChild = (s.metadata && s.metadata.childId) || null;
       const grant = productCredits(sku);
       // One-time packs grant here; the subscription's periodic grants come from
       // invoice.paid (which also fires for the first period).
       if (uid && grant && s.mode === 'payment') {
         await recordPurchase(db, { userId: uid, platform: 'stripe', productId: sku, credits: grant.credits,
-                                   amountCents: s.amount_total || null, externalId: 'stripe:' + s.id });
+                                   amountCents: s.amount_total || null, externalId: 'stripe:' + s.id,
+                                   childId: forChild });
       }
       if (uid && s.mode === 'subscription' && s.subscription) {
-        // Tag the subscription so invoice.paid events can find the user.
+        // Tag the subscription so invoice.paid events can find the user
+        // (and, multi-child, the board every renewal belongs to).
         try {
+          const tag = { 'metadata[userId]': String(uid), 'metadata[sku]': sku };
+          if (forChild) tag['metadata[childId]'] = String(forChild);
           await fetch(`https://api.stripe.com/v1/subscriptions/${s.subscription}`, {
             method: 'POST',
             headers: { Authorization: 'Bearer ' + process.env.STRIPE_SECRET_KEY, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ 'metadata[userId]': String(uid), 'metadata[sku]': sku }).toString(),
+            body: new URLSearchParams(tag).toString(),
           });
         } catch (_) {}
       }
@@ -1219,7 +1231,8 @@ async function stripeWebhook(req, res, db, raw) {
         const sub = subscriptionBySku(meta.sku) || SUBSCRIPTION;
         await recordPurchase(db, { userId: uid, platform: 'stripe', productId: sub.sku,
                                    credits: sub.creditsPerPeriod,
-                                   amountCents: inv.amount_paid || null, externalId: 'stripe:' + inv.id });
+                                   amountCents: inv.amount_paid || null, externalId: 'stripe:' + inv.id,
+                                   childId: meta.childId || null });
       } else {
         // Surfaced in Vercel logs — an invoice we could not attribute means a
         // paying subscriber got no credits. Investigate via the Stripe

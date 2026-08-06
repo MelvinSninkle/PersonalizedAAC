@@ -34,7 +34,18 @@ class AuthManager(context: Context, private val api: ApiClient) {
     val lastError: StateFlow<String?> = _lastError
 
     val isSignedIn: Boolean get() = _user.value != null
-    val childSlug: String get() = _user.value?.slug ?: ""
+
+    /** Multi-child: the family switcher's persisted choice — the session slug
+     *  names only the account's FIRST child. */
+    private val _activeChild = MutableStateFlow(prefs.getString("activeChildSlug", null))
+    val childSlug: String get() = _activeChild.value ?: _user.value?.slug ?: ""
+
+    /** Family switcher: work with this child from now on (persisted). */
+    fun setActiveChild(slug: String) {
+        if (slug.isEmpty()) return
+        prefs.edit().putString("activeChildSlug", slug).apply()
+        _activeChild.value = slug
+    }
 
     /** Try logging in; on success cache the user (cookie saved by the jar). */
     suspend fun signIn(email: String, password: String) {
@@ -42,6 +53,10 @@ class AuthManager(context: Context, private val api: ApiClient) {
             val resp = api.login(email, password)
             val u = SignedInUser(resp.user?.email, resp.user?.role, resp.user?.slug)
             save(u)
+            // A fresh sign-in may be a different account — the previous
+            // family-switcher choice must not leak across accounts.
+            prefs.edit().remove("activeChildSlug").apply()
+            _activeChild.value = null
             _user.value = u
             _lastError.value = null
         } catch (e: Exception) {
@@ -52,6 +67,8 @@ class AuthManager(context: Context, private val api: ApiClient) {
     suspend fun signOut() {
         api.logout()
         save(null)
+        prefs.edit().remove("activeChildSlug").apply()
+        _activeChild.value = null
         _user.value = null
     }
 

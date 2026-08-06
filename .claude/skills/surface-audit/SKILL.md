@@ -314,6 +314,25 @@ flag itself — so graduation is ONE flip in word-match.js, no client release.
 VERIFY: `invariants.sh` F2 greps + the access_smoke caption-gate assertion
 (match survives with captions off, caption does not).
 
+**F3. Multi-child accounts are dark-launched behind `MULTI_CHILD_PUBLIC`.**
+One login owns many boards through `child_access` relation 'parent' — the
+same roster therapists use, so data isolation is A1's roster gating, already
+enforced. The FIRST child's slug doubles as the account/session slug; every
+later child gets a generated slug (`newChildSlug`) living only in the
+roster, and `boardOwnerId` falls back to the roster's oldest parent row for
+those. "Add a Child" (`state.js` op add-child, gated by `multiChildAllowed`)
+rewinds `onboarding_progress` to a fresh slug at step 'child' — nothing
+about existing children is touched. Subscriptions are PER CHILD:
+`purchases.child_id` is stamped at every purchase-recording path (Stripe
+checkout metadata → webhook, Apple iap-verify, Google play-verify) and
+`entitlementFor(..., { childId })` filters on it — legacy NULL rows count
+for any of the account's children so single-child families never regress.
+Clients keep the ACTIVE child locally (web: the /parent/<slug> URL; native:
+AuthManager.setActiveChild persisted per device) — sessions always carry
+the first child's slug and are never mutated by a switch. VERIFY:
+`invariants.sh` F3 greps; on any purchase-path change confirm the childId
+thread survives end to end (checkout → webhook → recordPurchase).
+
 ## D. Admin containment
 
 **D1. Every Lab/taxonomy handler self-gates.** The dispatcher

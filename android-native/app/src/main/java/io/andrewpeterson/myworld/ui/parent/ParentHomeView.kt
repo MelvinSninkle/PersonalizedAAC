@@ -49,6 +49,9 @@ import io.andrewpeterson.myworld.net.StyleGuideInfo
 import io.andrewpeterson.myworld.net.StyleOverview
 import io.andrewpeterson.myworld.net.advanceBand
 import io.andrewpeterson.myworld.net.SupportNotice
+import io.andrewpeterson.myworld.net.ChildRef
+import io.andrewpeterson.myworld.net.onboardingAddChild
+import io.andrewpeterson.myworld.net.onboardingState
 import io.andrewpeterson.myworld.net.storeProblems
 import io.andrewpeterson.myworld.net.storeRearmAdd
 import io.andrewpeterson.myworld.net.storeRetry
@@ -97,6 +100,16 @@ fun ParentHomeView() {
     // Support notices ("we've opened your board" / the team's response) —
     // creator-only, persist until "Got it" acks them server-side.
     var supportNotices by remember { mutableStateOf<List<SupportNotice>>(emptyList()) }
+    // Multi-child family bar (dark launch): this account's children + whether
+    // Add-a-Child may show. The server is the gate; older servers return
+    // neither field and the bar stays hidden.
+    var family by remember { mutableStateOf<List<ChildRef>>(emptyList()) }
+    var familyMulti by remember { mutableStateOf(false) }
+    var familyMenu by remember { mutableStateOf(false) }
+    var confirmAddChild by remember { mutableStateOf(false) }
+    var addingChild by remember { mutableStateOf(false) }
+    // Recomposition anchor for the switcher (auth.childSlug is a plain getter).
+    var activeSlug by remember { mutableStateOf(c.auth.childSlug) }
 
     LaunchedEffect(Unit) {
         c.parentLive.start(c.auth.childSlug)
@@ -104,6 +117,11 @@ fun ParentHomeView() {
         creditBalance = try { c.api.storeCatalog().balance } catch (_: Exception) { null }
         problems = c.api.storeProblems(c.auth.childSlug)
         supportNotices = c.api.storeSupportNotices(c.auth.childSlug)
+        try {
+            val st = c.api.onboardingState()
+            family = st.children
+            familyMulti = st.multiChild
+        } catch (_: Exception) {}
     }
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose { c.parentLive.stop() }
@@ -144,6 +162,91 @@ fun ParentHomeView() {
                     .clickable { open = "settings" },
                 contentAlignment = Alignment.Center,
             ) { Text("⚙", fontSize = 19.sp) }
+        }
+
+        // 👨‍👩‍👧‍👦 Multi-child family bar: switch between this account's children or
+        // start onboarding for a new one (dark-launched — server-gated).
+        if (family.size > 1 || familyMulti) {
+            val famScope = androidx.compose.runtime.rememberCoroutineScope()
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (family.size > 1) {
+                    Box {
+                        Row(
+                            Modifier.background(Color.White, RoundedCornerShape(999.dp))
+                                .border(1.dp, hexColor("#f3c6dd"), RoundedCornerShape(999.dp))
+                                .clickable { familyMenu = true }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("👥 ", fontSize = 13.sp)
+                            Text(family.firstOrNull { it.childId == activeSlug }?.name ?: "Switch child",
+                                fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Brand.pinkDeep)
+                            Text(" ▾", fontSize = 12.sp, color = Brand.pinkDeep)
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = familyMenu, onDismissRequest = { familyMenu = false },
+                        ) {
+                            family.forEach { kid ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = {
+                                        Text((if (kid.childId == activeSlug) "✓ " else "")
+                                            + (kid.name ?: "New child (setting up)"))
+                                    },
+                                    onClick = {
+                                        familyMenu = false
+                                        if (kid.childId != activeSlug) {
+                                            c.auth.setActiveChild(kid.childId)
+                                            activeSlug = kid.childId
+                                            famScope.launch {
+                                                c.board.refresh(kid.childId)
+                                                c.parentLive.start(kid.childId)
+                                                problems = c.api.storeProblems(kid.childId)
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                if (familyMulti) {
+                    Row(
+                        Modifier.background(Brand.pink, RoundedCornerShape(999.dp))
+                            .clickable(enabled = !addingChild) { confirmAddChild = true }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        Text(if (addingChild) "Preparing…" else "➕ Add a Child",
+                            fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+            if (confirmAddChild) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { confirmAddChild = false },
+                    title = { Text("Add another child?") },
+                    text = { Text("This starts a brand-new board with its own photos, words, tracking, and its own subscription. Your current children are untouched — switch between them anytime from this screen.") },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            confirmAddChild = false
+                            addingChild = true
+                            famScope.launch {
+                                try {
+                                    c.api.onboardingAddChild()
+                                    c.onboarding.setNeedsOnboarding(true)
+                                    c.onboarding.resumeIfPossible()
+                                } catch (_: Exception) {} finally { addingChild = false }
+                            }
+                        }) { Text("Start onboarding", fontWeight = FontWeight.Bold) }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = { confirmAddChild = false }) { Text("Cancel") }
+                    },
+                )
+            }
         }
 
         // 🛠/✅ Support notices — the team opened the board (with the family's

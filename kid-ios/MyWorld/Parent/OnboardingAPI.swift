@@ -33,6 +33,16 @@ extension APIClient {
         let completed: [String]
         let childId: String?
         let data: [String: AnyCodable]?
+        /// Multi-child: every board this account parents (nil from older
+        /// servers) + whether the Add-a-Child affordance may show (dark
+        /// launch — admin only until the server flag flips).
+        var children: [ChildRef]? = nil
+        var multiChild: Bool? = nil
+    }
+    struct ChildRef: Codable, Identifiable, Hashable {
+        let childId: String
+        let name: String?
+        var id: String { childId }
     }
     /// Loose JSON value — we only need to surface a few keys back to the UI.
     struct AnyCodable: Codable {
@@ -61,6 +71,19 @@ extension APIClient {
         let (data, _) = try await request(method: "GET", path: "/api/onboarding/state", body: nil)
         do { return try JSONDecoder().decode(OnboardingState.self, from: data) }
         catch { throw APIError.decoding(error) }
+    }
+
+    /// Multi-child "Add a Child": rewinds the account's onboarding cursor to a
+    /// FRESH board slug at the child step. Existing children are untouched.
+    /// Server-gated (403 while dark-launched for non-admins).
+    func onboardingAddChild() async throws -> String {
+        struct R: Codable { let ok: Bool?; let childId: String? }
+        let body = try JSONSerialization.data(withJSONObject: ["op": "add-child"])
+        let (data, _) = try await request(method: "POST", path: "/api/onboarding/state",
+                                          body: body, contentType: "application/json")
+        let r = try JSONDecoder().decode(R.self, from: data)
+        guard let id = r.childId, r.ok == true else { throw APIError.invalidResponse }
+        return id
     }
 
     // MARK: -- Art style picker (style guides)

@@ -179,10 +179,25 @@ export async function ensureStarter(db, userId) {
 // days — renewals re-grant monthly on both platforms (Stripe invoice.paid;
 // StoreKit renewal transactions re-verified by the app), so the window covers
 // a full period plus grace.
-export async function activeSubscription(db, userId) {
+export async function activeSubscription(db, userId, childId = null) {
   const uid = Number(userId);
   if (!uid) return null;
   const skus = SUBSCRIPTIONS.flatMap((s) => [s.sku, s.appleProductId]);
+  // Multi-child: a subscription bought FOR a child (purchases.child_id
+  // stamped at checkout/verify) counts only for that child. Legacy rows
+  // (NULL child_id — every purchase before the stamp existed) count for any
+  // of the account's children, so single-child families never regress.
+  if (childId) {
+    try {
+      const r = await db`
+        SELECT product_id FROM purchases
+        WHERE user_id = ${uid} AND product_id = ANY(${skus})
+          AND (child_id = ${String(childId)} OR child_id IS NULL)
+          AND created_at > NOW() - INTERVAL '35 days'
+        ORDER BY created_at DESC LIMIT 1`;
+      return r.length ? subscriptionBySku(r[0].product_id) : null;
+    } catch (_) { /* child_id column predates this deploy — account-wide below */ }
+  }
   try {
     const r = await db`
       SELECT product_id FROM purchases
@@ -200,7 +215,7 @@ export async function activeSubscription(db, userId) {
 //   3. an active subscription purchase.
 //   4. free tier.
 // Accepts an auth.user-shaped object ({ uid, role }) or a bare user id.
-export async function entitlementFor(db, user) {
+export async function entitlementFor(db, user, { childId = null } = {}) {
   const uid = Number(typeof user === 'object' && user ? (user.uid || user.id) : user) || null;
   let role = (typeof user === 'object' && user && user.role) || null;
   let override = null;
@@ -239,7 +254,7 @@ export async function entitlementFor(db, user) {
              charge: false };
   }
   if (uid) {
-    const sub = await activeSubscription(db, uid);
+    const sub = await activeSubscription(db, uid, childId);
     if (sub) return { tier: sub.sku, label: sub.label, source: 'purchase', sub,
                       features: tierFeatures(sub), charge: true };
   }
@@ -268,7 +283,16 @@ export async function boardOwnerId(db, childId) {
   if (!childId) return null;
   try {
     const r = await db`SELECT id FROM users WHERE child_slug = ${childId} LIMIT 1`;
-    return r.length ? Number(r[0].id) : null;
+    if (r.length) return Number(r[0].id);
+  } catch (_) { /* fall through to the roster */ }
+  // Multi-child: only the FIRST child's slug lives on the users row — every
+  // later child exists purely in the roster, so the owner is the (oldest)
+  // parent-relation row there.
+  try {
+    const r = await db`SELECT user_id FROM child_access
+                       WHERE child_id = ${childId} AND relation = 'parent' AND status = 'active'
+                       ORDER BY created_at ASC NULLS LAST LIMIT 1`;
+    return r.length ? Number(r[0].user_id) : null;
   } catch (_) { return null; }
 }
 
@@ -337,13 +361,28 @@ export async function spendCredits(db, { userId, credits, reason, ref = null }) 
 // Record an external purchase exactly once and grant its credits. Returns
 // false when the external id was already processed (webhook retry, re-sent
 // receipt) — the caller should treat that as success.
-export async function recordPurchase(db, { userId, platform, productId, credits, amountCents = null, externalId, raw = null }) {
+export async function recordPurchase(db, { userId, platform, productId, credits, amountCents = null, externalId, raw = null, childId = null }) {
   const uid = Number(userId);
-  const ins = await db`
-    INSERT INTO purchases (user_id, platform, product_id, credits, amount_cents, external_id, raw)
-    VALUES (${uid}, ${platform}, ${productId}, ${credits}, ${amountCents}, ${externalId}, ${raw ? JSON.stringify(raw) : null})
-    ON CONFLICT (external_id) DO NOTHING
-    RETURNING id`;
+  const child = childId ? String(childId).slice(0, 64) : null;
+  let ins;
+  try {
+    // Multi-child: stamp which board this purchase was FOR — subscriptions
+    // are per child (activeSubscription filters on it). NULL = pre-stamp
+    // legacy rows, which count for any of the account's children.
+    ins = await db`
+      INSERT INTO purchases (user_id, platform, product_id, credits, amount_cents, external_id, raw, child_id)
+      VALUES (${uid}, ${platform}, ${productId}, ${credits}, ${amountCents}, ${externalId}, ${raw ? JSON.stringify(raw) : null}, ${child})
+      ON CONFLICT (external_id) DO NOTHING
+      RETURNING id`;
+  } catch (_) {
+    // child_id column predates this deploy (init not yet run) — never lose
+    // a purchase over a stamp.
+    ins = await db`
+      INSERT INTO purchases (user_id, platform, product_id, credits, amount_cents, external_id, raw)
+      VALUES (${uid}, ${platform}, ${productId}, ${credits}, ${amountCents}, ${externalId}, ${raw ? JSON.stringify(raw) : null})
+      ON CONFLICT (external_id) DO NOTHING
+      RETURNING id`;
+  }
   if (!ins.length) return { granted: false, duplicate: true };
   await db`INSERT INTO credit_ledger (user_id, delta, reason, ref)
            VALUES (${uid}, ${credits}, ${'purchase:' + platform}, ${externalId})`;

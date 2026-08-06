@@ -184,6 +184,17 @@ grep -q "SYNONYMS_PUBLIC" api/sync.js || { fail "F2 sync.js stopped consulting S
 grep -q "listenCaptions" api/sync.js || { fail "F2 sync.js no longer ships the listenCaptions flag — client captions can't follow the gate"; F2=1; }
 [ "$F2" -eq 0 ] && pass "F2 listening synonyms dark-launched (SYNONYMS_PUBLIC + synced listenCaptions)"
 
+# ── F3: multi-child accounts are dark-launched behind MULTI_CHILD_PUBLIC ─────
+# One login, many boards. While the flag is false only admins can add a child;
+# the roster + per-child subscription stamping beneath are always on. Losing
+# the flag = accidental ship; losing the childId thread in entitlements =
+# multi-child accounts silently sharing one subscription.
+F3=0
+grep -q "MULTI_CHILD_PUBLIC" api/_lib/onboarding.js || { fail "F3 onboarding.js lost the MULTI_CHILD_PUBLIC launch flag"; F3=1; }
+grep -q "multiChildAllowed" api/onboarding/state.js || { fail "F3 state.js stopped consulting the multi-child gate on add-child"; F3=1; }
+grep -q "activeSubscription(db, uid, childId)" api/_lib/credits.js || { fail "F3 entitlementFor no longer threads childId — per-child subscriptions broken"; F3=1; }
+[ "$F3" -eq 0 ] && pass "F3 multi-child dark-launched (MULTI_CHILD_PUBLIC + per-child subscription stamp)"
+
 # ── Vercel function ceiling (~100 routed functions) ──────────────────────────
 COUNT=$(find api -name '*.js' ! -name '_*' ! -path 'api/_lib/*' | wc -l)
 echo "INFO: routed Vercel functions: $COUNT / 100"

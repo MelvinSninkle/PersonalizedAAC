@@ -20,7 +20,7 @@ Last updated: **2026-07-24**. This is the working-context document for whoever
 - **Verify before every commit**: `node --check` on touched API files; the
   inline-JS `new Function()` check on touched HTML; brace/paren deltas vs
   HEAD on touched Swift/Kotlin; `bash tools/surface-audit/invariants.sh`
-  (expect **20 PASS**); the Playwright smokes (`access_smoke.cjs`,
+  (expect **21 PASS**); the Playwright smokes (`access_smoke.cjs`,
   `practice_smoke.cjs`, `translations_smoke.cjs`, `label_lab_smoke.cjs`,
   `beacon_smoke.cjs`) against `python3 tools/surface-audit/stub_server.py`
   (start with a PID file, `sleep 3`, never `pkill -f` — it matches your own

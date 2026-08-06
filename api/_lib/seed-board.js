@@ -297,7 +297,7 @@ export async function enqueueSeedJobs(db, childId, rows) {
   try {
     const { entitlementFor, boardOwnerId } = await import('./credits.js');
     const ownerId = await boardOwnerId(db, childId);
-    const ent = await entitlementFor(db, ownerId);
+    const ent = await entitlementFor(db, ownerId, { childId });   // multi-child: per-board subs
     personalRenders = !!ent.sub || ent.tier === 'admin';
     ownerTier = ent.label || ent.tier || 'unknown';
     chargeCtx = { ownerId, sub: ent.sub || null, isAdmin: ent.tier === 'admin' };
