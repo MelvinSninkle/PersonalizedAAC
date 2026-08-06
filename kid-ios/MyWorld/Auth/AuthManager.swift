@@ -20,14 +20,30 @@ final class AuthManager {
 
     private let api: APIClient
 
+    /// Multi-child: the child this device is currently working with. The
+    /// session slug names only the FIRST child; a parent who switched via the
+    /// family picker keeps that choice across launches.
+    private static let activeChildKey = "activeChildSlug"
+
     init(api: APIClient = APIClient()) {
         self.api = api
         let cached = SessionStore.load()
         self.user = cached
-        // The child slug we render. Today every parent account is tied to
-        // exactly one child via `user.slug`. If we ever support multi-child
-        // parents we surface a picker; for now the slug is the user's slug.
+        // The child slug we render: the account's session slug, unless the
+        // parent picked a different child from the family switcher (multi-
+        // child accounts — the picker AuthManager always said we'd surface).
         self.childSlug = cached?.slug ?? ""
+        if let over = UserDefaults.standard.string(forKey: Self.activeChildKey), !over.isEmpty {
+            self.childSlug = over
+        }
+    }
+
+    /// Family switcher: work with this child from now on (persisted).
+    @MainActor
+    func setActiveChild(_ slug: String) {
+        guard !slug.isEmpty else { return }
+        childSlug = slug
+        UserDefaults.standard.set(slug, forKey: Self.activeChildKey)
     }
 
     var isSignedIn: Bool { user != nil }
@@ -50,6 +66,9 @@ final class AuthManager {
             let u = SignedInUser(email: ru.email, role: ru.role, slug: ru.slug)
             SessionStore.save(u)
             self.user = u
+            // A fresh sign-in may be a different account — the previous
+            // family-switcher choice must not leak across accounts.
+            UserDefaults.standard.removeObject(forKey: Self.activeChildKey)
             self.childSlug = u.slug ?? self.childSlug
             self.lastError = nil
         } catch {
@@ -67,6 +86,7 @@ final class AuthManager {
     func signOut() async {
         await api.logout()
         SessionStore.save(nil)
+        UserDefaults.standard.removeObject(forKey: Self.activeChildKey)
         self.user = nil
     }
 
@@ -81,7 +101,11 @@ final class AuthManager {
                 let s = SignedInUser(email: u.email, role: u.role, slug: u.slug)
                 SessionStore.save(s)
                 self.user = s
-                self.childSlug = u.slug ?? self.childSlug
+                // Mid-session refresh: an active family-switcher choice wins
+                // over the session's (first-child) slug.
+                if UserDefaults.standard.string(forKey: Self.activeChildKey)?.isEmpty ?? true {
+                    self.childSlug = u.slug ?? self.childSlug
+                }
                 self.lastError = nil
             }
         } catch { /* leave existing state alone on error */ }

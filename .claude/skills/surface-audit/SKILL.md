@@ -221,6 +221,17 @@ Since the style-reference gallery, `renderTaxonomyTile` auto-attaches the
 subject-matched ref (person tiles → `person_ref_key`, everything else →
 `stuff_ref_key`) on FAMILY renders too — so a bad public person ref now
 reaches every family on that style, raising the stakes on this review.
+GUARD (2026-08-05, owner directive after sample-kid leak on a family
+board): family renders (`familyRender: true`, passed by seed-board's drain
+— the ONE family render path) NEVER attach the person exemplar, anchor or
+no anchor. The child's committed portrait (persons.reference_key — the
+onboarding flow stores the parent-CHOSEN generated portrait there, so the
+anchor is usually already person-in-style) carries likeness + character
+design; the stuff exemplar carries materials. The person exemplar reaches
+ONLY Lab/default-board builds, where the sample child IS the subject.
+VERIFY: `familyRender` reaches renderTaxonomyTile from seed-board.js, and
+the `usePerson && !familyRender` gate on person_ref_key survives any
+prompt refactor.
 
 **C5. Non-English boards bake NO text into art.** `renderTaxonomyTile`
 appends a hard no-text override when `suppressBakedText` (seed passes
@@ -302,6 +313,25 @@ and `api/message-to-board.js` take the expandMatchTerms DEFAULT, which is the
 flag itself — so graduation is ONE flip in word-match.js, no client release.
 VERIFY: `invariants.sh` F2 greps + the access_smoke caption-gate assertion
 (match survives with captions off, caption does not).
+
+**F3. Multi-child accounts are dark-launched behind `MULTI_CHILD_PUBLIC`.**
+One login owns many boards through `child_access` relation 'parent' — the
+same roster therapists use, so data isolation is A1's roster gating, already
+enforced. The FIRST child's slug doubles as the account/session slug; every
+later child gets a generated slug (`newChildSlug`) living only in the
+roster, and `boardOwnerId` falls back to the roster's oldest parent row for
+those. "Add a Child" (`state.js` op add-child, gated by `multiChildAllowed`)
+rewinds `onboarding_progress` to a fresh slug at step 'child' — nothing
+about existing children is touched. Subscriptions are PER CHILD:
+`purchases.child_id` is stamped at every purchase-recording path (Stripe
+checkout metadata → webhook, Apple iap-verify, Google play-verify) and
+`entitlementFor(..., { childId })` filters on it — legacy NULL rows count
+for any of the account's children so single-child families never regress.
+Clients keep the ACTIVE child locally (web: the /parent/<slug> URL; native:
+AuthManager.setActiveChild persisted per device) — sessions always carry
+the first child's slug and are never mutated by a switch. VERIFY:
+`invariants.sh` F3 greps; on any purchase-path change confirm the childId
+thread survives end to end (checkout → webhook → recordPurchase).
 
 ## D. Admin containment
 

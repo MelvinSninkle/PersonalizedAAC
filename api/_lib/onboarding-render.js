@@ -250,7 +250,7 @@ function noFaceRule(category) {
 // Render one taxonomy tile. `styleGuide` is the loaded { image, label } (or null),
 // `childAnchor` the loaded { buffer, contentType, name } (or null), `settings`
 // the lab_settings row. Returns { ok, b64?, contentType?, prompt?, costCents?, model?, detail? }.
-export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], objectRefKeys = [], worldRefKeys = [], guidance = '', priorKey = null, model = null, suppressBakedText = false }) {
+export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, settings, referenceImageKeys = [], objectRefKeys = [], worldRefKeys = [], guidance = '', priorKey = null, model = null, suppressBakedText = false, familyRender = false }) {
   const section = String(tax.column_name || '').toLowerCase();
   let content = tax.prompt_template || `A friendly illustration of ${tax.label}.`;
   const mentionsRef = /\{reference\}/i.test(content);
@@ -302,7 +302,13 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
   }
   if (subject && subject.buffer) {
     images.push({ buffer: subject.buffer, contentType: subject.contentType });
-    legend.push(`Image ${images.length} shows ${subject.name} — keep this person's face and likeness clearly recognizable.`);
+    // On family renders the anchor is usually the parent's CHOSEN committed
+    // portrait (onboarding sets persons.reference_key to the picked draft),
+    // i.e. the child already drawn as a character — so the instruction is
+    // "match this established look", not merely "keep the face".
+    legend.push(familyRender
+      ? `Image ${images.length} shows ${subject.name} — this is THE subject. Match this person's established look exactly — face, hair, features, overall design — clearly recognizable, rendered in the STYLE reference's art style.`
+      : `Image ${images.length} shows ${subject.name} — keep this person's face and likeness clearly recognizable.`);
   }
   // Per-style WORLD references (the Lab's "stuff" scene for an offered style):
   // more of the same art style, so materials/objects render consistently —
@@ -312,7 +318,14 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
   // on the "stuff" scene — the same anchors the Lab uses for the default
   // boards, honored for family renders too (parents can see and replace them
   // in the parent dashboard's Art style panel).
-  const kindRefKey = (usePerson
+  // The person exemplar is a picture of a SAMPLE child drawn in this style —
+  // and on a FAMILY render it must NEVER ride along, anchor or no anchor
+  // (owner directive, after the sample kid surfaced on a family board):
+  // once a family's board is rendering, the only child in context is their
+  // child. The committed portrait above carries person-in-style; the stuff
+  // exemplar carries materials. Lab/default-board builds (familyRender
+  // false) keep the person exemplar — there the sample child IS the subject.
+  const kindRefKey = ((usePerson && !familyRender)
     ? (styleGuide && styleGuide.person_ref_key)
     : (styleGuide && styleGuide.stuff_ref_key)) || null;
   const allWorldRefs = (kindRefKey && !(worldRefKeys || []).includes(kindRefKey))
@@ -322,6 +335,9 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
     try {
       const bytes = await readBlobBytes(key);
       images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
+      // (The person exemplar only reaches Lab/default builds now, where the
+      // sample child is the legitimate subject — so the generic style-ref
+      // wording is correct for every ref that lands here.)
       legend.push(`Image ${images.length} is ANOTHER STYLE reference from the same world — match how it renders objects, materials, and backgrounds; do not copy its content.`);
     } catch (_) { /* a missing reference never blocks generation */ }
   }

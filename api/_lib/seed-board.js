@@ -297,7 +297,7 @@ export async function enqueueSeedJobs(db, childId, rows) {
   try {
     const { entitlementFor, boardOwnerId } = await import('./credits.js');
     const ownerId = await boardOwnerId(db, childId);
-    const ent = await entitlementFor(db, ownerId);
+    const ent = await entitlementFor(db, ownerId, { childId });   // multi-child: per-board subs
     personalRenders = !!ent.sub || ent.tier === 'admin';
     ownerTier = ent.label || ent.tier || 'unknown';
     chargeCtx = { ownerId, sub: ent.sub || null, isAdmin: ent.tier === 'admin' };
@@ -494,6 +494,7 @@ export async function processSeedJob(db, job, getCtx) {
         // verb render mimic a lone-object composition).
         const isGuidedRetry = !!job.guidance;
         const r = await renderTaxonomyTile({ tax, styleGuide: c.styleGuide, childAnchor: c.childAnchor, settings: c.settings,
+                                             familyRender: true,
                                              suppressBakedText: !!c.trMap,
                                              referenceImageKeys: (!isGuidedRetry && job.ref_key && cur) ? [cur] : [],
                                              objectRefKeys: (!isGuidedRetry && job.ref_key) ? [job.ref_key] : [],

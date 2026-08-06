@@ -1123,6 +1123,12 @@ Size: {size}.',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`;
+    // Multi-child accounts: which board a purchase was FOR. Subscriptions
+    // are per child (activeSubscription filters on it); NULL = legacy rows,
+    // which count for any of the account's children.
+    await db`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS child_id TEXT`;
+    await db`CREATE INDEX IF NOT EXISTS purchases_child_idx ON purchases(child_id) WHERE child_id IS NOT NULL`;
+
     await db`CREATE INDEX IF NOT EXISTS persons_child_idx ON persons(child_id)`;
     await db`CREATE INDEX IF NOT EXISTS persons_rel_idx   ON persons(child_id, relationship)`;
     // People-section tiles point at the person they depict (nullable: only people tiles use it).

@@ -497,7 +497,13 @@
     if (!BAND.on || !t.imageKey || bandSkipped(t, section)) return;
     const b = document.createElement('div');
     b.className = 'band';
-    b.textContent = t.displayLabel || t.label;
+    // The word sits in an inner span so the fit pass can measure the TEXT,
+    // not the band: the band is always exactly tile-wide, so comparing the
+    // band against itself reads as "overflowing" every time and shrinks
+    // every word to a whisper (the bug the first deploy shipped).
+    const word = document.createElement('span');
+    word.textContent = t.displayLabel || t.label;
+    b.appendChild(word);
     sq.appendChild(b);
     el.classList.add('banded');
   }
@@ -506,11 +512,12 @@
   function fitBands() {
     for (const b of document.querySelectorAll('.tile .sq .band')) {
       const w = b.parentElement.clientWidth;
-      if (!w) continue;
+      const word = b.firstElementChild;
+      if (!w || !word) continue;
       let size = Math.max(8, Math.round(w * BAND.fontR));
       b.style.fontSize = size + 'px';
       let guard = 8;
-      while (b.scrollWidth > w - 6 && size > 8 && guard--) {
+      while (word.offsetWidth > w * 0.94 && size > 8 && guard--) {
         size = Math.floor(size * 0.9);
         b.style.fontSize = size + 'px';
       }

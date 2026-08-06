@@ -81,9 +81,13 @@ const fails = [];
     return t.querySelector('.sq .band').textContent === t.querySelector('.lb').textContent
       && getComputedStyle(t.querySelector('.lb')).display === 'none';
   }));
-  ok('band text sized from the tile width (fit pass ran)', await page.evaluate(() => {
+  // PROPORTIONAL, not merely >0: the first deploy shipped a fit pass that
+  // measured the band against itself and shrank every word to ~43% of the
+  // recipe. A short word must hold ≥9% of the tile width (recipe is ~10.9%).
+  ok('band text holds the recipe size (~11% of tile width)', await page.evaluate(() => {
     const b = document.querySelector('#board .tile.banded .sq .band');
-    return parseFloat(b.style.fontSize || '0') > 6;
+    const w = b.parentElement.clientWidth;
+    return parseFloat(b.style.fontSize || '0') >= w * 0.09;
   }));
   ok('needs strip tiles carry bands too', await page.evaluate(() =>
     document.querySelectorAll('#needs-grid .tile .sq .band').length >= 1));
@@ -137,6 +141,8 @@ const fails = [];
       .some((el) => decodeURIComponent(el.style.backgroundImage || '').includes('style-defaults/'))));
   ok('board still renders after the switch', await page.evaluate(() =>
     document.querySelectorAll('.tile').length > 10));
+  ok('caption bands survive a style switch', await page.evaluate(() =>
+    document.querySelectorAll('#board .tile.banded .sq .band').length > 3));
 
   // ── Demo-kid switcher (styles can offer more than one demo child) ──
   ok('kid switcher renders in styled mode', await page.evaluate(() => {
@@ -153,6 +159,8 @@ const fails = [];
   ok('switching kid re-renders person tiles', await page.evaluate(() =>
     [...document.querySelectorAll('#board .tile .sq')]
       .some((el) => decodeURIComponent(el.style.backgroundImage || '').includes('kid-3-people'))));
+  ok('caption bands survive a kid switch', await page.evaluate(() =>
+    document.querySelectorAll('#board .tile.banded .sq .band').length > 3));
 
   // ── Board-parity layout: fixed viewport, pinned needs strip, verbs live ──
   ok('fixed viewport (page never scrolls)', await page.evaluate(() =>

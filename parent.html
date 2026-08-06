@@ -255,6 +255,16 @@
   </div>
 </header>
 
+<!-- Multi-child: one login, many boards. The switcher appears once the account
+     parents 2+ children; Add a Child is dark-launched (server multiChild flag,
+     admin-only until it graduates). -->
+<div id="family-bar" style="max-width:1100px;margin:10px auto -6px;padding:0 18px;display:none;align-items:center;gap:10px;font-size:14px;">
+  <span style="font-weight:700;color:var(--muted);">Family:</span>
+  <select id="family-switch" style="display:none;padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;font-weight:600;"></select>
+  <button class="btn" id="family-add" style="display:none;">➕ Add a Child</button>
+  <span id="family-msg" style="font-size:12px;color:var(--muted);"></span>
+</div>
+
 <div class="wrap">
 
   <!-- PROGRESS CHARTS — pinned at top, tabbed, dismissable (reloads each visit) -->
@@ -1405,6 +1415,50 @@
   // ---- Child slug from /parent/<slug> ----
   const m = location.pathname.match(/^\/parent\/([^\/]+)/);
   const slug = m ? decodeURIComponent(m[1]) : 'fletcherpeterson';
+
+  // ---- Multi-child family bar (dark launch — api/_lib/onboarding.js) ----
+  // One login, many boards: the switcher navigates between this account's
+  // children; Add a Child rewinds the account's onboarding cursor to a fresh
+  // board slug and relaunches the flow. Fully separate data per child by
+  // construction (everything keys on child_id); subscriptions are per child.
+  (async () => {
+    try {
+      const r = await fetch('/api/onboarding/state', { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const st = await r.json();
+      const kids = Array.isArray(st.children) ? st.children : [];
+      const bar = document.getElementById('family-bar');
+      const sel = document.getElementById('family-switch');
+      const add = document.getElementById('family-add');
+      if (!bar || !sel || !add) return;
+      if (kids.length > 1) {
+        sel.innerHTML = kids.map((k) =>
+          '<option value="' + encodeURIComponent(k.childId) + '"' + (k.childId === slug ? ' selected' : '') + '>'
+          + (k.name ? String(k.name).replace(/</g, '&lt;') : 'New child (setting up)') + '</option>').join('');
+        sel.style.display = '';
+        sel.addEventListener('change', () => { location.href = '/parent/' + sel.value; });
+      }
+      if (st.multiChild) {
+        add.style.display = '';
+        add.addEventListener('click', async () => {
+          if (!confirm('Start onboarding for another child?\n\nYour current children and their boards are untouched — this creates a brand-new board with its own photos, words, tracking, and its own subscription.')) return;
+          add.disabled = true;
+          document.getElementById('family-msg').textContent = 'Preparing…';
+          try {
+            const p = await fetch('/api/onboarding/state', { method: 'POST', credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'add-child' }) });
+            const d = await p.json();
+            if (!p.ok) throw new Error(d.detail || d.error || 'could not start');
+            location.href = '/onboard';
+          } catch (e) {
+            document.getElementById('family-msg').textContent = String(e.message || e);
+            add.disabled = false;
+          }
+        });
+      }
+      if (kids.length > 1 || st.multiChild) bar.style.display = 'flex';
+    } catch (_) { /* the family bar is progressive enhancement */ }
+  })();
   const pretty = slug.replace(/peterson$/i, '').replace(/^\w/, c => c.toUpperCase()) || 'Fletcher';
   document.getElementById('child-name').textContent = pretty;
   // Fill every ".cn" placeholder with the child's name.

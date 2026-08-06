@@ -21,7 +21,13 @@ data class OnboardingStateResult(
     val childId: String?,
     /** Loose bag — only a few string keys surface back to the UI. */
     val data: Map<String, String>,
+    /** Multi-child: every board this account parents (empty from older
+     *  servers) + whether Add-a-Child may show (dark launch, admin only). */
+    val children: List<ChildRef> = emptyList(),
+    val multiChild: Boolean = false,
 )
+
+data class ChildRef(val childId: String, val name: String?)
 
 suspend fun ApiClient.onboardingState(): OnboardingStateResult {
     val root = Json.parseToJsonElement(raw("GET", "/api/onboarding/state").decodeToString()).jsonObject
@@ -32,7 +38,22 @@ suspend fun ApiClient.onboardingState(): OnboardingStateResult {
         childId = (root["childId"] as? JsonPrimitive)?.contentOrNull,
         data = ((root["data"] as? JsonObject) ?: emptyMap<String, kotlinx.serialization.json.JsonElement>())
             .mapNotNull { (k, v) -> (v as? JsonPrimitive)?.contentOrNull?.let { k to it } }.toMap(),
+        children = (root["children"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            val id = (o["childId"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            ChildRef(id, (o["name"] as? JsonPrimitive)?.contentOrNull)
+        } ?: emptyList(),
+        multiChild = ((root["multiChild"] as? JsonPrimitive)?.contentOrNull == "true"),
     )
+}
+
+/** Multi-child "Add a Child": rewinds the account's onboarding cursor to a
+ *  FRESH board slug at the child step. Server-gated (403 while dark). */
+suspend fun ApiClient.onboardingAddChild(): String {
+    val body = buildJsonObject { put("op", "add-child") }.toString()
+    val root = Json.parseToJsonElement(
+        raw("POST", "/api/onboarding/state", body.encodeToByteArray()).decodeToString()).jsonObject
+    return (root["childId"] as? JsonPrimitive)?.contentOrNull ?: error("add-child failed")
 }
 
 @Serializable

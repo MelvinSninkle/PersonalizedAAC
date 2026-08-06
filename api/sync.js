@@ -242,7 +242,7 @@ export default async function handler(req, res) {
     try {
       const { entitlementFor, boardOwnerId } = await import('./_lib/credits.js');
       const ownerId = await boardOwnerId(db, childId);
-      const ent = await entitlementFor(db, ownerId || auth.user);
+      const ent = await entitlementFor(db, ownerId || auth.user, { childId });   // multi-child: per-board subs
       const member = !!ent.sub || ent.tier === 'admin';
       entitlementOut = { tier: ent.tier, label: ent.label,
                          stt: !!ent.features.stt, autoTeach: !!ent.features.autoTeach,
