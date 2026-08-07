@@ -455,43 +455,16 @@ struct ParentSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                ArtStyleSection()
-
-                Section("Vocabulary level") {
-                    if let b = band {
-                        LabeledContent("Showing", value: bandLabel(b.current))
-                        if let next = b.next {
-                            if let m = b.mastery, b.readyToAdvance == true {
-                                Text("\(m.correct) of \(m.total) recent answers correct. Looks ready to grow.")
-                                    .font(.footnote).foregroundStyle(.secondary)
-                            }
-                            Button(advancing ? "Unlocking…" : "Unlock \(bandLabel(next))") {
-                                Task {
-                                    advancing = true
-                                    defer { advancing = false }
-                                    do { try await api.advanceBand(childId: auth.childSlug); band = try? await api.bandStatus(childId: auth.childSlug); advanceMsg = "Unlocked." }
-                                    catch { advanceMsg = "Could not unlock: \(error.localizedDescription)" }
-                                }
-                            }
-                            .disabled(advancing)
-                        } else {
-                            Text("Top vocabulary band reached.").font(.footnote).foregroundStyle(.secondary)
-                        }
-                        if let msg = advanceMsg { Text(msg).font(.footnote).foregroundStyle(.secondary) }
-                    } else {
-                        Text("Loading…").foregroundStyle(.secondary)
-                    }
-                }
-                Section("Listening") {
-                    Toggle("Hide bad words", isOn: $listenCensor)
-                        .onChange(of: listenCensor) { _, v in saveListen(["listenCensor": v]) }
-                    Text("Curse words and slurs someone says nearby show as \u{201C}Bad Word\u{201D} in the listening bar instead of the word itself.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Toggle("Only show words with tiles", isOn: $listenTilesOnly)
-                        .onChange(of: listenTilesOnly) { _, v in saveListen(["listenTilesOnly": v]) }
-                    Text("Spoken words that aren't on the board don't appear at all.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    if let listenMsg { Text(listenMsg).font(.footnote).foregroundStyle(.secondary) }
+                // Grouped drill-down (the Apple Settings pattern): a short
+                // top level pushing detail screens. Tabs cap out at this many
+                // sections; rows scale forever. Plain labels by design.
+                Section {
+                    NavigationLink("Board & learning") { boardGroup }
+                    NavigationLink("This device") { deviceGroup }
+                    NavigationLink("Family & account") { accountGroup }
+                    NavigationLink("Help & support") { helpGroup }
+                } footer: {
+                    Text("Deep configuration — organizing the board, styles in bulk, translations — lives on the web dashboard.")
                 }
                 // Admin-only rescue for older boards with stray aspect flags —
                 // new boards are always square, so parents never need this.
@@ -515,73 +488,6 @@ struct ParentSettingsView: View {
                         if let squareMsg { Text(squareMsg).font(.footnote).foregroundStyle(.secondary) }
                     }
                 }
-                Section("This device") {
-                    Button {
-                        mode.role = .childBoard
-                        dismiss()
-                    } label: {
-                        Label("Use as the child's board", systemImage: "hand.tap.fill")
-                    }
-                    Link(destination: webDashboardURL) {
-                        Label("Full dashboard on the web", systemImage: "safari")
-                    }
-                }
-                Section("Help & support") {
-                    // Filing a case IS the consent for the team to open and
-                    // edit the board — the alert message spells that out.
-                    Button("🛟 Request support…") { supportKind = "support"; supportText = ""; showSupport = true }
-                    Button("🐛 Report a bug…") { supportKind = "bug"; supportText = ""; showSupport = true }
-                    if let m = supportMsg {
-                        Text(m).font(.footnote)
-                            .foregroundStyle(m.hasPrefix("Sent") ? Color(hex: "#047857") : .secondary)
-                    }
-                }
-                Section("Account") {
-                    if let u = auth.user { LabeledContent("Email", value: u.email) }
-                    // The password doubles as the board's edit-unlock gate, so
-                    // changing it in-app matters — no detour to the website.
-                    Button("Change password…") { pwMsg = nil; showChangePw = true }
-                    if let m = pwMsg {
-                        Text(m).font(.footnote)
-                            .foregroundStyle(m.hasPrefix("Password updated") ? Color(hex: "#047857") : .red)
-                    }
-                    Button("Sign out", role: .destructive) {
-                        Task { await auth.signOut(); dismiss() }
-                    }
-                    // Apple requires in-app account deletion (5.1.1(v)) since
-                    // accounts are created in-app. Same endpoint as the web
-                    // dashboard: removes the account and EVERYTHING with it.
-                    Button("Delete account…", role: .destructive) { showDeleteConfirm = true }
-                    if let msg = deleteError {
-                        Text(msg).font(.footnote).foregroundStyle(.red)
-                    }
-                }
-                // Multi-child "Add a Child" — the END of settings, with the
-                // rest of the account actions (owner's placement call). The
-                // server gates visibility while dark-launched (admin only).
-                if familyMulti {
-                    Section {
-                        Button {
-                            confirmAddChild = true
-                        } label: {
-                            Label(addingChild ? "Preparing…" : "Add a Child", systemImage: "plus.circle.fill")
-                        }
-                        .disabled(addingChild)
-                        if let m = familyMsg { Text(m).font(.footnote).foregroundStyle(.red) }
-                    } header: {
-                        Text("Family")
-                    } footer: {
-                        Text("Starts a brand-new board with its own photos, words, tracking, and its own subscription. Your current children are untouched — switch between them from the parent home once there's more than one.")
-                    }
-                }
-
-                Section {
-                    HStack(spacing: 16) {
-                        Link("Terms of Service", destination: URL(string: "\(APIClient.defaultOrigin)/terms")!)
-                        Link("Privacy Policy", destination: URL(string: "\(APIClient.defaultOrigin)/privacy")!)
-                    }
-                    .font(.footnote)
-                }
             }
             .navigationTitle("Settings")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
@@ -596,39 +502,177 @@ struct ParentSettingsView: View {
                 // Multi-child gate (dark launch — older servers return nothing).
                 familyMulti = (try? await api.onboardingState())?.multiChild ?? false
             }
-            .alert("Add another child?", isPresented: $confirmAddChild) {
-                Button("Cancel", role: .cancel) {}
-                Button("Start onboarding") { Task { await addChild() } }
-            } message: {
-                Text("This starts a brand-new board with its own photos, words, tracking, and its own subscription. Your current children are untouched.")
-            }
-            .alert("Change password", isPresented: $showChangePw) {
-                SecureField("Current password", text: $curPw)
-                SecureField("New password (8+ characters)", text: $newPw)
-                Button("Cancel", role: .cancel) { curPw = ""; newPw = "" }
-                Button("Save") { Task { await changePassword() } }
-            } message: {
-                Text("This password also unlocks board editing on the child's device.")
-            }
-            .alert(supportKind == "bug" ? "Report a bug" : "Request support", isPresented: $showSupport) {
-                TextField(supportKind == "bug" ? "What went wrong?" : "What do you need help with?", text: $supportText)
-                Button("Cancel", role: .cancel) { supportText = "" }
-                Button("Send") { Task { await sendSupport() } }
-            } message: {
-                // Mirrors api/_lib/support.js CONFIRM_COPY — the disclosure IS the consent.
-                Text("By sending, you give the My World team permission to open and edit your child's board to investigate and fix this. You'll get a notice here when we start, and another when we're done. Responses can take up to 48 hours.")
-            }
-            .alert("Delete this account?", isPresented: $showDeleteConfirm) {
-                TextField("Type DELETE to confirm", text: $deleteText)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.characters)
-                Button("Cancel", role: .cancel) { deleteText = "" }
-                Button("Delete everything", role: .destructive) {
-                    Task { await deleteAccount() }
+        }
+    }
+
+    // ── Board & learning ────────────────────────────────────────────────────
+    private var boardGroup: some View {
+        Form {
+            ArtStyleSection()
+
+            Section("Vocabulary level") {
+                if let b = band {
+                    LabeledContent("Showing", value: bandLabel(b.current))
+                    if let next = b.next {
+                        if let m = b.mastery, b.readyToAdvance == true {
+                            Text("\(m.correct) of \(m.total) recent answers correct. Looks ready to grow.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        Button(advancing ? "Unlocking…" : "Unlock \(bandLabel(next))") {
+                            Task {
+                                advancing = true
+                                defer { advancing = false }
+                                do { try await api.advanceBand(childId: auth.childSlug); band = try? await api.bandStatus(childId: auth.childSlug); advanceMsg = "Unlocked." }
+                                catch { advanceMsg = "Could not unlock: \(error.localizedDescription)" }
+                            }
+                        }
+                        .disabled(advancing)
+                    } else {
+                        Text("Top vocabulary band reached.").font(.footnote).foregroundStyle(.secondary)
+                    }
+                    if let msg = advanceMsg { Text(msg).font(.footnote).foregroundStyle(.secondary) }
+                } else {
+                    Text("Loading…").foregroundStyle(.secondary)
                 }
-            } message: {
-                Text("Permanently deletes this account and everything on the board: every tile, photo, generated image, recording, and all history. This cannot be undone.")
             }
+            Section("Listening") {
+                Toggle("Hide bad words", isOn: $listenCensor)
+                    .onChange(of: listenCensor) { _, v in saveListen(["listenCensor": v]) }
+                Text("Curse words and slurs someone says nearby show as \u{201C}Bad Word\u{201D} in the listening bar instead of the word itself.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Toggle("Only show words with tiles", isOn: $listenTilesOnly)
+                    .onChange(of: listenTilesOnly) { _, v in saveListen(["listenTilesOnly": v]) }
+                Text("Spoken words that aren't on the board don't appear at all.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                if let listenMsg { Text(listenMsg).font(.footnote).foregroundStyle(.secondary) }
+            }
+        }
+        .navigationTitle("Board & learning")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // ── This device ─────────────────────────────────────────────────────────
+    private var deviceGroup: some View {
+        Form {
+            Section {
+                Button {
+                    mode.role = .childBoard
+                    dismiss()
+                } label: {
+                    Label("Use as the child's board", systemImage: "hand.tap.fill")
+                }
+                Link(destination: webDashboardURL) {
+                    Label("Full dashboard on the web", systemImage: "safari")
+                }
+            }
+        }
+        .navigationTitle("This device")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // ── Family & account ────────────────────────────────────────────────────
+    // The alerts ride THIS view (not the top level): an alert only presents
+    // from a view that's on screen, and their buttons live here.
+    private var accountGroup: some View {
+        Form {
+            Section("Account") {
+                if let u = auth.user { LabeledContent("Email", value: u.email) }
+                // The password doubles as the board's edit-unlock gate, so
+                // changing it in-app matters — no detour to the website.
+                Button("Change password…") { pwMsg = nil; showChangePw = true }
+                if let m = pwMsg {
+                    Text(m).font(.footnote)
+                        .foregroundStyle(m.hasPrefix("Password updated") ? Color(hex: "#047857") : .red)
+                }
+                Button("Sign out", role: .destructive) {
+                    Task { await auth.signOut(); dismiss() }
+                }
+                // Apple requires in-app account deletion (5.1.1(v)) since
+                // accounts are created in-app. Same endpoint as the web
+                // dashboard: removes the account and EVERYTHING with it.
+                Button("Delete account…", role: .destructive) { showDeleteConfirm = true }
+                if let msg = deleteError {
+                    Text(msg).font(.footnote).foregroundStyle(.red)
+                }
+            }
+            // Multi-child "Add a Child" — the END of settings, with the rest
+            // of the account actions (owner's placement call). The server
+            // gates visibility while dark-launched (admin only).
+            if familyMulti {
+                Section {
+                    Button {
+                        confirmAddChild = true
+                    } label: {
+                        Label(addingChild ? "Preparing…" : "Add a Child", systemImage: "plus.circle.fill")
+                    }
+                    .disabled(addingChild)
+                    if let m = familyMsg { Text(m).font(.footnote).foregroundStyle(.red) }
+                } header: {
+                    Text("Family")
+                } footer: {
+                    Text("Starts a brand-new board with its own photos, words, tracking, and its own subscription. Your current children are untouched — switch between them from the parent home once there's more than one.")
+                }
+            }
+        }
+        .navigationTitle("Family & account")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("Add another child?", isPresented: $confirmAddChild) {
+            Button("Cancel", role: .cancel) {}
+            Button("Start onboarding") { Task { await addChild() } }
+        } message: {
+            Text("This starts a brand-new board with its own photos, words, tracking, and its own subscription. Your current children are untouched.")
+        }
+        .alert("Change password", isPresented: $showChangePw) {
+            SecureField("Current password", text: $curPw)
+            SecureField("New password (8+ characters)", text: $newPw)
+            Button("Cancel", role: .cancel) { curPw = ""; newPw = "" }
+            Button("Save") { Task { await changePassword() } }
+        } message: {
+            Text("This password also unlocks board editing on the child's device.")
+        }
+        .alert("Delete this account?", isPresented: $showDeleteConfirm) {
+            TextField("Type DELETE to confirm", text: $deleteText)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.characters)
+            Button("Cancel", role: .cancel) { deleteText = "" }
+            Button("Delete everything", role: .destructive) {
+                Task { await deleteAccount() }
+            }
+        } message: {
+            Text("Permanently deletes this account and everything on the board: every tile, photo, generated image, recording, and all history. This cannot be undone.")
+        }
+    }
+
+    // ── Help & support ──────────────────────────────────────────────────────
+    private var helpGroup: some View {
+        Form {
+            Section {
+                // Filing a case IS the consent for the team to open and
+                // edit the board — the alert message spells that out.
+                Button("🛟 Request support…") { supportKind = "support"; supportText = ""; showSupport = true }
+                Button("🐛 Report a bug…") { supportKind = "bug"; supportText = ""; showSupport = true }
+                if let m = supportMsg {
+                    Text(m).font(.footnote)
+                        .foregroundStyle(m.hasPrefix("Sent") ? Color(hex: "#047857") : .secondary)
+                }
+            }
+            Section {
+                HStack(spacing: 16) {
+                    Link("Terms of Service", destination: URL(string: "\(APIClient.defaultOrigin)/terms")!)
+                    Link("Privacy Policy", destination: URL(string: "\(APIClient.defaultOrigin)/privacy")!)
+                }
+                .font(.footnote)
+            }
+        }
+        .navigationTitle("Help & support")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(supportKind == "bug" ? "Report a bug" : "Request support", isPresented: $showSupport) {
+            TextField(supportKind == "bug" ? "What went wrong?" : "What do you need help with?", text: $supportText)
+            Button("Cancel", role: .cancel) { supportText = "" }
+            Button("Send") { Task { await sendSupport() } }
+        } message: {
+            // Mirrors api/_lib/support.js CONFIRM_COPY — the disclosure IS the consent.
+            Text("By sending, you give the My World team permission to open and edit your child's board to investigate and fix this. You'll get a notice here when we start, and another when we're done. Responses can take up to 48 hours.")
         }
     }
 
