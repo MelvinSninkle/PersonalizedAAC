@@ -293,13 +293,18 @@ struct SentenceStripView: View {
     @Environment(SentenceBar.self) private var sentence
     @Environment(AccessPrefs.self) private var access
     @Environment(AuthManager.self) private var auth
+    @Environment(DisplayPrefs.self) private var prefs
 
     var body: some View {
+        // #15 parity: the sentence chips follow the LISTENING tile size — the
+        // header already grows by listenScale while the bar is active, so
+        // fixed-size chips looked tiny inside the enlarged bar.
+        let scale = prefs.listenScale
         HStack(spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(Array(sentence.staged.enumerated()), id: \.offset) { _, tile in
-                        SentenceChip(tile: tile) {
+                        SentenceChip(tile: tile, scale: scale) {
                             sentence.remove(tile, idleMinutes: access.sentenceIdleMin)
                         }
                     }
@@ -330,12 +335,13 @@ struct SentenceStripView: View {
             .buttonStyle(.plain)
             .padding(.trailing, 12)
         }
-        .frame(height: 92)
+        .frame(height: 92 * scale)
     }
 }
 
 private struct SentenceChip: View {
     let tile: Tile
+    var scale: Double = 1
     let onRemove: () -> Void
     @State private var image: UIImage?
 
@@ -346,21 +352,22 @@ private struct SentenceChip: View {
                     Image(uiImage: image).resizable().scaledToFill()
                 } else {
                     Text(tile.display)
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(.system(size: 16 * scale, weight: .bold, design: .rounded))
                         .foregroundStyle(Color(hex: "#ad1457"))
                         .padding(.horizontal, 8)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color(hex: "#fce4ec"))
                 }
             }
-            .frame(width: 76, height: 76)
+            .frame(width: 76 * scale, height: 76 * scale)
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08)))
         }
         .buttonStyle(.plain)
         .task(id: tile.imageKey) {
             if let key = tile.imageKey, !key.isEmpty {
-                image = await MediaCache.shared.image(for: key, maxPixel: 256)
+                // Enlarged chips decode a step sharper; still bounded (C7).
+                image = await MediaCache.shared.image(for: key, maxPixel: scale > 1 ? 512 : 256)
             }
         }
     }
