@@ -253,7 +253,9 @@ struct HeaderBar: View {
         Button {
             startTeachShow()
         } label: {
-            Text("📖 Teach me")
+            // Enlarged sizes go icon-only: at 1.5–2× the words turn the pills
+            // into awkward slabs; the symbol carries the meaning.
+            Text(prefs.topButtonSize > 0 ? "📖" : "📖 Teach me")
                 .font(.system(size: 14 * prefs.topButtonScale, weight: .semibold))
                 .padding(.horizontal, 12 * prefs.topButtonScale)
                 .padding(.vertical, 7 * prefs.topButtonScale)
@@ -268,7 +270,7 @@ struct HeaderBar: View {
         Button {
             startSelfQuiz()
         } label: {
-            Text("🙋 Play with me")
+            Text(prefs.topButtonSize > 0 ? "🙋" : "🙋 Play with me")
                 .font(.system(size: 14 * prefs.topButtonScale, weight: .semibold))
                 .padding(.horizontal, 12 * prefs.topButtonScale)
                 .padding(.vertical, 7 * prefs.topButtonScale)

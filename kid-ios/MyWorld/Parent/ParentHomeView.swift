@@ -30,14 +30,10 @@ struct ParentHomeView: View {
     /// Support notices ("we've opened your board" / the team's response) —
     /// shown above everything else until "Got it" acks them server-side.
     @State private var supportNotices: [APIClient.SupportNotice] = []
-    /// Multi-child (dark launch): this account's children + whether the
-    /// Add-a-Child affordance may show. The server is the gate.
-    @Environment(OnboardingCoordinator.self) private var onboarding
+    /// Multi-child: this account's children — the switcher shows at 2+.
+    /// (Add a Child lives at the END of ⚙ Settings, where the account
+    /// actions belong — the home grid stays about the current child.)
     @State private var family: [APIClient.ChildRef] = []
-    @State private var familyMulti = false
-    @State private var confirmAddChild = false
-    @State private var addingChild = false
-    @State private var familyMsg: String?
 
     private let columns = [GridItem(.adaptive(minimum: 160), spacing: 14)]
 
@@ -47,11 +43,9 @@ struct ParentHomeView: View {
                 VStack(spacing: 18) {
                     brandedHeader
 
-                    // Multi-child family bar: switch between this account's
-                    // children, or start onboarding for a new one. Appears
-                    // only for 2+ children or when the server allows adding
-                    // (dark-launched — admin accounts only until it ships).
-                    if family.count > 1 || familyMulti { familyBar }
+                    // Multi-child switcher — only once the account has 2+
+                    // children (Add a Child lives in ⚙ Settings).
+                    if family.count > 1 { familyBar }
 
                     ForEach(supportNotices) { n in supportNoticeCard(n) }
                     if !problems.isEmpty { problemsCard }
@@ -141,12 +135,6 @@ struct ParentHomeView: View {
             .sheet(isPresented: $showSettings) {
                 ParentSettingsView()
             }
-            .alert("Add another child?", isPresented: $confirmAddChild) {
-                Button("Cancel", role: .cancel) {}
-                Button("Start onboarding") { Task { await addChild() } }
-            } message: {
-                Text("This starts a brand-new board with its own photos, words, tracking, and its own subscription. Your current children are untouched — you can switch between them anytime from this screen.")
-            }
             .task {
                 // Hydrate the board once so Quick Board / game scopes / message
                 // previews have data without each screen re-syncing.
@@ -156,10 +144,9 @@ struct ParentHomeView: View {
                 parentLive.start(childId: auth.childSlug)
                 // Real child name for the title + board-build progress banner.
                 ChildNames.shared.refresh(auth.childSlug)
-                // Multi-child family bar data (older servers return neither).
+                // Multi-child switcher data (older servers return no list).
                 if let st = try? await APIClient().onboardingState() {
                     family = st.children ?? []
-                    familyMulti = st.multiChild ?? false
                 }
                 creditBalance = try? await APIClient().storeBalance()
                 problems = await APIClient().storeProblems(childId: auth.childSlug)
@@ -282,56 +269,37 @@ struct ParentHomeView: View {
         if ok { problems.removeAll { $0.id == p.id } }   // retry re-arms the job → alert clears
     }
 
-    // ── Multi-child family bar ──────────────────────────────────────────────
-    /// Which child this device is working with + the Add-a-Child CTA. The
-    /// switcher persists (AuthManager.setActiveChild) and re-hydrates the
-    /// board + live poller for the picked child on the spot.
+    // ── Multi-child family switcher ─────────────────────────────────────────
+    /// Which child this device is working with. Persists per device
+    /// (AuthManager.setActiveChild) and re-hydrates the board + live poller
+    /// for the picked child on the spot.
     private var familyBar: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                if family.count > 1 {
-                    Menu {
-                        ForEach(family) { kid in
-                            Button {
-                                switchChild(to: kid.childId)
-                            } label: {
-                                if kid.childId == auth.childSlug {
-                                    Label(kid.name ?? "New child (setting up)", systemImage: "checkmark")
-                                } else {
-                                    Text(kid.name ?? "New child (setting up)")
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "person.2.fill")
-                            Text(family.first(where: { $0.childId == auth.childSlug })?.name ?? "Switch child")
-                                .fontWeight(.bold)
-                            Image(systemName: "chevron.up.chevron.down").font(.system(size: 11))
-                        }
-                        .font(.system(size: 14, design: .rounded))
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Color(.systemBackground), in: Capsule())
-                        .overlay(Capsule().stroke(Color(hex: "#f3c6dd"), lineWidth: 1.5))
-                    }
-                }
-                Spacer()
-                if familyMulti {
+        HStack(spacing: 10) {
+            Menu {
+                ForEach(family) { kid in
                     Button {
-                        confirmAddChild = true
+                        switchChild(to: kid.childId)
                     } label: {
-                        Label(addingChild ? "Preparing…" : "Add a Child", systemImage: "plus.circle.fill")
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .padding(.horizontal, 12).padding(.vertical, 8)
-                            .background(Color(hex: "#ff1493"), in: Capsule())
-                            .foregroundStyle(.white)
+                        if kid.childId == auth.childSlug {
+                            Label(kid.name ?? "New child (setting up)", systemImage: "checkmark")
+                        } else {
+                            Text(kid.name ?? "New child (setting up)")
+                        }
                     }
-                    .disabled(addingChild)
                 }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.2.fill")
+                    Text(family.first(where: { $0.childId == auth.childSlug })?.name ?? "Switch child")
+                        .fontWeight(.bold)
+                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 11))
+                }
+                .font(.system(size: 14, design: .rounded))
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Color(.systemBackground), in: Capsule())
+                .overlay(Capsule().stroke(Color(hex: "#f3c6dd"), lineWidth: 1.5))
             }
-            if let familyMsg {
-                Text(familyMsg).font(.footnote).foregroundStyle(.red)
-            }
+            Spacer()
         }
     }
 
@@ -343,23 +311,6 @@ struct ParentHomeView: View {
             parentLive.start(childId: slug)
             ChildNames.shared.refresh(slug)
             problems = await APIClient().storeProblems(childId: slug)
-        }
-    }
-
-    /// "Add a Child": rewind the account's onboarding cursor server-side to a
-    /// fresh board slug, then relaunch the native onboarding flow exactly as a
-    /// new family would see it (minus the account step — that's done forever).
-    private func addChild() async {
-        addingChild = true
-        familyMsg = nil
-        defer { addingChild = false }
-        do {
-            _ = try await APIClient().onboardingAddChild()
-            onboarding.isAuthenticated = true
-            onboarding.needsOnboarding = true
-            await onboarding.resumeIfPossible()   // lands on the child step
-        } catch {
-            familyMsg = "Couldn't start onboarding: \((error as? LocalizedError)?.errorDescription ?? "try again")"
         }
     }
 
@@ -475,6 +426,12 @@ struct ParentSettingsView: View {
     @State private var listenTilesOnly = false
     @State private var listenLoaded = false
     @State private var listenMsg: String?
+    // Multi-child "Add a Child" (dark launch — the server flag is the gate).
+    @Environment(OnboardingCoordinator.self) private var onboarding
+    @State private var familyMulti = false
+    @State private var confirmAddChild = false
+    @State private var addingChild = false
+    @State private var familyMsg: String?
     @State private var advancing = false
     @State private var advanceMsg: String?
     @State private var squaring = false
@@ -599,6 +556,25 @@ struct ParentSettingsView: View {
                         Text(msg).font(.footnote).foregroundStyle(.red)
                     }
                 }
+                // Multi-child "Add a Child" — the END of settings, with the
+                // rest of the account actions (owner's placement call). The
+                // server gates visibility while dark-launched (admin only).
+                if familyMulti {
+                    Section {
+                        Button {
+                            confirmAddChild = true
+                        } label: {
+                            Label(addingChild ? "Preparing…" : "Add a Child", systemImage: "plus.circle.fill")
+                        }
+                        .disabled(addingChild)
+                        if let m = familyMsg { Text(m).font(.footnote).foregroundStyle(.red) }
+                    } header: {
+                        Text("Family")
+                    } footer: {
+                        Text("Starts a brand-new board with its own photos, words, tracking, and its own subscription. Your current children are untouched — switch between them from the parent home once there's more than one.")
+                    }
+                }
+
                 Section {
                     HStack(spacing: 16) {
                         Link("Terms of Service", destination: URL(string: "\(APIClient.defaultOrigin)/terms")!)
@@ -617,6 +593,14 @@ struct ParentSettingsView: View {
                 listenCensor = (s["listenCensor"] as? Bool) ?? true
                 listenTilesOnly = (s["listenTilesOnly"] as? Bool) ?? false
                 listenLoaded = true
+                // Multi-child gate (dark launch — older servers return nothing).
+                familyMulti = (try? await api.onboardingState())?.multiChild ?? false
+            }
+            .alert("Add another child?", isPresented: $confirmAddChild) {
+                Button("Cancel", role: .cancel) {}
+                Button("Start onboarding") { Task { await addChild() } }
+            } message: {
+                Text("This starts a brand-new board with its own photos, words, tracking, and its own subscription. Your current children are untouched.")
             }
             .alert("Change password", isPresented: $showChangePw) {
                 SecureField("Current password", text: $curPw)
@@ -699,6 +683,25 @@ struct ParentSettingsView: View {
             deleteError = "Couldn't delete: \(error.localizedDescription)"
         }
         deleteText = ""
+    }
+
+    /// "Add a Child": rewind the account's onboarding cursor server-side to a
+    /// fresh board slug, then close settings and relaunch the native
+    /// onboarding flow exactly as a new family would see it (minus the
+    /// account step — that's done forever).
+    private func addChild() async {
+        addingChild = true
+        familyMsg = nil
+        defer { addingChild = false }
+        do {
+            _ = try await APIClient().onboardingAddChild()
+            onboarding.isAuthenticated = true
+            onboarding.needsOnboarding = true
+            await onboarding.resumeIfPossible()   // lands on the child step
+            dismiss()
+        } catch {
+            familyMsg = "Couldn't start onboarding: \((error as? LocalizedError)?.errorDescription ?? "try again")"
+        }
     }
 
     /// Local-first write (ChildSettingsStore): the flip sticks on this device
