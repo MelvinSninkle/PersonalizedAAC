@@ -16,7 +16,7 @@ import { geminiKey, geminiDefaultModel, geminiProModel, isGeminiModel, geminiGen
 import { openaiEditImage, openaiKeystoneModel, openaiCostCents } from './openai-image.js';
 import { describePhotoLabel } from './vision.js';
 import { grantCredits, COST } from './credits.js';
-import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, buildPortraitPrompt, SQUARE_RULE, captionRule } from './onboarding-render.js';
+import { readBlobBytes, loadStyleGuide, loadChildVoiceId, loadChildStyleGuideId, synthesizeVoice, buildPortraitPrompt, SQUARE_RULE } from './onboarding-render.js';
 import { relationshipAgeGroup } from './relationships.js';
 import { childLanguage } from './i18n.js';
 import { archivePriorImage } from './image-history.js';
@@ -142,18 +142,12 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
   }
 
   const detailClause = detail ? ` Important detail from the family: ${detail}.` : '';
-  // Caption: the SAME captionRule every other generator appends (black
-  // lettering on a solid white band) — this pipeline used to hand-roll its
-  // own vaguer wording, so photo-added tiles drifted in band color and font
-  // from the rest of the board.
-  //
-  // suppressBakedText mirrors renderTaxonomyTile (audit C5): a NON-ENGLISH
-  // board bakes no text into its art, because image models mangle CJK and
-  // other non-Latin scripts — a family typing 饺子 must not get garbled
-  // characters painted into their tile. The app's own label carries the word.
-  const captionClause = (label && !suppressBakedText)
-    ? captionRule(label)
-    : ` Do not include any text, words, or letters in the image.`;
+  // Baked captions are RETIRED (owner decision — see noBakedTextRule in
+  // onboarding-render.js): art renders clean on EVERY board language, and
+  // the app's own label carries the word. This also erases the old CJK
+  // hazard the suppressBakedText flag existed for — the flag stays accepted
+  // for caller compatibility, but the clause is unconditional now.
+  const captionClause = ` Do not include any text, words, or letters in the image.`;
   const styleClause = (styleGuide && styleGuide.image)
     ? ` Match the art style of the style-reference image exactly — its palette, linework, shading, and finish — so this tile is consistent with the rest of the board.`
     : '';

@@ -233,11 +233,19 @@ VERIFY: `familyRender` reaches renderTaxonomyTile from seed-board.js, and
 the `usePerson && !familyRender` gate on person_ref_key survives any
 prompt refactor.
 
-**C5. Non-English boards bake NO text into art.** `renderTaxonomyTile`
-appends a hard no-text override when `suppressBakedText` (seed passes
-`!!c.trMap`). Image models mangle CJK; the app's own label carries the word.
-Verify flag exists at the seed call site and the override is appended AFTER
-the master prompt.
+**C5. NO board bakes text into art — captions are retired.** (Owner
+decision 2026-08-08, after the Label Lab band shipped.) `noBakedTextRule`
+in onboarding-render.js is appended AFTER the editable master prompt at
+EVERY generation site — renderTaxonomyTile, tile-jobs renderStyledPhoto,
+generate-image (both the edit prompt and the generic placeholder),
+_lab-generate — so a caption instruction stored in the master prompt can
+never win. The app draws the word: the tile's text label everywhere, the
+composited label band as it rolls out. LEGACY art still carries baked
+captions until re-rendered — that's fine, the band covers them. The old
+`suppressBakedText` flag stays accepted for caller compatibility but is
+implied everywhere now. VERIFY: no generation path concatenates the tile
+label into a caption instruction; the no-text rule survives any prompt
+refactor and stays after the master prompt.
 
 **C6. Read-through defaults never clobber personalization.** In
 `api/sync.js`: a tile is replaceable only when its key is empty or starts
@@ -420,10 +428,10 @@ prevent. VERIFY: grep the game views for raw `.label` /
 `android-native/.../ui/game/*.kt`, and app.html's SLIDE / TEACH / playPrompt
 blocks. Raw `.label` is CORRECT only in game-log/analytics payloads
 (`GameLogPayload`, `LivePayload`, `recordAttempt`) — logged identity stays
-English forever. Two accepted display quirks: English boards show no separate
-word element (the art's baked caption band carries it), while translated
-boards MUST show a word element because their art renders with no baked text
-(C-section `suppressBakedText`); and `TilePlayer.play(tile)` is always safe —
+English forever. Display note: with baked captions retired (C5), EVERY
+board relies on an app-drawn word element — the tile's text label today,
+the composited label band as it rolls out; legacy art may still carry a
+baked caption until re-rendered. And `TilePlayer.play(tile)` is always safe —
 it prefers the tile's seeded clip, which is synthesized from the translation.
 
 **E6. Access experiments are admin-only while dark-launched.** The
