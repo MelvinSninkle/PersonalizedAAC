@@ -147,7 +147,8 @@ export default async function handler(req, res) {
       // "⚡ Render a batch now" — one inline, bounded drain so a slow or
       // unconfigured cron (Hobby plans only run daily) never blocks the
       // wizard. Same code path the cron runs; safe to click repeatedly.
-      const r = await drainStyleBuildJobs(db, { budgetMs: 90_000, batch: 4 });
+      // 3-way parallel renders: 12 jobs fit the same 90s that 4 serial did.
+      const r = await drainStyleBuildJobs(db, { budgetMs: 90_000, batch: 12, concurrency: 3 });
       const status = await styleBuildStatus(db, styleGuideId);
       res.status(200).json({ ok: true, ...r, status });
       return;

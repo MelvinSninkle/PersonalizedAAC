@@ -16,7 +16,7 @@
 // image_generations (actor_role 'lab_style_default') so spend stays visible.
 import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
-import { readBlobBytes, renderTaxonomyTile } from './onboarding-render.js';
+import { readBlobBytes, renderTaxonomyTile, mapPool } from './onboarding-render.js';
 import { buildIconPrompt } from './category-icons.js';
 import { geminiKey, geminiDefaultModel, geminiGenerateImage, geminiCostCents } from './gemini.js';
 
@@ -301,10 +301,11 @@ export async function styleBuildStatus(db, styleGuideId, { demoChildId = 0 } = {
   const chipsDone = kid === 0 ? (chipDefs[0]?.n || 0) : 0;
   const j = { tileQueued: 0, tileFailed: 0, chipQueued: 0, chipFailed: 0 };
   for (const r of jobs) {
-    if (r.kind === 'tile' && r.status === 'queued') j.tileQueued = r.n;
-    if (r.kind === 'tile' && r.status === 'failed') j.tileFailed = r.n;
-    if (r.kind === 'chip' && r.status === 'queued') j.chipQueued = r.n;
-    if (r.kind === 'chip' && r.status === 'failed') j.chipFailed = r.n;
+    // 'rendering' (mid-drain claim) still counts as queued for display.
+    if (r.kind === 'tile' && (r.status === 'queued' || r.status === 'rendering')) j.tileQueued += r.n;
+    if (r.kind === 'tile' && r.status === 'failed') j.tileFailed += r.n;
+    if (r.kind === 'chip' && (r.status === 'queued' || r.status === 'rendering')) j.chipQueued += r.n;
+    if (r.kind === 'chip' && r.status === 'failed') j.chipFailed += r.n;
   }
   return {
     tiles: rows.length, tilesDone: tileDefs[0]?.n || 0,
@@ -314,32 +315,61 @@ export async function styleBuildStatus(db, styleGuideId, { demoChildId = 0 } = {
   };
 }
 
-/// Cron hook: render a bounded batch of queued jobs (oldest first, any
-/// style). Time-budgeted so the tick always returns; failures mark the job
+/// Cron hook + wizard "render a batch now": render a bounded batch of queued
+/// jobs. Three properties (all owner-requested after Emily sat at 0% while
+/// Bobby drained):
+///   FAIR — the pick round-robins across (style, demo kid) queues, so every
+///     queued build progresses at once instead of strict oldest-first.
+///   PARALLEL — the batch renders `concurrency` images at a time (image-API
+///     latency dominates; 3-way ≈ 3× throughput without hammering rate
+///     limits).
+///   CLAIMED — jobs flip to 'rendering' atomically before work starts, so a
+///     cron tick and a manual wizard drain can run together without ever
+///     rendering (and paying for) the same job twice. Orphaned 'rendering'
+///     rows (a crashed drain) reap back to 'queued' after 10 minutes.
+/// Time-budgeted so the tick always returns; failures mark the job
 /// (3 attempts max) and never wedge the queue. Returns processed counts.
-export async function drainStyleBuildJobs(db, { budgetMs = 40000, batch = 6 } = {}) {
+export async function drainStyleBuildJobs(db, { budgetMs = 40000, batch = 6, concurrency = 3 } = {}) {
   await ensureStyleBuildJobs(db);
   const started = Date.now();
-  const picked = await db`SELECT * FROM style_build_jobs
-                          WHERE status = 'queued' AND attempts < 3
-                          ORDER BY id LIMIT ${batch}`;
+  await db`UPDATE style_build_jobs SET status = 'queued', updated_at = NOW()
+           WHERE status = 'rendering' AND updated_at < NOW() - INTERVAL '10 minutes'`;
+  const picked = await db`
+    SELECT id FROM (
+      SELECT id, ROW_NUMBER() OVER (PARTITION BY style_guide_id, demo_child_id ORDER BY id) AS rn
+      FROM style_build_jobs WHERE status = 'queued' AND attempts < 3
+    ) t ORDER BY rn, id LIMIT ${batch}`;
   if (!picked.length) return { processed: 0, failed: 0 };
+  const claimed = await db`UPDATE style_build_jobs SET status = 'rendering', updated_at = NOW()
+                           WHERE id = ANY(${picked.map((r) => Number(r.id))}) AND status = 'queued'
+                           RETURNING *`;
+  if (!claimed.length) return { processed: 0, failed: 0 };
   const settings = await labSettings(db);
+  // Shared lookups resolve ONCE, before the concurrent pool, so parallel
+  // workers never race duplicate style/anchor loads.
   const styles = new Map();   // style id → style row (or null)
   const anchors = new Map();  // "styleId:kidId" → child anchor image (or null)
-  let processed = 0, failed = 0;
-  for (const job of picked) {
-    if (Date.now() - started > budgetMs) break;
+  for (const job of claimed) {
     const sid = Number(job.style_guide_id);
     const kid = Number(job.demo_child_id) || 0;
     if (!styles.has(sid)) styles.set(sid, await loadStyle(db, sid));
+    const aKey = `${sid}:${kid}`;
+    if (job.kind === 'tile' && styles.get(sid) && !anchors.has(aKey)) {
+      anchors.set(aKey, await demoChildAnchor(db, styles.get(sid), kid));
+    }
+  }
+  let processed = 0, failed = 0;
+  const requeue = [];
+  await mapPool(claimed, concurrency, async (job) => {
+    // Out of budget: unstarted jobs go straight back to the queue.
+    if (Date.now() - started > budgetMs) { requeue.push(Number(job.id)); return; }
+    const sid = Number(job.style_guide_id);
+    const kid = Number(job.demo_child_id) || 0;
     const style = styles.get(sid);
     try {
       if (!style) throw new Error('style guide missing');
       if (job.kind === 'tile') {
-        const aKey = `${sid}:${kid}`;
-        if (!anchors.has(aKey)) anchors.set(aKey, await demoChildAnchor(db, style, kid));
-        const anchor = anchors.get(aKey);
+        const anchor = anchors.get(`${sid}:${kid}`);
         if (kid !== 0 && !anchor) throw new Error('demo kid reference missing');
         const tax = (await db`SELECT id, id AS slug, column_name, category, subcategory, label, prompt_template,
                                      subject_mode, related_images, default_image_key
@@ -360,6 +390,10 @@ export async function drainStyleBuildJobs(db, { budgetMs = 40000, batch = 6 } = 
                    status = CASE WHEN attempts + 1 >= 3 THEN 'failed' ELSE 'queued' END
                WHERE id = ${job.id}`;
     }
+  });
+  if (requeue.length) {
+    await db`UPDATE style_build_jobs SET status = 'queued', updated_at = NOW()
+             WHERE id = ANY(${requeue}) AND status = 'rendering'`;
   }
   return { processed, failed };
 }

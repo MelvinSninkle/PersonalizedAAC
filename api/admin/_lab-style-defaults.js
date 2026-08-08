@@ -24,7 +24,8 @@
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { norm, ensureStyleDefaultTables, loadStyle, placeableRows, chipRows,
-         labSettings, personAnchor, renderOneTile, renderOneChip } from '../_lib/style-build.js';
+         labSettings, personAnchor, renderOneTile, renderOneChip,
+         isPersonScopeRow, demoChildAnchor } from '../_lib/style-build.js';
 
 export const config = { maxDuration: 300 };
 
@@ -43,12 +44,18 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const [rows, chips, tileDefs, chipDefs] = await Promise.all([
+      // ?demoChildId=N views an EXTRA demo kid's set (wizard step 2b): only
+      // their person-scope tiles exist — objects and chips are shared with
+      // the main set (kid 0), so the kid view shows tiles only.
+      const kidView = Math.max(0, parseInt(q.demoChildId, 10) || 0);
+      const [allRows, allChips, tileDefs, chipDefs] = await Promise.all([
         placeableRows(db), chipRows(db),
         db`SELECT taxonomy_id, image_key, status, error FROM taxonomy_style_defaults
-           WHERE style_guide_id = ${styleGuideId} AND demo_child_id = 0`,
+           WHERE style_guide_id = ${styleGuideId} AND demo_child_id = ${kidView}`,
         db`SELECT section, label_norm, parent_norm, image_key, status, error FROM category_style_defaults WHERE style_guide_id = ${styleGuideId}`,
       ]);
+      const rows = kidView === 0 ? allRows : allRows.filter(isPersonScopeRow);
+      const chips = kidView === 0 ? allChips : [];
       const tMap = new Map(tileDefs.map(t => [t.taxonomy_id, t]));
       const cMap = new Map(chipDefs.map(c => [`${c.section}|${c.label_norm}|${c.parent_norm}`, c]));
       const { isDefaultableTile } = await import('../_lib/onboarding-render.js');
@@ -87,7 +94,13 @@ export default async function handler(req, res) {
                                      subject_mode, related_images, default_image_key
                               FROM taxonomy WHERE id = ${String(b.taxonomyId)} LIMIT 1`)[0];
         if (!tax) { res.status(404).json({ error: 'taxonomy row not found' }); return; }
-        const imageKey = await renderOneTile({ db, style, tax, settings, anchor });
+        // A kid-view regen re-renders THAT kid's tile with their own anchor —
+        // never the main set's row (the demo_child_id rides all the way to
+        // the taxonomy_style_defaults upsert inside renderOneTile).
+        const kidRegen = Math.max(0, parseInt(b.demoChildId, 10) || 0);
+        const useAnchor = kidRegen === 0 ? anchor : await demoChildAnchor(db, style, kidRegen);
+        if (kidRegen !== 0 && !useAnchor) { res.status(400).json({ error: 'demo kid reference missing' }); return; }
+        const imageKey = await renderOneTile({ db, style, tax, settings, anchor: useAnchor, demoChildId: kidRegen });
         res.status(200).json({ ok: true, imageKey }); return;
       }
       if (b.chip && b.chip.section && b.chip.label) {
