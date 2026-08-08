@@ -8,7 +8,6 @@ import { canAccessChild } from './_lib/access.js';
 import { sql } from './_lib/db.js';
 import { geminiKey, geminiDefaultModel, isGeminiModel, geminiCostCents, geminiGenerateImage } from './_lib/gemini.js';
 import { loadStyleGuide, loadChildStyleGuideId, SQUARE_RULE } from './_lib/onboarding-render.js';
-import { childLanguage } from './_lib/i18n.js';
 import { chargeForGeneration, requireStyling, NEEDS_SUBSCRIPTION_DETAIL, COST } from './_lib/credits.js';
 
 // gpt-image-1.5 / -2 at high quality + input_fidelity:high can legitimately run
@@ -83,11 +82,9 @@ async function generateGenericPlaceholder(apiKey, model, label, style, buffer, c
     `trademarked, or branded character, mascot, logo, or product, and do NOT add any extra characters, ` +
     `figures, or mascots that are not physically part of the object itself. Center the subject on a ` +
     `soft, uncluttered background with bright friendly colors and a gentle, age-appropriate look. ` +
-    // Match the main edit prompt: caption the word into the art, spelled
-    // exactly — except on non-English boards (noText), which bake no text.
-    ((label && !noText)
-      ? `At the very bottom, add a clean caption band with the word or phrase “${label}”, spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered and easy to read; put no other text anywhere else. `
-      : `Do not include any text, words, or letters. `) +
+    // Baked captions RETIRED (owner decision — noBakedTextRule in
+    // onboarding-render.js): art renders clean; the app draws the word.
+    `Do not include any text, words, or letters. ` +
     // No face on an inanimate object unless the real thing has one.
     `If the object is inanimate, do NOT add eyes, mouths, faces, or smiles — draw it as a plain ` +
     `object, not a cartoon character.`;
@@ -240,19 +237,11 @@ export default async function handler(req, res) {
   const refClause = styleBuf
     ? ` Match the art style of the style-reference image exactly — its palette, linework, shading, and finish — so this tile is consistent with the rest of the board.`
     : '';
-  // Parent's call: bake the word INTO the art (the newer models render text
-  // cleanly), instead of a separate text band under the tile, which looked bad.
-  // The `label` field stays the canonical source for speech/games/teaching;
-  // this caption is purely visual. Spell it exactly to avoid a misspelled tile.
-  //
-  // Non-English boards bake NO text (audit C5, same rule as seeding and
-  // tile-jobs): image models mangle CJK and other non-Latin scripts, so a
-  // family typing 饺子 gets clean art and the app's label carries the word.
-  let boardLang = 'en';
-  try { boardLang = await childLanguage(db, childId); } catch (_) {}
-  const captionClause = (label && boardLang === 'en')
-    ? ` At the very bottom of the image, add a clean horizontal caption band and write the word or phrase “${label}” in it — spelled EXACTLY as "${label}", in a simple friendly rounded sans-serif, centered and large enough for a young child to read. Put NO other text, words, or letters anywhere else in the image.`
-    : ` Do not include any text, words, or letters in the image.`;
+  // Baked captions RETIRED (owner decision — noBakedTextRule in
+  // onboarding-render.js): art renders clean on EVERY board language and
+  // the app draws the word. `label` stays the canonical source for
+  // speech/games/teaching; only the visual bake is gone.
+  const captionClause = ` Do not include any text, words, or letters in the image.`;
   // Background: parent-pickable preset (or hex). If unset, the model picks
   // a soft pastel background that fits the brand.
   const bgPhrase = bg ? bg.phrase : 'a soft pastel';
@@ -333,7 +322,7 @@ export default async function handler(req, res) {
           res.status(upstream.status).json({ error: 'Image generation failed', detail: detail.slice(0, 500) });
           return;
         }
-        const fb = await generateGenericPlaceholder(apiKey, model, label, style, buffer, req.headers['content-type'] || 'image/jpeg', boardLang !== 'en');
+        const fb = await generateGenericPlaceholder(apiKey, model, label, style, buffer, req.headers['content-type'] || 'image/jpeg', true);
         if (!fb.ok) {
           res.status(upstream.status).json({
             error: 'Image generation failed',

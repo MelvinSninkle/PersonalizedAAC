@@ -225,14 +225,17 @@ export function buildPortraitPrompt({ styleGuide, attempt = 0, guidance = '', ag
 // single, identical treatment — black text on a solid white band — is what keeps the
 // caption from drifting in font/color/placement across the board. Appended by every
 // generator so the rule is enforced in code, not left to the per-tile template.
-export function captionRule(label) {
-  const word = String(label || '').trim();
-  if (!word) return '';
-  return ` LABEL: along the very bottom of the image, print the single caption "${word}", ` +
-    'spelled exactly, in BLACK lettering on a solid WHITE band that spans the full width — ' +
-    'a clean, bold, rounded sans-serif, large enough to read easily. Use this same ' +
-    'black-on-white treatment on every tile. The band sits below the subject and must not ' +
-    'cover it. Do NOT add any other text, words, letters, numbers, watermarks, or logos.';
+// Baked captions are RETIRED (owner decision, 2026-08-08, after the Label
+// Lab band shipped): art renders CLEAN on every board, and the APP draws
+// the word — the tile's text label today, the composited label band as it
+// rolls out. Screen-pixel text survives board resizing, translated boards
+// share the same art, and no credits are ever spent re-baking a word.
+// This rule replaces the old captionRule at every generation site, and it
+// must stay appended AFTER the editable master prompt so a leftover
+// caption instruction stored there can never win.
+export function noBakedTextRule() {
+  return ' IMPORTANT: render NO text of any kind in the image — no words, captions, ' +
+    'letters, numbers, watermarks, or logos. The app displays the word itself with the picture.';
 }
 
 // Object-like categories must never grow cartoon faces. Mirrors lab-generate.
@@ -377,7 +380,7 @@ export async function renderTaxonomyTile({ tax, styleGuide, childAnchor, setting
   }
   // Enforce framing + caption in code so they hold regardless of the editable
   // master prompt: square/centered/frame-filling, then the black-on-white label.
-  prompt += SQUARE_RULE + captionRule(tax.label);
+  prompt += SQUARE_RULE + noBakedTextRule();
   if (legend.length) prompt += '\n\n' + legend.join(' ');
 
   const gKey = geminiKey();

@@ -74,8 +74,10 @@ never a label rewrite.
   style mode) via `lab?action=default-upload`. Defaults overlay every
   replaceable tile at sync; family-personalized art is never touched
   (surface-audit C6).
-- Non-English boards render with `suppressBakedText` (no text baked into the
-  art) — you do NOT author a separate prompt per language.
+- NO board bakes text into art anymore (captions retired — surface-audit C5):
+  every render appends `noBakedTextRule` after the master prompt, and the app
+  draws the word (tile label / composited band). Never author caption
+  instructions into a prompt; one prompt serves every language.
 
 ### 3. Match terms — listening mode (`match_terms` column)
 The morphology engine (`api/_lib/word-match.js`) auto-generates regular

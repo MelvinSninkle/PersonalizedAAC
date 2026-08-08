@@ -5,16 +5,17 @@
 //   {style_description} — the chosen style guide's saved text description (the
 //                         art style in words, alongside the attached reference image)
 //   {content}           — the per-tile prompt_template body (the WHAT)
-//   {label}             — the tile's display label. The black-on-white caption is
-//                         enforced in code (captionRule), so the master prompt no
-//                         longer needs to spell out the caption treatment.
+//   {label}             — the tile's display label. Baked captions are RETIRED
+//                         (noBakedTextRule is appended in code after this prompt),
+//                         so any caption treatment written here is overridden.
 //   {size}              — image size, defaulting to settings.size_default
 //   {no_face_rule}      — auto-injected guard for inanimate categories
 //   {reference}         — kept for compatibility with existing taxonomy templates
 //
-// NOTE: square/centered/frame-filling composition and the black-on-white label
-// band are appended in code (SQUARE_RULE + captionRule) for every generation, so
-// they hold even if this editable prompt omits them.
+// NOTE: square/centered/frame-filling composition and the NO-BAKED-TEXT rule
+// are appended in code (SQUARE_RULE + noBakedTextRule) for every generation, so
+// they hold even if this editable prompt says otherwise — the app draws the
+// word (label band / tile text), never the image model.
 //
 //   GET                       returns current settings
 //   PUT  { masterPrompt?, modelDefaults?, sizeDefault?, notes? }   partial update

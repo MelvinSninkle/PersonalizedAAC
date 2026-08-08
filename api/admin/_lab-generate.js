@@ -16,7 +16,7 @@ import { geminiKey, isGeminiModel, geminiCostCents, geminiGenerateImage } from '
 import { openaiCostCents } from '../_lib/openai-image.js';
 import { sql } from '../_lib/db.js';
 import { resolveModelForRow } from './model-routes.js';
-import { SQUARE_RULE, captionRule } from '../_lib/onboarding-render.js';
+import { SQUARE_RULE, noBakedTextRule } from '../_lib/onboarding-render.js';
 
 // The slowest gpt-image-2 generation can run ~120s; 300s is Vercel Pro's ceiling.
 export const config = { maxDuration: 300 };
@@ -199,7 +199,7 @@ export default async function handler(req, res) {
   }
   // Enforce framing + caption in code so they hold regardless of the editable
   // master prompt (skip when the caller supplies a fully custom promptOverride).
-  if (!promptOverride) prompt += SQUARE_RULE + captionRule(tax.label);
+  if (!promptOverride) prompt += SQUARE_RULE + noBakedTextRule();
 
   // 5. Read the style guide bytes, then assemble the ordered image[] (style first,
   //    subject second) plus a positional legend so the model knows which is which.
