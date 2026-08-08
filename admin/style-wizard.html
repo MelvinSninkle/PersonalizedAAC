@@ -287,6 +287,7 @@
         + '<b>' + String(k.label || '').replace(/[<>&]/g, '') + '</b>'
         + '<span style="flex:1;">' + pct + '%' + stateTxt + '</span>'
         + '<button class="secondary" type="button" data-kid-jobs="' + k.id + '">🚀 Render their tiles</button>'
+        + '<button class="secondary" type="button" data-kid-force="' + k.id + '" title="Re-render EVERY tile for this kid, including finished ones — the recovery path when a set came out wrong.">↻ Re-render all</button>'
         + '<button class="secondary" type="button" data-kid-remove="' + k.id + '">Remove</button>'
         + '</div>';
     });
@@ -307,6 +308,16 @@
       try {
         const d = await wiz({ op: 'kid-jobs', kidId: Number(b.dataset.kidJobs) });
         setMsg('kids-msg', `Queued ${d.queued.tiles} person tiles for this kid. ` + (d.note || ''), 'ok');
+        startPoll();
+        await refresh();
+      } catch (e) { setMsg('kids-msg', e.message, 'err'); b.disabled = false; }
+    }));
+    $('kids-list').querySelectorAll('[data-kid-force]').forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm('Re-render EVERY tile for this kid (~a third of the board), including finished ones? Use this when a set came out wrong — every replaced image costs a fresh generation.')) return;
+      b.disabled = true;
+      try {
+        const d = await wiz({ op: 'kid-jobs', kidId: Number(b.dataset.kidForce), force: true });
+        setMsg('kids-msg', `Re-rendering ${d.queued.tiles} tiles for this kid. ` + (d.note || ''), 'ok');
         startPoll();
         await refresh();
       } catch (e) { setMsg('kids-msg', e.message, 'err'); b.disabled = false; }

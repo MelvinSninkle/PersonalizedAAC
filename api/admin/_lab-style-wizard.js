@@ -200,9 +200,11 @@ export default async function handler(req, res) {
                             WHERE id = ${kidId} AND style_guide_id = ${styleGuideId} AND active = TRUE`)[0];
       if (!kid) { res.status(404).json({ error: 'kid not found' }); return; }
       if (!kid.person_ref_key) { res.status(400).json({ error: 'kid has no reference image yet' }); return; }
-      const queued = await enqueueStyleBuild(db, styleGuideId, { demoChildId: kidId });
+      const queued = await enqueueStyleBuild(db, styleGuideId, { demoChildId: kidId, force: b.force === true });
       res.status(200).json({ ok: true, queued,
-        note: 'Queued — only the person tiles re-render for this kid; objects and folders are shared.' });
+        note: b.force === true
+          ? 'Re-rendering this kid\'s whole set — the drain works through it on its own.'
+          : 'Queued — only the person tiles re-render for this kid; objects and folders are shared.' });
       return;
     }
 

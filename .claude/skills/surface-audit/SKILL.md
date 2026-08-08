@@ -222,9 +222,11 @@ subject-matched ref (person tiles → `person_ref_key`, everything else →
 `stuff_ref_key`) on FAMILY renders too — so a bad public person ref now
 reaches every family on that style, raising the stakes on this review.
 GUARD (2026-08-05, owner directive after sample-kid leak on a family
-board): family renders (`familyRender: true`, passed by seed-board's drain
-— the ONE family render path) NEVER attach the person exemplar, anchor or
-no anchor. The child's committed portrait (persons.reference_key — the
+board; extended 2026-08-08 after EXTRA demo kids rendered as the exemplar
+kid): any render OWNED BY A SPECIFIC CHILD — family renders (seed-board's
+drain) AND extra-demo-kid builds (style-build renderOneTile passes
+`familyRender: demoChildId !== 0`) — NEVER attaches the person exemplar,
+anchor or no anchor. The child's committed portrait (persons.reference_key — the
 onboarding flow stores the parent-CHOSEN generated portrait there, so the
 anchor is usually already person-in-style) carries likeness + character
 design; the stuff exemplar carries materials. The person exemplar reaches

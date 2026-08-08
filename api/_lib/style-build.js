@@ -159,8 +159,17 @@ export async function personAnchor(style) {
 }
 
 export async function renderOneTile({ db, style, tax, settings, anchor, demoChildId = 0 }) {
+  // An EXTRA demo kid's render is owned by THAT child, exactly like a family
+  // render — so it gets the same C4 guard (familyRender): the style's person
+  // exemplar (a picture of the MAIN demo kid) never attaches, and the subject
+  // legend hardens to "this is THE subject — match this person's established
+  // look". Without this, every kid tile carried TWO children (the kid's ref
+  // + the exemplar) and the model kept drawing the exemplar — Emily came out
+  // looking like Bobby. Kid 0 keeps the exemplar: there the sample child IS
+  // the subject.
   const r = await renderTaxonomyTile({
     tax, styleGuide: style, childAnchor: anchor, settings,
+    familyRender: Number(demoChildId) !== 0,
     worldRefKeys: style.stuff_ref_key ? [style.stuff_ref_key] : [],
   });
   if (!r.ok) throw new Error(r.detail || 'render failed');
@@ -244,7 +253,7 @@ export async function ensureStyleBuildJobs(db) {
 /// demoChildId ≠ 0 = an EXTRA demo kid: only person-scope rows re-render
 /// (object tiles + chips are shared with kid 0), so a kid costs ~344 tiles,
 /// not the full board.
-export async function enqueueStyleBuild(db, styleGuideId, { demoChildId = 0 } = {}) {
+export async function enqueueStyleBuild(db, styleGuideId, { demoChildId = 0, force = false } = {}) {
   await ensureStyleDefaultTables(db);
   await ensureStyleBuildJobs(db);
   const kid = Number(demoChildId) || 0;
@@ -259,7 +268,10 @@ export async function enqueueStyleBuild(db, styleGuideId, { demoChildId = 0 } = 
   const doneChips = new Set(chipDefs.filter(c => c.image_key).map(c => `${c.section}|${c.label_norm}|${c.parent_norm}`));
   let tiles = 0, chipsN = 0;
   for (const t of rows) {
-    if (doneTiles.has(t.id)) continue;
+    // force = re-render even finished tiles (the recovery path for a set
+    // that rendered wrong — e.g. the exemplar-bleed kid tiles). Every
+    // replaced image is a fresh blob; nothing is deleted.
+    if (!force && doneTiles.has(t.id)) continue;
     // attempts resets too — a job that already burned its 3 tries would
     // otherwise sit "queued" forever (the drain only picks attempts < 3).
     await db`INSERT INTO style_build_jobs (style_guide_id, kind, taxonomy_id, demo_child_id)
