@@ -162,6 +162,9 @@
       <button id="go-publish" disabled>📣 Publish</button>
       <button id="go-unpublish" class="secondary" style="display:none;">Unpublish</button>
     </div>
+    <!-- Per-kid galleries (2b): each extra demo kid's person-scope tiles,
+         viewable + regen-able exactly like the main gallery. -->
+    <div id="review-kid-links" class="hint" style="display:none;"></div>
     <div class="msg" id="pub-msg"></div>
   </div>
 
@@ -289,6 +292,16 @@
     });
     $('kids-list').innerHTML = rows.length ? rows.join('')
       : 'Just the main demo kid so far.';
+    // Mirror the kids into step 4's per-kid gallery links.
+    const kl = $('review-kid-links');
+    if (kl) {
+      kl.style.display = KIDS.length ? '' : 'none';
+      kl.innerHTML = KIDS.length
+        ? 'Kid galleries: ' + KIDS.map((k) =>
+            '<a target="_blank" href="/admin/defaults.html?styleGuideId=' + SID
+            + '&demoChildId=' + k.id + '">' + String(k.label || 'kid').replace(/[<>&]/g, '') + '</a>').join(' · ')
+        : '';
+    }
     $('kids-list').querySelectorAll('[data-kid-jobs]').forEach((b) => b.addEventListener('click', async () => {
       b.disabled = true;
       try {

@@ -88,7 +88,7 @@ export default async function handler(req, res) {
     if (!overBudget()) {
       try {
         styleBuild = await drainStyleBuildJobs(db, {
-          budgetMs: Math.max(10_000, TIME_BUDGET_MS - (Date.now() - started)), batch: 6 });
+          budgetMs: Math.max(10_000, TIME_BUDGET_MS - (Date.now() - started)), batch: 9, concurrency: 3 });
       } catch (_) { /* style builds are lab work — never fail the family cron */ }
     }
 

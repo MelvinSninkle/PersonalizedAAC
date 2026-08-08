@@ -239,6 +239,9 @@
   let BOARDS = new Map();        // 'section|category_norm' → {storeOnly, pricing} (Lab board catalog)
 
   function styleGuideId() { return parseInt(document.getElementById('style-picker').value, 10) || 0; }
+  // Demo-kid view (wizard 2b gallery links): tiles shown/regen'd are THAT
+  // kid's person-scope set. 0 = the main board.
+  const KID_VIEW = parseInt(new URLSearchParams(location.search).get('demoChildId'), 10) || 0;
 
   // ── Tile / chip state ─────────────────────────────────────────────────
   function tileState(t) {
@@ -467,7 +470,10 @@
         BOARDS = new Map((bd.boards || []).map((b) => [b.section + '|' + norm(b.label), b]));
       } catch (_) { BOARDS = new Map(); }
       if (id) {
-        const d = await api('/api/admin/lab?action=style-defaults&styleGuideId=' + id);
+        // ?demoChildId=N (the wizard's per-kid gallery links): view that demo
+        // kid's person-scope set instead of the main board's.
+        const d = await api('/api/admin/lab?action=style-defaults&styleGuideId=' + id
+                            + (KID_VIEW ? '&demoChildId=' + KID_VIEW : ''));
         STYLE_INFO = d.style || null;
         TILES = d.tiles || [];
         CHIPS = (d.chips || []).map((c) => ({ ...c, parent: c.parent || '' }));
@@ -523,6 +529,13 @@
     }
   }
   async function bulkLoop(kind, force) {
+    // Kid view is view + per-tile regen only: the bulk generators target the
+    // MAIN set (demo kid 0); a kid's full render lives in the wizard's
+    // "Render their tiles" (the durable queue).
+    if (KID_VIEW) {
+      alert('This is a demo-kid gallery. Bulk rendering for a kid runs from the New Style wizard — "Render their tiles". Per-tile ↻ regenerate works right here.');
+      return { generated: 0, skipped: 0, failed: 0, total: 0 };
+    }
     const id = styleGuideId();
     const progress = document.getElementById('progress');
     let offset = 0, generated = 0, skipped = 0, failed = 0, total = 0;
@@ -619,7 +632,7 @@
     try {
       let r;
       if (btn.dataset.kind === 'tile') {
-        r = await apiPost('/api/admin/lab?action=style-defaults', { styleGuideId: id, op: 'regen', taxonomyId: btn.dataset.id });
+        r = await apiPost('/api/admin/lab?action=style-defaults', { styleGuideId: id, op: 'regen', taxonomyId: btn.dataset.id, demoChildId: KID_VIEW || 0 });
         const t = TILES.find((x) => String(x.id) === String(btn.dataset.id));
         if (t) { t.imageKey = r.imageKey; t.status = 'done'; t.error = null; }
       } else {
