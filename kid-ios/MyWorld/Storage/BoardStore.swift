@@ -34,9 +34,20 @@ final class BoardStore {
 
     init(api: APIClient = APIClient()) {
         self.api = api
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        self.cacheURL = docs.appendingPathComponent("board.json")
+        self.cacheURL = Self.diskCacheURL
         hydrateFromDisk()
+    }
+
+    private static var diskCacheURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("board.json")
+    }
+
+    /// Delete the persisted board. Called on sign-out so the next family to
+    /// register on this device never cold-launches into the old board (the
+    /// native side of the web's A1c cache-owner rule).
+    static func deleteDiskCache() {
+        try? FileManager.default.removeItem(at: diskCacheURL)
     }
 
     // MARK: -- Public API used by views

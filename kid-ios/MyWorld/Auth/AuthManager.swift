@@ -88,6 +88,13 @@ final class AuthManager {
         SessionStore.save(nil)
         UserDefaults.standard.removeObject(forKey: Self.activeChildKey)
         self.user = nil
+        // A signed-out device lands on the anonymous practice board so a NEW
+        // family can register from it: drop the slug (nothing keeps logging
+        // events against the old child) and the persisted board cache (the
+        // old family's tiles must never cold-paint for the next account —
+        // the native side of the web's A1c cache-owner rule).
+        self.childSlug = ""
+        BoardStore.deleteDiskCache()
     }
 
     /// Re-reads /api/auth/me and caches the result locally. Used by external

@@ -75,6 +75,11 @@ final class OnboardingCoordinator {
     /// True once the parent has completed account creation — gates the rest.
     var isAuthenticated: Bool = false
 
+    /// One-shot hint from the practice board: "Register an Account" opens the
+    /// account step in signup mode (the step's default is login, for returning
+    /// parents). Consumed by OnboardingAccountView on appear.
+    var accountPrefersSignup: Bool = false
+
     /// True ONLY while a brand-new parent is mid-onboarding. Drives ContentView
     /// to keep showing the flow even after the account is created (creating an
     /// account flips isSignedIn, which would otherwise abandon the flow). An

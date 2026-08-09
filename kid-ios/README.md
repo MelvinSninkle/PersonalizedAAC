@@ -102,6 +102,9 @@ MyWorld/
 │   └── BoardStore.swift       Observable in-memory board state, with disk hydrate
 ├── Audio/
 │   └── TilePlayer.swift       AVAudioPlayer + AVSpeechSynthesizer fallback
+├── Practice/
+│   └── PracticeBoardView.swift  Signed-out onboarding practice board (/api/demo):
+│                                style/kid/voice filters, ring tour, register CTA
 └── Views/
     ├── LoginView.swift
     ├── BoardView.swift        The main grid view

@@ -18,6 +18,13 @@ struct OnboardingFlow: View {
         }
         .task {
             coord.isAuthenticated = auth.isSignedIn
+            // A signed-out mount (fresh install OR just signed out from any
+            // surface) always lands on the practice board — never a stale
+            // mid-onboarding step from a previous session — so a new family
+            // can be registered from any device.
+            if !auth.isSignedIn && !coord.needsOnboarding {
+                coord.go(to: .demo)
+            }
         }
     }
 
@@ -353,89 +360,17 @@ private struct OBVoiceChip: View {
     }
 }
 
-// MARK: -- Step 1: Demo (space reserved)
+// MARK: -- Step 1: Demo — the live practice board
 
-/// The first thing a brand-new parent sees. SPACE RESERVED for the actual
-/// tap-real-tiles-and-hear-the-magic demo board; this scaffold keeps the
-/// pacing right and the messaging in place until that demo content lands.
+/// The first thing a brand-new parent sees: the full-bleed practice board
+/// (the native twin of the web's /practice page — live /api/demo content,
+/// style/kid/voice filters, the ring tour, and the persistent Register
+/// button). All of its chrome lives in Practice/PracticeBoardView.swift;
+/// this step just gives it the whole screen.
 private struct OnboardingDemoView: View {
-    @Environment(OnboardingCoordinator.self) private var coord
-
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                OBBrandBar()
-                OBHeader(eyebrow: "Welcome",
-                         title: "A board that sounds like the child it belongs to.",
-                         subtitle: "Watch what My World does for a real family. Tap any tile to hear it speak in their voice.")
-
-                // What-happens-next card (the tappable in-app demo is a
-                // future build; until then this sells the promise without
-                // shipping a visible "replace me" placeholder).
-                VStack(alignment: .leading, spacing: 14) {
-                    demoPoint(icon: "camera.fill",
-                              title: "Photograph their world",
-                              note: "Their snacks, their toys, their people. Each photo becomes a talking tile.")
-                    demoPoint(icon: "paintpalette.fill",
-                              title: "Drawn in the style they love",
-                              note: "Their face stays their face; the whole board shares one look.")
-                    demoPoint(icon: "speaker.wave.2.fill",
-                              title: "Tap a tile, it talks",
-                              note: "In the voice you pick, plus listening, teaching, and game modes as they grow.")
-                }
-                .padding(18)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(hex: Brand.card), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color(hex: Brand.line), lineWidth: 1))
-
-                ctaRow
-            }
-            .padding(20)
-        }
-        .background(Color(hex: Brand.bg))
-        // (helper lives below ctaRow)
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var ctaRow: some View {
-        VStack(spacing: 10) {
-            OBPrimaryButton(title: "Make this for my child", busy: false) {
-                coord.go(to: .account)
-            }
-            Text("Free to set up. Personalized board takes about 5 minutes.")
-                .font(.system(size: 12))
-                .foregroundStyle(Color(hex: Brand.muted))
-            // Returning families skip the pitch — the account step defaults to
-            // its "Welcome back" login mode, so this is a straight shot in.
-            Button {
-                coord.go(to: .account)
-            } label: {
-                (Text("Already have a board? ") + Text("Log in").bold().underline())
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color(hex: Brand.pinkDeep))
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 6)
-        }
-    }
-
-    private func demoPoint(icon: String, title: String, note: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
-                .background(Color(hex: Brand.pink), in: Circle())
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(hex: Brand.ink))
-                Text(note)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color(hex: Brand.muted))
-            }
-        }
+        PracticeBoardView()
+            .toolbar(.hidden, for: .navigationBar)
     }
 }
 
@@ -565,6 +500,14 @@ private struct OnboardingAccountView: View {
         }
         .background(Color(hex: Brand.bg))
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            // The practice board's "Register an Account" opens this step in
+            // signup mode (the default is login, for returning parents).
+            if coord.accountPrefersSignup {
+                mode = .signup
+                coord.accountPrefersSignup = false
+            }
+        }
     }
 
     private var emailButtonTitle: String {
