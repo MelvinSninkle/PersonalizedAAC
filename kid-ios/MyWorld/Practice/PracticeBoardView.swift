@@ -329,16 +329,27 @@ struct PracticeBoardView: View {
     }
 
     private func boardBody(_ p: Payload) -> some View {
-        VStack(spacing: 0) {
-            if hSize == .compact { phoneTabs }
-            HStack(alignment: .top, spacing: 0) {
-                ForEach(visibleSections, id: \.self) { section in
-                    sectionColumn(section, in: p)
-                        .frame(maxWidth: .infinity)
+        // WEB PARITY (the "hot garbage" fix): the web practice page weights
+        // the three columns 2:5:2 (People:Nouns:Verbs — the tiles-across of
+        // each section), so EVERY tile on the board renders the same size.
+        // Equal-width columns made People/Verbs tiles triple the size of
+        // Nouns. The Needs strip sizes off the same full-board total.
+        GeometryReader { geo in
+            let sections = visibleSections
+            let totalWeight = max(1, sections.reduce(0) { $0 + (across[$1] ?? 3) })
+            let allWeight = max(1, ["people", "nouns", "verbs"].reduce(0) { $0 + (across[$1] ?? 3) })
+            let needsTile = max(64, geo.size.width / CGFloat(allWeight) - 10)
+            VStack(spacing: 0) {
+                if hSize == .compact { phoneTabs }
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(sections, id: \.self) { section in
+                        sectionColumn(section, in: p)
+                            .frame(width: geo.size.width * CGFloat(across[section] ?? 3) / CGFloat(totalWeight))
+                    }
                 }
+                .frame(maxHeight: .infinity)
+                needsStrip(p, tileWidth: needsTile)
             }
-            .frame(maxHeight: .infinity)
-            needsStrip(p)
         }
     }
 
@@ -462,7 +473,7 @@ struct PracticeBoardView: View {
         }
     }
 
-    private func needsStrip(_ p: Payload) -> some View {
+    private func needsStrip(_ p: Payload, tileWidth: CGFloat) -> some View {
         let ts = Array(tiles(p, in: "needs").prefix(24))
         return Group {
             if !ts.isEmpty {
@@ -470,7 +481,7 @@ struct PracticeBoardView: View {
                     HStack(spacing: 8) {
                         ForEach(Array(ts.enumerated()), id: \.offset) { _, t in
                             practiceTile(t, section: "needs")
-                                .frame(width: 96)
+                                .frame(width: tileWidth)
                         }
                     }
                     .padding(8)
@@ -492,25 +503,21 @@ struct PracticeBoardView: View {
     }
 
     private func practiceTile(_ t: Payload.DemoTile, section: String) -> some View {
+        // No text under the tile: the served practice art carries the Label
+        // Lab caption band IN the image (the look the web page ships), so a
+        // separate label printed the word twice. The tile is the image + the
+        // tier ring, nothing else; VoiceOver still announces the word.
         Button {
             speak(t.label)
         } label: {
-            VStack(spacing: 4) {
-                PracticeTileImage(imageKey: t.imageKey, corner: 14)
-                    .aspectRatio(1, contentMode: .fit)
-                    .overlay(RoundedRectangle(cornerRadius: 14)
-                        .strokeBorder(ringColor(section), lineWidth: 2.5))
-                Text(t.label)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(hex: Brand.ink))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-            .padding(5)
-            .background(.white, in: RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.07), radius: 3, y: 1)
+            PracticeTileImage(imageKey: t.imageKey, corner: 14)
+                .aspectRatio(1, contentMode: .fit)
+                .overlay(RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(ringColor(section), lineWidth: 2.5))
+                .shadow(color: .black.opacity(0.07), radius: 3, y: 1)
         }
         .buttonStyle(TileButtonStyle())
+        .accessibilityLabel(Text(t.label))
     }
 
     // MARK: -- Welcome tour (floats over the first load; reopenable via ✨)
