@@ -193,6 +193,7 @@
     <button class="secondary" id="btn-build-board" title="RESCUE: run the full board build for any child by slug — places every word, queues the per-child renders/voices, re-arms dead jobs. Idempotent.">🧰 Build board…</button>
     <button class="secondary" id="btn-square-tiles" title="Normalize a board's tile shapes: every tile + folder chip squares up (keep_aspect off), except TV/movie/poster folders which keep their natural ratio. Fixes older boards with stray aspect flags.">⬜ Square tiles…</button>
     <button class="secondary" id="btn-index-objects" title="Backfill objects_present — the reverse index behind 'you added a fork; these pictures mention a fork'. Only fills rows missing it; AI pass when OpenAI is configured, mechanical otherwise.">🧠 Index objects…</button>
+    <button class="secondary" id="btn-synonyms" title="The listening-mode synonym sets and irregular-inflection map that ship in code (api/_lib/word-match.js). Read-only — every board gets them at sync; per-word one-offs go in a row's match terms instead.">🔤 Synonym sets…</button>
     <div class="menu-wrap">
       <button class="secondary" id="btn-export">Export ▾</button>
       <div class="menu" id="export-menu">
@@ -689,6 +690,26 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
   </div>
 </div>
 
+<!-- Synonym sets viewer (read-only) -->
+<div class="modal-backdrop" id="synonyms-modal">
+  <div class="modal wide">
+    <h3>Listening-mode synonym sets <span id="syn-flag" style="font-size:12px; font-weight:600;"></span></h3>
+    <div class="help">
+      These live in <code>api/_lib/word-match.js</code> and ship with every
+      deploy — <b>every</b> board's listening lexicon picks them up at sync, no
+      database writes. Whichever word of a set a tile is labeled with, the
+      others become its spoken variants (the caption still shows what was
+      actually said). To edit, change the sets in that file and deploy; for a
+      one-off variant on a single word, use that row's match terms field here
+      in the taxonomy instead.
+    </div>
+    <div id="syn-body" style="margin-top:14px;">Loading…</div>
+    <div class="button-row">
+      <button class="secondary" id="syn-close">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Snapshots modal -->
 <div class="modal-backdrop" id="snapshots-modal">
   <div class="modal">
@@ -1055,6 +1076,34 @@ needs.yes,Needs,yes,child_as_subject,none,A {style} illustration of {reference} 
       alert(msg);
     } catch (e) { alert('Indexing failed: ' + (e.message || e)); }
     finally { btn.disabled = false; document.getElementById('stat').textContent = `${allRows.length} rows`; }
+  });
+
+  // ---- Synonym sets viewer: the code-shipped listening lexicon, read-only ----
+  const synModal = document.getElementById('synonyms-modal');
+  document.getElementById('syn-close').addEventListener('click', () => synModal.classList.remove('show'));
+  synModal.addEventListener('click', (e) => { if (e.target === synModal) synModal.classList.remove('show'); });
+  document.getElementById('btn-synonyms').addEventListener('click', async () => {
+    synModal.classList.add('show');
+    const body = document.getElementById('syn-body');
+    body.textContent = 'Loading…';
+    try {
+      const r = await api('/api/admin/lab?action=synonyms');
+      document.getElementById('syn-flag').textContent = r.public ? '· LIVE on all boards' : '· admin-only (dark launch)';
+      const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const chip = (w, first) => `<span style="display:inline-block; margin:2px 3px; padding:3px 10px; border-radius:999px; font-size:13px; ${first ? 'background:#dbe7f5; font-weight:700;' : 'background:#eef1f6;'}">${esc(w)}</span>`;
+      const setsHtml = r.sets.map((set) => `<div style="padding:4px 0; border-bottom:1px solid #f2f4f8;">${set.map((w, i) => chip(w, i === 0)).join('')}</div>`).join('');
+      const irrHtml = Object.entries(r.irregular).map(([base, vs]) =>
+        `<div style="padding:3px 0;"><b>${esc(base)}</b> <span style="color:#557fa3;">→ ${esc(vs.join(', '))}</span></div>`).join('');
+      body.innerHTML =
+        `<div style="display:grid; grid-template-columns:1.4fr 1fr; gap:22px; align-items:start;">
+          <div><h4 style="margin:0 0 8px;">Synonym sets (${r.sets.length}) — any member label matches the rest</h4>
+            <div style="max-height:50vh; overflow-y:auto;">${setsHtml}</div></div>
+          <div><h4 style="margin:0 0 8px;">Irregular inflections (${Object.keys(r.irregular).length})</h4>
+            <div style="max-height:50vh; overflow-y:auto; font-size:13px;">${irrHtml}</div></div>
+        </div>`;
+    } catch (e) {
+      body.textContent = 'Failed to load: ' + (e.message || e);
+    }
   });
 
   // ---- Rescue: run the full board build for any child by slug ----

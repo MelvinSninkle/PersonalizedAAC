@@ -94,9 +94,11 @@ what generation can't produce:
   listen strips caption a synonym match with the SPOKEN word over the tile's
   image. Extend the set there for words every family shares; use curated
   matchTerms only for one-off, per-row synonyms. Only true same-tile words
-  in either place ("soda" is not juice). DARK-LAUNCHED: while
-  `SYNONYMS_PUBLIC = false` in word-match.js, only admin sync callers get
-  set expansion and captions (surface-audit F2) — one flip graduates it.
+  in either place ("soda" is not juice). PUBLIC since 2026-08-09
+  (`SYNONYMS_PUBLIC = true` in word-match.js): every board's sync expands
+  the sets and captions matches; flipping the flag back re-darkens it to
+  admin-only (surface-audit F2). Browse the live sets read-only via
+  Taxonomy admin → 🔤 Synonym sets.
 - Multi-word labels ("all done", "ice cream") get NO generated inflections —
   curate any variants you want matched.
 - Comparatives (-er/-est) are never generated (junk like "cookier") — curate

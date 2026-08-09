@@ -62,7 +62,15 @@ import("./api/_lib/word-match.js").then((m) => {
     console.error("FAIL word-match gate: {synonyms:false} still expanded →", dark.join(","));
     process.exit(1);
   }
-  console.log("word-match synonyms: PASS (hello → hi/hey, dog → puppy; gate off excludes)");
+  // Phrase tiles: shortened forms + the punctuation-stripped set lookup
+  // (a label like "How are you?" must still find its bare-keyed set).
+  const want = m.expandMatchTerms("I want", [], { synonyms: true });
+  const how = m.expandMatchTerms("How are you?", [], { synonyms: true });
+  if (!want.includes("want") || !how.includes("how are you doing")) {
+    console.error("FAIL word-match phrases: I want →", want.join(","), "How are you? →", how.join(","));
+    process.exit(1);
+  }
+  console.log("word-match synonyms: PASS (hello → hi/hey, dog → puppy, I want → want, punctuation lookup; gate off excludes)");
 })' || exit 1
 
 echo "ALL SYNTAX CHECKS PASS"

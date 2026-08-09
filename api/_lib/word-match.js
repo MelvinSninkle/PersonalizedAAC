@@ -54,13 +54,12 @@ export const IRREGULAR = {
   child: ['children'],
 };
 
-// DARK LAUNCH: synonym matching + spoken captions are being field-tested on
-// the owner's device first. While false, /api/sync expands synonyms only for
-// admin callers (and ships listenCaptions=false to everyone else, so no
-// client draws the caption band). Flip to true to ship to every family —
-// this one flip also turns synonyms on for the practice board (api/demo.js)
-// and parent message matching (api/message-to-board.js), which default to it.
-export const SYNONYMS_PUBLIC = false;
+// PUBLIC (graduated 2026-08-09 after owner field-testing): synonym matching
+// + spoken captions ship to every board. /api/sync expands the sets for all
+// callers and sends listenCaptions=true; the practice board (api/demo.js)
+// and parent message matching (api/message-to-board.js) follow via their
+// defaults. Flipping back to false re-darkens everything to admin-only.
+export const SYNONYMS_PUBLIC = true;
 
 // Synonym SETS — words that should land on the SAME tile in listening mode:
 // someone says "hi" and the board's "hello" tile renders (with "hi" as the
@@ -112,6 +111,148 @@ export const SYNONYM_SETS = [
   ['pants', 'trousers'],
   ['diaper', 'nappy'],
   ['stroller', 'pram', 'buggy'],
+  ['hurt', 'ouch', 'ow', 'owie', 'boo boo', 'it hurts'],
+  ['cookie', 'biscuit'],
+  ['yummy', 'tasty', 'delicious'],
+  ['yucky', 'gross', 'icky', 'ew'],
+  ['sick', 'ill', 'not feeling well'],
+  ['music', 'song', 'songs'],
+  ['blocks', 'building bricks', 'building blocks', 'legos', 'lego', 'bricks'],
+  ['hat', 'cap', 'baseball cap', 'ball cap'],
+  ['sleep', 'bedtime', 'bed time', 'sleepy time'],
+  ['teacher', 'my teacher'],
+
+  // ── Phrase tiles ──────────────────────────────────────────────────────────
+  // Multi-word labels get NO generated inflections, so without these a
+  // needs-strip or social tile matches only its exact label. These are the
+  // shortened / lengthened forms people actually say ("want" → the I-want
+  // tile); the spoken caption keeps the transcript honest. Owner directive
+  // (2026-08-09): match GENEROUSLY — if a form generally means that tile,
+  // matching is a benefit. The caption always shows the said word, and
+  // label-first indexing means a board with the more specific tile wins it.
+  // Still deliberately absent: bare "like" (filler: "like, you know"), bare
+  // "okay"/"look"/"welcome" (said constantly in other senses).
+  ['i want', 'want', 'i want it', 'i want that'],
+  ['i like', 'i like it', 'i like this', 'like it'],
+  ["i don't like", "don't like", "i don't like it", 'no like'],
+  ['all done', 'done', 'finished', 'all finished'],
+  ['thank you', 'thanks'],
+  ['help', 'help me', 'i need help', 'help please'],
+  ['more', 'more please', 'some more', 'want more'],
+  ['again', 'do it again', 'one more time'],
+  ['stop', 'stop it', 'stop that'],
+  ['my turn', "it's my turn", 'my turn now', 'me turn'],
+  ['your turn', "it's your turn"],
+  ['i love you', 'love you'],
+  ['i miss you', 'i missed you', 'missed you', 'miss you'],
+  ['how are you', 'how are you doing', 'how you doing'],
+  ["i'm great", 'im great', 'i am great', 'doing great'],
+  ['have a great day', 'have a good day'],
+  ["you're welcome", 'youre welcome'],
+  ["that's funny", 'thats funny', 'so funny'],
+  ["it's okay", 'its okay', "it's ok", 'its ok'],
+  ['are you okay', 'are you ok', 'you okay', 'you ok'],
+  ['look at this', 'look at that', 'look here'],
+  ['nice to see you', 'good to see you'],
+  ["what's your name", 'whats your name'],
+
+  // Greetings, praise & manners
+  ['good morning', 'morning everyone', 'good morning everyone'],
+  ['good night', 'goodnight', 'night night', 'nighty night', 'sweet dreams'],
+  ['good job', 'great job', 'nice job', 'well done', 'way to go', 'nice work'],
+  ['no thank you', 'no thanks'],
+  ['excuse me', 'pardon me', 'scuse me', 'pardon'],
+  ['sorry', 'sorry about that', "i'm sorry", 'im sorry', 'i am sorry', 'my bad'],
+  ['see you later', 'see you', 'see ya', 'see you soon', 'bye for now'],
+  ['happy birthday', 'happy birthday to you', 'happy bday'],
+
+  // Needs & requests
+  ["i'm hungry", 'im hungry', 'i am hungry', 'hungry', 'so hungry'],
+  ["i'm thirsty", 'im thirsty', 'i am thirsty', 'thirsty', 'so thirsty'],
+  ['i need a break', 'need a break', 'break please', 'take a break', 'break time'],
+  ['hold me', 'pick me up', 'hold me please', 'up please', 'uppy', 'uppies'],
+  ['carry me', 'carry me please'],
+  ['may i', 'may i please', 'can i', 'can i please'],
+  ['wait', 'wait a minute', 'wait a second', 'wait a sec', 'just a minute', 'just a second', 'hang on', 'hold on'],
+  ['all done eating', 'done eating', 'finished eating'],
+
+  // Play, encouragement & togetherness
+  ['i did it', 'i did it myself', 'did it', 'i did that'],
+  ['try again', 'try it again', 'one more try', 'do over'],
+  ['ready to play', "let's play", 'lets play', 'wanna play', 'want to play', 'play with me'],
+  ["let's go", 'lets go', 'time to go', 'come on'],
+  ['i see you', 'i can see you', 'peekaboo', 'peek a boo'],
+  ["what's that", 'whats that', 'what is that', "what's this", 'whats this', 'what is this'],
+  ['where are you', 'where did you go', "where'd you go"],
+  ['family hug', 'group hug', 'big hug'],
+  ['snuggle with me', 'snuggle', 'snuggles', 'cuddle', 'cuddles', 'cuddle with me'],
+
+  // Bedtime & routines
+  ['read to me', 'read me a book', 'read me a story', 'story time', 'read a story'],
+  ['one more book', 'another book', 'one more story', 'another story'],
+  ['tuck me in', 'tuck in', 'tuck me in please'],
+  ['goodnight kiss', 'kiss goodnight', 'night night kiss'],
+  ['bath time', 'bathtime', 'take a bath', 'bath', 'bubble bath'],
+  ['brush teeth', 'brush your teeth', 'brush my teeth', 'toothbrush'],
+
+  // School & therapy
+  ['quiet please', 'quiet down', 'shh', 'shhh', 'inside voice'],
+  ['line up', 'get in line', 'time to line up', 'line up please'],
+  ['circle time', 'carpet time', 'rug time'],
+  ['raise my hand', 'raise your hand', 'hand up', 'hands up'],
+  ['show and tell', 'show n tell'],
+  ['calm corner', 'calm down corner', 'cozy corner', 'quiet corner'],
+  ['quiet space', 'calm space'],
+  ['visual schedule', 'schedule', 'my schedule'],
+  ['my aide', 'my helper'],
+  ['my lovey', 'lovey'],
+
+  // Places & things
+  ["grandma's house", 'grandmas house', "nana's house", 'nanas house', "granny's house"],
+  ["grandpa's house", 'grandpas house', "papa's house", 'papas house'],
+  ['next to', 'beside'],
+  ['ice cream', 'icecream'],
+  ['hot dog', 'hotdog', 'hot dogs', 'hotdogs'],
+  ['play dough', 'playdough', 'play doh', 'playdoh'],
+  ['jump rope', 'jumprope', 'skipping rope'],
+  ['hula hoop', 'hoola hoop'],
+  ['race car', 'racecar', 'racing car'],
+  ['fire truck', 'firetruck', 'fire engine'],
+  ['dump truck', 'dumptruck'],
+  ['garbage truck', 'trash truck', 'rubbish truck'],
+  ['cement mixer', 'mixer truck', 'concrete mixer'],
+  ['police car', 'cop car'],
+  ['police officer', 'policeman', 'policewoman', 'cop'],
+  ['mail carrier', 'mailman', 'mail man', 'postman', 'letter carrier'],
+  ['pill bug', 'roly poly', 'rolly polly', 'pillbug'],
+  ['water bottle', 'bottle of water'],
+  ['sippy cup', 'sippy'],
+  ['rain boots', 'rainboots', 'wellies', 'galoshes'],
+  ['action figure', 'action figures'],
+
+  // Holidays
+  ['fourth of july', '4th of july', 'july 4th', 'july fourth', 'independence day'],
+  ["st. patrick's day", 'st patricks day', "saint patrick's day", 'saint patricks day'],
+  ["valentine's day", 'valentines day', 'valentines'],
+  ["mother's day", 'mothers day'],
+  ["father's day", 'fathers day'],
+  ['april fools day', 'april fools', "april fool's day"],
+  ["new year's eve", 'new years eve'],
+  ['new year', 'new years'],
+
+  // Clock tiles: recognizers transcribe the hour as a digit or a word.
+  ["1 o'clock", "one o'clock"],
+  ["2 o'clock", "two o'clock"],
+  ["3 o'clock", "three o'clock"],
+  ["4 o'clock", "four o'clock"],
+  ["5 o'clock", "five o'clock"],
+  ["6 o'clock", "six o'clock"],
+  ["7 o'clock", "seven o'clock"],
+  ["8 o'clock", "eight o'clock"],
+  ["9 o'clock", "nine o'clock"],
+  ["10 o'clock", "ten o'clock"],
+  ["11 o'clock", "eleven o'clock"],
+  ["12 o'clock", "twelve o'clock"],
 ];
 
 // label → the other words of its set (derived once; sets stay the source).
@@ -171,8 +312,14 @@ export function expandMatchTerms(label, curated = [], { synonyms = SYNONYMS_PUBL
     if (n && n !== base) out.add(n);
   }
   // Engine synonyms: every tile whose label sits in a SYNONYM_SET matches
-  // the set's other words ("hello" tile hears "hi"/"hey").
-  if (synonyms) for (const s of SYNONYMS[base] || []) out.add(s);
+  // the set's other words ("hello" tile hears "hi"/"hey"). The lookup also
+  // tries a punctuation-stripped key: labels like "How are you?" or
+  // "It's okay." must still find their set (sets are keyed bare; client
+  // tokenizers strip the same punctuation when they index).
+  if (synonyms) {
+    const bare = base.replace(/[.,!?;:"()\[\]{}]/g, '').replace(/\s+/g, ' ').trim();
+    for (const s of SYNONYMS[base] || SYNONYMS[bare] || []) out.add(s);
+  }
   // Single words inflect; multi-word labels rely on curated terms (inflecting
   // "all done" or "ice cream" makes nothing useful).
   if (base && !base.includes(' ')) {

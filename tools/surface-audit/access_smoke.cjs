@@ -37,6 +37,40 @@ const fails = [];
   ok('board renders tiles', true);
   ok('hooks exposed', await page.evaluate(() => !!window.__accessHooks));
 
+  // ── Label band on the family board: image tiles carry the word IN the art
+  //    (the Label Lab recipe), the redundant under-tile label hides, and the
+  //    fit pass sizes text from the tile's real width — never the whisper
+  //    shrink of the container-measures-itself bug. ?bands=0 kills it. ──
+  const band = await page.evaluate(() => {
+    const bands = [...document.querySelectorAll('.items-grid .tile-square .tile-band')];
+    const sample = bands[0];
+    const sq = sample && sample.parentElement;
+    const labelHidden = (() => {
+      const w = document.querySelector('.items-grid .tile-wrap.banded .tile-label');
+      return w ? getComputedStyle(w).display === 'none' : false;
+    })();
+    return {
+      count: bands.length,
+      withText: bands.filter(b => (b.textContent || '').trim().length > 0).length,
+      labelHidden,
+      fontPx: sample ? parseFloat(getComputedStyle(sample).fontSize) : 0,
+      tileW: sq ? sq.clientWidth : 0,
+    };
+  });
+  ok('label bands render on image tiles', band.count >= 3 && band.withText === band.count);
+  ok('banded tile hides the under-tile label', band.labelHidden === true);
+  ok('band text is proportional to the tile (no whisper shrink)',
+    band.tileW > 0 && band.fontPx >= band.tileW * 0.09);
+
+  // The rest of the suite runs with ?bands=0: bands hide the under-tile
+  // labels, which shortens every grid below this viewport's overflow point —
+  // the paging tests need the taller pre-band geometry to have something to
+  // scroll. This doubles as the kill-switch assertion.
+  await page.goto('http://127.0.0.1:8765/u/testchild?bands=0', { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => document.querySelectorAll('.items-grid .tile-wrap').length > 3, { timeout: 15000 });
+  ok('?bands=0 kill switch restores the old look', await page.evaluate(() =>
+    document.querySelectorAll('.tile-band').length === 0));
+
   // ── Feature 1: button navigation ──
   await page.evaluate(() => window.__accessHooks.applyAccessSettings({ navMode: 'buttons', sentenceBuilder: true, sentenceLift: 'drag', sentenceIdleMin: 2, listenRepeatNav: true }));
   ok('body.nav-buttons-mode', await page.evaluate(() => document.body.classList.contains('nav-buttons-mode')));

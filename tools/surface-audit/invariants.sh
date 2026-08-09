@@ -172,17 +172,17 @@ grep -q "isParentOf" api/beacon.js || { fail "F1 beacon control lost the parent-
 grep -q "BEACON_PUBLIC" api/beacon.js || { fail "F1 beacon lost its BEACON_PUBLIC launch flag — the release gate must be an explicit flip"; F1=1; }
 [ "$F1" -eq 0 ] && pass "F1 emergency beacon unpaywalled, parent-controlled, media-owned"
 
-# ── F2: listening synonyms are dark-launched behind SYNONYMS_PUBLIC ──────────
-# Until the owner field-tests on his own child's device, only admin sync
-# callers get synonym expansion, and clients draw the spoken-word caption
-# only when sync said to (listenCaptions). Removing the flag or the sync
-# gate = accidental ship to every family; removing listenCaptions from the
-# sync payload = captions stuck at each device's last-known state.
+# ── F2: listening synonyms ride the SYNONYMS_PUBLIC rail (now public) ────────
+# Graduated 2026-08-09: SYNONYMS_PUBLIC=true ships synonym expansion and the
+# spoken-word caption flag (listenCaptions) to every board. The RAIL must
+# survive the graduation — losing the flag means no way to re-darken on a
+# field problem; removing listenCaptions from the sync payload = captions
+# stuck at each device's last-known state.
 F2=0
-grep -q "SYNONYMS_PUBLIC" api/_lib/word-match.js || { fail "F2 word-match.js lost its SYNONYMS_PUBLIC launch flag — the release gate must be an explicit flip"; F2=1; }
+grep -q "SYNONYMS_PUBLIC" api/_lib/word-match.js || { fail "F2 word-match.js lost its SYNONYMS_PUBLIC launch flag — the release gate must stay an explicit flip"; F2=1; }
 grep -q "SYNONYMS_PUBLIC" api/sync.js || { fail "F2 sync.js stopped consulting SYNONYMS_PUBLIC — synonym expansion would follow only the default"; F2=1; }
 grep -q "listenCaptions" api/sync.js || { fail "F2 sync.js no longer ships the listenCaptions flag — client captions can't follow the gate"; F2=1; }
-[ "$F2" -eq 0 ] && pass "F2 listening synonyms dark-launched (SYNONYMS_PUBLIC + synced listenCaptions)"
+[ "$F2" -eq 0 ] && pass "F2 listening synonyms public on the SYNONYMS_PUBLIC rail (+ synced listenCaptions)"
 
 # ── F3: multi-child accounts are dark-launched behind MULTI_CHILD_PUBLIC ─────
 # One login, many boards. While the flag is false only admins can add a child;
