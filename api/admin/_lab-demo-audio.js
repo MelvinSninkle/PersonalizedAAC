@@ -90,10 +90,39 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const voices = await db`SELECT voice_id, name FROM demo_voices ORDER BY name`;
       const built = {};
+      // TRUE set comparison per voice — clips on hand vs the ENTIRE current
+      // taxonomy. A raw blob count lies as soon as the taxonomy moves: grow
+      // it by 10 words while 10 orphaned clips (renamed/retired labels)
+      // linger and the count still reads "complete". Instead:
+      //   have    = taxonomy labels whose clip exists
+      //   missing = taxonomy labels with no clip (+ the label list, capped)
+      //   orphans = clips matching no current label (harmless, never played)
+      const coverage = {};
       for (const v of voices) {
-        built[v.voice_id] = (await existingKeys(`demo-audio/${v.voice_id}/`)).size;
+        const keys = await existingKeys(`demo-audio/${v.voice_id}/`);
+        built[v.voice_id] = keys.size;
+        const sampleKey = `demo-audio/${v.voice_id}/voice-sample.mp3`;
+        const wanted = new Set(labels.map((l) => `demo-audio/${v.voice_id}/${demoSlug(l.label)}.mp3`));
+        const missingLabels = labels.filter((l) => !keys.has(`demo-audio/${v.voice_id}/${demoSlug(l.label)}.mp3`))
+                                    .map((l) => l.label);
+        let orphans = 0;
+        for (const k of keys) { if (!wanted.has(k) && k !== sampleKey) orphans++; }
+        coverage[v.voice_id] = {
+          have: labels.length - missingLabels.length,
+          missing: missingLabels.length,
+          missingLabels: missingLabels.slice(0, 60),
+          missingSample: !keys.has(sampleKey),
+          orphans,
+        };
+        // Keep the PUBLIC /api/demo completeness gate honest without waiting
+        // for the next build: counters follow the true comparison.
+        try {
+          await db`UPDATE demo_voices
+                   SET clips_built = ${labels.length - missingLabels.length}, clips_total = ${labels.length}
+                   WHERE voice_id = ${v.voice_id}`;
+        } catch (_) {}
       }
-      res.status(200).json({ ok: true, tiles: labels.length, voices, built });
+      res.status(200).json({ ok: true, tiles: labels.length, voices, built, coverage });
       return;
     }
 
