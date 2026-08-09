@@ -86,6 +86,9 @@ export default async function handler(req, res) {
 
   // Stripe webhook authenticates by signature, not session — handle first.
   if (action === 'stripe-webhook') return stripeWebhook(req, res, db, raw);
+  // Founding Family checkout is PRE-ACCOUNT by design (the waitlist funnel) —
+  // it authenticates with the waitlist row's HMAC token instead of a session.
+  if (action === 'concierge-checkout') return conciergeCheckout(req, res, db, raw ? parseJSON(raw) : {});
 
   const auth = await checkAuth(req);
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
@@ -1139,6 +1142,148 @@ async function stripeCheckout(req, res, db, auth, uid, body) {
   res.status(200).json({ ok: true, url: d.url });
 }
 
+// ── Founding Family concierge (the waitlist funnel) ─────────────────────────
+//
+// One Checkout, honest framing: the chosen membership starts billing TODAY,
+// plus a one-time $20 concierge setup item. No trial, no "commitment" theater
+// — the card on file and the live subscription ARE the commitment. The
+// webhook (below) marks the waitlist row paid, mints a single-use invite
+// code, and emails it; registration (register.js) links the already-running
+// subscription to the new account by email.
+const CONCIERGE_CENTS = 2000;
+
+async function conciergeCheckout(req, res, db, body) {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) { res.status(501).json({ error: 'stripe_not_configured' }); return; }
+  if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+  const sub = subscriptionBySku(String(body.sku || ''));
+  if (!sub || sub.hidden) { res.status(400).json({ error: 'unknown tier' }); return; }
+
+  // Two callers, one preference order:
+  //   1. A SIGNED-IN founding parent (the /founding letter flow) — the
+  //      ACCOUNT owns the subscription from the first charge, so the normal
+  //      webhook paths handle everything and no email-matching is needed.
+  //   2. Legacy anonymous waitlist flow — authenticated by the row token
+  //      /api/waitlist minted; register.js links the sub by email later.
+  const auth = await checkAuth(req);
+  const uid = auth.ok ? (Number(auth.user.uid || auth.user.id) || null) : null;
+  let email;
+  let waitlistId = 0;
+  if (uid) {
+    email = String(auth.user.email || '').toLowerCase();
+  } else {
+    email = String(body.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      res.status(400).json({ error: 'Valid email required' }); return;
+    }
+    waitlistId = Number(body.waitlistId) || 0;
+    const { verifyWaitlistToken } = await import('./waitlist.js');
+    if (!waitlistId || !verifyWaitlistToken(body.token, waitlistId)) {
+      res.status(401).json({ error: 'bad or expired signup token — rejoin the waitlist and try again' });
+      return;
+    }
+  }
+
+  const origin = `https://${req.headers.host}`;
+  const form = new URLSearchParams();
+  form.set('mode', 'subscription');
+  form.set('success_url', origin + (uid ? '/founding?paid=1' : '/?concierge=paid#waitlist'));
+  form.set('cancel_url', origin + (uid ? '/founding' : '/#waitlist'));
+  form.set('customer_email', email);
+  form.set('metadata[kind]', 'concierge');
+  form.set('metadata[sku]', sub.sku);
+  form.set('metadata[email]', email);
+  if (uid) {
+    // The signed-in path rides the SAME webhook rails as any web
+    // subscription: userId metadata → sub tagging, customer save, and
+    // invoice.paid credit grants, no concierge special-casing needed.
+    form.set('client_reference_id', String(uid));
+    form.set('metadata[userId]', String(uid));
+  } else {
+    form.set('metadata[waitlistId]', String(waitlistId));
+  }
+  form.set('line_items[0][quantity]', '1');
+  form.set('line_items[0][price_data][currency]', 'usd');
+  form.set('line_items[0][price_data][unit_amount]', String(sub.cents));
+  form.set('line_items[0][price_data][recurring][interval]', 'month');
+  form.set('line_items[0][price_data][product_data][name]', `${sub.label}: ${sub.creditsPerPeriod} credits/month`);
+  // One-time concierge item rides the first invoice of the subscription.
+  form.set('line_items[1][quantity]', '1');
+  form.set('line_items[1][price_data][currency]', 'usd');
+  form.set('line_items[1][price_data][unit_amount]', String(CONCIERGE_CENTS));
+  form.set('line_items[1][price_data][product_data][name]', 'Founding Family concierge setup (one-time)');
+  const r = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form.toString(),
+  });
+  const d = await r.json();
+  if (!r.ok) { res.status(502).json({ error: 'stripe error', detail: d.error && d.error.message }); return; }
+  res.status(200).json({ ok: true, url: d.url });
+}
+
+// Webhook side: stamp the waitlist row, mint the single-use invite code, and
+// email it. Idempotent — a Stripe redelivery finds paid_at already set.
+async function handleConciergePaid(db, s) {
+  const { ensureWaitlist } = await import('./waitlist.js');
+  await ensureWaitlist(db);
+  const wid = Number(s.metadata && s.metadata.waitlistId) || 0;
+  const email = String((s.metadata && s.metadata.email) || (s.customer_details && s.customer_details.email) || '').toLowerCase();
+  const sku = (s.metadata && s.metadata.sku) || '';
+  let row = wid ? (await db`SELECT id, email, invite_code, paid_at FROM waitlist WHERE id = ${wid} LIMIT 1`)[0] : null;
+  if (!row && email) {
+    // Metadata lost / row gone — never strand a payment: recreate the row.
+    const ins = await db`INSERT INTO waitlist (email, source) VALUES (${email}, 'concierge-webhook') RETURNING id, email, invite_code, paid_at`;
+    row = ins[0];
+  }
+  if (!row) { console.error('concierge webhook: no waitlist row and no email; session', s.id); return; }
+  if (row.paid_at && row.invite_code) return;   // redelivery — already handled
+
+  // Single-use gate code. Perks stay empty on purpose: the REAL subscription
+  // is already running on Stripe; register.js links it to the new account.
+  const code = 'vip-' + randomCouponCode(6).toLowerCase();
+  try {
+    await db`INSERT INTO invite_codes (code, label, active, max_uses)
+             VALUES (${code}, ${'Founding Family — ' + row.email}, TRUE, 1)`;
+  } catch (_) {
+    // Pre-migration invite_codes without max_uses — still a working gate code.
+    await db`INSERT INTO invite_codes (code, label, active)
+             VALUES (${code}, ${'Founding Family — ' + row.email}, TRUE)`;
+  }
+  await db`UPDATE waitlist
+           SET paid_at = NOW(), paid_sku = ${sku || null},
+               stripe_customer_id = ${String(s.customer || '') || null},
+               stripe_subscription_id = ${String(s.subscription || '') || null},
+               invite_code = ${code}
+           WHERE id = ${row.id}`;
+  // Tag the subscription so renewals resolve even before the account exists.
+  try {
+    await fetch(`https://api.stripe.com/v1/subscriptions/${s.subscription}`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + process.env.STRIPE_SECRET_KEY, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ 'metadata[kind]': 'concierge', 'metadata[waitlistId]': String(row.id),
+                                  'metadata[sku]': sku, 'metadata[email]': row.email }).toString(),
+    });
+  } catch (_) {}
+  try {
+    const { sendEmail, emailConfigured } = await import('./_lib/email.js');
+    if (emailConfigured()) {
+      await sendEmail({
+        to: row.email,
+        subject: "You're a My World Founding Family — here's your code",
+        text: 'Thank you! Your membership is active and your concierge board build is on us.\n\n'
+            + 'Your personal invite code: ' + code + '\n\n'
+            + 'Next steps:\n'
+            + '1. Go to https://myworldtaptotalk.com/welcome and enter the code.\n'
+            + '2. Create your account with THIS email address (' + row.email + ') so your membership connects automatically.\n'
+            + '3. Walk through onboarding — your photos and choices there are what we build from.\n\n'
+            + "We'll personally build out your child's full board and check in with you directly. "
+            + 'Reply to this email any time — you are talking to the founder.\n',
+      });
+    }
+  } catch (err) { console.error('concierge email failed:', String(err && err.message || err)); }
+}
+
 // "Manage billing" on the web: a Stripe billing-portal session where the
 // subscriber can upgrade, downgrade, or cancel. (Apple subscriptions are
 // managed in iOS Settings — the app links there instead.)
@@ -1211,6 +1356,11 @@ async function stripeWebhook(req, res, db, raw) {
       if (uid && s.customer) {
         try { await db`UPDATE users SET stripe_customer_id = ${String(s.customer)} WHERE id = ${uid}`; } catch (_) {}
       }
+      // Founding Family (pre-account, uid is null): stamp the waitlist row,
+      // mint the invite code, send the email.
+      if (!uid && (s.metadata && s.metadata.kind) === 'concierge' && s.mode === 'subscription') {
+        await handleConciergePaid(db, s);
+      }
     } else if (event.type === 'invoice.paid') {
       const inv = event.data.object;
       const meta = (inv.subscription_details && inv.subscription_details.metadata) || inv.metadata || {};
@@ -1233,6 +1383,10 @@ async function stripeWebhook(req, res, db, raw) {
                                    credits: sub.creditsPerPeriod,
                                    amountCents: inv.amount_paid || null, externalId: 'stripe:' + inv.id,
                                    childId: meta.childId || null });
+      } else if ((meta.kind || '') === 'concierge') {
+        // Expected pre-account state: a Founding Family paid before creating
+        // their account. First-period credits are granted when register.js
+        // links the subscription; renewals resolve via stripe_customer_id.
       } else {
         // Surfaced in Vercel logs — an invoice we could not attribute means a
         // paying subscriber got no credits. Investigate via the Stripe

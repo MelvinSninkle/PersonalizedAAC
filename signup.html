@@ -77,6 +77,11 @@
   const msg = $('msg');
   const form = $('signup-form');
 
+  // ?code=... prefill (the Founding Family letter links here with its code) —
+  // the code still validates server-side at registration like any other.
+  const urlCode = new URLSearchParams(location.search).get('code');
+  if (urlCode && !$('inviteCode').value) $('inviteCode').value = urlCode;
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     msg.className = 'msg';

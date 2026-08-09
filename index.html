@@ -249,7 +249,7 @@
     <a href="#how">How it works</a>
     <a href="#try">Try it</a>
     <a href="#pricing">Pricing</a>
-    <a class="cta" href="/signup">Get early access</a>
+    <a class="cta" href="#waitlist">Join the waitlist</a>
   </div>
 </nav>
 
@@ -263,11 +263,13 @@
       <em>become</em> their vocabulary, rendered in the style they love. Tap a tile, it talks.
     </p>
     <div class="ctas hero-ctas">
-      <a class="btn primary" href="/signup">Create your child’s account</a>
+      <a class="btn primary" href="#waitlist">Join the waitlist</a>
       <a class="btn secondary" href="/practice">🧩 Try the board live</a>
       <a class="btn secondary" href="#try">See how it works</a>
     </div>
-    <p class="tiny">Exact-photo tiles are always free. Styled art is part of memberships from $9.99/month.</p>
+    <p class="tiny">We're welcoming families in waves — join the waitlist and we'll email your invite code.
+      Launching first on iPhone &amp; iPad; Android is next.
+      Exact-photo tiles are always free. Styled art is part of memberships from $9.99/month.</p>
     <p class="tiny">Already have an account? <a class="member-cta" href="/login">Sign in to set up your child's board →</a></p>
   </div>
 </section>
@@ -310,7 +312,8 @@
     </div>
 
     <div style="text-align: center; margin-top: 48px;">
-      <a class="btn primary" href="/signup">Create your child’s account</a>
+      <a class="btn primary" href="#waitlist">Join the waitlist</a>
+      <p style="margin-top: 12px; font-size: 13px; color: #6b7280;">Have an invite code? <a href="/signup" style="font-weight:700;">Create your child's account →</a></p>
     </div>
   </div>
 </section>
@@ -345,8 +348,9 @@
     </figure>
 
     <div style="text-align: center; margin-top: 48px;">
-      <a class="btn primary" href="/signup">Create my child’s account</a>
-      <p style="margin-top: 12px; font-size: 13px; color: #6b7280;">Setting up an account is free. Styled boards are part of memberships from $9.99/month.</p>
+      <a class="btn primary" href="#waitlist">Join the waitlist</a>
+      <p style="margin-top: 12px; font-size: 13px; color: #6b7280;">Setting up an account is free once your invite arrives. Styled boards are part of memberships from $9.99/month.
+        Have an invite code? <a href="/signup" style="font-weight:700;">Create your child's account →</a></p>
     </div>
   </div>
 </section>
@@ -460,21 +464,25 @@
       </ul>
       <p class="tiny" style="margin-top:10px;">1 credit = one styled picture · family-member portraits use 5 · credit top-up packs from $4.99.
         Memberships renew monthly until cancelled; manage or cancel anytime in the store.</p>
-      <a class="btn primary" href="/signup" style="width: 100%;">Create your child's account</a>
-      <p class="tiny">No card needed to create the account.</p>
+      <a class="btn primary" href="#waitlist" style="width: 100%;">Join the waitlist</a>
+      <p class="tiny">No card needed to join. Have an invite code? <a href="/signup" style="font-weight:700;">Create your child's account →</a></p>
     </div>
   </div>
 </section>
 
 <section class="signup" id="signup">
   <div class="wrap">
-    <div class="eyebrow" style="color: #ffd400;">Get started</div>
+    <div class="eyebrow" style="color: #ffd400;">Launching in waves</div>
     <h2>Build your child's world today.</h2>
-    <p class="lead">Create your account and set up the first board in about five minutes. No card needed to start. Styled art is part of memberships from $9.99/month.</p>
+    <p class="lead">We're opening My World to families a group at a time, so every board gets our full attention.
+      Join the waitlist below and we'll email your invite code the moment spots open.
+      The app launches first on <strong>iPhone &amp; iPad</strong> (plus the full web board on any computer) — <strong>Android and Kindle Fire are next</strong>.
+      Setting up takes about five minutes once you're in. Styled art is part of memberships from $9.99/month.
+      In a hurry? <a href="/founding" style="color:#ffd400; font-weight:700;">The founder's letter</a> is the door for families who want in today.</p>
 
     <div style="margin-top: 24px;">
-      <a class="btn primary" href="/signup">Create your child's account</a>
-      <p style="margin-top: 12px; font-size: 13px; color: rgba(255,255,255,.85);">Already have an account? <a href="/login" style="color: #fff; font-weight: 700;">Sign in</a></p>
+      <p style="font-size: 13px; color: rgba(255,255,255,.85);">Have an invite code? <a href="/signup" style="color: #fff; font-weight: 700;">Create your child's account →</a>
+        · Already have an account? <a href="/login" style="color: #fff; font-weight: 700;">Sign in</a></p>
     </div>
 
     <div id="waitlist" style="margin-top: 44px; padding-top: 34px; border-top: 1px solid rgba(255,255,255,.25);">
@@ -490,13 +498,18 @@
         <button class="btn primary" type="submit" id="wl-btn" style="align-self: center; min-width: 220px;">Join the waitlist</button>
         <p class="msg" id="wl-msg" style="text-align: center; margin-top: 4px;"></p>
       </form>
+
+      <p style="margin-top: 26px; color:#fce4ec; font-size: 14px;">
+        Can't wait, and your child uses an iPhone or iPad?
+        <a href="/founding" style="color:#ffd400; font-weight:700;">Read the founder's letter and become a Founding Family →</a>
+      </p>
     </div>
   </div>
 </section>
 
 <footer>
   <p><span class="brand">My World</span> · Built by a dad for his son, for every child finding their voice.</p>
-  <p style="margin-top: 6px;">© Andrew Peterson.</p>
+  <p style="margin-top: 6px;">© My World Tap to Talk LLC.</p>
   <p style="margin-top: 10px;">Already have an account? <a class="member-cta" href="/login">Sign in</a>. Your board setup continues right where you left it.</p>
 </footer>
 
@@ -533,6 +546,21 @@
   }
   fillWaitlistStyles([...picker.querySelectorAll('.style-chip')].map(c => c.textContent.trim()).filter(Boolean));
 
+  // Arrived from the founder's letter because the current group filled up —
+  // say so plainly, right above the form they were sent to.
+  if (new URLSearchParams(location.search).get('group') === 'full') {
+    const msg = document.getElementById('wl-msg');
+    if (msg) {
+      msg.className = 'msg';
+      msg.textContent = 'The current Founding Family group is full — thank you for reading the letter. ' +
+        'Join the waitlist here and we\'ll email your invite code as the next group opens. The list is worked in order.';
+    }
+  }
+
+  // The waitlist stays a LIGHT lead capture on purpose: a parent whose kid
+  // needs words doesn't want to fill out our stuff. Photos, payment, and
+  // everything else belong to the ACCOUNT — the Founding Family letter
+  // (/founding) is the skip-the-line door for parents who want in today.
   const wlForm = document.getElementById('wl-form');
   if (wlForm) wlForm.addEventListener('submit', async (e) => {
     e.preventDefault();

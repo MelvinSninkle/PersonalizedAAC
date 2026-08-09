@@ -1,26 +1,41 @@
 import SwiftUI
+import Combine
 import AVFoundation
 
-/// The onboarding practice board — the first thing a brand-new install lands
-/// on, and what a signed-out device returns to, so a new family can register
-/// from any device. The native twin of the web's /practice page: it renders
-/// the same PUBLIC starter-board projection (GET /api/demo — live-fetched,
-/// never a bundled fixture) with the same one-strip toolbar of filters:
+// MARK: -- Practice chrome (environment payload TileView reads)
+
+/// Injected ONLY by PracticeBoardView. Its presence turns on the Label Lab
+/// caption bands + the pink/violet tier rings and suppresses the under-tile
+/// label inside TileView; every real board renders without it, untouched.
+@Observable
+final class PracticeChrome {
+    /// Tile ids whose category is on the Label Lab skip list (alphabet,
+    /// numbers, movie posters, clock faces — categories that ARE their label).
+    var bandSkip: Set<Int> = []
+}
+
+/// The pre-login practice board — the first thing a brand-new install lands
+/// on, and what a signed-out device returns to. It IS the child's board:
+/// the real SectionColumn / NeedsStrip / TileView pipeline, the real game
+/// modes (📖 Teach me, 🙋 Play with me), and real Listening Mode, rendering
+/// the same public /api/demo starter projection the web practice page uses —
+/// so a screen recording of this screen is a screen recording of the product.
 ///
-///   Style   — Classic + every published style (per-style pre-rendered art)
-///   Meet    — the style's demo kids; person tiles re-render for the pick
-///   Voice   — pre-built demo clips (demo-audio/<voice>/<slug>.mp3); the
-///             device voice is the offline fallback, never live TTS
+/// The differences from a real board are exactly the practice affordances:
+///   - a second header row with the Style / Meet / Voice filters, the
+///     ✨ What's-personalized tour, and local-only tap counters
+///   - "Register an Account" where the child's name would be
+///   - the lock button opens the create-an-account pitch (editing, adding
+///     your own pictures — that's what the account is for)
 ///
-/// Where the child's name sits on a real board, this header carries a
-/// persistent "Register an Account" button; a welcome tour floats over the
-/// first load explaining the pink/violet personalization rings (same honest
-/// tier framing as the web page), and local-only tap counters give a taste
-/// of the real product's tracking. Style + voice choices carry into the
-/// onboarding pickers when the parent registers.
+/// Tap audio plays the selected voice's PRE-RENDERED demo clips
+/// (demo-audio/<voice>/<slug>.mp3 through /api/media's public prefix) as each
+/// tile's soundKey — the normal TilePlayer path — with device speech as the
+/// offline fallback. Never live TTS (standing practice-board rule).
 struct PracticeBoardView: View {
+    @Environment(DisplayPrefs.self) private var prefs
     @Environment(OnboardingCoordinator.self) private var coord
-    @Environment(\.horizontalSizeClass) private var hSize
+    @Environment(GameController.self) private var game
 
     // MARK: payload (mirror of /api/demo)
 
@@ -31,6 +46,7 @@ struct PracticeBoardView: View {
             let category: String?
             let subcategory: String?
             let imageKey: String?
+            let matchTerms: [String]?
         }
         struct Folder: Decodable {
             let section: String?
@@ -45,9 +61,16 @@ struct PracticeBoardView: View {
         let voices: [VoiceOpt]?
         let styles: [StyleOpt]?
         let kids: [KidOpt]?
+        let listenBlocklist: [String]?
     }
 
     // MARK: state
+
+    /// Practice content rides its OWN in-memory BoardStore, injected over the
+    /// app-wide one for this subtree — SectionColumn, NeedsStrip, the games,
+    /// and the listening strip all read it through the normal environment.
+    @State private var store = BoardStore(hydrateFromDiskCache: false)
+    @State private var chrome = PracticeChrome()
 
     @State private var payload: Payload?
     @State private var styleId: Int?          // nil = Classic (generic starter art)
@@ -57,84 +80,203 @@ struct PracticeBoardView: View {
     @State private var voiceId: String?
     @State private var loading = true
     @State private var errorText: String?
-    /// The welcome tour — floats over the first load (register CTA + what the
-    /// rings mean + things to try), reopenable from ✨ What's personalized?.
+
+    /// The welcome tour — floats over the first load, reopenable from ✨.
     @State private var showTour = true
+    @State private var showAccountPrompt = false
     /// Local-only stats, like the web page: nothing posts anywhere.
     @State private var taps = 0
     @State private var tappedWords: Set<String> = []
-    /// Per-section chip selection (category / subcategory labels).
-    @State private var selCat: [String: String] = [:]
-    @State private var selSub: [String: String] = [:]
-    /// Phone layout: one section at a time (mirrors the web's <700px tabs).
-    @State private var phoneTab: String = "nouns"
-    @State private var player: AVAudioPlayer?
+
+    // Listening Mode — the same wiring BoardView uses (mic → rolling strip).
+    @State private var speech = SpeechListener()
+    @State private var listening = false
+    @State private var listenTimeout: Task<Void, Never>?
+
+    @State private var samplePlayer: AVAudioPlayer?
 
     private let api = APIClient()
-    /// Static so a mid-utterance view re-render can't deallocate the
-    /// synthesizer and clip the word.
-    private static let speech = AVSpeechSynthesizer()
-    /// The real board's default tiles-across, per section (web ACROSS).
-    private let across: [String: Int] = ["people": 2, "nouns": 5, "verbs": 2]
 
     var body: some View {
         VStack(spacing: 0) {
             headerBar
             filterBar
-            content
+            boardArea
         }
-        .background(Color(hex: "#ffffff"))
+        .background(Color(hex: "#fff7fb"))
+        .environment(store)      // practice content, NOT the family board
+        .environment(chrome)
+        .overlay { loadStateOverlay }
         .overlay { tourOverlay }
         .task(id: "\(styleId ?? 0)|\(kidId ?? 0)") { await load() }
+        // The real game covers — Teach me and Play with me present the same
+        // views a child's board presents.
+        .fullScreenCover(item: gameSessionBinding) { session in
+            Group {
+                switch session.mode {
+                case .matching, .auditoryComprehension, .clueQuiz:
+                    MatchingView(session: session) { endGame() }
+                case .expressiveNaming:
+                    ExpressiveNamingView(session: session) { endGame() }
+                case .slideshow:
+                    SlideshowView(session: session) { endGame() }
+                case .teach:
+                    TeachShowView(session: session) { endGame() }
+                case .celebration:
+                    CelebrationView { endGame() }
+                }
+            }
+        }
+        // Listening Mode lifecycle — mirrors BoardView: start/stop with the
+        // toggle, auto-stop after 2 minutes of silence.
+        .onChange(of: listening) { _, on in
+            listenTimeout?.cancel()
+            if on {
+                guard game.current == nil else { listening = false; return }
+                speech.start()
+                scheduleListenTimeout()
+            } else {
+                speech.stop()
+            }
+        }
+        .onChange(of: speech.transcript) { _, t in
+            if listening && !t.isEmpty { scheduleListenTimeout() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .myWorldTileSpoken)) { note in
+            taps += 1
+            if let label = note.userInfo?["label"] as? String {
+                tappedWords.insert(label.lowercased())
+            }
+        }
+        .onDisappear {
+            listenTimeout?.cancel()
+            if listening { listening = false }
+            speech.stop()
+            samplePlayer?.stop()
+        }
+        .sheet(isPresented: $showAccountPrompt) { accountPromptSheet }
     }
 
-    // MARK: -- Row 1: brand · REGISTER (the child-name slot) · log in
+    // MARK: -- Row 1: the real board header, practice edition
+    //
+    // Lock · mic — [Register an Account in the child-name slot] — Teach · Play
 
     private var headerBar: some View {
         ZStack {
-            // Center: where a real board shows "{Name}'s World" — here it's
-            // the persistent register button.
-            Button {
-                register()
-            } label: {
-                Text("Register an Account")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .lineLimit(1)
-                    .padding(.horizontal, 16).padding(.vertical, 7)
-                    .background(Color.white, in: Capsule())
-                    .foregroundStyle(Color(hex: Brand.pinkDeep))
-                    .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
-            }
-            .buttonStyle(.plain)
-
-            HStack(spacing: 8) {
-                Image(systemName: "globe.americas.fill")
-                    .foregroundStyle(.white)
-                if hSize != .compact {
-                    Text("My World · Try the board")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                }
-                Spacer()
+            if listening {
+                ListenStripView(speech: speech)
+                    .padding(.horizontal, 66)   // clear the side buttons
+            } else {
                 Button {
-                    logIn()
+                    register()
                 } label: {
-                    Text("Log in")
-                        .font(.system(size: 13, weight: .semibold))
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(Color.white.opacity(0.18), in: Capsule())
-                        .foregroundStyle(.white)
+                    Text("Register an Account")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .lineLimit(1)
+                        .padding(.horizontal, 16).padding(.vertical, 7)
+                        .background(Color.white, in: Capsule())
+                        .foregroundStyle(Color(hex: Brand.pinkDeep))
+                        .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
                 }
                 .buttonStyle(.plain)
             }
+
+            HStack(spacing: 10) {
+                if !listening { lockButton }
+                listenButton
+                    .padding(.trailing, listening ? 6 : 0)
+                Spacer()
+                if !listening {
+                    teachMeButton
+                    playWithMeButton
+                }
+            }
             .padding(.horizontal, 12)
         }
-        .frame(height: 48)
+        .frame(height: listening ? 104 : 48)
+        .animation(.easeInOut(duration: 0.2), value: listening)
         .background(Color(hex: Brand.pink))
     }
 
-    // MARK: -- Row 2: the practice filters (style · meet · voice · ✨ · stats)
+    /// The lock a real board carries. Here, unlocking IS the pitch: editing
+    /// and adding your own pictures is what the account unlocks.
+    private var lockButton: some View {
+        Button {
+            showAccountPrompt = true
+        } label: {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.55))
+                .padding(8)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var listenButton: some View {
+        Button {
+            listening.toggle()
+        } label: {
+            Image(systemName: listening ? "stop.circle.fill" : "mic.circle.fill")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(listening ? Color(hex: "#dc2626") : Color.white.opacity(0.9))
+                .padding(6)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var teachMeButton: some View {
+        Button {
+            guard game.current == nil, !store.tiles.isEmpty else { return }
+            game.startLocal(.teach, scope: "all", sample: 10)
+        } label: {
+            Text("📖 Teach me")
+                .font(.system(size: 14, weight: .semibold))
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(Color.white.opacity(0.18))
+                .foregroundStyle(.white)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var playWithMeButton: some View {
+        Button {
+            guard game.current == nil, !store.tiles.isEmpty else { return }
+            game.startLocal(.matching, scope: "all", sample: 10)
+        } label: {
+            Text("🙋 Play with me")
+                .font(.system(size: 14, weight: .semibold))
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(Color.white.opacity(0.18))
+                .foregroundStyle(.white)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func endGame() {
+        // Pre-login there is no live channel to reset — just close the session.
+        game.sessionDidEnd()
+    }
+
+    private var gameSessionBinding: Binding<GameController.Session?> {
+        Binding(
+            get: { game.current },
+            set: { newValue in if newValue == nil { game.stop() } }
+        )
+    }
+
+    private func scheduleListenTimeout() {
+        listenTimeout?.cancel()
+        listenTimeout = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000_000)
+            if !Task.isCancelled && listening { listening = false }
+        }
+    }
+
+    // MARK: -- Row 2: the practice filters
 
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -171,11 +313,8 @@ struct PracticeBoardView: View {
         }
     }
 
-    /// The "Meet" filter — who the demo board is about. Always visible while
-    /// a style is active (the web hides it until a style has extra kids,
-    /// which made it undiscoverable): with no alternates yet it still shows
-    /// "Our demo kid" so the concept reads, and extra kids appear as styles
-    /// finish rendering them.
+    /// The "Meet" filter — who the demo board is about. Visible whenever a
+    /// style is active (extra kids appear as styles finish rendering them).
     @ViewBuilder
     private var kidMenu: some View {
         if styleId != nil {
@@ -207,6 +346,7 @@ struct PracticeBoardView: View {
             ForEach(payload?.voices ?? [], id: \.id) { v in
                 Button {
                     voiceId = v.id
+                    rebuildTiles()
                     playVoiceSample()
                 } label: {
                     if effectiveVoiceId == v.id { Label(v.name, systemImage: "checkmark") } else { Text(v.name) }
@@ -214,7 +354,7 @@ struct PracticeBoardView: View {
             }
             Button {
                 voiceId = ""
-                speakLocal("Hello!")
+                rebuildTiles()
             } label: {
                 if effectiveVoiceId == "" { Label("Device voice", systemImage: "checkmark") } else { Text("Device voice") }
             }
@@ -292,232 +432,295 @@ struct PracticeBoardView: View {
         if effectiveVoiceId == "" { return "Device voice" }
         return payload?.voices?.first { $0.id == effectiveVoiceId }?.name ?? "—"
     }
-    /// Web parity: a warm human voice IS the demo, so the first real voice is
-    /// the default; "" is an explicit device-voice pick and is never overridden.
+    /// A warm human voice IS the demo, so the first real voice is the default;
+    /// "" is an explicit device-voice pick and is never overridden.
     private var effectiveVoiceId: String? {
         if let voiceId { return voiceId }
         return payload?.voices?.first?.id
     }
 
-    // MARK: -- Board content
+    // MARK: -- The board itself — the REAL board's layout math + components
 
-    @ViewBuilder
-    private var content: some View {
-        if loading && payload == nil {
-            Spacer()
-            ProgressView("Loading the board…")
-                .tint(Color(hex: Brand.pink))
-            Spacer()
-        } else if let err = errorText, payload == nil {
-            Spacer()
-            VStack(spacing: 12) {
-                Text(err)
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color(hex: Brand.muted))
-                    .multilineTextAlignment(.center)
-                Button("Try again") { Task { await load() } }
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 18).padding(.vertical, 10)
-                    .background(Color(hex: Brand.pink), in: Capsule())
-                    .foregroundStyle(.white)
-            }
-            .padding(30)
-            Spacer()
-        } else if let p = payload {
-            boardBody(p)
-        }
-    }
-
-    private func boardBody(_ p: Payload) -> some View {
-        // WEB PARITY (the "hot garbage" fix): the web practice page weights
-        // the three columns 2:5:2 (People:Nouns:Verbs — the tiles-across of
-        // each section), so EVERY tile on the board renders the same size.
-        // Equal-width columns made People/Verbs tiles triple the size of
-        // Nouns. The Needs strip sizes off the same full-board total.
+    private var boardArea: some View {
         GeometryReader { geo in
-            let sections = visibleSections
-            let totalWeight = max(1, sections.reduce(0) { $0 + (across[$1] ?? 3) })
-            let allWeight = max(1, ["people", "nouns", "verbs"].reduce(0) { $0 + (across[$1] ?? 3) })
-            let needsTile = max(64, geo.size.width / CGFloat(allWeight) - 10)
+            let tile = computeLayout(in: geo.size.width)
             VStack(spacing: 0) {
-                if hSize == .compact { phoneTabs }
-                HStack(alignment: .top, spacing: 0) {
-                    ForEach(sections, id: \.self) { section in
-                        sectionColumn(section, in: p)
-                            .frame(width: geo.size.width * CGFloat(across[section] ?? 3) / CGFloat(totalWeight))
+                HStack(spacing: 0) {
+                    let visible = visibleColumns
+                    ForEach(Array(visible.enumerated()), id: \.element) { idx, section in
+                        SectionColumn(section: section, tileSize: tile)
+                            .frame(width: BoardMetrics.columnWidth(across: prefs.across(section),
+                                                                   tile: tile))
+                        if idx < visible.count - 1 { Divider() }
                     }
+                    Spacer(minLength: 0)
                 }
                 .frame(maxHeight: .infinity)
-                needsStrip(p, tileWidth: needsTile)
+
+                if prefs.showNeeds {
+                    Divider()
+                    NeedsStrip(tileSize: tile)
+                }
             }
         }
     }
 
-    /// iPad: the three columns side by side. iPhone: one at a time via tabs.
-    private var visibleSections: [String] {
-        hSize == .compact ? [phoneTab] : ["people", "nouns", "verbs"]
+    private var visibleColumns: [BoardSection] {
+        [.people, .nouns, .verbs].filter { prefs.show($0) }
     }
 
-    private var phoneTabs: some View {
-        HStack(spacing: 8) {
-            ForEach(["people", "nouns", "verbs"], id: \.self) { s in
-                Button {
-                    phoneTab = s
-                } label: {
-                    Text(s.capitalized)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .padding(.horizontal, 14).padding(.vertical, 7)
-                        .background(phoneTab == s ? Color(hex: Brand.pink) : Color.white, in: Capsule())
-                        .foregroundStyle(phoneTab == s ? .white : Color(hex: Brand.pinkDeep))
-                        .overlay(Capsule().strokeBorder(Color(hex: Brand.line), lineWidth: 1))
-                }
-                .buttonStyle(.plain)
+    private func computeLayout(in width: CGFloat) -> CGFloat {
+        let visible = visibleColumns
+        let n = visible.count
+        guard n > 0, width > 0 else { return BoardMetrics.minTile }
+        let totalAcross = visible.reduce(0) { $0 + prefs.across($1) }
+        guard totalAcross > 0 else { return BoardMetrics.minTile }
+        let chromeWidth = visible.reduce(CGFloat(0)) { acc, s in
+            let a = prefs.across(s)
+            return acc + 2 * BoardMetrics.columnPad + CGFloat(a - 1) * BoardMetrics.tileGap
+        } + CGFloat(n - 1) * BoardMetrics.dividerWidth
+        let availForTiles = max(0, width - chromeWidth)
+        let idealTile = width / BoardMetrics.referenceAcross
+        let fitTile = availForTiles / CGFloat(totalAcross)
+        return max(BoardMetrics.minTile, min(idealTile, fitTile))
+    }
+
+    // MARK: -- Data: /api/demo → real Category/Tile models
+
+    private func load() async {
+        loading = true
+        errorText = nil
+        defer { loading = false }
+        var path = "/api/demo"
+        var q: [String] = []
+        if let styleId { q.append("style=\(styleId)") }
+        if let kidId { q.append("kid=\(kidId)") }
+        if !q.isEmpty { path += "?" + q.joined(separator: "&") }
+        do {
+            let (data, _) = try await api.request(method: "GET", path: path, body: nil)
+            let p = try JSONDecoder().decode(Payload.self, from: data)
+            if p.tiles.isEmpty && payload != nil { return }   // keep the board we have
+            payload = p
+            if p.tiles.isEmpty {
+                errorText = "The practice board isn't available right now, but the real thing is — tap Register an Account above!"
+            }
+            rebuildTiles()
+        } catch {
+            if payload == nil {
+                errorText = "Couldn't load the practice board. Check the connection and try again."
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
-        .background(Color(hex: Brand.bg))
     }
 
-    private func tiles(_ p: Payload, in section: String) -> [Payload.DemoTile] {
-        p.tiles.filter { $0.section == section }
-    }
+    /// The Label Lab band skip list — categories that ARE their own label.
+    private static let bandSkipNames: Set<String> =
+        ["alphabet", "letters", "numbers", "movies & shows", "movies", "shows", "clock", "time"]
 
-    private func folderIcon(_ p: Payload, section: String, name: String) -> String? {
-        let n = name.lowercased()
-        let fs = p.folders ?? []
-        return (fs.first { $0.label == n && ($0.section == nil || $0.section == section) }
-                ?? fs.first { $0.label == n })?.imageKey
-    }
+    /// Convert the demo payload into REAL Category/Tile models inside the
+    /// practice BoardStore. Both models decode themselves (their memberwise
+    /// inits are suppressed by custom Decodable), so the conversion builds
+    /// the same JSON /api/sync would send and decodes it — zero drift.
+    private func rebuildTiles() {
+        guard let p = payload else { return }
+        let vid = effectiveVoiceId ?? ""
+        var cats: [[String: Any]] = []
+        var items: [[String: Any]] = []
+        var catIds: [String: Int] = [:]
+        var nextCat = 1
+        var nextItem = 1000
+        var bandSkip: Set<Int> = []
 
-    private func sectionColumn(_ section: String, in p: Payload) -> some View {
-        let all = tiles(p, in: section)
-        let cats = uniqued(all.compactMap { $0.category }.filter { !$0.isEmpty })
-        let cat = selCat[section].flatMap { cats.contains($0) ? $0 : nil } ?? cats.first ?? ""
-        let inCat = all.filter { ($0.category ?? "") == cat }
-        let subs = uniqued(inCat.compactMap { $0.subcategory }.filter { !$0.isEmpty })
-        let sub = selSub[section].flatMap { subs.contains($0) ? $0 : nil } ?? subs.first ?? ""
-        let shown = Array(inCat.filter { sub.isEmpty || ($0.subcategory ?? "") == sub }.prefix(80))
-
-        return VStack(spacing: 0) {
-            Text(section.capitalized)
-                .font(.system(size: 16, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(hex: Brand.pinkDeep))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10).padding(.vertical, 5)
-
-            if cats.count > 1 {
-                chipStrip(cats, active: cat, p: p, section: section) { picked in
-                    selCat[section] = picked
-                    selSub[section] = nil
-                }
-            }
-            if subs.count > 1 {
-                chipStrip(subs, active: sub, p: p, section: section) { picked in
-                    selSub[section] = picked
-                }
-            }
-
-            ScrollView {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8),
-                                         count: max(1, across[section] ?? 3)),
-                          spacing: 8) {
-                    ForEach(Array(shown.enumerated()), id: \.offset) { _, t in
-                        practiceTile(t, section: section)
-                    }
-                }
-                .padding(8)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        func folderIcon(section: String, name: String) -> String? {
+            let n = name.lowercased()
+            let fs = p.folders ?? []
+            return (fs.first { $0.label == n && ($0.section == nil || $0.section == section) }
+                    ?? fs.first { $0.label == n })?.imageKey
         }
-        .background(Color.white)
-        .overlay(alignment: .trailing) {
-            if hSize != .compact { Rectangle().frame(width: 1).foregroundStyle(.black.opacity(0.06)) }
+        func ensureCat(section: String, cat: String, sub: String) -> Int {
+            let topKey = "\(section)|\(cat.lowercased())|"
+            var topId = catIds[topKey]
+            if topId == nil {
+                topId = nextCat; nextCat += 1
+                catIds[topKey] = topId
+                var c: [String: Any] = ["id": topId!, "section": section, "label": cat,
+                                        "order": topId!]
+                if let ik = folderIcon(section: section, name: cat) { c["imageKey"] = ik }
+                cats.append(c)
+            }
+            guard !sub.isEmpty else { return topId! }
+            let subKey = "\(section)|\(cat.lowercased())|\(sub.lowercased())"
+            var subId = catIds[subKey]
+            if subId == nil {
+                subId = nextCat; nextCat += 1
+                catIds[subKey] = subId
+                var c: [String: Any] = ["id": subId!, "section": section, "label": sub,
+                                        "parentId": topId!, "order": subId!]
+                if let ik = folderIcon(section: section, name: sub) { c["imageKey"] = ik }
+                cats.append(c)
+            }
+            return subId!
+        }
+
+        for t in p.tiles {
+            let section = t.section.lowercased()
+            guard ["people", "nouns", "verbs", "needs"].contains(section) else { continue }
+            let id = nextItem; nextItem += 1
+            var item: [String: Any] = ["id": id, "section": section, "label": t.label, "order": id]
+            if section != "needs" {
+                let cat = (t.category ?? "").trimmingCharacters(in: .whitespaces)
+                let sub = (t.subcategory ?? "").trimmingCharacters(in: .whitespaces)
+                item["categoryId"] = ensureCat(section: section,
+                                               cat: cat.isEmpty ? "More" : cat, sub: sub)
+                if Self.bandSkipNames.contains(cat.lowercased())
+                    || Self.bandSkipNames.contains(sub.lowercased()) {
+                    bandSkip.insert(id)
+                }
+            }
+            if let ik = t.imageKey, !ik.isEmpty { item["imageKey"] = ik }
+            // The selected demo voice's pre-rendered clip IS the tile's sound
+            // — TilePlayer plays it via the public media prefix, exactly like
+            // a real tile's recorded audio. Device voice → no key → speech.
+            if !vid.isEmpty {
+                item["soundKey"] = "demo-audio/\(vid)/\(Self.demoSlug(t.label)).mp3"
+            }
+            if let mt = t.matchTerms, !mt.isEmpty { item["matchTerms"] = mt }
+            items.append(item)
+        }
+
+        do {
+            let json = try JSONSerialization.data(withJSONObject: ["categories": cats, "items": items])
+            let resp = try JSONDecoder().decode(APIClient.SyncResponse.self, from: json)
+            store.categories = resp.categories
+            store.tiles = resp.items
+            store.listenBlocklist = Set((p.listenBlocklist ?? []).map { $0.lowercased() })
+            chrome.bandSkip = bandSkip
+        } catch {
+            errorText = "Couldn't prepare the practice board."
         }
     }
 
-    private func uniqued(_ xs: [String]) -> [String] {
-        var seen = Set<String>(); var out: [String] = []
-        for x in xs where seen.insert(x).inserted { out.append(x) }
+    // MARK: -- Actions
+
+    private func register() {
+        carrySelections()
+        coord.accountPrefersSignup = true
+        coord.go(to: .account)
+    }
+
+    /// The style/voice tried here pre-select the same pickers in onboarding.
+    private func carrySelections() {
+        if let sid = styleId, let s = payload?.styles?.first(where: { $0.id == sid }) {
+            coord.styleGuideId = s.id
+            coord.styleLabel = s.label
+        }
+        if let vid = effectiveVoiceId, !vid.isEmpty,
+           let v = payload?.voices?.first(where: { $0.id == vid }) {
+            coord.voiceId = v.id
+            coord.voiceName = v.name
+        }
+    }
+
+    /// Switching voices plays that voice's pre-rendered introduction clip.
+    /// Clip missing → stay silent; the next tile tap demonstrates the voice.
+    private func playVoiceSample() {
+        guard let vid = effectiveVoiceId, !vid.isEmpty else { return }
+        let key = "demo-audio/\(vid)/voice-sample.mp3"
+        Task {
+            guard let data = try? await MediaCache.shared.data(for: key) else { return }
+            await MainActor.run {
+                samplePlayer = try? AVAudioPlayer(data: data)
+                samplePlayer?.play()
+            }
+        }
+    }
+
+    /// Mirror of the practice page's clip slug — must stay in lockstep with
+    /// DemoBoardView.demoSlug / the Lab's clip builder.
+    static func demoSlug(_ s: String) -> String {
+        let lowered = s.lowercased()
+        var out = ""
+        var lastDash = true
+        for ch in lowered {
+            if ch.isLetter || ch.isNumber, ch.isASCII {
+                out.append(ch)
+                lastDash = false
+            } else if !lastDash {
+                out.append("-")
+                lastDash = true
+            }
+        }
+        if out.hasSuffix("-") { out.removeLast() }
         return out
     }
 
-    private func chipStrip(_ names: [String], active: String, p: Payload, section: String,
-                           onPick: @escaping (String) -> Void) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(names, id: \.self) { name in
-                    Button {
-                        onPick(name)
-                    } label: {
-                        VStack(spacing: 2) {
-                            PracticeTileImage(imageKey: folderIcon(p, section: section, name: name), corner: 10)
-                                .frame(width: 44, height: 44)
-                            Text(name)
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(Color(hex: Brand.ink))
-                                .lineLimit(1)
-                                .frame(maxWidth: 60)
-                        }
-                        .padding(4)
-                        .background(name == active ? Color(hex: Brand.line) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 12))
-                        .overlay(RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(name == active ? Color(hex: Brand.pink) : Color.black.opacity(0.08),
-                                          lineWidth: name == active ? 2 : 1))
-                    }
-                    .buttonStyle(.plain)
-                }
+    // MARK: -- Account prompt (the lock button's pitch)
+
+    private var accountPromptSheet: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "lock.open.fill")
+                .font(.system(size: 34))
+                .foregroundStyle(Color(hex: Brand.pink))
+                .padding(.top, 26)
+            Text("Unlocking is where it becomes your child's")
+                .font(.system(size: 21, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: Brand.ink))
+                .multilineTextAlignment(.center)
+            Text("On a real board, the lock opens editing: add tiles from your own photos, rename and re-voice words, and organize folders. That all comes with your account — free to create.")
+                .font(.system(size: 14))
+                .foregroundStyle(Color(hex: Brand.muted))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                showAccountPrompt = false
+                register()
+            } label: {
+                Text("Register an Account")
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .frame(maxWidth: .infinity).padding(.vertical, 13)
+                    .background(Color(hex: Brand.pink), in: RoundedRectangle(cornerRadius: 999))
+                    .foregroundStyle(.white)
             }
-            .padding(.horizontal, 8).padding(.vertical, 4)
+            .buttonStyle(.plain)
+            Button("Keep exploring") { showAccountPrompt = false }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color(hex: Brand.pinkDeep))
+                .buttonStyle(.plain)
+            Spacer()
         }
+        .padding(24)
+        .presentationDetents([.medium])
     }
 
-    private func needsStrip(_ p: Payload, tileWidth: CGFloat) -> some View {
-        let ts = Array(tiles(p, in: "needs").prefix(24))
-        return Group {
-            if !ts.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(Array(ts.enumerated()), id: \.offset) { _, t in
-                            practiceTile(t, section: "needs")
-                                .frame(width: tileWidth)
-                        }
-                    }
-                    .padding(8)
+    // MARK: -- Load / error state
+
+    @ViewBuilder
+    private var loadStateOverlay: some View {
+        if store.tiles.isEmpty {
+            if loading {
+                VStack(spacing: 12) {
+                    ProgressView().tint(Color(hex: Brand.pink)).scaleEffect(1.4)
+                    Text("Setting up the practice board…")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(hex: Brand.pinkDeep))
                 }
-                .background(Color(hex: Brand.bg))
-                .overlay(alignment: .top) { Divider() }
+            } else if let err = errorText {
+                VStack(spacing: 12) {
+                    Text(err)
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color(hex: Brand.muted))
+                        .multilineTextAlignment(.center)
+                    Button("Try again") { Task { await load() } }
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .padding(.horizontal, 18).padding(.vertical, 10)
+                        .background(Color(hex: Brand.pink), in: Capsule())
+                        .foregroundStyle(.white)
+                }
+                .padding(24)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
+                .shadow(color: .black.opacity(0.12), radius: 16, y: 6)
+                .padding(40)
             }
         }
-    }
-
-    // MARK: -- One tile (always ringed — the ring IS the personalization story)
-
-    /// Web parity: Nouns (the big vocabulary of THEIR things) carries the
-    /// violet Pro ring; everything else personalizable fits the pink Plus
-    /// ring. Framed as "comfortably personalizes each month", never a gate.
-    private func ringColor(_ section: String) -> Color {
-        section == "nouns" ? Color(hex: "#7c3aed").opacity(0.45)
-                           : Color(hex: "#ff1493").opacity(0.5)
-    }
-
-    private func practiceTile(_ t: Payload.DemoTile, section: String) -> some View {
-        // No text under the tile: the served practice art carries the Label
-        // Lab caption band IN the image (the look the web page ships), so a
-        // separate label printed the word twice. The tile is the image + the
-        // tier ring, nothing else; VoiceOver still announces the word.
-        Button {
-            speak(t.label)
-        } label: {
-            PracticeTileImage(imageKey: t.imageKey, corner: 14)
-                .aspectRatio(1, contentMode: .fit)
-                .overlay(RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(ringColor(section), lineWidth: 2.5))
-                .shadow(color: .black.opacity(0.07), radius: 3, y: 1)
-        }
-        .buttonStyle(TileButtonStyle())
-        .accessibilityLabel(Text(t.label))
     }
 
     // MARK: -- Welcome tour (floats over the first load; reopenable via ✨)
@@ -548,7 +751,7 @@ struct PracticeBoardView: View {
                                 bold: "Try it with a safety net:",
                                 body: "joining builds the full board up front, and if you cancel, everything you've made stays yours, forever.")
 
-                        Text("Things to try right now: pick an art style and voice up top, meet the demo kids, and tap anything — every tap speaks. Go ahead.")
+                        Text("Things to try right now: pick an art style and voice up top, tap 🎙 and just talk — words you say light up as tiles — and press 📖 Teach me or 🙋 Play with me for the learning games. Every tap speaks. Go ahead.")
                             .font(.system(size: 13))
                             .foregroundStyle(Color(hex: Brand.muted))
                             .fixedSize(horizontal: false, vertical: true)
@@ -568,7 +771,8 @@ struct PracticeBoardView: View {
                         HStack {
                             Button {
                                 showTour = false
-                                logIn()
+                                coord.accountPrefersSignup = false
+                                coord.go(to: .account)
                             } label: {
                                 (Text("Already have a board? ") + Text("Log in").bold().underline())
                                     .font(.system(size: 13))
@@ -606,158 +810,6 @@ struct PracticeBoardView: View {
                 .font(.system(size: 13.5))
                 .foregroundStyle(Color(hex: Brand.ink))
                 .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    // MARK: -- Actions
-
-    private func register() {
-        carrySelections()
-        coord.accountPrefersSignup = true
-        coord.go(to: .account)
-    }
-
-    private func logIn() {
-        coord.accountPrefersSignup = false
-        coord.go(to: .account)
-    }
-
-    /// The style + voice tried here pre-select the same pickers on the Child
-    /// step, so "I liked Watercolor in Grace's voice" survives registration.
-    /// (Style ids ARE style_guides ids; demo voice ids ARE the catalog's
-    /// ElevenLabs ids — both pickers match on id.)
-    private func carrySelections() {
-        if let sid = styleId, let s = payload?.styles?.first(where: { $0.id == sid }) {
-            coord.styleGuideId = s.id
-            coord.styleLabel = s.label
-        }
-        if let vid = effectiveVoiceId, !vid.isEmpty,
-           let v = payload?.voices?.first(where: { $0.id == vid }) {
-            coord.voiceId = v.id
-            coord.voiceName = v.name
-        }
-    }
-
-    // MARK: -- Data + audio
-
-    private func load() async {
-        loading = true
-        errorText = nil
-        defer { loading = false }
-        var path = "/api/demo"
-        var q: [String] = []
-        if let styleId { q.append("style=\(styleId)") }
-        if let kidId { q.append("kid=\(kidId)") }
-        if !q.isEmpty { path += "?" + q.joined(separator: "&") }
-        do {
-            let (data, _) = try await api.request(method: "GET", path: path, body: nil)
-            let p = try JSONDecoder().decode(Payload.self, from: data)
-            if p.tiles.isEmpty && payload != nil { return }   // keep the board we have
-            payload = p
-            if p.tiles.isEmpty {
-                errorText = "The practice board isn't available right now, but the real thing is — tap Register an Account above!"
-            }
-        } catch {
-            if payload == nil {
-                errorText = "Couldn't load the practice board. Check the connection and try again."
-            }
-        }
-    }
-
-    /// Local-only stats — a taste of the real product's tracking; nothing posts.
-    private func noteTap(_ label: String) {
-        taps += 1
-        tappedWords.insert(label.lowercased())
-    }
-
-    /// Tap-to-speak, web parity: the selected voice's PRE-RENDERED clip
-    /// (served through /api/media's public demo-audio/ prefix and cached by
-    /// MediaCache), falling back to the device voice — never live TTS.
-    private func speak(_ label: String) {
-        noteTap(label)
-        guard let vid = effectiveVoiceId, !vid.isEmpty else {
-            speakLocal(label)
-            return
-        }
-        let key = "demo-audio/\(vid)/\(Self.demoSlug(label)).mp3"
-        Task {
-            if let data = try? await MediaCache.shared.data(for: key) {
-                await MainActor.run {
-                    player = try? AVAudioPlayer(data: data)
-                    player?.play()
-                }
-            } else {
-                await MainActor.run { speakLocal(label) }
-            }
-        }
-    }
-
-    /// Switching voices plays that voice's pre-rendered introduction clip
-    /// (the same sample onboarding uses). Clip missing → stay silent; the
-    /// next tile tap demonstrates the voice anyway.
-    private func playVoiceSample() {
-        guard let vid = effectiveVoiceId, !vid.isEmpty else { return }
-        let key = "demo-audio/\(vid)/voice-sample.mp3"
-        Task {
-            guard let data = try? await MediaCache.shared.data(for: key) else { return }
-            await MainActor.run {
-                player = try? AVAudioPlayer(data: data)
-                player?.play()
-            }
-        }
-    }
-
-    private func speakLocal(_ text: String) {
-        let u = AVSpeechUtterance(string: text)
-        u.voice = AVSpeechSynthesisVoice(language: "en-US")
-        u.rate = AVSpeechUtteranceDefaultSpeechRate * 0.95
-        Self.speech.stopSpeaking(at: .immediate)
-        Self.speech.speak(u)
-    }
-
-    /// Mirror of the practice page's clip slug: lowercase, runs of
-    /// non-alphanumerics collapse to "-", trimmed at both ends. Must stay in
-    /// lockstep with DemoBoardView.demoSlug / the Lab's clip builder.
-    static func demoSlug(_ s: String) -> String {
-        let lowered = s.lowercased()
-        var out = ""
-        var lastDash = true
-        for ch in lowered {
-            if ch.isLetter || ch.isNumber, ch.isASCII {
-                out.append(ch)
-                lastDash = false
-            } else if !lastDash {
-                out.append("-")
-                lastDash = true
-            }
-        }
-        if out.hasSuffix("-") { out.removeLast() }
-        return out
-    }
-}
-
-/// Async tile/chip art loader on the shared MediaCache (decoded at display
-/// size, C7). Gray placeholder while loading; word-tile styling is not needed
-/// here because /api/demo only ships rows that HAVE art.
-private struct PracticeTileImage: View {
-    let imageKey: String?
-    var corner: CGFloat = 14
-    @State private var image: UIImage?
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: corner).fill(Color(hex: "#e9eef5"))
-            if let img = image ?? MediaCache.decodedImage(for: imageKey, maxPixel: 640) {
-                Image(uiImage: img)
-                    .resizable()
-                    .scaledToFill()
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: corner))
-        .task(id: imageKey) {
-            guard let key = imageKey, !key.isEmpty else { image = nil; return }
-            if MediaCache.decodedImage(for: key, maxPixel: 640) != nil { return }
-            image = await MediaCache.shared.image(for: key, maxPixel: 640)
         }
     }
 }

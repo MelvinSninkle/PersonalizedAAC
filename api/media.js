@@ -39,6 +39,15 @@ export default async function handler(req, res) {
       return;
     }
 
+  // Waitlist photos are family pictures uploaded BEFORE any account exists
+  // (the concierge funnel), so they live in no child-scoped table — the
+  // "found nowhere = shared library" rule below would serve them to any
+  // signed-in user. They are the opposite of library assets: ADMIN ONLY.
+  if (key.startsWith('waitlist/') && auth.user.role !== 'admin') {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+
   // Ownership: a key found in any child-scoped table is private to those
   // children — the caller must have access to at least one (admins pass).
   // A key found nowhere is a shared library asset (taxonomy / style guides)

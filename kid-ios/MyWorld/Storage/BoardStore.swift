@@ -32,10 +32,13 @@ final class BoardStore {
     private let api: APIClient
     private let cacheURL: URL
 
-    init(api: APIClient = APIClient()) {
+    /// `hydrateFromDiskCache: false` builds a purely in-memory store — the
+    /// pre-login practice board uses one so a signed-out screen can never
+    /// paint the previous family's cached board.
+    init(api: APIClient = APIClient(), hydrateFromDiskCache: Bool = true) {
         self.api = api
         self.cacheURL = Self.diskCacheURL
-        hydrateFromDisk()
+        if hydrateFromDiskCache { hydrateFromDisk() }
     }
 
     private static var diskCacheURL: URL {
