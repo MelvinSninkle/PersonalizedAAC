@@ -831,8 +831,20 @@
     try {
       const data = await api('/api/waitlist');
       const rows = data.waitlist || [];
-      out.innerHTML = rows.length ? `<table><thead><tr><th>Email</th><th>Style</th><th>About their child</th><th>Source</th><th>When</th></tr></thead><tbody>` +
-        rows.map(r => `<tr><td>${esc(r.email)}</td><td>${esc(r.style)}</td><td style="max-width:340px;white-space:pre-wrap;font-size:12.5px;">${esc(r.note || '')}</td><td>${esc(r.source)}</td><td>${esc(new Date(r.created_at).toLocaleString())}</td></tr>`).join('') +
+      // Founding Family state per row: 💛 paid (+ tier + minted code), 🔗
+      // linked (account created and sub attached), and any consented photo
+      // uploads as thumbnails (served admin-only via /api/media).
+      const founding = (r) => {
+        if (!r.paid_at) return '';
+        const bits = [`💛 paid ${esc((r.paid_sku || '').replace('.monthly', ''))}`];
+        if (r.invite_code) bits.push(`code <b>${esc(r.invite_code)}</b>`);
+        bits.push(r.linked_user_id ? `🔗 linked #${esc(String(r.linked_user_id))}` : '⚠️ NOT LINKED yet');
+        return `<div style="font-size:12px;">${bits.join(' · ')}</div>`;
+      };
+      const thumbs = (r) => (r.photos || []).map((k) =>
+        `<a href="/api/media?key=${encodeURIComponent(k)}" target="_blank"><img src="/api/media?key=${encodeURIComponent(k)}&w=96" style="width:44px;height:44px;object-fit:cover;border-radius:8px;margin:1px;" alt=""></a>`).join('');
+      out.innerHTML = rows.length ? `<table><thead><tr><th>Email</th><th>Style</th><th>About their child</th><th>Founding</th><th>Photos</th><th>Source</th><th>When</th></tr></thead><tbody>` +
+        rows.map(r => `<tr><td>${esc(r.email)}</td><td>${esc(r.style)}</td><td style="max-width:280px;white-space:pre-wrap;font-size:12.5px;">${esc(r.note || '')}</td><td>${founding(r)}</td><td style="max-width:150px;">${thumbs(r)}</td><td>${esc(r.source)}</td><td>${esc(new Date(r.created_at).toLocaleString())}</td></tr>`).join('') +
         `</tbody></table>` : '<p style="font-size:13px;color:var(--muted)">No signups yet.</p>';
     } catch (err) { out.innerHTML = '<p class="status err">' + esc(err.message) + '</p>'; }
   });

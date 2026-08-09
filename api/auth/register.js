@@ -180,6 +180,40 @@ export default async function handler(req, res) {
       // only; best-effort — a perk failure never blocks the signup itself.
       await applyInvitePerks(db, Number(user.id), req, invCode);
 
+      // Founding Family link: a concierge signup paid for their subscription
+      // BEFORE this account existed (waitlist funnel). Match the paid,
+      // unlinked waitlist row by email, attach the Stripe customer to this
+      // account (renewal invoices then resolve on their own), and grant the
+      // first period's credits that invoice.paid deliberately skipped
+      // pre-account. Best-effort — a link failure never blocks signup; the
+      // admin waitlist table shows paid-but-unlinked rows for manual repair.
+      try {
+        const { ensureWaitlist } = await import('../waitlist.js');
+        const { recordPurchase, subscriptionBySku } = await import('../_lib/credits.js');
+        await ensureWaitlist(db);
+        const wl = (await db`
+          SELECT id, paid_sku, stripe_customer_id, stripe_subscription_id FROM waitlist
+          WHERE email = ${email} AND paid_at IS NOT NULL AND linked_user_id IS NULL
+          ORDER BY paid_at DESC LIMIT 1`)[0];
+        if (wl) {
+          if (wl.stripe_customer_id) {
+            await db`UPDATE users SET stripe_customer_id = ${wl.stripe_customer_id} WHERE id = ${user.id}`;
+          }
+          const sub = subscriptionBySku(wl.paid_sku || '');
+          if (sub && wl.stripe_subscription_id) {
+            await recordPurchase(db, {
+              userId: Number(user.id), platform: 'stripe', productId: sub.sku,
+              credits: sub.creditsPerPeriod, amountCents: sub.cents,
+              externalId: 'stripe:concierge-link:' + wl.stripe_subscription_id,
+              childId: null,
+            });
+          }
+          await db`UPDATE waitlist SET linked_user_id = ${Number(user.id)} WHERE id = ${wl.id}`;
+        }
+      } catch (err) {
+        console.error('concierge link failed (repair via admin waitlist):', String(err && err.message || err));
+      }
+
       // Drop a session cookie so they walk straight into /onboard signed in.
       // The role MUST come from the user row, not a literal: applyRoleGrant
       // above may have just made this account a language_tester/therapist,
