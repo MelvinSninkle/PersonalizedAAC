@@ -112,6 +112,38 @@ export const SYNONYM_SETS = [
   ['pants', 'trousers'],
   ['diaper', 'nappy'],
   ['stroller', 'pram', 'buggy'],
+
+  // ── Phrase tiles ──────────────────────────────────────────────────────────
+  // Multi-word labels get NO generated inflections, so without these a
+  // needs-strip or social tile matches only its exact label. These are the
+  // shortened / lengthened forms people actually say ("want" → the I-want
+  // tile); the spoken caption keeps the transcript honest. Same conservatism
+  // as above — only forms that mean THAT tile. Deliberately absent: bare
+  // "like" (filler: "like, you know"), bare "okay"/"look"/"welcome"
+  // (said constantly in other senses).
+  ['i want', 'want', 'i want it', 'i want that'],
+  ['i like', 'i like it', 'i like this', 'like it'],
+  ["i don't like", "don't like", "i don't like it", 'no like'],
+  ['all done', 'done', 'finished', 'all finished'],
+  ['thank you', 'thanks'],
+  ['help', 'help me', 'i need help', 'help please'],
+  ['more', 'more please', 'some more', 'want more'],
+  ['again', 'do it again', 'one more time'],
+  ['stop', 'stop it', 'stop that'],
+  ['my turn', "it's my turn", 'my turn now', 'me turn'],
+  ['your turn', "it's your turn"],
+  ['i love you', 'love you'],
+  ['i missed you', 'missed you'],
+  ['how are you', 'how are you doing', 'how you doing'],
+  ["i'm great", 'im great', 'i am great', 'doing great'],
+  ['have a great day', 'have a good day'],
+  ["you're welcome", 'youre welcome'],
+  ["that's funny", 'thats funny', 'so funny'],
+  ["it's okay", 'its okay', "it's ok", 'its ok'],
+  ['are you okay', 'are you ok', 'you okay', 'you ok'],
+  ['look at this', 'look at that', 'look here'],
+  ['nice to see you', 'good to see you'],
+  ["what's your name", 'whats your name'],
 ];
 
 // label → the other words of its set (derived once; sets stay the source).
@@ -171,8 +203,14 @@ export function expandMatchTerms(label, curated = [], { synonyms = SYNONYMS_PUBL
     if (n && n !== base) out.add(n);
   }
   // Engine synonyms: every tile whose label sits in a SYNONYM_SET matches
-  // the set's other words ("hello" tile hears "hi"/"hey").
-  if (synonyms) for (const s of SYNONYMS[base] || []) out.add(s);
+  // the set's other words ("hello" tile hears "hi"/"hey"). The lookup also
+  // tries a punctuation-stripped key: labels like "How are you?" or
+  // "It's okay." must still find their set (sets are keyed bare; client
+  // tokenizers strip the same punctuation when they index).
+  if (synonyms) {
+    const bare = base.replace(/[.,!?;:"()\[\]{}]/g, '').replace(/\s+/g, ' ').trim();
+    for (const s of SYNONYMS[base] || SYNONYMS[bare] || []) out.add(s);
+  }
   // Single words inflect; multi-word labels rely on curated terms (inflecting
   // "all done" or "ice cream" makes nothing useful).
   if (base && !base.includes(' ')) {
