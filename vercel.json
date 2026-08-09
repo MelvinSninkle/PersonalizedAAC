@@ -5,6 +5,10 @@
       "destination": "/practice.html"
     },
     {
+      "source": "/founding",
+      "destination": "/founding.html"
+    },
+    {
       "source": "/u/:slug",
       "destination": "/app.html"
     },

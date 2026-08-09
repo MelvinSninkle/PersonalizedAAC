@@ -33,7 +33,10 @@ export const config = {
 function isPublicPage(pathname) {
   return pathname === '/' || pathname === '/index.html'
     || pathname === '/practice' || pathname === '/practice.html'
-    || pathname === '/signup' || pathname === '/signup.html';
+    || pathname === '/signup' || pathname === '/signup.html'
+    // The Founding Family letter — the education-first door to an invite
+    // code. Public by definition: it's how a stranger becomes a family.
+    || pathname === '/founding' || pathname === '/founding.html';
 }
 
 export default async function middleware(req) {

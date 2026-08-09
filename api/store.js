@@ -1156,31 +1156,52 @@ async function conciergeCheckout(req, res, db, body) {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) { res.status(501).json({ error: 'stripe_not_configured' }); return; }
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
-  const email = String(body.email || '').trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
-    res.status(400).json({ error: 'Valid email required' }); return;
-  }
   const sub = subscriptionBySku(String(body.sku || ''));
   if (!sub || sub.hidden) { res.status(400).json({ error: 'unknown tier' }); return; }
-  // The row token minted by POST /api/waitlist — proves this checkout belongs
-  // to a real signup this visitor just made (no anonymous session-spraying).
-  const waitlistId = Number(body.waitlistId) || 0;
-  const { verifyWaitlistToken } = await import('./waitlist.js');
-  if (!waitlistId || !verifyWaitlistToken(body.token, waitlistId)) {
-    res.status(401).json({ error: 'bad or expired signup token — rejoin the waitlist and try again' });
-    return;
+
+  // Two callers, one preference order:
+  //   1. A SIGNED-IN founding parent (the /founding letter flow) — the
+  //      ACCOUNT owns the subscription from the first charge, so the normal
+  //      webhook paths handle everything and no email-matching is needed.
+  //   2. Legacy anonymous waitlist flow — authenticated by the row token
+  //      /api/waitlist minted; register.js links the sub by email later.
+  const auth = await checkAuth(req);
+  const uid = auth.ok ? (Number(auth.user.uid || auth.user.id) || null) : null;
+  let email;
+  let waitlistId = 0;
+  if (uid) {
+    email = String(auth.user.email || '').toLowerCase();
+  } else {
+    email = String(body.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      res.status(400).json({ error: 'Valid email required' }); return;
+    }
+    waitlistId = Number(body.waitlistId) || 0;
+    const { verifyWaitlistToken } = await import('./waitlist.js');
+    if (!waitlistId || !verifyWaitlistToken(body.token, waitlistId)) {
+      res.status(401).json({ error: 'bad or expired signup token — rejoin the waitlist and try again' });
+      return;
+    }
   }
 
   const origin = `https://${req.headers.host}`;
   const form = new URLSearchParams();
   form.set('mode', 'subscription');
-  form.set('success_url', origin + '/?concierge=paid#waitlist');
-  form.set('cancel_url', origin + '/#waitlist');
+  form.set('success_url', origin + (uid ? '/founding?paid=1' : '/?concierge=paid#waitlist'));
+  form.set('cancel_url', origin + (uid ? '/founding' : '/#waitlist'));
   form.set('customer_email', email);
   form.set('metadata[kind]', 'concierge');
-  form.set('metadata[waitlistId]', String(waitlistId));
   form.set('metadata[sku]', sub.sku);
   form.set('metadata[email]', email);
+  if (uid) {
+    // The signed-in path rides the SAME webhook rails as any web
+    // subscription: userId metadata → sub tagging, customer save, and
+    // invoice.paid credit grants, no concierge special-casing needed.
+    form.set('client_reference_id', String(uid));
+    form.set('metadata[userId]', String(uid));
+  } else {
+    form.set('metadata[waitlistId]', String(waitlistId));
+  }
   form.set('line_items[0][quantity]', '1');
   form.set('line_items[0][price_data][currency]', 'usd');
   form.set('line_items[0][price_data][unit_amount]', String(sub.cents));
