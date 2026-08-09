@@ -32,6 +32,14 @@ targets:
     info:
       path: MyWorld/Info.plist
       properties:
+        # NB: xcodegen REGENERATES MyWorld/Info.plist from this list on every
+        # `xcodegen generate` — a key edited into the plist directly is
+        # silently lost on the next generate. Declare every key HERE.
+        # Standard HTTPS only — exempt from export-compliance review, so
+        # App Store Connect never blocks a build on the encryption question.
+        # (Was once added straight to the plist in ec970da and kept getting
+        # wiped by regeneration.)
+        ITSAppUsesNonExemptEncryption: false
         CFBundleDisplayName: My World
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
