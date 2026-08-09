@@ -132,7 +132,7 @@ export const SYNONYM_SETS = [
   ['my turn', "it's my turn", 'my turn now', 'me turn'],
   ['your turn', "it's your turn"],
   ['i love you', 'love you'],
-  ['i missed you', 'missed you'],
+  ['i miss you', 'i missed you', 'missed you', 'miss you'],
   ['how are you', 'how are you doing', 'how you doing'],
   ["i'm great", 'im great', 'i am great', 'doing great'],
   ['have a great day', 'have a good day'],
