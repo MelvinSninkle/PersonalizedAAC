@@ -369,19 +369,32 @@ export async function buildBoard(db, childId) {
 
 // ── Queue plumbing (mirrors tile_jobs semantics) ────────────────────────────
 
+// FAIR across families: the pick round-robins by child_id (same pattern as
+// the style-build drain), so two children onboarding at once both watch
+// their boards fill in — the second family never waits for the first
+// family's whole build to finish. Pick-then-conditional-claim (instead of
+// FOR UPDATE SKIP LOCKED, which Postgres disallows next to a window
+// function): the UPDATE re-checks runnability, so overlapping cron ticks
+// can race the same pick and only one wins each row — the claim flips
+// status/updated_at, which un-runs the other's re-check.
 export async function claimSeedJobs(db, kind, limit) {
-  return db`
-    UPDATE seed_jobs SET status = 'processing', updated_at = NOW()
-    WHERE id IN (
-      SELECT id FROM seed_jobs
+  const picked = await db`
+    SELECT id FROM (
+      SELECT id, ROW_NUMBER() OVER (PARTITION BY child_id ORDER BY id) AS rn
+      FROM seed_jobs
       WHERE kind = ${kind} AND (
         status = 'queued'
         OR (status = 'processing' AND updated_at < NOW() - INTERVAL '5 minutes')
         OR (status = 'failed' AND attempts < ${MAX_SEED_ATTEMPTS})
       )
-      ORDER BY id
-      LIMIT ${limit}
-      FOR UPDATE SKIP LOCKED
+    ) t ORDER BY rn, id LIMIT ${limit}`;
+  if (!picked.length) return [];
+  return db`
+    UPDATE seed_jobs SET status = 'processing', updated_at = NOW()
+    WHERE id = ANY(${picked.map((r) => Number(r.id))}) AND (
+      status = 'queued'
+      OR (status = 'processing' AND updated_at < NOW() - INTERVAL '5 minutes')
+      OR (status = 'failed' AND attempts < ${MAX_SEED_ATTEMPTS})
     )
     RETURNING id, child_id, kind, taxonomy_id, attempts, force, ref_key, guidance`;
 }

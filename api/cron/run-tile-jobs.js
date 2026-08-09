@@ -9,6 +9,16 @@ import { sql } from '../_lib/db.js';
 import { ensureTileJobs, claimRunnableJobs, processTileJob } from '../_lib/tile-jobs.js';
 import { ensureSeedJobs, claimSeedJobs, processSeedJob, makeSeedContext } from '../_lib/seed-board.js';
 import { drainStyleBuildJobs } from '../_lib/style-build.js';
+import { mapPool } from '../_lib/onboarding-render.js';
+
+// Family renders in parallel (image-API latency dominates, ~10-15s each).
+// Kept lower than the style-build default: this is the family-facing lane,
+// and voices/chips/tile-jobs share the same tick. SEED_RENDER_CONCURRENCY
+// tunes it without a deploy (capped at 6).
+const RENDER_CONCURRENCY = (() => {
+  const n = parseInt(process.env.SEED_RENDER_CONCURRENCY || '', 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 6) : 3;
+})();
 
 export const config = { maxDuration: 300 };
 
@@ -53,12 +63,20 @@ export default async function handler(req, res) {
       if (r.ok) seed.placed++;
     }
     while (!overBudget()) {
-      const batch = await claimSeedJobs(db, 'render', 4);
+      const batch = await claimSeedJobs(db, 'render', RENDER_CONCURRENCY * 3);
       if (!batch.length) break;
-      for (const j of batch) {
-        if (overBudget()) break;
+      // Budget-hit claims go straight back to 'queued' instead of sitting
+      // 'processing' for the 5-minute reclaim window.
+      const requeue = [];
+      await mapPool(batch, RENDER_CONCURRENCY, async (j) => {
+        if (overBudget()) { requeue.push(Number(j.id)); return; }
         const r = await processSeedJob(db, j, getCtx);
         if (r.ok) seed.rendered++; else seed.renderFailed++;
+      });
+      if (requeue.length) {
+        await db`UPDATE seed_jobs SET status = 'queued', updated_at = NOW()
+                 WHERE id = ANY(${requeue}) AND status = 'processing'`;
+        break;
       }
     }
     while (!overBudget()) {
@@ -87,8 +105,11 @@ export default async function handler(req, res) {
     let styleBuild = { processed: 0, failed: 0 };
     if (!overBudget()) {
       try {
+        // Continuous drain at styleBuildConcurrency (default 6-way) for the
+        // WHOLE leftover budget — a quiet tick now renders ~60-100 style
+        // images instead of the old fixed batch of 9.
         styleBuild = await drainStyleBuildJobs(db, {
-          budgetMs: Math.max(10_000, TIME_BUDGET_MS - (Date.now() - started)), batch: 9, concurrency: 3 });
+          budgetMs: Math.max(10_000, TIME_BUDGET_MS - (Date.now() - started)) });
       } catch (_) { /* style builds are lab work — never fail the family cron */ }
     }
 

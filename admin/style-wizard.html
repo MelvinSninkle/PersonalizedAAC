@@ -139,7 +139,8 @@
       renders them on its own — you can close this tab and come back.</p>
     <div class="btnrow">
       <button id="go-generate">🚀 Generate the whole default board</button>
-      <button class="secondary" id="go-drain">⚡ Render a batch now</button>
+      <button class="secondary" id="go-drain">⚡ Turbo render (keep tab open)</button>
+      <button class="secondary" id="go-stop" style="display:none;">⏹ Stop</button>
     </div>
     <div id="progress" style="display:none;margin-top:12px;">
       <div class="counts">Tiles <b id="p-tiles">–</b></div>
@@ -410,30 +411,73 @@
     $('bar-chips').style.width = STATUS.chips ? Math.round(100 * STATUS.chipsDone / STATUS.chips) + '%' : '0%';
     const waiting = STATUS.tileQueued + STATUS.chipQueued;
     const failedN = STATUS.tileFailed + STATUS.chipFailed;
-    const stalled = waiting > 0 && (Date.now() - lastChangeAt) > 180_000;
+    const stalled = waiting > 0 && !turbo && (Date.now() - lastChangeAt) > 180_000;
     $('p-note').textContent = STATUS.complete
       ? '✅ Complete — review and publish below.'
       : (stalled
-          ? `⏸ ${waiting} queued but nothing has rendered in a few minutes — the every-minute cron may not be running (Vercel plan must allow minute crons + CRON_SECRET). Use ⚡ Render a batch now, and check Vercel → Cron Jobs.`
-          : waiting ? `${waiting} queued — the cron renders a few every minute; safe to close this tab.` : 'Idle — nothing queued. 🚀 Generate to fan out the work.')
+          ? `⏸ ${waiting} queued but nothing has rendered in a few minutes — the every-minute cron may not be running (Vercel plan must allow minute crons + CRON_SECRET). Use ⚡ Turbo render, and check Vercel → Cron Jobs.`
+          : waiting ? `${waiting} queued — the cron renders continuously every minute; ⚡ Turbo adds this tab's help, or close the tab and let it finish on its own.` : 'Idle — nothing queued. 🚀 Generate to fan out the work.')
         + (failedN ? ` ⚠️ ${failedN} failed (fix in the gallery, or re-run Generate to requeue).` : '');
     $('go-generate').disabled = false;
     $('go-generate').textContent = STATUS.complete ? '🚀 Re-check for missing pieces' : '🚀 Generate the whole default board';
     $('go-publish').disabled = !STATUS.complete || (STYLE && STYLE.active);
+    // ⏹ shows whenever there's queued work to cancel (or turbo to pause).
+    $('go-stop').style.display = (waiting > 0 || turbo) ? '' : 'none';
   }
 
+  // ⚡ Turbo mode: LOOP the server drain (each call renders ~6-way parallel
+  // for up to 90s) until the build is done, the queue is stopped, or the
+  // admin pauses. Runs alongside the cron — the claim step dedupes — so a
+  // build drains at roughly cron + tab combined throughput while the tab is
+  // open. One click on, one click off.
+  let turbo = false;
+  let turboDone = 0;
   $('go-drain').addEventListener('click', async () => {
-    $('go-drain').disabled = true; const t = $('go-drain').textContent;
-    $('go-drain').textContent = '⚡ Rendering… (up to ~90s)';
+    if (turbo) {   // click while running = pause after the in-flight call
+      turbo = false;
+      $('go-drain').textContent = '⚡ Turbo render (keep tab open)';
+      return;
+    }
+    turbo = true; turboDone = 0;
+    $('go-drain').textContent = '⏸ Turbo on — click to pause';
+    setMsg('gen-msg', '⚡ Turbo rendering — keep this tab open. The cron keeps helping in the background.', 'ok');
     try {
-      const d = await wiz({ op: 'drain' });
+      while (turbo) {
+        const d = await wiz({ op: 'drain' });
+        STATUS = d.status || STATUS;
+        lastChangeAt = Date.now();
+        turboDone += d.processed || 0;
+        setMsg('gen-msg', `⚡ Turbo: ${turboDone} rendered this session` + (d.failed ? ` (${d.failed} failed last round)` : '') + '.', 'ok');
+        // Fresh style + kid status so the exit test sees the whole build.
+        try {
+          const s = await api('GET', '/api/admin/lab?action=style-wizard&styleGuideId=' + SID);
+          STATUS = s.status; STYLE = s.style; KIDS = s.kids || KIDS;
+        } catch (_) {}
+        paintStatus(); paintKids();
+        const waiting = STATUS ? (STATUS.tileQueued + STATUS.chipQueued) : 0;
+        const kidsWaiting = KIDS.some((k) => (k.status || {}).tileQueued > 0);
+        if (STATUS && STATUS.complete && !kidsWaiting) { paintAll(); break; }
+        if (!waiting && !kidsWaiting) break;   // stopped or empty — nothing left to help with
+      }
+    } catch (e) { setMsg('gen-msg', 'Turbo stopped: ' + e.message, 'err'); }
+    turbo = false;
+    $('go-drain').textContent = '⚡ Turbo render (keep tab open)';
+    paintStatus();
+  });
+
+  // ⏹ Stop: cancel every queued job for this style (demo kids included).
+  // In-flight renders (at most a batch) finish; 🚀 Generate re-queues later.
+  $('go-stop').addEventListener('click', async () => {
+    turbo = false;
+    $('go-stop').disabled = true;
+    try {
+      const d = await wiz({ op: 'stop' });
       STATUS = d.status || STATUS;
-      lastChangeAt = Date.now();
-      setMsg('gen-msg', `⚡ Rendered ${d.processed} piece${d.processed === 1 ? '' : 's'}` + (d.failed ? ` (${d.failed} failed)` : '') + '.', d.processed ? 'ok' : '');
+      setMsg('gen-msg', `⏹ Stopped — ${d.canceled} queued job${d.canceled === 1 ? '' : 's'} canceled. ` +
+        'In-flight renders finish; 🚀 Generate re-queues the rest whenever you want.', 'ok');
       paintStatus();
-      if (STATUS && STATUS.complete) paintAll();
-    } catch (e) { setMsg('gen-msg', 'Drain failed: ' + e.message, 'err'); }
-    $('go-drain').disabled = false; $('go-drain').textContent = t;
+    } catch (e) { setMsg('gen-msg', 'Stop failed: ' + e.message, 'err'); }
+    $('go-stop').disabled = false;
   });
 
   function startPoll() {

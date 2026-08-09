@@ -327,85 +327,106 @@ export async function styleBuildStatus(db, styleGuideId, { demoChildId = 0 } = {
   };
 }
 
-/// Cron hook + wizard "render a batch now": render a bounded batch of queued
-/// jobs. Three properties (all owner-requested after Emily sat at 0% while
-/// Bobby drained):
+/// How many images render at once per drain. Image-API latency dominates
+/// (~10-15s each), so parallelism is nearly free throughput — 6-way ≈ 6×.
+/// The Gemini wrapper already backs off on 429/503 and failed jobs re-queue
+/// (3 attempts), so an over-aggressive setting degrades gracefully instead
+/// of losing work. Tune with STYLE_BUILD_CONCURRENCY (capped at 12 so a
+/// cron tick + a turbo tab together stay well inside paid-tier rate limits).
+export function styleBuildConcurrency() {
+  const n = parseInt(process.env.STYLE_BUILD_CONCURRENCY || '', 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 12) : 6;
+}
+
+/// Cron hook + the wizard's ⚡ turbo drain: render queued jobs until the time
+/// budget runs out. Four properties (owner-requested after Emily sat at 0%
+/// while Bobby drained, then again when a full style took an afternoon):
 ///   FAIR — the pick round-robins across (style, demo kid) queues, so every
 ///     queued build progresses at once instead of strict oldest-first.
-///   PARALLEL — the batch renders `concurrency` images at a time (image-API
-///     latency dominates; 3-way ≈ 3× throughput without hammering rate
-///     limits).
+///   PARALLEL — `concurrency` images render at a time (default
+///     styleBuildConcurrency; image-API latency dominates).
+///   CONTINUOUS — claim → render → claim again until budgetMs is spent, so
+///     one cron tick does ~budget/latency × concurrency images, not one
+///     fixed batch (the old 9-per-minute ceiling was the whole slowness).
 ///   CLAIMED — jobs flip to 'rendering' atomically before work starts, so a
 ///     cron tick and a manual wizard drain can run together without ever
 ///     rendering (and paying for) the same job twice. Orphaned 'rendering'
 ///     rows (a crashed drain) reap back to 'queued' after 10 minutes.
-/// Time-budgeted so the tick always returns; failures mark the job
+/// A 'canceled' status (the wizard's ⏹ Stop) is never picked; 🚀 Generate
+/// re-queues canceled rows via its ON CONFLICT upsert. Failures mark the job
 /// (3 attempts max) and never wedge the queue. Returns processed counts.
-export async function drainStyleBuildJobs(db, { budgetMs = 40000, batch = 6, concurrency = 3 } = {}) {
+export async function drainStyleBuildJobs(db, { budgetMs = 40000, batch = null, concurrency = null } = {}) {
   await ensureStyleBuildJobs(db);
   const started = Date.now();
+  const conc = Math.max(1, Number(concurrency) || styleBuildConcurrency());
+  const roundSize = Math.max(1, Number(batch) || conc * 3);
   await db`UPDATE style_build_jobs SET status = 'queued', updated_at = NOW()
            WHERE status = 'rendering' AND updated_at < NOW() - INTERVAL '10 minutes'`;
-  const picked = await db`
-    SELECT id FROM (
-      SELECT id, ROW_NUMBER() OVER (PARTITION BY style_guide_id, demo_child_id ORDER BY id) AS rn
-      FROM style_build_jobs WHERE status = 'queued' AND attempts < 3
-    ) t ORDER BY rn, id LIMIT ${batch}`;
-  if (!picked.length) return { processed: 0, failed: 0 };
-  const claimed = await db`UPDATE style_build_jobs SET status = 'rendering', updated_at = NOW()
-                           WHERE id = ANY(${picked.map((r) => Number(r.id))}) AND status = 'queued'
-                           RETURNING *`;
-  if (!claimed.length) return { processed: 0, failed: 0 };
   const settings = await labSettings(db);
-  // Shared lookups resolve ONCE, before the concurrent pool, so parallel
-  // workers never race duplicate style/anchor loads.
+  // Shared lookups persist ACROSS rounds — one style/anchor load per drain,
+  // no matter how many rounds render.
   const styles = new Map();   // style id → style row (or null)
   const anchors = new Map();  // "styleId:kidId" → child anchor image (or null)
-  for (const job of claimed) {
-    const sid = Number(job.style_guide_id);
-    const kid = Number(job.demo_child_id) || 0;
-    if (!styles.has(sid)) styles.set(sid, await loadStyle(db, sid));
-    const aKey = `${sid}:${kid}`;
-    if (job.kind === 'tile' && styles.get(sid) && !anchors.has(aKey)) {
-      anchors.set(aKey, await demoChildAnchor(db, styles.get(sid), kid));
-    }
-  }
   let processed = 0, failed = 0;
-  const requeue = [];
-  await mapPool(claimed, concurrency, async (job) => {
-    // Out of budget: unstarted jobs go straight back to the queue.
-    if (Date.now() - started > budgetMs) { requeue.push(Number(job.id)); return; }
-    const sid = Number(job.style_guide_id);
-    const kid = Number(job.demo_child_id) || 0;
-    const style = styles.get(sid);
-    try {
-      if (!style) throw new Error('style guide missing');
-      if (job.kind === 'tile') {
-        const anchor = anchors.get(`${sid}:${kid}`);
-        if (kid !== 0 && !anchor) throw new Error('demo kid reference missing');
-        const tax = (await db`SELECT id, id AS slug, column_name, category, subcategory, label, prompt_template,
-                                     subject_mode, related_images, default_image_key
-                              FROM taxonomy WHERE id = ${job.taxonomy_id} LIMIT 1`)[0];
-        if (!tax) throw new Error('taxonomy row gone');
-        await renderOneTile({ db, style, tax, settings, anchor, demoChildId: kid });
-      } else {
-        await renderOneChip({ db, style,
-          chip: { section: job.section, label: job.label, parent: job.parent || '' } });
+
+  while (Date.now() - started < budgetMs) {
+    const picked = await db`
+      SELECT id FROM (
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY style_guide_id, demo_child_id ORDER BY id) AS rn
+        FROM style_build_jobs WHERE status = 'queued' AND attempts < 3
+      ) t ORDER BY rn, id LIMIT ${roundSize}`;
+    if (!picked.length) break;
+    const claimed = await db`UPDATE style_build_jobs SET status = 'rendering', updated_at = NOW()
+                             WHERE id = ANY(${picked.map((r) => Number(r.id))}) AND status = 'queued'
+                             RETURNING *`;
+    // A concurrent drain won the whole round — go pick again.
+    if (!claimed.length) continue;
+    for (const job of claimed) {
+      const sid = Number(job.style_guide_id);
+      const kid = Number(job.demo_child_id) || 0;
+      if (!styles.has(sid)) styles.set(sid, await loadStyle(db, sid));
+      const aKey = `${sid}:${kid}`;
+      if (job.kind === 'tile' && styles.get(sid) && !anchors.has(aKey)) {
+        anchors.set(aKey, await demoChildAnchor(db, styles.get(sid), kid));
       }
-      await db`UPDATE style_build_jobs SET status = 'done', error = NULL, updated_at = NOW() WHERE id = ${job.id}`;
-      processed++;
-    } catch (err) {
-      failed++;
-      const msg = String(err.message || err).slice(0, 400);
-      await db`UPDATE style_build_jobs
-               SET attempts = attempts + 1, error = ${msg}, updated_at = NOW(),
-                   status = CASE WHEN attempts + 1 >= 3 THEN 'failed' ELSE 'queued' END
-               WHERE id = ${job.id}`;
     }
-  });
-  if (requeue.length) {
-    await db`UPDATE style_build_jobs SET status = 'queued', updated_at = NOW()
-             WHERE id = ANY(${requeue}) AND status = 'rendering'`;
+    const requeue = [];
+    await mapPool(claimed, conc, async (job) => {
+      // Out of budget: unstarted jobs go straight back to the queue.
+      if (Date.now() - started > budgetMs) { requeue.push(Number(job.id)); return; }
+      const sid = Number(job.style_guide_id);
+      const kid = Number(job.demo_child_id) || 0;
+      const style = styles.get(sid);
+      try {
+        if (!style) throw new Error('style guide missing');
+        if (job.kind === 'tile') {
+          const anchor = anchors.get(`${sid}:${kid}`);
+          if (kid !== 0 && !anchor) throw new Error('demo kid reference missing');
+          const tax = (await db`SELECT id, id AS slug, column_name, category, subcategory, label, prompt_template,
+                                       subject_mode, related_images, default_image_key
+                                FROM taxonomy WHERE id = ${job.taxonomy_id} LIMIT 1`)[0];
+          if (!tax) throw new Error('taxonomy row gone');
+          await renderOneTile({ db, style, tax, settings, anchor, demoChildId: kid });
+        } else {
+          await renderOneChip({ db, style,
+            chip: { section: job.section, label: job.label, parent: job.parent || '' } });
+        }
+        await db`UPDATE style_build_jobs SET status = 'done', error = NULL, updated_at = NOW() WHERE id = ${job.id}`;
+        processed++;
+      } catch (err) {
+        failed++;
+        const msg = String(err.message || err).slice(0, 400);
+        await db`UPDATE style_build_jobs
+                 SET attempts = attempts + 1, error = ${msg}, updated_at = NOW(),
+                     status = CASE WHEN attempts + 1 >= 3 THEN 'failed' ELSE 'queued' END
+                 WHERE id = ${job.id}`;
+      }
+    });
+    if (requeue.length) {
+      await db`UPDATE style_build_jobs SET status = 'queued', updated_at = NOW()
+               WHERE id = ANY(${requeue}) AND status = 'rendering'`;
+      break;   // budget hit mid-round — done for this drain
+    }
   }
   return { processed, failed };
 }

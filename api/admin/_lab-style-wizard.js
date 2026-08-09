@@ -144,13 +144,31 @@ export default async function handler(req, res) {
     }
 
     if (op === 'drain') {
-      // "⚡ Render a batch now" — one inline, bounded drain so a slow or
+      // "⚡ Turbo render" — one inline, bounded drain so a slow or
       // unconfigured cron (Hobby plans only run daily) never blocks the
-      // wizard. Same code path the cron runs; safe to click repeatedly.
-      // 3-way parallel renders: 12 jobs fit the same 90s that 4 serial did.
-      const r = await drainStyleBuildJobs(db, { budgetMs: 90_000, batch: 12, concurrency: 3 });
+      // wizard. Same code path the cron runs (continuous claim → render at
+      // styleBuildConcurrency, default 6-way); safe to call repeatedly and
+      // alongside a cron tick — the claim step dedupes. The wizard page
+      // loops this while turbo mode is on, so a build drains at roughly
+      // cron + tab combined throughput while the tab stays open.
+      const r = await drainStyleBuildJobs(db, { budgetMs: 90_000 });
       const status = await styleBuildStatus(db, styleGuideId);
       res.status(200).json({ ok: true, ...r, status });
+      return;
+    }
+
+    if (op === 'stop') {
+      // ⏹ Stop this style's build: every queued job (primary kid AND demo
+      // kids) flips to 'canceled', which no drain ever picks. The handful
+      // already 'rendering' finish (they're paid for either way); 🚀
+      // Generate / kid-jobs re-queue canceled rows later via their
+      // ON CONFLICT upserts, so stopping never strands a build.
+      const r = await db`UPDATE style_build_jobs SET status = 'canceled', updated_at = NOW()
+                         WHERE style_guide_id = ${styleGuideId} AND status = 'queued'
+                         RETURNING id`;
+      const status = await styleBuildStatus(db, styleGuideId);
+      res.status(200).json({ ok: true, canceled: r.length, status,
+        note: 'Stopped — in-flight renders (at most a batch) finish; 🚀 Generate re-queues the rest whenever you want.' });
       return;
     }
 
