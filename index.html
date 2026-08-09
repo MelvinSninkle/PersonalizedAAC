@@ -546,6 +546,17 @@
   }
   fillWaitlistStyles([...picker.querySelectorAll('.style-chip')].map(c => c.textContent.trim()).filter(Boolean));
 
+  // Arrived from the founder's letter because the current group filled up —
+  // say so plainly, right above the form they were sent to.
+  if (new URLSearchParams(location.search).get('group') === 'full') {
+    const msg = document.getElementById('wl-msg');
+    if (msg) {
+      msg.className = 'msg';
+      msg.textContent = 'The current Founding Family group is full — thank you for reading the letter. ' +
+        'Join the waitlist here and we\'ll email your invite code as the next group opens. The list is worked in order.';
+    }
+  }
+
   // The waitlist stays a LIGHT lead capture on purpose: a parent whose kid
   // needs words doesn't want to fill out our stuff. Photos, payment, and
   // everything else belong to the ACCOUNT — the Founding Family letter

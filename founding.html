@@ -102,10 +102,12 @@
       <span>I understand this is experimental and may not work for my child.</span></label>
 
     <div class="reveal" id="reveal">
-      <div class="tiny">Your Founding Family invite code:</div>
-      <div class="code">FOUNDINGFAMILY</div>
-      <div class="tiny">Enter it when you create your account. It stops working when the current
-        group fills — after that, the <a href="/#waitlist">waitlist</a> is real and worked in order.</div>
+      <div class="tiny" id="reveal-status">Your Founding Family invite code:</div>
+      <div id="code-bits">
+        <div class="code">FOUNDINGFAMILY</div>
+        <div class="tiny">Enter it when you create your account. It stops working when the current
+          group fills — after that, the <a href="/#waitlist">waitlist</a> is real and worked in order.</div>
+      </div>
     </div>
 
     <div id="after-reveal" style="display:none;">
@@ -149,12 +151,46 @@
   const boxes = [...document.querySelectorAll('.ack-box')];
   const reveal = document.getElementById('reveal');
   const after = document.getElementById('after-reveal');
+  const revealStatus = document.getElementById('reveal-status');
+  const codeBits = document.getElementById('code-bits');
+
+  // Capacity probe: the moment both boxes are checked, ask the server whether
+  // the current group still has spots (the same POST the /welcome gate uses —
+  // it also sets the invite cookie, so signup is pre-cleared). Group full →
+  // straight back to the waitlist, never a dead code. Any other hiccup fails
+  // OPEN: signup re-enforces the cap and routes to the waitlist itself.
+  let probe = null;
+  async function probeCode() {
+    if (probe) return probe;
+    try {
+      const r = await fetch('/api/invite', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'foundingfamily' }),
+      });
+      probe = r.ok ? 'ok' : (r.status === 401 ? 'full' : 'ok');
+    } catch (_) { probe = 'ok'; }
+    return probe;
+  }
+
   // The code appears only when both acknowledgments are checked — the point
   // of this page is that a Founding Family arrives educated, not surprised.
-  function sync() {
+  async function sync() {
     const all = boxes.every((b) => b.checked);
-    reveal.classList.toggle('show', all);
-    after.style.display = all ? '' : 'none';
+    if (!all) {
+      reveal.classList.remove('show');
+      after.style.display = 'none';
+      return;
+    }
+    reveal.classList.add('show');
+    codeBits.style.display = 'none';
+    revealStatus.textContent = 'Checking that spots are still open…';
+    if (await probeCode() === 'full') {
+      location.href = '/?group=full#waitlist';
+      return;
+    }
+    revealStatus.textContent = 'Your Founding Family invite code:';
+    codeBits.style.display = '';
+    after.style.display = '';
   }
   boxes.forEach((b) => b.addEventListener('change', sync));
 
@@ -206,6 +242,7 @@
   // Back from a successful checkout.
   if (new URLSearchParams(location.search).get('paid') === '1') {
     paidMode = true;
+    probe = 'ok';   // their spot is already taken — by them; never bounce a paid family
     boxes.forEach((b) => { b.checked = true; });
     sync();
     payMsg.className = 'msg ok';
