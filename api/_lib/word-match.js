@@ -54,13 +54,12 @@ export const IRREGULAR = {
   child: ['children'],
 };
 
-// DARK LAUNCH: synonym matching + spoken captions are being field-tested on
-// the owner's device first. While false, /api/sync expands synonyms only for
-// admin callers (and ships listenCaptions=false to everyone else, so no
-// client draws the caption band). Flip to true to ship to every family —
-// this one flip also turns synonyms on for the practice board (api/demo.js)
-// and parent message matching (api/message-to-board.js), which default to it.
-export const SYNONYMS_PUBLIC = false;
+// PUBLIC (graduated 2026-08-09 after owner field-testing): synonym matching
+// + spoken captions ship to every board. /api/sync expands the sets for all
+// callers and sends listenCaptions=true; the practice board (api/demo.js)
+// and parent message matching (api/message-to-board.js) follow via their
+// defaults. Flipping back to false re-darkens everything to admin-only.
+export const SYNONYMS_PUBLIC = true;
 
 // Synonym SETS — words that should land on the SAME tile in listening mode:
 // someone says "hi" and the board's "hello" tile renders (with "hi" as the

@@ -552,6 +552,7 @@
     aspect-ratio: 1;
     border-radius: 14px;
     background: #e9eef5 center/cover no-repeat;
+    overflow: hidden;   /* the label band inherits the rounded corners */
     position: relative;
     overflow: hidden;
     box-shadow:
@@ -661,6 +662,15 @@
     text-overflow: ellipsis;
   }
   body.hide-labels .tile-label { display: none; }
+  /* Label band (the Label Lab recipe, live): the word rides IN the art —
+     uniform Fredoka band, any language, no re-render. The band survives
+     hide-labels (it emulates a caption baked into the art); the separate
+     under-tile text hides on banded tiles as redundant. */
+  .tile-square .tile-band { position: absolute; left: 0; right: 0; bottom: 0; height: 17.6%;
+    background: #ffffff; color: #000; font-family: 'Fredoka', ui-rounded, system-ui, sans-serif;
+    font-weight: 700; display: flex; align-items: center; justify-content: center;
+    white-space: nowrap; overflow: hidden; pointer-events: none; }
+  .tile-wrap.banded .tile-label { display: none; }
   body.hide-labels .aac-section h2 { display: none; }
 
   /* Category tabs */
@@ -2456,7 +2466,51 @@
     el.addEventListener('pointercancel', (e) => { if (e.pointerId === pid) active = false; });
   }
 
-  function makeTile({ kind, id, imageKey, keepAspect, label, isCategory, isActive, pinned, onClick, onEdit, forgivingTap }) {
+  // ── Label band — the Label Lab recipe on the family board ─────────────────
+  // Converged settings (band 180px, text 112px on the 1024px source tile) as
+  // RATIOS of the tile's rendered width, so the band scales with the board.
+  // Same recipe as practice.html; keep the two in step. Categories that ARE
+  // their own label (letters, numbers, posters, clock faces) skip the band.
+  // ?bands=0 shows the old under-tile look for comparison.
+  const BAND = {
+    on: new URLSearchParams(location.search).get('bands') !== '0',
+    heightR: 180 / 1024, fontR: 112 / 1024,
+    skip: ['alphabet', 'letters', 'numbers', 'movies & shows', 'movies', 'shows', 'clock', 'time'],
+  };
+  function bandSkipped(category, subcategory) {
+    const c = String(category || '').trim().toLowerCase();
+    const sub = String(subcategory || '').trim().toLowerCase();
+    return BAND.skip.includes(c) || (sub && BAND.skip.includes(sub));
+  }
+  // Size every band from its tile's real rendered width (text auto-shrinks
+  // until it fits, exactly like the lab preview). Re-runs on resize; renders
+  // schedule it through the rAF debounce so one frame sizes a whole board.
+  function fitBands() {
+    for (const b of document.querySelectorAll('.tile-square .tile-band')) {
+      const w = b.parentElement.clientWidth;
+      const word = b.firstElementChild;
+      if (!w || !word) continue;
+      let size = Math.max(8, Math.round(w * BAND.fontR));
+      b.style.fontSize = size + 'px';
+      let guard = 8;
+      while (word.offsetWidth > w * 0.94 && size > 8 && guard--) {
+        size = Math.floor(size * 0.9);
+        b.style.fontSize = size + 'px';
+      }
+    }
+  }
+  let _bandRaf = null;
+  function scheduleBandFit() {
+    if (_bandRaf) return;
+    _bandRaf = requestAnimationFrame(() => { _bandRaf = null; fitBands(); });
+  }
+  let _bandFitTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(_bandFitTimer);
+    _bandFitTimer = setTimeout(fitBands, 150);
+  });
+
+  function makeTile({ kind, id, imageKey, keepAspect, label, isCategory, isActive, pinned, onClick, onEdit, forgivingTap, bandCategory, bandSubcategory }) {
     const wrap = document.createElement('div');
     wrap.className = 'tile-wrap'
       + (isCategory ? ' category' : '')
@@ -2474,6 +2528,23 @@
       w.className = 'word-tile-text';
       w.textContent = label || '';
       sq.appendChild(w);
+    }
+
+    // The word rides IN the art on real image tiles (word tiles already show
+    // it big; posters keep their natural frame; category chips label below).
+    if (BAND.on && !isCategory && imageKey && label && !keepAspect
+        && !bandSkipped(bandCategory, bandSubcategory)) {
+      const band = document.createElement('div');
+      band.className = 'tile-band';
+      // Inner span so the fit pass measures the TEXT, not the band — the band
+      // is always exactly tile-wide, so measuring it against itself reads as
+      // "overflowing" every time and shrinks every word to a whisper.
+      const word = document.createElement('span');
+      word.textContent = label;
+      band.appendChild(word);
+      sq.appendChild(band);
+      wrap.classList.add('banded');
+      scheduleBandFit();
     }
 
     if (pinned) {
@@ -3084,6 +3155,7 @@
       const tile = makeTile({
         kind: 'i', id: it.id, imageKey: it.imageKey, keepAspect: tvPoster,
         label: it.displayLabel || it.label, pinned: it.pinned, forgivingTap: !editMode,
+        bandCategory: tapCategoryName, bandSubcategory: tapSubcategoryName,
         onClick: () => {
           if (editMode) { openItemModal(section, activeId, it); return; }
           tapSpeak(it, tapCategoryName, tapSubcategoryName);

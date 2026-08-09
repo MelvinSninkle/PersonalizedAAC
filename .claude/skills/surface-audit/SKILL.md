@@ -311,18 +311,20 @@ child-dismissable. Screen flashing is a slow ~0.3Hz pulse, NEVER ≥3Hz
 (photosensitive-seizure threshold). VERIFY: `bash invariants.sh` F1 +
 `node tools/surface-audit/beacon_smoke.cjs` against the stub.
 
-**F2. Listening synonyms are dark-launched behind `SYNONYMS_PUBLIC`.**
+**F2. Listening synonyms graduated PUBLIC via `SYNONYMS_PUBLIC` (2026-08-09).**
 The engine synonym sets (`SYNONYM_SETS` in `api/_lib/word-match.js`) and the
-spoken-word captions on matched listen chips are being field-tested on the
-owner's device first. While `SYNONYMS_PUBLIC = false`: `/api/sync` passes
-`{ synonyms }` into `expandMatchTerms` only for ADMIN callers, and ships
-`listenCaptions` (same boolean) so all three clients draw the caption band
-only when told to — web persists it (`aacListenCaptions`), iOS/Android carry
-it on BoardStore beside the blocklist. `api/demo.js` (public practice board)
-and `api/message-to-board.js` take the expandMatchTerms DEFAULT, which is the
-flag itself — so graduation is ONE flip in word-match.js, no client release.
-VERIFY: `invariants.sh` F2 greps + the access_smoke caption-gate assertion
-(match survives with captions off, caption does not).
+spoken-word captions on matched listen chips now ship to EVERY board:
+`SYNONYMS_PUBLIC = true`, so `/api/sync` expands sets for all callers and
+ships `listenCaptions = true`; `api/demo.js` (public practice board) and
+`api/message-to-board.js` take the expandMatchTerms DEFAULT, which is the
+flag itself. The RAIL stays load-bearing — all three clients still draw the
+caption band only when the synced flag says so (web `aacListenCaptions`,
+iOS/Android BoardStore beside the blocklist), so flipping the flag back to
+false re-darkens everything to admin-only with no client release. A
+read-only viewer of the sets lives at Taxonomy admin → 🔤 Synonym sets
+(`lab?action=synonyms`, requireAdmin per D1). VERIFY: `invariants.sh` F2
+greps + the access_smoke caption-gate assertion (match survives with
+captions off, caption does not).
 
 **F3. Multi-child accounts are dark-launched behind `MULTI_CHILD_PUBLIC`.**
 One login owns many boards through `child_access` relation 'parent' — the

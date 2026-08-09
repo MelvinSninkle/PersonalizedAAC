@@ -47,6 +47,7 @@ import backup from './_lab-backup.js';
 import defaultUpload from './_lab-default-upload.js';
 import spendGuard from './_lab-spend-guard.js';
 import support from './_lab-support.js';
+import synonyms from './_lab-synonyms.js';
 
 export const config = { maxDuration: 300 };
 
@@ -85,6 +86,7 @@ const HANDLERS = {
   'translations': translations,
   'lang-audio': langAudio,
   'role': role,
+  'synonyms': synonyms,
 };
 
 export default async function handler(req, res) {
