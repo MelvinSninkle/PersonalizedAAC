@@ -16,7 +16,18 @@ struct TileView: View {
     var posterMode: Bool = false
 
     @Environment(DisplayPrefs.self) private var prefs
+    /// Present ONLY on the pre-login practice board (PracticeBoardView
+    /// injects it): the Label Lab caption band, the pink/violet tier rings,
+    /// and under-tile label suppression. nil on every real board, so nothing
+    /// changes there.
+    @Environment(PracticeChrome.self) private var practiceChrome: PracticeChrome?
     @State private var image: UIImage?
+
+    private var practiceBandVisible: Bool {
+        guard let chrome = practiceChrome else { return false }
+        guard let key = tile.imageKey, !key.isEmpty else { return false }
+        return !chrome.bandSkip.contains(tile.id)
+    }
 
     var body: some View {
         Button {
@@ -58,6 +69,26 @@ struct TileView: View {
                             .font(.largeTitle)
                             .foregroundStyle(.tertiary)
                     }
+                    // Label Lab caption band (practice board only): the
+                    // converged recipe as RATIOS of the tile's rendered width
+                    // (band 180/1024, text 112/1024), text auto-shrinking to
+                    // fit — the same treatment practice.html ships.
+                    if practiceBandVisible {
+                        GeometryReader { g in
+                            VStack(spacing: 0) {
+                                Spacer(minLength: 0)
+                                Text(tile.display)
+                                    .font(.system(size: g.size.width * 0.109, weight: .heavy, design: .rounded))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.35)
+                                    .padding(.horizontal, 3)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: g.size.width * 0.176)
+                                    .background(Color.white.opacity(0.93))
+                                    .foregroundStyle(Color(hex: "#1f2937"))
+                            }
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .aspectRatio(1, contentMode: .fit)
@@ -67,6 +98,18 @@ struct TileView: View {
                         .stroke(editMode ? Color(hex: "#ff1493").opacity(0.7) : Color.black.opacity(0.06),
                                 lineWidth: editMode ? 2 : 1)
                 )
+                // Practice-board tier rings, same coding as practice.html:
+                // Nouns (their whole world of things) = violet Pro, everything
+                // else personalizable = pink Plus.
+                .overlay {
+                    if practiceChrome != nil {
+                        RoundedRectangle(cornerRadius: 18)
+                            .strokeBorder(tile.section == .nouns
+                                          ? Color(hex: "#7c3aed").opacity(0.45)
+                                          : Color(hex: "#ff1493").opacity(0.5),
+                                          lineWidth: 2.5)
+                    }
+                }
                 // Pencil badge so the parent knows the tile is tap-to-edit while
                 // unlocked (and the pinned star, matching the web organizer).
                 .overlay(alignment: .topTrailing) {
@@ -88,7 +131,8 @@ struct TileView: View {
                     }
                 }
 
-                if !prefs.hideLabels {
+                // Practice board: the caption band IS the label — never both.
+                if !prefs.hideLabels && practiceChrome == nil {
                     Text(tile.display)
                         .font(.system(size: 17, weight: .semibold))
                         .lineLimit(1)

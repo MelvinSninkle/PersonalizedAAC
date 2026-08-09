@@ -1,6 +1,12 @@
 import Foundation
 import AVFoundation
 
+extension Notification.Name {
+    /// Fired for every tile the board speaks (regardless of childId). The
+    /// practice board's "Taps this visit / Different words" counters listen.
+    static let myWorldTileSpoken = Notification.Name("myworld.tileSpoken")
+}
+
 /// Plays a tile's audio. Three-level fallback:
 ///   1. If the tile has a cached/cacheable `soundKey`, play that file via
 ///      AVAudioPlayer (fastest, exact audio the parent picked).
@@ -87,6 +93,11 @@ final class TilePlayer {
         if let childId, !childId.isEmpty {
             logTap(tile, childId: childId, categoryName: categoryName, subcategoryName: subcategoryName)
         }
+
+        // Local observers (the practice board's "Taps this visit" counters)
+        // hear every spoken tile regardless of childId — nothing posts.
+        NotificationCenter.default.post(name: .myWorldTileSpoken, object: nil,
+                                        userInfo: ["tileId": tile.id, "label": tile.label])
 
         // 1) Cached audio file.
         if let key = tile.soundKey, !key.isEmpty {
