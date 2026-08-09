@@ -8,7 +8,7 @@
   :root { --pink:#ff1493; --pink-deep:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#fce4ec; --bg:#fdf2f8; }
   * { box-sizing:border-box; margin:0; }
   body { font:16px/1.65 -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:var(--bg); }
-  .wrap { max-width:680px; margin:0 auto; padding:34px 20px 80px; }
+  .wrap { max-width:680px; margin:0 auto; padding:34px 20px 40px; }
   .brand { display:flex; align-items:center; gap:10px; margin-bottom:26px; }
   .brand img { height:34px; }
   .brand b { color:var(--pink-deep); font-size:18px; }
@@ -17,14 +17,13 @@
   h2 { font-size:18px; color:var(--pink-deep); margin:26px 0 8px; }
   p { margin:0 0 14px; }
   .sig { font-style:italic; color:var(--muted); }
-  .ack { display:flex; gap:10px; align-items:flex-start; padding:11px 12px; border:1px solid var(--line); border-radius:12px; margin-bottom:8px; font-size:14px; background:#fff; }
+  .ack { display:flex; gap:10px; align-items:flex-start; padding:12px 13px; border:1px solid var(--line); border-radius:12px; margin-bottom:8px; font-size:14.5px; background:#fff; }
   .ack input { margin-top:4px; flex:0 0 auto; }
   .reveal { display:none; margin-top:22px; padding:20px; border-radius:16px; background:var(--bg); border:2px dashed var(--pink); text-align:center; }
   .reveal.show { display:block; }
   .code { font-size:26px; font-weight:800; letter-spacing:.12em; color:var(--pink-deep); margin:8px 0 4px; user-select:all; }
   .btn { display:inline-block; background:var(--pink); color:#fff; text-decoration:none; font-weight:700; padding:13px 22px; border-radius:999px; border:none; font:inherit; font-weight:700; cursor:pointer; }
   .btn[disabled] { opacity:.45; cursor:default; }
-  .btn.ghost { background:#fff; color:var(--pink-deep); border:1.5px solid var(--pink); }
   .steps { margin:10px 0 0 0; padding-left:20px; }
   .steps li { margin-bottom:8px; }
   .paybox { margin-top:14px; padding:18px; border-radius:16px; border:1px solid var(--line); background:#fff; }
@@ -42,59 +41,86 @@
   <div class="card">
     <h1>A letter to Founding Families</h1>
 
-    <p>Hi — I'm Andrew. My son Fletcher is why this exists.</p>
+    <p>The first thing we noticed about my son was that he wouldn&rsquo;t turn his head when we called
+      his name. Next was the tiptoe walking. Then he passed the usual speech milestones and kept not
+      talking. If you&rsquo;re here considering this app for your own child, I don&rsquo;t need to
+      explain how that feels. Earlier this year, he was formally diagnosed with level three autism.</p>
 
-    <p>Fletcher is behind on speech. I know the feeling you might have right now, because I had it too:
-      you don't want a waitlist, you don't want a pitch — your kid needs words and you want this
-      <em>done</em>. So I built him a board where his own food, his own toys, his own people
-      <em>are</em> the vocabulary, drawn in a style he loves, speaking in a voice we chose.
-      It changed our house. This app is that board, made shareable.</p>
+    <p>Like many families with non-verbal children, we tried everything we could. My son sees ABA,
+      occupational, and speech therapists, and we tried the available speech devices for several
+      months. He never really took to them.</p>
 
-    <p>I want to hand it to you the same way I'd hand it to a friend — personally, with my full
-      attention on your child's board. That's what "Founding Family" means, and it's also why I have
-      to be honest with you about four things before you take a code:</p>
+    <p>But I noticed something: he could focus intently on movies and books. He could watch a
+      favorite movie for an hour and a half without looking away. That made me wonder: If I
+      couldn&rsquo;t bring his attention to a language device, could I bring a language device to
+      his attention?</p>
+
+    <p>I built a tiny prototype using AI-generated pictures of our real life, drawn in an animation
+      style he loved, and used AI to recreate my voice. We put it on an old touchscreen laptop.</p>
+
+    <p>The response was immediate.</p>
+
+    <p>He wouldn&rsquo;t put it down. He was touching a storybook made from his own life, and
+      suddenly he could use it to speak with his father&rsquo;s voice. Within minutes, he produced
+      the longest sentence we had ever heard from him.</p>
+
+    <p>I spent the next month building.</p>
+
+    <p>Three months later, his use of language has exploded. He can tell us what he wants to eat,
+      what toy he wants to play with, or what movie he wants to watch. The app tracks his progress,
+      helps us teach new language, and even has a listening mode that lets us communicate back and
+      forth in ways we simply couldn&rsquo;t before. I can speak to him, and my words appear on his
+      board as images he can understand and use as vocabulary.</p>
+
+    <p>This website and application were originally built for my son. At the urging of his
+      speech-language therapist and others who have seen him use it, I&rsquo;m now preparing to
+      offer the iOS app to other families.</p>
+
+    <p>I cannot promise it will work for your child the way it worked for mine. This is new. I
+      don&rsquo;t have a clinical study or a large dataset, only my son&rsquo;s experience and
+      encouraging signs from a small number of early users. For your child, it may be
+      transformative, or it may amount to little more than some personalized pictures they enjoy. I
+      cannot make any guarantee and more of you than I might wish will not find success using the
+      device.</p>
+
+    <p>If you understand that and would still like to try it, please acknowledge that below and
+      complete the form. I&rsquo;m personally working with this first group of families so I can
+      help get each child set up and learn what works.</p>
+
+    <p class="sig">&mdash; Andrew Peterson</p>
+
+    <h2>To receive your invite code</h2>
+    <p style="font-size:14.5px;">Please read the letter above, then check both boxes. Your code
+      appears below them.</p>
 
     <label class="ack"><input type="checkbox" class="ack-box">
-      <span><b>This is early, experimental software.</b> It works — our family and our testers use it
-      every day — but you will occasionally catch a rough edge. When you do, you tell me and I fix it
-      fast. You are talking to the person who wrote it.</span></label>
+      <span>My child can pay attention to a book, animated television show, or animated movie OR I
+      would like to try this anyway even though my child does not seem to pay attention to those
+      things</span></label>
 
     <label class="ack"><input type="checkbox" class="ack-box">
-      <span><b>iPhone &amp; iPad first.</b> The app launches on iOS, and the full board also runs on the
-      web on any computer. <b>Android and Kindle Fire come later</b> — they're in active development,
-      but if your child's device is Android-only today, this isn't ready for you yet.</span></label>
-
-    <label class="ack"><input type="checkbox" class="ack-box">
-      <span><b>Families are activated at the pace of one developer-dad.</b> I open spots as fast as I
-      can support them well, because every Founding Family board gets built and checked by me
-      personally. If the code below has run out, the waitlist on the home page is real and I work
-      through it in order.</span></label>
-
-    <label class="ack"><input type="checkbox" class="ack-box">
-      <span><b>I've read the <a href="/terms" target="_blank">Terms</a> and
-      <a href="/privacy" target="_blank">Privacy Policy</a>.</b> The short version I hold myself to:
-      your photos stay private to your family and are used only to make your child's board, and
-      everything made for your child stays yours forever — even if you cancel.</span></label>
+      <span>I understand this is experimental and may not work for my child.</span></label>
 
     <div class="reveal" id="reveal">
       <div class="tiny">Your Founding Family invite code:</div>
       <div class="code">FOUNDINGFAMILY</div>
-      <div class="tiny">Enter it when you create your account. It stops working when the current group fills.</div>
+      <div class="tiny">Enter it when you create your account. It stops working when the current
+        group fills — after that, the <a href="/#waitlist">waitlist</a> is real and worked in order.</div>
     </div>
 
     <div id="after-reveal" style="display:none;">
       <h2>What being a Founding Family costs, plainly</h2>
-      <p>A one-time <b>$20 concierge setup</b> — I personally build your child's whole board from your
-        photos and check in with you directly — plus a membership that <b>starts billing the day you
-        join</b>: Plus at $9.99/month or Pro at $19.99/month. Cancel anytime; the board and every
-        picture we made stays yours.</p>
+      <p>A one-time <b>$20 concierge setup</b> — I personally build your child's whole board from
+        your photos and check in with you directly — plus a membership that <b>starts billing the
+        day you join</b>: Plus at $9.99/month or Pro at $19.99/month. Cancel anytime; the board and
+        every picture made for your child stays yours.</p>
 
       <h2>Three steps, about ten minutes</h2>
       <ol class="steps">
         <li><a href="/signup?code=foundingfamily"><b>Create your account</b></a> with the code above.</li>
         <li>Come back to this page signed in and start your Founding membership below.</li>
-        <li>Walk through onboarding — your photos and choices there are what I build from. Then I take
-            it from there and email you when your board is ready.</li>
+        <li>Walk through onboarding — your photos and choices there are what I build from. Then I
+            take it from there and email you when your board is ready.</li>
       </ol>
 
       <div class="paybox" id="paybox">
@@ -109,11 +135,6 @@
         <p class="msg" id="pay-msg">Checking whether you're signed in…</p>
       </div>
     </div>
-
-    <p style="margin-top:26px;">Thank you for trusting me with something this important. I don't take
-      it lightly.</p>
-    <p class="sig">— Andrew Peterson, Fletcher's dad · reply to any email from us and it reaches me
-      directly</p>
   </div>
 
   <p class="tiny" style="text-align:center; margin-top:18px;">
@@ -121,13 +142,15 @@
   </p>
 </div>
 
+<div style="text-align:center;font-size:12px;color:#9ca3af;padding:18px 10px;">© My World Tap to Talk LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home. It isn’t a medical device and doesn’t replace your child’s care team.</div>
+
 <script>
 (() => {
   const boxes = [...document.querySelectorAll('.ack-box')];
   const reveal = document.getElementById('reveal');
   const after = document.getElementById('after-reveal');
-  // The code appears only when every acknowledgment is checked — the point of
-  // this page is that a Founding Family arrives educated, not surprised.
+  // The code appears only when both acknowledgments are checked — the point
+  // of this page is that a Founding Family arrives educated, not surprised.
   function sync() {
     const all = boxes.every((b) => b.checked);
     reveal.classList.toggle('show', all);
