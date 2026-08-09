@@ -117,7 +117,7 @@
       bigger than any one board, so words never spoken anywhere render once and are cached forever. Clips
       speak exactly what boards speak (phonetic overrides included). Runs are resumable — press again to finish.</p>
     <table>
-      <thead><tr><th>Voice</th><th>Clips built</th><th style="width:190px;"></th></tr></thead>
+      <thead><tr><th>Voice</th><th>Coverage vs the whole taxonomy</th><th style="width:190px;"></th></tr></thead>
       <tbody id="demo-rows"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody>
     </table>
     <div class="addrow">
@@ -813,17 +813,34 @@
   async function loadDemoStatus() {
     const d = await api('/api/admin/lab?action=demo-audio');
     DEMO_TOTAL = Number(d.tiles) || 0;
-    const built = d.built || {};
+    const coverage = d.coverage || {};
     const rows = VOICES.filter((v) => v.active && (v.lang || 'en') === 'en');
     const tb = document.getElementById('demo-rows');
     if (!rows.length) { tb.innerHTML = '<tr><td colspan="3" class="empty">No active English voices.</td></tr>'; return; }
     tb.innerHTML = rows.map((v) => {
-      const n = Number(built[v.id]) || 0;
-      const done = DEMO_TOTAL > 0 && n >= DEMO_TOTAL;
+      // TRUE set comparison from the server: taxonomy labels with a clip vs
+      // without (a raw blob count lies once the taxonomy moves — orphaned
+      // clips for renamed words keep the count looking complete).
+      const c = coverage[v.id] || { have: 0, missing: DEMO_TOTAL, missingLabels: [], missingSample: true, orphans: 0 };
+      const done = DEMO_TOTAL > 0 && c.missing === 0 && !c.missingSample;
+      let cell = (done ? '✅ ' : '') + c.have + ' / ' + DEMO_TOTAL;
+      const extras = [];
+      if (c.missingSample) extras.push('intro sample missing');
+      if (c.orphans) extras.push(c.orphans + ' orphaned clip' + (c.orphans === 1 ? '' : 's') + ' (retired words — harmless)');
+      if (extras.length) cell += ' <span class="sub" style="font-size:12px;">· ' + esc(extras.join(' · ')) + '</span>';
+      if (c.missing > 0) {
+        const list = (c.missingLabels || []).map(esc).join(', ')
+          + (c.missing > (c.missingLabels || []).length ? ` … +${c.missing - c.missingLabels.length} more` : '');
+        cell += '<details style="margin-top:4px;"><summary style="cursor:pointer;font-size:12.5px;color:#b91c1c;font-weight:700;">'
+          + c.missing + ' word' + (c.missing === 1 ? '' : 's') + ' missing a clip</summary>'
+          + '<div style="font-size:12px;color:#475569;max-width:480px;margin-top:4px;">' + list + '</div></details>';
+      }
       return '<tr><td>' + esc(v.name) + '</td>'
-        + '<td>' + (done ? '✅ ' : '') + n + (DEMO_TOTAL ? ' / ' + DEMO_TOTAL : '') + '</td>'
+        + '<td>' + cell + '</td>'
         + '<td><button class="primary" data-demo-build="' + esc(v.id) + '"' + (done ? ' disabled' : '') + '>'
-        + (n > 0 && !done ? '⚡ Resume copy + fill' : '⚡ Copy + fill clips') + '</button></td></tr>';
+        + (done ? '✅ Complete'
+           : (c.have > 0 ? '⚡ Fill ' + (c.missing + (c.missingSample ? 1 : 0)) + ' gap' + (c.missing + (c.missingSample ? 1 : 0) === 1 ? '' : 's')
+                         : '⚡ Copy + fill clips')) + '</button></td></tr>';
     }).join('');
     tb.querySelectorAll('[data-demo-build]').forEach((b) =>
       b.addEventListener('click', () => buildDemo([b.dataset.demoBuild])));
