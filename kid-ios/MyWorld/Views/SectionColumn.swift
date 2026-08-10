@@ -77,7 +77,8 @@ struct SectionColumn: View {
                 t,
                 childId: auth.childSlug,
                 categoryName: fallbackCategory ?? activeCategoryName,
-                subcategoryName: activeSubcategoryName
+                subcategoryName: activeSubcategoryName,
+                touchControls: true   // board tap — teach/interrupt apply even signed out (practice)
             )
         }
     }

@@ -104,11 +104,17 @@ enum ListenTokenizer {
 /// after ~10s (or once the bar fills) — a continuous class-captioning aid.
 struct ListenStripView: View {
     let speech: SpeechListener
+    /// Practice/demo board only: render the strip at a fixed larger scale
+    /// (roomier chips for screen recordings). nil — every real board — uses
+    /// the device's low-vision listenScale, exactly as before.
+    var scaleOverride: Double? = nil
     @Environment(BoardStore.self) private var board
     @Environment(AccessPrefs.self) private var access
     @Environment(BoardNav.self) private var nav
     @Environment(DisplayPrefs.self) private var prefs
     @State private var lastNavKey = ""
+
+    private var stripScale: Double { scaleOverride ?? prefs.listenScale }
 
     private var tokens: [ListenToken] {
         ListenTokenizer.tokenize(speech.words, lexicon: ListenTokenizer.lexicon(from: board.tiles),
@@ -142,10 +148,10 @@ struct ListenStripView: View {
                         // The word still being spoken, shown faint at the end.
                         if !speech.liveTail.isEmpty {
                             Text(speech.liveTail)
-                                .font(.system(size: 18 * prefs.listenScale, weight: .semibold, design: .rounded))
+                                .font(.system(size: 18 * stripScale, weight: .semibold, design: .rounded))
                                 .foregroundStyle(Color(hex: "#ad1457").opacity(0.5))
                                 .padding(.horizontal, 8)
-                                .frame(height: 76 * prefs.listenScale)
+                                .frame(height: 76 * stripScale)
                                 .id("live-tail")
                         }
                     }
@@ -165,7 +171,7 @@ struct ListenStripView: View {
         }
         // #15 low-vision enlargement: the strip and its chips scale together
         // (HeaderBar grows its tall frame by the same factor).
-        .frame(height: 92 * prefs.listenScale)
+        .frame(height: 92 * stripScale)
     }
 
     /// A word matched N times IN A ROW = "show me": open that tile's category,
@@ -196,14 +202,14 @@ struct ListenStripView: View {
     @ViewBuilder
     private func chip(_ tok: ListenToken) -> some View {
         if let tile = tok.tile {
-            ListenTileChip(tile: tile, scale: prefs.listenScale, spoken: tok.spoken)
+            ListenTileChip(tile: tile, scale: stripScale, spoken: tok.spoken)
         } else {
             Text(tok.word)
-                .font(.system(size: 20 * prefs.listenScale, weight: .bold, design: .rounded))
+                .font(.system(size: 20 * stripScale, weight: .bold, design: .rounded))
                 .italic(tok.masked)
                 .foregroundStyle(Color(hex: "#ad1457").opacity(tok.masked ? 0.7 : 1))
                 .padding(.horizontal, 12)
-                .frame(height: 76 * prefs.listenScale)
+                .frame(height: 76 * stripScale)
                 .background(Color(hex: "#fce4ec"), in: RoundedRectangle(cornerRadius: 14))
         }
     }
@@ -239,7 +245,10 @@ private struct ListenTileChip: View {
                         .minimumScaleFactor(0.6)
                         .foregroundStyle(Color(hex: "#1f2937"))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 1)
+                        // Asymmetric padding: the rounded-corner clip below
+                        // was shaving descenders (g/y/p) off the caption.
+                        .padding(.top, 1)
+                        .padding(.bottom, 3)
                         .background(.white.opacity(0.92))
                 }
             }

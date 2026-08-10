@@ -152,7 +152,8 @@ struct NeedsStrip: View {
                                     await TilePlayer.shared.play(
                                         t,
                                         childId: auth.childSlug,
-                                        categoryName: "Needs"
+                                        categoryName: "Needs",
+                                        touchControls: true   // board tap — teach/interrupt apply even signed out (practice)
                                     )
                                 }
                             },

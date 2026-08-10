@@ -82,8 +82,12 @@ struct TileView: View {
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.35)
                                     .padding(.horizontal, 3)
+                                    // Sit the text slightly high in the band —
+                                    // the corner-radius clip below was shaving
+                                    // descenders off the label's bottom edge.
+                                    .padding(.bottom, g.size.width * 0.02)
                                     .frame(maxWidth: .infinity)
-                                    .frame(height: g.size.width * 0.176)
+                                    .frame(height: g.size.width * 0.185)
                                     .background(Color.white.opacity(0.93))
                                     .foregroundStyle(Color(hex: "#1f2937"))
                             }
