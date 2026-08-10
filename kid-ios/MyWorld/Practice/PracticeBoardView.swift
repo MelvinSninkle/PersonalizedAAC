@@ -47,6 +47,7 @@ struct PracticeBoardView: View {
             let subcategory: String?
             let imageKey: String?
             let matchTerms: [String]?
+            let descriptiveClues: [String]?
         }
         struct Folder: Decodable {
             let section: String?
@@ -71,6 +72,19 @@ struct PracticeBoardView: View {
     /// and the listening strip all read it through the normal environment.
     @State private var store = BoardStore(hydrateFromDiskCache: false)
     @State private var chrome = PracticeChrome()
+    /// Practice-local access prefs: the sentence constructor is ON here (the
+    /// pencil + drag-to-bar), independent of any family's stored settings.
+    /// AccessPrefs is a read-only holder — a fresh instance never persists.
+    @State private var access: AccessPrefs = {
+        let a = AccessPrefs()
+        a.sentenceBuilder = true
+        a.sentenceDrag = true
+        return a
+    }()
+    /// Fresh sentence + navigation state so nothing bleeds between the
+    /// practice screen and a family board on the same device.
+    @State private var sentence = SentenceBar()
+    @State private var boardNav = BoardNav()
 
     @State private var payload: Payload?
     @State private var styleId: Int?          // nil = Classic (generic starter art)
@@ -106,9 +120,31 @@ struct PracticeBoardView: View {
         .background(Color(hex: "#fff7fb"))
         .environment(store)      // practice content, NOT the family board
         .environment(chrome)
+        .environment(access)
+        .environment(sentence)
+        .environment(boardNav)
+        // Shared space for the sentence-lift gesture (same name the real
+        // board uses): tiles report drag points here; the header drop zone
+        // is y ≤ SentenceBar.dropZoneMaxY.
+        .coordinateSpace(name: "board")
+        // Floating copy of the tile while drag-staging (sentenceDrag).
+        .overlay {
+            if let d = sentence.drag {
+                SentenceDragGhost(tile: d.tile).position(d.point)
+            }
+        }
         .overlay { loadStateOverlay }
         .overlay { tourOverlay }
         .task(id: "\(styleId ?? 0)|\(kidId ?? 0)") { await load() }
+        // Practice touch defaults: tap-again-to-learn ON, utterances
+        // NON-interruptible — the recommended child-board feel, demoed as
+        // such. TouchConfig is app-global, but a family signing in re-reads
+        // their own settings (AccessPrefs.refresh) which overwrites these.
+        .onAppear {
+            TouchConfig.doubleTapTeach = true
+            TouchConfig.interrupt = false
+            TouchConfig.teachTapMs = 2000
+        }
         // The real game covers — Teach me and Play with me present the same
         // views a child's board presents.
         .fullScreenCover(item: gameSessionBinding) { session in
@@ -161,9 +197,16 @@ struct PracticeBoardView: View {
     //
     // Lock · mic — [Register an Account in the child-name slot] — Teach · Play
 
+    private var tall: Bool { listening || sentence.active }
+
     private var headerBar: some View {
         ZStack {
-            if listening {
+            if sentence.active {
+                // Sentence constructor: while composing, the strip is the
+                // ONLY header content — same rule as the real board.
+                SentenceStripView()
+                    .padding(.horizontal, 8)
+            } else if listening {
                 ListenStripView(speech: speech)
                     .padding(.horizontal, 66)   // clear the side buttons
             } else {
@@ -181,21 +224,41 @@ struct PracticeBoardView: View {
                 .buttonStyle(.plain)
             }
 
-            HStack(spacing: 10) {
-                if !listening { lockButton }
-                listenButton
-                    .padding(.trailing, listening ? 6 : 0)
-                Spacer()
-                if !listening {
-                    teachMeButton
-                    playWithMeButton
+            if !sentence.active {
+                HStack(spacing: 10) {
+                    if !listening { lockButton }
+                    listenButton
+                        .padding(.trailing, listening ? 6 : 0)
+                    // ✏️ Sentence mode — modal, like the real board: while on,
+                    // a TAP stages its tile; ▶ in the strip speaks the sentence.
+                    if !listening { sentenceModeButton }
+                    Spacer()
+                    if !listening {
+                        teachMeButton
+                        playWithMeButton
+                    }
                 }
+                .padding(.horizontal, 12)
             }
-            .padding(.horizontal, 12)
         }
-        .frame(height: listening ? 104 : 48)
-        .animation(.easeInOut(duration: 0.2), value: listening)
+        .frame(height: tall ? 104 : 48)
+        .animation(.easeInOut(duration: 0.2), value: tall)
         .background(Color(hex: Brand.pink))
+        // Drop-target glow while a lifted tile hovers over the bar.
+        .overlay(Rectangle().stroke(Color(hex: "#66bb6a"),
+                                    lineWidth: sentence.drag?.overHeader == true ? 4 : 0))
+    }
+
+    private var sentenceModeButton: some View {
+        Button {
+            sentence.setMode(!sentence.mode)
+        } label: {
+            Text("✏️")
+                .font(.system(size: 15))
+                .padding(6)
+                .background(Circle().fill(sentence.mode ? Color(hex: "#66bb6a") : Color.white.opacity(0.18)))
+        }
+        .buttonStyle(.plain)
     }
 
     /// The lock a real board carries. Here, unlocking IS the pitch: editing
@@ -584,6 +647,9 @@ struct PracticeBoardView: View {
                 item["soundKey"] = "demo-audio/\(vid)/\(Self.demoSlug(t.label)).mp3"
             }
             if let mt = t.matchTerms, !mt.isEmpty { item["matchTerms"] = mt }
+            // Tap-again-to-learn: the same taxonomy teaching facts real
+            // boards speak (practice defaults doubleTapTeach ON).
+            if let dc = t.descriptiveClues, !dc.isEmpty { item["descriptiveClues"] = dc }
             items.append(item)
         }
 

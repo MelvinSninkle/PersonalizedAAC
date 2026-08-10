@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     try {
       rows = await db`
         SELECT id, column_name, category, subcategory, label, default_image_key,
-               sort_order, match_terms
+               sort_order, match_terms, descriptive_clues
         FROM taxonomy
         WHERE COALESCE(archived, FALSE) = FALSE
           AND COALESCE(is_event, FALSE) = FALSE
@@ -171,6 +171,12 @@ export default async function handler(req, res) {
           const mt = expandMatchTerms(r.label, r.match_terms || []);
           if (mt.length) t.matchTerms = mt;
         } catch (_) {}
+        // Tap-again-to-learn facts — the same shared taxonomy prose every
+        // real board receives on sync (no family data). Lets the practice
+        // board's tap-to-learn speak real teaching clues.
+        if (Array.isArray(r.descriptive_clues) && r.descriptive_clues.length) {
+          t.descriptiveClues = r.descriptive_clues.slice(0, 3);
+        }
         return t;
       });
 

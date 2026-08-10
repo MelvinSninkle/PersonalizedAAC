@@ -50,12 +50,19 @@ final class TilePlayer {
     func play(_ tile: Tile,
               childId: String? = nil,
               categoryName: String? = nil,
-              subcategoryName: String? = nil) async {
-        // Touch controls apply only to logged board taps (childId present) —
-        // game/slideshow playback is never gated. Mirrors web tapSpeak:
-        // the double-tap-teach check runs BEFORE the interrupt gate, so a
-        // second tap teaches even while the first word is still playing.
-        if let childId, !childId.isEmpty {
+              subcategoryName: String? = nil,
+              touchControls: Bool? = nil) async {
+        // Touch controls apply to BOARD taps — historically detected by
+        // childId being present, which also kept game/slideshow playback
+        // ungated. The signed-out practice board is a board tap with no
+        // child, so board callers now say so explicitly (touchControls:
+        // true); nil keeps the childId-derived behavior for everyone else.
+        let cid: String? = (childId?.isEmpty == false) ? childId : nil
+        let isBoardTap = touchControls ?? (cid != nil)
+        // Mirrors web tapSpeak: the double-tap-teach check runs BEFORE the
+        // interrupt gate, so a second tap teaches even while the first word
+        // is still playing.
+        if isBoardTap {
             // A teaching fact mid-speech is not interruptible — the tap is
             // simply ignored (not logged; nothing happened for the child).
             if clueSpeaking { return }
@@ -71,11 +78,13 @@ final class TilePlayer {
                 if teachIdx < clues.count {
                     let clue = Array(clues)[teachIdx]
                     teachIdx += 1
-                    logTap(tile, childId: childId, categoryName: categoryName, subcategoryName: subcategoryName)
+                    if let cid {
+                        logTap(tile, childId: cid, categoryName: categoryName, subcategoryName: subcategoryName)
+                    }
                     player?.stop()
                     speech.stopSpeaking(at: .immediate)
                     clueSpeaking = true
-                    await GameAudio.shared.speakAwait(clue, childId: childId)
+                    await GameAudio.shared.speakAwait(clue, childId: cid ?? "")
                     clueSpeaking = false
                     lastTapAt = Date()      // window restarts when the fact ENDS
                     return
@@ -90,8 +99,8 @@ final class TilePlayer {
         }
 
         // Log the tap (fire-and-forget — UI never waits on analytics).
-        if let childId, !childId.isEmpty {
-            logTap(tile, childId: childId, categoryName: categoryName, subcategoryName: subcategoryName)
+        if let cid {
+            logTap(tile, childId: cid, categoryName: categoryName, subcategoryName: subcategoryName)
         }
 
         // Local observers (the practice board's "Taps this visit" counters)

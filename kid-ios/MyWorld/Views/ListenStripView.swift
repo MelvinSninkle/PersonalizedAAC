@@ -239,7 +239,10 @@ private struct ListenTileChip: View {
                         .minimumScaleFactor(0.6)
                         .foregroundStyle(Color(hex: "#1f2937"))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 1)
+                        // Asymmetric padding: the rounded-corner clip below
+                        // was shaving descenders (g/y/p) off the caption.
+                        .padding(.top, 1)
+                        .padding(.bottom, 3)
                         .background(.white.opacity(0.92))
                 }
             }
