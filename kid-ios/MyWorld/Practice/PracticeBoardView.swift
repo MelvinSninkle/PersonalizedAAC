@@ -241,7 +241,7 @@ struct PracticeBoardView: View {
                 .padding(.horizontal, 12)
             }
         }
-        .frame(height: tall ? 112 : 48)
+        .frame(height: tall ? 104 : 48)
         .animation(.easeInOut(duration: 0.2), value: tall)
         .background(Color(hex: Brand.pink))
         // Drop-target glow while a lifted tile hovers over the bar.
