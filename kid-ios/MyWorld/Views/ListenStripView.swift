@@ -164,8 +164,9 @@ struct ListenStripView: View {
             }
         }
         // #15 low-vision enlargement: the strip and its chips scale together
-        // (HeaderBar grows its tall frame by the same factor).
-        .frame(height: 92 * prefs.listenScale)
+        // (HeaderBar grows its tall frame by the same factor). 100pt: the
+        // 76pt thumbnail plus real room for the caption underneath.
+        .frame(height: 100 * prefs.listenScale)
     }
 
     /// A word matched N times IN A ROW = "show me": open that tile's category,
@@ -222,32 +223,34 @@ private struct ListenTileChip: View {
         Button {
             Task { await TilePlayer.shared.play(tile) }
         } label: {
-            Group {
-                if let image {
-                    Image(uiImage: image).resizable().scaledToFill()
-                } else {
-                    Color(hex: "#fff7fb")
+            // Caption BELOW the thumbnail, not overlaid inside it: the old
+            // in-image band both covered the art and had no vertical room —
+            // "the label was there but there wasn't space." The strip (100pt)
+            // and the header's tall state (112pt) grew to give it real room.
+            VStack(spacing: 2 * scale) {
+                Group {
+                    if let image {
+                        Image(uiImage: image).resizable().scaledToFill()
+                    } else {
+                        Color(hex: "#fff7fb")
+                    }
                 }
-            }
-            .frame(width: 76 * scale, height: 76 * scale)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .overlay(alignment: .bottom) {
+                .frame(width: 76 * scale, height: 76 * scale)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.06)))
+
                 if let spoken, !spoken.isEmpty {
                     Text(spoken)
                         .font(.system(size: 12 * scale, weight: .bold, design: .rounded))
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                         .foregroundStyle(Color(hex: "#1f2937"))
-                        .frame(maxWidth: .infinity)
-                        // Asymmetric padding: the rounded-corner clip below
-                        // was shaving descenders (g/y/p) off the caption.
-                        .padding(.top, 1)
-                        .padding(.bottom, 3)
-                        .background(.white.opacity(0.92))
+                        .padding(.horizontal, 6 * scale)
+                        .padding(.vertical, 2 * scale)
+                        .frame(maxWidth: 76 * scale)
+                        .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 6))
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.06)))
         }
         .buttonStyle(.plain)
         .task(id: tile.imageKey) {

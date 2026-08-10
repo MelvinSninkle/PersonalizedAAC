@@ -124,7 +124,8 @@ struct HeaderBar: View {
         }
         // #15 low-vision enlargement: the bar grows with its content — the
         // listening strip's scale while tall, the button scale otherwise.
-        .frame(height: tall ? 104 * prefs.listenScale : 48 * prefs.topButtonScale)
+        // 112: the 100pt strip (thumbnail + below-image caption) + breathing.
+        .frame(height: tall ? 112 * prefs.listenScale : 48 * prefs.topButtonScale)
     }
 
     // MARK: -- Left: the lock icon
