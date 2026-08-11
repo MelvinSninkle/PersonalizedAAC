@@ -57,10 +57,38 @@ enum ListenTokenizer {
         return map
     }
 
+    /// Contractions expand to the words their tiles exist for — "he's" →
+    /// "he is", "don't" → "do not" — ONLY after the contraction itself
+    /// matched no tile or synonym (a real "don't" tile always wins), so
+    /// possessives ("mom's ball") are never touched: only these exact
+    /// pronoun/wh/negation forms expand. Applies to every board (family +
+    /// practice) — keep in lockstep with app.html + practice.html.
+    static let contractions: [String: [String]] = [
+        "i'm": ["i", "am"], "i've": ["i", "have"], "i'll": ["i", "will"], "i'd": ["i", "would"],
+        "you're": ["you", "are"], "you've": ["you", "have"], "you'll": ["you", "will"], "you'd": ["you", "would"],
+        "he's": ["he", "is"], "he'll": ["he", "will"], "he'd": ["he", "would"],
+        "she's": ["she", "is"], "she'll": ["she", "will"], "she'd": ["she", "would"],
+        "it's": ["it", "is"], "it'll": ["it", "will"],
+        "we're": ["we", "are"], "we've": ["we", "have"], "we'll": ["we", "will"], "we'd": ["we", "would"],
+        "they're": ["they", "are"], "they've": ["they", "have"], "they'll": ["they", "will"], "they'd": ["they", "would"],
+        "that's": ["that", "is"], "that'll": ["that", "will"],
+        "there's": ["there", "is"], "here's": ["here", "is"], "where's": ["where", "is"],
+        "what's": ["what", "is"], "who's": ["who", "is"], "how's": ["how", "is"], "when's": ["when", "is"],
+        "let's": ["let", "us"],
+        "isn't": ["is", "not"], "aren't": ["are", "not"], "wasn't": ["was", "not"], "weren't": ["were", "not"],
+        "don't": ["do", "not"], "doesn't": ["does", "not"], "didn't": ["did", "not"],
+        "can't": ["can", "not"], "cannot": ["can", "not"], "couldn't": ["could", "not"],
+        "won't": ["will", "not"], "wouldn't": ["would", "not"], "shouldn't": ["should", "not"], "mustn't": ["must", "not"],
+        "haven't": ["have", "not"], "hasn't": ["has", "not"], "hadn't": ["had", "not"],
+        "ain't": ["is", "not"],
+        "gonna": ["going", "to"], "wanna": ["want", "to"], "gotta": ["got", "to"],
+    ]
+
     static func tokenize(_ words: [TimedWord], lexicon: [String: Tile],
                          censor: Bool = true, tilesOnly: Bool = false,
                          blocklist: Set<String> = [],
                          captions: Bool = false) -> [ListenToken] {
+        var words = words
         var out: [ListenToken] = []
         var i = 0
         while i < words.count {
@@ -71,6 +99,23 @@ enum ListenTokenizer {
                 let phrase = normalize(words[i..<(i + w)].map { $0.text }.joined(separator: " "))
                 if let tile = lexicon[phrase] { matched = tile; used = w; break }
                 w -= 1
+            }
+            // Unmatched contraction → splice its expansion in and re-match
+            // from the same spot ("he's" becomes "he" "is", each finding its
+            // own tile). Curly apostrophes (the recognizer's favorite)
+            // normalize to straight before lookup. Derived ids are negative
+            // so they can never collide with the recognizer's own word ids —
+            // and stay stable across transcript re-emits.
+            if matched == nil {
+                let key = normalize(words[i].text).replacingOccurrences(of: "\u{2019}", with: "'")
+                if let parts = Self.contractions[key] {
+                    let src = words[i]
+                    let repl = parts.enumerated().map { k, p in
+                        TimedWord(id: -(src.id * 8 + k + 1), text: p, at: src.at)
+                    }
+                    words.replaceSubrange(i...i, with: repl)
+                    continue
+                }
             }
             let src = Array(words[i..<(i + used)])
             let id = src.first?.id ?? i
@@ -222,7 +267,17 @@ private struct ListenTileChip: View {
     /// A synonym match borrows this tile's image; the caption shows what was
     /// actually SAID ("hi" under hello's picture). nil = no caption.
     var spoken: String? = nil
+    /// Practice board only (nil on real boards): every chip carries its label
+    /// as a band across the image bottom, like the board tiles.
+    @Environment(PracticeChrome.self) private var practiceChrome: PracticeChrome?
     @State private var image: UIImage?
+
+    /// Band text: the honest spoken caption when a synonym matched; on the
+    /// practice board, the tile's label otherwise (real boards: caption only).
+    private var bandText: String? {
+        if let spoken, !spoken.isEmpty { return spoken }
+        return practiceChrome != nil ? tile.display : nil
+    }
 
     var body: some View {
         Button {
@@ -238,8 +293,8 @@ private struct ListenTileChip: View {
             .frame(width: 76 * scale, height: 76 * scale)
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(alignment: .bottom) {
-                if let spoken, !spoken.isEmpty {
-                    Text(spoken)
+                if let bandText {
+                    Text(bandText)
                         .font(.system(size: 12 * scale, weight: .bold, design: .rounded))
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
