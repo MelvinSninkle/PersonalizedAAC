@@ -436,6 +436,9 @@ struct ParentSettingsView: View {
     @State private var advanceMsg: String?
     @State private var squaring = false
     @State private var squareMsg: String?
+    /// The child board's full Settings screen, presented for parity — the
+    /// phone adjusts everything the iPad can.
+    @State private var showBoardSettings = false
     @State private var showDeleteConfirm = false
     @State private var deleteText = ""
     @State private var deleting = false
@@ -508,6 +511,24 @@ struct ParentSettingsView: View {
     // ── Board & learning ────────────────────────────────────────────────────
     private var boardGroup: some View {
         Form {
+            // FULL board-settings parity with the child's iPad: present the
+            // board's own Settings screen (its own NavigationStack, so a
+            // sheet, not a push). One shared surface = the phone can adjust
+            // everything the iPad can — look, tools & touch, listening,
+            // safety, the 5 setup questions — and every future setting added
+            // there is automatically adjustable here too. Synced keys follow
+            // the child to every device; Board look also restyles this
+            // phone's Quick Board (it IS the same board).
+            Section {
+                Button {
+                    showBoardSettings = true
+                } label: {
+                    Label("All board settings", systemImage: "slider.horizontal.3")
+                }
+            } footer: {
+                Text("The complete board settings, exactly as they appear on the child's device — look, tools & touch, listening, and safety. Changes sync to every device this board is used on.")
+            }
+
             ArtStyleSection()
 
             Section("Vocabulary level") {
@@ -549,6 +570,7 @@ struct ParentSettingsView: View {
         }
         .navigationTitle("Board & learning")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showBoardSettings) { DisplaySettingsView() }
     }
 
     // ── This device ─────────────────────────────────────────────────────────
