@@ -344,6 +344,13 @@ private struct SentenceChip: View {
     var scale: Double = 1
     let onRemove: () -> Void
     @State private var image: UIImage?
+    /// Practice board only (nil on real boards): staged chips carry the label
+    /// as a band across the image bottom, same as the board tiles and the
+    /// listening chips — practice art bakes no text, so a bare picture loses
+    /// its word the moment it's staged.
+    @Environment(PracticeChrome.self) private var practiceChrome: PracticeChrome?
+
+    private var bandText: String? { practiceChrome != nil ? tile.display : nil }
 
     var body: some View {
         Button(action: onRemove) {
@@ -354,12 +361,35 @@ private struct SentenceChip: View {
                     Text(tile.display)
                         .font(.system(size: 16 * scale, weight: .bold, design: .rounded))
                         .foregroundStyle(Color(hex: "#ad1457"))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.5)
+                        .multilineTextAlignment(.center)
                         .padding(.horizontal, 8)
+                        // Bottom inset so the rounded-corner clip below can't
+                        // shave the last line's descenders (g/y/p) — the same
+                        // fix ListenTileChip's band got.
+                        .padding(.bottom, 3)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color(hex: "#fce4ec"))
                 }
             }
             .frame(width: 76 * scale, height: 76 * scale)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(alignment: .bottom) {
+                if image != nil, let bandText {
+                    Text(bandText)
+                        .font(.system(size: 12 * scale, weight: .bold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .foregroundStyle(Color(hex: "#1f2937"))
+                        .frame(maxWidth: .infinity)
+                        // Asymmetric padding: the rounded-corner clip below
+                        // was shaving descenders (g/y/p) off the caption.
+                        .padding(.top, 1)
+                        .padding(.bottom, 3)
+                        .background(.white.opacity(0.92))
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08)))
         }
@@ -387,6 +417,11 @@ struct SentenceDragGhost: View {
                 Text(tile.display)
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(Color(hex: "#ad1457"))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.5)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 6)
+                    .padding(.bottom, 3)  // rounded clip must not shave descenders
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(hex: "#fce4ec"))
             }

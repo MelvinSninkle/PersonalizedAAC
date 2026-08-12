@@ -245,8 +245,9 @@ struct PracticeBoardView: View {
             }
         }
         // Listening gets the demo-roomy height (the 1.25× strip); the
-        // sentence strip keeps the real board's 104.
-        .frame(height: listening ? 130 : (sentence.active ? 104 : 48))
+        // sentence strip scales like HeaderBar's (its chips grow by
+        // listenScale, so a fixed 104 clipped them at the low-vision steps).
+        .frame(height: listening ? 130 : (sentence.active ? 104 * prefs.listenScale : 48))
         .animation(.easeInOut(duration: 0.2), value: tall)
         .background(Color(hex: Brand.pink))
         // Drop-target glow while a lifted tile hovers over the bar.

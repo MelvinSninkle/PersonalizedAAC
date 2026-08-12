@@ -4,11 +4,13 @@
 // curation path for hand-picked imagery (e.g. the mixed group-of-children
 // pictures used for person-y tiles), bypassing prompt generation entirely.
 //
-//   POST { taxonomyId, imageBase64, styleGuideId? }
+//   POST { taxonomyId, imageBase64, styleGuideId?, demoChildId? }
 //     no styleGuideId → generic default: blob under taxonomy-defaults/ and
 //                       taxonomy.default_image_key
 //     styleGuideId    → that style's default: blob under style-defaults/ and
-//                       an upsert into taxonomy_style_defaults
+//                       an upsert into taxonomy_style_defaults, targeting
+//                       demoChildId's set (default 0 — the primary set family
+//                       boards read; a kid id must belong to this style)
 //
 // SAFE BY CONSTRUCTION: this writes only the shared default layers. It never
 // touches items rows, so a family's own tile art is untouched — sync's
@@ -42,16 +44,25 @@ export default async function handler(req, res) {
     if (!tax) { res.status(404).json({ error: 'taxonomy row not found' }); return; }
 
     if (styleGuideId) {
+      // The upload targets the set the caller is LOOKING AT: demo_child_id 0
+      // (the primary set family boards read) unless the gallery was opened on
+      // an extra demo kid — writing 0 while the page shows kid K made uploads
+      // look lost (the kid view kept its own render). A kid id must be one of
+      // this style's own demo kids.
+      const demoChildId = Math.max(0, parseInt(b.demoChildId, 10) || 0);
+      if (demoChildId > 0) {
+        const kid = (await db`SELECT id FROM style_demo_children
+                              WHERE style_guide_id = ${styleGuideId} AND id = ${demoChildId} LIMIT 1`)[0];
+        if (!kid) { res.status(404).json({ error: 'demo kid not found for this style' }); return; }
+      }
       const key = `style-defaults/${styleGuideId}/${taxonomyId}/${randomUUID()}.png`;
       await put(key, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
-      // Uploads always target the style's PRIMARY set (demo_child_id 0) —
-      // the one family boards read. Extra demo kids render via the wizard.
       await db`
         INSERT INTO taxonomy_style_defaults (taxonomy_id, style_guide_id, demo_child_id, image_key, status, updated_at)
-        VALUES (${taxonomyId}, ${styleGuideId}, 0, ${key}, 'done', NOW())
+        VALUES (${taxonomyId}, ${styleGuideId}, ${demoChildId}, ${key}, 'done', NOW())
         ON CONFLICT (taxonomy_id, style_guide_id, demo_child_id)
         DO UPDATE SET image_key = ${key}, status = 'done', error = NULL, updated_at = NOW()`;
-      res.status(200).json({ ok: true, scope: 'style', styleGuideId, imageKey: key, label: tax.label });
+      res.status(200).json({ ok: true, scope: 'style', styleGuideId, demoChildId, imageKey: key, label: tax.label });
       return;
     }
 
