@@ -33,13 +33,18 @@
   .seg { display:flex; gap:0; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
   .seg button { flex:1; border:none; background:#fff; padding:9px 0; font:inherit; font-weight:600; cursor:pointer; color:var(--muted); }
   .seg button.on { background:var(--pink); color:#fff; }
+  .sib-chip { width:72px; cursor:pointer; border:2px solid var(--line); border-radius:10px; overflow:hidden; background:#fff7fb; font-size:10px; color:var(--muted); text-align:center; }
+  .sib-chip img { width:100%; height:60px; object-fit:cover; display:block; }
+  .sib-chip span { display:block; padding:2px 3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sib-chip.sel { border-color:var(--pink); }
+  .sib-chip.off { opacity:.35; cursor:default; }
   #error { display:none; margin-top:10px; font-size:12px; color:#991b1b; background:#fee2e2; border:1px solid #fecaca; border-radius:10px; padding:10px; white-space:pre-wrap; }
 </style>
 </head>
 <body>
 <header>
   <h1>🧩 Add-Tile Lab</h1>
-  <p>Bench for the add-a-photo tile pipeline — the exact renderStyledPhoto the iPad runs (style guide attached, people → keystone portrait, things → nano). Retries send the RESULT + your correction, mirroring the board. Admin only.</p>
+  <p>Bench for the add-a-photo tile pipeline — the exact renderStyledPhoto the iPad runs (style guide attached, people → keystone portrait, things → nano). Retries send the RESULT + your correction, mirroring the board. Siblings experiment: A/B the objects reference against the child's own category tiles as style refs. Admin only.</p>
   <a href="/admin/" style="display:inline-block;margin-top:6px;color:var(--pink);font-weight:700;font-size:14px;text-decoration:none;">← Lab home</a>
 </header>
 <div class="wrap">
@@ -82,6 +87,24 @@
     <div class="check"><input type="checkbox" id="no-style"><span>No style matching (raw restyle, no style-guide image)</span></div>
     <div class="thumb" id="style-thumb" style="margin-top:8px;height:120px;aspect-ratio:auto;">Style preview</div>
 
+    <!-- Siblings-as-style-refs A/B: up to 3 tiles from one of the child's
+         categories ride as extra style references. Eligible = painted by the
+         SELECTED style guide, not needs-review, has art (raw photos and
+         grandfathered art are dimmed with the reason). Bench-only. -->
+    <label style="margin-top:18px;">Sibling references — experiment</label>
+    <div style="font-size:12px;color:var(--muted);margin:-2px 0 8px;">Attach up to 3 of the child's own category tiles as style references. Eligible = drawn by the selected style guide, accepted, has art.</div>
+    <div class="row2">
+      <input type="text" id="sib-child" placeholder="child id" value="fletcherpeterson">
+      <button class="btn ghost" id="sib-load" style="padding:10px 0;">Load board</button>
+    </div>
+    <select id="sib-cat" style="margin-top:8px;" disabled><option value="">— load a board first —</option></select>
+    <div id="sib-strip" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
+    <div class="seg" id="ref-mode" style="margin-top:10px;">
+      <button data-mode="today" class="on">Objects ref (today)</button>
+      <button data-mode="siblings">Siblings instead</button>
+      <button data-mode="both">Both</button>
+    </div>
+
     <div style="margin-top:16px;display:flex;gap:10px;">
       <button class="btn" id="gen">Generate</button>
     </div>
@@ -109,6 +132,18 @@
     </div>
     <label>Prompt sent</label>
     <pre id="prompt">—</pre>
+    <!-- A/B pane: the previous render (image, caption, prompt) survives one
+         generation so two arms compare side by side without screenshots. -->
+    <div class="row2" id="prev-wrap" style="display:none;margin-top:14px;">
+      <div>
+        <div class="thumb" id="prev-thumb"></div>
+        <div class="msg" id="prev-cap" style="text-align:center;">Previous</div>
+      </div>
+      <div>
+        <label>Previous prompt</label>
+        <pre id="prev-prompt" style="max-height:200px;">—</pre>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -161,6 +196,74 @@
   $('style-select').addEventListener('change', showStylePreview);
   $('no-style').addEventListener('change', showStylePreview);
 
+  // ---- Siblings experiment: board context, eligible chips, reference mode ----
+  let refMode = 'today';
+  let boardItems = [];
+  const selectedSibs = new Set();
+  document.querySelectorAll('#ref-mode button').forEach((b) => b.addEventListener('click', () => {
+    refMode = b.dataset.mode;
+    document.querySelectorAll('#ref-mode button').forEach((x) => x.classList.toggle('on', x === b));
+  }));
+  $('sib-load').addEventListener('click', async () => {
+    const cid = ($('sib-child').value || '').trim();
+    if (!cid) { msg('Enter a child id to load.', true); return; }
+    msg('Loading board…');
+    try {
+      const r = await fetch('/api/admin/lab?action=board-state&childId=' + encodeURIComponent(cid), { credentials: 'same-origin' }).then((x) => x.json());
+      if (r.error) throw new Error([r.error, r.detail].filter(Boolean).join(' — '));
+      boardItems = r.items || [];
+      const cats = (r.categories || []).filter((c) => c.section === 'nouns');
+      const counts = {};
+      boardItems.forEach((it) => { if (it.category_id != null) counts[it.category_id] = (counts[it.category_id] || 0) + 1; });
+      $('sib-cat').disabled = false;
+      $('sib-cat').innerHTML = '<option value="">— pick a category —</option>' +
+        cats.map((c) => '<option value="' + c.id + '">' + (c.label || ('#' + c.id)) + ' (' + (counts[c.id] || 0) + ')</option>').join('');
+      $('sib-strip').innerHTML = '';
+      selectedSibs.clear();
+      msg('Board loaded — pick a category.');
+    } catch (err) { msg('Board load failed: ' + err.message, true); }
+  });
+  // Eligibility mirrors the qualifying-siblings rule a production port would
+  // use: painted by THE guide under test (styled_style_id equality — raw
+  // photos, save-first failures, and grandfathered art all leave it NULL),
+  // not needs-review, has art.
+  function sibReason(it, guideId) {
+    if (!it.image_key) return 'no art';
+    if (it.needs_review) return 'needs review';
+    if (it.styled_style_id == null) return 'raw photo / unstyled art';
+    if (!guideId || Number(it.styled_style_id) !== Number(guideId)) return 'painted by a different style guide';
+    return '';
+  }
+  function renderSibs() {
+    const catId = Number($('sib-cat').value || 0);
+    const wrap = $('sib-strip');
+    selectedSibs.clear();
+    if (!catId) { wrap.innerHTML = ''; return; }
+    const guideId = $('no-style').checked ? null : (Number($('style-select').value || 0) || null);
+    const inCat = boardItems.filter((it) => Number(it.category_id) === catId);
+    // Deterministic pick: the 3 most recently styled eligible tiles.
+    inCat.filter((it) => !sibReason(it, guideId))
+      .sort((a, b) => String(b.styled_at || '').localeCompare(String(a.styled_at || '')))
+      .slice(0, 3).forEach((it) => selectedSibs.add(it.image_key));
+    wrap.innerHTML = inCat.map((it) => {
+      const reason = sibReason(it, guideId);
+      const sel = selectedSibs.has(it.image_key);
+      return '<div class="sib-chip' + (sel ? ' sel' : '') + (reason ? ' off' : '') + '" data-key="' + (it.image_key || '') + '"' +
+        ' title="' + (reason ? 'Not eligible: ' + reason : (it.label || '')) + '">' +
+        (it.image_key ? '<img src="/api/media?key=' + encodeURIComponent(it.image_key) + '&w=96" alt="">' : '·') +
+        '<span>' + (it.label || '') + '</span></div>';
+    }).join('') || '<div style="font-size:12px;color:#9ca3af;">No tiles in this category.</div>';
+    wrap.querySelectorAll('.sib-chip:not(.off)').forEach((el) => el.addEventListener('click', () => {
+      const k = el.dataset.key;
+      if (selectedSibs.has(k)) { selectedSibs.delete(k); el.classList.remove('sel'); }
+      else if (selectedSibs.size < 3) { selectedSibs.add(k); el.classList.add('sel'); }
+      else msg('Up to 3 sibling references.', true);
+    }));
+  }
+  $('sib-cat').addEventListener('change', renderSibs);
+  $('style-select').addEventListener('change', renderSibs);
+  $('no-style').addEventListener('change', renderSibs);
+
   async function run(usePrior) {
     if (!photoB64 && !usePrior) { msg('Pick a photo first.', true); return; }
     const guidance = ($('guidance').value || '').trim();
@@ -168,6 +271,11 @@
     // re-roll wastes the credit. (First generation needs no guidance.)
     if (usePrior && !guidance) {
       msg('Add text telling it what to change (or pick a different style to reference) — that\'s what makes the retry worth it.', true);
+      return;
+    }
+    // Sibling arms need siblings; the retry edit pass ignores them entirely.
+    if (!usePrior && refMode !== 'today' && !selectedSibs.size) {
+      msg('Pick sibling tiles first (load a board and category) — or switch back to "Objects ref (today)".', true);
       return;
     }
     $('gen').disabled = true; $('retry').disabled = true;
@@ -188,14 +296,27 @@
         ageGroup: (section === 'people' && $('age-group').value) ? $('age-group').value : undefined,
         styleGuideId: $('no-style').checked ? undefined : ($('style-select').value || undefined),
         noStyle: $('no-style').checked,
+        siblingKeys: (!usePrior && refMode !== 'today' && selectedSibs.size) ? Array.from(selectedSibs).slice(0, 3) : undefined,
+        noStuffRef: (!usePrior && refMode === 'siblings') ? true : undefined,
       });
+      // Shift the outgoing render into the A/B pane before overwriting it.
+      if (lastResultB64) {
+        $('prev-wrap').style.display = '';
+        $('prev-thumb').innerHTML = '<img src="data:image/png;base64,' + lastResultB64 + '" alt="">';
+        $('prev-cap').innerHTML = 'Previous · ' + $('result-cap').innerHTML.replace(/^Result · /, '');
+        $('prev-prompt').textContent = $('prompt').textContent;
+      }
       lastResultB64 = d.b64;
       $('retry').disabled = false;
       $('result').innerHTML = '<img src="data:image/png;base64,' + d.b64 + '" alt="">';
       $('prompt').textContent = d.prompt || '—';
       const pill = d.styleImageAttached ? '<span class="pill ok">style ATTACHED</span>' : '<span class="pill no">no style</span>';
       $('result-cap').innerHTML = 'Result · ' + pill + (d.engine ? ' · ' + d.engine : '')
-        + (d.retriedFromPrior ? ' · <span class="pill ok">retry from prior</span>' : '');
+        + (d.retriedFromPrior ? ' · <span class="pill ok">retry from prior</span>' : '')
+        + (d.siblingCount ? ' · <span class="pill ok">' + d.siblingCount + ' sibling' + (d.siblingCount > 1 ? 's' : '') + '</span>' : '')
+        + ((d.styleImageAttached && !d.retriedFromPrior)
+            ? (d.stuffRefAttached ? ' · <span class="pill ok">objects ref</span>' : ' · <span class="pill no">objects ref off</span>')
+            : '');
       msg('Done.' + (d.costCents != null ? ' (~' + d.costCents + '¢)' : ''));
     } catch (err) {
       $('result').innerHTML = '<div style="font-size:13px;color:#dc2626;">Failed</div>';

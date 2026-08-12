@@ -107,7 +107,12 @@ async function describeLabel(buffer, contentType) {
 // { ok, b64, prompt, costCents } or { ok:false, detail }.
 // (`bg` is still accepted from old app builds but no longer shapes the prompt —
 // the photo's real setting, translated into the style, is the background now.)
-export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, section, ageGroup = null, suppressBakedText = false, guidance = '', priorKey = null, prior = null }) {
+// `siblingRefKeys` / `noStuffRef` are BENCH-ONLY experiment params (the admin
+// tile lab's siblings-as-style-refs A/B): up to three same-board tiles ride as
+// extra style references, optionally replacing the objects reference. No
+// production path passes either — if the experiment wins, production wiring
+// is a deliberate separate change, not a default flip here.
+export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, section, ageGroup = null, suppressBakedText = false, guidance = '', priorKey = null, prior = null, siblingRefKeys = [], noStuffRef = false }) {
   const subject = label ? `"${label}"` : 'the main subject';
   const isPerson = String(section || '').toLowerCase() === 'people';
 
@@ -253,12 +258,23 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
     images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
     legend.push(`Image ${images.length} is the STYLE reference — copy its art style only, not its content.`);
   }
-  if (styleGuide && styleGuide.stuff_ref_key) {
+  if (styleGuide && styleGuide.stuff_ref_key && !noStuffRef) {
     try {
       const stuff = await readBlobBytes(styleGuide.stuff_ref_key);
       images.push({ buffer: stuff.buffer, contentType: stuff.contentType });
       legend.push(`Image ${images.length} shows how OBJECTS and materials are rendered in this style — match that treatment; never copy its content.`);
     } catch (_) { /* missing ref → style scene alone still anchors the look */ }
+  }
+  // Bench experiment: category-sibling tiles as extra style references. Same
+  // legend + attach discipline as renderTaxonomyTile's worldRefKeys (style
+  // only — never the RELATED-tile wording, which forces scene cloning); a
+  // missing reference never blocks generation. The photo stays LAST.
+  for (const key of (siblingRefKeys || []).slice(0, 3)) {
+    try {
+      const bytes = await readBlobBytes(key);
+      images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
+      legend.push(`Image ${images.length} is ANOTHER STYLE reference from the same world — match how it renders objects, materials, and backgrounds; do not copy its content.`);
+    } catch (_) { /* a missing reference never blocks generation */ }
   }
   images.push({ buffer: photo, contentType: contentType || 'image/jpeg' });
   legend.push(`Image ${images.length} is the source photo — re-illustrate THIS subject in the style above.`);

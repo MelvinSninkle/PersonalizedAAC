@@ -1,6 +1,12 @@
 // /api/admin/lab?action=tile-lab  (admin only)
 // Body JSON: { photoB64, photoType?, label?, detail?, section?, styleGuideId?,
-//              noStyle?, model?, priorB64? }
+//              noStyle?, model?, priorB64?, siblingKeys?, noStuffRef? }
+//
+// Siblings A/B experiment: `siblingKeys` (≤3 blob keys of same-board tiles)
+// ride as extra style references, and `noStuffRef: true` suppresses the
+// style guide's objects reference — the three arms are today's stack (neither
+// param), siblings-instead (both), and both-references (siblingKeys alone).
+// Bench-only: no production path sets either.
 //
 // A Lab bench for the ADD-TILE photo pipeline — the exact renderStyledPhoto
 // the iPad's add flow runs (style-guide attachment, people → keystone-portrait
@@ -39,6 +45,12 @@ export default async function handler(req, res) {
   const model = typeof b.model === 'string' && b.model ? b.model.slice(0, 60) : null;
   const noStyle = b.noStyle === true;
   const styleGuideId = Number.isFinite(Number(b.styleGuideId)) && Number(b.styleGuideId) > 0 ? Number(b.styleGuideId) : null;
+  // Siblings experiment (admin-gated, so cross-board key reads are the
+  // admin's existing privilege — same short-circuit /api/media relies on).
+  const siblingKeys = Array.isArray(b.siblingKeys)
+    ? b.siblingKeys.filter((k) => typeof k === 'string' && k && !k.startsWith('data:')).slice(0, 3)
+    : [];
+  const noStuffRef = b.noStuffRef === true;
 
   try {
     const db = sql();
@@ -62,6 +74,9 @@ export default async function handler(req, res) {
       styleGuide, model, bg: '', section, ageGroup,
       guidance: retryMode ? detail : '',
       prior: retryMode ? { buffer: Buffer.from(priorB64, 'base64'), contentType: 'image/png' } : null,
+      // First renders only — the retry edit pass carries the prior image
+      // alone and ignores the reference stack by construction.
+      siblingRefKeys: siblingKeys, noStuffRef,
     });
     if (!r.ok) { res.status(502).json({ error: 'generation failed', detail: r.detail || '' }); return; }
 
@@ -75,6 +90,9 @@ export default async function handler(req, res) {
       styleGuideId: styleGuide ? styleGuide.id : null,
       styleLabel: styleGuide ? styleGuide.label : null,
       retriedFromPrior: retryMode,
+      siblingCount: siblingKeys.length,
+      siblingKeysAttached: siblingKeys,
+      stuffRefAttached: !!(styleGuide && styleGuide.stuff_ref_key && !noStuffRef),
     });
   } catch (err) {
     res.status(500).json({ error: 'tile-lab failed', detail: String(err.message || err) });

@@ -4,6 +4,7 @@
 // (publishing a tile is blocked until its category is on the board). Admin-gated.
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
+import { ensureTileJobs } from '../_lib/tile-jobs.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') { res.status(405).json({ error: 'Method not allowed' }); return; }
@@ -15,8 +16,12 @@ export default async function handler(req, res) {
 
   try {
     const db = sql();
+    // styled_style_id / styled_at / needs_review are additive columns (§9
+    // styled tracking) — ensure they exist before selecting on an old DB.
+    try { await ensureTileJobs(db); } catch (_) {}
     const items = await db`
-      SELECT id, section, label, image_key, taxonomy_slug, category_id
+      SELECT id, section, label, image_key, taxonomy_slug, category_id,
+             styled_style_id, styled_at, needs_review
       FROM items WHERE child_id = ${childId}`;
     const categories = await db`
       SELECT id, section, label, parent_id, image_key
