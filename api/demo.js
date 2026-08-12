@@ -223,7 +223,13 @@ export default async function handler(req, res) {
       } catch (_) { /* table appears with the first Lab build */ }
     }
 
-    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+    // CDN-only cache, kept SHORT on purpose: publishing a style is just a DB
+    // flag flip with no CDN purge, so this header bounds how long a freshly
+    // published style stays invisible in the practice page's style selector
+    // ("anime showed on iOS but not on /practice" — the iOS parent picker
+    // reads a no-store endpoint, this one sat stale at the edge for hours).
+    // 5 min CDN + 1 h stale-while-revalidate matches style-guides/public.
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600');
     // listenBlocklist: the server-owned bad-words list (E8) — the practice
     // page's listening demo masks these as "Bad Word", censor always ON.
     // Same shared list every real board receives on sync; no family data.

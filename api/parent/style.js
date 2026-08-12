@@ -73,10 +73,15 @@ async function resolveCurrent(db, childId) {
   const pinnedId = cs && cs.settings && cs.settings.styleGuideId ? Number(cs.settings.styleGuideId) : null;
   let row = null;
   if (pinnedId) {
+    // E9 read gate: a pinned GLOBAL template must also be active — a draft
+    // style pinned to a child (e.g. via the wizard's preview) must never
+    // render as "Current style" on a parent surface. The child's OWN family
+    // guide resolves unconditionally, same as before. A gated-out pin falls
+    // through to the family/global fallbacks below, like a deleted id does.
     row = (await db`
       SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key, child_id
       FROM style_guides
-      WHERE id = ${pinnedId} AND (child_id IS NULL OR child_id = ${childId})
+      WHERE id = ${pinnedId} AND (child_id = ${childId} OR (child_id IS NULL AND active = TRUE))
       LIMIT 1`)[0] || null;
   }
   if (!row) {

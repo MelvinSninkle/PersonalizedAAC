@@ -120,6 +120,8 @@ grep -q "listenCensor" practice.html && { fail "E8 practice.html must not expose
 E9=0
 grep -q "active = TRUE" api/onboarding/styles.js || { fail "E9 onboarding styles picker lost the active filter"; E9=1; }
 grep -q "active = TRUE AND child_id IS NULL" api/demo.js || { fail "E9 demo style switcher lost the active filter"; E9=1; }
+grep -q "active = TRUE" api/style-guides/public.js || { fail "E9 public style list lost the active filter"; E9=1; }
+grep -q "child_id IS NULL AND active = TRUE" api/parent/style.js || { fail "E9 parent panel's pinned-style branch lost the active gate on global templates"; E9=1; }
 grep -q "DRAFT_ACTIVE = false" api/admin/style-guides.js || { fail "E9 style creation no longer defaults to draft"; E9=1; }
 # Demo-kid isolation: extra demo children (style_demo_children) exist for the
 # PUBLIC practice board only. Family syncs must pin the primary set.
