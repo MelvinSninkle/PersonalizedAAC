@@ -690,7 +690,7 @@
     </div>
     <!-- The exact reference images attached to every generation -->
     <div class="section-label" style="margin-top:18px;">The reference pictures behind new art</div>
-    <p class="hint">Every new picture is drawn while looking at these. Portraits of people lean on the people reference; everything else leans on the objects reference (each falls back to the main style when not set). Upload your own to steer the look. It applies to pictures made from now on; existing tiles keep theirs, and any tile can be remade from its editor.</p>
+    <p class="hint">Every new picture is drawn while looking at these. Portraits of people lean on the people reference; everything else leans on the objects reference (each falls back to the main style when not set). Upload your own to steer the look — best results come from an image showing several different objects and materials. Avoid anything too specific: a single food or toy can leak its shapes into new pictures. It applies to pictures made from now on; existing tiles keep theirs, and any tile can be remade from its editor.</p>
     <div id="style-refs" style="display:flex;gap:14px;flex-wrap:wrap;"></div>
     <input type="file" id="style-ref-file" accept="image/*" style="display:none;">
     <div id="style-refs-msg" style="font-size:13px;color:#6b7280;margin-top:6px;"></div>
@@ -1997,7 +1997,7 @@
   const STYLE_REF_CARDS = [
     { kind: 'main',   title: '🎨 Main style',         hint: 'Attached to every new picture.' },
     { kind: 'person', title: '🧑 People & portraits', hint: 'Guides portraits of people.' },
-    { kind: 'stuff',  title: '🧸 Objects & scenes',   hint: 'Guides everything that isn\'t a person.' },
+    { kind: 'stuff',  title: '🧸 Objects & scenes',   hint: 'Guides everything that isn\'t a person. Best: several different objects, nothing too specific.' },
   ];
   let styleUploadKind = null;
   function styleRefsMsg(t) { const el = document.getElementById('style-refs-msg'); if (el) el.textContent = t || ''; }

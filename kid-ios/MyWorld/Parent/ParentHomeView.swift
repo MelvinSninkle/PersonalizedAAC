@@ -869,7 +869,7 @@ struct ArtStyleSection: View {
                         }
                     }
                 } message: {
-                    Text("New pictures will be drawn to match it. Tiles already on the board don't change, so the board can look inconsistent until you remake them.")
+                    Text("New pictures will be drawn to match it. Best results come from an image showing several different objects and materials — avoid anything too specific, since a single food or toy can leak its shapes into new pictures. Tiles already on the board don't change, so the board can look inconsistent until you remake them.")
                 }
                 .photosPicker(isPresented: $showPhotoPicker, selection: $libraryItem, matching: .images)
                 .onChange(of: libraryItem) { _, item in
@@ -884,7 +884,7 @@ struct ArtStyleSection: View {
         } header: {
             Text("Art style")
         } footer: {
-            Text("Every generated picture is drawn while looking at these references. Changes apply to NEW pictures only. Tiles already on the board keep their current art.")
+            Text("Every generated picture is drawn while looking at these references, so pick ones that show several different objects and materials rather than one specific thing. Changes apply to NEW pictures only. Tiles already on the board keep their current art.")
         }
         .task { await load() }
     }
