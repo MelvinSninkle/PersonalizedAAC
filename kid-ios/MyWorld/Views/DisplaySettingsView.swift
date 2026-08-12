@@ -285,6 +285,20 @@ struct DisplaySettingsView: View {
                 Text("While listening runs, words your family says that aren't on the board yet appear in the parent dashboard to add, dismiss, or block. Only matched words are kept, never audio or transcripts.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
+            // Permission repair lives HERE too, not just in the strip: after a
+            // reinstall (or a stray "Don't Allow"), only iOS Settings can turn
+            // the microphone back on — the app cannot re-prompt a denial.
+            Section {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Label("Fix microphone permissions", systemImage: "mic.badge.xmark")
+                }
+            } footer: {
+                Text("If listening says the microphone or Speech Recognition is off — common after reinstalling the app — this opens My World's page in iOS Settings. Turn on Microphone and Speech Recognition there, then come back and tap the mic again.")
+            }
         }
         .disabled(!syncedLoaded)
         .navigationTitle("Listening")

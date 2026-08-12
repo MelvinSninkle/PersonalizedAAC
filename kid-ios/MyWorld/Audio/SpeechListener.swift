@@ -31,6 +31,10 @@ final class SpeechListener {
     var isListening: Bool = false
     /// Human-readable state / error, shown in the strip when there are no words.
     var status: String = ""
+    /// Mic or speech permission is DENIED (not just unasked) — the strip shows
+    /// an "Open Settings" button, since only iOS Settings can undo a denial
+    /// (a reinstall that re-prompts and gets a stray "Don't Allow" lands here).
+    var permissionDenied: Bool = false
 
     private let fadeSeconds: TimeInterval = 10   // a word lingers ~10s after it's spoken
     private let maxWords = 18                     // "bar is full" cap (oldest drop off)
@@ -52,14 +56,23 @@ final class SpeechListener {
     func start() {
         guard !isListening else { return }
         transcript = ""; words = []; liveTail = ""; status = "Starting…"
+        permissionDenied = false
         useOnDevice = (recognizer?.supportsOnDeviceRecognition == true)
         restarts = 0; utteranceBase = 0
         SFSpeechRecognizer.requestAuthorization { [weak self] auth in
             AVAudioApplication.requestRecordPermission { mic in
                 Task { @MainActor in
                     guard let self else { return }
-                    guard auth == .authorized else { self.status = "Speech permission denied. Enable it in Settings › My World."; return }
-                    guard mic else { self.status = "Microphone permission denied. Enable it in Settings › My World."; return }
+                    guard auth == .authorized else {
+                        self.permissionDenied = true
+                        self.status = "Speech Recognition is switched off for My World — tap Open Settings, then turn it on."
+                        return
+                    }
+                    guard mic else {
+                        self.permissionDenied = true
+                        self.status = "The Microphone is switched off for My World — tap Open Settings, then turn it on."
+                        return
+                    }
                     guard self.recognizer?.isAvailable == true else { self.status = "Speech recognizer unavailable (needs network, or a downloaded language)."; return }
                     self.isListening = true
                     self.startCleanup()

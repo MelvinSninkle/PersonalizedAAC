@@ -184,6 +184,25 @@ struct ListenStripView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
+                        // A denial can only be undone in iOS Settings — hand
+                        // the parent a one-tap way there instead of a dead
+                        // strip (bites after every uninstall/reinstall that
+                        // re-prompts and catches a stray "Don't Allow").
+                        if speech.permissionDenied {
+                            Button {
+                                if let url = URL(string: UIApplication.openSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
+                            } label: {
+                                Text("Open Settings")
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Capsule().fill(Color(hex: "#ad1457")))
+                            }
+                            .buttonStyle(.plain)
+                        }
                     } else {
                         ForEach(tokens) { tok in
                             chip(tok)
