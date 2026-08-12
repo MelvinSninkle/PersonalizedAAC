@@ -79,6 +79,11 @@ export async function ensureTileJobs(db) {
   // the parent hasn't answered yet — store.js action=followups re-offers it
   // on every surface until answered or auto-closed (nothing to offer).
   await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS followup_done_at TIMESTAMPTZ`;
+  // Guided retry (mirrors seed_jobs.guidance/ref_key): the parent's correction
+  // and the render it corrects. OVERWRITTEN by each retry, never appended —
+  // `detail` stays the add-time family note forever. A blind retry clears both.
+  await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS guidance TEXT`;
+  await db`ALTER TABLE tile_jobs ADD COLUMN IF NOT EXISTS prior_key TEXT`;
   // §9 styled tracking on items (also ensured by seed-board's ensureSeedJobs;
   // duplicated here because this pipeline writes the columns independently).
   await db`ALTER TABLE items ADD COLUMN IF NOT EXISTS styled_style_id INT`;
@@ -102,9 +107,79 @@ async function describeLabel(buffer, contentType) {
 // { ok, b64, prompt, costCents } or { ok:false, detail }.
 // (`bg` is still accepted from old app builds but no longer shapes the prompt —
 // the photo's real setting, translated into the style, is the background now.)
-export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, section, ageGroup = null, suppressBakedText = false }) {
+// `siblingRefKeys` / `noStuffRef` are BENCH-ONLY experiment params (the admin
+// tile lab's siblings-as-style-refs A/B): up to three same-board tiles ride as
+// extra style references, optionally replacing the objects reference. No
+// production path passes either — if the experiment wins, production wiring
+// is a deliberate separate change, not a default flip here.
+export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, section, ageGroup = null, suppressBakedText = false, guidance = '', priorKey = null, prior = null, siblingRefKeys = [], noStuffRef = false }) {
   const subject = label ? `"${label}"` : 'the main subject';
   const isPerson = String(section || '').toLowerCase() === 'people';
+
+  // GUIDED RETRY = an edit pass on the picture being corrected, and NOTHING
+  // else rides along. The prior render already carries the board's style baked
+  // into its pixels, so re-attaching the style scene or the objects reference
+  // only reintroduces bleed — a stuff ref semantically close to the subject
+  // (a bowl of pretzels vs a photo of fries) overrode the source photo on
+  // every full re-render, and the correction text lost to the live image.
+  // (Owner decision: the full reference stack STAYS on first renders —
+  // dropping refs there was tried and renders come out style-less — so the
+  // correction pass is where contamination gets cut.) `prior` is bytes from
+  // the admin bench; `priorKey` is the blob key production threads through
+  // tile_jobs.prior_key. A missing/unreadable prior falls through to the
+  // normal full render with the correction riding late-position instead.
+  if (guidance) {
+    let priorImg = (prior && prior.buffer) ? prior : null;
+    if (!priorImg && priorKey) {
+      try { priorImg = await readBlobBytes(priorKey); } catch (_) { /* fall through */ }
+    }
+    if (priorImg) {
+      const prompt =
+        `Image 1 is the current picture for the tile ${subject} on a young child's communication board. ` +
+        `Apply this correction from the parent exactly: ${String(guidance).slice(0, 400)}. ` +
+        `Change ONLY what the correction requires — keep the art style, palette, linework, composition, ` +
+        `and everything that already works completely unchanged.` +
+        ` Do not include any text, words, or letters in the image.` + SQUARE_RULE;
+      const images = [{ buffer: priorImg.buffer, contentType: priorImg.contentType || 'image/png' }];
+      if (isPerson) {
+        // Same engine contract as the keystone-portrait branch below: OpenAI
+        // keystone with one transient retry, Gemini Pro only when no OpenAI
+        // key exists, never a cross-engine downgrade mid-run.
+        const oaKey0 = process.env.OPENAI_API_KEY;
+        const gKey0 = geminiKey();
+        if (!oaKey0 && !gKey0) return { ok: false, detail: 'No image API key configured' };
+        const callOpenAI = async () =>
+          openaiEditImage({ apiKey: oaKey0, model: await openaiKeystoneModel(db), prompt, images, size: '1024x1024' });
+        const callGemini = async () =>
+          geminiGenerateImage({ apiKey: gKey0, model: geminiProModel(), prompt, images, aspectRatio: '1:1' });
+        const transient = (r) => !r.ok && (r.status === 429 || r.status >= 500 || !r.status);
+        const primary = oaKey0 ? callOpenAI : callGemini;
+        let g = await primary().catch((e) => ({ ok: false, detail: String(e.message || e) }));
+        if (transient(g)) {
+          await new Promise((r) => setTimeout(r, 1500));
+          g = await primary().catch((e) => ({ ok: false, detail: String(e.message || e) }));
+        }
+        if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
+        return { ok: true, b64: g.b64, prompt, model: 'keystone-portrait', costCents: g.costCents ?? 13 };
+      }
+      // Objects: same routing as the full render below — explicit model
+      // honored as-is, otherwise nano banana.
+      const oaKey = process.env.OPENAI_API_KEY;
+      const gKey = geminiKey();
+      let useModel = model;
+      if (!useModel) useModel = geminiDefaultModel();
+      if (!isGeminiModel(useModel)) {
+        if (!oaKey) return { ok: false, detail: 'OPENAI_API_KEY not configured' };
+        const g = await openaiEditImage({ apiKey: oaKey, model: useModel, prompt, images, size: '1024x1024' });
+        if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
+        return { ok: true, b64: g.b64, prompt, model: useModel, costCents: g.costCents ?? openaiCostCents(useModel) };
+      }
+      if (!gKey) return { ok: false, detail: 'GEMINI_API_KEY not configured' };
+      const g = await geminiGenerateImage({ apiKey: gKey, model: useModel, prompt, images, aspectRatio: '1:1' });
+      if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
+      return { ok: true, b64: g.b64, prompt, model: useModel, costCents: geminiCostCents(useModel) };
+    }
+  }
 
   // PEOPLE mimic the Portrait Lab / onboarding family pipeline 1:1 — the SAME
   // buildPortraitPrompt (strict style transfer + likeness language), the same
@@ -125,7 +200,9 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
       images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
     }
     images.push({ buffer: photo, contentType: contentType || 'image/jpeg' });
-    const prompt = buildPortraitPrompt({ styleGuide, guidance: detail || '', ageGroup });
+    // Fall-through guided retry (prior blob unreadable): the correction joins
+    // the add-time detail in the portrait prompt's own correction clause.
+    const prompt = buildPortraitPrompt({ styleGuide, guidance: [detail, guidance].filter(Boolean).join(' '), ageGroup });
     const callOpenAI = async () =>
       openaiEditImage({ apiKey: oaKey0, model: await openaiKeystoneModel(db), prompt, images, size: '1024x1024' });
     const callGemini = async () =>
@@ -181,15 +258,30 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
     images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
     legend.push(`Image ${images.length} is the STYLE reference — copy its art style only, not its content.`);
   }
-  if (styleGuide && styleGuide.stuff_ref_key) {
+  if (styleGuide && styleGuide.stuff_ref_key && !noStuffRef) {
     try {
       const stuff = await readBlobBytes(styleGuide.stuff_ref_key);
       images.push({ buffer: stuff.buffer, contentType: stuff.contentType });
       legend.push(`Image ${images.length} shows how OBJECTS and materials are rendered in this style — match that treatment; never copy its content.`);
     } catch (_) { /* missing ref → style scene alone still anchors the look */ }
   }
+  // Bench experiment: category-sibling tiles as extra style references. Same
+  // legend + attach discipline as renderTaxonomyTile's worldRefKeys (style
+  // only — never the RELATED-tile wording, which forces scene cloning); a
+  // missing reference never blocks generation. The photo stays LAST.
+  for (const key of (siblingRefKeys || []).slice(0, 3)) {
+    try {
+      const bytes = await readBlobBytes(key);
+      images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
+      legend.push(`Image ${images.length} is ANOTHER STYLE reference from the same world — match how it renders objects, materials, and backgrounds; do not copy its content.`);
+    } catch (_) { /* a missing reference never blocks generation */ }
+  }
   images.push({ buffer: photo, contentType: contentType || 'image/jpeg' });
   legend.push(`Image ${images.length} is the source photo — re-illustrate THIS subject in the style above.`);
+  // Fall-through guided retry (prior blob unreadable): the correction rides
+  // LATE, right next to the legend — late-position instructions dominate in
+  // this composition scheme (same framing as renderTaxonomyTile's clause).
+  if (guidance) prompt += ` Important correction from the parent — apply this exactly: ${String(guidance).slice(0, 400)}.`;
   prompt += '\n\n' + legend.join(' ');
 
   // MODEL ROUTING (when the client sends none): objects render on nano banana.
@@ -265,6 +357,11 @@ export async function processTileJob(db, jobId) {
       // Relationship decides the age treatment when it can; the job's explicit
       // age_group (the capture UI's kid/grown-up choice) covers the rest.
       ageGroup: relationshipAgeGroup(job.relationship) || job.age_group || null,
+      // Guided retry: correction + the render being corrected (edit pass).
+      // prior_key is gated on guidance so a stale prior from an earlier guided
+      // retry can never ride along on a later blind re-roll.
+      guidance: job.guidance || '',
+      priorKey: job.guidance ? (job.prior_key || null) : null,
     });
     if (r.ok) {
       imageBytes = Buffer.from(r.b64, 'base64'); imageExt = 'png'; imageCT = 'image/png';

@@ -894,11 +894,17 @@ async function retryTile(req, res, db, auth, uid, body) {
     await ensureSeedJobs(db);
     await enqueueRenderJob(db, childId, item.taxonomy_slug, { force: true, refKey: priorKey, guidance: guidance || null });
   } else {
-    // Re-arm the job: processTileJob re-renders from the source photo (styled,
-    // never raw) and updates THIS item in place, archiving the old picture.
+    // Re-arm the job. A guided retry runs as an EDIT PASS on the current
+    // picture (guidance + prior_key → renderStyledPhoto short-circuits to the
+    // prior image alone, no reference stack — so a style ref close to the
+    // subject can't bleed into the correction). A blind retry clears both and
+    // re-renders from the source photo with the full stack, same as ever.
+    // Both columns are OVERWRITTEN, never appended — `detail` stays the
+    // add-time family note and no longer accumulates corrections.
+    const photoPrior = (guidance && item.image_key && !String(item.image_key).startsWith('taxonomy-defaults/'))
+      ? item.image_key : null;
     await db`UPDATE tile_jobs SET status = 'queued', attempts = 0, error = NULL, raw = FALSE,
-               detail = CASE WHEN ${guidance} = '' THEN detail
-                        ELSE COALESCE(detail, '') || ' Correction from the parent — apply this exactly: ' || ${guidance} END,
+               guidance = ${guidance || null}, prior_key = ${photoPrior},
                updated_at = NOW() WHERE id = ${customJob.id}`;
   }
   res.status(200).json({ ok: true, charged, freeRetry: charged === 0 && !isAdmin,

@@ -1,15 +1,23 @@
 // /api/admin/lab?action=tile-lab  (admin only)
 // Body JSON: { photoB64, photoType?, label?, detail?, section?, styleGuideId?,
-//              noStyle?, model?, priorB64? }
+//              noStyle?, model?, priorB64?, siblingKeys?, noStuffRef? }
+//
+// Siblings A/B experiment: `siblingKeys` (≤3 blob keys of same-board tiles)
+// ride as extra style references, and `noStuffRef: true` suppresses the
+// style guide's objects reference — the three arms are today's stack (neither
+// param), siblings-instead (both), and both-references (siblingKeys alone).
+// Bench-only: no production path sets either.
 //
 // A Lab bench for the ADD-TILE photo pipeline — the exact renderStyledPhoto
 // the iPad's add flow runs (style-guide attachment, people → keystone-portrait
 // branch, objects → nano), so what you see here is what a parent gets.
 //
 // Retry iteration: pass `priorB64` (the previous result) + `detail` (the
-// correction) and the bench re-renders FROM the prior image with the guidance
-// applied — mirroring the board's guided retry. `noStyle` disables the style
-// guide entirely (the raw-photo restyle with no style matching).
+// correction) and the bench runs the REAL guided-retry edit pass — the prior
+// image alone plus the correction, no reference stack — exactly what the
+// board's guided retry does in production. With `priorB64` but no `detail`
+// it's a blind re-roll from the photo, also matching production. `noStyle`
+// disables the style guide entirely (raw-photo restyle, no style matching).
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { loadStyleGuide } from '../_lib/onboarding-render.js';
@@ -37,6 +45,12 @@ export default async function handler(req, res) {
   const model = typeof b.model === 'string' && b.model ? b.model.slice(0, 60) : null;
   const noStyle = b.noStyle === true;
   const styleGuideId = Number.isFinite(Number(b.styleGuideId)) && Number(b.styleGuideId) > 0 ? Number(b.styleGuideId) : null;
+  // Siblings experiment (admin-gated, so cross-board key reads are the
+  // admin's existing privilege — same short-circuit /api/media relies on).
+  const siblingKeys = Array.isArray(b.siblingKeys)
+    ? b.siblingKeys.filter((k) => typeof k === 'string' && k && !k.startsWith('data:')).slice(0, 3)
+    : [];
+  const noStuffRef = b.noStuffRef === true;
 
   try {
     const db = sql();
@@ -46,15 +60,23 @@ export default async function handler(req, res) {
       catch (e) { res.status(e.status || 400).json({ error: e.message || 'style load failed' }); return; }
     }
 
-    // Retry mode: render FROM the previous result (that's what the board's
-    // guided retry does — improve this picture, don't re-roll the photo).
-    const sourceB64 = priorB64 || photoB64;
-    const photo = Buffer.from(sourceB64, 'base64');
+    // Retry mode: the correction runs as the production edit pass — prior
+    // image + guidance, no photo, no reference stack. The photo (or the prior,
+    // when only that was sent) still rides as `photo` so a retry WITHOUT a
+    // correction falls through to the normal full render, same as production.
+    const retryMode = !!(priorB64 && detail);
+    const photo = Buffer.from(photoB64 || priorB64, 'base64');
 
     const r = await renderStyledPhoto({
-      db, photo, contentType: priorB64 ? 'image/png' : photoType,
-      label, detail, style: 'soft, friendly children\'s illustration',
+      db, photo, contentType: photoB64 ? photoType : 'image/png',
+      label, detail: retryMode ? '' : detail,
+      style: 'soft, friendly children\'s illustration',
       styleGuide, model, bg: '', section, ageGroup,
+      guidance: retryMode ? detail : '',
+      prior: retryMode ? { buffer: Buffer.from(priorB64, 'base64'), contentType: 'image/png' } : null,
+      // First renders only — the retry edit pass carries the prior image
+      // alone and ignores the reference stack by construction.
+      siblingRefKeys: siblingKeys, noStuffRef,
     });
     if (!r.ok) { res.status(502).json({ error: 'generation failed', detail: r.detail || '' }); return; }
 
@@ -67,7 +89,10 @@ export default async function handler(req, res) {
       styleImageAttached: !!(styleGuide && styleGuide.image && styleGuide.image.buffer),
       styleGuideId: styleGuide ? styleGuide.id : null,
       styleLabel: styleGuide ? styleGuide.label : null,
-      retriedFromPrior: !!priorB64,
+      retriedFromPrior: retryMode,
+      siblingCount: siblingKeys.length,
+      siblingKeysAttached: siblingKeys,
+      stuffRefAttached: !!(styleGuide && styleGuide.stuff_ref_key && !noStuffRef),
     });
   } catch (err) {
     res.status(500).json({ error: 'tile-lab failed', detail: String(err.message || err) });
