@@ -186,14 +186,42 @@ export default async function handler(req, res) {
     try {
       folders = (await db`SELECT section, label_norm, image_key FROM category_defaults`)
         .map((r) => ({ section: String(r.section || '').toLowerCase(), label: r.label_norm,
-                       imageKey: styledChips.get(`${String(r.section || '').toLowerCase()}|${r.label_norm}`) || r.image_key }))
-        .sort((a, b) => {
-          const oa = catOrder.get(`${a.section}|${a.label}|`) ?? Number.MAX_SAFE_INTEGER;
-          const ob = catOrder.get(`${b.section}|${b.label}|`) ?? Number.MAX_SAFE_INTEGER;
-          if (oa !== ob) return oa - ob;
-          return a.label < b.label ? -1 : 1;
-        });
+                       imageKey: styledChips.get(`${String(r.section || '').toLowerCase()}|${r.label_norm}`) || r.image_key }));
     } catch (_) { /* pre-migration DB — chips just render as text */ }
+    // Every taxonomy category must APPEAR even before any icon exists. This
+    // list used to be enumerated from category_defaults alone, so a category
+    // added to the taxonomy simply vanished from the demo (no folder at all,
+    // even when the selected style had a perfect styled chip for it). Fill
+    // the gaps live from the taxonomy: styled icon when the style has one,
+    // otherwise imageKey null — clients already render a label-only chip.
+    try {
+      const have = new Set(folders.map((f) => `${f.section}|${f.label}`));
+      const cats = await db`
+        SELECT DISTINCT lower(column_name) AS section, category, subcategory FROM taxonomy
+        WHERE COALESCE(archived, FALSE) = FALSE
+          AND COALESCE(is_event, FALSE) = FALSE
+          AND COALESCE(is_gestalt, FALSE) = FALSE
+          AND COALESCE(authoring_kind, 'canonical') = 'canonical'
+          AND COALESCE(audience, 'universal') = 'universal'
+          AND lower(column_name) <> 'needs'
+          AND COALESCE(category, '') <> ''`;
+      for (const r of cats) {
+        for (const lbl of [r.category, r.subcategory]) {
+          const label = String(lbl || '').trim().toLowerCase();
+          if (!label) continue;
+          const key = `${r.section}|${label}`;
+          if (have.has(key)) continue;
+          have.add(key);
+          folders.push({ section: r.section, label, imageKey: styledChips.get(key) || null });
+        }
+      }
+    } catch (_) { /* taxonomy unreadable → the category_defaults set stands */ }
+    folders.sort((a, b) => {
+      const oa = catOrder.get(`${a.section}|${a.label}|`) ?? Number.MAX_SAFE_INTEGER;
+      const ob = catOrder.get(`${b.section}|${b.label}|`) ?? Number.MAX_SAFE_INTEGER;
+      if (oa !== ob) return oa - ob;
+      return a.label < b.label ? -1 : 1;
+    });
 
     // Published styles for the page's style switcher (thumbnails serve via
     // the existing public /api/style-guides/public?image= endpoint).

@@ -609,7 +609,12 @@
         img.src = URL.createObjectURL(file);
       });
       const body = { taxonomyId: upTaxId, imageBase64: b64 };
-      if (MODE === 'style') body.styleGuideId = styleGuideId();
+      // The upload must land on the SET THIS PAGE IS SHOWING: the gallery
+      // opened from a wizard kid link views demo_child_id = KID_VIEW, and an
+      // upload silently written to the primary set (0) looked like it never
+      // took — the card patched optimistically, then a reload showed the old
+      // kid render again. Same scoping the regen button below already sends.
+      if (MODE === 'style') { body.styleGuideId = styleGuideId(); body.demoChildId = KID_VIEW || 0; }
       const r = await apiPost('/api/admin/lab?action=default-upload', body);
       const t = TILES.find((x) => String(x.id) === String(upTaxId));
       if (t) { t.imageKey = r.imageKey; t.status = 'done'; t.error = null; }

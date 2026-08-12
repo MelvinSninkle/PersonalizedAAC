@@ -412,12 +412,23 @@
     const waiting = STATUS.tileQueued + STATUS.chipQueued;
     const failedN = STATUS.tileFailed + STATUS.chipFailed;
     const stalled = waiting > 0 && !turbo && (Date.now() - lastChangeAt) > 180_000;
-    $('p-note').textContent = STATUS.complete
+    // The status is a true set-difference against TODAY's taxonomy, so a
+    // category or word added after publish shows up here as missing — this
+    // line is the ongoing sanity check that nothing ships iconless.
+    const missT = (STATUS.tiles || 0) - (STATUS.tilesDone || 0);
+    const missC = (STATUS.chips || 0) - (STATUS.chipsDone || 0);
+    const missBits = [];
+    if (missT > 0) missBits.push(missT + ' tile' + (missT > 1 ? 's' : '')
+      + ((STATUS.missingTileLabels || []).length ? ' — ' + STATUS.missingTileLabels.slice(0, 8).join(', ') + (missT > 8 ? ', …' : '') : ''));
+    if (missC > 0) missBits.push(missC + ' folder chip' + (missC > 1 ? 's' : '')
+      + ((STATUS.missingChipLabels || []).length ? ' — ' + STATUS.missingChipLabels.slice(0, 8).join(', ') + (missC > 8 ? ', …' : '') : ''));
+    $('p-note').textContent = (STATUS.complete
       ? '✅ Complete — review and publish below.'
       : (stalled
           ? `⏸ ${waiting} queued but nothing has rendered in a few minutes — the every-minute cron may not be running (Vercel plan must allow minute crons + CRON_SECRET). Use ⚡ Turbo render, and check Vercel → Cron Jobs.`
           : waiting ? `${waiting} queued — the cron renders continuously every minute; ⚡ Turbo adds this tab's help, or close the tab and let it finish on its own.` : 'Idle — nothing queued. 🚀 Generate to fan out the work.')
-        + (failedN ? ` ⚠️ ${failedN} failed (fix in the gallery, or re-run Generate to requeue).` : '');
+        + (failedN ? ` ⚠️ ${failedN} failed (fix in the gallery, or re-run Generate to requeue).` : ''))
+      + (missBits.length ? ` Missing: ${missBits.join(' · ')}. New taxonomy words/categories land here — 🚀 Generate queues just the gaps.` : '');
     $('go-generate').disabled = false;
     $('go-generate').textContent = STATUS.complete ? '🚀 Re-check for missing pieces' : '🚀 Generate the whole default board';
     $('go-publish').disabled = !STATUS.complete || (STYLE && STYLE.active);

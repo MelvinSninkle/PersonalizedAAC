@@ -22,7 +22,6 @@ struct NeedsStrip: View {
     @Environment(AuthManager.self) private var auth
     @Environment(AccessPrefs.self) private var access
     @Environment(SentenceBar.self) private var sentence
-    @State private var page = 0
     /// Live-shuffle drag preview (see SectionColumn) — siblings part to show
     /// the landing slot while a strip tile is lifted.
     @State private var dragSourceId: Int? = nil
@@ -61,27 +60,13 @@ struct NeedsStrip: View {
         // "+ Add tile" cell is reachable even before any Needs tiles exist.
         if tiles.isEmpty && !editMode {
             EmptyView()
-        } else if (access.buttonsNav || sentence.mode) && !editMode {
-            // Button navigation: whole-page turns instead of a sideways scroll.
-            GeometryReader { geo in
-                let per = max(1, Int((geo.size.width - 108) / (tileSize + BoardMetrics.tileGap)))
-                let pageCount = max(1, Int(ceil(Double(tiles.count) / Double(per))))
-                let p = min(page, pageCount - 1)
-                let slice = Array(tiles.dropFirst(p * per).prefix(per))
-                HStack(spacing: BoardMetrics.tileGap) {
-                    stripPaddle("chevron.left", disabled: p <= 0) { page = max(0, p - 1) }
-                        .opacity(pageCount > 1 ? 1 : 0)
-                    ForEach(slice) { tile in needsCell(tile) }
-                    Spacer(minLength: 0)
-                    stripPaddle("chevron.right", disabled: p >= pageCount - 1) { page = min(pageCount - 1, p + 1) }
-                        .opacity(pageCount > 1 ? 1 : 0)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 8)
-            }
-            .frame(height: stripHeight)
-            .background(Color(hex: prefs.colorNeeds))
         } else {
+            // The core strip ALWAYS scrolls sideways — button-navigation mode
+            // (buttonsNav) locks the vertical grids into page turns but must
+            // never touch this strip (web parity: nav-buttons-mode only kills
+            // overflow on the grids). It used to swap in a paddle pager here,
+            // which read as a dead strip whenever everything fit on one page —
+            // the owner hit exactly that on his son's board and the demo.
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: BoardMetrics.tileGap) {
                     ForEach(orderedTiles) { tile in
@@ -106,8 +91,13 @@ struct NeedsStrip: View {
                 .padding(.vertical, 8)
             }
             // Frozen while a sentence lift is in progress — the pan gesture
-            // is what was stealing every drag out of this strip.
-            .scrollDisabled(stripLift)
+            // is what was stealing every drag out of this strip. The freeze is
+            // ANDed with a live drag on the model: SwiftUI cancels a gesture
+            // without calling onEnded when a pan steals the touch, so a bare
+            // stripLift latched TRUE forever and the strip froze permanently.
+            // sentence.drag is cleared by dragEnd/dragCancel AND the 1.8s
+            // stranded-ghost watchdog, so scrolling always comes back.
+            .scrollDisabled(stripLift && sentence.drag != nil)
             .frame(height: stripHeight)
             .background(Color(hex: prefs.colorNeeds))
             .onChange(of: editMode) { _, _ in previewIds = nil; dragSourceId = nil }
@@ -203,21 +193,6 @@ struct NeedsStrip: View {
     private func stageTile(_ tile: Tile) {
         sentence.stage(tile, idleMinutes: access.sentenceIdleMin)
         TilePlayer.shared.logOnly(tile, childId: auth.childSlug, categoryName: "Needs")
-    }
-
-    private func stripPaddle(_ icon: String, disabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(Color(hex: "#2b3a55"))
-                .frame(width: 44, height: tileSize)
-                .background(RoundedRectangle(cornerRadius: 12).fill(.white))
-                .overlay(RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color(hex: "#c9d5e8"), lineWidth: 2))
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-        .opacity(disabled ? 0.25 : 1)
     }
 
     /// Reorder within the strip. When the live shuffle previewed an order,

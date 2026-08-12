@@ -17,7 +17,7 @@
 import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { readBlobBytes, renderTaxonomyTile, mapPool } from './onboarding-render.js';
-import { buildIconPrompt } from './category-icons.js';
+import { buildIconPrompt, iconFor } from './category-icons.js';
 import { geminiKey, geminiDefaultModel, geminiGenerateImage, geminiCostCents } from './gemini.js';
 
 export const norm = (s) => String(s || '').trim().toLowerCase();
@@ -188,7 +188,72 @@ export async function renderOneTile({ db, style, tax, settings, anchor, demoChil
   return imageKey;
 }
 
+// A chip for a category with NO curated icon description (a new taxonomy
+// category the CATEGORY_ICONS maps don't know) composes itself from three of
+// the style's own finished tiles instead of prompting blind: free (no model
+// call), always on-style, and always representative of what's actually inside
+// the folder. Falls through to the prompt path when the category has no
+// rendered tiles yet (the drain re-runs the chip after tiles land — chip jobs
+// requeue on failure, and 🚀 Generate gap-fills ON CONFLICT DO NOTHING).
+async function composeChipFromTiles({ db, style, chip }) {
+  const done = chip.parent
+    ? await db`SELECT d.image_key FROM taxonomy t
+               JOIN taxonomy_style_defaults d ON d.taxonomy_id = t.id
+               WHERE d.style_guide_id = ${style.id} AND d.demo_child_id = 0 AND d.image_key IS NOT NULL
+                 AND COALESCE(t.archived, FALSE) = FALSE
+                 AND lower(t.column_name) = ${chip.section}
+                 AND lower(TRIM(t.subcategory)) = ${norm(chip.label)}
+                 AND lower(TRIM(t.category)) = ${norm(chip.parent)}
+               ORDER BY t.label, t.id LIMIT 3`
+    : await db`SELECT d.image_key FROM taxonomy t
+               JOIN taxonomy_style_defaults d ON d.taxonomy_id = t.id
+               WHERE d.style_guide_id = ${style.id} AND d.demo_child_id = 0 AND d.image_key IS NOT NULL
+                 AND COALESCE(t.archived, FALSE) = FALSE
+                 AND lower(t.column_name) = ${chip.section}
+                 AND lower(TRIM(t.category)) = ${norm(chip.label)}
+               ORDER BY t.label, t.id LIMIT 3`;
+  if (!done.length) return null;
+  // Dynamic import, same as api/media.js: sharp must never gate — if it's
+  // unavailable on this platform the chip falls through to the prompt path.
+  let sharp;
+  try { sharp = (await import('sharp')).default; } catch (_) { return null; }
+  const parts = await Promise.all(done.map((r) => readBlobBytes(r.image_key)));
+  const n = parts.length;
+  const cell = n === 1 ? 1024 : 512;
+  const bufs = await Promise.all(parts.map((p) =>
+    sharp(p.buffer).resize(cell, cell, { fit: 'cover' }).png().toBuffer()));
+  // 3 → two up top, one centered below; 2 → side by side; 1 → full frame.
+  const layout = n >= 3
+    ? [{ input: bufs[0], top: 0, left: 0 }, { input: bufs[1], top: 0, left: 512 }, { input: bufs[2], top: 512, left: 256 }]
+    : n === 2
+      ? [{ input: bufs[0], top: 256, left: 0 }, { input: bufs[1], top: 256, left: 512 }]
+      : [{ input: bufs[0], top: 0, left: 0 }];
+  const png = await sharp({ create: { width: 1024, height: 1024, channels: 3,
+                                      background: { r: 255, g: 247, b: 251 } } })
+    .composite(layout).png().toBuffer();
+  const imageKey = `style-defaults/${style.id}/chips/${chip.section}/${randomUUID()}.png`;
+  await put(imageKey, png, { access: 'private', contentType: 'image/png', addRandomSuffix: false });
+  await db`INSERT INTO category_style_defaults (style_guide_id, section, label_norm, parent_norm, image_key, status, error, updated_at)
+           VALUES (${style.id}, ${chip.section}, ${norm(chip.label)}, ${norm(chip.parent)}, ${imageKey}, 'done', NULL, NOW())
+           ON CONFLICT (style_guide_id, section, label_norm, parent_norm)
+           DO UPDATE SET image_key = ${imageKey}, status = 'done', error = NULL, updated_at = NOW()`;
+  try {
+    await db`INSERT INTO image_generations (child_id, actor_email, actor_role, label, style, prompt, size, cost_cents)
+             VALUES ('__lab__', NULL, 'lab_style_default', ${'chip: ' + chip.label},
+                     ${'style-default guide#' + style.id + ' ' + (style.label || '')},
+                     ${'composite of ' + n + ' category tiles (no curated icon)'}, '1024x1024', 0)`;
+  } catch (_) {}
+  return imageKey;
+}
+
 export async function renderOneChip({ db, style, chip }) {
+  // New categories (no curated CATEGORY_ICONS entry) prefer the tile
+  // composite — see composeChipFromTiles. Curated chips render as before.
+  const curated = chip.parent ? iconFor(chip.parent, chip.label) : iconFor(chip.label, null);
+  if (!curated) {
+    const composed = await composeChipFromTiles({ db, style, chip });
+    if (composed) return composed;
+  }
   const gKey = geminiKey();
   if (!gKey) throw new Error('GEMINI_API_KEY not configured');
   let prompt = buildIconPrompt({
@@ -304,13 +369,21 @@ export async function styleBuildStatus(db, styleGuideId, { demoChildId = 0 } = {
     db`SELECT kind, status, COUNT(*)::int AS n FROM style_build_jobs
        WHERE style_guide_id = ${styleGuideId} AND demo_child_id = ${kid} GROUP BY kind, status`,
     placeableRows(db), chipRows(db),
-    db`SELECT COUNT(*)::int AS n FROM taxonomy_style_defaults
+    db`SELECT taxonomy_id FROM taxonomy_style_defaults
        WHERE style_guide_id = ${styleGuideId} AND demo_child_id = ${kid} AND image_key IS NOT NULL`,
-    db`SELECT COUNT(*)::int AS n FROM category_style_defaults WHERE style_guide_id = ${styleGuideId} AND image_key IS NOT NULL`,
+    db`SELECT section, label_norm, parent_norm FROM category_style_defaults
+       WHERE style_guide_id = ${styleGuideId} AND image_key IS NOT NULL`,
   ]);
   const rows = kid === 0 ? allRows : allRows.filter(isPersonScopeRow);
   const chips = kid === 0 ? allChips : [];
-  const chipsDone = kid === 0 ? (chipDefs[0]?.n || 0) : 0;
+  // TRUE SET DIFFERENCE, not row counts: counts let a stale default (for a
+  // renamed/retired row) mask a genuinely missing NEW one — "42 done of 42"
+  // while a category added last week has no chip anywhere. The missing lists
+  // ride along so the wizard can say exactly what 🚀 Generate will fill.
+  const doneTiles = new Set(tileDefs.map((r) => String(r.taxonomy_id)));
+  const doneChips = new Set(chipDefs.map((r) => `${r.section}|${r.label_norm}|${r.parent_norm || ''}`));
+  const missingTiles = rows.filter((r) => !doneTiles.has(String(r.id)));
+  const missingChips = chips.filter((c) => !doneChips.has(`${c.section}|${norm(c.label)}|${norm(c.parent)}`));
   const j = { tileQueued: 0, tileFailed: 0, chipQueued: 0, chipFailed: 0 };
   for (const r of jobs) {
     // 'rendering' (mid-drain claim) still counts as queued for display.
@@ -320,10 +393,12 @@ export async function styleBuildStatus(db, styleGuideId, { demoChildId = 0 } = {
     if (r.kind === 'chip' && r.status === 'failed') j.chipFailed += r.n;
   }
   return {
-    tiles: rows.length, tilesDone: tileDefs[0]?.n || 0,
-    chips: chips.length, chipsDone,
+    tiles: rows.length, tilesDone: rows.length - missingTiles.length,
+    chips: chips.length, chipsDone: chips.length - missingChips.length,
+    missingTileLabels: missingTiles.slice(0, 40).map((r) => r.label),
+    missingChipLabels: missingChips.slice(0, 40).map((c) => (c.parent ? `${c.parent} › ${c.label}` : c.label)),
     ...j,
-    complete: (tileDefs[0]?.n || 0) >= rows.length && chipsDone >= chips.length,
+    complete: missingTiles.length === 0 && missingChips.length === 0,
   };
 }
 
