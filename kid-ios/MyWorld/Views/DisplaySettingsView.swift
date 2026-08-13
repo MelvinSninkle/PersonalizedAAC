@@ -30,6 +30,7 @@ struct DisplaySettingsView: View {
     @State private var listenCensor = true
     @State private var listenTilesOnly = false
     @State private var repeatCount = 2       // #12: 0 off / 2 / 3 in a row
+    @State private var sentenceListen = true // background mic while building a sentence
     @State private var suggestListening = false   // #10 consent (off by default)
     @State private var easyClose = false
     @State private var exitHoldSec = 1.2     // ✕ hold length when easyClose off
@@ -278,12 +279,30 @@ struct DisplaySettingsView: View {
                     guard [0, 2, 3].contains(n) else { return }
                     saveSynced(["listenRepeatCount": n, "listenRepeatNav": n > 0])
                 }
+                Toggle("Listen for words while building a sentence", isOn: $sentenceListen)
+                    .onChange(of: sentenceListen) { _, v in saveSynced(["sentenceListen": v]) }
+                Text("While the sentence builder is open, the microphone quietly listens so you can say a word twice and the board jumps to its tile — then drag it up. Works with the \"say a word twice\" setting above.")
+                    .font(.footnote).foregroundStyle(.secondary)
                 // #10: opt-in consent for the suggestion queue. Matched
                 // words only (name + count), never audio or transcripts.
                 Toggle("Suggest words your family says", isOn: $suggestListening)
                     .onChange(of: suggestListening) { _, v in saveSynced(["suggestFromListening": v]) }
                 Text("While listening runs, words your family says that aren't on the board yet appear in the parent dashboard to add, dismiss, or block. Only matched words are kept, never audio or transcripts.")
                     .font(.footnote).foregroundStyle(.secondary)
+            }
+            // Permission repair lives HERE too, not just in the strip: after a
+            // reinstall (or a stray "Don't Allow"), only iOS Settings can turn
+            // the microphone back on — the app cannot re-prompt a denial.
+            Section {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Label("Fix microphone permissions", systemImage: "mic.badge.xmark")
+                }
+            } footer: {
+                Text("If listening says the microphone or Speech Recognition is off — common after reinstalling the app — this opens My World's page in iOS Settings. Turn on Microphone and Speech Recognition there, then come back and tap the mic again.")
             }
         }
         .disabled(!syncedLoaded)
@@ -420,6 +439,7 @@ struct DisplaySettingsView: View {
         listenTilesOnly = (s["listenTilesOnly"] as? Bool) ?? false
         let rc = (s["listenRepeatCount"] as? Int) ?? Int(s["listenRepeatCount"] as? Double ?? -1)
         repeatCount = [0, 2, 3].contains(rc) ? rc : (((s["listenRepeatNav"] as? Bool) ?? true) ? 2 : 0)
+        sentenceListen = (s["sentenceListen"] as? Bool) ?? true
         suggestListening = (s["suggestFromListening"] as? Bool) == true
         easyClose = (s["easyClose"] as? Bool) ?? false
         exitHoldSec = Double(TouchConfig.clampMs(s["exitHoldMs"], 300, 3000, 1200)) / 1000.0

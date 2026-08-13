@@ -234,6 +234,7 @@
     <p class="hint">Just for this visit. On a real board these follow your child to every
       device, along with lots more: board tools, touch behavior, listening filters, and safety controls.</p>
     <label class="grp"><input type="checkbox" id="pd-hide-labels"> Hide labels (tiles, folders &amp; headers)</label>
+    <label class="grp"><input type="checkbox" id="pd-teach"> Tap a tile again to hear a teaching fact</label>
     <div class="grp">Tiles across:
       People <select id="pd-across-people"></select>
       Nouns <select id="pd-across-nouns"></select>
@@ -335,6 +336,7 @@
     sectionVisible: { people: true, nouns: true, verbs: true, needs: true },
     sectionColors: { people: '#ffffff', nouns: '#ffffff', verbs: '#ffffff', needs: '#ffffff' },
     headerColors: { bg: '#ff1493', text: '#ffffff' },
+    teachTap: true,        // tap-again-to-learn: 2nd/3rd/4th tap speaks a fact
     eduDismissed: false,   // legacy key — older sessions may carry it
     tourSeen: false,       // welcome tour shown once per browser session
   });
@@ -380,6 +382,31 @@
   }
 
   const audioEl = new Audio();
+  // Tap-again-to-learn (default ON — the same show-of-value the iOS practice
+  // board ships): a re-tap inside 2s walks the tile's teaching facts (fact 1,
+  // fact 2, fact 3, then back to the word). Facts speak via the browser voice
+  // (speakLocal) — the demo clip library covers labels only, and the practice
+  // page never calls live TTS.
+  let _teachLabel = null, _teachAt = 0, _teachIdx = 0;
+  function tapTile(t) {
+    const clues = (PDISP.teachTap !== false && t && Array.isArray(t.descriptiveClues))
+      ? t.descriptiveClues.filter(Boolean).slice(0, 3) : [];
+    if (clues.length && _teachLabel === t.label && (Date.now() - _teachAt) < 2000) {
+      _teachAt = Date.now();
+      if (_teachIdx < clues.length) {
+        noteTap(t.label);
+        speakLocal(clues[_teachIdx]);
+        _teachIdx++;
+        return;
+      }
+      _teachIdx = 0;   // walked all facts — wrap back to the word
+    } else {
+      _teachIdx = 0;
+    }
+    _teachLabel = t ? t.label : null; _teachAt = Date.now();
+    speak(t.label);
+  }
+
   function speak(label) {
     noteTap(label);
     if (VOICE) {
@@ -620,7 +647,7 @@
       lb.className = 'lb'; lb.textContent = t.label;
       attachBand(el, sq, t, section);
       el.appendChild(sq); el.appendChild(lb);
-      el.addEventListener('click', () => speak(t.label));
+      el.addEventListener('click', () => tapTile(t));
       grid.appendChild(el);
     }
     host.appendChild(grid);
@@ -658,7 +685,7 @@
       lb.className = 'lb'; lb.textContent = t.label;
       attachBand(el, sq, t, 'needs');
       el.appendChild(sq); el.appendChild(lb);
-      el.addEventListener('click', () => speak(t.label));
+      el.addEventListener('click', () => tapTile(t));
       grid.appendChild(el);
     }
     requestAnimationFrame(fitBands);
@@ -667,6 +694,7 @@
   // ── ⚙ Display panel wiring ────────────────────────────────────────────────
   function pdPopulate() {
     document.getElementById('pd-hide-labels').checked = !!PDISP.hideLabels;
+    document.getElementById('pd-teach').checked = PDISP.teachTap !== false;
     for (const s of ['people', 'nouns', 'verbs']) {
       const selEl = document.getElementById('pd-across-' + s);
       if (!selEl.options.length) {
@@ -696,6 +724,9 @@
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('show'); });
     document.getElementById('pd-hide-labels').addEventListener('change', (e) => {
       PDISP.hideLabels = e.target.checked; pdCommit();
+    });
+    document.getElementById('pd-teach').addEventListener('change', (e) => {
+      PDISP.teachTap = e.target.checked; pdSave();
     });
     for (const s of ['people', 'nouns', 'verbs']) {
       document.getElementById('pd-across-' + s).addEventListener('change', (e) => {

@@ -86,8 +86,19 @@ struct HeaderBar: View {
                 // Sentence constructor: while composing, the strip is the ONLY
                 // header content — name, globe, and buttons all yield (the
                 // background color stays). Emptying the strip restores them.
-                SentenceStripView()
-                    .padding(.horizontal, 8)
+                // The small pulsing mic says background listening is live —
+                // the parent can say a word twice to flash its tile.
+                HStack(spacing: 4) {
+                    if listening {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color(hex: "#ffd400"))
+                            .symbolEffect(.pulse, options: .repeating)
+                            .padding(.leading, 8)
+                    }
+                    SentenceStripView()
+                }
+                .padding(.horizontal, 8)
             } else if listening {
                 ListenStripView(speech: speech)
                     .padding(.horizontal, 66)   // clear the side buttons
@@ -113,7 +124,9 @@ struct HeaderBar: View {
                     }
                     // ✏️ Sentence mode: modal, owned here — while on, the board
                     // pages instead of scrolling and a TAP stages its tile.
-                    if !listening && access.sentenceBuilder && access.toolSentence {
+                    // With background sentence-listening on, the pencil stays
+                    // reachable during listening — the two now coexist.
+                    if (!listening || access.sentenceListen) && access.sentenceBuilder && access.toolSentence {
                         sentenceModeButton
                     }
                     Spacer()
@@ -176,7 +189,9 @@ struct HeaderBar: View {
             // friendly join popup instead of a dead toggle (turning OFF is
             // always allowed).
             if !listening && !board.sttAllowed { showSttUpsell = true; return }
-            if !listening { sentence.setMode(false) }   // listening owns the header
+            // Listening owns the header — unless background sentence-listening
+            // is on, in which case the pencil and the mic coexist.
+            if !listening && !access.sentenceListen { sentence.setMode(false) }
             listening.toggle()
         } label: {
             Image(systemName: listening ? "stop.circle.fill" : "mic.circle.fill")

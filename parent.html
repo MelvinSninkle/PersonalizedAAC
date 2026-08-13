@@ -780,6 +780,12 @@
     <p class="hint">What the live listening bar shows when people talk near the board.</p>
     <div style="display:flex;flex-direction:column;gap:12px;max-width:520px;">
       <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span>🎙 Listen for words while building a sentence
+          <span class="hint" style="display:block;margin:2px 0 0;">On (default): while the ✏️ sentence builder is open, the board's microphone quietly listens so
+          you can say a word twice and the board jumps to that tile — then drag it into the sentence. A natural way to model language together.</span></span>
+        <input type="checkbox" id="touch-sentence-listen">
+      </label>
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <span>🙊 Hide bad words in Listening
           <span class="hint" style="display:block;margin:2px 0 0;">On (default): curse words and slurs someone says nearby show as "Bad Word" in the listening
           bar instead of the word itself. The blocked list is maintained by My World and updates automatically.</span></span>
@@ -3908,12 +3914,14 @@
       // Listening display filter (E8): masking defaults ON, tiles-only OFF.
       document.getElementById('touch-listen-censor').checked = childSettings.listenCensor !== false;
       document.getElementById('touch-listen-tiles').checked = !!childSettings.listenTilesOnly;
+      document.getElementById('touch-sentence-listen').checked = childSettings.sentenceListen !== false;
       document.getElementById('touch-save').addEventListener('click', () => {
         childSettings = { ...childSettings,
           tapInterrupt: touchInt.checked,
           doubleTapTeach: document.getElementById('touch-doubletap').checked,
           listenCensor: document.getElementById('touch-listen-censor').checked,
           listenTilesOnly: document.getElementById('touch-listen-tiles').checked,
+          sentenceListen: document.getElementById('touch-sentence-listen').checked,
         };
         saveSettingsToServer('Saved ✓. The board picks it up on its next settings sync', 'touch-msg');
       });
