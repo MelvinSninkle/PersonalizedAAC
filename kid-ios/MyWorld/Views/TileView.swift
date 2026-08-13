@@ -16,6 +16,7 @@ struct TileView: View {
     var posterMode: Bool = false
 
     @Environment(DisplayPrefs.self) private var prefs
+    @Environment(\.scenePhase) private var scenePhase
     /// Present ONLY on the pre-login practice board (PracticeBoardView
     /// injects it): the Label Lab caption band, the pink/violet tier rings,
     /// and under-tile label suppression. nil on every real board, so nothing
@@ -148,12 +149,28 @@ struct TileView: View {
         }
         .buttonStyle(TileButtonStyle())
         .task(id: tile.imageKey) { await loadImage() }
+        // A foreground interruption (system alert, Calendar popup) fires a
+        // memory warning that purges the shared decoded NSCache — and a tile
+        // rendering purely off that cache went blank FOREVER (the .task only
+        // re-runs when the view or key changes). Returning to active retries
+        // any tile whose art is missing.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, image == nil, tile.imageKey?.isEmpty == false {
+                Task { await loadImage() }
+            }
+        }
     }
 
     private func loadImage() async {
         guard let key = tile.imageKey, !key.isEmpty else { return }
-        // Already rendering synchronously from the decoded cache → no work.
-        if MediaCache.decodedImage(for: key, maxPixel: 640) != nil { return }
+        // Decoded-cache hit: ADOPT it into @State rather than returning —
+        // the NSCache is purgeable (memory warnings empty it, deliberately),
+        // and a visible tile must hold its own strong reference or a Calendar
+        // alert can blank it permanently.
+        if let hit = MediaCache.decodedImage(for: key, maxPixel: 640) {
+            await MainActor.run { self.image = hit }
+            return
+        }
         if let img = await MediaCache.shared.image(for: key, maxPixel: 640) {
             // NO automatic pixel trimming — auto blank-space removal was the
             // board's most-complained-about behavior and is deliberately gone.
