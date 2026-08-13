@@ -356,7 +356,24 @@ final class SentenceBar {
     /// the parent picked) first, TTS fallback. Sequential, like the web ▶.
     @ObservationIgnored private var playTask: Task<Void, Never>?
 
-    func playAll(childId: String, idleMinutes: Int) {
+    /// Mirror of the server's clip slug (demoSlug in _lab-demo-audio.js) —
+    /// must stay in lockstep with it and the practice board's copy.
+    static func termSlug(_ s: String) -> String {
+        let lowered = s.lowercased()
+        var out = ""
+        var lastDash = true
+        for ch in lowered {
+            if (ch.isLetter || ch.isNumber), ch.isASCII {
+                out.append(ch); lastDash = false
+            } else if !lastDash {
+                out.append("-"); lastDash = true
+            }
+        }
+        if out.hasSuffix("-") { out.removeLast() }
+        return out
+    }
+
+    func playAll(childId: String, idleMinutes: Int, voiceClipPrefix: String? = nil, voiceClipExt: String = ".mp3") {
         guard !staged.isEmpty else { return }
         stopPlayback()   // restart semantics — never two loops at once
         resetIdle(idleMinutes: idleMinutes)
@@ -367,9 +384,20 @@ final class SentenceBar {
         playTask = Task { @MainActor in
             for entry in list {
                 if Task.isCancelled { return }
-                // A synonym is UTTERED as said — the recorded clip library
-                // covers labels only, so synonyms ride the TTS path.
-                if entry.spoken == nil, let key = entry.tile.soundKey, !key.isEmpty,
+                if let spoken = entry.spoken {
+                    // A synonym is UTTERED as said. Prefer the pre-rendered
+                    // clip in the child's OWN voice (voice-terms/<voiceId>/,
+                    // built in the Voice library) — offline, instant, and
+                    // unmetered; a miss falls through to the TTS path.
+                    if let prefix = voiceClipPrefix,
+                       let url = try? await MediaCache.shared.audioFileURL(for: prefix + Self.termSlug(spoken) + voiceClipExt) {
+                        await GameAudio.shared.playFileAwait(url)
+                    } else {
+                        await GameAudio.shared.speakAwait(spoken, childId: childId)
+                    }
+                    continue
+                }
+                if let key = entry.tile.soundKey, !key.isEmpty,
                    let url = try? await MediaCache.shared.audioFileURL(for: key) {
                     await GameAudio.shared.playFileAwait(url)
                 } else {
@@ -388,6 +416,7 @@ struct SentenceStripView: View {
     @Environment(AccessPrefs.self) private var access
     @Environment(AuthManager.self) private var auth
     @Environment(DisplayPrefs.self) private var prefs
+    @Environment(BoardStore.self) private var board
 
     var body: some View {
         // #15 parity: the sentence chips follow the LISTENING tile size — the
@@ -418,7 +447,8 @@ struct SentenceStripView: View {
             }
             .buttonStyle(.plain)
             Button {
-                sentence.playAll(childId: auth.childSlug, idleMinutes: access.sentenceIdleMin)
+                sentence.playAll(childId: auth.childSlug, idleMinutes: access.sentenceIdleMin,
+                                 voiceClipPrefix: board.voiceClipPrefix, voiceClipExt: board.voiceClipExt)
             } label: {
                 Image(systemName: "play.fill")
                     .font(.system(size: 24, weight: .bold))

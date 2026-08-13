@@ -91,10 +91,14 @@ export default async function handler(req, res) {
     const normLbl = (v) => String(v || '').trim().toLowerCase();
     let styleTileDefs = new Map(), styleChipDefs = new Map();
     let boardLang = 'en';
+    let voiceIdOut = '';
     try {
       const csRow = (await db`SELECT settings FROM child_settings WHERE child_id = ${childId} LIMIT 1`)[0];
       const langRaw = csRow && csRow.settings && csRow.settings.language;
       if (typeof langRaw === 'string' && langRaw) boardLang = langRaw;
+      // The child's voice id rides out as a clip PREFIX (voiceClips below) so
+      // the device can address pre-rendered synonym clips deterministically.
+      voiceIdOut = String((csRow && csRow.settings && csRow.settings.voiceId) || '').slice(0, 80);
       const sgId = Number(csRow && csRow.settings && csRow.settings.styleGuideId) || 0;
       if (sgId > 0) {
         // FAMILY boards read ONLY the style's primary set (demo_child_id = 0).
@@ -319,6 +323,12 @@ export default async function handler(req, res) {
       // picture) — dark-launched with the synonym sets; server-owned so
       // graduation is one flip (SYNONYMS_PUBLIC), no client release.
       listenCaptions: listenCaptionsOut,
+      // Deterministic prefix for pre-rendered SYNONYM clips in the child's
+      // voice (voice-terms/<voiceId>/<slug(term)>.mp3, built in the Voice
+      // library). The device mirrors the slug rule and simply tries the key;
+      // a miss falls through to its TTS path — no manifest needed. null when
+      // no voice is chosen.
+      voiceClips: voiceIdOut ? { prefix: `voice-terms/${voiceIdOut}/`, ext: '.mp3' } : null,
       layoutOffer,
     });
   } catch (err) {

@@ -122,6 +122,7 @@
     </table>
     <div class="addrow">
       <button class="primary" id="demo-build-all">⚡ Prepare all active English voices</button>
+      <button id="demo-build-syn" title="Pre-render the curated synonym/variant clips (voice-terms/) every active voice — sentence playback speaks a staged synonym in the child's own voice, offline and unmetered">🗣 Prepare synonym clips</button>
       <span id="demo-msg"></span>
     </div>
   </div>
@@ -137,6 +138,11 @@
       Standard library only — personalized words render per child.</p>
     <div class="bench-controls">
       <select id="voice-sel"></select>
+      <select id="rv-scope" title="Which clips Listen &amp; confirm walks — synonyms are the pre-rendered variant clips sentence playback uses">
+        <option value="core">Words + facts</option>
+        <option value="syn">Synonym clips</option>
+        <option value="all">Everything</option>
+      </select>
       <button id="preview-btn">▶ Preview voice</button>
       <input type="search" id="wq" placeholder="Filter words…" style="width:160px;">
       <button class="primary" id="review-btn">🎧 Listen &amp; confirm (words + facts)</button>
@@ -220,6 +226,7 @@
   let VOICES = [];        // full catalog, incl. inactive, in sortOrder
   let WORDS = [];         // [{label, group, taxId, clues}] unique standard-library labels
   let REVIEW = [];        // the full QC queue: every word AND every teaching fact
+  let SYNS = [];          // curated synonym/variant terms (voice-terms clips)
   const CLIPS = new Map(); // client-side blob cache: "voiceId|text" → Blob
   // Listen-and-confirm state for the SELECTED voice: server-persisted ✓ marks
   // (resume anywhere) + the global phonetic overrides (taxonomy.pronunciation).
@@ -544,10 +551,13 @@
     const voice = currentVoice();
     const msg = document.getElementById('bench-msg');
     if (!voice) { msg.textContent = 'No active voice selected.'; return; }
-    if (!confirm(`Approve EVERYTHING for "${voice.name}" without listening?\n\nMarks every standard-library word and every teaching fact ✓ for this voice. You can still spot-check anytime — Listen & confirm's ← Back or a word's ▶ both work, and ↻ re-renders anything that sounds off.`)) return;
+    const synScope = (document.getElementById('rv-scope') || {}).value === 'syn';
+    if (!confirm(synScope
+      ? `Approve every SYNONYM clip for "${voice.name}" without listening?\n\n(The scope picker is on Synonym clips — words and facts are untouched.)`
+      : `Approve EVERYTHING for "${voice.name}" without listening?\n\nMarks every standard-library word and every teaching fact ✓ for this voice (synonym clips have their own scope). You can still spot-check anytime — Listen & confirm's ← Back or a word's ▶ both work, and ↻ re-renders anything that sounds off.`)) return;
     try {
       const r = await withSpinner(document.getElementById('approve-all-btn'), () =>
-        api('/api/admin/lab?action=voices', { method: 'POST', body: { op: 'qc-all', voiceId: voice.id } }));
+        api('/api/admin/lab?action=voices', { method: 'POST', body: { op: 'qc-all', voiceId: voice.id, scope: synScope ? 'synonyms' : undefined } }));
       await loadQC();
       renderWords();
       msg.textContent = `✓ Approved ${r.approved} clips for ${voice.name}.`;
@@ -555,6 +565,11 @@
   });
 
   document.getElementById('wq').addEventListener('input', () => { stopPlayAll(); renderWords(); });
+  document.getElementById('rv-scope').addEventListener('change', () => {
+    if (!rvOpen) return;
+    rvIdx = Math.max(0, rvFirstUnapproved(0));
+    rvShow();
+  });
   document.getElementById('voice-sel').addEventListener('change', async () => {
     stopPlayAll();
     await loadQC();
@@ -572,7 +587,16 @@
   // back, pausing only when something needs a ✓ decision or a ↻.
   let rvAuto = false, rvAutoRun = 0;
 
-  function rvQueue() { return REVIEW.length ? REVIEW : WORDS.map((w) => ({ kind: 'word', label: w.label, taxId: w.taxId, group: w.group, qcKey: w.label.toLowerCase() })); }
+  function rvQueue() {
+    const base = REVIEW.length ? REVIEW : WORDS.map((w) => ({ kind: 'word', label: w.label, taxId: w.taxId, group: w.group, qcKey: w.label.toLowerCase() }));
+    // Scope keeps the hands-free queue reviewable: the synonym clips are a
+    // separate, lower-ceremony pile (they only play when the child SAID that
+    // exact word) — they never sneak into the default words+facts walk.
+    const scope = (document.getElementById('rv-scope') || {}).value || 'core';
+    if (scope === 'syn') return base.filter((x) => x.kind === 'syn');
+    if (scope === 'all') return base;
+    return base.filter((x) => x.kind !== 'syn');
+  }
   function rvKey(x) { return x.qcKey || x.label.toLowerCase(); }
   function rvFirstUnapproved(from) {
     const q = rvQueue();
@@ -593,7 +617,7 @@
     rv('rv-group').textContent = w.group;
     // Phonetic overrides are a WORD concept (taxonomy.pronunciation); facts
     // are prose — a bad fact clip just gets a ↻ re-render.
-    const isWord = w.kind !== 'fact';
+    const isWord = w.kind === 'word';   // facts AND synonym clips: no phonetic override (it's label-keyed)
     rv('rv-pron').style.display = isWord ? '' : 'none';
     rv('rv-pron-note').style.display = isWord ? '' : 'none';
     rv('rv-pron').value = (w.taxId && QC.pron[w.taxId]) || '';
@@ -814,6 +838,15 @@
     const d = await api('/api/admin/lab?action=demo-audio');
     DEMO_TOTAL = Number(d.tiles) || 0;
     const coverage = d.coverage || {};
+    // Synonym clips ride the same response: refresh the QC queue's syn tail
+    // (keyed syn|<term>, same convention as clue|) without disturbing the
+    // words+facts entries already built.
+    SYNS = Array.isArray(d.synonymTerms) ? d.synonymTerms : [];
+    REVIEW = REVIEW.filter((x) => x.kind !== 'syn');
+    for (const t of SYNS) {
+      REVIEW.push({ kind: 'syn', label: t, taxId: null,
+                    group: '🗣 synonym / variant clip', qcKey: 'syn|' + t.toLowerCase() });
+    }
     const rows = VOICES.filter((v) => v.active && (v.lang || 'en') === 'en');
     const tb = document.getElementById('demo-rows');
     if (!rows.length) { tb.innerHTML = '<tr><td colspan="3" class="empty">No active English voices.</td></tr>'; return; }
@@ -835,6 +868,10 @@
           + c.missing + ' word' + (c.missing === 1 ? '' : 's') + ' missing a clip</summary>'
           + '<div style="font-size:12px;color:#475569;max-width:480px;margin-top:4px;">' + list + '</div></details>';
       }
+      if (c.synTotal) {
+        cell += '<div class="sub" style="font-size:12px;margin-top:2px;">🗣 synonym clips: '
+          + (c.synMissing === 0 ? '✅ ' : '') + c.synHave + ' / ' + c.synTotal + '</div>';
+      }
       return '<tr><td>' + esc(v.name) + '</td>'
         + '<td>' + cell + '</td>'
         + '<td><button class="primary" data-demo-build="' + esc(v.id) + '"' + (done ? ' disabled' : '') + '>'
@@ -845,7 +882,7 @@
     tb.querySelectorAll('[data-demo-build]').forEach((b) =>
       b.addEventListener('click', () => buildDemo([b.dataset.demoBuild])));
   }
-  async function buildDemo(voiceIds) {
+  async function buildDemo(voiceIds, scope) {
     const msg = document.getElementById('demo-msg');
     document.querySelectorAll('#demo-panel button').forEach((b) => { b.disabled = true; });
     // Accumulate the money story across rounds: free cache copies vs
@@ -855,7 +892,7 @@
       for (const vid of voiceIds) {
         for (let round = 0; round < 60; round++) {   // safety cap; each call is time-boxed
           msg.textContent = 'Preparing ' + vid + '… (round ' + (round + 1) + ' — safe to keep waiting)';
-          const r = await api('/api/admin/lab?action=demo-audio', { method: 'POST', body: { op: 'build', voiceIds: [vid] } });
+          const r = await api('/api/admin/lab?action=demo-audio', { method: 'POST', body: { op: 'build', voiceIds: [vid], scope: scope || undefined } });
           fromCache += Number(r.fromCache) || 0;
           generated += Number(r.generated) || 0;
           const remaining = Number(r.remaining) || 0;
@@ -875,6 +912,12 @@
     if (!ids.length) return;
     if (!confirm('Prepare practice clips for ' + ids.length + ' voice(s)? Words each voice has already spoken are COPIED free from the shared cache; only never-spoken words generate anew.')) return;
     buildDemo(ids);
+  });
+  document.getElementById('demo-build-syn').addEventListener('click', () => {
+    const ids = VOICES.filter((v) => v.active && (v.lang || 'en') === 'en').map((v) => v.id);
+    if (!ids.length) return;
+    if (!confirm('Pre-render synonym/variant clips for ' + ids.length + ' voice(s) (~' + (SYNS.length || 'a few hundred') + ' terms each)? Terms a voice has already spoken are COPIED free from the shared cache. These never affect the /practice picker.')) return;
+    buildDemo(ids, 'synonyms');
   });
 
   document.getElementById('refresh').addEventListener('click', load);

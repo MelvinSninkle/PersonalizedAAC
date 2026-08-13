@@ -15,6 +15,7 @@
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { ensureVoicesTable, listVoices } from '../_lib/voices.js';
+import { curatedSpokenTerms } from '../_lib/word-match.js';
 
 export const config = { maxDuration: 30 };
 
@@ -103,15 +104,26 @@ export default async function handler(req, res) {
       // exactly matches what Listen & confirm would have walked through.
       const voiceId = String(b.voiceId || '').trim();
       if (!voiceId) { res.status(400).json({ error: 'voiceId required' }); return; }
+      // scope:'synonyms' bulk-approves ONLY the syn| keys (the curated
+      // synonym/variant clips — namespaced like clue|, no schema change);
+      // the default remains words + facts exactly as before, so approving a
+      // whole voice never silently sweeps in material the owner didn't hear.
+      const scope = b.scope === 'synonyms' ? 'synonyms' : 'core';
       let rows;
       try {
-        rows = await db`SELECT label, descriptive_clues FROM taxonomy WHERE COALESCE(archived, FALSE) = FALSE`;
+        rows = await db`SELECT label, match_terms, descriptive_clues FROM taxonomy WHERE COALESCE(archived, FALSE) = FALSE`;
       } catch (_) {
         rows = await db`SELECT label FROM taxonomy WHERE COALESCE(archived, FALSE) = FALSE`;
       }
       const keys = new Set();
       for (const r of rows) {
         const label = String(r.label || '').trim();
+        if (scope === 'synonyms') {
+          for (const t of curatedSpokenTerms(label, r.match_terms || [])) {
+            keys.add('syn|' + t.toLowerCase());
+          }
+          continue;
+        }
         if (label) keys.add(label.toLowerCase());
         for (const clue of (Array.isArray(r.descriptive_clues) ? r.descriptive_clues : [])) {
           if (clue) keys.add('clue|' + String(clue).toLowerCase().slice(0, 280));
