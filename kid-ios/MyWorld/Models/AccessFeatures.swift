@@ -143,6 +143,10 @@ final class BoardNav {
     /// same-key cooldown — the mic hears the board's own audio, and a played
     /// sentence containing a repeated word must not yank the category out
     /// from under the parent.
+    /// @MainActor: SpeechListener is MainActor-isolated (its `words` can't be
+    /// read from a nonisolated context) — and every caller is a SwiftUI
+    /// onChange closure, which already runs on the main actor.
+    @MainActor
     func repeatNavigate(speech: SpeechListener, board: BoardStore, access: AccessPrefs) {
         let n = access.listenRepeatCount
         guard n >= 2 else { return }
