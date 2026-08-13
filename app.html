@@ -2018,7 +2018,9 @@
     },
     headerColors: { bg: '#ff1493', text: '#ffffff' },
     // Low-vision enlargement steps: 0 = normal, 1 = +50%, 2 = +100% (#15).
-    listenTileSize: 0,
+    // Listening/sentence strip defaults to BIGGEST (owner call — the doubled
+    // strip just reads better); a device that ever saved a step keeps it.
+    listenTileSize: 2,
     topButtonSize: 0,
   };
   const SIZE_SCALE = [1, 1.5, 2];
@@ -2079,7 +2081,8 @@
           bg:   sanitizeColor(raw.headerColors?.bg,   DISPLAY_DEFAULTS.headerColors.bg),
           text: sanitizeColor(raw.headerColors?.text, DISPLAY_DEFAULTS.headerColors.text),
         },
-        listenTileSize: clampSizeStep(raw.listenTileSize),
+        // Absent key → the new Biggest default; an explicitly saved 0 stays 0.
+        listenTileSize: raw.listenTileSize == null ? DISPLAY_DEFAULTS.listenTileSize : clampSizeStep(raw.listenTileSize),
         topButtonSize:  clampSizeStep(raw.topButtonSize),
       };
       headerSetByDevice = !!(raw.headerColors && (raw.headerColors.bg || raw.headerColors.text));
