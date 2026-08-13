@@ -29,10 +29,8 @@ struct NeedsStrip: View {
     /// A sentence lift is in progress from this strip: freeze its scrolling
     /// so the horizontal pan can't steal the drag mid-flight (see quickLift).
     @State private var stripLift = false
-    /// quickLift's manual hold timer + touch bookkeeping (single-touch).
-    @State private var liftTask: Task<Void, Never>? = nil
+    /// This touch was judged horizontal (the scroll's) — never lift on it.
     @State private var liftBlocked = false
-    @State private var liftPoint: CGPoint = .zero
 
     private var tiles: [Tile] {
         board.tiles
@@ -163,52 +161,45 @@ struct NeedsStrip: View {
 
     private var dragStaging: Bool { access.sentenceDrag && access.sentenceBuilder && !editMode }
 
-    /// HOLD-then-drag that never CLAIMS the touch. The previous version
-    /// sequenced a LongPressGesture ahead of the drag — and a long press
-    /// participating on ScrollView content holds every touch from finger-
-    /// down, so the strip's horizontal pan never engaged AT ALL (observed on
-    /// real boards and practice alike; the grids never had this because
-    /// their lift is a plain 24pt drag, which the scroll pan happily
-    /// steals). This is a single 0-distance drag with a manual hold timer:
-    /// a finger that stays put ~0.3s arms the lift (haptic; stripLift then
-    /// freezes the strip so the follow-on drag can't be stolen mid-flight);
-    /// a finger that moves early belongs to the scroll — we stand down and
-    /// the pan takes it, cancelling this gesture on its own schedule. If a
-    /// cancellation lands AFTER arming (cancelled gestures skip onEnded),
-    /// the SentenceBar watchdog clears the ghost and the compound
-    /// scrollDisabled below releases the strip.
+    /// The MIRROR of SectionColumn's proven lift, axes swapped. The grids
+    /// scroll vertically AND lift fine because their gesture is a plain
+    /// 24pt drag: the vertical scroll pan claims along-axis motion, and
+    /// cross-axis motion falls through to the lift. Every fancier strip
+    /// variant (sequenced LongPress, then a 0-distance drag with a hold
+    /// timer) CLAIMED the touch on contact and killed scrolling outright —
+    /// a gesture with minimumDistance 0, like a participating long press,
+    /// owns the touch before the scroll pan can move.
+    ///
+    /// So: plain 12pt drag + a one-shot direction gate. Horizontal-dominant
+    /// motion belongs to the strip's scroll (which will normally have
+    /// claimed it before we even see it) — we stand down for the rest of
+    /// that touch. A near-straight-up pull (owner's rule: sideways motion
+    /// always wins; only a clearly upward lift stages) arms the lift with a
+    /// haptic, and stripLift freezes the strip so the follow-on drag can't
+    /// be stolen mid-flight. dragEnd clears the drag itself; a cancellation
+    /// after arming is covered by the SentenceBar watchdog + the compound
+    /// scrollDisabled above.
     private func quickLift(_ tile: Tile) -> some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .named("board"))
+        DragGesture(minimumDistance: 12, coordinateSpace: .named("board"))
             .onChanged { value in
-                liftPoint = value.location
-                let moved = hypot(value.translation.width, value.translation.height)
-                if !stripLift {
-                    if moved > 10 {
-                        // Scroll's touch this pass — never arm on it.
+                if !stripLift && !liftBlocked {
+                    let h = abs(value.translation.width)
+                    let up = -value.translation.height
+                    if up > 0 && up > h * 1.5 {
+                        stripLift = true
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    } else {
                         liftBlocked = true
-                        liftTask?.cancel(); liftTask = nil
-                    } else if liftTask == nil && !liftBlocked {
-                        liftTask = Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: 300_000_000)
-                            guard !Task.isCancelled, !liftBlocked, !stripLift else { return }
-                            stripLift = true
-                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                            sentence.dragUpdate(tile, at: liftPoint)
-                        }
+                        return
                     }
                 }
                 if stripLift { sentence.dragUpdate(tile, at: value.location) }
             }
             .onEnded { value in
-                liftTask?.cancel(); liftTask = nil
                 liftBlocked = false
                 let lifted = stripLift
                 stripLift = false
-                if lifted {
-                    if sentence.dragEnd(at: value.location) { stageTile(tile) }
-                } else {
-                    sentence.dragCancel()
-                }
+                if lifted, sentence.dragEnd(at: value.location) { stageTile(tile) }
             }
     }
 
