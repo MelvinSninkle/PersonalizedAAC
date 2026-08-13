@@ -65,8 +65,10 @@ struct SectionColumn: View {
     }
     private func playWithLogging(_ t: Tile, fallbackCategory: String? = nil) {
         // Sentence mode (the pencil): a tap IS the stage — silent; ▶ speaks.
+        // spokenWord: a synonym that just located this tile via repeat-nav
+        // rides onto the chip and into ▶ playback.
         if sentence.mode && !editMode {
-            sentence.stage(t, idleMinutes: access.sentenceIdleMin)
+            sentence.stage(t, spoken: nav.spokenWord(for: t.id), idleMinutes: access.sentenceIdleMin)
             TilePlayer.shared.logOnly(t, childId: auth.childSlug,
                                       categoryName: fallbackCategory ?? activeCategoryName,
                                       subcategoryName: activeSubcategoryName)
@@ -262,7 +264,7 @@ struct SectionColumn: View {
     }
 
     private func stageTile(_ tile: Tile) {
-        sentence.stage(tile, idleMinutes: access.sentenceIdleMin)
+        sentence.stage(tile, spoken: nav.spokenWord(for: tile.id), idleMinutes: access.sentenceIdleMin)
         TilePlayer.shared.logOnly(tile, childId: auth.childSlug,
                                   categoryName: activeCategoryName,
                                   subcategoryName: activeSubcategoryName)
