@@ -7619,6 +7619,9 @@
   // on-device offline when enabled); if that plugin isn't present (e.g. plain
   // Safari or dev), the strip shows a friendly note instead of erroring.
   let _listening = false, _listenLex = null, _listenRestart = false, _listenIdleTimer = null;
+  // word -> EVERY tile it can mean (labels + matchTerms) for homophone
+  // cycling; the lexicon above keeps first-match-wins for tokenizing.
+  let _listenCands = null;
   const LISTEN_IDLE_MS = 120000;   // auto-stop after 2 minutes with no speech heard
   function bumpListenIdle() {
     if (_listenIdleTimer) clearTimeout(_listenIdleTimer);
@@ -7629,6 +7632,12 @@
   }
   async function buildListenLexicon() {
     const map = new Map();
+    _listenCands = new Map();
+    const addCand = (key, it) => {
+      if (!key) return;
+      const a = _listenCands.get(key) || [];
+      if (!a.some((x) => x.id === it.id)) { a.push(it); _listenCands.set(key, a); }
+    };
     const all = [];
     for (const s of ['people', 'nouns', 'verbs', 'needs']) {
       try { all.push(...await getAllItems(s)); } catch (_) {}
@@ -7638,13 +7647,17 @@
     for (const it of all) {
       const key = normalizeListenWord(it.label);
       if (key && !map.has(key)) map.set(key, it);
+      addCand(key, it);
     }
     for (const it of all) {
       for (const v of (it.matchTerms || [])) {
         const key = normalizeListenWord(v);
         if (key && !map.has(key)) map.set(key, it);
+        addCand(key, it);
       }
     }
+    // Stable id order so the homophone cycle is deterministic.
+    for (const a of _listenCands.values()) a.sort((x, y) => (x.id || 0) - (y.id || 0));
     return map;
   }
   // Contractions expand to the words their tiles exist for — "he's" →
@@ -8542,25 +8555,31 @@
   // position so re-emitted partial transcripts don't re-trigger.
   let _listenNavKey = '', _listenNavAt = 0;
   function maybeListenNavigate(tokens) {
-    // #12: n consecutive repeats trigger the jump (0 = off). The highlight
-    // fade below is deliberately untouched.
+    // #12: n consecutive repeats of the SAME SPOKEN WORD trigger the jump
+    // (0 = off) — and repeats BEYOND n cycle through every tile that word
+    // can mean (homophones/duplicate labels: with threshold 3, "star star
+    // star" shows the first star tile, a 4th "star" the next, a 5th wraps
+    // back around). The highlight fade in navigateToTile is untouched.
     const need = Number(ACCESS.listenRepeatCount) || 0;
-    if (!need) return;
-    for (let i = tokens.length - 1; i >= need - 1; i--) {
-      const a = tokens[i];
-      if (!a.item) continue;
-      let run = true;
-      for (let k = 1; k < need; k++) {
-        const p = tokens[i - k];
-        if (!p || !p.item || p.item.id !== a.item.id) { run = false; break; }
-      }
-      if (!run) continue;
-      const key = a.item.id + '@' + i;
-      if (key === _listenNavKey && Date.now() - _listenNavAt < 15000) return;
-      _listenNavKey = key; _listenNavAt = Date.now();
-      navigateToTile(a.item);
-      return;
+    if (!need || !tokens.length) return;
+    const last = tokens[tokens.length - 1];
+    if (last.masked) return;
+    const w = normalizeListenWord(last.spoken || last.word);
+    if (!w) return;
+    let run = 0;
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const t = tokens[i];
+      if (t.masked || normalizeListenWord(t.spoken || t.word) !== w) break;
+      run++;
     }
+    if (run < need) return;
+    const cands = (_listenCands && _listenCands.get(w)) || (last.item ? [last.item] : []);
+    if (!cands.length) return;
+    const item = cands[(run - need) % cands.length];
+    const key = w + '#' + run + '@' + (tokens.length - 1);
+    if (key === _listenNavKey && Date.now() - _listenNavAt < 15000) return;
+    _listenNavKey = key; _listenNavAt = Date.now();
+    navigateToTile(item);
   }
   async function navigateToTile(item) {
     const section = item.section;

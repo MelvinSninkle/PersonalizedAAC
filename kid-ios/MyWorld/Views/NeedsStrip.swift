@@ -22,6 +22,7 @@ struct NeedsStrip: View {
     @Environment(AuthManager.self) private var auth
     @Environment(AccessPrefs.self) private var access
     @Environment(SentenceBar.self) private var sentence
+    @Environment(BoardNav.self) private var nav
     /// Live-shuffle drag preview (see SectionColumn) — siblings part to show
     /// the landing slot while a strip tile is lifted.
     @State private var dragSourceId: Int? = nil
@@ -135,8 +136,10 @@ struct NeedsStrip: View {
         let base = TileView(tile: tile,
                             onTap: { t in
                                 // Sentence mode: a tap IS the stage — silent.
+                                // spokenWord: a synonym that just located this
+                                // tile via repeat-nav rides onto the chip.
                                 if sentence.mode && !editMode {
-                                    sentence.stage(t, idleMinutes: access.sentenceIdleMin)
+                                    sentence.stage(t, spoken: nav.spokenWord(for: t.id), idleMinutes: access.sentenceIdleMin)
                                     TilePlayer.shared.logOnly(t, childId: auth.childSlug, categoryName: "Needs")
                                     return
                                 }
@@ -180,7 +183,11 @@ struct NeedsStrip: View {
     /// after arming is covered by the SentenceBar watchdog + the compound
     /// scrollDisabled above.
     private func quickLift(_ tile: Tile) -> some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .named("board"))
+        // 22pt (near the grids' 24): the smaller 12pt threshold made the
+        // lift gesture compete inside the pan's disambiguation window and
+        // side-scrolling felt sluggish — the scroll now owns early motion
+        // outright, and a deliberate upward pull still clears 22pt easily.
+        DragGesture(minimumDistance: 22, coordinateSpace: .named("board"))
             .onChanged { value in
                 if !stripLift && !liftBlocked {
                     let h = abs(value.translation.width)
@@ -204,7 +211,7 @@ struct NeedsStrip: View {
     }
 
     private func stageTile(_ tile: Tile) {
-        sentence.stage(tile, idleMinutes: access.sentenceIdleMin)
+        sentence.stage(tile, spoken: nav.spokenWord(for: tile.id), idleMinutes: access.sentenceIdleMin)
         TilePlayer.shared.logOnly(tile, childId: auth.childSlug, categoryName: "Needs")
     }
 

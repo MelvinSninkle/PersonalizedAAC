@@ -127,6 +127,20 @@ final class BoardNav {
     @ObservationIgnored private var highlightClear: Task<Void, Never>?
     @ObservationIgnored private var lastNavKey = ""
     @ObservationIgnored private var lastNavAt = Date.distantPast
+    /// The synonym that located a tile via repeat-nav ("sparkle sparkle" →
+    /// the star tile): staging that tile shortly after carries the SPOKEN
+    /// word onto the sentence chip and into ▶ playback. nil when the child
+    /// said the tile's own label.
+    struct SpokenHit { let tileId: Int; let word: String; let at: Date }
+    @ObservationIgnored private var lastSpokenHit: SpokenHit?
+
+    /// The spoken synonym to attach when staging `tileId` — valid for 30s
+    /// after the navigation that remembered it.
+    func spokenWord(for tileId: Int) -> String? {
+        guard let h = lastSpokenHit, h.tileId == tileId,
+              Date().timeIntervalSince(h.at) < 30 else { return nil }
+        return h.word
+    }
 
     func category(_ s: BoardSection) -> Int? { cat[s] }
     func subcategory(_ s: BoardSection) -> Int? { sub[s] }
@@ -154,20 +168,41 @@ final class BoardNav {
                                             censor: access.listenCensor, tilesOnly: access.listenTilesOnly,
                                             blocklist: board.listenBlocklist,
                                             captions: board.listenCaptions)
-        guard toks.count >= n else { return }
+        guard let last = toks.last, !last.masked else { return }
+        let w = ListenTokenizer.normalize(last.word)
+        guard !w.isEmpty else { return }
+        // The trailing run of the SAME SPOKEN WORD (not the same tile): the
+        // word is what the child is repeating, and it's what lets homophones
+        // cycle — with threshold 3, "star star star" shows the first star
+        // tile, a 4th "star" the next one, a 5th wraps back around.
+        var runLen = 0
         var i = toks.count - 1
-        while i >= n - 1 {
-            if let a = toks[i].tile,
-               (1..<n).allSatisfy({ toks[i - $0].tile?.id == a.id }) {
-                let key = "\(a.id)@\(toks[i].id)"
-                if key == lastNavKey, Date().timeIntervalSince(lastNavAt) < 15 { return }
-                lastNavKey = key
-                lastNavAt = Date()
-                navigate(to: a, board: board)
-                return
-            }
-            i -= 1
+        while i >= 0, ListenTokenizer.normalize(toks[i].word) == w { runLen += 1; i -= 1 }
+        guard runLen >= n else { return }
+        // Every tile the word can mean — its own label or a synonym/inflection
+        // (matchTerms) — in stable id order so the cycle is deterministic.
+        var candidates = board.tiles.filter { t in
+            ListenTokenizer.normalize(t.label) == w
+                || (t.matchTerms ?? []).contains { ListenTokenizer.normalize($0) == w }
+        }.sorted { $0.id < $1.id }
+        if candidates.isEmpty, let t = last.tile { candidates = [t] }
+        guard !candidates.isEmpty else { return }
+        let target = candidates[(runLen - n) % candidates.count]
+        // Keyed by word + run length + the run's last stable source-word id:
+        // re-emitted partial transcripts re-produce the same key (suppressed),
+        // while each ADDITIONAL repeat extends the run and navigates anew.
+        let key = "\(w)#\(runLen)@\(last.id)"
+        if key == lastNavKey, Date().timeIntervalSince(lastNavAt) < 15 { return }
+        lastNavKey = key
+        lastNavAt = Date()
+        // A synonym locating the tile is remembered so staging carries the
+        // spoken word ("the label has the synonym and the synonym is uttered").
+        if ListenTokenizer.normalize(target.label) != w {
+            lastSpokenHit = SpokenHit(tileId: target.id, word: last.spoken ?? last.word, at: Date())
+        } else {
+            lastSpokenHit = nil
         }
+        navigate(to: target, board: board)
     }
 
     /// Listening repeat-navigate: open the tile's category/subcategory and
@@ -203,7 +238,18 @@ final class BoardNav {
 final class SentenceBar {
     struct Drag { var tile: Tile; var point: CGPoint; var overHeader: Bool }
 
-    var staged: [Tile] = []
+    /// One staged word. `spoken` is the synonym that located the tile via
+    /// repeat-nav ("sparkle" on the star tile): the chip labels it and ▶
+    /// utters it (TTS — recorded clips cover tile labels only). The own-UUID
+    /// identity also lets the same tile be staged twice and removed precisely.
+    struct StagedWord: Identifiable {
+        let id = UUID()
+        let tile: Tile
+        var spoken: String? = nil
+        var display: String { spoken ?? tile.display }
+    }
+
+    var staged: [StagedWord] = []
     var drag: Drag?
     var active: Bool { !staged.isEmpty }
     /// Sentence MODE — owned by the header pencil. While on, the board runs
@@ -270,15 +316,15 @@ final class SentenceBar {
 
     static let maxWords = 25   // a sentence, not a filibuster
 
-    func stage(_ tile: Tile, idleMinutes: Int) {
+    func stage(_ tile: Tile, spoken: String? = nil, idleMinutes: Int) {
         guard staged.count < Self.maxWords else { return }
-        staged.append(tile)
+        staged.append(StagedWord(tile: tile, spoken: spoken))
         resetIdle(idleMinutes: idleMinutes)
         armModeTimer()
     }
 
-    func remove(_ tile: Tile, idleMinutes: Int) {
-        if let i = staged.firstIndex(where: { $0.id == tile.id }) { staged.remove(at: i) }
+    func remove(_ entry: StagedWord, idleMinutes: Int) {
+        if let i = staged.firstIndex(where: { $0.id == entry.id }) { staged.remove(at: i) }
         if staged.isEmpty { clear() } else { resetIdle(idleMinutes: idleMinutes) }
     }
 
@@ -316,15 +362,18 @@ final class SentenceBar {
         resetIdle(idleMinutes: idleMinutes)
         let list = staged
         // Log the spoken sentence (fire-and-forget) — Sentence activity panel.
+        // display = the synonym when one located the tile: the log stays honest.
         Task { await APIClient().logSentence(childId: childId, words: list.map(\.display)) }
         playTask = Task { @MainActor in
-            for tile in list {
+            for entry in list {
                 if Task.isCancelled { return }
-                if let key = tile.soundKey, !key.isEmpty,
+                // A synonym is UTTERED as said — the recorded clip library
+                // covers labels only, so synonyms ride the TTS path.
+                if entry.spoken == nil, let key = entry.tile.soundKey, !key.isEmpty,
                    let url = try? await MediaCache.shared.audioFileURL(for: key) {
                     await GameAudio.shared.playFileAwait(url)
                 } else {
-                    await GameAudio.shared.speakAwait(tile.display, childId: childId)
+                    await GameAudio.shared.speakAwait(entry.display, childId: childId)
                 }
             }
         }
@@ -348,9 +397,9 @@ struct SentenceStripView: View {
         HStack(spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(Array(sentence.staged.enumerated()), id: \.offset) { _, tile in
-                        SentenceChip(tile: tile, scale: scale) {
-                            sentence.remove(tile, idleMinutes: access.sentenceIdleMin)
+                    ForEach(sentence.staged) { entry in
+                        SentenceChip(tile: entry.tile, scale: scale, spoken: entry.spoken) {
+                            sentence.remove(entry, idleMinutes: access.sentenceIdleMin)
                         }
                     }
                 }
@@ -387,6 +436,10 @@ struct SentenceStripView: View {
 private struct SentenceChip: View {
     let tile: Tile
     var scale: Double = 1
+    /// The synonym that located this tile ("sparkle" on the star tile) —
+    /// shown as the chip's band on EVERY board, since the word being said
+    /// is the word the child chose. nil = the tile's own label.
+    var spoken: String? = nil
     let onRemove: () -> Void
     @State private var image: UIImage?
     /// Practice board only (nil on real boards): staged chips carry the label
@@ -395,7 +448,10 @@ private struct SentenceChip: View {
     /// its word the moment it's staged.
     @Environment(PracticeChrome.self) private var practiceChrome: PracticeChrome?
 
-    private var bandText: String? { practiceChrome != nil ? tile.display : nil }
+    private var bandText: String? {
+        if let spoken, !spoken.isEmpty { return spoken }
+        return practiceChrome != nil ? tile.display : nil
+    }
 
     var body: some View {
         Button(action: onRemove) {
@@ -403,7 +459,7 @@ private struct SentenceChip: View {
                 if let image {
                     Image(uiImage: image).resizable().scaledToFill()
                 } else {
-                    Text(tile.display)
+                    Text(spoken ?? tile.display)
                         .font(.system(size: 16 * scale, weight: .bold, design: .rounded))
                         .foregroundStyle(Color(hex: "#ad1457"))
                         .lineLimit(2)
