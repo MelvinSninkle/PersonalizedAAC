@@ -231,10 +231,10 @@ struct PracticeBoardView: View {
                 }
                 .padding(.horizontal, 8)
             } else if listening {
-                // Demo-roomy: the practice strip renders 25% larger than a
-                // real board's (screen recordings read better); the chip's
-                // band-over-image look is identical.
-                ListenStripView(speech: speech, scaleOverride: 1.25)
+                // Same scale as a real board (device listenScale, default
+                // Biggest) — the old fixed 1.25 override is retired now that
+                // the doubled strip is the shipped default everywhere.
+                ListenStripView(speech: speech)
                     .padding(.horizontal, 66)   // clear the side buttons
             } else {
                 Button {
@@ -268,10 +268,9 @@ struct PracticeBoardView: View {
                 .padding(.horizontal, 12)
             }
         }
-        // Listening gets the demo-roomy height (the 1.25× strip); the
-        // sentence strip scales like HeaderBar's (its chips grow by
-        // listenScale, so a fixed 104 clipped them at the low-vision steps).
-        .frame(height: listening ? 130 : (sentence.active ? 104 * prefs.listenScale : 48))
+        // Both strips scale by the device listenScale, same as HeaderBar —
+        // fixed heights clipped the chips once Biggest became the default.
+        .frame(height: tall ? 104 * prefs.listenScale : 48)
         .animation(.easeInOut(duration: 0.2), value: tall)
         .background(Color(hex: Brand.pink))
         // Drop-target glow while a lifted tile hovers over the bar.

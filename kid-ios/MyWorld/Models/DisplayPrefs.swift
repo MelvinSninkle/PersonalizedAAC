@@ -75,7 +75,10 @@ final class DisplayPrefs {
         self.colorNeeds    = d.string(forKey: "pref.colorNeeds")  ?? Self.defaultNeeds
         self.colorHeaderBg   = d.string(forKey: "pref.colorHeaderBg")   ?? Self.defaultHeaderBg
         self.colorHeaderText = d.string(forKey: "pref.colorHeaderText") ?? Self.defaultHeaderText
-        self.listenTileSize  = d.object(forKey: "pref.listenTileSize") as? Int ?? 0
+        // Default is BIGGEST (owner call): the doubled listening/sentence
+        // strip reads better everywhere — boards and demo videos alike. A
+        // device that ever saved a step keeps its saved choice.
+        self.listenTileSize  = d.object(forKey: "pref.listenTileSize") as? Int ?? 2
         self.topButtonSize   = d.object(forKey: "pref.topButtonSize")  as? Int ?? 0
     }
 
@@ -89,7 +92,7 @@ final class DisplayPrefs {
         colorNeeds  = Self.defaultNeeds
         colorHeaderBg   = Self.defaultHeaderBg
         colorHeaderText = Self.defaultHeaderText
-        listenTileSize  = 0
+        listenTileSize  = 2   // Biggest is the shipped default (see init)
         topButtonSize   = 0
     }
 
