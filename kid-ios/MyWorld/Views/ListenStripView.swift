@@ -155,9 +155,7 @@ struct ListenStripView: View {
     var scaleOverride: Double? = nil
     @Environment(BoardStore.self) private var board
     @Environment(AccessPrefs.self) private var access
-    @Environment(BoardNav.self) private var nav
     @Environment(DisplayPrefs.self) private var prefs
-    @State private var lastNavKey = ""
 
     private var stripScale: Double { scaleOverride ?? prefs.listenScale }
 
@@ -224,7 +222,10 @@ struct ListenStripView: View {
                 .animation(.easeInOut(duration: 0.25), value: speech.words)
             }
             .onChange(of: speech.words.count) { _, _ in
-                maybeRepeatNavigate()
+                // Repeat-navigate ("say it twice → show me") moved to
+                // BoardNav.repeatNavigate, driven by the board views — it must
+                // keep firing when this strip is unmounted (background
+                // listening while the sentence bar owns the header).
                 guard let last = tokens.last?.id else { return }
                 withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(last, anchor: .trailing) }
             }
@@ -236,31 +237,6 @@ struct ListenStripView: View {
         // #15 low-vision enlargement: the strip and its chips scale together
         // (HeaderBar grows its tall frame by the same factor).
         .frame(height: 92 * stripScale)
-    }
-
-    /// A word matched N times IN A ROW = "show me": open that tile's category,
-    /// flash it yellow (BoardNav drives the section columns). N is the
-    /// parent's listenRepeatCount (#12: Off/2/3; legacy blobs derive 2 from
-    /// the old boolean). Keyed by the run's last stable source-word id so
-    /// re-emitted partial transcripts don't re-trigger. Mirrors the web
-    /// board's maybeListenNavigate.
-    private func maybeRepeatNavigate() {
-        let n = access.listenRepeatCount
-        guard n >= 2 else { return }
-        let toks = tokens
-        guard toks.count >= n else { return }
-        var i = toks.count - 1
-        while i >= n - 1 {
-            if let a = toks[i].tile,
-               (1..<n).allSatisfy({ toks[i - $0].tile?.id == a.id }) {
-                let key = "\(a.id)@\(toks[i].id)"
-                if key == lastNavKey { return }
-                lastNavKey = key
-                nav.navigate(to: a, board: board)
-                return
-            }
-            i -= 1
-        }
     }
 
     @ViewBuilder

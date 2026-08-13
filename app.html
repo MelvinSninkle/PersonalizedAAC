@@ -1701,6 +1701,11 @@
         <option value="3">3 in a row</option>
       </select>
     </div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="disp-sentence-listen">
+      <label for="disp-sentence-listen">Listen for words while building a sentence
+        <span style="display:block;font-size:12px;color:#666;">While the ✏️ sentence builder is open, the microphone quietly listens so you can say a word twice and the board jumps to its tile.</span></label>
+    </div>
 
     <!-- 5 · Safety & unlock -->
     <label style="margin-top:18px;">🔒 Safety &amp; unlock</label>
@@ -5878,6 +5883,8 @@
     document.getElementById('disp-listen-tiles').checked = LISTEN.tilesOnly;
     const rn = document.getElementById('disp-repeat-nav');
     if (rn) rn.value = String(ACCESS.listenRepeatCount || 0);
+    const sl = document.getElementById('disp-sentence-listen');
+    if (sl) sl.checked = ACCESS.sentenceListen !== false;
     document.getElementById('disp-tool-listen').checked = TOOLS.listen;
     document.getElementById('disp-tool-teach').checked = TOOLS.teach;
     document.getElementById('disp-tool-play').checked = TOOLS.play;
@@ -6001,7 +6008,9 @@
     TOOLS.teach = next.toolTeach !== false;
     TOOLS.play = next.toolPlay !== false;
     TOOLS.sentence = next.toolSentence !== false;
+    ACCESS.sentenceListen = next.sentenceListen !== false;
     applyTools();
+    syncSentenceListen();
   }
   (function wireSafetyToggles() {
     const closeCb = document.getElementById('disp-easy-close');
@@ -6026,6 +6035,7 @@
     plain('disp-tool-sentence', 'toolSentence', () => TOOLS.sentence);
     plain('disp-tap-interrupt', 'tapInterrupt', () => TOUCH.interrupt);
     plain('disp-double-teach', 'doubleTapTeach', () => TOUCH.doubleTapTeach);
+    plain('disp-sentence-listen', 'sentenceListen', () => ACCESS.sentenceListen !== false);
     // Millisecond sliders — save on release (change), live-update the label.
     const slider = (id, valId, key, mirror) => {
       const el = document.getElementById(id);
@@ -7904,18 +7914,21 @@
       try { await SR.removeAllListeners(); } catch (_) {}
       await SR.addListener('partialResults', (data) => {
         const text = (data && data.matches && data.matches[0]) || '';
-        if (text.trim()) bumpListenIdle();   // heard something → reset the 2-min timeout
+        if (text.trim() && _listening) bumpListenIdle();   // heard something → reset the 2-min timeout
         if (_listenLex) {
           const toks = tokenizeForListen(text, _listenLex);
-          renderListenStrip(toks);
+          // Background sentence-listening (_listenBg) drives ONLY the
+          // repeat-jump: no strip render (the sentence bar owns the header)
+          // and no suggestion capture — that stays tied to the visible,
+          // deliberate listening mode.
+          if (_listening) { renderListenStrip(toks); suggestScan(text); }
           maybeListenNavigate(toks);
-          suggestScan(text);   // #10: silent, consent-gated, zero UI change
         }
       });
       // iOS ends a recognition session after a pause / ~1 min — restart while on.
       try {
         await SR.addListener('listeningState', (s) => {
-          if (_listening && _listenRestart && s && s.status === 'stopped') setTimeout(kickSpeech, 300);
+          if ((_listening || _listenBg) && _listenRestart && s && s.status === 'stopped') setTimeout(kickSpeech, 300);
         });
       } catch (_) {}
       if (hint) hint.textContent = 'Listening…';
@@ -8299,7 +8312,7 @@
   // settings are writable only by admins (server-enforced in child-settings);
   // the board simply honors whatever was set for this child.
   // ===========================================================================
-  const ACCESS = { navMode: 'scroll', sentenceBuilder: false, sentenceIdleMin: 1, sentenceLift: 'longpress', listenRepeatNav: true };
+  const ACCESS = { navMode: 'scroll', sentenceBuilder: false, sentenceIdleMin: 1, sentenceLift: 'longpress', listenRepeatNav: true, sentenceListen: true };
   function applyAccessSettings(s) {
     ACCESS.navMode = s.navMode === 'buttons' ? 'buttons' : 'scroll';
     ACCESS.sentenceBuilder = !!s.sentenceBuilder;
@@ -8311,11 +8324,15 @@
     // kids who naturally repeat). Absent → legacy flag decides at 2.
     ACCESS.listenRepeatCount = [0, 2, 3].includes(Number(s.listenRepeatCount))
       ? Number(s.listenRepeatCount) : (s.listenRepeatNav !== false ? 2 : 0);
+    // Background listening while the sentence builder is open (default ON):
+    // the pencil quietly runs the mic so "say a word twice" can locate tiles.
+    ACCESS.sentenceListen = s.sentenceListen !== false;
     document.body.classList.toggle('nav-buttons-mode', ACCESS.navMode === 'buttons' || SB.mode);
     document.body.classList.toggle('sb-on', ACCESS.sentenceBuilder);
     if (!ACCESS.sentenceBuilder) sbSetMode(false);
     applyTools();
     updateAllPagers();
+    syncSentenceListen();
   }
 
   // ---- Button navigation ----------------------------------------------------
@@ -8407,6 +8424,27 @@
     if (!SB.mode) sbClear();
     sbArmModeTimer();
     updateAllPagers();
+    syncSentenceListen();
+  }
+  // Background listening while the sentence builder is open (parent setting
+  // `sentenceListen`, default ON): the mic runs with NO header takeover so a
+  // parent can say a word twice (maybeListenNavigate) and the board jumps to
+  // the tile they want to stage — a natural way to find words while modeling
+  // language. Full listening mode still owns the header and stays exclusive;
+  // this quiet mode lives only under the ✏️ pencil.
+  let _listenBg = false;
+  async function syncSentenceListen() {
+    const want = SB.mode && ACCESS.sentenceListen !== false && !_listening
+      && (ACCESS.listenRepeatCount || 0) > 0 && entAllows('stt') && !!speechPlugin();
+    if (want && !_listenBg) {
+      _listenBg = true;
+      _listenLex = await buildListenLexicon();
+      await startSpeech();
+    } else if (!want && _listenBg) {
+      _listenBg = false;
+      // Full mode taking over keeps the mic; otherwise release it.
+      if (!_listening) { await stopSpeech(); _listenLex = null; }
+    }
   }
   // 60-second "nothing started" window: runs whenever the mode is on with an
   // empty bar; staging cancels it, clearing re-arms it.

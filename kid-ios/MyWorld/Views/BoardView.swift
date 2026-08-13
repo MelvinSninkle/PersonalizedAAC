@@ -22,6 +22,7 @@ struct BoardView: View {
     @Environment(AutoTeachRunner.self) private var autoTeach
     @Environment(AccessPrefs.self) private var access
     @Environment(SentenceBar.self) private var sentence
+    @Environment(BoardNav.self) private var nav
     @Environment(\.horizontalSizeClass) private var hSize
     @Environment(\.verticalSizeClass) private var vSize
 
@@ -42,6 +43,10 @@ struct BoardView: View {
     @State private var speech = SpeechListener()
     @State private var listening = false
     @State private var listenTimeout: Task<Void, Never>?
+    /// The mic was auto-started FOR the sentence constructor (background
+    /// listening, access.sentenceListen) — auto-stops when the sentence ends.
+    /// A mic the parent started themselves is never auto-stopped.
+    @State private var sentenceAutoListen = false
     /// Gate the empty-board welcome so it only appears AFTER the first server
     /// refresh (never flashes during the initial cold-launch paint).
     @State private var didInitialLoad = false
@@ -271,6 +276,21 @@ struct BoardView: View {
         .onChange(of: speech.transcript) { _, t in
             if listening && !t.isEmpty { scheduleListenTimeout() }
         }
+        // Repeat-navigate fires per recognized word from HERE (not the strip)
+        // so it works while the sentence bar owns the header.
+        .onChange(of: speech.words.count) { _, _ in
+            if listening { nav.repeatNavigate(speech: speech, board: board, access: access) }
+        }
+        // Background listening while building a sentence (default ON): the
+        // constructor engaging (pencil mode, or the first staged tile) starts
+        // the mic so "say it twice" can locate tiles to drag up; the sentence
+        // ending stops a mic WE started. Quiet dragging must not trip the
+        // 2-minute silence timeout, so staging activity reschedules it.
+        .onChange(of: sentence.mode) { _, _ in syncSentenceListen() }
+        .onChange(of: sentence.active) { _, _ in syncSentenceListen() }
+        .onChange(of: sentence.staged.count) { _, _ in
+            if listening { scheduleListenTimeout() }
+        }
         // Pause the scheduler tick while a game / unlock / settings sheet is up
         // so a fired schedule doesn't try to stack a second sheet on top.
         .onChange(of: game.current) { _, c in
@@ -487,6 +507,23 @@ struct BoardView: View {
                 }
                 try? await Task.sleep(nanoseconds: 12_000_000_000)
             }
+        }
+    }
+
+    /// Background listening for the sentence constructor: keep the mic state
+    /// in step with the constructor being engaged. Only a mic THIS path
+    /// started is ever auto-stopped (sentenceAutoListen).
+    private func syncSentenceListen() {
+        let engaged = sentence.mode || sentence.active
+        if engaged {
+            if access.sentenceListen && !listening && board.sttAllowed
+                && game.current == nil && pendingMessage == nil {
+                sentenceAutoListen = true
+                listening = true
+            }
+        } else if sentenceAutoListen {
+            sentenceAutoListen = false
+            if listening { listening = false }
         }
     }
 

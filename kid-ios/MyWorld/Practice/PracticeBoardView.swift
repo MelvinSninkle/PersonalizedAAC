@@ -106,6 +106,8 @@ struct PracticeBoardView: View {
     @State private var speech = SpeechListener()
     @State private var listening = false
     @State private var listenTimeout: Task<Void, Never>?
+    /// Mic auto-started FOR the sentence constructor — see BoardView's twin.
+    @State private var sentenceAutoListen = false
 
     @State private var samplePlayer: AVAudioPlayer?
 
@@ -178,6 +180,17 @@ struct PracticeBoardView: View {
         .onChange(of: speech.transcript) { _, t in
             if listening && !t.isEmpty { scheduleListenTimeout() }
         }
+        // Repeat-navigate ("say it twice → show me") — driven here so it keeps
+        // working while the sentence strip owns the header; the demo defaults
+        // (listenRepeatCount 2, sentenceListen true) are the practice pitch.
+        .onChange(of: speech.words.count) { _, _ in
+            if listening { boardNav.repeatNavigate(speech: speech, board: store, access: access) }
+        }
+        .onChange(of: sentence.mode) { _, _ in syncSentenceListen() }
+        .onChange(of: sentence.active) { _, _ in syncSentenceListen() }
+        .onChange(of: sentence.staged.count) { _, _ in
+            if listening { scheduleListenTimeout() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .myWorldTileSpoken)) { note in
             taps += 1
             if let label = note.userInfo?["label"] as? String {
@@ -203,9 +216,20 @@ struct PracticeBoardView: View {
         ZStack {
             if sentence.active {
                 // Sentence constructor: while composing, the strip is the
-                // ONLY header content — same rule as the real board.
-                SentenceStripView()
-                    .padding(.horizontal, 8)
+                // ONLY header content — same rule as the real board. The
+                // pulsing mic = background listening is live (say a word
+                // twice and its tile flashes).
+                HStack(spacing: 4) {
+                    if listening {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color(hex: "#ffd400"))
+                            .symbolEffect(.pulse, options: .repeating)
+                            .padding(.leading, 8)
+                    }
+                    SentenceStripView()
+                }
+                .padding(.horizontal, 8)
             } else if listening {
                 // Demo-roomy: the practice strip renders 25% larger than a
                 // real board's (screen recordings read better); the chip's
@@ -342,6 +366,22 @@ struct PracticeBoardView: View {
         listenTimeout = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 120_000_000_000)
             if !Task.isCancelled && listening { listening = false }
+        }
+    }
+
+    /// Background listening for the sentence constructor — BoardView's twin
+    /// (practice has no membership gate; the local AccessPrefs defaults keep
+    /// sentenceListen true, so the demo shows the feature working).
+    private func syncSentenceListen() {
+        let engaged = sentence.mode || sentence.active
+        if engaged {
+            if access.sentenceListen && !listening && game.current == nil {
+                sentenceAutoListen = true
+                listening = true
+            }
+        } else if sentenceAutoListen {
+            sentenceAutoListen = false
+            if listening { listening = false }
         }
     }
 

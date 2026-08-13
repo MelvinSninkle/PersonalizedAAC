@@ -63,6 +63,11 @@ final class AccessPrefs {
     /// hides every spoken word that has no tile on the board.
     var listenCensor = true
     var listenTilesOnly = false
+    /// Background listening while the sentence constructor is engaged
+    /// (pencil mode or a staged bar): the mic runs with no strip takeover so
+    /// the parent can say a word twice, watch the tile flash, and drag it up.
+    /// Parent-writable, default ON. Meaningless when listenRepeatCount == 0.
+    var sentenceListen = true
 
     var buttonsNav: Bool { navMode == "buttons" }
 
@@ -97,6 +102,7 @@ final class AccessPrefs {
             sentenceDrag = (s["sentenceDrag"] as? Bool) ?? false
             listenCensor = (s["listenCensor"] as? Bool) ?? true
             listenTilesOnly = (s["listenTilesOnly"] as? Bool) ?? false
+            sentenceListen = (s["sentenceListen"] as? Bool) ?? true
             // Touch + safety controls ride the same settings fetch (root keys too).
             TouchConfig.interrupt = (s["tapInterrupt"] as? Bool) ?? false
             TouchConfig.doubleTapTeach = (s["doubleTapTeach"] as? Bool) ?? false
@@ -119,11 +125,46 @@ final class BoardNav {
     private var sub: [BoardSection: Int] = [:]
     var highlight: Highlight?
     @ObservationIgnored private var highlightClear: Task<Void, Never>?
+    @ObservationIgnored private var lastNavKey = ""
+    @ObservationIgnored private var lastNavAt = Date.distantPast
 
     func category(_ s: BoardSection) -> Int? { cat[s] }
     func subcategory(_ s: BoardSection) -> Int? { sub[s] }
     func setCategory(_ s: BoardSection, _ id: Int?) { cat[s] = id }
     func setSubcategory(_ s: BoardSection, _ id: Int?) { sub[s] = id }
+
+    /// "Say a word N times in a row → show me its tile", hoisted OUT of
+    /// ListenStripView so it keeps firing while the sentence strip owns the
+    /// header (background listening while building a sentence). Driven by
+    /// BoardView / PracticeBoardView on every recognized word — the strip is
+    /// now a pure display. A repeat = N consecutive tokens resolving to the
+    /// same tile id; keyed by the run's last stable source-word id so
+    /// re-emitted partial transcripts don't re-trigger, PLUS the web's 15s
+    /// same-key cooldown — the mic hears the board's own audio, and a played
+    /// sentence containing a repeated word must not yank the category out
+    /// from under the parent.
+    func repeatNavigate(speech: SpeechListener, board: BoardStore, access: AccessPrefs) {
+        let n = access.listenRepeatCount
+        guard n >= 2 else { return }
+        let toks = ListenTokenizer.tokenize(speech.words, lexicon: ListenTokenizer.lexicon(from: board.tiles),
+                                            censor: access.listenCensor, tilesOnly: access.listenTilesOnly,
+                                            blocklist: board.listenBlocklist,
+                                            captions: board.listenCaptions)
+        guard toks.count >= n else { return }
+        var i = toks.count - 1
+        while i >= n - 1 {
+            if let a = toks[i].tile,
+               (1..<n).allSatisfy({ toks[i - $0].tile?.id == a.id }) {
+                let key = "\(a.id)@\(toks[i].id)"
+                if key == lastNavKey, Date().timeIntervalSince(lastNavAt) < 15 { return }
+                lastNavKey = key
+                lastNavAt = Date()
+                navigate(to: a, board: board)
+                return
+            }
+            i -= 1
+        }
+    }
 
     /// Listening repeat-navigate: open the tile's category/subcategory and
     /// flash it. Mirrors the web's navigateToTile.
