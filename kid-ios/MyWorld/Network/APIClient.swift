@@ -65,6 +65,15 @@ struct APIClient {
         /// picture) — server-owned dark-launch flag (SYNONYMS_PUBLIC); the
         /// strip draws captions only when the last sync said to.
         var listenCaptions: Bool? = nil
+        /// Deterministic prefix for pre-rendered synonym clips in the child's
+        /// voice (voice-terms/<voiceId>/): key = prefix + slug(term) + ext.
+        /// nil when no voice is chosen — playback falls back to TTS.
+        var voiceClips: VoiceClips? = nil
+
+        struct VoiceClips: Codable {
+            let prefix: String
+            let ext: String
+        }
     }
 
     /// POST /api/auth/login — captures the Set-Cookie session.

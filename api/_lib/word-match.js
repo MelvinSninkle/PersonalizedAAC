@@ -299,6 +299,26 @@ export function inflections(word) {
   return [...out];
 }
 
+/// The CURATED slice of a tile's match set — the terms worth SPENDING on
+/// (pre-rendered voice clips for sentence playback): per-row curated
+/// match_terms, engine synonym sets, and irregular verb forms. Deliberately
+/// EXCLUDES the machine-generated regular inflections ("momming", "dadded")
+/// that expandMatchTerms adds — harmless to MATCH, absurd to synthesize.
+/// Same normalization, label-exclusion, and cap as expandMatchTerms.
+export function curatedSpokenTerms(label, curated = []) {
+  const base = norm(label);
+  const out = new Set();
+  for (const c of Array.isArray(curated) ? curated : []) {
+    const n = norm(c);
+    if (n && n !== base) out.add(n);
+  }
+  const bare = base.replace(/[.,!?;:"()\[\]{}]/g, '').replace(/\s+/g, ' ').trim();
+  for (const s of SYNONYMS[base] || SYNONYMS[bare] || []) out.add(s);
+  for (const v of IRREGULAR[base] || []) out.add(v);
+  out.delete(base);
+  return [...out].slice(0, 24);
+}
+
 /// Full match set for a tile: curated terms + generated inflections.
 /// Returns normalized variants EXCLUDING the label itself, deduped, capped.
 /// `synonyms` defaults to the launch flag so callers with no opinion (demo,

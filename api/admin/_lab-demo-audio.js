@@ -9,12 +9,25 @@
 // it off. synthesizeVoice()'s shared render cache means labels already spoken
 // anywhere in the product cost nothing to re-render here.
 //
-//   GET                      → { voices, tiles, built: {voiceId: count} }
-//   POST { op:'build', voiceIds:['..'] } → synth missing clips (≤ ~4 min)
+//   GET                      → { voices, tiles, built: {voiceId: count},
+//                                coverage, synonymTerms }
+//   POST { op:'build', voiceIds:['..'] }                    → label clips (≤ ~4 min)
+//   POST { op:'build', voiceIds:['..'], scope:'synonyms' }  → synonym clips
+//
+// SYNONYM CLIPS (scope:'synonyms'): the curated slice of every tile's match
+// set (curatedSpokenTerms — synonym sets, irregular forms, per-row curated
+// terms; never the machine-generated inflections) renders per voice to
+//     voice-terms/<voiceId>/<slug(term)>.mp3
+// so a sentence staged via a spoken synonym plays the child's OWN voice
+// offline instead of metered TTS. NOT public (authenticated boards reach it
+// through media.js's shared-library branch) and NEVER counted in
+// clips_built/clips_total — folding them in would drop every voice below
+// /api/demo's completeness gate and empty the public practice picker.
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { synthesizeVoice } from '../_lib/onboarding-render.js';
 import { VOICE_SAMPLE_TEXT } from '../_lib/voices.js';
+import { curatedSpokenTerms } from '../_lib/word-match.js';
 import { put, list } from '@vercel/blob';
 
 export const config = { maxDuration: 300 };
@@ -61,6 +74,39 @@ async function demoLabels(db) {
   return [...byLabel.values()].map((r) => ({ label: r.label, speak: r.speak_override || r.label }));
 }
 
+// The curated spoken terms across the same taxonomy slice demoLabels covers,
+// deduped by slug (two terms slugging identically share one clip — first
+// wins). Terms synthesize VERBATIM: pronunciation overrides are keyed to the
+// LABEL, and a synonym clip must say the synonym.
+async function synonymTerms(db) {
+  let rows;
+  try {
+    rows = await db`
+      SELECT DISTINCT label, match_terms FROM taxonomy
+      WHERE COALESCE(archived, FALSE) = FALSE
+        AND COALESCE(is_event, FALSE) = FALSE
+        AND COALESCE(is_gestalt, FALSE) = FALSE
+        AND COALESCE(authoring_kind, 'canonical') = 'canonical'
+        AND COALESCE(audience, 'universal') = 'universal'`;
+  } catch (_) {
+    rows = await db`
+      SELECT DISTINCT label FROM taxonomy
+      WHERE COALESCE(archived, FALSE) = FALSE
+        AND COALESCE(is_event, FALSE) = FALSE
+        AND COALESCE(is_gestalt, FALSE) = FALSE
+        AND COALESCE(authoring_kind, 'canonical') = 'canonical'
+        AND COALESCE(audience, 'universal') = 'universal'`;
+  }
+  const bySlug = new Map();
+  for (const r of rows) {
+    for (const t of curatedSpokenTerms(r.label, r.match_terms || [])) {
+      const slug = demoSlug(t);
+      if (slug && !bySlug.has(slug)) bySlug.set(slug, t);
+    }
+  }
+  return [...bySlug.values()].sort();
+}
+
 async function existingKeys(prefix) {
   const keys = new Set();
   let cursor;
@@ -86,6 +132,7 @@ export default async function handler(req, res) {
 
   try {
     const labels = await demoLabels(db);
+    const terms = await synonymTerms(db);
 
     if (req.method === 'GET') {
       const voices = await db`SELECT voice_id, name FROM demo_voices ORDER BY name`;
@@ -107,12 +154,19 @@ export default async function handler(req, res) {
                                     .map((l) => l.label);
         let orphans = 0;
         for (const k of keys) { if (!wanted.has(k) && k !== sampleKey) orphans++; }
+        // Synonym coverage rides SEPARATELY — see the header: it must never
+        // count toward clips_built/clips_total (the /api/demo public gate).
+        const tkeys = await existingKeys(`voice-terms/${v.voice_id}/`);
+        const missingTerms = terms.filter((t) => !tkeys.has(`voice-terms/${v.voice_id}/${demoSlug(t)}.mp3`));
         coverage[v.voice_id] = {
           have: labels.length - missingLabels.length,
           missing: missingLabels.length,
           missingLabels: missingLabels.slice(0, 60),
           missingSample: !keys.has(sampleKey),
           orphans,
+          synTotal: terms.length,
+          synHave: terms.length - missingTerms.length,
+          synMissing: missingTerms.length,
         };
         // Keep the PUBLIC /api/demo completeness gate honest without waiting
         // for the next build: counters follow the true comparison.
@@ -122,7 +176,8 @@ export default async function handler(req, res) {
                    WHERE voice_id = ${v.voice_id}`;
         } catch (_) {}
       }
-      res.status(200).json({ ok: true, tiles: labels.length, voices, built, coverage });
+      res.status(200).json({ ok: true, tiles: labels.length, voices, built, coverage,
+                             synonymTerms: terms });
       return;
     }
 
@@ -131,6 +186,36 @@ export default async function handler(req, res) {
     if (b.op !== 'build') { res.status(400).json({ error: 'unknown op' }); return; }
     const voiceIds = (Array.isArray(b.voiceIds) ? b.voiceIds : []).map(String).slice(0, 4);
     if (!voiceIds.length) { res.status(400).json({ error: 'voiceIds required' }); return; }
+
+    // Synonym-clip build: voice-terms/<vid>/ only. Deliberately does NOT
+    // register the voice in demo_voices or touch its clip counters — synonym
+    // clips serve real boards' sentence playback, not the practice picker.
+    if (b.scope === 'synonyms') {
+      const deadline = Date.now() + 240_000;
+      const stats = { cached: 0, generated: 0 };
+      let built = 0, skipped = 0, remaining = 0;
+      for (const vid of voiceIds) {
+        const have = await existingKeys(`voice-terms/${vid}/`);
+        for (const term of terms) {
+          const key = `voice-terms/${vid}/${demoSlug(term)}.mp3`;
+          if (have.has(key)) { skipped++; continue; }
+          if (Date.now() > deadline) { remaining++; continue; }
+          try {
+            const buf = await synthesizeVoice({ text: term, voiceId: vid, stats });
+            if (buf) {
+              await put(key, buf, { access: 'private', addRandomSuffix: false, contentType: 'audio/mpeg' });
+              built++;
+            } else { remaining++; }
+          } catch (_) { remaining++; }
+        }
+      }
+      res.status(200).json({ ok: true, built, skipped, remaining,
+        fromCache: stats.cached, generated: stats.generated,
+        note: (built > 0
+          ? `${stats.cached} copied free from your existing voice cache, ${stats.generated} newly generated. `
+          : '') + (remaining > 0 ? 'Run build again to finish the rest.' : 'Complete.') });
+      return;
+    }
 
     // Record the chosen voices (name from the catalog) for /api/demo.
     const catalog = await db`SELECT id, name FROM voices`;

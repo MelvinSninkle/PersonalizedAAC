@@ -23,6 +23,11 @@ final class BoardStore {
     /// Spoken-word captions on matched listen chips — server-owned dark-launch
     /// flag from the last sync (rides the board cache like the blocklist).
     var listenCaptions: Bool = false
+    /// Clip prefix for pre-rendered SYNONYM audio in the child's chosen voice
+    /// (voice-terms/<voiceId>/). Sentence playback tries prefix+slug+ext for
+    /// a staged synonym; a miss falls through to TTS. nil = no voice chosen.
+    var voiceClipPrefix: String? = nil
+    var voiceClipExt: String = ".mp3"
 
     /// Convenience gates for the UI. Unknown = allowed, so an offline board
     /// never locks features it can't verify.
@@ -175,6 +180,8 @@ final class BoardStore {
             self.entitlement = resp.entitlement ?? self.entitlement
             if let bl = resp.listenBlocklist, !bl.isEmpty { self.listenBlocklist = Set(bl) }
             if let lc = resp.listenCaptions { self.listenCaptions = lc }   // false re-closes the gate
+            self.voiceClipPrefix = resp.voiceClips?.prefix               // nil clears (voice unset)
+            self.voiceClipExt = resp.voiceClips?.ext ?? ".mp3"
             self.lastError = nil
             persistToDisk(resp)
             precacheMedia()
@@ -220,6 +227,8 @@ final class BoardStore {
         self.entitlement = resp.entitlement
         if let bl = resp.listenBlocklist, !bl.isEmpty { self.listenBlocklist = Set(bl) }
         if let lc = resp.listenCaptions { self.listenCaptions = lc }
+        self.voiceClipPrefix = resp.voiceClips?.prefix
+        self.voiceClipExt = resp.voiceClips?.ext ?? ".mp3"
         precacheMedia()   // start warming from the cached board on cold launch
     }
 
