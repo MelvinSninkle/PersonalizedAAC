@@ -271,6 +271,13 @@ struct PracticeBoardView: View {
         // Both strips scale by the device listenScale, same as HeaderBar —
         // fixed heights clipped the chips once Biggest became the default.
         .frame(height: tall ? 104 * prefs.listenScale : 48)
+        // Publish the RENDERED height as the sentence drop zone (+ slack) —
+        // HeaderBar's twin; a fixed zone lost drops on the doubled bar.
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { sentence.dropZoneMaxY = g.size.height + 36 }
+                .onChange(of: g.size.height) { _, h in sentence.dropZoneMaxY = h + 36 }
+        })
         .animation(.easeInOut(duration: 0.2), value: tall)
         .background(Color(hex: Brand.pink))
         // Drop-target glow while a lifted tile hovers over the bar.

@@ -138,6 +138,14 @@ struct HeaderBar: View {
         // #15 low-vision enlargement: the bar grows with its content — the
         // listening strip's scale while tall, the button scale otherwise.
         .frame(height: tall ? 104 * prefs.listenScale : 48 * prefs.topButtonScale)
+        // Publish the RENDERED height as the sentence drop zone (+ slack):
+        // the bar doubles at the Biggest listening size, and a fixed zone
+        // silently discarded drops landing in its lower third.
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { sentence.dropZoneMaxY = g.size.height + 36 }
+                .onChange(of: g.size.height) { _, h in sentence.dropZoneMaxY = h + 36 }
+        })
     }
 
     // MARK: -- Left: the lock icon

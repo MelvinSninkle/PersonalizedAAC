@@ -277,9 +277,12 @@ final class SentenceBar {
         }
     }
 
-    /// Header drop zone in the "board" coordinate space: the bar itself (104pt
-    /// when composing / 48 idle) plus slack so a child needn't be pixel-exact.
-    static let dropZoneMaxY: CGFloat = 140
+    /// Header drop zone in the "board" coordinate space: the bar's RENDERED
+    /// height plus slack so a child needn't be pixel-exact. Published by the
+    /// header views (GeometryReader) because the bar's height moves with the
+    /// listening scale — a fixed 140 silently discarded drops in the bottom
+    /// third of the 208pt bar once Biggest became the default size.
+    var dropZoneMaxY: CGFloat = 140
 
     /// Watchdog on the floating lift. Two real failure modes leave the ghost
     /// stranded mid-screen without it: a ScrollView stealing the gesture
@@ -297,14 +300,14 @@ final class SentenceBar {
     }
 
     func dragUpdate(_ tile: Tile, at point: CGPoint) {
-        drag = Drag(tile: tile, point: point, overHeader: point.y <= Self.dropZoneMaxY)
+        drag = Drag(tile: tile, point: point, overHeader: point.y <= dropZoneMaxY)
         armDragWatchdog()
     }
 
     /// Ends the drag; returns true when the tile landed on the bar.
     func dragEnd(at point: CGPoint) -> Bool {
         dragWatchdog?.cancel(); dragWatchdog = nil
-        let hit = point.y <= Self.dropZoneMaxY
+        let hit = point.y <= dropZoneMaxY
         drag = nil
         return hit
     }

@@ -38,6 +38,12 @@
   .sib-chip span { display:block; padding:2px 3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sib-chip.sel { border-color:var(--pink); }
   .sib-chip.off { opacity:.35; cursor:default; }
+  .ref-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .ref-chip { width:64px; font-size:10px; color:var(--muted); text-align:center; }
+  .ref-chip img, .ref-chip .ph { width:64px; height:64px; object-fit:cover; border-radius:10px;
+                                 border:2px solid var(--line); background:#fff7fb; display:block; }
+  .ref-chip .ph { display:grid; place-items:center; color:#c4b5fd; font-size:18px; }
+  .ref-chip span { display:block; padding-top:2px; font-weight:700; }
   #error { display:none; margin-top:10px; font-size:12px; color:#991b1b; background:#fee2e2; border:1px solid #fecaca; border-radius:10px; padding:10px; white-space:pre-wrap; }
 </style>
 </head>
@@ -98,6 +104,7 @@
       <button class="btn ghost" id="sib-load" style="padding:10px 0;">Load board</button>
     </div>
     <select id="sib-cat" style="margin-top:8px;" disabled><option value="">— load a board first —</option></select>
+    <button class="btn ghost" id="sib-shuffle" style="margin-top:8px;width:100%;padding:8px 0;">🎲 Pick 3 at random</button>
     <div id="sib-strip" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
     <div class="seg" id="ref-mode" style="margin-top:10px;">
       <button data-mode="today" class="on">Objects ref (today)</button>
@@ -130,6 +137,8 @@
         <div class="msg" id="result-cap" style="text-align:center;">Result</div>
       </div>
     </div>
+    <label>References sent with this generation</label>
+    <div class="ref-row" id="ref-row"><span style="font-size:12px;color:#9ca3af;">—</span></div>
     <label>Prompt sent</label>
     <pre id="prompt">—</pre>
     <!-- A/B pane: the previous render (image, caption, prompt) survives one
@@ -140,6 +149,8 @@
         <div class="msg" id="prev-cap" style="text-align:center;">Previous</div>
       </div>
       <div>
+        <label>Previous references</label>
+        <div class="ref-row" id="prev-ref-row"></div>
         <label>Previous prompt</label>
         <pre id="prev-prompt" style="max-height:200px;">—</pre>
       </div>
@@ -150,6 +161,7 @@
 <script>
   const $ = (id) => document.getElementById(id);
   let photoB64 = '';
+  let photoDataUrl = '';
   let lastResultB64 = '';
   let section = 'nouns';
 
@@ -173,6 +185,7 @@
       const c = document.createElement('canvas'); c.width = w; c.height = h;
       c.getContext('2d').drawImage(bmp, 0, 0, w, h); if (bmp.close) bmp.close();
       const dataUrl = c.toDataURL('image/jpeg', 0.9);
+      photoDataUrl = dataUrl;
       photoB64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
       $('photo-thumb').innerHTML = '<img src="' + dataUrl + '" alt="">';
     } catch (err) { msg('Could not read photo: ' + err.message, true); }
@@ -234,17 +247,23 @@
     if (!guideId || Number(it.styled_style_id) !== Number(guideId)) return 'painted by a different style guide';
     return '';
   }
-  function renderSibs() {
+  // Note: wired directly as a change listener too, so the first argument may
+  // be an Event — only an explicit {keepSelection:true} (the 🎲 shuffle)
+  // preserves the current picks instead of re-preselecting.
+  function renderSibs(opts) {
+    const keep = !!(opts && opts.keepSelection === true);
     const catId = Number($('sib-cat').value || 0);
     const wrap = $('sib-strip');
-    selectedSibs.clear();
-    if (!catId) { wrap.innerHTML = ''; return; }
+    if (!catId) { selectedSibs.clear(); wrap.innerHTML = ''; return; }
     const guideId = $('no-style').checked ? null : (Number($('style-select').value || 0) || null);
     const inCat = boardItems.filter((it) => Number(it.category_id) === catId);
-    // Deterministic pick: the 3 most recently styled eligible tiles.
-    inCat.filter((it) => !sibReason(it, guideId))
-      .sort((a, b) => String(b.styled_at || '').localeCompare(String(a.styled_at || '')))
-      .slice(0, 3).forEach((it) => selectedSibs.add(it.image_key));
+    if (!keep) {
+      // Deterministic pick: the 3 most recently styled eligible tiles.
+      selectedSibs.clear();
+      inCat.filter((it) => !sibReason(it, guideId))
+        .sort((a, b) => String(b.styled_at || '').localeCompare(String(a.styled_at || '')))
+        .slice(0, 3).forEach((it) => selectedSibs.add(it.image_key));
+    }
     wrap.innerHTML = inCat.map((it) => {
       const reason = sibReason(it, guideId);
       const sel = selectedSibs.has(it.image_key);
@@ -261,8 +280,43 @@
     }));
   }
   $('sib-cat').addEventListener('change', renderSibs);
+  // 🎲 Random sample of 3 eligible tiles (Fisher-Yates) — for spotting how
+  // much the sibling PICK changes the result, not just whether siblings help.
+  $('sib-shuffle').addEventListener('click', () => {
+    const catId = Number($('sib-cat').value || 0);
+    if (!catId) { msg('Pick a category first.', true); return; }
+    const guideId = $('no-style').checked ? null : (Number($('style-select').value || 0) || null);
+    const eligible = boardItems.filter((it) => Number(it.category_id) === catId && !sibReason(it, guideId));
+    if (!eligible.length) { msg('No eligible tiles in this category.', true); return; }
+    const pick = eligible.slice();
+    for (let i = pick.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pick[i], pick[j]] = [pick[j], pick[i]];
+    }
+    selectedSibs.clear();
+    pick.slice(0, 3).forEach((it) => selectedSibs.add(it.image_key));
+    renderSibs({ keepSelection: true });
+  });
   $('style-select').addEventListener('change', renderSibs);
   $('no-style').addEventListener('change', renderSibs);
+
+  // Thumbnails of the EXACT image stack the server attached, in legend order
+  // ("Image 1", "Image 2", …): style scene, objects ref, siblings, source
+  // photo, prior attempt. Keyed refs load via /api/media (admin session);
+  // photo/prior render from the bytes this page already holds.
+  function renderRefRow(refs, priorB64ForRow) {
+    const row = $('ref-row');
+    if (!refs.length) { row.innerHTML = '<span style="font-size:12px;color:#9ca3af;">none reported</span>'; return; }
+    const label = { style: 'style scene', objects: 'objects ref', sibling: 'sibling', photo: 'source photo', prior: 'prior attempt' };
+    row.innerHTML = refs.map((r, i) => {
+      let img;
+      if (r.kind === 'photo' && photoDataUrl) img = '<img src="' + photoDataUrl + '" alt="">';
+      else if (r.kind === 'prior' && priorB64ForRow) img = '<img src="data:image/png;base64,' + priorB64ForRow + '" alt="">';
+      else if (r.key) img = '<img src="/api/media?key=' + encodeURIComponent(r.key) + '" alt="">';
+      else img = '<div class="ph">🖼</div>';
+      return '<div class="ref-chip">' + img + '<span>' + (i + 1) + ' · ' + (label[r.kind] || r.kind) + '</span></div>';
+    }).join('');
+  }
 
   async function run(usePrior) {
     if (!photoB64 && !usePrior) { msg('Pick a photo first.', true); return; }
@@ -285,6 +339,7 @@
     $('style-out').innerHTML = ($('no-style').checked || !$('style-select').value)
       ? 'No style'
       : '<img src="/api/onboarding/styles?image=' + encodeURIComponent($('style-select').value) + '" alt="">';
+    const sentPrior = usePrior ? lastResultB64 : '';
     try {
       const d = await api('/api/admin/lab?action=tile-lab', {
         photoB64,
@@ -305,7 +360,9 @@
         $('prev-thumb').innerHTML = '<img src="data:image/png;base64,' + lastResultB64 + '" alt="">';
         $('prev-cap').innerHTML = 'Previous · ' + $('result-cap').innerHTML.replace(/^Result · /, '');
         $('prev-prompt').textContent = $('prompt').textContent;
+        $('prev-ref-row').innerHTML = $('ref-row').innerHTML;
       }
+      renderRefRow(d.refs || [], sentPrior);
       lastResultB64 = d.b64;
       $('retry').disabled = false;
       $('result').innerHTML = '<img src="data:image/png;base64,' + d.b64 + '" alt="">';

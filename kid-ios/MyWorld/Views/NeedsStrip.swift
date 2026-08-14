@@ -30,8 +30,6 @@ struct NeedsStrip: View {
     /// A sentence lift is in progress from this strip: freeze its scrolling
     /// so the horizontal pan can't steal the drag mid-flight (see quickLift).
     @State private var stripLift = false
-    /// This touch was judged horizontal (the scroll's) — never lift on it.
-    @State private var liftBlocked = false
 
     private var tiles: [Tile] {
         board.tiles
@@ -70,6 +68,7 @@ struct NeedsStrip: View {
             // overflow on the grids). It used to swap in a paddle pager here,
             // which read as a dead strip whenever everything fit on one page —
             // the owner hit exactly that on his son's board and the demo.
+            ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: BoardMetrics.tileGap) {
                     ForEach(orderedTiles) { tile in
@@ -105,7 +104,22 @@ struct NeedsStrip: View {
             .background(Color(hex: prefs.colorNeeds))
             .onChange(of: editMode) { _, _ in previewIds = nil; dragSourceId = nil }
             .onChange(of: tiles.map(\.id)) { _, _ in previewIds = nil }
+            // Repeat-nav lands on core words too: center the found tile —
+            // the yellow ring rides needsCell. (SectionColumn's twin; this
+            // strip simply never had it.)
+            .onChange(of: nav.highlight) { _, h in
+                guard let h, h.section == .needs else { return }
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    proxy.scrollTo(cellId(h.tileId), anchor: .center)
+                }
+            }
+            }
         }
+    }
+
+    /// The stable identity needsCell stamps on each tile — scroll-to targets it.
+    private func cellId(_ tileId: Int) -> String {
+        "\(tileId)-\(editMode ? "e" : "p")-\(dragStaging ? "d" : "n")"
     }
 
     private func needsPayload(_ tile: Tile) -> String {
@@ -154,7 +168,15 @@ struct NeedsStrip: View {
                             },
                             editMode: editMode, onEdit: onEditTile)
             .frame(width: tileSize)
-            .id("\(tile.id)-\(editMode ? "e" : "p")-\(dragStaging ? "d" : "n")")
+            // Repeat-nav "found it" ring — SectionColumn's twin.
+            .overlay {
+                if nav.highlight?.tileId == tile.id {
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(Color(hex: "#ffd400"), lineWidth: 5)
+                        .shadow(color: Color(hex: "#ffd400").opacity(0.6), radius: 8)
+                }
+            }
+            .id(cellId(tile.id))
         if dragStaging {
             base.simultaneousGesture(quickLift(tile))
         } else {
@@ -189,21 +211,24 @@ struct NeedsStrip: View {
         // outright, and a deliberate upward pull still clears 22pt easily.
         DragGesture(minimumDistance: 22, coordinateSpace: .named("board"))
             .onChanged { value in
-                if !stripLift && !liftBlocked {
+                if !stripLift {
+                    // Direction gate, STATELESS by design: translation is
+                    // measured from the touch origin, so it re-evaluates
+                    // per event with no memory. Horizontal-dominant motion
+                    // belongs to the scroll — the pan claims and cancels
+                    // this gesture on its own schedule. (A latched
+                    // "blocked" flag here previously stuck TRUE forever —
+                    // cancelled gestures skip onEnded — and one sideways
+                    // scroll killed lifting for the whole session.)
                     let h = abs(value.translation.width)
                     let up = -value.translation.height
-                    if up > 0 && up > h * 1.5 {
-                        stripLift = true
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    } else {
-                        liftBlocked = true
-                        return
-                    }
+                    guard up > 0, up > h * 1.5 else { return }
+                    stripLift = true
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 }
-                if stripLift { sentence.dragUpdate(tile, at: value.location) }
+                sentence.dragUpdate(tile, at: value.location)
             }
             .onEnded { value in
-                liftBlocked = false
                 let lifted = stripLift
                 stripLift = false
                 if lifted, sentence.dragEnd(at: value.location) { stageTile(tile) }
