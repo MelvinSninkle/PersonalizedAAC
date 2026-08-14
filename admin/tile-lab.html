@@ -38,6 +38,8 @@
   .sib-chip span { display:block; padding:2px 3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sib-chip.sel { border-color:var(--pink); }
   .sib-chip.off { opacity:.35; cursor:default; }
+  .sib-chip.warn { border-style:dashed; border-color:#f59e0b; opacity:.75; }
+  .sib-chip.warn.sel { border-style:solid; border-color:var(--pink); opacity:1; }
   .ref-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
   .ref-chip { width:64px; font-size:10px; color:var(--muted); text-align:center; }
   .ref-chip img, .ref-chip .ph { width:64px; height:64px; object-fit:cover; border-radius:10px;
@@ -200,10 +202,17 @@
     } catch (_) { $('style-select').innerHTML = '<option value="">(could not load styles)</option>'; }
   })();
 
+  // A family guide's preview can't come from /api/onboarding/styles (that
+  // endpoint serves active GLOBAL templates) — its option carries data-img
+  // (the parent-panel ref URL, admin-readable) instead.
+  function styleImgUrl(id) {
+    const opt = $('style-select').querySelector('option[value="' + id + '"]');
+    return (opt && opt.dataset.img) || ('/api/onboarding/styles?image=' + encodeURIComponent(id));
+  }
   function showStylePreview() {
     const id = $('style-select').value;
     $('style-thumb').innerHTML = (id && !$('no-style').checked)
-      ? '<img src="/api/onboarding/styles?image=' + encodeURIComponent(id) + '" alt="">'
+      ? '<img src="' + styleImgUrl(id) + '" alt="">'
       : 'No style';
   }
   $('style-select').addEventListener('change', showStylePreview);
@@ -233,7 +242,30 @@
         cats.map((c) => '<option value="' + c.id + '">' + (c.label || ('#' + c.id)) + ' (' + (counts[c.id] || 0) + ')</option>').join('');
       $('sib-strip').innerHTML = '';
       selectedSibs.clear();
-      msg('Board loaded — pick a category.');
+      // The child's OWN resolved guide (their uploaded reference photos) is
+      // the truest production simulation — surface it at the top of the
+      // style picker and auto-select it, so "skip the style step" is the
+      // default whenever a board is loaded. Family guides are child-scoped
+      // rows the global template list can never show.
+      let ownNote = '';
+      try {
+        const sg = (await fetch('/api/parent/style?childId=' + encodeURIComponent(cid),
+                                { credentials: 'same-origin' }).then((x) => x.json())).styleGuide;
+        if (sg && sg.id) {
+          const sel = $('style-select');
+          let opt = sel.querySelector('option[data-family="1"]');
+          if (!opt) { opt = document.createElement('option'); opt.dataset.family = '1'; sel.insertBefore(opt, sel.firstChild); }
+          opt.value = String(sg.id);
+          opt.dataset.img = sg.imageUrl || '';
+          opt.textContent = '★ ' + cid + "'s own guide — " + (sg.label || ('#' + sg.id))
+            + (sg.source === 'family' ? '' : ' (template)');
+          sel.value = String(sg.id);
+          showStylePreview();
+          renderSibs();
+          ownNote = " Style set to the family's own guide.";
+        }
+      } catch (_) { /* picker keeps the global templates */ }
+      msg('Board loaded — pick a category.' + ownNote);
     } catch (err) { msg('Board load failed: ' + err.message, true); }
   });
   // Eligibility mirrors the qualifying-siblings rule a production port would
@@ -257,18 +289,27 @@
     if (!catId) { selectedSibs.clear(); wrap.innerHTML = ''; return; }
     const guideId = $('no-style').checked ? null : (Number($('style-select').value || 0) || null);
     const inCat = boardItems.filter((it) => Number(it.category_id) === catId);
+    // BENCH RULE: anything WITH ART is selectable — the admin is the judge.
+    // The strict eligibility test (painted by the selected guide, accepted)
+    // demotes to a dashed-amber warning: real boards predate §9 styled
+    // tracking (styled_style_id NULL on grandfathered art), and with no
+    // style guide picked NOTHING could ever pass, which read as a broken
+    // picker. Only tiles with no art at all stay unselectable.
+    const withArt = inCat.filter((it) => it.image_key);
     if (!keep) {
-      // Deterministic pick: the 3 most recently styled eligible tiles.
+      // Preselect the 3 most recently styled ELIGIBLE tiles; when the strict
+      // test matches nothing (grandfathered boards), fall back to any art.
       selectedSibs.clear();
-      inCat.filter((it) => !sibReason(it, guideId))
-        .sort((a, b) => String(b.styled_at || '').localeCompare(String(a.styled_at || '')))
-        .slice(0, 3).forEach((it) => selectedSibs.add(it.image_key));
+      const eligible = withArt.filter((it) => !sibReason(it, guideId))
+        .sort((a, b) => String(b.styled_at || '').localeCompare(String(a.styled_at || '')));
+      (eligible.length ? eligible : withArt).slice(0, 3).forEach((it) => selectedSibs.add(it.image_key));
     }
     wrap.innerHTML = inCat.map((it) => {
       const reason = sibReason(it, guideId);
       const sel = selectedSibs.has(it.image_key);
-      return '<div class="sib-chip' + (sel ? ' sel' : '') + (reason ? ' off' : '') + '" data-key="' + (it.image_key || '') + '"' +
-        ' title="' + (reason ? 'Not eligible: ' + reason : (it.label || '')) + '">' +
+      const cls = !it.image_key ? ' off' : (reason ? ' warn' : '');
+      return '<div class="sib-chip' + (sel ? ' sel' : '') + cls + '" data-key="' + (it.image_key || '') + '"' +
+        ' title="' + (reason ? (it.label || '') + ' — ' + reason + ' (still usable on the bench)' : (it.label || '')) + '">' +
         (it.image_key ? '<img src="/api/media?key=' + encodeURIComponent(it.image_key) + '&w=96" alt="">' : '·') +
         '<span>' + (it.label || '') + '</span></div>';
     }).join('') || '<div style="font-size:12px;color:#9ca3af;">No tiles in this category.</div>';
@@ -286,9 +327,10 @@
     const catId = Number($('sib-cat').value || 0);
     if (!catId) { msg('Pick a category first.', true); return; }
     const guideId = $('no-style').checked ? null : (Number($('style-select').value || 0) || null);
-    const eligible = boardItems.filter((it) => Number(it.category_id) === catId && !sibReason(it, guideId));
-    if (!eligible.length) { msg('No eligible tiles in this category.', true); return; }
-    const pick = eligible.slice();
+    const withArt = boardItems.filter((it) => Number(it.category_id) === catId && it.image_key);
+    if (!withArt.length) { msg('No tiles with art in this category.', true); return; }
+    const eligible = withArt.filter((it) => !sibReason(it, guideId));
+    const pick = (eligible.length >= 3 ? eligible : withArt).slice();
     for (let i = pick.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [pick[i], pick[j]] = [pick[j], pick[i]];
@@ -338,7 +380,7 @@
     $('result').innerHTML = '<div style="font-size:13px;color:#9ca3af;">Working…</div>';
     $('style-out').innerHTML = ($('no-style').checked || !$('style-select').value)
       ? 'No style'
-      : '<img src="/api/onboarding/styles?image=' + encodeURIComponent($('style-select').value) + '" alt="">';
+      : '<img src="' + styleImgUrl($('style-select').value) + '" alt="">';
     const sentPrior = usePrior ? lastResultB64 : '';
     try {
       const d = await api('/api/admin/lab?action=tile-lab', {
