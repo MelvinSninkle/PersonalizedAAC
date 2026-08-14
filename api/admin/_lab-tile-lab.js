@@ -20,8 +20,34 @@
 // disables the style guide entirely (raw-photo restyle, no style matching).
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
-import { loadStyleGuide } from '../_lib/onboarding-render.js';
+import { loadStyleGuide, readBlobBytes } from '../_lib/onboarding-render.js';
 import { renderStyledPhoto } from '../_lib/tile-jobs.js';
+
+// BENCH loader for an explicit styleGuideId: unlike loadStyleGuide (which
+// demands active = TRUE — production must never render a family's board with
+// an unpublished style), the admin bench may test DRAFT/inactive styles and
+// any family's own guide by id. requireAdmin gates this file (C8: per-request
+// styleGuideId overrides are admin-only). Falls back to loadStyleGuide's
+// resolution when no id is given.
+async function loadBenchStyle(db, styleGuideId) {
+  if (!styleGuideId) return loadStyleGuide(db, null);
+  let row;
+  try {
+    row = (await db`SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key
+                    FROM style_guides WHERE id = ${styleGuideId} LIMIT 1`)[0] || null;
+  } catch (_) {
+    row = (await db`SELECT id, label, description, blob_key
+                    FROM style_guides WHERE id = ${styleGuideId} LIMIT 1`)[0] || null;
+  }
+  if (!row) {
+    throw Object.assign(new Error('style guide not found'), { status: 404, code: 'style_not_found' });
+  }
+  let image = null;
+  if (row.blob_key) { try { image = await readBlobBytes(row.blob_key); } catch (_) {} }
+  return { id: Number(row.id), label: row.label, description: row.description || '',
+           blob_key: row.blob_key, person_ref_key: row.person_ref_key || null,
+           stuff_ref_key: row.stuff_ref_key || null, image };
+}
 
 export const config = { maxDuration: 120 };
 
@@ -56,7 +82,7 @@ export default async function handler(req, res) {
     const db = sql();
     let styleGuide = null;
     if (!noStyle) {
-      try { styleGuide = await loadStyleGuide(db, styleGuideId); }
+      try { styleGuide = await loadBenchStyle(db, styleGuideId); }
       catch (e) { res.status(e.status || 400).json({ error: e.message || 'style load failed' }); return; }
     }
 

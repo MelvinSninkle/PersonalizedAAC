@@ -202,10 +202,17 @@
     } catch (_) { $('style-select').innerHTML = '<option value="">(could not load styles)</option>'; }
   })();
 
+  // A family guide's preview can't come from /api/onboarding/styles (that
+  // endpoint serves active GLOBAL templates) — its option carries data-img
+  // (the parent-panel ref URL, admin-readable) instead.
+  function styleImgUrl(id) {
+    const opt = $('style-select').querySelector('option[value="' + id + '"]');
+    return (opt && opt.dataset.img) || ('/api/onboarding/styles?image=' + encodeURIComponent(id));
+  }
   function showStylePreview() {
     const id = $('style-select').value;
     $('style-thumb').innerHTML = (id && !$('no-style').checked)
-      ? '<img src="/api/onboarding/styles?image=' + encodeURIComponent(id) + '" alt="">'
+      ? '<img src="' + styleImgUrl(id) + '" alt="">'
       : 'No style';
   }
   $('style-select').addEventListener('change', showStylePreview);
@@ -235,7 +242,30 @@
         cats.map((c) => '<option value="' + c.id + '">' + (c.label || ('#' + c.id)) + ' (' + (counts[c.id] || 0) + ')</option>').join('');
       $('sib-strip').innerHTML = '';
       selectedSibs.clear();
-      msg('Board loaded — pick a category.');
+      // The child's OWN resolved guide (their uploaded reference photos) is
+      // the truest production simulation — surface it at the top of the
+      // style picker and auto-select it, so "skip the style step" is the
+      // default whenever a board is loaded. Family guides are child-scoped
+      // rows the global template list can never show.
+      let ownNote = '';
+      try {
+        const sg = (await fetch('/api/parent/style?childId=' + encodeURIComponent(cid),
+                                { credentials: 'same-origin' }).then((x) => x.json())).styleGuide;
+        if (sg && sg.id) {
+          const sel = $('style-select');
+          let opt = sel.querySelector('option[data-family="1"]');
+          if (!opt) { opt = document.createElement('option'); opt.dataset.family = '1'; sel.insertBefore(opt, sel.firstChild); }
+          opt.value = String(sg.id);
+          opt.dataset.img = sg.imageUrl || '';
+          opt.textContent = '★ ' + cid + "'s own guide — " + (sg.label || ('#' + sg.id))
+            + (sg.source === 'family' ? '' : ' (template)');
+          sel.value = String(sg.id);
+          showStylePreview();
+          renderSibs();
+          ownNote = " Style set to the family's own guide.";
+        }
+      } catch (_) { /* picker keeps the global templates */ }
+      msg('Board loaded — pick a category.' + ownNote);
     } catch (err) { msg('Board load failed: ' + err.message, true); }
   });
   // Eligibility mirrors the qualifying-siblings rule a production port would
@@ -350,7 +380,7 @@
     $('result').innerHTML = '<div style="font-size:13px;color:#9ca3af;">Working…</div>';
     $('style-out').innerHTML = ($('no-style').checked || !$('style-select').value)
       ? 'No style'
-      : '<img src="/api/onboarding/styles?image=' + encodeURIComponent($('style-select').value) + '" alt="">';
+      : '<img src="' + styleImgUrl($('style-select').value) + '" alt="">';
     const sentPrior = usePrior ? lastResultB64 : '';
     try {
       const d = await api('/api/admin/lab?action=tile-lab', {
