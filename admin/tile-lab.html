@@ -104,6 +104,7 @@
       <button class="btn ghost" id="sib-load" style="padding:10px 0;">Load board</button>
     </div>
     <select id="sib-cat" style="margin-top:8px;" disabled><option value="">— load a board first —</option></select>
+    <button class="btn ghost" id="sib-shuffle" style="margin-top:8px;width:100%;padding:8px 0;">🎲 Pick 3 at random</button>
     <div id="sib-strip" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
     <div class="seg" id="ref-mode" style="margin-top:10px;">
       <button data-mode="today" class="on">Objects ref (today)</button>
@@ -246,17 +247,23 @@
     if (!guideId || Number(it.styled_style_id) !== Number(guideId)) return 'painted by a different style guide';
     return '';
   }
-  function renderSibs() {
+  // Note: wired directly as a change listener too, so the first argument may
+  // be an Event — only an explicit {keepSelection:true} (the 🎲 shuffle)
+  // preserves the current picks instead of re-preselecting.
+  function renderSibs(opts) {
+    const keep = !!(opts && opts.keepSelection === true);
     const catId = Number($('sib-cat').value || 0);
     const wrap = $('sib-strip');
-    selectedSibs.clear();
-    if (!catId) { wrap.innerHTML = ''; return; }
+    if (!catId) { selectedSibs.clear(); wrap.innerHTML = ''; return; }
     const guideId = $('no-style').checked ? null : (Number($('style-select').value || 0) || null);
     const inCat = boardItems.filter((it) => Number(it.category_id) === catId);
-    // Deterministic pick: the 3 most recently styled eligible tiles.
-    inCat.filter((it) => !sibReason(it, guideId))
-      .sort((a, b) => String(b.styled_at || '').localeCompare(String(a.styled_at || '')))
-      .slice(0, 3).forEach((it) => selectedSibs.add(it.image_key));
+    if (!keep) {
+      // Deterministic pick: the 3 most recently styled eligible tiles.
+      selectedSibs.clear();
+      inCat.filter((it) => !sibReason(it, guideId))
+        .sort((a, b) => String(b.styled_at || '').localeCompare(String(a.styled_at || '')))
+        .slice(0, 3).forEach((it) => selectedSibs.add(it.image_key));
+    }
     wrap.innerHTML = inCat.map((it) => {
       const reason = sibReason(it, guideId);
       const sel = selectedSibs.has(it.image_key);
@@ -273,6 +280,23 @@
     }));
   }
   $('sib-cat').addEventListener('change', renderSibs);
+  // 🎲 Random sample of 3 eligible tiles (Fisher-Yates) — for spotting how
+  // much the sibling PICK changes the result, not just whether siblings help.
+  $('sib-shuffle').addEventListener('click', () => {
+    const catId = Number($('sib-cat').value || 0);
+    if (!catId) { msg('Pick a category first.', true); return; }
+    const guideId = $('no-style').checked ? null : (Number($('style-select').value || 0) || null);
+    const eligible = boardItems.filter((it) => Number(it.category_id) === catId && !sibReason(it, guideId));
+    if (!eligible.length) { msg('No eligible tiles in this category.', true); return; }
+    const pick = eligible.slice();
+    for (let i = pick.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pick[i], pick[j]] = [pick[j], pick[i]];
+    }
+    selectedSibs.clear();
+    pick.slice(0, 3).forEach((it) => selectedSibs.add(it.image_key));
+    renderSibs({ keepSelection: true });
+  });
   $('style-select').addEventListener('change', renderSibs);
   $('no-style').addEventListener('change', renderSibs);
 
