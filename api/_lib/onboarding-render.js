@@ -28,11 +28,18 @@ export async function loadStyleGuide(db, styleGuideId) {
   const cols = async (q) => { try { return await q(true); } catch (_) { return await q(false); } };
   let row = null;
   if (styleGuideId) {
+    // OWNER POLICY (2026-08-14): `active` gates DISCOVERY, not existing use.
+    // A board whose pinned or family guide gets unpublished keeps rendering
+    // with it — the old `AND active = TRUE` here made every render of an
+    // explicitly-chosen inactive guide fail loud, and the durable job then
+    // landed the RAW photo ("the style never applied"). The E9 read gates
+    // (pickers: onboarding, demo switcher, public list) still filter active,
+    // so new families can't discover an unpublished style.
     row = (await cols((ext) => ext
-      ? db`SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key FROM style_guides WHERE id = ${styleGuideId} AND active = TRUE LIMIT 1`
-      : db`SELECT id, label, description, blob_key FROM style_guides WHERE id = ${styleGuideId} AND active = TRUE LIMIT 1`))[0] || null;
-    // A SPECIFIC style was requested but isn't there (deleted / inactive / wrong
-    // id). Parents want THEIR exact style — never substitute or go generic. Fail
+      ? db`SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key FROM style_guides WHERE id = ${styleGuideId} LIMIT 1`
+      : db`SELECT id, label, description, blob_key FROM style_guides WHERE id = ${styleGuideId} LIMIT 1`))[0] || null;
+    // A SPECIFIC style was requested but isn't there (deleted / wrong id).
+    // Parents want THEIR exact style — never substitute or go generic. Fail
     // loud so the caller surfaces it and the parent re-picks / re-uploads.
     if (!row) {
       throw Object.assign(

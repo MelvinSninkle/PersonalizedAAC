@@ -107,11 +107,12 @@ async function describeLabel(buffer, contentType) {
 // { ok, b64, prompt, costCents } or { ok:false, detail }.
 // (`bg` is still accepted from old app builds but no longer shapes the prompt —
 // the photo's real setting, translated into the style, is the background now.)
-// `siblingRefKeys` / `noStuffRef` are BENCH-ONLY experiment params (the admin
-// tile lab's siblings-as-style-refs A/B): up to three same-board tiles ride as
-// extra style references, optionally replacing the objects reference. No
-// production path passes either — if the experiment wins, production wiring
-// is a deliberate separate change, not a default flip here.
+// `siblingRefKeys` / `noStuffRef`: up to three same-board tiles ride as extra
+// style references, optionally replacing the objects reference. GRADUATED to
+// production (owner-benched A/B on the fries photo, 2026-08-14): the child's
+// own category tiles beat the fixed objects exemplar, which bled same-domain
+// content (a pretzel-bowl ref made pretzel-shaped fries). processTileJob
+// selects the siblings; the admin tile lab drives them directly.
 export async function renderStyledPhoto({ db = null, photo, contentType, label, detail, style, styleGuide, model, section, ageGroup = null, suppressBakedText = false, guidance = '', priorKey = null, prior = null, siblingRefKeys = [], noStuffRef = false }) {
   const subject = label ? `"${label}"` : 'the main subject';
   const isPerson = String(section || '').toLowerCase() === 'people';
@@ -344,6 +345,34 @@ export async function processTileJob(db, jobId) {
     const sgId = job.style_guide_id || (await loadChildStyleGuideId(db, job.child_id));
     const styleGuide = await loadStyleGuide(db, sgId);
 
+    // SIBLING STYLE REFERENCES (owner-benched winner): a non-person photo
+    // tile renders with up to three of its category's own tiles as style
+    // references INSTEAD of the style's objects exemplar — the board's real
+    // art is the truest "how this world draws things", and a fixed exemplar
+    // semantically close to the subject bleeds its content (pretzel-bowl ref
+    // → pretzel-shaped fries). Candidates must be generated art, never a
+    // parent's raw photo (photographic style would inject itself): taxonomy
+    // tiles are always generated; custom tiles qualify once styled-tracked.
+    // Fewer than TWO candidates → today's stack unchanged (a single
+    // same-category ref recreates the one-exemplar bleed this replaces, and
+    // cold-start boards still need the objects anchor).
+    let siblingKeys = [];
+    if (String(job.section || '').toLowerCase() !== 'people' && job.category_id) {
+      try {
+        const sibs = await db`
+          SELECT image_key FROM items
+          WHERE child_id = ${job.child_id} AND category_id = ${Number(job.category_id)}
+            AND image_key IS NOT NULL
+            AND id <> ${Number(job.item_id) || 0}
+            AND COALESCE(needs_review, FALSE) = FALSE
+            AND (taxonomy_slug IS NOT NULL OR styled_style_id IS NOT NULL)
+          ORDER BY styled_at DESC NULLS LAST, id DESC
+          LIMIT 3`;
+        siblingKeys = sibs.map((r) => r.image_key);
+      } catch (_) { /* pre-migration DB → objects-ref fallback */ }
+    }
+    const useSiblings = siblingKeys.length >= 2;
+
     // Generate the art. On failure, retry the whole job (cron) until MAX, then
     // save-first: keep the raw photo as the tile so a usable tile still lands.
     let imageBytes, imageExt, imageCT, artFailed = false, usedPrompt = null, costCents = 4;
@@ -373,6 +402,8 @@ export async function processTileJob(db, jobId) {
       // retry can never ride along on a later blind re-roll.
       guidance: job.guidance || '',
       priorKey: job.guidance ? (job.prior_key || null) : null,
+      siblingRefKeys: useSiblings ? siblingKeys : [],
+      noStuffRef: useSiblings,
     });
     if (r.ok) {
       imageBytes = Buffer.from(r.b64, 'base64'); imageExt = 'png'; imageCT = 'image/png';
