@@ -38,6 +38,8 @@
   .sib-chip span { display:block; padding:2px 3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sib-chip.sel { border-color:var(--pink); }
   .sib-chip.off { opacity:.35; cursor:default; }
+  .sib-chip.warn { border-style:dashed; border-color:#f59e0b; opacity:.75; }
+  .sib-chip.warn.sel { border-style:solid; border-color:var(--pink); opacity:1; }
   .ref-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
   .ref-chip { width:64px; font-size:10px; color:var(--muted); text-align:center; }
   .ref-chip img, .ref-chip .ph { width:64px; height:64px; object-fit:cover; border-radius:10px;
@@ -257,18 +259,27 @@
     if (!catId) { selectedSibs.clear(); wrap.innerHTML = ''; return; }
     const guideId = $('no-style').checked ? null : (Number($('style-select').value || 0) || null);
     const inCat = boardItems.filter((it) => Number(it.category_id) === catId);
+    // BENCH RULE: anything WITH ART is selectable — the admin is the judge.
+    // The strict eligibility test (painted by the selected guide, accepted)
+    // demotes to a dashed-amber warning: real boards predate §9 styled
+    // tracking (styled_style_id NULL on grandfathered art), and with no
+    // style guide picked NOTHING could ever pass, which read as a broken
+    // picker. Only tiles with no art at all stay unselectable.
+    const withArt = inCat.filter((it) => it.image_key);
     if (!keep) {
-      // Deterministic pick: the 3 most recently styled eligible tiles.
+      // Preselect the 3 most recently styled ELIGIBLE tiles; when the strict
+      // test matches nothing (grandfathered boards), fall back to any art.
       selectedSibs.clear();
-      inCat.filter((it) => !sibReason(it, guideId))
-        .sort((a, b) => String(b.styled_at || '').localeCompare(String(a.styled_at || '')))
-        .slice(0, 3).forEach((it) => selectedSibs.add(it.image_key));
+      const eligible = withArt.filter((it) => !sibReason(it, guideId))
+        .sort((a, b) => String(b.styled_at || '').localeCompare(String(a.styled_at || '')));
+      (eligible.length ? eligible : withArt).slice(0, 3).forEach((it) => selectedSibs.add(it.image_key));
     }
     wrap.innerHTML = inCat.map((it) => {
       const reason = sibReason(it, guideId);
       const sel = selectedSibs.has(it.image_key);
-      return '<div class="sib-chip' + (sel ? ' sel' : '') + (reason ? ' off' : '') + '" data-key="' + (it.image_key || '') + '"' +
-        ' title="' + (reason ? 'Not eligible: ' + reason : (it.label || '')) + '">' +
+      const cls = !it.image_key ? ' off' : (reason ? ' warn' : '');
+      return '<div class="sib-chip' + (sel ? ' sel' : '') + cls + '" data-key="' + (it.image_key || '') + '"' +
+        ' title="' + (reason ? (it.label || '') + ' — ' + reason + ' (still usable on the bench)' : (it.label || '')) + '">' +
         (it.image_key ? '<img src="/api/media?key=' + encodeURIComponent(it.image_key) + '&w=96" alt="">' : '·') +
         '<span>' + (it.label || '') + '</span></div>';
     }).join('') || '<div style="font-size:12px;color:#9ca3af;">No tiles in this category.</div>';
@@ -286,9 +297,10 @@
     const catId = Number($('sib-cat').value || 0);
     if (!catId) { msg('Pick a category first.', true); return; }
     const guideId = $('no-style').checked ? null : (Number($('style-select').value || 0) || null);
-    const eligible = boardItems.filter((it) => Number(it.category_id) === catId && !sibReason(it, guideId));
-    if (!eligible.length) { msg('No eligible tiles in this category.', true); return; }
-    const pick = eligible.slice();
+    const withArt = boardItems.filter((it) => Number(it.category_id) === catId && it.image_key);
+    if (!withArt.length) { msg('No tiles with art in this category.', true); return; }
+    const eligible = withArt.filter((it) => !sibReason(it, guideId));
+    const pick = (eligible.length >= 3 ? eligible : withArt).slice();
     for (let i = pick.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [pick[i], pick[j]] = [pick[j], pick[i]];
