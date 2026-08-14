@@ -523,18 +523,22 @@ New offered styles (global `style_guides` rows) are created INACTIVE
 (`DRAFT_ACTIVE = false` in api/admin/style-guides.js) and go live only via
 the style wizard's Publish, which refuses until the generated default set is
 100% complete (`_lab-style-wizard.js` op publish → `styleBuildStatus`).
-Four read gates filter `active = TRUE`: the onboarding picker
+Three DISCOVERY gates filter `active = TRUE`: the onboarding picker
 (api/onboarding/styles.js), the public demo's style switcher list
-(api/demo.js), the public style list (api/style-guides/public.js), and the
-parent panel's pinned-current-style branch (api/parent/style.js — global
-templates only; a child's OWN family guide resolves regardless of active).
+(api/demo.js), and the public style list (api/style-guides/public.js).
+OWNER POLICY (2026-08-14): active gates discovery ONLY — a board that
+already has a style keeps rendering it after unpublish. The renderer's
+by-id loader (onboarding-render.js loadStyleGuide) and the parent panel's
+pinned-current branch (api/parent/style.js, ownership-filtered) accept
+inactive guides on purpose; the old by-id active filter made renders of an
+unpublished-but-in-use guide fail loud and land raw photos.
 An explicit `/api/demo?style=<id>` also resolves DRAFT ids —
 deliberate (the wizard's preview), safe because per-style default art is
 shared-library-only (`style-defaults/` — already one of A-PUBLIC's four
 public prefixes) and a draft is not discoverable without its id. The build
 pipeline is `style_build_jobs` drained by the run-tile-jobs cron with
-family work always first. Verify: `invariants.sh` E9 greps all four active
-filters + the draft default. Freshness note: /api/demo is CDN-cached
+family work always first. Verify: `invariants.sh` E9 greps the three
+discovery filters + the draft default + the keep-your-style policy marker. Freshness note: /api/demo is CDN-cached
 (s-maxage=300 + 1h SWR, api/demo.js) — publish flips a DB flag with no CDN
 purge, so that header bounds how long a new style lags on /practice.
 

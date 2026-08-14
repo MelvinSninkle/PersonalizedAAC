@@ -73,15 +73,16 @@ async function resolveCurrent(db, childId) {
   const pinnedId = cs && cs.settings && cs.settings.styleGuideId ? Number(cs.settings.styleGuideId) : null;
   let row = null;
   if (pinnedId) {
-    // E9 read gate: a pinned GLOBAL template must also be active — a draft
-    // style pinned to a child (e.g. via the wizard's preview) must never
-    // render as "Current style" on a parent surface. The child's OWN family
-    // guide resolves unconditionally, same as before. A gated-out pin falls
-    // through to the family/global fallbacks below, like a deleted id does.
+    // OWNER POLICY (2026-08-14): a board that HAS a style keeps it, active
+    // or not — `active` gates DISCOVERY (the pickers new families browse),
+    // never existing use. The panel must show the guide the renderer
+    // actually uses (loadStyleGuide's by-id path accepts inactive too), so
+    // the only filter here is ownership: the pin resolves when it's a
+    // GLOBAL template or THIS child's own guide — never another family's.
     row = (await db`
       SELECT id, label, description, blob_key, person_ref_key, stuff_ref_key, child_id
       FROM style_guides
-      WHERE id = ${pinnedId} AND (child_id = ${childId} OR (child_id IS NULL AND active = TRUE))
+      WHERE id = ${pinnedId} AND (child_id IS NULL OR child_id = ${childId})
       LIMIT 1`)[0] || null;
   }
   if (!row) {
