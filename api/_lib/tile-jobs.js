@@ -141,6 +141,9 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
         `and everything that already works completely unchanged.` +
         ` Do not include any text, words, or letters in the image.` + SQUARE_RULE;
       const images = [{ buffer: priorImg.buffer, contentType: priorImg.contentType || 'image/png' }];
+      // refs mirrors `images` in order — the bench renders exactly what rode
+      // along with each generation (kind + blob key when one exists).
+      const refs = [{ kind: 'prior', key: priorKey || null }];
       if (isPerson) {
         // Same engine contract as the keystone-portrait branch below: OpenAI
         // keystone with one transient retry, Gemini Pro only when no OpenAI
@@ -160,7 +163,7 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
           g = await primary().catch((e) => ({ ok: false, detail: String(e.message || e) }));
         }
         if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
-        return { ok: true, b64: g.b64, prompt, model: 'keystone-portrait', costCents: g.costCents ?? 13 };
+        return { ok: true, b64: g.b64, prompt, model: 'keystone-portrait', costCents: g.costCents ?? 13, refs };
       }
       // Objects: same routing as the full render below — explicit model
       // honored as-is, otherwise nano banana.
@@ -172,12 +175,12 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
         if (!oaKey) return { ok: false, detail: 'OPENAI_API_KEY not configured' };
         const g = await openaiEditImage({ apiKey: oaKey, model: useModel, prompt, images, size: '1024x1024' });
         if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
-        return { ok: true, b64: g.b64, prompt, model: useModel, costCents: g.costCents ?? openaiCostCents(useModel) };
+        return { ok: true, b64: g.b64, prompt, model: useModel, costCents: g.costCents ?? openaiCostCents(useModel), refs };
       }
       if (!gKey) return { ok: false, detail: 'GEMINI_API_KEY not configured' };
       const g = await geminiGenerateImage({ apiKey: gKey, model: useModel, prompt, images, aspectRatio: '1:1' });
       if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
-      return { ok: true, b64: g.b64, prompt, model: useModel, costCents: geminiCostCents(useModel) };
+      return { ok: true, b64: g.b64, prompt, model: useModel, costCents: geminiCostCents(useModel), refs };
     }
   }
 
@@ -196,10 +199,13 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
     const gKey0 = geminiKey();
     if (!oaKey0 && !gKey0) return { ok: false, detail: 'No image API key configured' };
     const images = [];
+    const refs = [];
     if (styleGuide && styleGuide.image && styleGuide.image.buffer) {
       images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
+      refs.push({ kind: 'style', key: styleGuide.blob_key || null });
     }
     images.push({ buffer: photo, contentType: contentType || 'image/jpeg' });
+    refs.push({ kind: 'photo' });
     // Fall-through guided retry (prior blob unreadable): the correction joins
     // the add-time detail in the portrait prompt's own correction clause.
     const prompt = buildPortraitPrompt({ styleGuide, guidance: [detail, guidance].filter(Boolean).join(' '), ageGroup });
@@ -215,7 +221,7 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
       g = await primary().catch((e) => ({ ok: false, detail: String(e.message || e) }));
     }
     if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
-    return { ok: true, b64: g.b64, prompt, model: 'keystone-portrait', costCents: g.costCents ?? 13 };
+    return { ok: true, b64: g.b64, prompt, model: 'keystone-portrait', costCents: g.costCents ?? 13, refs };
   }
 
   const detailClause = detail ? ` Important detail from the family: ${detail}.` : '';
@@ -254,15 +260,18 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
   // treatment even when every reference was uploaded.
   const images = [];
   const legend = [];
+  const refs = [];   // mirrors `images` in order — see the edit pass above
   if (styleGuide && styleGuide.image && styleGuide.image.buffer) {
     images.push({ buffer: styleGuide.image.buffer, contentType: styleGuide.image.contentType });
     legend.push(`Image ${images.length} is the STYLE reference — copy its art style only, not its content.`);
+    refs.push({ kind: 'style', key: styleGuide.blob_key || null });
   }
   if (styleGuide && styleGuide.stuff_ref_key && !noStuffRef) {
     try {
       const stuff = await readBlobBytes(styleGuide.stuff_ref_key);
       images.push({ buffer: stuff.buffer, contentType: stuff.contentType });
       legend.push(`Image ${images.length} shows how OBJECTS and materials are rendered in this style — match that treatment; never copy its content.`);
+      refs.push({ kind: 'objects', key: styleGuide.stuff_ref_key });
     } catch (_) { /* missing ref → style scene alone still anchors the look */ }
   }
   // Bench experiment: category-sibling tiles as extra style references. Same
@@ -274,10 +283,12 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
       const bytes = await readBlobBytes(key);
       images.push({ buffer: bytes.buffer, contentType: bytes.contentType });
       legend.push(`Image ${images.length} is ANOTHER STYLE reference from the same world — match how it renders objects, materials, and backgrounds; do not copy its content.`);
+      refs.push({ kind: 'sibling', key });
     } catch (_) { /* a missing reference never blocks generation */ }
   }
   images.push({ buffer: photo, contentType: contentType || 'image/jpeg' });
   legend.push(`Image ${images.length} is the source photo — re-illustrate THIS subject in the style above.`);
+  refs.push({ kind: 'photo' });
   // Fall-through guided retry (prior blob unreadable): the correction rides
   // LATE, right next to the legend — late-position instructions dominate in
   // this composition scheme (same framing as renderTaxonomyTile's clause).
@@ -300,13 +311,13 @@ export async function renderStyledPhoto({ db = null, photo, contentType, label, 
     if (!oaKey) return { ok: false, detail: 'OPENAI_API_KEY not configured' };
     const g = await openaiEditImage({ apiKey: oaKey, model: useModel, prompt, images, size: '1024x1024' });
     if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
-    return { ok: true, b64: g.b64, prompt, model: useModel, costCents: g.costCents ?? openaiCostCents(useModel) };
+    return { ok: true, b64: g.b64, prompt, model: useModel, costCents: g.costCents ?? openaiCostCents(useModel), refs };
   }
   if (!gKey) return { ok: false, detail: 'GEMINI_API_KEY not configured' };
   const gm = isGeminiModel(useModel) ? useModel : geminiDefaultModel();
   const g = await geminiGenerateImage({ apiKey: gKey, model: gm, prompt, images, aspectRatio: '1:1' });
   if (!g.ok) return { ok: false, status: g.status, detail: g.detail };
-  return { ok: true, b64: g.b64, prompt, model: gm, costCents: geminiCostCents(gm) };
+  return { ok: true, b64: g.b64, prompt, model: gm, costCents: geminiCostCents(gm), refs };
 }
 
 // Run one job to completion. Reads the durable source, names it (if needed),

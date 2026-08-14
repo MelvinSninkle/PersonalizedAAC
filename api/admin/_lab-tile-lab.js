@@ -93,6 +93,10 @@ export default async function handler(req, res) {
       siblingCount: siblingKeys.length,
       siblingKeysAttached: siblingKeys,
       stuffRefAttached: !!(styleGuide && styleGuide.stuff_ref_key && !noStuffRef),
+      // The EXACT image stack that rode along, in legend order — the bench
+      // renders these as thumbnails so "what references were sent?" is
+      // answered visually, not by decoding pills.
+      refs: r.refs || [],
     });
   } catch (err) {
     res.status(500).json({ error: 'tile-lab failed', detail: String(err.message || err) });

@@ -38,6 +38,12 @@
   .sib-chip span { display:block; padding:2px 3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sib-chip.sel { border-color:var(--pink); }
   .sib-chip.off { opacity:.35; cursor:default; }
+  .ref-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .ref-chip { width:64px; font-size:10px; color:var(--muted); text-align:center; }
+  .ref-chip img, .ref-chip .ph { width:64px; height:64px; object-fit:cover; border-radius:10px;
+                                 border:2px solid var(--line); background:#fff7fb; display:block; }
+  .ref-chip .ph { display:grid; place-items:center; color:#c4b5fd; font-size:18px; }
+  .ref-chip span { display:block; padding-top:2px; font-weight:700; }
   #error { display:none; margin-top:10px; font-size:12px; color:#991b1b; background:#fee2e2; border:1px solid #fecaca; border-radius:10px; padding:10px; white-space:pre-wrap; }
 </style>
 </head>
@@ -130,6 +136,8 @@
         <div class="msg" id="result-cap" style="text-align:center;">Result</div>
       </div>
     </div>
+    <label>References sent with this generation</label>
+    <div class="ref-row" id="ref-row"><span style="font-size:12px;color:#9ca3af;">—</span></div>
     <label>Prompt sent</label>
     <pre id="prompt">—</pre>
     <!-- A/B pane: the previous render (image, caption, prompt) survives one
@@ -140,6 +148,8 @@
         <div class="msg" id="prev-cap" style="text-align:center;">Previous</div>
       </div>
       <div>
+        <label>Previous references</label>
+        <div class="ref-row" id="prev-ref-row"></div>
         <label>Previous prompt</label>
         <pre id="prev-prompt" style="max-height:200px;">—</pre>
       </div>
@@ -150,6 +160,7 @@
 <script>
   const $ = (id) => document.getElementById(id);
   let photoB64 = '';
+  let photoDataUrl = '';
   let lastResultB64 = '';
   let section = 'nouns';
 
@@ -173,6 +184,7 @@
       const c = document.createElement('canvas'); c.width = w; c.height = h;
       c.getContext('2d').drawImage(bmp, 0, 0, w, h); if (bmp.close) bmp.close();
       const dataUrl = c.toDataURL('image/jpeg', 0.9);
+      photoDataUrl = dataUrl;
       photoB64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
       $('photo-thumb').innerHTML = '<img src="' + dataUrl + '" alt="">';
     } catch (err) { msg('Could not read photo: ' + err.message, true); }
@@ -264,6 +276,24 @@
   $('style-select').addEventListener('change', renderSibs);
   $('no-style').addEventListener('change', renderSibs);
 
+  // Thumbnails of the EXACT image stack the server attached, in legend order
+  // ("Image 1", "Image 2", …): style scene, objects ref, siblings, source
+  // photo, prior attempt. Keyed refs load via /api/media (admin session);
+  // photo/prior render from the bytes this page already holds.
+  function renderRefRow(refs, priorB64ForRow) {
+    const row = $('ref-row');
+    if (!refs.length) { row.innerHTML = '<span style="font-size:12px;color:#9ca3af;">none reported</span>'; return; }
+    const label = { style: 'style scene', objects: 'objects ref', sibling: 'sibling', photo: 'source photo', prior: 'prior attempt' };
+    row.innerHTML = refs.map((r, i) => {
+      let img;
+      if (r.kind === 'photo' && photoDataUrl) img = '<img src="' + photoDataUrl + '" alt="">';
+      else if (r.kind === 'prior' && priorB64ForRow) img = '<img src="data:image/png;base64,' + priorB64ForRow + '" alt="">';
+      else if (r.key) img = '<img src="/api/media?key=' + encodeURIComponent(r.key) + '" alt="">';
+      else img = '<div class="ph">🖼</div>';
+      return '<div class="ref-chip">' + img + '<span>' + (i + 1) + ' · ' + (label[r.kind] || r.kind) + '</span></div>';
+    }).join('');
+  }
+
   async function run(usePrior) {
     if (!photoB64 && !usePrior) { msg('Pick a photo first.', true); return; }
     const guidance = ($('guidance').value || '').trim();
@@ -285,6 +315,7 @@
     $('style-out').innerHTML = ($('no-style').checked || !$('style-select').value)
       ? 'No style'
       : '<img src="/api/onboarding/styles?image=' + encodeURIComponent($('style-select').value) + '" alt="">';
+    const sentPrior = usePrior ? lastResultB64 : '';
     try {
       const d = await api('/api/admin/lab?action=tile-lab', {
         photoB64,
@@ -305,7 +336,9 @@
         $('prev-thumb').innerHTML = '<img src="data:image/png;base64,' + lastResultB64 + '" alt="">';
         $('prev-cap').innerHTML = 'Previous · ' + $('result-cap').innerHTML.replace(/^Result · /, '');
         $('prev-prompt').textContent = $('prompt').textContent;
+        $('prev-ref-row').innerHTML = $('ref-row').innerHTML;
       }
+      renderRefRow(d.refs || [], sentPrior);
       lastResultB64 = d.b64;
       $('retry').disabled = false;
       $('result').innerHTML = '<img src="data:image/png;base64,' + d.b64 + '" alt="">';
