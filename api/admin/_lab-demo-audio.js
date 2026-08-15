@@ -29,11 +29,22 @@ import { synthesizeVoice } from '../_lib/onboarding-render.js';
 import { VOICE_SAMPLE_TEXT } from '../_lib/voices.js';
 import { curatedSpokenTerms } from '../_lib/word-match.js';
 import { put, list } from '@vercel/blob';
+import { createHash } from 'node:crypto';
 
 export const config = { maxDuration: 300 };
 
 export const demoSlug = (s) =>
   String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+// Fact-clip key derivation — MUST stay in LOCKSTEP with practice.html's
+// factHash and iOS GameAudio.factHash: NFC-normalize, trim, collapse internal
+// whitespace to single spaces, sha256 hex, first 16 chars. The hash covers
+// EXACTLY the text handed to synthesizeVoice (no lowercasing/stripping — the
+// fact text IS the synthesis input). Keys live under demo-audio/<vid>/facts/
+// so they ride the public media prefix the signed-out practice board can
+// reach, while staying separately listable for coverage.
+export const factNorm = (s) => String(s || '').normalize('NFC').trim().replace(/\s+/g, ' ');
+export const factHash = (s) => createHash('sha256').update(factNorm(s), 'utf8').digest('hex').slice(0, 16);
 
 async function demoLabels(db) {
   // ALL placeable canonical/universal labels — no default_image_key gate:
@@ -107,6 +118,31 @@ async function synonymTerms(db) {
   return [...bySlug.values()].sort();
 }
 
+// Every teaching fact the boards speak (descriptive_clues, first 3 per row —
+// the same slice every client plays), deduped by hash, verbatim text.
+async function demoFacts(db) {
+  let rows;
+  try {
+    rows = await db`
+      SELECT label, descriptive_clues FROM taxonomy
+      WHERE COALESCE(archived, FALSE) = FALSE
+        AND COALESCE(is_event, FALSE) = FALSE
+        AND COALESCE(is_gestalt, FALSE) = FALSE
+        AND COALESCE(authoring_kind, 'canonical') = 'canonical'
+        AND COALESCE(audience, 'universal') = 'universal'`;
+  } catch (_) { return []; }
+  const byHash = new Map();
+  for (const r of rows) {
+    for (const c of (Array.isArray(r.descriptive_clues) ? r.descriptive_clues : []).filter(Boolean).slice(0, 3)) {
+      const text = factNorm(c);
+      if (!text) continue;
+      const h = factHash(text);
+      if (!byHash.has(h)) byHash.set(h, text);
+    }
+  }
+  return [...byHash.entries()].map(([hash, text]) => ({ hash, text }));
+}
+
 async function existingKeys(prefix) {
   const keys = new Set();
   let cursor;
@@ -133,6 +169,7 @@ export default async function handler(req, res) {
   try {
     const labels = await demoLabels(db);
     const terms = await synonymTerms(db);
+    const facts = await demoFacts(db);
 
     if (req.method === 'GET') {
       const voices = await db`SELECT voice_id, name FROM demo_voices ORDER BY name`;
@@ -146,7 +183,11 @@ export default async function handler(req, res) {
       //   orphans = clips matching no current label (harmless, never played)
       const coverage = {};
       for (const v of voices) {
-        const keys = await existingKeys(`demo-audio/${v.voice_id}/`);
+        // Fact clips live under a /facts/ sub-path of the SAME prefix (public
+        // media whitelist) — exclude them from the label count and the orphan
+        // sweep or every fact would read as an orphaned label clip.
+        const allKeys = await existingKeys(`demo-audio/${v.voice_id}/`);
+        const keys = new Set([...allKeys].filter((k) => !k.includes('/facts/')));
         built[v.voice_id] = keys.size;
         const sampleKey = `demo-audio/${v.voice_id}/voice-sample.mp3`;
         const wanted = new Set(labels.map((l) => `demo-audio/${v.voice_id}/${demoSlug(l.label)}.mp3`));
@@ -167,6 +208,9 @@ export default async function handler(req, res) {
           synTotal: terms.length,
           synHave: terms.length - missingTerms.length,
           synMissing: missingTerms.length,
+          factTotal: facts.length,
+          factHave: facts.filter((f) => allKeys.has(`demo-audio/${v.voice_id}/facts/${f.hash}.mp3`)).length,
+          factMissing: facts.filter((f) => !allKeys.has(`demo-audio/${v.voice_id}/facts/${f.hash}.mp3`)).length,
         };
         // Keep the PUBLIC /api/demo completeness gate honest without waiting
         // for the next build: counters follow the true comparison.
@@ -177,7 +221,7 @@ export default async function handler(req, res) {
         } catch (_) {}
       }
       res.status(200).json({ ok: true, tiles: labels.length, voices, built, coverage,
-                             synonymTerms: terms });
+                             synonymTerms: terms, factCount: facts.length });
       return;
     }
 
@@ -202,6 +246,35 @@ export default async function handler(req, res) {
           if (Date.now() > deadline) { remaining++; continue; }
           try {
             const buf = await synthesizeVoice({ text: term, voiceId: vid, stats });
+            if (buf) {
+              await put(key, buf, { access: 'private', addRandomSuffix: false, contentType: 'audio/mpeg' });
+              built++;
+            } else { remaining++; }
+          } catch (_) { remaining++; }
+        }
+      }
+      res.status(200).json({ ok: true, built, skipped, remaining,
+        fromCache: stats.cached, generated: stats.generated,
+        note: (built > 0
+          ? `${stats.cached} copied free from your existing voice cache, ${stats.generated} newly generated. `
+          : '') + (remaining > 0 ? 'Run build again to finish the rest.' : 'Complete.') });
+      return;
+    }
+
+    // Teaching-fact build: demo-audio/<vid>/facts/ only — same rules as the
+    // synonyms scope (no demo_voices registration, no clip counters).
+    if (b.scope === 'facts') {
+      const deadline = Date.now() + 240_000;
+      const stats = { cached: 0, generated: 0 };
+      let built = 0, skipped = 0, remaining = 0;
+      for (const vid of voiceIds) {
+        const have = await existingKeys(`demo-audio/${vid}/facts/`);
+        for (const f of facts) {
+          const key = `demo-audio/${vid}/facts/${f.hash}.mp3`;
+          if (have.has(key)) { skipped++; continue; }
+          if (Date.now() > deadline) { remaining++; continue; }
+          try {
+            const buf = await synthesizeVoice({ text: f.text, voiceId: vid, stats });
             if (buf) {
               await put(key, buf, { access: 'private', addRandomSuffix: false, contentType: 'audio/mpeg' });
               built++;

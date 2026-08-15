@@ -453,10 +453,16 @@ struct BoardView: View {
             ZStack {
                 Color(hex: "#fdf2f8").ignoresSafeArea()
                 VStack(spacing: 14) {
+                    // Branding moment (owner call): the same transparent
+                    // logo the website leads with, not bare text.
+                    Image("MyWorldLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 140)
                     ProgressView()
                         .controlSize(.large)
                         .tint(Color(hex: "#ff1493"))
-                    Text("One moment — getting your pictures ready…")
+                    Text("One moment while we load your device")
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color(hex: "#9d2463"))
                 }

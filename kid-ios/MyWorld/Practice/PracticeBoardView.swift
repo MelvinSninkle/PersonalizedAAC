@@ -12,6 +12,9 @@ final class PracticeChrome {
     /// Tile ids whose category is on the Label Lab skip list (alphabet,
     /// numbers, movie posters, clock faces — categories that ARE their label).
     var bandSkip: Set<Int> = []
+    /// demo-audio/<vid>/facts/ for the selected demo voice — teaching facts
+    /// play pre-rendered clips (signed out = no TTS). nil on real boards.
+    var factClipPrefix: String? = nil
 }
 
 /// The pre-login practice board — the first thing a brand-new install lands
@@ -108,6 +111,10 @@ struct PracticeBoardView: View {
     @State private var listenTimeout: Task<Void, Never>?
     /// Mic auto-started FOR the sentence constructor — see BoardView's twin.
     @State private var sentenceAutoListen = false
+    /// First screenful warmed — the branded curtain holds until then, so the
+    /// board pops in complete instead of tile-by-tile.
+    @State private var practiceReady = false
+    @State private var warmTask: Task<Void, Never>?
 
     @State private var samplePlayer: AVAudioPlayer?
 
@@ -164,6 +171,17 @@ struct PracticeBoardView: View {
                     CelebrationView { endGame() }
                 }
             }
+            // ISOLATION: a fullScreenCover's content resolves the environment
+            // at the ATTACHMENT point — the app root's — not this subtree's.
+            // Without re-injection the games read the app-global BoardStore
+            // and showed the signed-out FAMILY's tiles on the public demo
+            // (and will show the previous kid on a shared clinic iPad).
+            // Every practice-scoped object rides in explicitly.
+            .environment(store)
+            .environment(chrome)
+            .environment(access)
+            .environment(sentence)
+            .environment(boardNav)
         }
         // Listening Mode lifecycle — mirrors BoardView: start/stop with the
         // toggle, auto-stop after 2 minutes of silence.
@@ -202,6 +220,8 @@ struct PracticeBoardView: View {
             if listening { listening = false }
             speech.stop()
             samplePlayer?.stop()
+            warmTask?.cancel()
+            TilePlayer.factClipPrefix = nil   // never leaks onto a real board
         }
         .sheet(isPresented: $showAccountPrompt) { accountPromptSheet }
     }
@@ -712,8 +732,59 @@ struct PracticeBoardView: View {
             store.tiles = resp.items
             store.listenBlocklist = Set((p.listenBlocklist ?? []).map { $0.lowercased() })
             chrome.bandSkip = bandSkip
+            // Teaching-fact clips for the selected voice (Teach me + the
+            // tap-again teach): the games read chrome, TilePlayer's tap
+            // path reads the static (it has no environment).
+            let fp = (effectiveVoiceId?.isEmpty == false) ? "demo-audio/\(effectiveVoiceId!)/facts/" : nil
+            chrome.factClipPrefix = fp
+            TilePlayer.factClipPrefix = fp
+            // Warm the board like a real board does (the practice payload
+            // never went through BoardStore.precacheMedia, so every image
+            // and demo clip was a first-tap network round trip — the
+            // sluggishness the owner hit). Style/voice switches land here
+            // too, so the newly selected combination warms immediately.
+            warmTask?.cancel()
+            warmTask = Task { await warmPractice() }
         } catch {
             errorText = "Couldn't prepare the practice board."
+        }
+    }
+
+    /// First paint: category icons + the first screenful per section race a
+    /// 2.5s cap (BoardView's warmFirstPaint recipe), then the curtain drops
+    /// onto a COMPLETE board. Background: every remaining tile image, then
+    /// every demo voice clip — the device ends up holding the whole selected
+    /// style+voice combination, so taps are instant and repeat visits are
+    /// effectively offline. A style/voice switch re-enters with the cached
+    /// art already local, so only the new pieces download.
+    private func warmPractice() async {
+        let tiles = store.tiles
+        let cats = store.categories
+        if !practiceReady {
+            var firstKeys: [String] = cats.compactMap(\.imageKey)
+            for s in [BoardSection.people, .nouns, .verbs, .needs] {
+                firstKeys += tiles.filter { $0.section == s }.prefix(14).compactMap(\.imageKey)
+            }
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for k in firstKeys {
+                        if Task.isCancelled { return }
+                        _ = await MediaCache.shared.image(for: k, maxPixel: 640)
+                    }
+                }
+                group.addTask { try? await Task.sleep(nanoseconds: 2_500_000_000) }
+                await group.next()
+                group.cancelAll()
+            }
+            practiceReady = true
+        }
+        for t in tiles {
+            if Task.isCancelled { return }
+            if let k = t.imageKey, !k.isEmpty { _ = await MediaCache.shared.image(for: k, maxPixel: 640) }
+        }
+        for t in tiles {
+            if Task.isCancelled { return }
+            if let s = t.soundKey, !s.isEmpty { _ = await MediaCache.shared.data(for: s) }
         }
     }
 
@@ -813,14 +884,26 @@ struct PracticeBoardView: View {
 
     @ViewBuilder
     private var loadStateOverlay: some View {
-        if store.tiles.isEmpty {
-            if loading {
-                VStack(spacing: 12) {
-                    ProgressView().tint(Color(hex: Brand.pink)).scaleEffect(1.4)
-                    Text("Setting up the practice board…")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Color(hex: Brand.pinkDeep))
+        // Held until the first screenful of art is DECODED (practiceReady),
+        // not merely until the JSON lands — the old tiles.isEmpty gate
+        // dropped the curtain instantly and the user watched tiles pop in
+        // one by one.
+        if store.tiles.isEmpty || !practiceReady {
+            if errorText == nil {
+                ZStack {
+                    Color(hex: "#fdf2f8").ignoresSafeArea()
+                    VStack(spacing: 14) {
+                        Image("MyWorldLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 140)
+                        ProgressView().tint(Color(hex: Brand.pink)).scaleEffect(1.4)
+                        Text("One moment while we load your device")
+                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color(hex: Brand.pinkDeep))
+                    }
                 }
+                .transition(.opacity)
             } else if let err = errorText {
                 VStack(spacing: 12) {
                     Text(err)

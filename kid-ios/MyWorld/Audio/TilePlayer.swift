@@ -18,6 +18,10 @@ extension Notification.Name {
 @MainActor
 final class TilePlayer {
     static let shared = TilePlayer()
+    /// Practice board only: demo-audio/<vid>/facts/ prefix so tap-again
+    /// teaching facts play pre-rendered clips (signed out = no TTS). Set by
+    /// PracticeBoardView per selected voice, cleared when practice closes.
+    static var factClipPrefix: String? = nil
 
     private var player: AVAudioPlayer?
     private let speech = AVSpeechSynthesizer()
@@ -84,7 +88,7 @@ final class TilePlayer {
                     player?.stop()
                     speech.stopSpeaking(at: .immediate)
                     clueSpeaking = true
-                    await GameAudio.shared.speakAwait(clue, childId: cid ?? "")
+                    await GameAudio.shared.speakAwait(clue, childId: cid ?? "", factPrefix: Self.factClipPrefix)
                     clueSpeaking = false
                     lastTapAt = Date()      // window restarts when the fact ENDS
                     return
