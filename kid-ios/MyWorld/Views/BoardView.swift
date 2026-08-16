@@ -225,6 +225,9 @@ struct BoardView: View {
             scheduler.start(childId: auth.childSlug)
             autoTeach.start(childId: auth.childSlug)
             startSeedWatch()
+            // Listening vocabulary (canonical suggestions + gap-fill ledger):
+            // reads its consents + terms now that the board is loaded.
+            ListenVocab.shared.configure(childId: auth.childSlug, board: board)
             // In-flight photo adds (this device or another) become "Pending"
             // placeholder tiles at their landing spot — previously this only
             // ran when the Add flow opened, so a restarted app showed nothing.
@@ -269,12 +272,22 @@ struct BoardView: View {
                 guard game.current == nil, pendingMessage == nil else { listening = false; return }
                 speech.start()
                 scheduleListenTimeout()
+                // Suggestion capture + gap-fill counting ride the VISIBLE,
+                // deliberate listening session only (sentence-builder
+                // background listening never captures — parity with web).
+                if !sentenceAutoListen { ListenVocab.shared.sessionBegan() }
             } else {
                 speech.stop()
+                ListenVocab.shared.sessionEnded()
             }
         }
         .onChange(of: speech.transcript) { _, t in
-            if listening && !t.isEmpty { scheduleListenTimeout() }
+            if listening && !t.isEmpty {
+                scheduleListenTimeout()
+                if !sentenceAutoListen {
+                    ListenVocab.shared.ingest(t, onDevice: speech.onDevice)
+                }
+            }
         }
         // Repeat-navigate fires per recognized word from HERE (not the strip)
         // so it works while the sentence bar owns the header.

@@ -7936,8 +7936,14 @@
           // Background sentence-listening (_listenBg) drives ONLY the
           // repeat-jump: no strip render (the sentence bar owns the header)
           // and no suggestion capture — that stays tied to the visible,
-          // deliberate listening mode.
-          if (_listening) { renderListenStrip(toks); suggestScan(text); }
+          // deliberate listening mode. Suggestion capture additionally needs
+          // the gapFill entitlement ($9.99+ per the gap-fill spec; GF-22:
+          // ineligible tiers see nothing, not a locked tease) — the server
+          // re-checks, this just saves the wasted round trips.
+          if (_listening) {
+            renderListenStrip(toks);
+            if (!ENT || ENT.gapFill !== false) suggestScan(text);
+          }
           maybeListenNavigate(toks);
         }
       });

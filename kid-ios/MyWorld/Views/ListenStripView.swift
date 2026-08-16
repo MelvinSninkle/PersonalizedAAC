@@ -216,6 +216,24 @@ struct ListenStripView: View {
                                 .frame(height: 76 * stripScale)
                                 .id("live-tail")
                         }
+                        // Gap-fill live prompt (GF-20): a candidate word was
+                        // just heard — render-only, so the board's primary
+                        // function is never interrupted; the parent acts in
+                        // Settings → New words heard. Entitlement + consent
+                        // gates live inside ListenVocab (GF-22: ineligible
+                        // tiers simply never set liveCandidate — no tease).
+                        if let cand = ListenVocab.shared.liveCandidate {
+                            HStack(spacing: 4) {
+                                Text("✨")
+                                Text(cand)
+                                    .font(.system(size: 16 * stripScale, weight: .bold, design: .rounded))
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Capsule().fill(Color(hex: "#fff7e0")))
+                            .overlay(Capsule().stroke(Color(hex: "#ffd400"), lineWidth: 2))
+                            .id("gap-candidate")
+                        }
                     }
                 }
                 .padding(.horizontal, 8)

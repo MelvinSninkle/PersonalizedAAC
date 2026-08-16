@@ -52,6 +52,10 @@ struct APIClient {
         let stt: Bool
         let autoTeach: Bool
         let styling: Bool
+        /// Listening-driven vocabulary suggestions (canonical queue + the
+        /// new-word ledger) — Plus/Pro only. Optional so cached entitlements
+        /// from older builds still decode; nil = permissive (server enforces).
+        var gapFill: Bool? = nil
     }
 
     struct SyncResponse: Codable {
@@ -61,6 +65,9 @@ struct APIClient {
         /// Listening display filter (E8): server-owned bad-word list; words
         /// on it render as "Bad Word" in the listening strip.
         var listenBlocklist: [String]? = nil
+        /// Function-word stoplist for the gap-fill ledger — server-owned
+        /// (word-match.js STOP_WORDS) so curation needs no release.
+        var listenStopwords: [String]? = nil
         /// Spoken-word captions on matched listen chips ("hi" under hello's
         /// picture) — server-owned dark-launch flag (SYNONYMS_PUBLIC); the
         /// strip draws captions only when the last sync said to.
@@ -392,6 +399,67 @@ struct APIClient {
         let body = try JSONSerialization.data(withJSONObject: ["op": "reorder", "ids": ids])
         _ = try await request(method: "POST", path: "/api/items",
                               body: body, contentType: "application/json")
+    }
+
+    // MARK: -- Listening vocabulary (#10 canonical suggestions + gap-fill)
+
+    /// GET /api/items?lexicon=1 — the canonical matcher vocabulary (slug →
+    /// label + variants). Small enough to ship whole; ListenVocab caches it
+    /// on disk and refreshes at most daily.
+    struct LexiconEntry: Codable {
+        let slug: String
+        let label: String
+        let terms: [String]
+    }
+    func suggestLexicon() async -> [LexiconEntry] {
+        struct R: Decodable { let lexicon: [LexiconEntry]? }
+        guard let (data, _) = try? await request(method: "GET", path: "/api/items?lexicon=1", body: nil),
+              let r = try? JSONDecoder().decode(R.self, from: data) else { return [] }
+        return r.lexicon ?? []
+    }
+
+    /// POST /api/items { op:'suggest-record' } — batched canonical-match
+    /// hits (slug + count only; the server re-checks consent and tier).
+    func suggestRecord(childId: String, slugs: [String]) async {
+        guard !slugs.isEmpty,
+              let body = try? JSONSerialization.data(withJSONObject:
+                ["op": "suggest-record", "childId": childId, "slugs": slugs]) else { return }
+        _ = try? await request(method: "POST", path: "/api/items",
+                               body: body, contentType: "application/json")
+    }
+
+    /// POST /api/items { op:'request-word' } — the parent explicitly asks for
+    /// a word the taxonomy doesn't know (the tap IS the share: one word, one
+    /// affirmative action; never automatic). inTaxonomy=true means the word
+    /// was actually known — the server minted a normal suggestion instead.
+    struct WordRequestResult: Decodable {
+        let ok: Bool?
+        var status: String? = nil
+        var inTaxonomy: Bool? = nil
+        var error: String? = nil
+    }
+    func requestWord(childId: String, word: String, hits: Int) async -> WordRequestResult? {
+        guard let body = try? JSONSerialization.data(withJSONObject:
+            ["op": "request-word", "childId": childId, "word": word, "hits": hits,
+             "locale": Locale.current.identifier.replacingOccurrences(of: "_", with: "-")]) else { return nil }
+        guard let (data, _) = try? await request(method: "POST", path: "/api/items",
+                                                 body: body, contentType: "application/json") else { return nil }
+        return try? JSONDecoder().decode(WordRequestResult.self, from: data)
+    }
+
+    /// POST /api/items { op:'request-list' } — this child's request states,
+    /// so the device shows "requested ✓" and stops re-offering the word.
+    struct WordRequestRow: Decodable {
+        let word: String
+        let status: String
+    }
+    func requestList(childId: String) async -> [WordRequestRow] {
+        struct R: Decodable { let requests: [WordRequestRow]? }
+        guard let body = try? JSONSerialization.data(withJSONObject: ["op": "request-list", "childId": childId]),
+              let (data, _) = try? await request(method: "POST", path: "/api/items",
+                                                 body: body, contentType: "application/json"),
+              let r = try? JSONDecoder().decode(R.self, from: data) else { return [] }
+        return r.requests ?? []
     }
 
     /// POST /api/categories { op:'reorder', ids } — chip-strip twin of the above.

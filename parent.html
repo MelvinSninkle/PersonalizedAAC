@@ -3268,12 +3268,26 @@
   async function loadSuggestions() {
     const panel = document.getElementById('suggest-panel'); if (!panel) return;
     let list = [];
+    let needsSub = false;
     try {
       const r = await fetch('/api/items', { method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ op: 'suggest-list', childId: slug }) });
-      list = (await r.json()).suggestions || [];
+      const d = await r.json();
+      list = d.suggestions || [];
+      needsSub = d.needsSubscription === true;
     } catch (_) {}
+    // Tier-gated (gap-fill is Plus/Pro): the parent surface MAY explain —
+    // only the child's board must never tease (GF-22).
+    if (needsSub) {
+      panel.style.display = '';
+      document.getElementById('suggest-count').textContent = '✦';
+      document.getElementById('suggest-list').innerHTML =
+        '<p class="hint" style="margin:4px 0 8px;">Word suggestions from listening are part of the Plus and Pro '
+        + 'memberships — the board notices the words your family says that it doesn\'t have yet, and offers them '
+        + 'here for one-tap adding. <a href="/store.html">See memberships</a>.</p>';
+      return;
+    }
     if (!list.length) { panel.style.display = 'none'; return; }
     panel.style.display = '';
     document.getElementById('suggest-count').textContent = list.length;

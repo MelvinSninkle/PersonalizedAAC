@@ -944,6 +944,41 @@ Size: {size}.',
     await db`CREATE INDEX IF NOT EXISTS survey_email_idx   ON survey_responses(email)`;
     await db`CREATE INDEX IF NOT EXISTS survey_created_idx ON survey_responses(created_at DESC)`;
 
+    // ---- Listening-driven vocabulary (canonical suggestions + gap-fill) ----
+    // Runtime migrations live in api/_lib/word-suggestions.js (ensureSuggestions
+    // / ensureWordRequests) — this is the canonical mirror. word_suggestions:
+    // one row per (child, known-word slug) with a hit counter — never one per
+    // utterance. word_requests: parent-initiated requests for words the
+    // taxonomy does NOT know (the tap is the share; delivery mints a
+    // word_suggestions row once the word ships with default art).
+    await db`
+      CREATE TABLE IF NOT EXISTS word_suggestions (
+        child_id TEXT NOT NULL,
+        taxonomy_slug TEXT NOT NULL,
+        hit_count INT NOT NULL DEFAULT 1,
+        last_heard_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (child_id, taxonomy_slug)
+      )
+    `;
+    await db`
+      CREATE TABLE IF NOT EXISTS word_requests (
+        id BIGSERIAL PRIMARY KEY,
+        child_id TEXT NOT NULL,
+        word TEXT NOT NULL,
+        raw_word TEXT,
+        locale TEXT DEFAULT 'en-US',
+        hit_count INT,
+        status TEXT NOT NULL DEFAULT 'requested',
+        taxonomy_slug TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (child_id, word)
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS word_requests_word_idx ON word_requests(word)`;
+
     // ---- People identities: name vs. relationship (docs/people-data-model.md) ----
     // The real person behind the People-section tiles. Separates the spoken/shown
     // name (display_name) from the actual given name, and captures a structured

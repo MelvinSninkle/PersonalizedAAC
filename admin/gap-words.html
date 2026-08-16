@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gap words — admin</title>
+<style>
+  :root { --pink:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#faf7f9; }
+  header { position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--line);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; padding:12px 18px; }
+  header h1 { font-size:18px; margin:0; margin-right:6px; }
+  .spacer { flex:1; }
+  a.back { color:var(--pink); text-decoration:none; font-size:13px; }
+  input[type=number], button { font:inherit; padding:7px 11px; border:1px solid var(--line); border-radius:9px; background:#fff; }
+  button { cursor:pointer; }
+  button.small { font-size:12px; padding:4px 10px; }
+  main { padding:16px 18px 80px; max-width:1000px; margin:0 auto; }
+  .chips { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; }
+  .chip { background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 14px; font-size:12px; color:var(--muted); }
+  .chip b { display:block; font-size:19px; color:var(--ink); margin-bottom:1px; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:12px; margin-bottom:16px; overflow:hidden; }
+  .panel .head { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); background:#fdf7fa; }
+  .panel h2 { margin:0; font-size:13px; font-weight:700; color:var(--pink); text-transform:uppercase; letter-spacing:.04em; }
+  .panel .sub { font-size:12px; color:var(--muted); }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { text-align:left; padding:7px 12px; border-bottom:1px solid #f3f4f6; white-space:nowrap; }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); background:#fbfbfc; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr.hot td:first-child { font-weight:700; }
+  .tag { font-size:11px; font-weight:700; border-radius:999px; padding:2px 9px; }
+  .tag.req { background:#eff6ff; color:#1d4ed8; }
+  .tag.acc { background:#ecfdf5; color:#047857; }
+  .empty { color:var(--muted); text-align:center; padding:26px; font-size:13px; }
+  .note { font-size:12px; color:var(--muted); padding:8px 14px; border-top:1px solid #f3f4f6; }
+  .msg { font-size:12.5px; color:var(--muted); margin-left:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🕳️ Gap words</h1>
+  <label style="font-size:12px;color:var(--muted);">High-demand at ≥
+    <input type="number" id="k" min="1" value="5" style="width:58px;margin-left:4px;"> families</label>
+  <button id="refresh">↻ Refresh</button>
+  <button id="deliver">📬 Deliver fulfilled</button>
+  <a class="back" href="/api/admin/lab?action=gap-words&csv=1">⬇ CSV</a>
+  <span class="msg" id="msg"></span>
+  <div class="spacer"></div>
+  <a class="back" href="/admin/taxonomy.html">Taxonomy</a>
+  <a class="back" href="/admin/">← Lab home</a>
+</header>
+
+<main>
+  <div class="chips" id="chips"></div>
+  <div class="panel">
+    <div class="head"><h2>Requested words the taxonomy doesn't know</h2>
+      <span class="sub">every row is an explicit parent request; ⭐ = at/above the family threshold (bulk-build candidates)</span></div>
+    <div class="tablewrap"><table id="t"></table></div>
+    <div class="note">Flow: <b>Accept</b> marks a word queued for authoring (add it via the Taxonomy workbench —
+      prompt, match terms, translations, audio — then generate default art). <b>Deliver fulfilled</b> then finds every
+      open request whose word now exists with default art and drops it into that family's suggestion queue, where the
+      parent's normal Add / Dismiss / Never review delivers it. Nothing ever lands on a board unreviewed.</div>
+  </div>
+</main>
+
+<script>
+  const token = localStorage.getItem('aacToken') || '';
+  async function api(path, body) {
+    const headers = body ? { 'Content-Type': 'application/json' } : {};
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const r = await fetch(path, { headers, credentials: 'same-origin',
+      method: body ? 'POST' : 'GET', body: body ? JSON.stringify(body) : undefined });
+    if (r.status === 401 || r.status === 403) throw new Error('Sign in as an admin first (open /login), then return here.');
+    if (!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0, 160));
+    return r.json();
+  }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const $ = (id) => document.getElementById(id);
+
+  let DATA = null;
+
+  function render() {
+    if (!DATA) return;
+    const hot = DATA.open.filter((r) => r.hot).length;
+    $('chips').innerHTML = `
+      <div class="chip"><b>${DATA.open.length}</b>open words</div>
+      <div class="chip"><b>${hot}</b>⭐ high-demand (≥${DATA.k} families)</div>
+      <div class="chip"><b>${DATA.delivered}</b>delivered</div>
+      <div class="chip"><b>${DATA.rejected}</b>rejected</div>`;
+    const t = $('t');
+    if (!DATA.open.length) {
+      t.innerHTML = '<tr><td class="empty">No open requests — families\' boards are keeping up with their worlds. 💛</td></tr>';
+      return;
+    }
+    t.innerHTML = '<tr><th>Word</th><th class="num">Families</th><th class="num">Heard</th><th>Locales</th><th>First asked</th><th>Status</th><th></th></tr>'
+      + DATA.open.map((r) => `<tr class="${r.hot ? 'hot' : ''}">
+          <td>${r.hot ? '⭐ ' : ''}${esc(r.word)}</td>
+          <td class="num">${r.families}</td><td class="num">${r.hits || '—'}</td>
+          <td>${esc((r.locales || []).join(', '))}</td>
+          <td>${new Date(r.firstAt).toLocaleDateString()}</td>
+          <td><span class="tag ${r.status === 'accepted' ? 'acc' : 'req'}">${esc(r.status)}</span></td>
+          <td>
+            ${r.status === 'accepted' ? '' : `<button class="small" data-act="accept" data-w="${esc(r.word)}">Accept</button>`}
+            <button class="small" data-act="reject" data-w="${esc(r.word)}">Reject</button>
+          </td>
+        </tr>`).join('');
+    t.querySelectorAll('button[data-act]').forEach((b) => b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        await api('/api/admin/lab?action=gap-words', { op: b.dataset.act, word: b.dataset.w });
+        load();
+      } catch (err) { $('msg').textContent = err.message; b.disabled = false; }
+    }));
+  }
+
+  async function load() {
+    $('msg').textContent = '';
+    try {
+      const k = Math.max(1, parseInt($('k').value, 10) || 5);
+      try { localStorage.setItem('mwGapK', String(k)); } catch (_) {}
+      DATA = await api('/api/admin/lab?action=gap-words&k=' + k);
+      render();
+    } catch (err) { $('t').innerHTML = '<tr><td class="empty">' + esc(err.message) + '</td></tr>'; }
+  }
+
+  $('deliver').addEventListener('click', async () => {
+    $('deliver').disabled = true;
+    $('msg').textContent = 'Delivering…';
+    try {
+      const d = await api('/api/admin/lab?action=gap-words', { op: 'deliver' });
+      $('msg').textContent = 'Delivered ' + d.delivered + ' request' + (d.delivered === 1 ? '' : 's') + ' into family suggestion queues.';
+      load();
+    } catch (err) { $('msg').textContent = err.message; }
+    $('deliver').disabled = false;
+  });
+  $('refresh').addEventListener('click', load);
+  $('k').addEventListener('change', load);
+  try { $('k').value = localStorage.getItem('mwGapK') || '5'; } catch (_) {}
+  load();
+</script>
+</body>
+</html>

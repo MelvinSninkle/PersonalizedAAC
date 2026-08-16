@@ -45,9 +45,13 @@ export default async function handler(req, res) {
       if (b.op === 'reorder')      return await reorderBulk(req, res, db, auth.user, b);
       // #10 canonical suggestion queue — all roster-gated, consent-checked
       // server-side (see _lib/word-suggestions.js).
-      if (b.op === 'suggest-record' || b.op === 'suggest-list' || b.op === 'suggest-act') {
+      if (b.op === 'suggest-record' || b.op === 'suggest-list' || b.op === 'suggest-act'
+          || b.op === 'request-word' || b.op === 'request-list') {
         const ws = await import('./_lib/word-suggestions.js');
-        const fn = { 'suggest-record': ws.suggestRecord, 'suggest-list': ws.suggestList, 'suggest-act': ws.suggestAct }[b.op];
+        const fn = { 'suggest-record': ws.suggestRecord, 'suggest-list': ws.suggestList, 'suggest-act': ws.suggestAct,
+                     // Gap-B: parent-initiated new-word requests (the tap IS
+                     // the share — see _lib/word-suggestions.js).
+                     'request-word': ws.requestWord, 'request-list': ws.requestList }[b.op];
         return await fn(req, res, db, auth.user, b, canAccessChild);
       }
       return await create(req, res, db, auth.user);

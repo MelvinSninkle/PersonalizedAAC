@@ -29,10 +29,18 @@ final class BoardStore {
     var voiceClipPrefix: String? = nil
     var voiceClipExt: String = ".mp3"
 
+    /// Function-word stoplist for the gap-fill ledger (server-owned, from
+    /// word-match.js STOP_WORDS). Rides the board cache like the blocklist.
+    var listenStopwords: Set<String> = []
+
     /// Convenience gates for the UI. Unknown = allowed, so an offline board
     /// never locks features it can't verify.
     var sttAllowed: Bool { entitlement?.stt ?? true }
     var stylingAllowed: Bool { entitlement?.styling ?? true }
+    /// Gap-fill (listening-driven suggestions + new-word ledger) is Plus/Pro.
+    /// GF-22: when this is false the prompts don't render at all — no locked
+    /// tease on the child's board. Server re-enforces on every write.
+    var gapFillAllowed: Bool { entitlement?.gapFill ?? true }
 
     private let api: APIClient
     private let cacheURL: URL
@@ -179,6 +187,7 @@ final class BoardStore {
             self.tiles = resp.items
             self.entitlement = resp.entitlement ?? self.entitlement
             if let bl = resp.listenBlocklist, !bl.isEmpty { self.listenBlocklist = Set(bl) }
+            if let sw = resp.listenStopwords, !sw.isEmpty { self.listenStopwords = Set(sw) }
             if let lc = resp.listenCaptions { self.listenCaptions = lc }   // false re-closes the gate
             self.voiceClipPrefix = resp.voiceClips?.prefix               // nil clears (voice unset)
             self.voiceClipExt = resp.voiceClips?.ext ?? ".mp3"
@@ -226,6 +235,7 @@ final class BoardStore {
         self.tiles = resp.items
         self.entitlement = resp.entitlement
         if let bl = resp.listenBlocklist, !bl.isEmpty { self.listenBlocklist = Set(bl) }
+        if let sw = resp.listenStopwords, !sw.isEmpty { self.listenStopwords = Set(sw) }
         if let lc = resp.listenCaptions { self.listenCaptions = lc }
         self.voiceClipPrefix = resp.voiceClips?.prefix
         self.voiceClipExt = resp.voiceClips?.ext ?? ".mp3"

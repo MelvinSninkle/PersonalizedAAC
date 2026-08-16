@@ -32,6 +32,7 @@ struct DisplaySettingsView: View {
     @State private var repeatCount = 2       // #12: 0 off / 2 / 3 in a row
     @State private var sentenceListen = true // background mic while building a sentence
     @State private var suggestListening = false   // #10 consent (off by default)
+    @State private var gapFillListen = false      // gap-fill ledger consent (off by default)
     @State private var easyClose = false
     @State private var exitHoldSec = 1.2     // ✕ hold length when easyClose off
     @State private var easyUnlock = false
@@ -286,9 +287,38 @@ struct DisplaySettingsView: View {
                 // #10: opt-in consent for the suggestion queue. Matched
                 // words only (name + count), never audio or transcripts.
                 Toggle("Suggest words your family says", isOn: $suggestListening)
-                    .onChange(of: suggestListening) { _, v in saveSynced(["suggestFromListening": v]) }
+                    .onChange(of: suggestListening) { _, v in
+                        saveSynced(["suggestFromListening": v])
+                        ListenVocab.shared.captureConsent = v
+                    }
                 Text("While listening runs, words your family says that aren't on the board yet appear in the parent dashboard to add, dismiss, or block. Only matched words are kept, never audio or transcripts.")
                     .font(.footnote).foregroundStyle(.secondary)
+                // Gap-fill consent — SEPARATE from the toggle above because it
+                // covers a broader thing: counting words our library does NOT
+                // know. Copy is deliberately literal: the app counts words, it
+                // never records sentences. Turning it off clears the ledger.
+                Toggle("Notice new words we don't have yet", isOn: $gapFillListen)
+                    .onChange(of: gapFillListen) { _, v in
+                        saveSynced(["gapFillListen": v])
+                        if v { ListenVocab.shared.ledgerConsent = true }
+                        else { ListenVocab.shared.consentRevoked() }
+                    }
+                Text("The board keeps a private count, on this device only, of words it hears often but doesn't have — even ones our library doesn't know. You review them below and choose what happens; nothing is shared unless you ask us to build a word. The app counts words — it never records sentences, audio, or who said what. Turning this off erases the counts.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                if gapFillListen {
+                    NavigationLink {
+                        NewWordsReviewView()
+                    } label: {
+                        HStack {
+                            Text("New words heard")
+                            Spacer()
+                            if !ListenVocab.shared.candidates.isEmpty {
+                                Text("\(ListenVocab.shared.candidates.count)")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
             }
             // Permission repair lives HERE too, not just in the strip: after a
             // reinstall (or a stray "Don't Allow"), only iOS Settings can turn
@@ -441,6 +471,7 @@ struct DisplaySettingsView: View {
         repeatCount = [0, 2, 3].contains(rc) ? rc : (((s["listenRepeatNav"] as? Bool) ?? true) ? 2 : 0)
         sentenceListen = (s["sentenceListen"] as? Bool) ?? true
         suggestListening = (s["suggestFromListening"] as? Bool) == true
+        gapFillListen = (s["gapFillListen"] as? Bool) == true
         easyClose = (s["easyClose"] as? Bool) ?? false
         exitHoldSec = Double(TouchConfig.clampMs(s["exitHoldMs"], 300, 3000, 1200)) / 1000.0
         serverEasyUnlock = (s["easyUnlock"] as? Bool) ?? false
