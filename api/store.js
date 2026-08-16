@@ -89,6 +89,9 @@ export default async function handler(req, res) {
   // Founding Family checkout is PRE-ACCOUNT by design (the waitlist funnel) —
   // it authenticates with the waitlist row's HMAC token instead of a session.
   if (action === 'concierge-checkout') return conciergeCheckout(req, res, db, raw ? parseJSON(raw) : {});
+  // Survey Founding-100 board — also pre-account, authenticated by the survey
+  // row's HMAC token (minted by /api/waitlist?action=survey).
+  if (action === 'founding-checkout') return foundingCheckout(req, res, db, raw ? parseJSON(raw) : {});
 
   const auth = await checkAuth(req);
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
@@ -1290,6 +1293,147 @@ async function handleConciergePaid(db, s) {
   } catch (err) { console.error('concierge email failed:', String(err && err.message || err)); }
 }
 
+// ── Survey Founding-100 board ($49.99 one-time) ─────────────────────────────
+//
+// The /survey funnel's purchase gate: a family who said YES to the early-
+// access program can buy the Founding Personalized Board at the founding
+// price. Distinct from the concierge flow above — one-time payment, no
+// subscription attached, and HARD-CAPPED at FOUNDING_CAP paid families.
+// Nobody counts against the 100 until their payment actually succeeds
+// (the cap query counts payment_status='paid' rows, which only the webhook
+// writes) — the pre-checkout probe here just stops us from SENDING more
+// people to Stripe once the seats are gone.
+const FOUNDING_CENTS = 4999;
+
+async function foundingCheckout(req, res, db, body) {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) { res.status(501).json({ error: 'stripe_not_configured' }); return; }
+  if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+
+  const email = String(body.email || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    res.status(400).json({ error: 'Valid email required' }); return;
+  }
+  const surveyId = Number(body.surveyId) || 0;
+  const { verifySurveyToken, ensureSurvey, FOUNDING_CAP } = await import('./waitlist.js');
+  if (!surveyId || !verifySurveyToken(body.token, surveyId)) {
+    res.status(401).json({ error: 'bad or expired survey token — refresh the survey and try again' });
+    return;
+  }
+  await ensureSurvey(db);
+  const row = (await db`SELECT id, payment_status FROM survey_responses WHERE id = ${surveyId} LIMIT 1`)[0];
+  if (!row) { res.status(404).json({ error: 'survey not found' }); return; }
+  if (row.payment_status === 'paid') { res.status(400).json({ error: 'already_paid' }); return; }
+
+  const paid = Number((await db`
+    SELECT COUNT(*)::int AS n FROM survey_responses
+    WHERE cohort = 'founding_100' AND payment_status = 'paid'`)[0]?.n) || 0;
+  if (paid >= FOUNDING_CAP) {
+    res.status(409).json({ error: 'founding_full',
+      detail: 'Founding Family spots are full. Join the next early-access group.' });
+    return;
+  }
+
+  const origin = `https://${req.headers.host}`;
+  const form = new URLSearchParams();
+  form.set('mode', 'payment');
+  form.set('success_url', origin + '/survey?paid=1');
+  form.set('cancel_url', origin + '/survey?canceled=1');
+  form.set('customer_email', email);
+  form.set('metadata[kind]', 'founding');
+  form.set('metadata[surveyId]', String(surveyId));
+  form.set('metadata[email]', email);
+  form.set('line_items[0][quantity]', '1');
+  form.set('line_items[0][price_data][currency]', 'usd');
+  form.set('line_items[0][price_data][unit_amount]', String(FOUNDING_CENTS));
+  form.set('line_items[0][price_data][product_data][name]', 'Founding Personalized Board (one-time)');
+  const r = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form.toString(),
+  });
+  const d = await r.json();
+  if (!r.ok) { res.status(502).json({ error: 'stripe error', detail: d.error && d.error.message }); return; }
+  // Funnel breadcrumb: they made it to Stripe. Never downgrades a paid row.
+  try {
+    await db`UPDATE survey_responses
+             SET stripe_session_id = ${String(d.id || '')}, email = ${email},
+                 payment_status = 'checkout_started', updated_at = NOW()
+             WHERE id = ${surveyId} AND (payment_status IS NULL OR payment_status <> 'paid')`;
+  } catch (_) {}
+  res.status(200).json({ ok: true, url: d.url });
+}
+
+// Webhook side of the Founding-100 board. Stamps the SURVEY row (that's what
+// the cap counts), then mirrors into the waitlist + mints the single-use
+// invite code + sends the email — same rails register.js already links
+// accounts through. Idempotent on Stripe redelivery.
+async function handleFoundingPaid(db, s) {
+  const { ensureWaitlist, ensureSurvey } = await import('./waitlist.js');
+  await ensureWaitlist(db);
+  await ensureSurvey(db);
+  const sid = Number(s.metadata && s.metadata.surveyId) || 0;
+  const email = String((s.metadata && s.metadata.email) || (s.customer_details && s.customer_details.email) || '').toLowerCase();
+
+  const srow = sid ? (await db`SELECT id, payment_status FROM survey_responses WHERE id = ${sid} LIMIT 1`)[0] : null;
+  if (srow && srow.payment_status === 'paid') return;   // redelivery — already handled
+  if (srow) {
+    await db`
+      UPDATE survey_responses
+      SET founding_family = TRUE, founding_purchase_price = 49.99,
+          cohort = 'founding_100', payment_status = 'paid', paid_at = NOW(),
+          stripe_session_id = ${String(s.id || '') || null},
+          stripe_customer_id = ${String(s.customer || '') || null},
+          email = COALESCE(${email || null}, email),
+          updated_at = NOW()
+      WHERE id = ${sid}`;
+  } else {
+    console.error('founding webhook: survey row missing; session', s.id, '— still fulfilling by email');
+  }
+
+  // Waitlist mirror + invite code + email — never strand a payment even if
+  // the survey row vanished.
+  let row = email ? (await db`SELECT id, email, invite_code, paid_at FROM waitlist WHERE email = ${email} LIMIT 1`)[0] : null;
+  if (!row && email) {
+    const ins = await db`INSERT INTO waitlist (email, source) VALUES (${email}, 'survey-founding') RETURNING id, email, invite_code, paid_at`;
+    row = ins[0];
+  }
+  if (!row) { console.error('founding webhook: no email on session', s.id); return; }
+  if (row.paid_at && row.invite_code) return;   // this family already holds a paid seat + code
+
+  const code = 'vip-' + randomCouponCode(6).toLowerCase();
+  try {
+    await db`INSERT INTO invite_codes (code, label, active, max_uses)
+             VALUES (${code}, ${'Founding 100 — ' + row.email}, TRUE, 1)`;
+  } catch (_) {
+    await db`INSERT INTO invite_codes (code, label, active)
+             VALUES (${code}, ${'Founding 100 — ' + row.email}, TRUE)`;
+  }
+  await db`UPDATE waitlist
+           SET paid_at = NOW(), paid_sku = 'founding.board',
+               stripe_customer_id = ${String(s.customer || '') || null},
+               invite_code = ${code}
+           WHERE id = ${row.id}`;
+  try {
+    const { sendEmail, emailConfigured } = await import('./_lib/email.js');
+    if (emailConfigured()) {
+      await sendEmail({
+        to: row.email,
+        subject: "You're a My World Founding Family — here's your code",
+        text: 'Thank you! Your Founding Personalized Board is reserved — you are one of our first hundred families.\n\n'
+            + 'Your personal invite code: ' + code + '\n\n'
+            + 'Next steps:\n'
+            + '1. Go to https://myworldtaptotalk.com/welcome and enter the code.\n'
+            + '2. Create your account with THIS email address (' + row.email + ') so your purchase connects automatically.\n'
+            + '3. Walk through onboarding — your photos and choices there are what your child\'s board is built from.\n\n'
+            + 'Your board is yours permanently — no subscription is required to keep using it. '
+            + "We'll be in touch directly about the early-access program. "
+            + 'Reply to this email any time — you are talking to the founder.\n',
+      });
+    }
+  } catch (err) { console.error('founding email failed:', String(err && err.message || err)); }
+}
+
 // "Manage billing" on the web: a Stripe billing-portal session where the
 // subscriber can upgrade, downgrade, or cancel. (Apple subscriptions are
 // managed in iOS Settings — the app links there instead.)
@@ -1366,6 +1510,11 @@ async function stripeWebhook(req, res, db, raw) {
       // mint the invite code, send the email.
       if (!uid && (s.metadata && s.metadata.kind) === 'concierge' && s.mode === 'subscription') {
         await handleConciergePaid(db, s);
+      }
+      // Survey Founding-100 board (also pre-account): stamp the survey row
+      // (the seat counter), mirror the waitlist, mint the code, email it.
+      if ((s.metadata && s.metadata.kind) === 'founding' && s.mode === 'payment') {
+        await handleFoundingPaid(db, s);
       }
     } else if (event.type === 'invoice.paid') {
       const inv = event.data.object;

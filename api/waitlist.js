@@ -1,12 +1,22 @@
 // /api/waitlist — the landing-page waitlist, now the front door of the
-// Founding Family concierge funnel.
+// Founding Family concierge funnel AND the product-discovery survey.
 //
 //   POST                    { email, style?, note?, source?, consent? }
 //                           → { ok, id, token }  (token authorizes ?action=photo)
 //   POST ?action=photo      { id, token, image: dataURL, name? }
 //                           → { ok, count }      (consented family photos)
+//   POST ?action=survey     { id?, token?, answers: {...}, complete? }
+//                           → { ok, id, token }  (progressive save — see below)
+//   GET  ?action=founding-status
+//                           → { ok, open }       (public: Founding-100 sold out?)
 //   GET                     admin-only review: rows + paid state + photo keys
 //
+// The survey (/survey) saves PROGRESSIVELY: the first answered question
+// creates a row and mints an HMAC row token; every later section re-sends the
+// full answer state under that token. That gives the dashboard a real
+// started→completed funnel and keeps partial answers when someone bails at
+// question 12. Payment fields (founding_family, payment_status, cohort…) are
+// NEVER client-writable — only the Stripe webhook (store.js) sets them.
 // POST is intentionally open — it's the public form. Photo uploads are the
 // SENSITIVE part (families upload pictures of their kids before any account
 // or COPPA consent screen exists), so they are fenced four ways:
@@ -62,6 +72,93 @@ export async function ensureWaitlist(db) {
   await db`CREATE INDEX IF NOT EXISTS waitlist_photos_row_idx ON waitlist_photos(waitlist_id)`;
 }
 
+// ── Product-discovery survey ────────────────────────────────────────────────
+// One row per survey session, one COLUMN per answer (never a JSON blob of the
+// whole form) so the dashboard can aggregate with plain SQL/JS. Multi-selects
+// are JSONB arrays of option keys. Canonical DDL also lives in api/init.js.
+export const SURVEY_VERSION = '2026-08-v1';
+export const FOUNDING_CAP = 100;   // Founding-100 seats — counted by PAID rows only
+
+export async function ensureSurvey(db) {
+  await db`
+    CREATE TABLE IF NOT EXISTS survey_responses (
+      id BIGSERIAL PRIMARY KEY,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ,
+      survey_version TEXT,
+      source TEXT,
+      email  TEXT,
+      respondent_type TEXT,
+      -- family branch
+      child_age_range TEXT,
+      communication_methods JSONB,
+      spoken_language_level TEXT,
+      current_aac_system TEXT,
+      current_aac_other TEXT,
+      current_aac_likes TEXT,
+      current_aac_frustrations TEXT,
+      interests JSONB,
+      preferred_shows_books_styles JSONB,
+      family_goals JSONB,
+      family_goal_other TEXT,
+      six_month_goal_text TEXT,
+      preferred_purchase_tier TEXT,
+      purchase_value_drivers JSONB,
+      purchase_value_text TEXT,
+      subscription_preference TEXT,
+      language_interest TEXT,
+      languages_requested JSONB,
+      language_other TEXT,
+      language_use_cases JSONB,
+      sign_language_interest TEXT,
+      sign_features_requested JSONB,
+      signed_language_requested TEXT,
+      signed_language_other TEXT,
+      data_sharing_interest TEXT,
+      founding_purchase_interest TEXT,
+      -- payment (webhook-only writes; see store.js handleFoundingPaid)
+      founding_family BOOLEAN NOT NULL DEFAULT FALSE,
+      founding_purchase_price NUMERIC(10,2),
+      cohort TEXT,
+      payment_status TEXT,
+      stripe_session_id TEXT,
+      stripe_customer_id TEXT,
+      paid_at TIMESTAMPTZ,
+      -- professional branch
+      professional_role TEXT,
+      organization TEXT,
+      professional_website TEXT,
+      professional_email TEXT,
+      professional_phone TEXT,
+      potential_children_served TEXT,
+      professional_age_ranges JSONB,
+      professional_aac_systems JSONB,
+      professional_aac_other TEXT,
+      professional_problems_text TEXT,
+      professional_feature_interests JSONB,
+      professional_time_saver_text TEXT,
+      professional_purchasing_model TEXT,
+      volume_license_interest TEXT,
+      estimated_license_volume TEXT,
+      pilot_willingness TEXT,
+      direct_contact_willingness TEXT,
+      preferred_contact_text TEXT,
+      evaluation_program_interest TEXT,
+      professional_pilot_candidate BOOLEAN NOT NULL DEFAULT FALSE,
+      -- general-interest branch
+      general_interest_text TEXT,
+      general_for_whom TEXT,
+      feature_interests JSONB,
+      -- everyone
+      marketing_permissions JSONB,
+      early_access_interest BOOLEAN NOT NULL DEFAULT FALSE
+    )
+  `;
+  await db`CREATE INDEX IF NOT EXISTS survey_email_idx   ON survey_responses(email)`;
+  await db`CREATE INDEX IF NOT EXISTS survey_created_idx ON survey_responses(created_at DESC)`;
+}
+
 // ── Row token: lets the JUST-SUBMITTED form attach photos to its own row and
 //    start its own checkout — nothing else. HMAC over the row id + expiry
 //    with SESSION_SECRET (same secret the session cookies trust).
@@ -85,14 +182,41 @@ export function verifyWaitlistToken(token, id) {
   try { return timingSafeEqual(Buffer.from(expect), Buffer.from(String(sig || ''))); } catch (_) { return false; }
 }
 
+// Survey row token — same HMAC recipe with a DIFFERENT prefix ('sv:' vs 'wl:')
+// so a waitlist token can never update a survey row or vice versa. Longer TTL:
+// a parent may leave the tab open and finish (or pay) hours later.
+const SURVEY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+
+export function mintSurveyToken(id, exp = Date.now() + SURVEY_TOKEN_TTL_MS) {
+  const secret = tokenSecret();
+  if (!secret) return null;
+  const sig = createHmac('sha256', secret).update(`sv:${id}:${exp}`).digest('hex').slice(0, 40);
+  return `${id}.${exp}.${sig}`;
+}
+
+export function verifySurveyToken(token, id) {
+  const secret = tokenSecret();
+  if (!secret || typeof token !== 'string') return false;
+  const [tid, texp, sig] = token.split('.');
+  if (String(tid) !== String(id)) return false;
+  const exp = Number(texp);
+  if (!Number.isFinite(exp) || exp < Date.now()) return false;
+  const expect = createHmac('sha256', secret).update(`sv:${id}:${exp}`).digest('hex').slice(0, 40);
+  try { return timingSafeEqual(Buffer.from(expect), Buffer.from(String(sig || ''))); } catch (_) { return false; }
+}
+
 export default async function handler(req, res) {
   const action = String((req.query && req.query.action) || '');
-  if (req.method === 'GET') return list(req, res);
+  if (req.method === 'GET') {
+    if (action === 'founding-status') return foundingStatus(req, res);
+    return list(req, res);
+  }
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
   if (action === 'photo') return photo(req, res);
+  if (action === 'survey') return survey(req, res);
   return join(req, res);
 }
 
@@ -169,6 +293,165 @@ async function photo(req, res) {
     res.status(200).json({ ok: true, count: count + 1 });
   } catch (err) {
     res.status(500).json({ error: 'photo save failed', detail: String(err.message || err) });
+  }
+}
+
+// ── Survey save ─────────────────────────────────────────────────────────────
+// Server-side normalization: enums are allow-listed, free text is capped,
+// multi-selects become bounded arrays of trimmed strings. Anything that fails
+// validation stores as NULL rather than erroring — a survey must never eat a
+// family's answers over one malformed field.
+function sTxt(v, cap) {
+  if (typeof v !== 'string') return null;
+  const t = v.trim().slice(0, cap);
+  return t || null;
+}
+function sArr(v, maxItems = 24, itemCap = 120) {
+  if (!Array.isArray(v)) return null;
+  const out = [];
+  for (const x of v) {
+    if (typeof x !== 'string') continue;
+    const t = x.trim().slice(0, itemCap);
+    if (t && !out.includes(t)) out.push(t);
+    if (out.length >= maxItems) break;
+  }
+  return out.length ? out : null;
+}
+function sEnum(v, allowed) { return typeof v === 'string' && allowed.includes(v) ? v : null; }
+const jb = (a) => (a ? JSON.stringify(a) : null);   // JSONB param helper
+
+const RESPONDENT_TYPES = ['parent', 'slp', 'ot', 'teacher', 'clinic', 'professional_other', 'general'];
+const YMN   = ['yes', 'maybe', 'no'];
+const TIERS = ['essential', 'personalized', 'bespoke', 'none_affordable', 'not_ready'];
+const SUBS  = ['essentials', 'plus', 'pro', 'no_subscription', 'not_sure', 'none'];
+const SIGN_INTEREST = ['definitely', 'probably', 'maybe', 'no'];
+
+async function survey(req, res) {
+  const body = (typeof req.body === 'object' && req.body) || {};
+  const a = (typeof body.answers === 'object' && body.answers) || {};
+  try {
+    const db = sql();
+    await ensureWaitlist(db);
+    await ensureSurvey(db);
+
+    let id = Number(body.id) || 0;
+    if (id) {
+      if (!verifySurveyToken(body.token, id)) {
+        res.status(401).json({ error: 'bad or expired survey token — refresh the page to start over' });
+        return;
+      }
+    } else {
+      const rt = sEnum(a.respondent_type, RESPONDENT_TYPES);
+      if (!rt) { res.status(400).json({ error: 'respondent_type required to start' }); return; }
+      const source = sTxt(body.source, 60) || 'survey';
+      const ins = await db`
+        INSERT INTO survey_responses (survey_version, source, respondent_type)
+        VALUES (${SURVEY_VERSION}, ${source}, ${rt}) RETURNING id`;
+      id = Number(ins[0].id);
+    }
+
+    const email = sTxt(a.email, 254);
+    const validEmail = email && EMAIL_RE.test(email) ? email.toLowerCase() : null;
+    const marketing = sArr(a.marketing_permissions, 12, 60);
+    // Derived flags (spec fields) — computed here, not trusted from the client.
+    const pilotCandidate = sEnum(a.evaluation_program_interest, YMN) === 'yes';
+    const earlyAccess = !!(marketing && marketing.includes('early_access'))
+      || sEnum(a.founding_purchase_interest, YMN) === 'yes';
+
+    // One static UPDATE of every client-writable column — the page re-sends
+    // its whole answer state each save, so absent answers simply write NULL
+    // again. Payment columns are deliberately NOT in this list.
+    await db`
+      UPDATE survey_responses SET
+        updated_at = NOW(),
+        email = ${validEmail},
+        respondent_type = ${sEnum(a.respondent_type, RESPONDENT_TYPES)},
+        child_age_range = ${sTxt(a.child_age_range, 30)},
+        communication_methods = ${jb(sArr(a.communication_methods))},
+        spoken_language_level = ${sTxt(a.spoken_language_level, 80)},
+        current_aac_system = ${sTxt(a.current_aac_system, 60)},
+        current_aac_other = ${sTxt(a.current_aac_other, 120)},
+        current_aac_likes = ${sTxt(a.current_aac_likes, 2000)},
+        current_aac_frustrations = ${sTxt(a.current_aac_frustrations, 2000)},
+        interests = ${jb(sArr(a.interests))},
+        preferred_shows_books_styles = ${jb(sArr(a.preferred_shows_books_styles, 24, 80))},
+        family_goals = ${jb(sArr(a.family_goals, 5, 80))},
+        family_goal_other = ${sTxt(a.family_goal_other, 200)},
+        six_month_goal_text = ${sTxt(a.six_month_goal_text, 2000)},
+        preferred_purchase_tier = ${sEnum(a.preferred_purchase_tier, TIERS)},
+        purchase_value_drivers = ${jb(sArr(a.purchase_value_drivers, 3, 60))},
+        purchase_value_text = ${sTxt(a.purchase_value_text, 2000)},
+        subscription_preference = ${sEnum(a.subscription_preference, SUBS)},
+        language_interest = ${sEnum(a.language_interest, YMN)},
+        languages_requested = ${jb(sArr(a.languages_requested, 24, 60))},
+        language_other = ${sTxt(a.language_other, 120)},
+        language_use_cases = ${jb(sArr(a.language_use_cases, 12, 80))},
+        sign_language_interest = ${sEnum(a.sign_language_interest, SIGN_INTEREST)},
+        sign_features_requested = ${jb(sArr(a.sign_features_requested, 12, 80))},
+        signed_language_requested = ${sTxt(a.signed_language_requested, 40)},
+        signed_language_other = ${sTxt(a.signed_language_other, 120)},
+        data_sharing_interest = ${sEnum(a.data_sharing_interest, YMN)},
+        founding_purchase_interest = ${sEnum(a.founding_purchase_interest, YMN)},
+        professional_role = ${sTxt(a.professional_role, 60)},
+        organization = ${sTxt(a.organization, 200)},
+        professional_website = ${sTxt(a.professional_website, 254)},
+        professional_email = ${sTxt(a.professional_email, 254)},
+        professional_phone = ${sTxt(a.professional_phone, 40)},
+        potential_children_served = ${sTxt(a.potential_children_served, 20)},
+        professional_age_ranges = ${jb(sArr(a.professional_age_ranges, 10, 30))},
+        professional_aac_systems = ${jb(sArr(a.professional_aac_systems, 24, 60))},
+        professional_aac_other = ${sTxt(a.professional_aac_other, 200)},
+        professional_problems_text = ${sTxt(a.professional_problems_text, 2000)},
+        professional_feature_interests = ${jb(sArr(a.professional_feature_interests, 20, 60))},
+        professional_time_saver_text = ${sTxt(a.professional_time_saver_text, 2000)},
+        professional_purchasing_model = ${sTxt(a.professional_purchasing_model, 80)},
+        volume_license_interest = ${sEnum(a.volume_license_interest, YMN)},
+        estimated_license_volume = ${sTxt(a.estimated_license_volume, 20)},
+        pilot_willingness = ${sEnum(a.pilot_willingness, YMN)},
+        direct_contact_willingness = ${sEnum(a.direct_contact_willingness, YMN)},
+        preferred_contact_text = ${sTxt(a.preferred_contact_text, 300)},
+        evaluation_program_interest = ${sEnum(a.evaluation_program_interest, YMN)},
+        professional_pilot_candidate = ${pilotCandidate},
+        general_interest_text = ${sTxt(a.general_interest_text, 2000)},
+        general_for_whom = ${sTxt(a.general_for_whom, 120)},
+        feature_interests = ${jb(sArr(a.feature_interests, 20, 60))},
+        marketing_permissions = ${jb(marketing)},
+        early_access_interest = ${earlyAccess}
+      WHERE id = ${id}`;
+
+    if (body.complete === true) {
+      await db`UPDATE survey_responses SET completed_at = COALESCE(completed_at, NOW()) WHERE id = ${id}`;
+      // A completed survey with an email joins the plain waitlist too (unless
+      // that email is already on it) so "total waitlist" stays one number.
+      if (validEmail) {
+        const ex = await db`SELECT id FROM waitlist WHERE email = ${validEmail} LIMIT 1`;
+        if (!ex.length) {
+          await db`INSERT INTO waitlist (email, source) VALUES (${validEmail}, 'survey')`;
+        }
+      }
+    }
+
+    res.status(200).json({ ok: true, id, token: mintSurveyToken(id) });
+  } catch (err) {
+    res.status(500).json({ error: 'Save failed', detail: String(err.message || err) });
+  }
+}
+
+// Public sold-out probe for the /survey founding card. Deliberately returns
+// only open/closed — the live "n of 100" counter is admin-only (dashboard).
+async function foundingStatus(req, res) {
+  try {
+    const db = sql();
+    await ensureSurvey(db);
+    const n = Number((await db`
+      SELECT COUNT(*)::int AS n FROM survey_responses
+      WHERE cohort = 'founding_100' AND payment_status = 'paid'`)[0]?.n) || 0;
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).json({ ok: true, open: n < FOUNDING_CAP });
+  } catch (err) {
+    // Fail OPEN like founding.html's capacity probe — checkout re-enforces
+    // the cap server-side, so a DB hiccup here must not hide the offer.
+    res.status(200).json({ ok: true, open: true });
   }
 }
 

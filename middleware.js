@@ -36,7 +36,10 @@ function isPublicPage(pathname) {
     || pathname === '/signup' || pathname === '/signup.html'
     // The Founding Family letter — the education-first door to an invite
     // code. Public by definition: it's how a stranger becomes a family.
-    || pathname === '/founding' || pathname === '/founding.html';
+    || pathname === '/founding' || pathname === '/founding.html'
+    // The waitlist & product-discovery survey — a lead-capture funnel, so it
+    // must load for complete strangers.
+    || pathname === '/survey' || pathname === '/survey.html';
 }
 
 export default async function middleware(req) {

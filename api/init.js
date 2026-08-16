@@ -844,6 +844,102 @@ Size: {size}.',
     `;
     await db`CREATE INDEX IF NOT EXISTS waitlist_email_idx   ON waitlist(email)`;
     await db`CREATE INDEX IF NOT EXISTS waitlist_created_idx ON waitlist(created_at DESC)`;
+    // Concierge-funnel columns + photo table (runtime migration lives in
+    // api/waitlist.js ensureWaitlist — this is the canonical mirror).
+    await db`ALTER TABLE waitlist ADD COLUMN IF NOT EXISTS photo_consent TEXT`;
+    await db`ALTER TABLE waitlist ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`;
+    await db`ALTER TABLE waitlist ADD COLUMN IF NOT EXISTS paid_sku TEXT`;
+    await db`ALTER TABLE waitlist ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`;
+    await db`ALTER TABLE waitlist ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT`;
+    await db`ALTER TABLE waitlist ADD COLUMN IF NOT EXISTS invite_code TEXT`;
+    await db`ALTER TABLE waitlist ADD COLUMN IF NOT EXISTS linked_user_id BIGINT`;
+    await db`
+      CREATE TABLE IF NOT EXISTS waitlist_photos (
+        id BIGSERIAL PRIMARY KEY,
+        waitlist_id BIGINT NOT NULL,
+        blob_key TEXT NOT NULL,
+        name TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS waitlist_photos_row_idx ON waitlist_photos(waitlist_id)`;
+
+    // ---- Product-discovery survey (/survey) ----
+    // One column per answer, multi-selects as JSONB arrays; payment columns
+    // are written ONLY by the Stripe webhook. Runtime migration:
+    // api/waitlist.js ensureSurvey (kept in lockstep with this DDL).
+    await db`
+      CREATE TABLE IF NOT EXISTS survey_responses (
+        id BIGSERIAL PRIMARY KEY,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed_at TIMESTAMPTZ,
+        survey_version TEXT,
+        source TEXT,
+        email  TEXT,
+        respondent_type TEXT,
+        child_age_range TEXT,
+        communication_methods JSONB,
+        spoken_language_level TEXT,
+        current_aac_system TEXT,
+        current_aac_other TEXT,
+        current_aac_likes TEXT,
+        current_aac_frustrations TEXT,
+        interests JSONB,
+        preferred_shows_books_styles JSONB,
+        family_goals JSONB,
+        family_goal_other TEXT,
+        six_month_goal_text TEXT,
+        preferred_purchase_tier TEXT,
+        purchase_value_drivers JSONB,
+        purchase_value_text TEXT,
+        subscription_preference TEXT,
+        language_interest TEXT,
+        languages_requested JSONB,
+        language_other TEXT,
+        language_use_cases JSONB,
+        sign_language_interest TEXT,
+        sign_features_requested JSONB,
+        signed_language_requested TEXT,
+        signed_language_other TEXT,
+        data_sharing_interest TEXT,
+        founding_purchase_interest TEXT,
+        founding_family BOOLEAN NOT NULL DEFAULT FALSE,
+        founding_purchase_price NUMERIC(10,2),
+        cohort TEXT,
+        payment_status TEXT,
+        stripe_session_id TEXT,
+        stripe_customer_id TEXT,
+        paid_at TIMESTAMPTZ,
+        professional_role TEXT,
+        organization TEXT,
+        professional_website TEXT,
+        professional_email TEXT,
+        professional_phone TEXT,
+        potential_children_served TEXT,
+        professional_age_ranges JSONB,
+        professional_aac_systems JSONB,
+        professional_aac_other TEXT,
+        professional_problems_text TEXT,
+        professional_feature_interests JSONB,
+        professional_time_saver_text TEXT,
+        professional_purchasing_model TEXT,
+        volume_license_interest TEXT,
+        estimated_license_volume TEXT,
+        pilot_willingness TEXT,
+        direct_contact_willingness TEXT,
+        preferred_contact_text TEXT,
+        evaluation_program_interest TEXT,
+        professional_pilot_candidate BOOLEAN NOT NULL DEFAULT FALSE,
+        general_interest_text TEXT,
+        general_for_whom TEXT,
+        feature_interests JSONB,
+        marketing_permissions JSONB,
+        early_access_interest BOOLEAN NOT NULL DEFAULT FALSE
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS survey_email_idx   ON survey_responses(email)`;
+    await db`CREATE INDEX IF NOT EXISTS survey_created_idx ON survey_responses(created_at DESC)`;
 
     // ---- People identities: name vs. relationship (docs/people-data-model.md) ----
     // The real person behind the People-section tiles. Separates the spoken/shown
