@@ -386,10 +386,34 @@
   const audioEl = new Audio();
   // Tap-again-to-learn (default ON — the same show-of-value the iOS practice
   // board ships): a re-tap inside 2s walks the tile's teaching facts (fact 1,
-  // fact 2, fact 3, then back to the word). Facts speak via the browser voice
-  // (speakLocal) — the demo clip library covers labels only, and the practice
-  // page never calls live TTS.
+  // fact 2, fact 3, then back to the word). Facts play the voice's
+  // PRE-RENDERED clips at demo-audio/<vid>/facts/<sha16>.mp3 (built in the
+  // Voice library; hash recipe in LOCKSTEP with the Lab builder + iOS:
+  // NFC → trim → collapse whitespace → sha256 hex, first 16), with the
+  // browser voice as the fallback. Never live TTS on this page.
   let _teachLabel = null, _teachAt = 0, _teachIdx = 0;
+  const _factHashes = new Map();
+  async function factHash(text) {
+    const norm = String(text || '').normalize('NFC').trim().replace(/\s+/g, ' ');
+    if (_factHashes.has(norm)) return _factHashes.get(norm);
+    let h = null;
+    try {
+      const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(norm));
+      h = [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('').slice(0, 16);
+    } catch (_) { /* insecure context → browser-voice fallback */ }
+    _factHashes.set(norm, h);
+    return h;
+  }
+  function speakFact(text) {
+    if (!VOICE) { speakLocal(text); return; }
+    factHash(text).then((h) => {
+      if (!h) { speakLocal(text); return; }
+      audioEl.src = media('demo-audio/' + VOICE + '/facts/' + h + '.mp3');
+      audioEl.currentTime = 0;
+      audioEl.play().catch(() => speakLocal(text));
+      audioEl.onerror = () => speakLocal(text);
+    });
+  }
   function tapTile(t) {
     const clues = (PDISP.teachTap !== false && t && Array.isArray(t.descriptiveClues))
       ? t.descriptiveClues.filter(Boolean).slice(0, 3) : [];
@@ -397,7 +421,7 @@
       _teachAt = Date.now();
       if (_teachIdx < clues.length) {
         noteTap(t.label);
-        speakLocal(clues[_teachIdx]);
+        speakFact(clues[_teachIdx]);
         _teachIdx++;
         return;
       }

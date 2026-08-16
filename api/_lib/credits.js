@@ -86,10 +86,17 @@ export function subscriptionBySku(sku) {
 
 // What a tier can do. Free = the onboarding portraits (child + parent) plus
 // the shared default board; every paid tier turns the platform features on.
+// gapFill (the listening-driven vocabulary suggestions — both the canonical
+// queue and the new-word ledger) is the $9.99+ hook per the gap-fill spec:
+// the $4.99 tier keeps the growing shared library and pushed vocabulary, but
+// the board does not ALSO listen for what to offer next. GF-22: clients
+// suppress the prompts entirely at ineligible tiers — never a greyed-out
+// tease on the child's board.
 export function tierFeatures(sub) {
   const paid = !!sub;
   return {
     stt: paid, autoTeach: paid, reporting: paid, dataSaving: paid,
+    gapFill: paid && sub.sku !== 'starter.monthly',
     voiceCharsPerMonth: sub ? sub.voiceCharsPerMonth : 0,
   };
 }

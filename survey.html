@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Help Shape My World · My World: Tap to Talk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --pink:#ff1493; --pink-mid:#c2185b; --pink-deep:#ad1457; --ink:#1f2937;
+          --muted:#6b7280; --faint:#9ca3af; --line:#fce4ec; --bg:#fdf2f8; --accent:#ffd400; }
+  * { box-sizing:border-box; margin:0; }
+  body { font:16px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:var(--bg); }
+  .wrap { max-width:680px; margin:0 auto; padding:26px 18px 40px; }
+  .brand { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .brand img { height:34px; }
+  .brand b { color:var(--pink-deep); font-size:18px; font-family:'Fredoka', ui-rounded, system-ui, sans-serif; }
+  .progress { height:8px; border-radius:99px; background:#fff; border:1px solid var(--line); overflow:hidden; margin-bottom:16px; }
+  .progress i { display:block; height:100%; width:0%; background:linear-gradient(90deg, var(--pink), var(--pink-mid)); transition:width .25s ease; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:22px; padding:26px 24px 24px; box-shadow:0 10px 34px rgba(173,20,87,.07); }
+  .eyebrow { font-size:12px; text-transform:uppercase; letter-spacing:.12em; color:var(--pink-mid); font-weight:700; margin-bottom:6px; }
+  h1 { font-family:'Fredoka', ui-rounded, system-ui, sans-serif; font-size:24px; color:var(--pink-deep); line-height:1.25; margin-bottom:10px; }
+  .intro { color:var(--muted); font-size:14.5px; margin-bottom:16px; }
+  .why { background:var(--bg); border-radius:12px; padding:11px 13px; font-size:13px; color:var(--muted); margin:12px 0 4px; }
+  .opts { display:flex; flex-direction:column; gap:9px; margin-top:14px; }
+  .opt { display:block; width:100%; text-align:left; background:#fff; border:2px solid var(--line); border-radius:14px;
+         padding:13px 15px; font:inherit; font-size:15.5px; cursor:pointer; transition:border-color .1s, background .1s; }
+  .opt:hover { border-color:var(--pink); }
+  .opt.sel { border-color:var(--pink); background:#fff0f6; }
+  .opt small { display:block; color:var(--muted); font-size:13px; margin-top:2px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .chip { background:#fff; border:2px solid var(--line); border-radius:999px; padding:9px 15px; font:inherit; font-size:14.5px;
+          cursor:pointer; transition:border-color .1s, background .1s; }
+  .chip:hover { border-color:var(--pink); }
+  .chip.sel { border-color:var(--pink); background:#fff0f6; font-weight:600; }
+  textarea, input[type=text], input[type=email], input[type=tel], input[type=url] {
+    width:100%; border:2px solid var(--line); border-radius:14px; padding:12px 14px; font:inherit; font-size:15px;
+    background:#fff; outline:none; }
+  textarea:focus, input:focus { border-color:var(--pink); }
+  textarea { min-height:110px; resize:vertical; }
+  .nav { display:flex; gap:10px; align-items:center; margin-top:18px; }
+  .btn { display:inline-block; background:var(--pink); color:#fff; text-decoration:none; font-weight:700;
+         padding:13px 24px; border-radius:999px; border:none; font:inherit; font-weight:700; cursor:pointer; }
+  .btn[disabled] { opacity:.45; cursor:default; }
+  .btn.ghost { background:#fff0f6; color:var(--pink-deep); }
+  .back { background:none; border:none; color:var(--muted); font:inherit; font-size:14px; cursor:pointer; padding:10px 6px; }
+  .count { font-size:13px; color:var(--muted); margin-left:auto; }
+  .msg { min-height:18px; font-size:13.5px; color:var(--muted); margin-top:10px; }
+  .msg.ok { color:#047857; font-weight:700; }
+  .msg.err { color:#dc2626; }
+  .tiny { font-size:12.5px; color:var(--muted); }
+  a { color:var(--pink-deep); }
+  /* Product cards (Q12 / Q15 / founding gate) */
+  .pcards { display:flex; flex-direction:column; gap:12px; margin-top:14px; }
+  .pcard { border:2px solid var(--line); border-radius:16px; padding:16px 16px 14px; cursor:pointer; position:relative;
+           background:#fff; transition:border-color .1s, background .1s; }
+  .pcard:hover { border-color:var(--pink); }
+  .pcard.sel { border-color:var(--pink); background:#fff0f6; }
+  .pcard .badge { position:absolute; top:-11px; right:14px; background:var(--accent); color:var(--ink); font-size:11.5px;
+                  font-weight:700; border-radius:999px; padding:3px 11px; }
+  .pcard h3 { font-family:'Fredoka', ui-rounded, system-ui, sans-serif; font-size:17px; color:var(--pink-deep); }
+  .pcard .price { font-size:22px; font-weight:800; color:var(--ink); margin:2px 0 6px; }
+  .pcard .price small { font-size:13px; color:var(--muted); font-weight:600; }
+  .pcard ul { margin:0; padding-left:19px; font-size:13.5px; color:var(--ink); }
+  .pcard ul li { margin-bottom:3px; }
+  .strike { color:var(--faint); text-decoration:line-through; font-size:16px; font-weight:600; margin-right:8px; }
+  .fcard { border:2px dashed var(--pink); border-radius:16px; background:var(--bg); padding:18px 16px; margin-top:14px; }
+  .tagrow { display:flex; gap:8px; margin-top:14px; }
+  .tagrow input { flex:1; }
+  .search { margin-top:14px; }
+  .ack { display:flex; gap:10px; align-items:flex-start; padding:12px 13px; border:1px solid var(--line);
+         border-radius:12px; margin-top:12px; font-size:14px; background:#fff; }
+  .ack input { margin-top:3px; flex:0 0 auto; }
+  .center { text-align:center; }
+  @media (max-width:900px) { .card { padding:22px 16px 20px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><img src="/icons/myworld-globe.png" alt=""><b>My World · Tap to Talk</b></div>
+  <div class="progress"><i id="bar"></i></div>
+  <div class="card" id="card"></div>
+  <p class="tiny center" style="margin-top:16px;">
+    <a href="/practice">Try the board live</a> · <a href="/founding">Read the Founding Family letter</a> · <a href="/">Home</a>
+  </p>
+</div>
+
+<div style="text-align:center;font-size:12px;color:#9ca3af;padding:18px 10px;">© My World Tap to Talk LLC · <a href="/terms" style="color:#c2185b;">Terms</a> · <a href="/privacy" style="color:#c2185b;">Privacy</a> · My World supports communication practice at home. It isn’t a medical device and doesn’t replace your child’s care team.</div>
+
+<script>
+(() => {
+  // ── State ─────────────────────────────────────────────────────────────────
+  // S.a is the whole answer object, re-sent on every save (the server writes
+  // every column each time, so partial local state is never a problem).
+  const LS_KEY = 'mw_survey_v1';
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const S = { id: 0, token: null, a: {}, stepId: null, paid: false };
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+    if (saved && typeof saved === 'object') Object.assign(S, saved);
+  } catch (_) {}
+
+  const qp = new URLSearchParams(location.search);
+  if (qp.get('paid') === '1') { S.paid = true; S.a.founding_purchase_interest = 'yes'; S.stepId = 'paysuccess'; }
+  const canceled = qp.get('canceled') === '1';
+  if (canceled && S.stepId !== 'paysuccess') S.stepId = 'founding';
+
+  function persist() { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (_) {} }
+
+  // ── Progressive save ──────────────────────────────────────────────────────
+  // First save (after Q1) creates the row and mints the token; later saves
+  // ride a promise chain so they can never land out of order.
+  let chain = Promise.resolve();
+  function save(complete) {
+    chain = chain.then(async () => {
+      try {
+        const r = await fetch('/api/waitlist?action=survey', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: S.id || undefined, token: S.token || undefined,
+                                 answers: S.a, complete: complete === true, source: 'survey' }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (r.ok && d.id) { S.id = d.id; S.token = d.token; persist(); }
+      } catch (_) { /* offline mid-survey — localStorage keeps the answers */ }
+    });
+    return chain;
+  }
+
+  // ── Option lists ──────────────────────────────────────────────────────────
+  const AGES = ['Under 2', '2–3', '4–5', '6–8', '9–12', '13–17', '18+'];
+  const AAC_SYSTEMS = ['PECS / physical picture system', 'Proloquo / Proloquo2Go', 'TouchChat', 'TD Snap',
+                       'LAMP Words for Life', 'Avaz', 'CoughDrop', 'Spoken'];
+  const LANGS = ['Spanish', 'Mandarin Chinese', 'Cantonese', 'French', 'German', 'Japanese', 'Korean', 'Arabic',
+                 'Portuguese', 'Italian', 'Hindi', 'Vietnamese', 'Tagalog', 'Russian', 'Ukrainian', 'Polish',
+                 'Dutch', 'Turkish', 'Hebrew'];
+  const YMN = [ { v:'yes', l:'Yes' }, { v:'maybe', l:'Maybe' }, { v:'no', l:'No / not relevant to us' } ];
+
+  const isPro = (a) => ['slp','ot','teacher','clinic','professional_other'].includes(a.respondent_type);
+  const isFam = (a) => a.respondent_type === 'parent';
+  const isGen = (a) => a.respondent_type === 'general';
+  const usesAAC = (a) => Array.isArray(a.communication_methods) && a.communication_methods.some((m) =>
+    ['Picture cards / PECS', 'AAC app', 'Dedicated AAC device'].includes(m));
+  const hasSystem = (a) => usesAAC(a) && a.current_aac_system && !['None', 'Prefer not to say'].includes(a.current_aac_system);
+
+  // ── Steps ─────────────────────────────────────────────────────────────────
+  // Each step: { id, when(a)?, type, key?, ... }. The visible flow is STEPS
+  // filtered by when() — branching is just predicates, in document order.
+  const STEPS = [
+    { id: 'welcome', type: 'info', title: 'Help shape My World 💛',
+      html: '<p class="intro">My World: Tap to Talk builds personalized communication boards from a child\'s own world — their people, their places, the pictures they love. We\'re deciding what to build next, and your answers directly shape it.</p>'
+          + '<p class="intro">This takes about 3–6 minutes. Skip anything you aren\'t comfortable answering.</p>',
+      btn: 'Let\'s go' },
+
+    { id: 'q1', type: 'single', key: 'respondent_type', title: 'Who are you here for?',
+      opts: [ { v:'parent', l:'I\'m a parent or caregiver' },
+              { v:'slp', l:'I\'m a speech-language pathologist (SLP)' },
+              { v:'ot', l:'I\'m an occupational therapist (OT)' },
+              { v:'teacher', l:'I\'m a teacher / special educator' },
+              { v:'clinic', l:'I work for a clinic or therapy practice' },
+              { v:'professional_other', l:'Other professional' },
+              { v:'general', l:'I\'m just interested in My World' } ] },
+
+    // ── FAMILY ──
+    { id: 'q2', when: isFam, type: 'single', key: 'child_age_range',
+      eyebrow: 'Tell us about your child',
+      title: 'How old is your child?',
+      intro: 'Every child communicates differently. These questions help us understand who My World needs to work for. Skip anything you aren\'t comfortable answering.',
+      opts: AGES.map((v) => ({ v, l: v })).concat([{ v:'Prefer not to say', l:'Prefer not to say' }]) },
+
+    { id: 'q3', when: isFam, type: 'multi', key: 'communication_methods',
+      title: 'How does your child communicate today?', intro: 'Select all that apply.',
+      opts: ['Spoken words', 'Sounds / vocalizations', 'Gestures', 'Pointing', 'Leading someone to what they want',
+             'Sign language / signs', 'Picture cards / PECS', 'AAC app', 'Dedicated AAC device', 'Typing / spelling',
+             'Other'].map((v) => ({ v, l: v })).concat([{ v:'We\'re still figuring this out', l:'We\'re still figuring this out', ex: true }]) },
+
+    { id: 'q4', when: isFam, type: 'single', key: 'spoken_language_level',
+      title: 'How would you describe their spoken communication?',
+      opts: ['Not currently using spoken words', 'Uses a few spoken words', 'Uses many individual words',
+             'Uses short phrases', 'Uses sentences', 'Speech is difficult for unfamiliar people to understand',
+             'Speech varies significantly depending on the situation', 'Not sure', 'Not relevant to us']
+             .map((v) => ({ v, l: v })) },
+
+    { id: 'q5', when: (a) => isFam(a) && usesAAC(a), type: 'single', key: 'current_aac_system',
+      title: 'What does your child currently use for AAC?', otherKey: 'current_aac_other',
+      opts: [{ v:'None', l:'None' }].concat(AAC_SYSTEMS.map((v) => ({ v, l: v })))
+            .concat([{ v:'Other', l:'Other' }, { v:'Prefer not to say', l:'Prefer not to say' }]) },
+
+    { id: 'q6', when: (a) => isFam(a) && hasSystem(a), type: 'text', key: 'current_aac_likes', optional: true,
+      title: 'What works well about what you use today?' },
+
+    { id: 'q7', when: (a) => isFam(a) && hasSystem(a), type: 'text', key: 'current_aac_frustrations', optional: true,
+      title: 'What frustrates you or your child about it?',
+      intro: 'Honest answers help the most — this is exactly what we\'re trying to fix.' },
+
+    { id: 'q8', when: isFam, type: 'multi', key: 'interests',
+      eyebrow: 'Attention & interests',
+      title: 'Are there particular things your child will reliably pay attention to?',
+      intro: 'My World can build communication around things a child already loves. Knowing what captures your child\'s attention can also help us decide which visual styles to support.',
+      opts: ['Favorite TV show', 'Movie', 'Book', 'Characters', 'Video game', 'Animals', 'Vehicles', 'Music',
+             'Specific objects or toys', 'People they know', 'Other'].map((v) => ({ v, l: v }))
+            .concat([{ v:'Nothing consistently', l:'Nothing consistently', ex: true },
+                     { v:'Not relevant to us', l:'Not relevant to us', ex: true }]) },
+
+    { id: 'q9', when: isFam, type: 'tags', key: 'preferred_shows_books_styles', optional: true,
+      title: 'What show, book, character, game, or visual world gets their attention?',
+      placeholder: 'Bluey, Cars, Minecraft, The Very Hungry Caterpillar…',
+      why: 'Why we\'re asking: if many families request a similar visual style, we may be able to build a supported style once and make it available much more affordably than creating it individually. Your answers are evidence about the kinds of visuals kids love — not a promise to reproduce licensed characters.' },
+
+    { id: 'q10', when: isFam, type: 'multi', key: 'family_goals', max: 5,
+      eyebrow: 'What families want help with',
+      title: 'What would you most like My World to help your child do?',
+      intro: 'Choose up to 5.', otherKey: 'family_goal_other', otherV: 'Something else',
+      opts: ['Communicate basic wants and needs', 'Reduce communication frustration', 'Ask for help',
+             'Communicate feelings', 'Learn new words', 'Understand spoken words', 'Use more spoken words',
+             'Build two-word combinations', 'Build longer sentences', 'Communicate with people outside the family',
+             'Participate at school', 'Communicate during therapy', 'Learn social language',
+             'Prepare for unfamiliar situations', 'Learn another language', 'Learn or use sign language',
+             'Something else'].map((v) => ({ v, l: v })) },
+
+    { id: 'q11', when: isFam, type: 'text', key: 'six_month_goal_text', optional: true,
+      title: 'If My World worked wonderfully for your family, what would you hope was different six months from now?' },
+
+    { id: 'q12', when: isFam, type: 'cards', key: 'preferred_purchase_tier',
+      eyebrow: 'What would actually work for your family',
+      title: 'Which one-time purchase would feel like the best fit?',
+      intro: 'We want My World to be affordable while still giving families meaningful personalization. We\'re considering several options. There are no wrong answers — we want to know what would actually work for your family.',
+      cards: [
+        { v:'essential', name:'Essential Board', price:'Under $50', per:'one time',
+          feats: ['Permanent AAC board', 'Core vocabulary', 'Smaller personalization allowance',
+                  'Standardized additional images', 'Limited voice choices', 'Choose from supported visual styles',
+                  'Works without an ongoing subscription'] },
+        { v:'personalized', name:'Personalized Board', price:'Around $99', per:'one time', badge:'Our planned standard option',
+          feats: ['Permanent AAC board', 'Larger personalized vocabulary', 'More image customization',
+                  'More voice options', 'More words / tiles / images', 'Choose from supported visual styles',
+                  'Works without an ongoing subscription'] },
+        { v:'bespoke', name:'Bespoke World', price:'Around $199', per:'one time',
+          feats: ['Permanent AAC board', 'Approximately 1,200 coordinated words / images',
+                  'A visual style created specifically for your child', 'Greater personalization',
+                  'Voice-cloning option', 'Full-board visual consistency', 'Works without an ongoing subscription'] } ],
+      opts: [ { v:'none_affordable', l:'I\'m interested, but none of these prices work for my family.' },
+              { v:'not_ready', l:'I\'m not ready to choose yet.' } ] },
+
+    { id: 'q13', when: isFam, type: 'multi', key: 'purchase_value_drivers', max: 3,
+      title: 'What matters most when deciding whether My World is worth purchasing?',
+      intro: 'Choose your top 3.',
+      opts: ['Lowest possible price', 'Number of included words', 'Personalized images', 'Custom visual style',
+             'Voice options', 'Voice cloning', 'Learning activities', 'Progress tracking', 'Parent access',
+             'No required subscription', 'Works offline', 'Privacy', 'Ability to keep everything permanently',
+             'Other'].map((v) => ({ v, l: v })) },
+
+    { id: 'q14', when: isFam, type: 'text', key: 'purchase_value_text', optional: true,
+      title: 'What would make My World feel worth the price to your family?' },
+
+    // LOCKSTEP: the Plus/Pro monthly credit numbers below mirror
+    // api/_lib/credits.js SUBSCRIPTIONS creditsPerPeriod (Plus 50, Pro 150).
+    // Never invent a new allowance here — update BOTH places together.
+    { id: 'q15', when: isFam, type: 'cards', key: 'subscription_preference',
+      eyebrow: 'Optional ongoing plans',
+      title: 'Which sounds most appropriate for your family?',
+      intro: '<b>Your child\'s board is theirs.</b> Optional plans add ongoing services, content and customization. If you ever cancel, you keep the board and everything you\'ve already purchased or created.',
+      cards: [
+        { v:'essentials', name:'My World Essentials', price:'$4.99', per:'/month',
+          feats: ['Ongoing access to standardized new images', 'New vocabulary additions', 'Seasonal words and boards',
+                  'Consistent text-to-speech voice for new content', 'Performance and stat tracking',
+                  'Shareable progress data', 'Ongoing software and service features',
+                  'No monthly custom-image generation credits'] },
+        { v:'plus', name:'My World Plus', price:'$9.99', per:'/month',
+          feats: ['Everything in Essentials', '50 personalized image credits every month',
+                  'Ongoing personalized image generation', 'Additional customization'] },
+        { v:'pro', name:'My World Pro', price:'$19.99', per:'/month',
+          feats: ['Everything in Plus', '150 image credits every month',
+                  'Ongoing parent / family voice-cloning support', 'Larger voice-generation allowance',
+                  'Highest personalization allowance', 'Early access to selected new capabilities'] } ],
+      after: 'Cancel anytime. Keep everything you\'ve already purchased or created.',
+      opts: [ { v:'no_subscription', l:'I would probably use the board without a subscription' },
+              { v:'not_sure', l:'I\'m not sure' },
+              { v:'none', l:'None of these' } ] },
+
+    // ── Future products (family; general gets a feature chip instead) ──
+    { id: 'qbooks', when: isFam, type: 'single', key: 'behavior_books_interest',
+      eyebrow: 'Help us decide what to build next',
+      title: 'Would personalized storybooks be useful to your family?',
+      intro: 'The following features are being explored and may not be available at launch. Your answers help us decide what families actually need.'
+           + '<br><br>Imagine a picture ebook starring <b>your child</b>, drawn in the same style as their board, gently walking through real situations — trying new foods, going to the dentist, getting a haircut, or practicing social cues like greetings and taking turns.',
+      opts: [ { v:'definitely', l:'Definitely' }, { v:'probably', l:'Probably' },
+              { v:'maybe', l:'Maybe' }, { v:'no', l:'No / not relevant to us' } ] },
+
+    { id: 'qbooks2', when: (a) => isFam(a) && ['definitely','probably','maybe'].includes(a.behavior_books_interest),
+      type: 'multi', key: 'behavior_book_topics', otherKey: 'behavior_book_other', otherV: 'Other',
+      title: 'Which situations would you want a book for first?', intro: 'Select all that apply.',
+      opts: ['Trying new foods / eating a wider diet', 'Going to the dentist', 'Doctor visits',
+             'Getting a haircut', 'Bedtime routine', 'Potty / toilet routines',
+             'Starting school or a new classroom', 'Riding in the car / travel',
+             'Waiting and taking turns', 'Greetings and social cues', 'Managing big feelings',
+             'Other'].map((v) => ({ v, l: v })) },
+
+    // ── Languages (family + general) ──
+    { id: 'q16', when: (a) => isFam(a) || isGen(a), type: 'single', key: 'language_interest',
+      eyebrow: 'Help us decide what to build next',
+      title: 'Would your family use My World in a language other than English?',
+      intro: 'Also being explored — may not be available at launch. Your answers help us decide what families actually need.',
+      opts: YMN },
+
+    { id: 'q17', when: (a) => (isFam(a) || isGen(a)) && ['yes','maybe'].includes(a.language_interest),
+      type: 'langs', key: 'languages_requested', otherKey: 'language_other',
+      title: 'Which languages?', intro: 'Pick as many as you need.' },
+
+    { id: 'q18', when: (a) => isFam(a) && ['yes','maybe'].includes(a.language_interest),
+      type: 'multi', key: 'language_use_cases',
+      title: 'How would you want those languages used?', intro: 'Select all that apply.',
+      opts: ['Child communicates primarily in our home language', 'Board should support both English and our home language',
+             'Different family members speak different languages', 'Help my child learn English',
+             'Help my child learn another language', 'Let spoken English appear visually in another language',
+             'Let another spoken language appear visually in English', 'Switch languages easily', 'Other']
+             .map((v) => ({ v, l: v })).concat([{ v:'Not relevant to us', l:'Not relevant to us', ex: true }]) },
+
+    // ── Sign language (family + general) ──
+    { id: 'q19', when: (a) => isFam(a) || isGen(a), type: 'single', key: 'sign_language_interest',
+      eyebrow: 'Sign language',
+      title: 'Would sign-language features be useful to your family?',
+      intro: 'We\'re exploring ways to connect spoken language, AAC and sign language so children and families can learn and communicate together.',
+      opts: [ { v:'definitely', l:'Definitely' }, { v:'probably', l:'Probably' },
+              { v:'maybe', l:'Maybe' }, { v:'no', l:'No / not relevant to us' } ] },
+
+    { id: 'q20', when: (a) => isFam(a) && ['definitely','probably','maybe'].includes(a.sign_language_interest),
+      type: 'multi', key: 'sign_features_requested',
+      title: 'Which capabilities would be useful?', intro: 'Select all that apply.',
+      opts: ['Tap a word to see its sign', 'See a short animation or video demonstrating the sign',
+             'Have words heard in Listening Mode appear as signs', 'Learn signs alongside my child',
+             'Practice signs by category', 'Include signs as another representation alongside my child\'s personalized image',
+             'Track which signs my child knows and uses', 'Other'].map((v) => ({ v, l: v })) },
+
+    { id: 'q21', when: (a) => (isFam(a) || isGen(a)) && ['definitely','probably','maybe'].includes(a.sign_language_interest),
+      type: 'single', key: 'signed_language_requested', otherKey: 'signed_language_other',
+      title: 'Which signed language would you need?',
+      opts: ['ASL', 'BSL', 'Auslan', 'LSF', 'DGS', 'JSL'].map((v) => ({ v, l: v }))
+            .concat([{ v:'Other', l:'Other' }, { v:'I\'m not sure', l:'I\'m not sure' }]) },
+
+    // ── Data-sharing + Founding gate (family only) ──
+    { id: 'q22', when: isFam, type: 'single', key: 'data_sharing_interest',
+      eyebrow: 'Early-access program',
+      title: 'Would you be willing to help us improve My World by sharing product-usage and learning data?',
+      intro: 'Early families can choose to share information about how My World is being used — such as which features are used, learning activity results, and communication progress. This helps us understand what works and what needs improvement.'
+           + '<br><br>Participation is optional. We\'ll explain exactly what is collected and how it is protected before you enroll.',
+      opts: [ { v:'yes', l:'Yes — I\'m interested in participating' },
+              { v:'maybe', l:'Maybe — I\'d like more information first' },
+              { v:'no', l:'No — I\'d prefer not to share usage data' } ] },
+
+    { id: 'founding', when: (a) => isFam(a) && ['yes','maybe'].includes(a.data_sharing_interest),
+      type: 'founding' },
+
+    { id: 'paysuccess', when: () => S.paid, type: 'info', title: '💛 You\'re a Founding Family',
+      html: '<p class="intro">Payment received — your Founding Personalized Board is reserved. Watch your inbox: your personal invite code and next steps are on the way.</p>'
+          + '<p class="intro">Two quick questions left so we know how to stay in touch.</p>',
+      btn: 'Finish up' },
+
+    // ── PROFESSIONAL ──
+    { id: 'p1', when: isPro, type: 'single', key: 'professional_role',
+      eyebrow: 'About your practice',
+      title: 'What best describes your role?',
+      opts: ['SLP', 'AAC specialist', 'OT', 'Teacher', 'Special education teacher', 'BCBA',
+             'Early-intervention provider', 'Clinic owner / administrator', 'Other'].map((v) => ({ v, l: v })) },
+
+    { id: 'p2', when: isPro, type: 'form', title: 'Where do you work?',
+      intro: 'Everything here is optional except email — it\'s how we\'d follow up about pilots and early access.',
+      fields: [ { key:'organization', l:'Organization / practice name', t:'text', optional:true },
+                { key:'professional_website', l:'Website', t:'url', optional:true },
+                { key:'professional_email', l:'Professional email', t:'email' },
+                { key:'professional_phone', l:'Phone number', t:'tel', optional:true } ] },
+
+    { id: 'p6', when: isPro, type: 'single', key: 'potential_children_served',
+      title: 'Approximately how many children do you currently serve who could potentially benefit from AAC?',
+      opts: ['1–5', '6–10', '11–25', '26–50', '51–100', '100+'].map((v) => ({ v, l: v })) },
+
+    { id: 'p7', when: isPro, type: 'multi', key: 'professional_age_ranges',
+      title: 'What age ranges do you primarily serve?', intro: 'Select all that apply.',
+      opts: AGES.map((v) => ({ v, l: v })) },
+
+    { id: 'p8', when: isPro, type: 'multi', key: 'professional_aac_systems', otherKey: 'professional_aac_other', otherV: 'Other',
+      title: 'What AAC systems do the children you serve currently use?', intro: 'Select all that apply.',
+      opts: AAC_SYSTEMS.map((v) => ({ v, l: v })).concat([{ v:'None / low-tech only', l:'None / low-tech only' }, { v:'Other', l:'Other' }]) },
+
+    { id: 'p9', when: isPro, type: 'text', key: 'professional_problems_text', optional: true,
+      title: 'What are the biggest problems you encounter with existing AAC systems?',
+      intro: 'Be blunt — this is the question we learn the most from.' },
+
+    { id: 'p10', when: isPro, type: 'multi', key: 'professional_feature_interests',
+      title: 'Which My World capabilities interest you most?', intro: 'Select all that apply.',
+      opts: ['Personalized vocabulary / images', 'Receptive-language teaching', 'Expressive-language tracking',
+             'Sentence building', 'Speech-assisted navigation', 'Listening Mode', 'Automated teaching',
+             'Quizzes / assessment', 'Parent dashboard', 'Longitudinal progress tracking', 'Shareable data',
+             'Multilingual AAC', 'Sign-language support', 'Personalized stories', 'Other'].map((v) => ({ v, l: v })) },
+
+    { id: 'p11', when: isPro, type: 'text', key: 'professional_time_saver_text', optional: true,
+      title: 'What could My World do that would save you the most time?' },
+
+    { id: 'p12', when: isPro, type: 'single', key: 'professional_purchasing_model',
+      eyebrow: 'Purchasing',
+      title: 'How would you most likely want access?',
+      opts: ['Families purchase their own licenses', 'Our practice purchases licenses for individual children',
+             'We purchase a discounted bundle of licenses', 'Practice-wide / site license',
+             'Professional account + families maintain individual licenses', 'School / district purchasing',
+             'I\'d only want to recommend the product', 'Not sure'].map((v) => ({ v, l: v })) },
+
+    { id: 'p13', when: isPro, type: 'single', key: 'volume_license_interest',
+      title: 'Would discounted volume licenses interest your organization?', opts: YMN },
+
+    { id: 'p14', when: (a) => isPro(a) && a.volume_license_interest === 'yes', type: 'single', key: 'estimated_license_volume',
+      title: 'Approximately how many licenses might you purchase annually?',
+      opts: ['1–5', '6–10', '11–25', '26–50', '51–100', '100+'].map((v) => ({ v, l: v })) },
+
+    { id: 'p15', when: isPro, type: 'single', key: 'pilot_willingness',
+      title: 'Would you be willing to pilot My World with children you currently serve?', opts: YMN },
+
+    { id: 'p16', when: isPro, type: 'single', key: 'direct_contact_willingness',
+      title: 'Would you be willing to speak directly with the My World team?', opts: YMN },
+
+    { id: 'p16b', when: (a) => isPro(a) && a.direct_contact_willingness === 'yes', type: 'form',
+      title: 'How should we reach you?',
+      fields: [ { key:'preferred_contact_text', l:'Preferred contact method and time (e.g. "email, weekday mornings")', t:'text' } ] },
+
+    { id: 'p17', when: isPro, type: 'single', key: 'evaluation_program_interest',
+      eyebrow: 'Early evaluation program',
+      title: 'Would you be interested in participating in an early evaluation program?',
+      intro: 'This may involve using My World with consenting families, providing structured professional feedback, reviewing progress and usage, helping identify problems, and potentially participating in future formal validation work.',
+      opts: [ { v:'yes', l:'Yes' }, { v:'maybe', l:'Maybe / contact me' }, { v:'no', l:'No' } ] },
+
+    // ── GENERAL INTEREST ──
+    { id: 'g1', when: isGen, type: 'text', key: 'general_interest_text', optional: true,
+      title: 'What interests you about My World?' },
+
+    { id: 'g2', when: isGen, type: 'single', key: 'general_for_whom',
+      title: 'Are you interested for a particular person?',
+      opts: ['My child', 'A grandchild or relative', 'A friend\'s child', 'A student or client', 'Myself',
+             'Just curious'].map((v) => ({ v, l: v })) },
+
+    { id: 'g3', when: isGen, type: 'multi', key: 'feature_interests',
+      title: 'Which features interest you?', intro: 'Select all that apply.',
+      opts: ['Personalized picture boards', 'Familiar visual styles', 'Text-to-speech voices', 'Voice cloning',
+             'Learning games and teaching', 'Listening Mode', 'Progress tracking', 'Multiple languages',
+             'Sign language', 'Personalized storybooks', 'Other'].map((v) => ({ v, l: v })) },
+
+    // ── CONTACT (everyone) ──
+    { id: 'contact', type: 'contact', title: 'How would you like to stay involved?' },
+
+    { id: 'done', type: 'done' },
+  ];
+
+  // ── Engine ────────────────────────────────────────────────────────────────
+  const card = document.getElementById('card');
+  const bar = document.getElementById('bar');
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  function flow() { return STEPS.filter((s) => !s.when || s.when(S.a)); }
+  function stepIndex(id) { const f = flow(); const i = f.findIndex((s) => s.id === id); return i < 0 ? 0 : i; }
+
+  function go(id) {
+    S.stepId = id; persist();
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function next() {
+    const f = flow(); const i = stepIndex(S.stepId);
+    if (i < f.length - 1) go(f[i + 1].id);
+  }
+  function back() {
+    const f = flow(); const i = stepIndex(S.stepId);
+    if (i > 0) go(f[i - 1].id);
+  }
+
+  function header(st) {
+    let h = '';
+    if (st.eyebrow) h += `<div class="eyebrow">${esc(st.eyebrow)}</div>`;
+    if (st.title) h += `<h1>${esc(st.title)}</h1>`;
+    if (st.intro) h += `<p class="intro">${st.intro}</p>`;
+    return h;
+  }
+  function navRow({ backBtn = true, cont = null, count = '' } = {}) {
+    return `<div class="nav">${backBtn ? '<button class="back" data-nav="back">← Back</button>' : ''}`
+         + (cont ? `<button class="btn" data-nav="next">${esc(cont)}</button>` : '')
+         + (count ? `<span class="count">${esc(count)}</span>` : '') + '</div>';
+  }
+
+  function render() {
+    const f = flow();
+    if (!S.stepId || !f.some((s) => s.id === S.stepId)) S.stepId = f[0].id;
+    const st = f[stepIndex(S.stepId)];
+    bar.style.width = Math.round(100 * stepIndex(S.stepId) / Math.max(1, f.length - 1)) + '%';
+
+    if (st.type === 'info')    return renderInfo(st);
+    if (st.type === 'single')  return renderSingle(st);
+    if (st.type === 'multi')   return renderMulti(st);
+    if (st.type === 'text')    return renderText(st);
+    if (st.type === 'tags')    return renderTags(st);
+    if (st.type === 'cards')   return renderCards(st);
+    if (st.type === 'langs')   return renderLangs(st);
+    if (st.type === 'form')    return renderForm(st);
+    if (st.type === 'founding') return renderFounding(st);
+    if (st.type === 'contact') return renderContact(st);
+    if (st.type === 'done')    return renderDone(st);
+  }
+
+  function wireNav(st) {
+    card.querySelectorAll('[data-nav]').forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.nav === 'back') back();
+    }));
+  }
+
+  function renderInfo(st) {
+    card.innerHTML = header(st) + (st.html || '')
+      + `<div class="nav">${st.id !== 'welcome' ? '' : ''}<button class="btn" id="go">${esc(st.btn || 'Continue')}</button></div>`;
+    card.querySelector('#go').addEventListener('click', () => next());
+  }
+
+  function renderSingle(st) {
+    const cur = S.a[st.key];
+    card.innerHTML = header(st)
+      + `<div class="opts">${st.opts.map((o) =>
+          `<button class="opt${cur === o.v ? ' sel' : ''}" data-v="${esc(o.v)}">${esc(o.l)}${o.d ? `<small>${esc(o.d)}</small>` : ''}</button>`).join('')}</div>`
+      + (st.otherKey ? `<div id="other-slot" style="margin-top:10px; display:${cur === 'Other' ? '' : 'none'};">
+          <input type="text" id="other-in" placeholder="Tell us which…" value="${esc(S.a[st.otherKey] || '')}"></div>` : '')
+      + navRow({ backBtn: st.id !== 'q1' });
+    wireNav(st);
+    card.querySelectorAll('.opt').forEach((b) => b.addEventListener('click', () => {
+      const v = b.dataset.v;
+      S.a[st.key] = v;
+      if (st.otherKey && v !== 'Other') { S.a[st.otherKey] = null; }
+      persist(); save();
+      if (st.otherKey && v === 'Other') {
+        card.querySelectorAll('.opt').forEach((x) => x.classList.toggle('sel', x === b));
+        const slot = card.querySelector('#other-slot');
+        slot.style.display = '';
+        const inp = card.querySelector('#other-in');
+        inp.focus();
+        if (!slot.dataset.wired) {
+          slot.dataset.wired = '1';
+          slot.insertAdjacentHTML('beforeend', '<div class="nav"><button class="btn" id="other-go">Continue</button></div>');
+          slot.querySelector('#other-go').addEventListener('click', () => {
+            S.a[st.otherKey] = inp.value.trim() || null; persist(); save(); next();
+          });
+        }
+        return;
+      }
+      next();
+    }));
+  }
+
+  function renderMulti(st) {
+    const sel = new Set(Array.isArray(S.a[st.key]) ? S.a[st.key] : []);
+    const exVals = st.opts.filter((o) => o.ex).map((o) => o.v);
+    card.innerHTML = header(st)
+      + `<div class="chips">${st.opts.map((o) =>
+          `<button class="chip${sel.has(o.v) ? ' sel' : ''}" data-v="${esc(o.v)}">${esc(o.l)}</button>`).join('')}</div>`
+      + (st.otherKey ? `<div id="other-slot" style="margin-top:10px; display:${sel.has(st.otherV) ? '' : 'none'};">
+          <input type="text" id="other-in" placeholder="Tell us more…" value="${esc(S.a[st.otherKey] || '')}"></div>` : '')
+      + navRow({ cont: 'Continue', count: st.max ? `up to ${st.max}` : '' });
+    wireNav(st);
+    const sync = () => {
+      card.querySelectorAll('.chip').forEach((c) => c.classList.toggle('sel', sel.has(c.dataset.v)));
+      if (st.otherKey) card.querySelector('#other-slot').style.display = sel.has(st.otherV) ? '' : 'none';
+    };
+    card.querySelectorAll('.chip').forEach((c) => c.addEventListener('click', () => {
+      const v = c.dataset.v;
+      if (sel.has(v)) sel.delete(v);
+      else {
+        if (exVals.includes(v)) sel.clear();               // exclusive option wipes the rest
+        else exVals.forEach((x) => sel.delete(x));         // real option wipes exclusives
+        if (st.max && [...sel].filter((x) => !exVals.includes(x)).length >= st.max) return;
+        sel.add(v);
+      }
+      sync();
+    }));
+    card.querySelector('[data-nav=next]').addEventListener('click', () => {
+      S.a[st.key] = sel.size ? [...sel] : null;
+      if (st.otherKey) {
+        const inp = card.querySelector('#other-in');
+        S.a[st.otherKey] = (sel.has(st.otherV) && inp) ? (inp.value.trim() || null) : null;
+      }
+      persist(); save(); next();
+    });
+  }
+
+  function renderText(st) {
+    card.innerHTML = header(st)
+      + `<textarea id="ta" placeholder="${esc(st.placeholder || 'Your thoughts…')}">${esc(S.a[st.key] || '')}</textarea>`
+      + (st.why ? `<div class="why">${esc(st.why)}</div>` : '')
+      + navRow({ cont: 'Continue' });
+    wireNav(st);
+    const ta = card.querySelector('#ta');
+    const btn = card.querySelector('[data-nav=next]');
+    const relabel = () => { btn.textContent = (ta.value.trim() || !st.optional) ? 'Continue' : 'Skip'; };
+    ta.addEventListener('input', relabel); relabel();
+    btn.addEventListener('click', () => { S.a[st.key] = ta.value.trim() || null; persist(); save(); next(); });
+  }
+
+  function renderTags(st) {
+    const tags = Array.isArray(S.a[st.key]) ? [...S.a[st.key]] : [];
+    card.innerHTML = header(st)
+      + `<div class="tagrow"><input type="text" id="tag-in" placeholder="${esc(st.placeholder || '')}">
+         <button class="btn ghost" id="tag-add">Add</button></div>
+         <div class="chips" id="tag-chips"></div>`
+      + (st.why ? `<div class="why">${esc(st.why)}</div>` : '')
+      + navRow({ cont: 'Continue' });
+    wireNav(st);
+    const chipsEl = card.querySelector('#tag-chips');
+    const inp = card.querySelector('#tag-in');
+    const draw = () => {
+      chipsEl.innerHTML = tags.map((t, i) => `<button class="chip sel" data-i="${i}">${esc(t)} ✕</button>`).join('');
+      chipsEl.querySelectorAll('.chip').forEach((c) => c.addEventListener('click', () => {
+        tags.splice(Number(c.dataset.i), 1); draw();
+      }));
+    };
+    const add = () => {
+      const v = inp.value.trim().slice(0, 80);
+      if (v && !tags.includes(v) && tags.length < 24) { tags.push(v); inp.value = ''; draw(); }
+      inp.focus();
+    };
+    card.querySelector('#tag-add').addEventListener('click', add);
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    draw();
+    card.querySelector('[data-nav=next]').addEventListener('click', () => {
+      add();   // capture anything still typed but not added
+      S.a[st.key] = tags.length ? tags : null; persist(); save(); next();
+    });
+  }
+
+  function renderCards(st) {
+    const cur = S.a[st.key];
+    card.innerHTML = header(st)
+      + `<div class="pcards">${st.cards.map((c) =>
+          `<div class="pcard${cur === c.v ? ' sel' : ''}" data-v="${esc(c.v)}">
+             ${c.badge ? `<span class="badge">${esc(c.badge)}</span>` : ''}
+             <h3>${esc(c.name)}</h3>
+             <div class="price">${c.strike ? `<span class="strike">${esc(c.strike)}</span>` : ''}${esc(c.price)} <small>${esc(c.per)}</small></div>
+             <ul>${c.feats.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+           </div>`).join('')}</div>`
+      + (st.after ? `<p class="tiny" style="margin-top:10px;">${esc(st.after)}</p>` : '')
+      + `<div class="opts">${(st.opts || []).map((o) =>
+          `<button class="opt${cur === o.v ? ' sel' : ''}" data-v="${esc(o.v)}">${esc(o.l)}</button>`).join('')}</div>`
+      + navRow({ cont: 'Continue' });
+    wireNav(st);
+    const pick = (v) => {
+      S.a[st.key] = v; persist(); save();
+      card.querySelectorAll('.pcard,.opt').forEach((x) => x.classList.toggle('sel', x.dataset.v === v));
+    };
+    card.querySelectorAll('.pcard,.opt').forEach((x) => x.addEventListener('click', () => pick(x.dataset.v)));
+    card.querySelector('[data-nav=next]').addEventListener('click', () => {
+      if (!S.a[st.key]) { pick(null); }
+      next();
+    });
+  }
+
+  function renderLangs(st) {
+    const sel = new Set(Array.isArray(S.a[st.key]) ? S.a[st.key] : []);
+    card.innerHTML = header(st)
+      + `<div class="search"><input type="text" id="lang-q" placeholder="Search languages…"></div>
+         <div class="chips" id="lang-chips"></div>
+         <div style="margin-top:10px;"><input type="text" id="lang-other" placeholder="Another language? Type it here…"
+              value="${esc(S.a[st.otherKey] || '')}"></div>`
+      + navRow({ cont: 'Continue' });
+    wireNav(st);
+    const chipsEl = card.querySelector('#lang-chips');
+    const q = card.querySelector('#lang-q');
+    const draw = () => {
+      const needle = q.value.trim().toLowerCase();
+      const list = LANGS.filter((l) => !needle || l.toLowerCase().includes(needle));
+      chipsEl.innerHTML = list.map((l) =>
+        `<button class="chip${sel.has(l) ? ' sel' : ''}" data-v="${esc(l)}">${esc(l)}</button>`).join('');
+      chipsEl.querySelectorAll('.chip').forEach((c) => c.addEventListener('click', () => {
+        const v = c.dataset.v;
+        if (sel.has(v)) sel.delete(v); else sel.add(v);
+        c.classList.toggle('sel', sel.has(v));
+      }));
+    };
+    q.addEventListener('input', draw); draw();
+    card.querySelector('[data-nav=next]').addEventListener('click', () => {
+      const other = card.querySelector('#lang-other').value.trim().slice(0, 120) || null;
+      const out = [...sel];
+      if (other) out.push(other);
+      S.a[st.key] = out.length ? out : null;
+      S.a[st.otherKey] = other;
+      persist(); save(); next();
+    });
+  }
+
+  function renderForm(st) {
+    card.innerHTML = header(st)
+      + st.fields.map((f) => `
+          <div style="margin-top:10px;">
+            <label class="tiny" style="font-weight:700;">${esc(f.l)}${f.optional ? ' <span style="font-weight:400;">(optional)</span>' : ''}</label>
+            <input type="${esc(f.t)}" data-k="${esc(f.key)}" value="${esc(S.a[f.key] || '')}" style="margin-top:4px;">
+          </div>`).join('')
+      + navRow({ cont: 'Continue' }) + '<p class="msg" id="form-msg"></p>';
+    wireNav(st);
+    card.querySelector('[data-nav=next]').addEventListener('click', () => {
+      const msg = card.querySelector('#form-msg');
+      for (const f of st.fields) {
+        const v = card.querySelector(`input[data-k="${f.key}"]`).value.trim();
+        if (!v && !f.optional) { msg.className = 'msg err'; msg.textContent = `Please add your ${f.l.toLowerCase()}.`; return; }
+        if (v && f.t === 'email' && !EMAIL_RE.test(v)) { msg.className = 'msg err'; msg.textContent = 'That email doesn\'t look right.'; return; }
+        S.a[f.key] = v || null;
+      }
+      if (st.fields.some((f) => f.t === 'email') && S.a.professional_email && !S.a.email) S.a.email = S.a.professional_email;
+      persist(); save(); next();
+    });
+  }
+
+  // ── Founding Family gate ──────────────────────────────────────────────────
+  // Shown only to families interested in the early-access program (Q22 yes;
+  // maybe sees the info but must affirm before payment unlocks). The seat cap
+  // is enforced server-side; this render just checks whether to show the
+  // offer at all. Framing matters: participation in the program earns the
+  // founding price — never "your data for a discount".
+  function renderFounding() {
+    const maybe = S.a.data_sharing_interest === 'maybe';
+    card.innerHTML = `
+      <div class="eyebrow">Founding Family Program</div>
+      <h1>Become a Founding Family</h1>
+      <p class="intro">We're inviting a limited number of families to be among the first to use My World.
+        We're looking for families willing to actively participate in our early-access program and help us
+        evaluate and improve My World. Participating families receive our founding-family price.</p>
+      <div id="f-slot"><p class="msg">Checking availability…</p></div>`;
+    fetch('/api/waitlist?action=founding-status').then((r) => r.json()).catch(() => ({ open: true }))
+      .then((d) => drawFounding(d && d.open !== false, maybe));
+  }
+
+  function drawFounding(open, maybe) {
+    const slot = document.getElementById('f-slot');
+    if (!slot) return;
+    if (!open) {
+      slot.innerHTML = `
+        <div class="fcard center">
+          <h3 style="font-family:'Fredoka',ui-rounded,system-ui,sans-serif;color:var(--pink-deep);">Founding Family spots are full.</h3>
+          <p class="intro" style="margin-top:6px;">Join the next early-access group — leave your email on the next screen
+            and you'll be first in line.</p>
+        </div>` + navRow({ cont: 'Continue' });
+      wireFoundingNav(slot, null);
+      return;
+    }
+    slot.innerHTML = `
+      <div class="fcard">
+        <h3 style="font-family:'Fredoka',ui-rounded,system-ui,sans-serif;font-size:19px;color:var(--pink-deep);">Founding Personalized Board</h3>
+        <div class="price" style="font-size:26px;font-weight:800;margin:4px 0 8px;">
+          <span class="strike">$99.99</span>$49.99 <small style="font-size:13px;color:var(--muted);font-weight:600;">one time</small></div>
+        <div class="tiny" style="margin-bottom:10px;font-weight:700;">Limited to the first 100 qualifying families</div>
+        <ul style="margin:0;padding-left:19px;font-size:14px;">
+          <li>Personalized communication board</li>
+          <li>Supported visual style</li>
+          <li>Permanent ownership</li>
+          <li>Launch personalization allowance</li>
+          <li>Early access</li>
+          <li>Direct opportunity to provide feedback</li>
+          <li>Optional subscription services</li>
+          <li>No subscription required to keep using the board</li>
+        </ul>
+      </div>
+      ${maybe ? `<label class="ack"><input type="checkbox" id="f-affirm">
+        <span>I'm interested in actively participating in the early-access program (we'll walk through the
+        exact participation and data terms before anything is collected).</span></label>` : ''}
+      <div style="margin-top:12px;">
+        <label class="tiny" style="font-weight:700;">Email for your receipt and invite code</label>
+        <input type="email" id="f-email" value="${esc(S.a.email || '')}" placeholder="you@example.com" style="margin-top:4px;">
+      </div>
+      <div class="opts">
+        <button class="opt" id="f-yes" style="border-color:var(--pink);font-weight:700;">YES — Reserve my board for $49.99</button>
+        <button class="opt" id="f-maybe">MAYBE — Send me more information</button>
+        <button class="opt" id="f-no">NO — Keep me on the waitlist</button>
+      </div>
+      <p class="msg" id="f-msg">${canceled ? 'Checkout canceled — no charge was made. You can try again any time.' : ''}</p>
+      <div class="nav"><button class="back" data-nav="back">← Back</button></div>`;
+    wireFoundingNav(slot, maybe);
+  }
+
+  function wireFoundingNav(slot, maybe) {
+    slot.querySelectorAll('[data-nav]').forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.nav === 'back') back();
+      if (b.dataset.nav === 'next') next();
+    }));
+    const msg = slot.querySelector('#f-msg');
+    const yes = slot.querySelector('#f-yes');
+    if (!yes) return;
+    yes.addEventListener('click', async () => {
+      const email = (slot.querySelector('#f-email').value || '').trim().toLowerCase();
+      if (!EMAIL_RE.test(email)) { msg.className = 'msg err'; msg.textContent = 'Add a valid email first — it\'s where your invite code goes.'; return; }
+      if (maybe) {
+        const affirm = slot.querySelector('#f-affirm');
+        if (!affirm || !affirm.checked) {
+          msg.className = 'msg err';
+          msg.textContent = 'Please confirm you\'re interested in the early-access program first — the founding price is for participating families.';
+          return;
+        }
+        S.a.data_sharing_interest = 'yes';
+      }
+      S.a.email = email;
+      S.a.founding_purchase_interest = 'yes';
+      persist();
+      yes.disabled = true;
+      msg.className = 'msg'; msg.textContent = 'Opening secure checkout…';
+      try {
+        await save();   // make sure the row + token exist and carry this state
+        if (!S.id || !S.token) throw new Error('Could not save your survey — please try again.');
+        const r = await fetch('/api/store?action=founding-checkout', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ surveyId: S.id, token: S.token, email }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (r.status === 409) {
+          msg.className = 'msg err';
+          msg.textContent = 'Founding Family spots are full. Join the next early-access group.';
+          yes.disabled = true;
+          return;
+        }
+        if (!r.ok || !d.url) throw new Error(d.error === 'stripe_not_configured'
+          ? 'Checkout isn\'t open quite yet — choose MAYBE and we\'ll email you the moment it is.'
+          : (d.detail || d.error || 'Checkout could not start. Please try again.'));
+        location.href = d.url;
+      } catch (err) {
+        yes.disabled = false;
+        msg.className = 'msg err'; msg.textContent = err.message;
+      }
+    });
+    slot.querySelector('#f-maybe').addEventListener('click', () => {
+      const email = (slot.querySelector('#f-email').value || '').trim().toLowerCase();
+      if (EMAIL_RE.test(email)) S.a.email = email;
+      S.a.founding_purchase_interest = 'maybe'; persist(); save(); next();
+    });
+    slot.querySelector('#f-no').addEventListener('click', () => {
+      const email = (slot.querySelector('#f-email').value || '').trim().toLowerCase();
+      if (EMAIL_RE.test(email)) S.a.email = email;
+      S.a.founding_purchase_interest = 'no'; persist(); save(); next();
+    });
+  }
+
+  // ── Contact preferences (everyone) ────────────────────────────────────────
+  function renderContact(st) {
+    const OPTS = [
+      { v:'launch', l:'Tell me when My World launches' },
+      { v:'early_access', l:'Invite me to early access' },
+      { v:'feedback', l:'I\'d like to provide product feedback' },
+      { v:'pilot', l:'Contact me about a professional pilot' },
+      { v:'languages', l:'Tell me when new languages launch' },
+      { v:'sign', l:'Tell me when sign-language features launch' },
+      { v:'updates', l:'Product updates only' },
+      { v:'none', l:'No further contact', ex: true },
+    ];
+    const sel = new Set(Array.isArray(S.a.marketing_permissions) ? S.a.marketing_permissions : []);
+    card.innerHTML = header({ eyebrow: 'Last step', title: st.title, intro: 'Select all that apply.' })
+      + `<div class="chips">${OPTS.map((o) =>
+          `<button class="chip${sel.has(o.v) ? ' sel' : ''}" data-v="${esc(o.v)}">${esc(o.l)}</button>`).join('')}</div>
+        <div style="margin-top:14px;">
+          <label class="tiny" style="font-weight:700;">Your email</label>
+          <input type="email" id="c-email" value="${esc(S.a.email || S.a.professional_email || '')}" placeholder="you@example.com" style="margin-top:4px;">
+        </div>
+        <p class="tiny" style="margin-top:10px;">These are update preferences only — they're separate from any research or
+          data-sharing consent, which we'll always ask for explicitly before anything is collected.</p>`
+      + navRow({ cont: 'Finish' }) + '<p class="msg" id="c-msg"></p>';
+    wireNav(st);
+    const exVals = OPTS.filter((o) => o.ex).map((o) => o.v);
+    card.querySelectorAll('.chip').forEach((c) => c.addEventListener('click', () => {
+      const v = c.dataset.v;
+      if (sel.has(v)) sel.delete(v);
+      else {
+        if (exVals.includes(v)) sel.clear(); else exVals.forEach((x) => sel.delete(x));
+        sel.add(v);
+      }
+      card.querySelectorAll('.chip').forEach((x) => x.classList.toggle('sel', sel.has(x.dataset.v)));
+    }));
+    card.querySelector('[data-nav=next]').addEventListener('click', async () => {
+      const msg = card.querySelector('#c-msg');
+      const email = (card.querySelector('#c-email').value || '').trim().toLowerCase();
+      const wantsContact = sel.size && !sel.has('none');
+      if (email && !EMAIL_RE.test(email)) { msg.className = 'msg err'; msg.textContent = 'That email doesn\'t look right.'; return; }
+      if (!email && wantsContact) { msg.className = 'msg err'; msg.textContent = 'Add your email so we can actually reach you — or choose "No further contact".'; return; }
+      if (email) S.a.email = email;
+      S.a.marketing_permissions = sel.size ? [...sel] : null;
+      persist();
+      msg.className = 'msg'; msg.textContent = 'Saving…';
+      await save(true);
+      next();
+    });
+  }
+
+  function renderDone() {
+    bar.style.width = '100%';
+    const paidBit = S.paid
+      ? '<p class="intro">💛 Your Founding Personalized Board is reserved — watch your inbox for your personal invite code and next steps.</p>'
+      : '';
+    card.innerHTML = `
+      <h1>Thank you 💛</h1>
+      <p class="intro">Your answers genuinely shape what we build next — which styles, which languages, which
+        features, and what it all should cost.</p>
+      ${paidBit}
+      <p class="intro">Want to see what My World feels like right now? The practice board is live — no account needed.</p>
+      <div class="nav"><a class="btn" href="/practice">Try the board live →</a></div>`;
+    try { localStorage.removeItem(LS_KEY); } catch (_) {}
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

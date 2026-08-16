@@ -13,6 +13,7 @@ struct ContentView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(DeviceMode.self)  private var mode
     @Environment(OnboardingCoordinator.self) private var onboarding
+    @Environment(BoardStore.self)  private var board
 
     var body: some View {
         // Show the onboarding flow when (a) nobody is signed in — a brand-new
@@ -40,6 +41,21 @@ struct ContentView: View {
             }
         }
         .updateGate()   // server-driven min/suggested build check (UpdateGate.swift)
+        // Sign-out must scrub the DEVICE, not just the disk cache: the
+        // in-memory BoardStore kept the family's tiles (the signed-out
+        // practice board's games were showing them), and the media/speech
+        // disk caches kept their art and clips. One iPad serves many kids in
+        // clinics — nothing of the previous account may survive sign-out.
+        .onChange(of: auth.isSignedIn) { was, now in
+            guard was, !now else { return }
+            board.tiles = []
+            board.categories = []
+            board.listenBlocklist = []
+            Task {
+                await MediaCache.shared.clear()
+                await SpeechCache.shared.clear()
+            }
+        }
     }
 }
 

@@ -45,6 +45,10 @@ final class SpeechListener {
     private var task: SFSpeechRecognitionTask?
     private var cleanupTask: Task<Void, Never>?
     private var useOnDevice = true
+    /// Whether recognition is currently running on-device. The gap-fill
+    /// ledger (ListenVocab) refuses to count words the moment this is false —
+    /// "nothing leaves the device" must be structurally true, not aspirational.
+    var onDevice: Bool { useOnDevice }
     private var restarts = 0
     private var nextWordId = 0
     private var utteranceBase = 0                  // committed words in the current utterance

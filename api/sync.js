@@ -14,6 +14,7 @@ import { canAccessChild } from './_lib/access.js';
 import { bandForBirthDate, tileFitsAge, higherBand } from './_lib/age-band.js';
 import { isDefaultableTile } from './_lib/onboarding-render.js';
 import { BAD_WORDS } from './_lib/bad-words.js';
+import { STOP_WORDS } from './_lib/word-match.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -250,6 +251,7 @@ export default async function handler(req, res) {
       const member = !!ent.sub || ent.tier === 'admin';
       entitlementOut = { tier: ent.tier, label: ent.label,
                          stt: !!ent.features.stt, autoTeach: !!ent.features.autoTeach,
+                         gapFill: !!ent.features.gapFill || ent.tier === 'admin',
                          styling: member };
     } catch (_) { /* flags are advisory — sync must never fail over them */ }
 
@@ -319,6 +321,10 @@ export default async function handler(req, res) {
       // "Bad Word" on the child's screen. Server-owned like match terms —
       // extend _lib/bad-words.js and every device updates on next sync.
       listenBlocklist: BAD_WORDS,
+      // Function-word stoplist for the gap-fill ledger (words the taxonomy
+      // doesn't know). Server-owned in _lib/word-match.js STOP_WORDS —
+      // curate there, every device updates on next sync, no release.
+      listenStopwords: STOP_WORDS,
       // Spoken-word captions on matched listen chips ("hi" under hello's
       // picture) — dark-launched with the synonym sets; server-owned so
       // graduation is one flip (SYNONYMS_PUBLIC), no client release.

@@ -123,6 +123,7 @@
     <div class="addrow">
       <button class="primary" id="demo-build-all">⚡ Prepare all active English voices</button>
       <button id="demo-build-syn" title="Pre-render the curated synonym/variant clips (voice-terms/) every active voice — sentence playback speaks a staged synonym in the child's own voice, offline and unmetered">🗣 Prepare synonym clips</button>
+      <button id="demo-build-facts" title="Pre-render every teaching fact (demo-audio/<vid>/facts/) so the practice board's Teach me and tap-again-to-learn speak real clips signed out — facts already QC'd in a voice copy free from the shared cache">📖 Prepare teaching-fact clips</button>
       <span id="demo-msg"></span>
     </div>
   </div>
@@ -872,6 +873,10 @@
         cell += '<div class="sub" style="font-size:12px;margin-top:2px;">🗣 synonym clips: '
           + (c.synMissing === 0 ? '✅ ' : '') + c.synHave + ' / ' + c.synTotal + '</div>';
       }
+      if (c.factTotal) {
+        cell += '<div class="sub" style="font-size:12px;margin-top:2px;">📖 teaching facts: '
+          + (c.factMissing === 0 ? '✅ ' : '') + c.factHave + ' / ' + c.factTotal + '</div>';
+      }
       return '<tr><td>' + esc(v.name) + '</td>'
         + '<td>' + cell + '</td>'
         + '<td><button class="primary" data-demo-build="' + esc(v.id) + '"' + (done ? ' disabled' : '') + '>'
@@ -912,6 +917,12 @@
     if (!ids.length) return;
     if (!confirm('Prepare practice clips for ' + ids.length + ' voice(s)? Words each voice has already spoken are COPIED free from the shared cache; only never-spoken words generate anew.')) return;
     buildDemo(ids);
+  });
+  document.getElementById('demo-build-facts').addEventListener('click', () => {
+    const ids = VOICES.filter((v) => v.active && (v.lang || 'en') === 'en').map((v) => v.id);
+    if (!ids.length) return;
+    if (!confirm('Pre-render teaching-fact clips for ' + ids.length + ' voice(s) (~4,800 facts each)? Facts already spoken or QC-reviewed in a voice are COPIED free from the shared cache — the build panel reports the split. These never affect the /practice picker.')) return;
+    buildDemo(ids, 'facts');
   });
   document.getElementById('demo-build-syn').addEventListener('click', () => {
     const ids = VOICES.filter((v) => v.active && (v.lang || 'en') === 'en').map((v) => v.id);

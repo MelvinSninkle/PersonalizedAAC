@@ -9,6 +9,10 @@
       "destination": "/founding.html"
     },
     {
+      "source": "/survey",
+      "destination": "/survey.html"
+    },
+    {
       "source": "/u/:slug",
       "destination": "/app.html"
     },

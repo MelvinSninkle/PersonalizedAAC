@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Survey — admin</title>
+<style>
+  :root { --pink:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#faf7f9; }
+  header {
+    position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--line);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; padding:12px 18px;
+  }
+  header h1 { font-size:18px; margin:0; margin-right:6px; }
+  .spacer { flex:1; }
+  a.back { color:var(--pink); text-decoration:none; font-size:13px; }
+  input[type=number], button { font:inherit; padding:7px 11px; border:1px solid var(--line); border-radius:9px; background:#fff; }
+  button { cursor:pointer; }
+  main { padding:16px 18px 80px; max-width:1180px; margin:0 auto; }
+
+  .counter { background:linear-gradient(135deg,#ad1457,#ff1493); color:#fff; border-radius:16px; padding:22px 24px;
+             margin-bottom:16px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; }
+  .counter .label { font-size:13px; text-transform:uppercase; letter-spacing:.1em; font-weight:700; opacity:.85; }
+  .counter .big { font-size:44px; font-weight:800; font-variant-numeric:tabular-nums; }
+  .counter .sub { font-size:14px; opacity:.9; }
+  .counter.full { background:linear-gradient(135deg,#b45309,#f59e0b); }
+
+  .chips { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; }
+  .chip { background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 14px; font-size:12px; color:var(--muted); }
+  .chip b { display:block; font-size:19px; color:var(--ink); margin-bottom:1px; }
+
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:900px) { .grid2 { grid-template-columns:1fr; } }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:12px; margin-bottom:16px; overflow:hidden; }
+  .panel .head { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); background:#fdf7fa; }
+  .panel h2 { margin:0; font-size:13px; font-weight:700; color:var(--pink); text-transform:uppercase; letter-spacing:.04em; }
+  .panel .sub { font-size:12px; color:var(--muted); }
+  .panel .body { padding:10px 14px 14px; }
+
+  .bar { display:flex; align-items:center; gap:10px; padding:4px 0; font-size:13px; }
+  .bar .lbl { flex:0 0 46%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bar .track { flex:1; height:14px; background:#f3f4f6; border-radius:7px; overflow:hidden; }
+  .bar .fill { height:100%; background:#e91e8c; border-radius:7px; min-width:2px; }
+  .bar .n { flex:0 0 76px; text-align:right; font-variant-numeric:tabular-nums; color:var(--muted); }
+  .bar.hot .fill { background:#f59e0b; }
+  .bar.hot .lbl { font-weight:700; }
+
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { text-align:left; padding:7px 12px; border-bottom:1px solid #f3f4f6; white-space:nowrap; }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); background:#fbfbfc; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .empty { color:var(--muted); text-align:center; padding:26px; font-size:13px; }
+  .note { font-size:12px; color:var(--muted); padding:8px 14px; border-top:1px solid #f3f4f6; }
+  .quote { border-left:3px solid #fce4ec; padding:6px 10px; margin:6px 0; font-size:13px; color:var(--ink); background:#fdfbfc; border-radius:0 8px 8px 0; }
+  .quote .when { color:var(--muted); font-size:11px; }
+  details summary { cursor:pointer; font-size:12px; color:var(--muted); }
+  .variants { font-size:11.5px; color:var(--muted); }
+  .funnel { display:flex; gap:8px; flex-wrap:wrap; padding:6px 0; }
+  .fstep { flex:1; min-width:120px; background:#fdf7fa; border:1px solid var(--line); border-radius:10px; padding:10px 12px; text-align:center; }
+  .fstep b { display:block; font-size:22px; }
+  .fstep span { font-size:11.5px; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 Survey</h1>
+  <button id="refresh">↻ Refresh</button>
+  <label style="font-size:12px;color:var(--muted);">Style demand threshold
+    <input type="number" id="threshold" min="1" value="5" style="width:64px;margin-left:6px;"></label>
+  <div class="spacer"></div>
+  <a class="back" href="/survey" target="_blank">Public survey ↗</a>
+  <a class="back" href="/admin/reports.html">Reports</a>
+  <a class="back" href="/admin/">← Lab home</a>
+</header>
+
+<main>
+  <div class="counter" id="counter"><div class="empty">Loading…</div></div>
+  <div class="chips" id="demand"></div>
+
+  <div class="grid2">
+    <div class="panel"><div class="head"><h2>One-time purchase preference</h2><span class="sub">families, Q12</span></div><div class="body" id="p-tier"></div></div>
+    <div class="panel"><div class="head"><h2>Subscription preference</h2><span class="sub">families, Q15 — recorded independently</span></div><div class="body" id="p-sub"></div></div>
+  </div>
+  <div class="panel"><div class="head"><h2>Purchase tier × subscription</h2><span class="sub">the cross-tab the pricing decision hangs on</span></div><div class="body tablewrap" id="p-cross"></div></div>
+  <div class="panel"><div class="head"><h2>What makes it worth buying</h2><span class="sub">top-3 value drivers, families</span></div><div class="body" id="p-drivers"></div></div>
+
+  <div class="panel"><div class="head"><h2>Requested visual worlds</h2><span class="sub">grouped similar answers; ⭐ = at or above the demand threshold (bulk-style candidates)</span></div><div class="body" id="p-styles"></div></div>
+
+  <div class="grid2">
+    <div class="panel"><div class="head"><h2>Family goals</h2><span class="sub">Q10, up to 5 each</span></div><div class="body" id="p-goals"></div></div>
+    <div class="panel"><div class="head"><h2>Current AAC systems</h2><span class="sub">families + professionals</span></div><div class="body" id="p-aac"></div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel"><div class="head"><h2>Languages</h2><span class="sub">interest + ranked demand</span></div><div class="body" id="p-langs"></div></div>
+    <div class="panel"><div class="head"><h2>Sign language</h2><span class="sub">interest, signed language, features</span></div><div class="body" id="p-sign"></div></div>
+  </div>
+
+  <div class="panel"><div class="head"><h2>Personalized storybooks</h2><span class="sub">future product: behavior/social-story ebooks starring the child, in their style</span></div><div class="body" id="p-books"></div></div>
+
+  <div class="panel"><div class="head"><h2>Early-access cohort funnel</h2><span class="sub">willing → interested → checkout → paid</span></div><div class="body" id="p-funnel"></div></div>
+
+  <div class="panel"><div class="head"><h2>Professionals</h2><span class="sub">pilot candidates are high-priority leads</span></div>
+    <div class="body" id="p-pro"></div>
+    <div class="tablewrap"><table id="t-pilots"></table></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel"><div class="head"><h2>Biggest AAC frustrations</h2><span class="sub">families, free text</span></div><div class="body" id="p-frustrations"></div></div>
+    <div class="panel"><div class="head"><h2>Six months from now…</h2><span class="sub">families, free text — marketing gold</span></div><div class="body" id="p-sixmonth"></div></div>
+  </div>
+  <div class="grid2">
+    <div class="panel"><div class="head"><h2>Problems professionals hit</h2><span class="sub">free text</span></div><div class="body" id="p-problems"></div></div>
+    <div class="panel"><div class="head"><h2>What would save professionals time</h2><span class="sub">free text</span></div><div class="body" id="p-timesavers"></div></div>
+  </div>
+</main>
+
+<script>
+  // Same admin auth as the other tools: session cookie (preferred) or the legacy
+  // bearer token in localStorage.
+  const token = localStorage.getItem('aacToken') || '';
+  async function api(path) {
+    const headers = {};
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const r = await fetch(path, { headers, credentials: 'same-origin' });
+    if (r.status === 401 || r.status === 403) throw new Error('Sign in as an admin first (open /login), then return here.');
+    if (!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0, 160));
+    return r.json();
+  }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const $ = (id) => document.getElementById(id);
+  const pct = (n, d) => d ? Math.round(100 * n / d) + '%' : '—';
+
+  const TIER_L = { essential: 'Essential (<$50)', personalized: 'Personalized (~$99)', bespoke: 'Bespoke (~$199)',
+                   none_affordable: 'None of these prices work', not_ready: 'Not ready to choose' };
+  const SUB_L = { essentials: 'Essentials $4.99', plus: 'Plus $9.99', pro: 'Pro $19.99',
+                  no_subscription: 'Would use without a subscription', not_sure: 'Not sure', none: 'None of these' };
+  const cap = (s) => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
+
+  let DATA = null;
+
+  // Ranked-count bar list. total = the answered base for % display.
+  function bars(el, list, { labels = {}, hot = () => false, limit = 30 } = {}) {
+    const box = typeof el === 'string' ? $(el) : el;
+    if (!list || !list.length) { box.innerHTML = '<div class="empty">No answers yet.</div>'; return; }
+    const total = list.reduce((s, x) => s + x.count, 0);
+    const max = list[0].count;
+    box.innerHTML = list.slice(0, limit).map((x) => `
+      <div class="bar${hot(x) ? ' hot' : ''}">
+        <span class="lbl" title="${esc(labels[x.value] || x.value)}">${hot(x) ? '⭐ ' : ''}${esc(labels[x.value] || x.value)}</span>
+        <span class="track"><span class="fill" style="width:${Math.max(2, Math.round(100 * x.count / max))}%"></span></span>
+        <span class="n">${x.count} · ${pct(x.count, total)}</span>
+      </div>`).join('');
+  }
+  function quotes(el, list) {
+    const box = $(el);
+    if (!list || !list.length) { box.innerHTML = '<div class="empty">Nothing yet.</div>'; return; }
+    box.innerHTML = list.slice(0, 40).map((q) => `
+      <div class="quote">${esc(q.t)} <span class="when">· ${new Date(q.at).toLocaleDateString()}</span></div>`).join('');
+  }
+
+  function renderCounter(f) {
+    const el = $('counter');
+    el.className = 'counter' + (f.remaining === 0 ? ' full' : '');
+    el.innerHTML = `
+      <span class="label">Founding families</span>
+      <span class="big">${f.paid} / ${f.cap}</span>
+      <span class="sub">${f.remaining === 0
+        ? 'FULL — the $49.99 checkout is disabled; the survey now shows "Join the next early-access group."'
+        : f.remaining + ' seats left · checkout disables automatically at ' + f.cap}</span>`;
+  }
+
+  function renderDemand(d) {
+    $('demand').innerHTML = `
+      <div class="chip"><b>${d.waitlistTotal}</b>total waitlist</div>
+      <div class="chip"><b>${d.surveysStarted}</b>surveys started</div>
+      <div class="chip"><b>${d.surveysCompleted}</b>completed (${pct(d.surveysCompleted, d.surveysStarted)})</div>
+      <div class="chip"><b>${d.families}</b>families</div>
+      <div class="chip"><b>${d.professionals}</b>professionals</div>
+      <div class="chip"><b>${d.byType.general || 0}</b>general interest</div>
+      <div class="chip"><b>${d.foundingPurchases}</b>founding purchases</div>
+      <div class="chip"><b>${pct(d.foundingPurchases, d.families)}</b>family → paid conversion</div>`;
+  }
+
+  function renderCross(cross) {
+    const tiers = ['essential', 'personalized', 'bespoke', 'none_affordable', 'not_ready'];
+    const subs = ['essentials', 'plus', 'pro', 'no_subscription', 'not_sure', 'none'];
+    const any = Object.keys(cross || {}).length;
+    if (!any) { $('p-cross').innerHTML = '<div class="empty">No paired answers yet.</div>'; return; }
+    $('p-cross').innerHTML = `<table>
+      <tr><th>Q12 \\ Q15</th>${subs.map((s) => `<th class="num">${esc(SUB_L[s])}</th>`).join('')}</tr>
+      ${tiers.map((t) => `<tr><td>${esc(TIER_L[t])}</td>${subs.map((s) => {
+        const n = cross[t + '|' + s] || 0;
+        return `<td class="num"${n ? ' style="font-weight:700;"' : ' style="color:#c4c8cf;"'}>${n}</td>`;
+      }).join('')}</tr>`).join('')}
+    </table>`;
+  }
+
+  function renderStyles() {
+    const th = Math.max(1, parseInt($('threshold').value, 10) || 5);
+    try { localStorage.setItem('mwSurveyThreshold', String(th)); } catch (_) {}
+    const list = (DATA.styles || []).map((s) => ({ value: s.label, count: s.count, s }));
+    bars('p-styles', list, { hot: (x) => x.count >= th, limit: 60 });
+    const flagged = (DATA.styles || []).filter((s) => s.count >= th);
+    const box = $('p-styles');
+    if (DATA.styles && DATA.styles.length) {
+      box.insertAdjacentHTML('beforeend', `<details style="margin-top:10px;"><summary>Variant spellings (grouped)</summary>
+        <div class="variants">${DATA.styles.slice(0, 60).map((s) =>
+          s.variants.length > 1 ? `<div><b>${esc(s.label)}</b>: ${s.variants.map((v) => esc(v.v) + ' ×' + v.n).join(', ')}</div>` : '').join('')}</div></details>
+        <div class="note">${flagged.length} world${flagged.length === 1 ? '' : 's'} at/above the threshold of ${th} — candidates for a supported bulk style.</div>`);
+    }
+  }
+
+  function renderFunnel(c, f) {
+    const yes = (c.dataSharing.find((x) => x.value === 'yes') || {}).count || 0;
+    const maybe = (c.dataSharing.find((x) => x.value === 'maybe') || {}).count || 0;
+    const want = (c.foundingInterest.find((x) => x.value === 'yes') || {}).count || 0;
+    $('p-funnel').innerHTML = `<div class="funnel">
+      <div class="fstep"><b>${yes}</b><span>willing to share data<br>(+${maybe} maybe)</span></div>
+      <div class="fstep"><b>${want}</b><span>want to purchase now</span></div>
+      <div class="fstep"><b>${c.checkoutStarted}</b><span>checkout started</span></div>
+      <div class="fstep"><b>${c.paid}</b><span>payment successful</span></div>
+      <div class="fstep"><b>${c.remaining}</b><span>Founding seats remaining</span></div>
+    </div>`;
+  }
+
+  function renderPro(p) {
+    $('p-pro').innerHTML = `
+      <div class="chips" style="margin-bottom:8px;">
+        <div class="chip"><b>${p.total}</b>professionals</div>
+        <div class="chip"><b>~${p.childrenRepresented}</b>potential children represented</div>
+        <div class="chip"><b>${p.pilotCandidates.length}</b>pilot candidates</div>
+        <div class="chip"><b>${(p.volumeInterest.find((x) => x.value === 'yes') || {}).count || 0}</b>want volume licenses</div>
+      </div>
+      <div class="grid2">
+        <div><h3 style="font-size:12px;color:var(--muted);margin:6px 0;">Purchasing model</h3><div id="pro-model"></div></div>
+        <div><h3 style="font-size:12px;color:var(--muted);margin:6px 0;">Annual license volume (if yes)</h3><div id="pro-vol"></div></div>
+      </div>`;
+    bars(document.getElementById('pro-model'), p.purchasingModel);
+    bars(document.getElementById('pro-vol'), p.licenseVolume);
+    const t = $('t-pilots');
+    if (!p.pilotCandidates.length) { t.innerHTML = '<tr><td class="empty">No pilot candidates yet.</td></tr>'; return; }
+    t.innerHTML = '<tr><th>When</th><th>Role</th><th>Organization</th><th>Email</th><th>Phone</th><th class="num">Children</th><th>Eval program</th><th>Contact pref</th></tr>'
+      + p.pilotCandidates.map((r) => `<tr>
+          <td>${new Date(r.created_at).toLocaleDateString()}</td>
+          <td>${esc(r.role)}</td><td>${esc(r.organization)}</td>
+          <td>${r.email ? `<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>` : '—'}</td>
+          <td>${esc(r.phone || '—')}</td><td class="num">${esc(r.children || '—')}</td>
+          <td>${esc(r.evaluation || '—')}</td><td>${esc(r.contact || '—')}</td>
+        </tr>`).join('');
+  }
+
+  function render() {
+    if (!DATA) return;
+    renderCounter(DATA.founding);
+    renderDemand(DATA.demand);
+    bars('p-tier', DATA.pricing.purchaseTier, { labels: TIER_L });
+    bars('p-sub', DATA.pricing.subscription, { labels: SUB_L });
+    renderCross(DATA.pricing.cross);
+    bars('p-drivers', DATA.pricing.valueDrivers);
+    renderStyles();
+    bars('p-goals', DATA.product.goals);
+    $('p-aac').innerHTML = '<h3 style="font-size:12px;color:var(--muted);margin:6px 0;">Families (Q5)</h3><div id="aac-fam"></div>'
+      + '<h3 style="font-size:12px;color:var(--muted);margin:10px 0 6px;">Professionals (P8)</h3><div id="aac-pro"></div>';
+    bars(document.getElementById('aac-fam'), DATA.product.aacSystems);
+    bars(document.getElementById('aac-pro'), DATA.product.proAacSystems);
+    $('p-langs').innerHTML = '<div id="lang-int"></div><h3 style="font-size:12px;color:var(--muted);margin:10px 0 6px;">Ranked languages</h3><div id="lang-rank"></div>'
+      + '<h3 style="font-size:12px;color:var(--muted);margin:10px 0 6px;">Use cases</h3><div id="lang-use"></div>';
+    bars(document.getElementById('lang-int'), DATA.languages.interest, { labels: { yes: 'Yes', maybe: 'Maybe', no: 'No / not relevant' } });
+    bars(document.getElementById('lang-rank'), DATA.languages.requested);
+    bars(document.getElementById('lang-use'), DATA.languages.useCases);
+    $('p-sign').innerHTML = '<div id="sign-int"></div><h3 style="font-size:12px;color:var(--muted);margin:10px 0 6px;">Signed language</h3><div id="sign-lang"></div>'
+      + '<h3 style="font-size:12px;color:var(--muted);margin:10px 0 6px;">Most wanted features</h3><div id="sign-feat"></div>';
+    bars(document.getElementById('sign-int'), DATA.sign.interest, { labels: { definitely: 'Definitely', probably: 'Probably', maybe: 'Maybe', no: 'No / not relevant' } });
+    bars(document.getElementById('sign-lang'), DATA.sign.requested);
+    bars(document.getElementById('sign-feat'), DATA.sign.features);
+    $('p-books').innerHTML = '<div id="books-int"></div><h3 style="font-size:12px;color:var(--muted);margin:10px 0 6px;">Most wanted book topics</h3><div id="books-topics"></div><div id="books-other"></div>';
+    bars(document.getElementById('books-int'), (DATA.books || {}).interest, { labels: { definitely: 'Definitely', probably: 'Probably', maybe: 'Maybe', no: 'No / not relevant' } });
+    bars(document.getElementById('books-topics'), (DATA.books || {}).topics);
+    if (DATA.books && DATA.books.otherTopics && DATA.books.otherTopics.length) {
+      document.getElementById('books-other').innerHTML = '<h3 style="font-size:12px;color:var(--muted);margin:10px 0 6px;">Write-in topics</h3>'
+        + DATA.books.otherTopics.slice(0, 20).map((q) => `<div class="quote">${esc(q.t)}</div>`).join('');
+    }
+    renderFunnel(DATA.cohort, DATA.founding);
+    renderPro(DATA.professional);
+    quotes('p-frustrations', DATA.texts.frustrations);
+    quotes('p-sixmonth', DATA.texts.sixMonth);
+    quotes('p-problems', DATA.texts.proProblems);
+    quotes('p-timesavers', DATA.texts.proTimeSavers);
+  }
+
+  async function load() {
+    try {
+      DATA = await api('/api/admin/lab?action=survey-dashboard');
+      render();
+    } catch (err) {
+      $('counter').innerHTML = '<div class="empty" style="color:#fff;">' + esc(err.message) + '</div>';
+    }
+  }
+  try { $('threshold').value = localStorage.getItem('mwSurveyThreshold') || '5'; } catch (_) {}
+  $('threshold').addEventListener('change', renderStyles);
+  $('refresh').addEventListener('click', load);
+  load();
+</script>
+</body>
+</html>

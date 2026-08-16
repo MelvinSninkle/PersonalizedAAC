@@ -366,7 +366,8 @@ export async function processTileJob(db, jobId) {
             AND id <> ${Number(job.item_id) || 0}
             AND COALESCE(needs_review, FALSE) = FALSE
             AND (taxonomy_slug IS NOT NULL OR styled_style_id IS NOT NULL)
-          ORDER BY styled_at DESC NULLS LAST, id DESC
+          ORDER BY (styled_style_id = ${Number(sgId) || 0}) DESC NULLS LAST,
+                   styled_at DESC NULLS LAST, id DESC
           LIMIT 3`;
         siblingKeys = sibs.map((r) => r.image_key);
       } catch (_) { /* pre-migration DB → objects-ref fallback */ }

@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import CryptoKit
 
 /// Game-mode audio, mirroring the web app:
 ///   - Background music loops quietly during a game (from the parent's reward
@@ -95,7 +96,16 @@ final class GameAudio {
     /// "Teach me" slideshow chains word → clue → clue → clue this way. Same
     /// disk cache as speak(); paces on the clip's decoded duration plus a
     /// small breath rather than a delegate (good enough for speech pacing).
-    func speakAwait(_ text: String, childId: String) async {
+    /// `factPrefix` (practice board only, nil everywhere else): pre-rendered
+    /// teaching-fact clips at demo-audio/<vid>/facts/<sha16>.mp3 — signed-out
+    /// boards can't call TTS, and every fact was silently skipped. A cache/
+    /// fetch miss falls through to the TTS path exactly as before.
+    func speakAwait(_ text: String, childId: String, factPrefix: String? = nil) async {
+        if let factPrefix, !factPrefix.isEmpty,
+           let url = try? await MediaCache.shared.audioFileURL(for: factPrefix + Self.factHash(text) + ".mp3") {
+            await playFileAwait(url)
+            return
+        }
         guard let data = await SpeechCache.shared.data(text: text, emotion: "default", childId: childId, api: api) else { return }
         do {
             let p = try AVAudioPlayer(data: data)
@@ -117,6 +127,17 @@ final class GameAudio {
 
     /// Play a downloaded audio file and suspend until it (roughly) finishes —
     /// the sentence bar's ▶ chains staged tiles' recorded clips this way.
+    /// Fact-clip key hash — MUST stay in lockstep with the Lab's clip builder
+    /// (_lab-demo-audio.js factHash) and practice.html: NFC-normalize, trim,
+    /// collapse internal whitespace to single spaces, sha256 hex, first 16.
+    static func factHash(_ s: String) -> String {
+        let norm = s.precomposedStringWithCanonicalMapping
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return String(SHA256.hash(data: Data(norm.utf8))
+            .map { String(format: "%02x", $0) }.joined().prefix(16))
+    }
+
     func playFileAwait(_ url: URL) async {
         do {
             let p = try AVAudioPlayer(contentsOf: url)

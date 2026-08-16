@@ -166,6 +166,9 @@ struct TeachShowView: View {
 
     @Environment(BoardStore.self) private var board
     @Environment(AuthManager.self) private var auth
+    /// Practice board only (nil on real boards): demo fact-clip prefix so
+    /// the teaching clues play pre-rendered clips instead of (unavailable) TTS.
+    @Environment(PracticeChrome.self) private var practiceChrome: PracticeChrome?
 
     @State private var deck: [Tile] = []
     @State private var pos = 0
@@ -265,14 +268,22 @@ struct TeachShowView: View {
             // speaking over the previous slide's tail read as out-of-sync.
             try? await Task.sleep(nanoseconds: 350_000_000)
             if Task.isCancelled { return }
-            // The word first…
-            await GameAudio.shared.speakAwait(tile.display, childId: childId)
+            // The word first — its own recorded clip when the tile has one
+            // (the child's chosen voice on real boards, the demo voice on
+            // practice, where TTS is unavailable and this line was silent).
+            if let sk = tile.soundKey, !sk.isEmpty,
+               let url = try? await MediaCache.shared.audioFileURL(for: sk) {
+                await GameAudio.shared.playFileAwait(url)
+            } else {
+                await GameAudio.shared.speakAwait(tile.display, childId: childId)
+            }
             // …then every teaching clue, shown while it's spoken. Clues are
-            // English taxonomy prose — skipped on translated boards.
+            // English taxonomy prose — skipped on translated boards. On
+            // practice the pre-rendered fact clips play (factPrefix).
             for c in (tile.displayLabel == nil ? (tile.descriptiveClues ?? []) : []) {
                 if Task.isCancelled { return }
                 await MainActor.run { clue = c }
-                await GameAudio.shared.speakAwait(c, childId: childId)
+                await GameAudio.shared.speakAwait(c, childId: childId, factPrefix: practiceChrome?.factClipPrefix)
                 try? await Task.sleep(nanoseconds: 350_000_000)
             }
             try? await Task.sleep(nanoseconds: 900_000_000)

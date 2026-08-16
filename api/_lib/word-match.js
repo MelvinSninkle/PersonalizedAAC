@@ -61,6 +61,48 @@ export const IRREGULAR = {
 // defaults. Flipping back to false re-darkens everything to admin-only.
 export const SYNONYMS_PUBLIC = true;
 
+// Function-word stoplist for the GAP-FILL ledger (the on-device counter of
+// words the taxonomy does NOT know). Without this, the top of every child's
+// unknown-word ranking is "the / was / very / really" — grammar, not
+// vocabulary demand. Server-owned like BAD_WORDS: ships via /api/sync as
+// listenStopwords, so curation here reaches every device with no release.
+// Deliberately ONLY closed-class grammar words — never nouns/verbs a family
+// might genuinely want ("outside" is a real AAC word; "although" is not).
+export const STOP_WORDS = [
+  // articles + demonstratives
+  'the', 'a', 'an', 'this', 'that', 'these', 'those',
+  // pronouns (board core words like "me"/"you" are matched by the taxonomy
+  // pass first; these are the leftovers that would clutter the ledger)
+  'i', 'me', 'my', 'mine', 'myself', 'you', 'your', 'yours', 'yourself',
+  'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself',
+  'it', 'its', 'itself', 'we', 'us', 'our', 'ours', 'ourselves',
+  'they', 'them', 'their', 'theirs', 'themselves', 'who', 'whom', 'whose',
+  'which', 'what', 'somebody', 'someone', 'something', 'anybody', 'anyone',
+  'anything', 'everybody', 'everyone', 'everything', 'nobody', 'nothing',
+  // auxiliaries + copulas
+  'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+  'do', 'does', 'did', 'doing', 'have', 'has', 'had', 'having',
+  'will', 'would', 'shall', 'should', 'can', 'could', 'may', 'might', 'must',
+  'gonna', 'gotta', 'wanna', 'lemme', 'gimme',
+  // prepositions + conjunctions
+  'of', 'to', 'in', 'on', 'at', 'by', 'for', 'with', 'from', 'into', 'onto',
+  'about', 'over', 'under', 'between', 'through', 'during', 'before', 'after',
+  'above', 'below', 'around', 'against', 'toward', 'towards', 'until', 'till',
+  'and', 'or', 'but', 'nor', 'so', 'yet', 'if', 'then', 'than', 'because',
+  'while', 'although', 'though', 'unless', 'since', 'whether', 'either', 'neither',
+  // adverbial filler + discourse noise
+  'very', 'really', 'just', 'quite', 'too', 'also', 'only', 'even', 'still',
+  'again', 'already', 'always', 'never', 'sometimes', 'often', 'usually',
+  'maybe', 'perhaps', 'well', 'okay', 'ok', 'oh', 'ah', 'um', 'uh', 'hmm',
+  'yeah', 'yep', 'nope', 'huh', 'hey', 'actually', 'basically', 'literally',
+  'anyway', 'right', 'like', 'kind', 'sort', 'lot', 'lots', 'bit',
+  // quantifiers + comparatives
+  'some', 'any', 'no', 'not', 'all', 'both', 'each', 'every', 'few', 'many',
+  'much', 'most', 'more', 'less', 'least', 'other', 'another', 'such', 'same',
+  'own', 'one', 'ones', 'thing', 'things', 'there', 'here', 'where', 'when',
+  'why', 'how', 'as', 'let',
+];
+
 // Synonym SETS — words that should land on the SAME tile in listening mode:
 // someone says "hi" and the board's "hello" tile renders (with "hi" as the
 // spoken caption). Sets, not pairs, and symmetric on purpose: whichever word

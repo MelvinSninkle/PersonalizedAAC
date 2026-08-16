@@ -48,6 +48,8 @@ import defaultUpload from './_lab-default-upload.js';
 import spendGuard from './_lab-spend-guard.js';
 import support from './_lab-support.js';
 import synonyms from './_lab-synonyms.js';
+import surveyDashboard from './_lab-survey-dashboard.js';
+import gapWords from './_lab-gap-words.js';
 
 export const config = { maxDuration: 300 };
 
@@ -87,6 +89,8 @@ const HANDLERS = {
   'lang-audio': langAudio,
   'role': role,
   'synonyms': synonyms,
+  'survey-dashboard': surveyDashboard,
+  'gap-words': gapWords,
 };
 
 export default async function handler(req, res) {
