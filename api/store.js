@@ -1151,7 +1151,14 @@ async function stripeCheckout(req, res, db, auth, uid, body) {
   res.status(200).json({ ok: true, url: d.url });
 }
 
-// ── Founding Family concierge (the waitlist funnel) ─────────────────────────
+// ── Founding Family concierge (LEGACY — superseded 2026-08-16) ──────────────
+//
+// RETIRED FUNNEL: the founder's letter (/founding) now routes to /survey,
+// whose $49.99 Founding-100 board (foundingCheckout below) replaced this
+// $20-setup-plus-subscription offer. The action stays wired so any family
+// mid-checkout at the switchover still completes, and its webhook path keeps
+// honoring old sessions — but no page links here anymore. Remove once the
+// owner confirms no concierge sessions remain in flight.
 //
 // One Checkout, honest framing: the chosen membership starts billing TODAY,
 // plus a one-time $20 concierge setup item. No trial, no "commitment" theater

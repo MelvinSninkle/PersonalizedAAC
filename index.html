@@ -478,7 +478,7 @@
       Join the waitlist below and we'll email your invite code the moment spots open.
       The app launches first on <strong>iPhone &amp; iPad</strong> (plus the full web board on any computer) — <strong>Android and Kindle Fire are next</strong>.
       Setting up takes about five minutes once you're in. Styled art is part of memberships from $9.99/month.
-      In a hurry? <a href="/founding" style="color:#ffd400; font-weight:700;">The founder's letter</a> is the door for families who want in today.</p>
+      Want in today? <a href="/survey" style="color:#ffd400; font-weight:700;">The Founding Family survey</a> is the door — it shapes what we build, and qualifying families can reserve a founding board at the end.</p>
 
     <div style="margin-top: 24px;">
       <p style="font-size: 13px; color: rgba(255,255,255,.85);">Have an invite code? <a href="/signup" style="color: #fff; font-weight: 700;">Create your child's account →</a>
@@ -486,8 +486,12 @@
     </div>
 
     <div id="waitlist" style="margin-top: 44px; padding-top: 34px; border-top: 1px solid rgba(255,255,255,.25);">
-      <h3 style="color: #fff; font-size: 22px; margin-bottom: 8px;">No invite yet? Join the waitlist.</h3>
-      <p style="color: #fce4ec; font-size: 14px; max-width: 560px; margin: 0 auto;">We're welcoming families a group at a time so every board gets our full attention. Tell us a little about your child and we'll email your invite code the moment spots open.</p>
+      <h3 style="color: #fff; font-size: 22px; margin-bottom: 8px;">No invite yet? Start with the survey.</h3>
+      <p style="color: #fce4ec; font-size: 14px; max-width: 560px; margin: 0 auto;">Tell us about your child and what you need — it takes 3–6 minutes, it directly shapes which styles, languages, and features we build, and qualifying families can become a <strong>Founding Family</strong> at the end.</p>
+      <div style="margin-top: 18px;">
+        <a class="btn primary" href="/survey" style="min-width: 260px; display:inline-block;">Take the survey — join the waitlist →</a>
+      </div>
+      <p style="color: #fce4ec; font-size: 13.5px; max-width: 560px; margin: 26px auto 0;">In a hurry? Leave just your email and we'll be in touch as spots open.</p>
       <form class="wl-form" id="wl-form">
         <label class="wl-label" for="wl-email">Your email</label>
         <input id="wl-email" type="email" required placeholder="you@example.com" autocomplete="email">
@@ -500,8 +504,8 @@
       </form>
 
       <p style="margin-top: 26px; color:#fce4ec; font-size: 14px;">
-        Can't wait, and your child uses an iPhone or iPad?
-        <a href="/founding" style="color:#ffd400; font-weight:700;">Read the founder's letter and become a Founding Family →</a>
+        Wondering why we built this?
+        <a href="/founding" style="color:#ffd400; font-weight:700;">Read the founder's letter →</a>
       </p>
     </div>
   </div>
@@ -546,21 +550,10 @@
   }
   fillWaitlistStyles([...picker.querySelectorAll('.style-chip')].map(c => c.textContent.trim()).filter(Boolean));
 
-  // Arrived from the founder's letter because the current group filled up —
-  // say so plainly, right above the form they were sent to.
-  if (new URLSearchParams(location.search).get('group') === 'full') {
-    const msg = document.getElementById('wl-msg');
-    if (msg) {
-      msg.className = 'msg';
-      msg.textContent = 'The current Founding Family group is full — thank you for reading the letter. ' +
-        'Join the waitlist here and we\'ll email your invite code as the next group opens. The list is worked in order.';
-    }
-  }
-
-  // The waitlist stays a LIGHT lead capture on purpose: a parent whose kid
-  // needs words doesn't want to fill out our stuff. Photos, payment, and
-  // everything else belong to the ACCOUNT — the Founding Family letter
-  // (/founding) is the skip-the-line door for parents who want in today.
+  // The email form stays a LIGHT lead capture on purpose: a parent whose kid
+  // needs words doesn't want to fill out our stuff. The /survey funnel is the
+  // primary door now (market/product research + the Founding-100 purchase
+  // gate); this form is the low-effort fallback for "just tell me when".
   const wlForm = document.getElementById('wl-form');
   if (wlForm) wlForm.addEventListener('submit', async (e) => {
     e.preventDefault();
