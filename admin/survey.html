@@ -98,6 +98,8 @@
     <div class="panel"><div class="head"><h2>Sign language</h2><span class="sub">interest, signed language, features</span></div><div class="body" id="p-sign"></div></div>
   </div>
 
+  <div class="panel"><div class="head"><h2>Personalized storybooks</h2><span class="sub">future product: behavior/social-story ebooks starring the child, in their style</span></div><div class="body" id="p-books"></div></div>
+
   <div class="panel"><div class="head"><h2>Early-access cohort funnel</h2><span class="sub">willing → interested → checkout → paid</span></div><div class="body" id="p-funnel"></div></div>
 
   <div class="panel"><div class="head"><h2>Professionals</h2><span class="sub">pilot candidates are high-priority leads</span></div>
@@ -274,6 +276,13 @@
     bars(document.getElementById('sign-int'), DATA.sign.interest, { labels: { definitely: 'Definitely', probably: 'Probably', maybe: 'Maybe', no: 'No / not relevant' } });
     bars(document.getElementById('sign-lang'), DATA.sign.requested);
     bars(document.getElementById('sign-feat'), DATA.sign.features);
+    $('p-books').innerHTML = '<div id="books-int"></div><h3 style="font-size:12px;color:var(--muted);margin:10px 0 6px;">Most wanted book topics</h3><div id="books-topics"></div><div id="books-other"></div>';
+    bars(document.getElementById('books-int'), (DATA.books || {}).interest, { labels: { definitely: 'Definitely', probably: 'Probably', maybe: 'Maybe', no: 'No / not relevant' } });
+    bars(document.getElementById('books-topics'), (DATA.books || {}).topics);
+    if (DATA.books && DATA.books.otherTopics && DATA.books.otherTopics.length) {
+      document.getElementById('books-other').innerHTML = '<h3 style="font-size:12px;color:var(--muted);margin:10px 0 6px;">Write-in topics</h3>'
+        + DATA.books.otherTopics.slice(0, 20).map((q) => `<div class="quote">${esc(q.t)}</div>`).join('');
+    }
     renderFunnel(DATA.cohort, DATA.founding);
     renderPro(DATA.professional);
     quotes('p-frustrations', DATA.texts.frustrations);

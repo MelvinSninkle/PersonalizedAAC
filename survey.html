@@ -277,11 +277,29 @@
               { v:'not_sure', l:'I\'m not sure' },
               { v:'none', l:'None of these' } ] },
 
+    // ── Future products (family; general gets a feature chip instead) ──
+    { id: 'qbooks', when: isFam, type: 'single', key: 'behavior_books_interest',
+      eyebrow: 'Help us decide what to build next',
+      title: 'Would personalized storybooks be useful to your family?',
+      intro: 'The following features are being explored and may not be available at launch. Your answers help us decide what families actually need.'
+           + '<br><br>Imagine a picture ebook starring <b>your child</b>, drawn in the same style as their board, gently walking through real situations — trying new foods, going to the dentist, getting a haircut, or practicing social cues like greetings and taking turns.',
+      opts: [ { v:'definitely', l:'Definitely' }, { v:'probably', l:'Probably' },
+              { v:'maybe', l:'Maybe' }, { v:'no', l:'No / not relevant to us' } ] },
+
+    { id: 'qbooks2', when: (a) => isFam(a) && ['definitely','probably','maybe'].includes(a.behavior_books_interest),
+      type: 'multi', key: 'behavior_book_topics', otherKey: 'behavior_book_other', otherV: 'Other',
+      title: 'Which situations would you want a book for first?', intro: 'Select all that apply.',
+      opts: ['Trying new foods / eating a wider diet', 'Going to the dentist', 'Doctor visits',
+             'Getting a haircut', 'Bedtime routine', 'Potty / toilet routines',
+             'Starting school or a new classroom', 'Riding in the car / travel',
+             'Waiting and taking turns', 'Greetings and social cues', 'Managing big feelings',
+             'Other'].map((v) => ({ v, l: v })) },
+
     // ── Languages (family + general) ──
     { id: 'q16', when: (a) => isFam(a) || isGen(a), type: 'single', key: 'language_interest',
       eyebrow: 'Help us decide what to build next',
       title: 'Would your family use My World in a language other than English?',
-      intro: 'The following features are being explored and may not be available at launch. Your answers help us decide what families actually need.',
+      intro: 'Also being explored — may not be available at launch. Your answers help us decide what families actually need.',
       opts: YMN },
 
     { id: 'q17', when: (a) => (isFam(a) || isGen(a)) && ['yes','maybe'].includes(a.language_interest),
@@ -421,7 +439,7 @@
       title: 'Which features interest you?', intro: 'Select all that apply.',
       opts: ['Personalized picture boards', 'Familiar visual styles', 'Text-to-speech voices', 'Voice cloning',
              'Learning games and teaching', 'Listening Mode', 'Progress tracking', 'Multiple languages',
-             'Sign language', 'Other'].map((v) => ({ v, l: v })) },
+             'Sign language', 'Personalized storybooks', 'Other'].map((v) => ({ v, l: v })) },
 
     // ── CONTACT (everyone) ──
     { id: 'contact', type: 'contact', title: 'How would you like to stay involved?' },

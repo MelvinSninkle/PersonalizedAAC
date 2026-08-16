@@ -102,6 +102,7 @@ export default async function handler(req, res) {
              purchase_value_text, subscription_preference,
              language_interest, languages_requested, language_use_cases,
              sign_language_interest, sign_features_requested, signed_language_requested,
+             behavior_books_interest, behavior_book_topics, behavior_book_other,
              data_sharing_interest, founding_purchase_interest, founding_family,
              cohort, payment_status, paid_at,
              professional_role, organization, professional_website, professional_email,
@@ -216,6 +217,11 @@ export default async function handler(req, res) {
         interest: tally(rows, (r) => r.sign_language_interest),
         requested: tally(rows, (r) => r.signed_language_requested),
         features: tallyArr(families, (r) => r.sign_features_requested),
+      },
+      books: {
+        interest: tally(families, (r) => r.behavior_books_interest),
+        topics: tallyArr(families, (r) => r.behavior_book_topics),
+        otherTopics: texts(families, (r) => r.behavior_book_other),
       },
       professional: {
         total: pros.length,

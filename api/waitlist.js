@@ -115,6 +115,9 @@ export async function ensureSurvey(db) {
       sign_features_requested JSONB,
       signed_language_requested TEXT,
       signed_language_other TEXT,
+      behavior_books_interest TEXT,
+      behavior_book_topics JSONB,
+      behavior_book_other TEXT,
       data_sharing_interest TEXT,
       founding_purchase_interest TEXT,
       -- payment (webhook-only writes; see store.js handleFoundingPaid)
@@ -157,6 +160,10 @@ export async function ensureSurvey(db) {
   `;
   await db`CREATE INDEX IF NOT EXISTS survey_email_idx   ON survey_responses(email)`;
   await db`CREATE INDEX IF NOT EXISTS survey_created_idx ON survey_responses(created_at DESC)`;
+  // Additive columns for tables created before these questions existed.
+  await db`ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS behavior_books_interest TEXT`;
+  await db`ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS behavior_book_topics JSONB`;
+  await db`ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS behavior_book_other TEXT`;
 }
 
 // ── Row token: lets the JUST-SUBMITTED form attach photos to its own row and
@@ -390,6 +397,9 @@ async function survey(req, res) {
         sign_features_requested = ${jb(sArr(a.sign_features_requested, 12, 80))},
         signed_language_requested = ${sTxt(a.signed_language_requested, 40)},
         signed_language_other = ${sTxt(a.signed_language_other, 120)},
+        behavior_books_interest = ${sEnum(a.behavior_books_interest, SIGN_INTEREST)},
+        behavior_book_topics = ${jb(sArr(a.behavior_book_topics, 16, 80))},
+        behavior_book_other = ${sTxt(a.behavior_book_other, 200)},
         data_sharing_interest = ${sEnum(a.data_sharing_interest, YMN)},
         founding_purchase_interest = ${sEnum(a.founding_purchase_interest, YMN)},
         professional_role = ${sTxt(a.professional_role, 60)},
