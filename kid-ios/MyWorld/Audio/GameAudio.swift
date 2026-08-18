@@ -100,13 +100,17 @@ final class GameAudio {
     /// teaching-fact clips at demo-audio/<vid>/facts/<sha16>.mp3 — signed-out
     /// boards can't call TTS, and every fact was silently skipped. A cache/
     /// fetch miss falls through to the TTS path exactly as before.
-    func speakAwait(_ text: String, childId: String, factPrefix: String? = nil) async {
+    /// Returns whether anything was actually spoken — the sentence bar's
+    /// fluent path needs to know so it can fall back to per-word clips when
+    /// TTS is unavailable (offline, or the server refused the voice budget).
+    @discardableResult
+    func speakAwait(_ text: String, childId: String, factPrefix: String? = nil) async -> Bool {
         if let factPrefix, !factPrefix.isEmpty,
            let url = try? await MediaCache.shared.audioFileURL(for: factPrefix + Self.factHash(text) + ".mp3") {
             await playFileAwait(url)
-            return
+            return true
         }
-        guard let data = await SpeechCache.shared.data(text: text, emotion: "default", childId: childId, api: api) else { return }
+        guard let data = await SpeechCache.shared.data(text: text, emotion: "default", childId: childId, api: api) else { return false }
         do {
             let p = try AVAudioPlayer(data: data)
             p.volume = 1.0
@@ -115,7 +119,8 @@ final class GameAudio {
             speakPlayer = p
             let secs = max(0.3, p.duration) + 0.25
             try? await Task.sleep(nanoseconds: UInt64(secs * 1_000_000_000))
-        } catch { }
+            return true
+        } catch { return false }
     }
 
     /// Cut the speech channel NOW (sentence ▶ stopped, mode exited, a game or

@@ -124,6 +124,7 @@
       <button class="primary" id="demo-build-all">⚡ Prepare all active English voices</button>
       <button id="demo-build-syn" title="Pre-render the curated synonym/variant clips (voice-terms/) every active voice — sentence playback speaks a staged synonym in the child's own voice, offline and unmetered">🗣 Prepare synonym clips</button>
       <button id="demo-build-facts" title="Pre-render every teaching fact (demo-audio/<vid>/facts/) so the practice board's Teach me and tap-again-to-learn speak real clips signed out — facts already QC'd in a voice copy free from the shared cache">📖 Prepare teaching-fact clips</button>
+      <button id="demo-build-sent" title="Pre-render the curated fluent-sentence showcase clips (demo-audio/<vid>/sentences/) — the practice sentence constructor speaks 'I want ice cream' as one natural utterance, the membership feature demonstrable signed out">💬 Prepare fluent sentences</button>
       <span id="demo-msg"></span>
     </div>
   </div>
@@ -877,6 +878,10 @@
         cell += '<div class="sub" style="font-size:12px;margin-top:2px;">📖 teaching facts: '
           + (c.factMissing === 0 ? '✅ ' : '') + c.factHave + ' / ' + c.factTotal + '</div>';
       }
+      if (c.sentTotal) {
+        cell += '<div class="sub" style="font-size:12px;margin-top:2px;">💬 fluent sentences: '
+          + (c.sentHave === c.sentTotal ? '✅ ' : '') + c.sentHave + ' / ' + c.sentTotal + '</div>';
+      }
       return '<tr><td>' + esc(v.name) + '</td>'
         + '<td>' + cell + '</td>'
         + '<td><button class="primary" data-demo-build="' + esc(v.id) + '"' + (done ? ' disabled' : '') + '>'
@@ -929,6 +934,12 @@
     if (!ids.length) return;
     if (!confirm('Pre-render synonym/variant clips for ' + ids.length + ' voice(s) (~' + (SYNS.length || 'a few hundred') + ' terms each)? Terms a voice has already spoken are COPIED free from the shared cache. These never affect the /practice picker.')) return;
     buildDemo(ids, 'synonyms');
+  });
+  document.getElementById('demo-build-sent').addEventListener('click', () => {
+    const ids = VOICES.filter((v) => v.active && (v.lang || 'en') === 'en').map((v) => v.id);
+    if (!ids.length) return;
+    if (!confirm('Pre-render the fluent-sentence showcase clips for ' + ids.length + ' voice(s) (a dozen short sentences each — pennies)? The practice sentence constructor then speaks a curated sentence like "I want ice cream" as ONE natural utterance, showing off the membership feature signed out.')) return;
+    buildDemo(ids, 'sentences');
   });
 
   document.getElementById('refresh').addEventListener('click', load);

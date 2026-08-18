@@ -66,6 +66,9 @@ struct PracticeBoardView: View {
         let styles: [StyleOpt]?
         let kids: [KidOpt]?
         let listenBlocklist: [String]?
+        /// Curated fluent-sentence showcase lines with pre-rendered clips
+        /// under demo-audio/<vid>/sentences/ (the membership feature demo).
+        let demoSentences: [String]?
     }
 
     // MARK: state
@@ -738,6 +741,12 @@ struct PracticeBoardView: View {
             let fp = (effectiveVoiceId?.isEmpty == false) ? "demo-audio/\(effectiveVoiceId!)/facts/" : nil
             chrome.factClipPrefix = fp
             TilePlayer.factClipPrefix = fp
+            // Fluent-sentence showcase: staging a curated sentence in the
+            // constructor plays its pre-rendered whole-sentence clip in the
+            // selected demo voice — the membership feature, shown signed out.
+            store.demoSentences = p.demoSentences ?? []
+            store.sentenceClipPrefix = (effectiveVoiceId?.isEmpty == false)
+                ? "demo-audio/\(effectiveVoiceId!)/sentences/" : nil
             // Warm the board like a real board does (the practice payload
             // never went through BoardStore.precacheMedia, so every image
             // and demo clip was a first-tap network round trip — the

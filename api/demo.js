@@ -12,6 +12,7 @@
 import { sql } from './_lib/db.js';
 import { expandMatchTerms } from './_lib/word-match.js';
 import { BAD_WORDS } from './_lib/bad-words.js';
+import { DEMO_SENTENCES } from './_lib/demo-sentences.js';
 
 const norm = (s) => String(s || '').trim().toLowerCase();
 
@@ -263,6 +264,12 @@ export default async function handler(req, res) {
     // Same shared list every real board receives on sync; no family data.
     res.status(200).json({ ok: true, tiles, folders, voices, styles, kids,
                            listenBlocklist: BAD_WORDS,
+                           // Fluent-sentence showcase: when the demo sentence
+                           // constructor stages one of these exactly, it plays
+                           // the pre-rendered whole-sentence clip
+                           // (demo-audio/<vid>/sentences/<factHash>.mp3) —
+                           // the membership feature, demonstrable signed-out.
+                           demoSentences: DEMO_SENTENCES,
                            style: Number.isFinite(styleId) && styleId > 0 ? styleId : null,
                            kid: Number.isFinite(kidId) && kidId > 0 && kids.some((k) => k.id === kidId) ? kidId : null });
   } catch (err) {

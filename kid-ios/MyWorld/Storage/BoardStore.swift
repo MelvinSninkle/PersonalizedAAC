@@ -28,6 +28,11 @@ final class BoardStore {
     /// a staged synonym; a miss falls through to TTS. nil = no voice chosen.
     var voiceClipPrefix: String? = nil
     var voiceClipExt: String = ".mp3"
+    /// Fluent-sentence showcase (practice board only): the curated sentences
+    /// with pre-rendered clips + the demo-audio/<vid>/sentences/ prefix.
+    /// Real boards leave these empty and speak sentences via metered TTS.
+    var demoSentences: [String] = []
+    var sentenceClipPrefix: String? = nil
 
     /// Function-word stoplist for the gap-fill ledger (server-owned, from
     /// word-match.js STOP_WORDS). Rides the board cache like the blocklist.

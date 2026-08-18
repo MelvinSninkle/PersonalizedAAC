@@ -26,6 +26,7 @@
 import { requireAdmin } from '../_lib/admin.js';
 import { sql } from '../_lib/db.js';
 import { synthesizeVoice } from '../_lib/onboarding-render.js';
+import { DEMO_SENTENCES } from '../_lib/demo-sentences.js';
 import { VOICE_SAMPLE_TEXT } from '../_lib/voices.js';
 import { curatedSpokenTerms } from '../_lib/word-match.js';
 import { put, list } from '@vercel/blob';
@@ -170,6 +171,9 @@ export default async function handler(req, res) {
     const labels = await demoLabels(db);
     const terms = await synonymTerms(db);
     const facts = await demoFacts(db);
+    // Fluent-sentence showcase clips — same hash recipe as facts, so the
+    // practice page and iOS derive the key from the text with no manifest.
+    const sentences = DEMO_SENTENCES.map((t) => ({ text: t, hash: factHash(t) }));
 
     if (req.method === 'GET') {
       const voices = await db`SELECT voice_id, name FROM demo_voices ORDER BY name`;
@@ -187,7 +191,9 @@ export default async function handler(req, res) {
         // media whitelist) — exclude them from the label count and the orphan
         // sweep or every fact would read as an orphaned label clip.
         const allKeys = await existingKeys(`demo-audio/${v.voice_id}/`);
-        const keys = new Set([...allKeys].filter((k) => !k.includes('/facts/')));
+        // /facts/ and /sentences/ are sub-paths of the same public prefix —
+        // exclude BOTH from the label sweep or each reads as an orphan.
+        const keys = new Set([...allKeys].filter((k) => !k.includes('/facts/') && !k.includes('/sentences/')));
         built[v.voice_id] = keys.size;
         const sampleKey = `demo-audio/${v.voice_id}/voice-sample.mp3`;
         const wanted = new Set(labels.map((l) => `demo-audio/${v.voice_id}/${demoSlug(l.label)}.mp3`));
@@ -211,6 +217,8 @@ export default async function handler(req, res) {
           factTotal: facts.length,
           factHave: facts.filter((f) => allKeys.has(`demo-audio/${v.voice_id}/facts/${f.hash}.mp3`)).length,
           factMissing: facts.filter((f) => !allKeys.has(`demo-audio/${v.voice_id}/facts/${f.hash}.mp3`)).length,
+          sentTotal: sentences.length,
+          sentHave: sentences.filter((s) => allKeys.has(`demo-audio/${v.voice_id}/sentences/${s.hash}.mp3`)).length,
         };
         // Keep the PUBLIC /api/demo completeness gate honest without waiting
         // for the next build: counters follow the true comparison.
@@ -275,6 +283,35 @@ export default async function handler(req, res) {
           if (Date.now() > deadline) { remaining++; continue; }
           try {
             const buf = await synthesizeVoice({ text: f.text, voiceId: vid, stats });
+            if (buf) {
+              await put(key, buf, { access: 'private', addRandomSuffix: false, contentType: 'audio/mpeg' });
+              built++;
+            } else { remaining++; }
+          } catch (_) { remaining++; }
+        }
+      }
+      res.status(200).json({ ok: true, built, skipped, remaining,
+        fromCache: stats.cached, generated: stats.generated,
+        note: (built > 0
+          ? `${stats.cached} copied free from your existing voice cache, ${stats.generated} newly generated. `
+          : '') + (remaining > 0 ? 'Run build again to finish the rest.' : 'Complete.') });
+      return;
+    }
+
+    // Fluent-sentence showcase build: demo-audio/<vid>/sentences/ only —
+    // same rules as facts (no demo_voices registration, no clip counters).
+    if (b.scope === 'sentences') {
+      const deadline = Date.now() + 240_000;
+      const stats = { cached: 0, generated: 0 };
+      let built = 0, skipped = 0, remaining = 0;
+      for (const vid of voiceIds) {
+        const have = await existingKeys(`demo-audio/${vid}/sentences/`);
+        for (const s of sentences) {
+          const key = `demo-audio/${vid}/sentences/${s.hash}.mp3`;
+          if (have.has(key)) { skipped++; continue; }
+          if (Date.now() > deadline) { remaining++; continue; }
+          try {
+            const buf = await synthesizeVoice({ text: s.text, voiceId: vid, stats });
             if (buf) {
               await put(key, buf, { access: 'private', addRandomSuffix: false, contentType: 'audio/mpeg' });
               built++;

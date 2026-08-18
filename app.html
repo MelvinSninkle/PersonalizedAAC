@@ -8536,6 +8536,18 @@
           itemCount: SB.staged.length, correctCount: 0, notes: text, attempts: [] }),
       }).catch(() => {});
     } catch (_) {}
+    // Fluent sentence — the membership feature (entitlement.sentenceVoice,
+    // every subscription tier): "I want ice cream" spoken as ONE natural
+    // utterance instead of three stitched clips. The server's TTS cache
+    // makes repeat plays free; ANY failure (offline, refused) falls through
+    // to the per-word loop below — never silence.
+    if (SB.staged.length > 1 && typeof ENT === 'object' && ENT && ENT.sentenceVoice === true) {
+      try {
+        const text = SB.staged.map(i => i.spoken || i.displayLabel || i.label).join(' ');
+        const u = await teachAudioURL(text);
+        if (u && gen === _sbPlayGen) { await playAwait(u); sbResetIdle(); return; }
+      } catch (_) {}
+    }
     for (const item of SB.staged.slice()) {
       if (gen !== _sbPlayGen) return;   // stopped or restarted
       try {
