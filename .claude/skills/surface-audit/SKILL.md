@@ -160,6 +160,20 @@ cache key; publish `pushSounds` stamp), then READ each and compare the
 template string piece by piece. Seeded/pushed clips use emotion literal
 `default`.
 
+**B3b. TTS cache keys are VOICE-scoped (owner rule 2026-08-18).**
+The hash input is `model|voice|emotion|text` — voice id IN, child id OUT.
+That one shape is the whole caching policy for generated speech (fluent
+sentences included): a SUPPORTED voice shares one global `tts/` entry per
+phrase across every family (cost amortizes), while a CLONED voice's unique
+id makes its entries personal by construction — no other family's board can
+ever derive those keys, and the `tts/` prefix has no `/api/media` read path.
+Two failure directions, both invariant-checked with exact-string pins in
+invariants.sh: adding `childId` to the key fragments the global cache
+(every family re-pays for "I want ice cream"); dropping `voiceId` would
+speak one family's cloned voice on another family's board. If the key shape
+must ever change, update BOTH construction sites (B3) and the B3b pins in
+the same commit — and preserve both properties.
+
 **B4. What a tile SAYS follows the language.** Seed: `spokenTextFor` in
 `api/_lib/seed-board.js` = translation.pronunciation → translation.label →
 taxonomy.pronunciation → taxonomy.label (translation map loaded only when

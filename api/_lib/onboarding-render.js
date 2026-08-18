@@ -458,6 +458,8 @@ export async function synthesizeVoice({ text, voiceId, db = null, childId = null
   // re-generated the same stock words per account. Callers still copy the
   // bytes into the child's own blob, so account deletion (which wipes a
   // child's media) never touches the shared file another family relies on.
+  // Voice-scoped key — same owner rule as api/tts.js cacheKeyFor (invariant
+  // B3b): global cache for shared voices, personal-by-construction for clones.
   const cacheKey = 'tts/' + createHash('sha256')
     .update(`${mid}|${vid}|default|${body}`).digest('hex').slice(0, 40) + '.mp3';
   try {
