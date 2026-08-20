@@ -77,13 +77,22 @@
   aside.filters .stats { margin-top: 14px; font-size: 12px; color: #557fa3; line-height: 1.6; }
 
   #walker { display: flex; flex-direction: column; gap: 10px; }
-  .cat-row { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; border: 1px solid #e2e6ec; border-radius: 6px; background: #fafbfd; font-size: 12px; }
+  /* House status pattern (owner decision 2026-08-20): a colored BAR on the
+     left edge + the status text in that same color — never a full background
+     tint. Calmer on the eyes at volume, and the color reads as a label
+     instead of a wash. Adopt this pattern for any new status-colored row. */
+  .cat-row { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px 6px 10px; border: 1px solid #e2e6ec; border-left: 4px solid #c0cad6; border-radius: 6px; background: #fff; font-size: 12px; }
   .cat-row .cat-top { display: flex; gap: 8px; align-items: center; }
   .cat-row .cat-prompt { width: 100%; box-sizing: border-box; font-size: 10px; line-height: 1.35; color: #4a5b6b; border: 1px solid #d7dee7; border-radius: 4px; padding: 4px 6px; resize: vertical; min-height: 46px; background: #fff; font-family: inherit; }
   .cat-row .cat-prompt:focus { outline: none; border-color: #2d7ff9; }
-  .cat-row.missing { background: #fef7e0; border-color: #f5d486; }
-  .cat-row.ok { background: #e6f4ea; border-color: #b6dfc0; }
-  .cat-row.parent-missing { background: #fde9e6; border-color: #f3b8b1; }
+  .cat-row.missing { border-left-color: #e6a817; }
+  .cat-row.ok { border-left-color: #2e8b57; }
+  .cat-row.parent-missing { border-left-color: #d9534f; }
+  .cat-row .status { font-weight: 600; }
+  .cat-row.missing .status { color: #9a6700; }
+  .cat-row.ok .status { color: #2e8b57; }
+  .cat-row.parent-missing .status { color: #c0392b; }
+  .cat-row.flash { outline: 3px solid #2d7ff9; outline-offset: 2px; }
   .cat-row .thumb { width: 36px; height: 36px; border-radius: 4px; background: #ddd; object-fit: cover; flex-shrink: 0; }
   .cat-row .thumb-empty { width: 36px; height: 36px; border-radius: 4px; background: #e2e6ec; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #95a5a6; font-size: 18px; }
   .cat-row .lbl { flex: 1; min-width: 0; }
@@ -276,10 +285,14 @@
     <span class="stat" id="cats-stat">— total</span>
     <label style="font-size:11px;color:#557fa3;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="cats-only-missing"> only missing or no image</label>
     <button id="cats-fill-all" onclick="reviewAndGenerateIcons()" style="font-size:11px;border:1px solid #2d7ff9;background:#eaf2ff;color:#2d7ff9;border-radius:6px;padding:3px 9px;cursor:pointer;" title="Cluster the chips that need an icon, read/tweak their prompts, then generate them all">✨ Review &amp; generate icons</button>
+    <button id="cats-toggle" style="font-size:11px;border:1px solid #c0cad6;background:#fff;border-radius:6px;padding:3px 9px;cursor:pointer;">▸ Show all</button>
     <span style="flex:1;"></span>
     <span style="font-size:11px;color:#95a5a6;">Create category chips here BEFORE generating tiles in that category — publish blocks otherwise.</span>
   </div>
-  <div id="cats-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;"></div>
+  <!-- Collapsed by default (owner request): the full chip grid is a wall at
+       ~40 categories. The 📁 link on any tile card below jumps straight to
+       (and reveals) that tile's category/subcategory card here. -->
+  <div id="cats-list" style="display:none;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;"></div>
   <input type="file" id="cat-upload-input" accept="image/png,image/jpeg,image/webp" style="display:none;">
 </section>
 
@@ -658,7 +671,8 @@ function renderCategoryPanel() {
       ? `<img class="thumb" src="/api/media?key=${encodeURIComponent(r.imageKey)}" alt="">`
       : `<div class="thumb-empty">·</div>`;
     const crumb = `${r.section}${r.parentLabel ? ` › ${escapeHtml(r.parentLabel)}` : ''} · ${r.tileCount} tiles`;
-    const status = r.parentMissing ? `⚠ need "${escapeHtml(r.parentLabel)}" first` : (r.hasImage ? '✓ chip · image' : (r.boardId ? '⚠ chip, no image' : '— not on board'));
+    const status = `<span class="status">${r.parentMissing ? `⚠ need "${escapeHtml(r.parentLabel)}" first` : (r.hasImage ? '✓ chip · image' : (r.boardId ? '⚠ chip, no image' : '— not on board'))}</span>`;
+    div.dataset.catkey = catKey(r);
     div.innerHTML = `
       <div class="cat-top">
         ${thumb}
@@ -673,6 +687,36 @@ function renderCategoryPanel() {
     div.querySelector('[data-act="cat-prompt"]').addEventListener('input', (e) => { r.prompt = e.target.value; editedPrompts.set(catKey(r), e.target.value); });
     list.appendChild(div);
   }
+}
+
+// Collapsed-by-default category grid + jump-links from tile cards (owner
+// request 2026-08-20: the full list was a wall; the tile you're editing
+// should link you to its own category card instead).
+let catsOpen = false;
+function setCatsOpen(open) {
+  catsOpen = open;
+  const list = $('cats-list');
+  if (list) list.style.display = open ? 'grid' : 'none';
+  const t = $('cats-toggle');
+  if (t) t.textContent = open ? '▾ Hide list' : '▸ Show all';
+}
+if ($('cats-toggle')) $('cats-toggle').addEventListener('click', () => setCatsOpen(!catsOpen));
+
+function revealCategory(section, label, parentLabel) {
+  setCatsOpen(true);
+  const tryKeys = [
+    ((section || '') + '|' + (parentLabel || '') + '|' + (label || '')).toLowerCase(),
+    ((section || '') + '||' + (label || '')).toLowerCase(),
+  ];
+  let el = null;
+  for (const k of tryKeys) {
+    el = document.querySelector(`[data-catkey="${CSS.escape(k)}"]`);
+    if (el) break;
+  }
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1800);
 }
 
 let _pendingCatUpload = null;
@@ -921,7 +965,8 @@ function renderTileCard(t) {
       <div class="head">
         <span class="label" contenteditable="true" data-field="label">${escapeHtml(t.label || '')}</span>
         <span class="badge">${escapeHtml(t.column || '')}</span>
-        <span class="badge" style="background:#fcecd9;color:#e67e22;">${escapeHtml(t.category || '')}</span>
+        <button class="badge" data-act="cat-jump" title="Open this category's chip card above (icon prompt · upload · generate)"
+          style="background:#fcecd9;color:#e67e22;border:none;cursor:pointer;font:inherit;">📁 ${escapeHtml(t.category || '')}${t.subcategory ? ' › ' + escapeHtml(t.subcategory) : ''}</button>
         <span class="id">${escapeHtml(t.id)}</span>
         <span class="id" data-board-note style="background:transparent;"></span>
       </div>
@@ -999,6 +1044,12 @@ function renderTileCard(t) {
   card.querySelector('[data-act="scene-add"]').addEventListener('click', () => { addSceneSubject(card); });
   card.querySelector('[data-act="scene-go"]').addEventListener('click', () => generateScene(t.id, card));
   decorateBoardNote(t, card);
+
+  // 📁 category badge → reveal + scroll to this tile's category (or
+  // subcategory) chip card in the collapsed grid above.
+  const catJump = card.querySelector('[data-act="cat-jump"]');
+  if (catJump) catJump.addEventListener('click', () =>
+    revealCategory(t.column, t.subcategory || t.category, t.subcategory ? t.category : ''));
 
   updateCostHint(t.id);
   return card;
