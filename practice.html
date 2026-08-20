@@ -605,8 +605,12 @@
     const styles = DATA.styles || [];
     if (!styles.length) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
-    fillSelect(document.getElementById('sel-style'),
-               [{ id: 0, label: 'Classic' }, ...styles], STYLE);
+    // "Classic" is a client-side pseudo style (id 0 = generic starter art) —
+    // the Lab's practice-lineup flag retires it once real styles ship. The
+    // server only sends classicHidden when at least one style is published,
+    // so an empty lineup can never strand the page style-less.
+    const opts = DATA.classicHidden ? styles : [{ id: 0, label: 'Classic' }, ...styles];
+    fillSelect(document.getElementById('sel-style'), opts, STYLE);
   }
 
   // Some styles offer more than one demo child — a "Meet" dropdown lets the
@@ -1139,6 +1143,14 @@
       const r = await fetch('/api/demo' + (STYLE ? '?style=' + STYLE : ''));
       DATA = await r.json();
       if (!DATA || !Array.isArray(DATA.tiles) || !DATA.tiles.length) throw new Error('empty');
+      // Classic retired (Lab flag) and no deep-linked style: land on the
+      // first PUBLISHED style instead of the generic starter art.
+      if (!STYLE && DATA.classicHidden && (DATA.styles || []).length) {
+        STYLE = DATA.styles[0].id;
+        const r2 = await fetch('/api/demo?style=' + STYLE);
+        const d2 = await r2.json();
+        if (d2 && Array.isArray(d2.tiles) && d2.tiles.length) DATA = d2;
+      }
     } catch (_) {
       document.getElementById('loading').textContent =
         'The practice board isn’t available right now, but the real thing is. Tap "Make it your child’s" above!';

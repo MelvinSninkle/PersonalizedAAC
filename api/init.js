@@ -725,6 +725,9 @@ export default async function handler(req, res) {
         updated_by TEXT
       )
     `;
+    // Practice-board lineup: hide the hardcoded "Classic" (generic starter
+    // art) option from the practice style switchers once real styles ship.
+    await db`ALTER TABLE lab_settings ADD COLUMN IF NOT EXISTS hide_classic BOOLEAN NOT NULL DEFAULT FALSE`;
     // Seed the singleton row with a starter master prompt the user can edit later.
     await db`
       INSERT INTO lab_settings (id, master_prompt, model_defaults, size_default)

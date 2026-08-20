@@ -69,6 +69,10 @@ struct PracticeBoardView: View {
         /// Curated fluent-sentence showcase lines with pre-rendered clips
         /// under demo-audio/<vid>/sentences/ (the membership feature demo).
         let demoSentences: [String]?
+        /// Lab practice-lineup flag: drop the hardcoded "Classic" (generic
+        /// starter art) option. Server sends TRUE only when at least one
+        /// real style is published, so the switcher can never go empty.
+        let classicHidden: Bool?
     }
 
     // MARK: state
@@ -434,10 +438,14 @@ struct PracticeBoardView: View {
 
     private var styleMenu: some View {
         Menu {
-            Button {
-                kidId = nil; styleId = nil
-            } label: {
-                if styleId == nil { Label("Classic", systemImage: "checkmark") } else { Text("Classic") }
+            // "Classic" is a client-side pseudo style (nil = generic starter
+            // art) — retired from the lineup once the Lab flag says so.
+            if payload?.classicHidden != true {
+                Button {
+                    kidId = nil; styleId = nil
+                } label: {
+                    if styleId == nil { Label("Classic", systemImage: "checkmark") } else { Text("Classic") }
+                }
             }
             ForEach(payload?.styles ?? [], id: \.id) { s in
                 Button {
@@ -639,6 +647,13 @@ struct PracticeBoardView: View {
             let p = try JSONDecoder().decode(Payload.self, from: data)
             if p.tiles.isEmpty && payload != nil { return }   // keep the board we have
             payload = p
+            // Classic retired and nothing picked yet: land on the first
+            // published style instead of the generic starter art.
+            if styleId == nil, p.classicHidden == true, let first = p.styles?.first {
+                styleId = first.id
+                Task { await load() }
+                return
+            }
             if p.tiles.isEmpty {
                 errorText = "The practice board isn't available right now, but the real thing is — tap Register an Account above!"
             }
