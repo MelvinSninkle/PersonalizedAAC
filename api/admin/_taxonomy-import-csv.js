@@ -73,13 +73,20 @@ export default async function handler(req, res) {
           continue;
         }
         const have = new Set((cur.match_terms || []).map((s) => s.toLowerCase()));
+        // CLEAR SENTINEL: a cell containing exactly '-' means "blank this
+        // field on the live row" — COALESCE alone can only add/replace,
+        // never remove, and a recategorization (e.g. the 2026-08 verb
+        // reorg) must be able to wipe a stale subcategory like 'More'.
+        // Supported for category + subcategory only.
         plan.enrich.push({
           id,
           clues: cluesArr(r.descriptive_clues),
           prompt: txt(r.prompt_template),
           pron: txt(r.pronunciation),
-          category: txt(r.category),
-          subcategory: txt(r.subcategory),
+          category: txt(r.category) === '-' ? null : txt(r.category),
+          categoryClear: txt(r.category) === '-',
+          subcategory: txt(r.subcategory) === '-' ? null : txt(r.subcategory),
+          subcategoryClear: txt(r.subcategory) === '-',
           growth: txt(r.growth_stage),
           meal: txt(r.meal_context),
           notes: txt(r.notes),
@@ -123,8 +130,10 @@ export default async function handler(req, res) {
                  descriptive_clues = COALESCE(${e.clues}, descriptive_clues),
                  prompt_template   = COALESCE(${e.prompt}, prompt_template),
                  pronunciation     = COALESCE(${e.pron}, pronunciation),
-                 category          = COALESCE(${e.category}, category),
-                 subcategory       = COALESCE(${e.subcategory}, subcategory),
+                 category          = CASE WHEN ${e.categoryClear === true} THEN NULL
+                                          ELSE COALESCE(${e.category}, category) END,
+                 subcategory       = CASE WHEN ${e.subcategoryClear === true} THEN NULL
+                                          ELSE COALESCE(${e.subcategory}, subcategory) END,
                  growth_stage      = COALESCE(${e.growth}, growth_stage),
                  meal_context      = COALESCE(${e.meal}, meal_context),
                  notes             = COALESCE(${e.notes}, notes),
