@@ -77,7 +77,33 @@ export async function ensureWaitlist(db) {
 // whole form) so the dashboard can aggregate with plain SQL/JS. Multi-selects
 // are JSONB arrays of option keys. Canonical DDL also lives in api/init.js.
 export const SURVEY_VERSION = '2026-08-v1';
-export const FOUNDING_CAP = 100;   // Founding-100 seats — counted by PAID rows only
+export const FOUNDING_CAP = 100;   // default priority-cohort size (see foundingCaps)
+
+// Founding capacity — TWO thresholds, both admin-adjustable (Lab settings):
+//   priorityCap (default 100)  — the first N PAID deposits are the priority
+//                                cohort ("Founding Family #N", set up first).
+//   orderCap    (default 1000) — the hard stop: deposit-taking disables
+//                                entirely at N paid orders so a viral night
+//                                can't sell unlimited discounted boards.
+// Counted by PAID rows only — reserving (account + photos, no deposit) never
+// consumes a slot. Falls back to the defaults when settings are unreadable.
+export async function foundingCaps(db) {
+  let priorityCap = 100, orderCap = 1000;
+  try {
+    const r = (await db`SELECT founding_priority_cap, founding_order_cap FROM lab_settings WHERE id = 1`)[0];
+    if (r && Number(r.founding_priority_cap) > 0) priorityCap = Number(r.founding_priority_cap);
+    if (r && Number(r.founding_order_cap) > 0) orderCap = Number(r.founding_order_cap);
+  } catch (_) { /* pre-migration settings — defaults hold */ }
+  return { priorityCap, orderCap };
+}
+
+export async function foundingPaidCount(db) {
+  try {
+    return Number((await db`
+      SELECT COUNT(*)::int AS n FROM survey_responses
+      WHERE cohort = 'founding_100' AND payment_status = 'paid'`)[0]?.n) || 0;
+  } catch (_) { return 0; }
+}
 
 export async function ensureSurvey(db) {
   await db`
@@ -164,6 +190,12 @@ export async function ensureSurvey(db) {
   await db`ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS behavior_books_interest TEXT`;
   await db`ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS behavior_book_topics JSONB`;
   await db`ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS behavior_book_other TEXT`;
+  // Funnel v2 (survey-gated signup): the account this survey created, the
+  // family's paid deposit rank, and the professional clinic address (for the
+  // future geo-tagged clinic-boards feature).
+  await db`ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS linked_user_id BIGINT`;
+  await db`ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS founding_rank INT`;
+  await db`ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS professional_address TEXT`;
 }
 
 // ── Row token: lets the JUST-SUBMITTED form attach photos to its own row and
@@ -407,6 +439,7 @@ async function survey(req, res) {
         professional_website = ${sTxt(a.professional_website, 254)},
         professional_email = ${sTxt(a.professional_email, 254)},
         professional_phone = ${sTxt(a.professional_phone, 40)},
+        professional_address = ${sTxt(a.professional_address, 300)},
         potential_children_served = ${sTxt(a.potential_children_served, 20)},
         professional_age_ranges = ${jb(sArr(a.professional_age_ranges, 10, 30))},
         professional_aac_systems = ${jb(sArr(a.professional_aac_systems, 24, 60))},
@@ -447,21 +480,23 @@ async function survey(req, res) {
   }
 }
 
-// Public sold-out probe for the /survey founding card. Deliberately returns
-// only open/closed — the live "n of 100" counter is admin-only (dashboard).
+// Public capacity probe for the founding funnel. Deliberately returns only
+// booleans — exact counts stay admin-only (dashboard):
+//   open     — deposits are still being taken (paid < orderCap)
+//   priority — the NEXT paid deposit lands inside the priority cohort
+//              ("you'd be in the first hundred")
 async function foundingStatus(req, res) {
   try {
     const db = sql();
     await ensureSurvey(db);
-    const n = Number((await db`
-      SELECT COUNT(*)::int AS n FROM survey_responses
-      WHERE cohort = 'founding_100' AND payment_status = 'paid'`)[0]?.n) || 0;
+    const n = await foundingPaidCount(db);
+    const { priorityCap, orderCap } = await foundingCaps(db);
     res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json({ ok: true, open: n < FOUNDING_CAP });
+    res.status(200).json({ ok: true, open: n < orderCap, priority: n < priorityCap });
   } catch (err) {
     // Fail OPEN like founding.html's capacity probe — checkout re-enforces
     // the cap server-side, so a DB hiccup here must not hide the offer.
-    res.status(200).json({ ok: true, open: true });
+    res.status(200).json({ ok: true, open: true, priority: false });
   }
 }
 

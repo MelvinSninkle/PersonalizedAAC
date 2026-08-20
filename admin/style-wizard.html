@@ -572,9 +572,25 @@
         '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #fce4ef;">'
         + '<b style="flex:1;">' + String(s.label || ('#' + s.id)).replace(/[<>&]/g, '') + '</b>'
         + (s.active ? '<span class="pill live">LIVE</span>' : '<span class="pill draft">DRAFT</span>')
+        + '<button class="secondary" type="button" data-rename="' + s.id + '" data-label="'
+          + String(s.label || '').replace(/[<>&"]/g, '') + '" title="Rename this style — boards keep rendering, only the name changes">✏️</button>'
         + '<a href="?styleGuideId=' + s.id + '"><button class="secondary" type="button">Open →</button></a>'
         + '</div>').join('')
         : 'No styles yet — create your first one below.';
+      // Rename: label-only PATCH — image sets, board pins, and renders all
+      // key on the style's ID, so a rename is cosmetic everywhere (pickers,
+      // practice switcher, onboarding) and takes effect on next load.
+      document.querySelectorAll('[data-rename]').forEach((b) => b.addEventListener('click', async () => {
+        const next = prompt('New name for this style:', b.dataset.label || '');
+        if (next == null) return;
+        const label = next.trim().slice(0, 120);
+        if (!label) return;
+        b.disabled = true;
+        try {
+          await api('PATCH', '/api/admin/style-guides?id=' + b.dataset.rename, { label });
+          showResumeList();
+        } catch (e) { setMsg('classic-msg', 'Rename failed: ' + (e.message || e), 'err'); b.disabled = false; }
+      }));
     } catch (e) { $('resume-list').textContent = 'Could not load styles: ' + (e.message || e); }
     // Practice-lineup flag rides the Lab settings singleton.
     try {

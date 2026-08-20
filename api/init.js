@@ -728,6 +728,9 @@ export default async function handler(req, res) {
     // Practice-board lineup: hide the hardcoded "Classic" (generic starter
     // art) option from the practice style switchers once real styles ship.
     await db`ALTER TABLE lab_settings ADD COLUMN IF NOT EXISTS hide_classic BOOLEAN NOT NULL DEFAULT FALSE`;
+    // Founding capacity knobs: priority-cohort size + hard deposit stop.
+    await db`ALTER TABLE lab_settings ADD COLUMN IF NOT EXISTS founding_priority_cap INT NOT NULL DEFAULT 100`;
+    await db`ALTER TABLE lab_settings ADD COLUMN IF NOT EXISTS founding_order_cap INT NOT NULL DEFAULT 1000`;
     // Seed the singleton row with a starter master prompt the user can edit later.
     await db`
       INSERT INTO lab_settings (id, master_prompt, model_defaults, size_default)
@@ -941,7 +944,10 @@ Size: {size}.',
         general_for_whom TEXT,
         feature_interests JSONB,
         marketing_permissions JSONB,
-        early_access_interest BOOLEAN NOT NULL DEFAULT FALSE
+        early_access_interest BOOLEAN NOT NULL DEFAULT FALSE,
+        linked_user_id BIGINT,
+        founding_rank INT,
+        professional_address TEXT
       )
     `;
     await db`CREATE INDEX IF NOT EXISTS survey_email_idx   ON survey_responses(email)`;

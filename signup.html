@@ -49,11 +49,16 @@
       <label for="password">Password</label>
       <input id="password" type="password" autocomplete="new-password" placeholder="At least 8 characters" required>
 
-      <label for="inviteCode">Invite code</label>
-      <input id="inviteCode" type="text" autocomplete="off" autocapitalize="none" placeholder="e.g. soccer-friends">
-      <p class="hint">My World is invite-only during early access. Came here from an invite link?
-        Your code is already applied, so you can leave this blank.
-        No code yet? <a href="/#waitlist">Join the waitlist →</a></p>
+      <p class="hint" id="survey-ok" style="display:none;color:#047857;font-weight:700;">
+        ✓ Survey complete — you're clear to create your account.</p>
+      <div id="invite-wrap">
+        <label for="inviteCode">Invite code</label>
+        <input id="inviteCode" type="text" autocomplete="off" autocapitalize="none" placeholder="e.g. soccer-friends">
+        <p class="hint">Account creation starts with our short survey (3–6 minutes) — it directly
+          shapes what we build, and qualifying families can become a Founding Family.
+          <a href="/survey"><b>Take the survey →</b></a><br>
+          Already have an invite code (or came from an invite link)? It works here too.</p>
+      </div>
 
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;font-weight:500;text-transform:none;letter-spacing:0;line-height:1.45;margin:14px 0 10px;color:#4b5563;">
         <input type="checkbox" id="consent" style="width:auto;margin-top:2px;flex:0 0 auto;">
@@ -82,6 +87,18 @@
   const urlCode = new URLSearchParams(location.search).get('code');
   if (urlCode && !$('inviteCode').value) $('inviteCode').value = urlCode;
 
+  // Survey credential (?sv=<rowId>&st=<token>, set by /survey's account
+  // buttons): a COMPLETED survey is the front-door signup credential now —
+  // the invite-code box collapses to keep the path obvious. Validated
+  // server-side; a bad/expired token falls back to the invite message.
+  const qp = new URLSearchParams(location.search);
+  const surveyId = parseInt(qp.get('sv') || '', 10) || 0;
+  const surveyToken = qp.get('st') || '';
+  if (surveyId && surveyToken) {
+    document.getElementById('survey-ok').style.display = '';
+    document.getElementById('invite-wrap').style.display = 'none';
+  }
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     msg.className = 'msg';
@@ -105,7 +122,8 @@
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         body: JSON.stringify({ selfSignup: true, email, password, childName, consent: true, consentVersion: '2026-07',
-                               inviteCode: $('inviteCode').value.trim() }),
+                               inviteCode: $('inviteCode').value.trim(),
+                               surveyId: surveyId || undefined, surveyToken: surveyToken || undefined }),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -113,8 +131,10 @@
         msg.textContent = data.error || ('Could not create account (HTTP ' + r.status + ').');
         if (r.status === 409) msg.innerHTML = (data.error || 'That email already has an account.') + ' <a href="/login">Sign in →</a>';
         if (data.error === 'invite_required') {
-          msg.innerHTML = (data.detail || 'My World is invite-only right now. Enter your invite code above.') +
-            ' <a href="/#waitlist">Join the waitlist →</a>';
+          document.getElementById('invite-wrap').style.display = '';
+          document.getElementById('survey-ok').style.display = 'none';
+          msg.innerHTML = (data.detail || 'Account creation starts with our short survey.') +
+            ' <a href="/survey"><b>Take the survey →</b></a>';
           $('inviteCode').focus();
         }
         // The code is real but its launch group is full — the fix is the

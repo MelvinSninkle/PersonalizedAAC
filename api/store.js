@@ -178,9 +178,35 @@ async function catalog(req, res, db, auth, uid) {
     } catch (_) { /* renewal estimate is display-only */ }
   }
 
+  // Founding deposit state for this account (funnel v2): drives the store's
+  // Founding card — pay now, resume later, or "you're #N". Best-effort.
+  let foundingState = null;
+  if (uid) {
+    try {
+      const { ensureSurvey, foundingCaps, foundingPaidCount } = await import('./waitlist.js');
+      await ensureSurvey(db);
+      const email = String((auth.user && auth.user.email) || '').toLowerCase();
+      const row = (await db`SELECT id, payment_status, founding_rank, founding_purchase_interest
+                            FROM survey_responses
+                            WHERE linked_user_id = ${uid}
+                               OR (email = ${email || null} AND completed_at IS NOT NULL)
+                            ORDER BY (linked_user_id = ${uid}) DESC, created_at DESC LIMIT 1`)[0];
+      const paidCount = await foundingPaidCount(db);
+      const { priorityCap, orderCap } = await foundingCaps(db);
+      foundingState = {
+        surveyed: !!row,
+        paid: row?.payment_status === 'paid',
+        rank: row?.founding_rank || null,
+        priority: row?.founding_rank ? row.founding_rank <= priorityCap : paidCount < priorityCap,
+        open: paidCount < orderCap,
+      };
+    } catch (_) { /* card simply doesn't render */ }
+  }
+
   res.setHeader('Cache-Control', 'no-store');
   res.status(200).json({
     ok: true,
+    foundingState,
     balance: uid ? await creditBalance(db, uid) : 0,
     costs: COST,   // per-spend price facts — clients never hardcode these
     creditCents: CREDIT_CENTS,
@@ -1317,39 +1343,73 @@ async function foundingCheckout(req, res, db, body) {
   if (!key) { res.status(501).json({ error: 'stripe_not_configured' }); return; }
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
 
-  const email = String(body.email || '').trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
-    res.status(400).json({ error: 'Valid email required' }); return;
-  }
-  const surveyId = Number(body.surveyId) || 0;
-  const { verifySurveyToken, ensureSurvey, FOUNDING_CAP } = await import('./waitlist.js');
-  if (!surveyId || !verifySurveyToken(body.token, surveyId)) {
-    res.status(401).json({ error: 'bad or expired survey token — refresh the survey and try again' });
-    return;
-  }
+  const { verifySurveyToken, ensureSurvey, foundingCaps, foundingPaidCount } = await import('./waitlist.js');
   await ensureSurvey(db);
-  const row = (await db`SELECT id, payment_status FROM survey_responses WHERE id = ${surveyId} LIMIT 1`)[0];
-  if (!row) { res.status(404).json({ error: 'survey not found' }); return; }
-  if (row.payment_status === 'paid') { res.status(400).json({ error: 'already_paid' }); return; }
 
-  const paid = Number((await db`
-    SELECT COUNT(*)::int AS n FROM survey_responses
-    WHERE cohort = 'founding_100' AND payment_status = 'paid'`)[0]?.n) || 0;
-  if (paid >= FOUNDING_CAP) {
+  // Two callers:
+  //   1. SIGNED IN (the normal funnel v2 path — deposit placed from the
+  //      store's Founding card, now or whenever the family resumes): the
+  //      account's linked survey row is the order record; an invite-code
+  //      account with no survey gets a stub row so capacity accounting
+  //      stays in one table.
+  //   2. Anonymous with a survey row token (legacy pre-account path).
+  const auth = await checkAuth(req);
+  const uid = auth.ok ? (Number(auth.user.uid || auth.user.id) || null) : null;
+  let email, surveyId = 0;
+  if (uid) {
+    email = String(auth.user.email || '').toLowerCase();
+    let row = (await db`SELECT id, payment_status FROM survey_responses
+                        WHERE linked_user_id = ${uid} LIMIT 1`)[0];
+    if (!row && email) {
+      row = (await db`SELECT id, payment_status FROM survey_responses
+                      WHERE email = ${email} AND completed_at IS NOT NULL
+                      ORDER BY created_at DESC LIMIT 1`)[0];
+      if (row) { try { await db`UPDATE survey_responses SET linked_user_id = ${uid} WHERE id = ${row.id}`; } catch (_) {} }
+    }
+    if (!row) {
+      row = (await db`INSERT INTO survey_responses
+        (survey_version, source, respondent_type, email, completed_at, linked_user_id, founding_purchase_interest)
+        VALUES ('stub', 'store-deposit', 'parent', ${email}, NOW(), ${uid}, 'yes')
+        RETURNING id, payment_status`)[0];
+    }
+    if (row.payment_status === 'paid') { res.status(400).json({ error: 'already_paid' }); return; }
+    surveyId = Number(row.id);
+  } else {
+    email = String(body.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      res.status(400).json({ error: 'Valid email required' }); return;
+    }
+    surveyId = Number(body.surveyId) || 0;
+    if (!surveyId || !verifySurveyToken(body.token, surveyId)) {
+      res.status(401).json({ error: 'bad or expired survey token — refresh the survey and try again' });
+      return;
+    }
+    const row = (await db`SELECT id, payment_status FROM survey_responses WHERE id = ${surveyId} LIMIT 1`)[0];
+    if (!row) { res.status(404).json({ error: 'survey not found' }); return; }
+    if (row.payment_status === 'paid') { res.status(400).json({ error: 'already_paid' }); return; }
+  }
+
+  // HARD STOP at the order cap (admin-adjustable, default 1000) — deposit-
+  // taking disables entirely, whatever page someone is holding open. The
+  // priority cap (default 100) never blocks — it only ranks.
+  const paid = await foundingPaidCount(db);
+  const { orderCap } = await foundingCaps(db);
+  if (paid >= orderCap) {
     res.status(409).json({ error: 'founding_full',
-      detail: 'Founding Family spots are full. Join the next early-access group.' });
+      detail: 'Deposits are paused while we work through the current group — your account and photos hold your place, and we\'ll email you the moment deposits reopen.' });
     return;
   }
 
   const origin = `https://${req.headers.host}`;
   const form = new URLSearchParams();
   form.set('mode', 'payment');
-  form.set('success_url', origin + '/survey?paid=1');
-  form.set('cancel_url', origin + '/survey?canceled=1');
+  form.set('success_url', origin + (uid ? '/store.html?founding=paid' : '/survey?paid=1'));
+  form.set('cancel_url', origin + (uid ? '/store.html?founding=canceled' : '/survey?canceled=1'));
   form.set('customer_email', email);
   form.set('metadata[kind]', 'founding');
   form.set('metadata[surveyId]', String(surveyId));
   form.set('metadata[email]', email);
+  if (uid) form.set('metadata[userId]', String(uid));
   form.set('line_items[0][quantity]', '1');
   form.set('line_items[0][price_data][currency]', 'usd');
   form.set('line_items[0][price_data][unit_amount]', String(FOUNDING_CENTS));
@@ -1376,14 +1436,16 @@ async function foundingCheckout(req, res, db, body) {
 // invite code + sends the email — same rails register.js already links
 // accounts through. Idempotent on Stripe redelivery.
 async function handleFoundingPaid(db, s) {
-  const { ensureWaitlist, ensureSurvey } = await import('./waitlist.js');
+  const { ensureWaitlist, ensureSurvey, foundingCaps } = await import('./waitlist.js');
   await ensureWaitlist(db);
   await ensureSurvey(db);
   const sid = Number(s.metadata && s.metadata.surveyId) || 0;
+  const uid = Number(s.metadata && s.metadata.userId) || 0;
   const email = String((s.metadata && s.metadata.email) || (s.customer_details && s.customer_details.email) || '').toLowerCase();
 
   const srow = sid ? (await db`SELECT id, payment_status FROM survey_responses WHERE id = ${sid} LIMIT 1`)[0] : null;
   if (srow && srow.payment_status === 'paid') return;   // redelivery — already handled
+  let rank = null;
   if (srow) {
     await db`
       UPDATE survey_responses
@@ -1392,10 +1454,60 @@ async function handleFoundingPaid(db, s) {
           stripe_session_id = ${String(s.id || '') || null},
           stripe_customer_id = ${String(s.customer || '') || null},
           email = COALESCE(${email || null}, email),
+          linked_user_id = COALESCE(${uid || null}, linked_user_id),
           updated_at = NOW()
       WHERE id = ${sid}`;
+    // Deposit rank = position in the paid order ("Founding Family #N").
+    // Counted after our own stamp so this row is included; a concurrent
+    // webhook tie can at worst share a number — acceptable for a greeting.
+    try {
+      rank = Number((await db`SELECT COUNT(*)::int AS n FROM survey_responses
+                              WHERE cohort = 'founding_100' AND payment_status = 'paid'`)[0]?.n) || null;
+      if (rank) await db`UPDATE survey_responses SET founding_rank = ${rank} WHERE id = ${sid} AND founding_rank IS NULL`;
+    } catch (_) {}
   } else {
     console.error('founding webhook: survey row missing; session', s.id, '— still fulfilling by email');
+  }
+  const { priorityCap } = await foundingCaps(db);
+  const priority = rank != null && rank <= priorityCap;
+
+  // SIGNED-IN depositor: the account already exists, so no invite code and
+  // no "create your account" email — stamp the waitlist mirror as paid +
+  // linked, and send the deposit confirmation with their rank instead.
+  if (uid) {
+    try {
+      let row = email ? (await db`SELECT id FROM waitlist WHERE email = ${email} LIMIT 1`)[0] : null;
+      if (!row && email) {
+        row = (await db`INSERT INTO waitlist (email, source) VALUES (${email}, 'founding-deposit') RETURNING id`)[0];
+      }
+      if (row) {
+        await db`UPDATE waitlist
+                 SET paid_at = COALESCE(paid_at, NOW()), paid_sku = 'founding.board',
+                     stripe_customer_id = COALESCE(${String(s.customer || '') || null}, stripe_customer_id),
+                     linked_user_id = COALESCE(linked_user_id, ${uid})
+                 WHERE id = ${row.id}`;
+      }
+    } catch (_) {}
+    try {
+      const { sendEmail, emailConfigured } = await import('./_lib/email.js');
+      if (email && emailConfigured()) {
+        await sendEmail({
+          to: email,
+          subject: rank
+            ? `Deposit received — you're Founding Family #${rank} 💛`
+            : 'Deposit received — your Founding Board is reserved 💛',
+          text: 'Thank you! Your Founding Personalized Board deposit is in.\n\n'
+              + (rank ? `You are Founding Family #${rank}.` : 'Your board is reserved.') + ' '
+              + (priority
+                  ? 'You are inside our first hundred — your board gets priority setup.\n\n'
+                  : 'Boards are personally set up in deposit order — we\'ll be in touch as yours comes up.\n\n')
+              + 'Next: finish onboarding (your photos and choices there are what your child\'s board is built from) '
+              + 'if you haven\'t already. We\'ll take it from there and email you when your board is ready.\n\n'
+              + 'Reply to this email any time — you are talking to the founder.\n',
+        });
+      }
+    } catch (err) { console.error('founding deposit email failed:', String(err && err.message || err)); }
+    return;
   }
 
   // Waitlist mirror + invite code + email — never strand a payment even if

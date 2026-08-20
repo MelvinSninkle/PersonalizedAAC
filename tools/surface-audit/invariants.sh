@@ -169,9 +169,11 @@ E13_HITS=$(grep -rln "support_cases" api | sort)
 if [ "$E13_HITS" == "$E13_WANT" ]; then pass "E13 support_cases containment (4 intended files)"; else
   fail "E13 support_cases reachable from unexpected files: $(echo "$E13_HITS" | tr '\n' ' ')"; fi
 
-# ── E10: web self-signup requires a valid invite code ────────────────────────
+# ── E10: web self-signup requires a valid credential ─────────────────────────
 # The page-level invite wall moved off the funnel (/, /practice, /signup are
-# public); the private preview is enforced INSIDE account creation instead.
+# public); the gate is enforced INSIDE account creation instead. Two accepted
+# credentials (2026-08-20): a COMPLETED survey row token, or an invite code.
+# Both greps below must hold — losing either means the wall has a hole.
 E10=0
 grep -q "validateInviteCode" api/auth/register.js || { fail "E10 register.js no longer validates an invite code on self-signup"; E10=1; }
 grep -q "invite_required" api/auth/register.js || { fail "E10 register.js lost the invite_required rejection"; E10=1; }

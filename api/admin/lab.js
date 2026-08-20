@@ -50,6 +50,7 @@ import support from './_lab-support.js';
 import synonyms from './_lab-synonyms.js';
 import surveyDashboard from './_lab-survey-dashboard.js';
 import gapWords from './_lab-gap-words.js';
+import orders from './_lab-orders.js';
 
 export const config = { maxDuration: 300 };
 
@@ -91,6 +92,7 @@ const HANDLERS = {
   'synonyms': synonyms,
   'survey-dashboard': surveyDashboard,
   'gap-words': gapWords,
+  'orders': orders,
 };
 
 export default async function handler(req, res) {

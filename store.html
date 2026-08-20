@@ -132,6 +132,54 @@
 
   function money(cents) { return '$' + (cents / 100).toFixed(2); }
 
+  // Founding deposit card (funnel v2): a family who came through the survey
+  // can place their $49.99 deposit here — right away or whenever they come
+  // back. The card is honest about state: paid shows their rank ("Founding
+  // Family #N"), unpaid shows priority ("deposits placed now land in the
+  // first hundred"), and a paused window says the spot is safe.
+  function renderFounding() {
+    const el = document.getElementById('packs');
+    const f = CATALOG && CATALOG.foundingState;
+    if (!f || (!f.surveyed && !f.paid)) return;
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.cssText = 'border:2px dashed #ff1493;';
+    if (f.paid) {
+      card.innerHTML = `<h3>💛 Founding Family${f.rank ? ' #' + f.rank : ''}</h3>
+        <div class="val">Your deposit is in — your board is reserved.</div>
+        <div class="sub">${f.rank && f.priority
+          ? 'You\'re inside the first hundred: priority setup.'
+          : 'Boards are personally set up in deposit order — we\'ll email you as yours comes up.'}</div>`;
+    } else if (!f.open) {
+      card.innerHTML = `<h3>💛 Founding deposit</h3>
+        <div class="val">Deposits are paused right now.</div>
+        <div class="sub">Your account and photos hold your place — we'll email you the moment deposits reopen.</div>`;
+    } else {
+      card.innerHTML = `<h3>💛 Founding Personalized Board</h3>
+        <div class="big"><span style="color:#9ca3af;text-decoration:line-through;font-size:16px;">$99.99</span> $49.99</div>
+        <div class="val">One-time deposit — the board is yours permanently.</div>
+        <div class="sub">${f.priority ? 'Deposits placed now land in the first hundred — priority setup.' : 'Fulfilled in deposit order.'}
+          Not ready? Your account and photos already hold your place.</div>
+        <button class="btn" id="founding-pay">Place my $49.99 deposit</button>`;
+    }
+    el.parentNode.insertBefore(card, el);
+    const pay = document.getElementById('founding-pay');
+    if (pay) pay.addEventListener('click', async () => {
+      pay.disabled = true;
+      try {
+        const d = await api('/api/store?action=founding-checkout', { method: 'POST', body: JSON.stringify({}) });
+        if (d && d.url) { location.href = d.url; return; }
+        throw new Error('Checkout could not start.');
+      } catch (e) {
+        pay.disabled = false;
+        toast(e.status === 501 ? 'Deposits open soon — your place is already held.' : (e.message || 'Checkout could not start.'));
+      }
+    });
+  }
+  if (new URLSearchParams(location.search).get('founding') === 'paid') {
+    setTimeout(() => toast('💛 Deposit received — your Founding Board is reserved. Check your email for your number.'), 400);
+  }
+
   function renderPacks() {
     const el = document.getElementById('packs');
     const c = CATALOG;
@@ -321,10 +369,12 @@
     btn.disabled = false;
   });
 
+  let foundingRendered = false;
   async function loadCatalog() {
     CATALOG = await api('/api/store?action=catalog&childId=' + encodeURIComponent(CHILD));
     document.getElementById('balance').textContent = `⭐ ${CATALOG.balance} credits`;
     renderPacks();
+    if (!foundingRendered) { foundingRendered = true; renderFounding(); }
   }
   async function loadShop() {
     const d = await api('/api/store?action=browse&childId=' + encodeURIComponent(CHILD));
