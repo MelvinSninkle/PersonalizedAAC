@@ -97,6 +97,12 @@ export function tierFeatures(sub) {
   return {
     stt: paid, autoTeach: paid, reporting: paid, dataSaving: paid,
     gapFill: paid && sub.sku !== 'starter.monthly',
+    // Fluent sentence playback: the constructor speaks "I want ice cream"
+    // as ONE natural utterance instead of three stitched word clips. EVERY
+    // subscription tier (owner decision 2026-08-18) — it's a headline
+    // membership feature; one-time-purchase boards fall back to word clips.
+    // Enforcement rides the voice budget: free tier has 0 TTS chars/month.
+    sentenceVoice: paid,
     voiceCharsPerMonth: sub ? sub.voiceCharsPerMonth : 0,
   };
 }

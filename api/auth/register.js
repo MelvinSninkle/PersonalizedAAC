@@ -64,16 +64,35 @@ export default async function handler(req, res) {
     try {
       const db = sql();
 
-      // Private preview: creating an account REQUIRES a valid invite code —
-      // typed on the signup form, or already carried by the signed mw_invite
-      // cookie a /welcome invite link set. The landing + practice pages are
-      // public; the wall is here, at account creation, where it can't be
-      // walked around. Fails closed on an unknown/inactive code.
+      // Account creation takes ONE of two credentials, both checked here at
+      // the wall (the landing + practice pages stay public):
+      //   1. A COMPLETED SURVEY — the /survey funnel's row token (owner
+      //      decision 2026-08-20: everyone signing up goes through the
+      //      market/product research first). The row must actually be
+      //      completed, not just started.
+      //   2. A valid invite code — typed on the form or carried by the
+      //      signed mw_invite cookie (admin codes + the vip- codes paid
+      //      families receive by email keep working unchanged).
+      // Fails closed on neither.
+      let surveyRow = null;
+      const svId = Number(body.surveyId) || 0;
+      if (svId && typeof body.surveyToken === 'string') {
+        try {
+          const { verifySurveyToken, ensureSurvey } = await import('../waitlist.js');
+          if (verifySurveyToken(body.surveyToken, svId)) {
+            await ensureSurvey(db);
+            const r = (await db`SELECT id, completed_at, linked_user_id FROM survey_responses WHERE id = ${svId} LIMIT 1`)[0];
+            if (r && r.completed_at && !r.linked_user_id) surveyRow = r;
+          }
+        } catch (_) { /* fall through to the invite-code path */ }
+      }
       const typedCode = typeof body.inviteCode === 'string' ? body.inviteCode : '';
-      const invCheck = await validateInviteCode(db, typedCode || await inviteCodeFromCookie(req));
+      const invCheck = surveyRow
+        ? { code: 'survey' }
+        : await validateInviteCode(db, typedCode || await inviteCodeFromCookie(req));
       if (!invCheck) {
         res.status(403).json({ error: 'invite_required',
-          detail: 'My World is invite-only right now. Enter the invite code you were given, or write us for one.' });
+          detail: 'Account creation starts with our short survey (3–6 minutes) — it directly shapes what we build. Take it at myworldtaptotalk.com/survey, or enter an invite code if you were given one.' });
         return;
       }
       // A real code whose launch-group slots are all taken: be honest about
@@ -179,6 +198,19 @@ export default async function handler(req, res) {
       // family never stalls at their first image generation. Creation-time
       // only; best-effort — a perk failure never blocks the signup itself.
       await applyInvitePerks(db, Number(user.id), req, invCode);
+
+      // Survey-credential signup: bind the survey row to this brand-new
+      // account (one account per completed survey — the gate above refuses a
+      // row that's already linked). The admin orders queue and the founding
+      // deposit flow both key off this link. Best-effort, never blocks.
+      if (surveyRow) {
+        try {
+          await db`UPDATE survey_responses
+                   SET linked_user_id = ${Number(user.id)},
+                       email = COALESCE(email, ${email}), updated_at = NOW()
+                   WHERE id = ${Number(surveyRow.id)}`;
+        } catch (_) { /* repairable from the admin orders queue */ }
+      }
 
       // Founding Family link: a concierge signup paid for their subscription
       // BEFORE this account existed (waitlist funnel). Match the paid,

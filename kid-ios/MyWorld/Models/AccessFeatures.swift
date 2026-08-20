@@ -376,7 +376,8 @@ final class SentenceBar {
         return out
     }
 
-    func playAll(childId: String, idleMinutes: Int, voiceClipPrefix: String? = nil, voiceClipExt: String = ".mp3") {
+    func playAll(childId: String, idleMinutes: Int, voiceClipPrefix: String? = nil, voiceClipExt: String = ".mp3",
+                 fluent: Bool = false, sentenceClips: [String] = [], sentenceClipPrefix: String? = nil) {
         guard !staged.isEmpty else { return }
         stopPlayback()   // restart semantics — never two loops at once
         resetIdle(idleMinutes: idleMinutes)
@@ -385,6 +386,27 @@ final class SentenceBar {
         // display = the synonym when one located the tile: the log stays honest.
         Task { await APIClient().logSentence(childId: childId, words: list.map(\.display)) }
         playTask = Task { @MainActor in
+            // Fluent sentence — the membership feature: "I want ice cream" as
+            // ONE natural utterance instead of stitched word clips. Two paths:
+            //   • Practice/demo (sentenceClipPrefix set): a staged sentence
+            //     matching a curated showcase line plays its pre-rendered clip
+            //     (no TTS exists signed out) — the show-of-value.
+            //   • Real board (fluent = entitlement.sentenceVoice): the whole
+            //     sentence goes through the metered TTS path once; the server
+            //     cache makes repeats free. Any failure (offline, refused)
+            //     falls through to the per-word loop below — never silence.
+            if list.count > 1 {
+                let text = list.map { $0.spoken ?? $0.tile.label }.joined(separator: " ")
+                if let prefix = sentenceClipPrefix,
+                   let match = sentenceClips.first(where: { $0.lowercased() == text.lowercased() }),
+                   let url = try? await MediaCache.shared.audioFileURL(for: prefix + GameAudio.factHash(match) + ".mp3") {
+                    await GameAudio.shared.playFileAwait(url)
+                    return
+                }
+                if fluent, await GameAudio.shared.speakAwait(text, childId: childId) {
+                    return
+                }
+            }
             for entry in list {
                 if Task.isCancelled { return }
                 if let spoken = entry.spoken {
@@ -451,7 +473,13 @@ struct SentenceStripView: View {
             .buttonStyle(.plain)
             Button {
                 sentence.playAll(childId: auth.childSlug, idleMinutes: access.sentenceIdleMin,
-                                 voiceClipPrefix: board.voiceClipPrefix, voiceClipExt: board.voiceClipExt)
+                                 voiceClipPrefix: board.voiceClipPrefix, voiceClipExt: board.voiceClipExt,
+                                 // Strictly == true: fluent sentences are a
+                                 // membership feature — an unknown entitlement
+                                 // plays word clips until the next sync says so.
+                                 fluent: board.entitlement?.sentenceVoice == true,
+                                 sentenceClips: board.demoSentences,
+                                 sentenceClipPrefix: board.sentenceClipPrefix)
             } label: {
                 Image(systemName: "play.fill")
                     .font(.system(size: 24, weight: .bold))

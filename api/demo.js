@@ -12,6 +12,7 @@
 import { sql } from './_lib/db.js';
 import { expandMatchTerms } from './_lib/word-match.js';
 import { BAD_WORDS } from './_lib/bad-words.js';
+import { DEMO_SENTENCES } from './_lib/demo-sentences.js';
 
 const norm = (s) => String(s || '').trim().toLowerCase();
 
@@ -233,6 +234,16 @@ export default async function handler(req, res) {
         .map((r) => ({ id: Number(r.id), label: r.label }));
     } catch (_) { /* pre-migration DB — no switcher */ }
 
+    // Practice lineup control (Lab settings): the "Classic" option is a
+    // CLIENT-side pseudo style (id 0 = the generic starter art — there is no
+    // style_guides row to unpublish), so hiding it is an explicit admin flag.
+    // Clients fail OPEN: Classic always shows when no real style is published.
+    let classicHidden = false;
+    try {
+      const ls = (await db`SELECT hide_classic FROM lab_settings WHERE id = 1`)[0];
+      classicHidden = ls?.hide_classic === true && styles.length > 0;
+    } catch (_) { /* pre-migration DB — Classic stays */ }
+
     // Demo voices built by Lab → demo-audio (deterministic clip keys:
     // demo-audio/<voiceId>/<slug(label)>.mp3). Only voices whose clip set is
     // COMPLETE are offered — a half-built voice would silently fall back to
@@ -262,7 +273,14 @@ export default async function handler(req, res) {
     // page's listening demo masks these as "Bad Word", censor always ON.
     // Same shared list every real board receives on sync; no family data.
     res.status(200).json({ ok: true, tiles, folders, voices, styles, kids,
+                           classicHidden,
                            listenBlocklist: BAD_WORDS,
+                           // Fluent-sentence showcase: when the demo sentence
+                           // constructor stages one of these exactly, it plays
+                           // the pre-rendered whole-sentence clip
+                           // (demo-audio/<vid>/sentences/<factHash>.mp3) —
+                           // the membership feature, demonstrable signed-out.
+                           demoSentences: DEMO_SENTENCES,
                            style: Number.isFinite(styleId) && styleId > 0 ? styleId : null,
                            kid: Number.isFinite(kidId) && kidId > 0 && kids.some((k) => k.id === kidId) ? kidId : null });
   } catch (err) {

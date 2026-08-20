@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orders — admin</title>
+<style>
+  :root { --pink:#ad1457; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#faf7f9; }
+  header { position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--line);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; padding:12px 18px; }
+  header h1 { font-size:18px; margin:0; margin-right:6px; }
+  .spacer { flex:1; }
+  a.back { color:var(--pink); text-decoration:none; font-size:13px; }
+  input[type=number], button { font:inherit; padding:7px 11px; border:1px solid var(--line); border-radius:9px; background:#fff; }
+  button { cursor:pointer; }
+  main { padding:16px 18px 80px; max-width:1180px; margin:0 auto; }
+  .chips { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; }
+  .chip { background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 14px; font-size:12px; color:var(--muted); }
+  .chip b { display:block; font-size:19px; color:var(--ink); margin-bottom:1px; }
+  .caps { background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:16px;
+          display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:13px; }
+  .caps label { display:flex; gap:6px; align-items:center; color:var(--muted); }
+  .caps input { width:90px; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:12px; margin-bottom:16px; overflow:hidden; }
+  .panel .head { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); background:#fdf7fa; }
+  .panel h2 { margin:0; font-size:13px; font-weight:700; color:var(--pink); text-transform:uppercase; letter-spacing:.04em; }
+  .panel .sub { font-size:12px; color:var(--muted); }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { text-align:left; padding:7px 12px; border-bottom:1px solid #f3f4f6; white-space:nowrap; }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); background:#fbfbfc; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .tag { font-size:11px; font-weight:700; border-radius:999px; padding:2px 9px; }
+  .tag.paid { background:#ecfdf5; color:#047857; }
+  .tag.prio { background:#fff7e0; color:#b45309; }
+  .tag.res { background:#eff6ff; color:#1d4ed8; }
+  .tag.bad { background:#fef2f2; color:#b91c1c; }
+  .empty { color:var(--muted); text-align:center; padding:26px; font-size:13px; }
+  .msg { font-size:12.5px; color:var(--muted); margin-left:8px; }
+  td a { color:var(--pink); }
+</style>
+</head>
+<body>
+<header>
+  <h1>📦 Orders</h1>
+  <button id="refresh">↻ Refresh</button>
+  <span class="msg" id="msg"></span>
+  <div class="spacer"></div>
+  <a class="back" href="/admin/survey.html">Survey dashboard</a>
+  <a class="back" href="/admin/">← Lab home</a>
+</header>
+
+<main>
+  <div class="chips" id="chips"></div>
+
+  <!-- The two capacity knobs (waitlist.js foundingCaps). Priority never
+       blocks — it only decides who's "in the first hundred". The order cap
+       is the HARD deposit stop: at N paid, the checkout refuses. -->
+  <div class="caps">
+    <b style="color:var(--pink);">Capacity</b>
+    <label>Priority cohort (first&nbsp;N) <input type="number" id="cap-priority" min="1"></label>
+    <label>Hard order stop <input type="number" id="cap-order" min="1"></label>
+    <button id="cap-save">Save caps</button>
+    <span class="msg" id="cap-msg">Deposits disable automatically at the hard stop; reservations (account + photos, no deposit) are never blocked.</span>
+  </div>
+
+  <div class="panel">
+    <div class="head"><h2>Fulfillment queue</h2>
+      <span class="sub">paid deposits first (by rank), then reservations holding a spot without a deposit</span></div>
+    <div class="tablewrap"><table id="t"></table></div>
+    <div class="note" class="sub" style="font-size:12px;color:var(--muted);padding:8px 14px;">
+      Work a board: open the Lab tools with the family's board id (child slug), or the
+      Boards workbench from the Lab home. Photos = reference images uploaded; Personalized =
+      tiles carrying their own art (not shared defaults); Jobs = renders queued/failed.</div>
+  </div>
+</main>
+
+<script>
+  const token = localStorage.getItem('aacToken') || '';
+  async function api(path, body, method) {
+    const headers = body ? { 'Content-Type': 'application/json' } : {};
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const r = await fetch(path, { headers, credentials: 'same-origin',
+      method: method || (body ? 'POST' : 'GET'), body: body ? JSON.stringify(body) : undefined });
+    if (r.status === 401 || r.status === 403) throw new Error('Sign in as an admin first (open /login), then return here.');
+    if (!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0, 160));
+    return r.json();
+  }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const $ = (id) => document.getElementById(id);
+
+  let DATA = null;
+
+  function render() {
+    if (!DATA) return;
+    const paidRows = DATA.orders.filter((o) => o.paid);
+    const reserved = DATA.orders.filter((o) => !o.paid);
+    const prio = paidRows.filter((o) => o.priority).length;
+    $('chips').innerHTML = `
+      <div class="chip"><b>${DATA.paid} / ${DATA.caps.orderCap}</b>paid deposits (hard stop)</div>
+      <div class="chip"><b>${prio} / ${DATA.caps.priorityCap}</b>priority cohort filled</div>
+      <div class="chip"><b>${reserved.length}</b>reserved, no deposit yet</div>
+      <div class="chip"><b>${DATA.paid >= DATA.caps.orderCap ? 'PAUSED' : 'OPEN'}</b>deposit taking</div>`;
+    $('cap-priority').value = DATA.caps.priorityCap;
+    $('cap-order').value = DATA.caps.orderCap;
+    const t = $('t');
+    if (!DATA.orders.length) { t.innerHTML = '<tr><td class="empty">No orders yet.</td></tr>'; return; }
+    t.innerHTML = '<tr><th>#</th><th>Family</th><th>Board</th><th>Status</th><th class="num">Photos</th>'
+      + '<th class="num">Tiles</th><th class="num">Personalized</th><th class="num">Jobs</th><th>Since</th></tr>'
+      + DATA.orders.map((o) => `<tr>
+          <td class="num">${o.rank ? (o.priority ? '⭐ ' : '') + o.rank : '—'}</td>
+          <td>${esc(o.email || '—')}</td>
+          <td>${o.childSlug ? esc(o.childSlug) : '<span class="tag bad">no account</span>'}</td>
+          <td>${o.paid
+              ? '<span class="tag paid">PAID</span>' + (o.priority ? ' <span class="tag prio">FIRST ' + DATA.caps.priorityCap + '</span>' : '')
+              : '<span class="tag res">RESERVED</span>'}</td>
+          <td class="num">${o.photos}</td>
+          <td class="num">${o.tiles}</td>
+          <td class="num">${o.personalized}</td>
+          <td class="num">${o.jobsQueued || ''}${o.jobsFailed ? ' <span class="tag bad">' + o.jobsFailed + ' failed</span>' : (o.jobsQueued ? ' queued' : '—')}</td>
+          <td>${new Date(o.paidAt || o.reservedAt).toLocaleDateString()}</td>
+        </tr>`).join('');
+  }
+
+  async function load() {
+    $('msg').textContent = '';
+    try { DATA = await api('/api/admin/lab?action=orders'); render(); }
+    catch (err) { $('t').innerHTML = '<tr><td class="empty">' + esc(err.message) + '</td></tr>'; }
+  }
+
+  $('cap-save').addEventListener('click', async () => {
+    const p = parseInt($('cap-priority').value, 10), o = parseInt($('cap-order').value, 10);
+    if (!(p > 0) || !(o > 0)) { $('cap-msg').textContent = 'Both caps must be positive numbers.'; return; }
+    $('cap-save').disabled = true;
+    try {
+      await api('/api/admin/lab?action=settings', { foundingPriorityCap: p, foundingOrderCap: o }, 'PUT');
+      $('cap-msg').textContent = 'Saved — checkout and all counters follow the new caps immediately.';
+      load();
+    } catch (err) { $('cap-msg').textContent = err.message; }
+    $('cap-save').disabled = false;
+  });
+  $('refresh').addEventListener('click', load);
+  load();
+</script>
+</body>
+</html>

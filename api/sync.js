@@ -252,6 +252,7 @@ export default async function handler(req, res) {
       entitlementOut = { tier: ent.tier, label: ent.label,
                          stt: !!ent.features.stt, autoTeach: !!ent.features.autoTeach,
                          gapFill: !!ent.features.gapFill || ent.tier === 'admin',
+                         sentenceVoice: !!ent.features.sentenceVoice || ent.tier === 'admin',
                          styling: member };
     } catch (_) { /* flags are advisory — sync must never fail over them */ }
 

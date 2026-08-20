@@ -32,6 +32,13 @@ const EMOTIONS = {
   whisper:  { stability: 0.60, similarity_boost: 0.90, style: 0.10, use_speaker_boost: false },
 };
 
+// OWNER RULE (2026-08-18, invariant B3b): the key is VOICE-scoped — voice id
+// in, child id OUT. One shape, two cache policies: supported voices share a
+// single global entry per phrase across every family (fluent sentences,
+// clues, cheers all amortize), while a cloned voice's unique id makes its
+// entries personal by construction. NEVER add childId (fragments the global
+// cache) and NEVER drop voiceId (would speak one family's cloned voice on
+// another family's board). The tts/ prefix has no /api/media read path.
 function cacheKeyFor(modelId, voiceId, emotionKey, text) {
   const h = createHash('sha256')
     .update(`${modelId}|${voiceId}|${emotionKey}|${text}`)

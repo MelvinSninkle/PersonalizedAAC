@@ -144,6 +144,22 @@
           background-repeat:no-repeat; background-position:right 10px center; }
   .tsel:focus { outline:none; border-color:var(--pink); }
   #listen-btn { background:var(--pink); color:#fff; border-color:var(--pink); font-weight:700; }
+  #sent-btn.on { background:#7c3aed; color:#fff; border-color:#7c3aed; }
+
+  /* ── Sentence constructor bar (mouse-friendly: CLICK tiles to stage) ── */
+  .sentbar { flex:0 0 auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:8px 12px;
+             background:#f5f3ff; border-bottom:2px solid #ddd6fe; }
+  .sentbar .hint { font-size:13px; color:#6d28d9; font-weight:600; }
+  .sent-chip { display:inline-flex; align-items:center; gap:6px; background:#fff; border:2px solid #ddd6fe;
+               border-radius:999px; padding:5px 12px; font-size:14px; font-weight:700; color:#4c1d95;
+               cursor:pointer; font-family:'Fredoka',sans-serif; }
+  .sent-chip img { width:22px; height:22px; border-radius:6px; object-fit:cover; }
+  .sentbar .act { border:none; border-radius:999px; padding:7px 14px; font:inherit; font-weight:800; cursor:pointer; }
+  #sent-play { background:#2e7d32; color:#fff; }
+  #sent-smooth { background:#ffd400; color:#1f2937; }
+  #sent-smooth:disabled { opacity:.4; cursor:default; }
+  #sent-clear { background:#fff; border:2px solid #ddd6fe; color:#6b7280; }
+  .sentbar .note { flex-basis:100%; font-size:12px; color:#6d28d9; }
 
   /* ── Tier color code — which tiles a membership comfortably personalizes
          each month. Soft rings so the art stays the hero: pink = the basics
@@ -201,12 +217,26 @@
   </span>
   <button class="voice-chip" id="disp-btn" title="Labels, tile sizes, sections and colors, just for this visit">⚙ Display</button>
   <button class="voice-chip" id="listen-btn" title="The board that listens: talk nearby and the words you say light up as tiles">🎙 Try listening</button>
+  <button class="voice-chip" id="sent-btn" title="Build a sentence by clicking tiles — hear it word by word, then smooth (how memberships sound)">💬 Build a sentence</button>
   <button class="voice-chip" id="tour-btn" title="What the colored rings mean and everything you can try here">✨ What's personalized?</button>
   <div class="stats" title="On a real board, every tap builds your child's progress charts, word history, and milestone moments.">
     <span>Taps this visit <b id="st-taps">0</b></span>
     <span>Different words <b id="st-words">0</b></span>
     <span class="foot-note"><a href="/signup.html">Create your child's own →</a></span>
   </div>
+</div>
+
+<!-- Sentence constructor: CLICK tiles to stage them (drag isn't needed with
+     a mouse). ▶ chains the word clips; ✨ Smooth plays the pre-rendered
+     whole-sentence clip when the staged sentence matches a curated one —
+     the membership feature, demonstrable signed out. -->
+<div class="sentbar" id="sent-bar" style="display:none;">
+  <span class="hint" id="sent-hint"></span>
+  <span id="sent-chips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></span>
+  <button class="act" id="sent-play" title="Play the sentence word by word">▶ Play</button>
+  <button class="act" id="sent-smooth" title="The membership version: the whole sentence spoken naturally in one breath" disabled>✨ Smooth</button>
+  <button class="act" id="sent-clear" title="Start over">✕</button>
+  <span class="note" id="sent-note"></span>
 </div>
 
 <!-- Live listening strip — heard words appear here (browser speech
@@ -415,6 +445,9 @@
     });
   }
   function tapTile(t) {
+    // Sentence mode: a CLICK stages the tile (silently, like the real
+    // board's sentence constructor) — no drag needed with a mouse.
+    if (SENT.on) { sentStage(t); return; }
     const clues = (PDISP.teachTap !== false && t && Array.isArray(t.descriptiveClues))
       ? t.descriptiveClues.filter(Boolean).slice(0, 3) : [];
     if (clues.length && _teachLabel === t.label && (Date.now() - _teachAt) < 2000) {
@@ -453,6 +486,99 @@
     } catch (_) {}
   }
 
+  // ── Sentence constructor ──────────────────────────────────────────────────
+  // Click tiles to build "I want ice cream", then hear it two ways:
+  //   ▶ Play    — the word clips chained (how a board without a membership
+  //               sounds) — always available.
+  //   ✨ Smooth — the pre-rendered whole-sentence clip in the selected demo
+  //               voice, enabled only when the staged sentence matches one of
+  //               the curated showcase lines (DATA.demoSentences; clip key =
+  //               demo-audio/<vid>/sentences/<factHash>.mp3, the same recipe
+  //               as teaching facts). The with/without contrast IS the pitch.
+  const SENT = { on: false, staged: [] };
+  let _sentGen = 0;
+  const sentEsc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function sentMatch() {
+    if (SENT.staged.length < 2) return null;
+    const text = SENT.staged.map((s) => s.label).join(' ').toLowerCase();
+    return ((DATA && DATA.demoSentences) || []).find((s) => s.toLowerCase() === text) || null;
+  }
+
+  function sentSync() {
+    const bar = document.getElementById('sent-bar');
+    const btn = document.getElementById('sent-btn');
+    bar.style.display = SENT.on ? '' : 'none';
+    btn.classList.toggle('on', SENT.on);
+    if (!SENT.on) return;
+    const hint = document.getElementById('sent-hint');
+    const first = ((DATA && DATA.demoSentences) || [])[0] || 'I want more';
+    hint.textContent = SENT.staged.length ? '' : 'Click tiles to build a sentence — try “' + first + '”.';
+    document.getElementById('sent-chips').innerHTML = SENT.staged.map((s, i) =>
+      '<span class="sent-chip" data-i="' + i + '" title="Click to remove">'
+      + (s.imageKey ? '<img src="' + media(s.imageKey) + '" alt="">' : '')
+      + sentEsc(s.label) + '</span>').join('');
+    document.querySelectorAll('#sent-chips .sent-chip').forEach((c) => c.addEventListener('click', () => {
+      SENT.staged.splice(Number(c.dataset.i), 1);
+      sentSync();
+    }));
+    const match = sentMatch();
+    document.getElementById('sent-smooth').disabled = !(match && VOICE);
+    document.getElementById('sent-note').textContent = match
+      ? '✨ This one has a smooth version — with any My World membership, every sentence plays like that, in your child\'s chosen voice.'
+      : '';
+  }
+
+  function sentStage(t) {
+    if (!t || SENT.staged.length >= 8) return;
+    noteTap(t.label);
+    SENT.staged.push({ label: t.label, imageKey: t.imageKey || null });
+    sentSync();
+  }
+
+  function playLabelAwait(label) {
+    return new Promise((resolve) => {
+      const done = () => { audioEl.onended = null; audioEl.onerror = null; resolve(); };
+      if (!VOICE) { speakLocal(label); setTimeout(done, 900); return; }
+      audioEl.src = media('demo-audio/' + VOICE + '/' + slug(label) + '.mp3');
+      audioEl.currentTime = 0;
+      audioEl.onended = done;
+      audioEl.onerror = () => { speakLocal(label); setTimeout(done, 900); };
+      audioEl.play().catch(() => { speakLocal(label); setTimeout(done, 900); });
+    });
+  }
+
+  async function sentPlay() {
+    if (!SENT.staged.length) return;
+    const gen = ++_sentGen;
+    for (const s of SENT.staged) {
+      if (gen !== _sentGen) return;
+      await playLabelAwait(s.label);
+    }
+  }
+
+  async function sentSmooth() {
+    const match = sentMatch();
+    if (!match || !VOICE) return;
+    _sentGen++;   // cut any word-by-word playback
+    const h = await factHash(match);
+    if (!h) return;
+    audioEl.onended = null;
+    audioEl.onerror = () => {};   // clip not built yet for this voice — stay quiet
+    audioEl.src = media('demo-audio/' + VOICE + '/sentences/' + h + '.mp3');
+    audioEl.currentTime = 0;
+    audioEl.play().catch(() => {});
+  }
+
+  document.getElementById('sent-btn').addEventListener('click', () => {
+    SENT.on = !SENT.on;
+    if (!SENT.on) { SENT.staged = []; _sentGen++; }
+    sentSync();
+  });
+  document.getElementById('sent-play').addEventListener('click', sentPlay);
+  document.getElementById('sent-smooth').addEventListener('click', sentSmooth);
+  document.getElementById('sent-clear').addEventListener('click', () => { SENT.staged = []; _sentGen++; sentSync(); });
+
   function folderIcon(section, name) {
     const n = String(name || '').toLowerCase();
     const f = (DATA.folders || []).find((x) => x.label === n && (!x.section || x.section === section))
@@ -479,8 +605,12 @@
     const styles = DATA.styles || [];
     if (!styles.length) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
-    fillSelect(document.getElementById('sel-style'),
-               [{ id: 0, label: 'Classic' }, ...styles], STYLE);
+    // "Classic" is a client-side pseudo style (id 0 = generic starter art) —
+    // the Lab's practice-lineup flag retires it once real styles ship. The
+    // server only sends classicHidden when at least one style is published,
+    // so an empty lineup can never strand the page style-less.
+    const opts = DATA.classicHidden ? styles : [{ id: 0, label: 'Classic' }, ...styles];
+    fillSelect(document.getElementById('sel-style'), opts, STYLE);
   }
 
   // Some styles offer more than one demo child — a "Meet" dropdown lets the
@@ -1013,6 +1143,14 @@
       const r = await fetch('/api/demo' + (STYLE ? '?style=' + STYLE : ''));
       DATA = await r.json();
       if (!DATA || !Array.isArray(DATA.tiles) || !DATA.tiles.length) throw new Error('empty');
+      // Classic retired (Lab flag) and no deep-linked style: land on the
+      // first PUBLISHED style instead of the generic starter art.
+      if (!STYLE && DATA.classicHidden && (DATA.styles || []).length) {
+        STYLE = DATA.styles[0].id;
+        const r2 = await fetch('/api/demo?style=' + STYLE);
+        const d2 = await r2.json();
+        if (d2 && Array.isArray(d2.tiles) && d2.tiles.length) DATA = d2;
+      }
     } catch (_) {
       document.getElementById('loading').textContent =
         'The practice board isn’t available right now, but the real thing is. Tap "Make it your child’s" above!';

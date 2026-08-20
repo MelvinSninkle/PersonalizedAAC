@@ -90,7 +90,7 @@ export default async function handler(req, res) {
   const db = sql();
 
   try {
-    const { ensureWaitlist, ensureSurvey, FOUNDING_CAP } = await import('../waitlist.js');
+    const { ensureWaitlist, ensureSurvey, foundingCaps } = await import('../waitlist.js');
     try { await ensureWaitlist(db); await ensureSurvey(db); } catch (_) {}
 
     const rows = await db`
@@ -127,6 +127,7 @@ export default async function handler(req, res) {
     const paidCount = Number((await db`
       SELECT COUNT(*)::int AS n FROM survey_responses
       WHERE cohort = 'founding_100' AND payment_status = 'paid'`)[0]?.n) || 0;
+    const { priorityCap, orderCap } = await foundingCaps(db);
 
     // Styles: group by normalized key, keep raw variants for the admin eye.
     const styleMap = new Map();
@@ -178,7 +179,7 @@ export default async function handler(req, res) {
     res.status(200).json({
       generatedAt: new Date().toISOString(),
       rowCap: ROW_CAP, rowCount: rows.length,
-      founding: { paid: paidCount, cap: FOUNDING_CAP, remaining: Math.max(0, FOUNDING_CAP - paidCount) },
+      founding: { paid: paidCount, cap: priorityCap, orderCap, remaining: Math.max(0, priorityCap - paidCount) },
       demand: {
         waitlistTotal,
         surveysStarted: rows.length,
@@ -240,7 +241,7 @@ export default async function handler(req, res) {
         foundingInterest: tally(families, (r) => r.founding_purchase_interest),
         checkoutStarted: rows.filter((r) => r.payment_status === 'checkout_started').length,
         paid: paidCount,
-        remaining: Math.max(0, FOUNDING_CAP - paidCount),
+        remaining: Math.max(0, priorityCap - paidCount),
       },
       contact: {
         marketing: tallyArr(rows, (r) => r.marketing_permissions),

@@ -55,6 +55,19 @@
     <h2>Your styles</h2>
     <p class="hint">Pick up where you left off — drafts stay hidden from parents until you publish.</p>
     <div id="resume-list" class="counts">Loading…</div>
+    <!-- "Classic" is not a style row — it's the hardcoded generic-starter-art
+         option (id 0) the practice switchers prepend, which is why it has no
+         unpublish button. This flag retires it from BOTH practice boards
+         (web immediately, iOS on its next payload) once real styles ship;
+         the server keeps offering Classic whenever no style is published,
+         so the demo can never go style-less. -->
+    <label style="display:flex;gap:8px;align-items:flex-start;margin-top:14px;font-size:13.5px;">
+      <input type="checkbox" id="hide-classic" style="margin-top:3px;">
+      <span><b>Retire the “Classic” option</b> on the practice board — visitors land on your first
+        published style instead of the plain starter art. (Classic isn’t a real style, so it has no
+        publish toggle of its own; this is its off switch.)</span>
+    </label>
+    <p class="msg" id="classic-msg"></p>
   </div>
 
   <!-- Step 1: the style itself -->
@@ -559,11 +572,44 @@
         '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #fce4ef;">'
         + '<b style="flex:1;">' + String(s.label || ('#' + s.id)).replace(/[<>&]/g, '') + '</b>'
         + (s.active ? '<span class="pill live">LIVE</span>' : '<span class="pill draft">DRAFT</span>')
+        + '<button class="secondary" type="button" data-rename="' + s.id + '" data-label="'
+          + String(s.label || '').replace(/[<>&"]/g, '') + '" title="Rename this style — boards keep rendering, only the name changes">✏️</button>'
         + '<a href="?styleGuideId=' + s.id + '"><button class="secondary" type="button">Open →</button></a>'
         + '</div>').join('')
         : 'No styles yet — create your first one below.';
+      // Rename: label-only PATCH — image sets, board pins, and renders all
+      // key on the style's ID, so a rename is cosmetic everywhere (pickers,
+      // practice switcher, onboarding) and takes effect on next load.
+      document.querySelectorAll('[data-rename]').forEach((b) => b.addEventListener('click', async () => {
+        const next = prompt('New name for this style:', b.dataset.label || '');
+        if (next == null) return;
+        const label = next.trim().slice(0, 120);
+        if (!label) return;
+        b.disabled = true;
+        try {
+          await api('PATCH', '/api/admin/style-guides?id=' + b.dataset.rename, { label });
+          showResumeList();
+        } catch (e) { setMsg('classic-msg', 'Rename failed: ' + (e.message || e), 'err'); b.disabled = false; }
+      }));
     } catch (e) { $('resume-list').textContent = 'Could not load styles: ' + (e.message || e); }
+    // Practice-lineup flag rides the Lab settings singleton.
+    try {
+      const s = await api('GET', '/api/admin/lab?action=settings');
+      $('hide-classic').checked = !!(s.settings && s.settings.hideClassic);
+    } catch (_) {}
   }
+  $('hide-classic').addEventListener('change', async () => {
+    const on = $('hide-classic').checked;
+    try {
+      await api('PUT', '/api/admin/lab?action=settings', { hideClassic: on });
+      setMsg('classic-msg', on
+        ? 'Classic retired — the practice board now opens on your first published style. (The public page can take ~5 minutes: /api/demo is CDN-cached.)'
+        : 'Classic restored to the practice lineup.', 'ok');
+    } catch (e) {
+      $('hide-classic').checked = !on;
+      setMsg('classic-msg', e.message || 'Save failed', 'err');
+    }
+  });
 
   async function refresh() {
     if (!SID) { showResumeList(); paintAll(); return; }

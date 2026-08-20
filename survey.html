@@ -262,6 +262,7 @@
       cards: [
         { v:'essentials', name:'My World Essentials', price:'$4.99', per:'/month',
           feats: ['Ongoing access to standardized new images', 'New vocabulary additions', 'Seasonal words and boards',
+                  'Sentences spoken naturally in one voice — not word-by-word',
                   'Consistent text-to-speech voice for new content', 'Performance and stat tracking',
                   'Shareable progress data', 'Ongoing software and service features',
                   'No monthly custom-image generation credits'] },
@@ -367,7 +368,9 @@
       fields: [ { key:'organization', l:'Organization / practice name', t:'text', optional:true },
                 { key:'professional_website', l:'Website', t:'url', optional:true },
                 { key:'professional_email', l:'Professional email', t:'email' },
-                { key:'professional_phone', l:'Phone number', t:'tel', optional:true } ] },
+                { key:'professional_phone', l:'Phone number', t:'tel', optional:true },
+                { key:'professional_address', l:'Clinic / practice address', t:'text', optional:true,
+                  help:'Why we ask: we\'re exploring a location feature — a child arriving at your clinic could automatically see any boards your clinic shares. Totally optional.' } ] },
 
     { id: 'p6', when: isPro, type: 'single', key: 'potential_children_served',
       title: 'Approximately how many children do you currently serve who could potentially benefit from AAC?',
@@ -690,6 +693,7 @@
           <div style="margin-top:10px;">
             <label class="tiny" style="font-weight:700;">${esc(f.l)}${f.optional ? ' <span style="font-weight:400;">(optional)</span>' : ''}</label>
             <input type="${esc(f.t)}" data-k="${esc(f.key)}" value="${esc(S.a[f.key] || '')}" style="margin-top:4px;">
+            ${f.help ? `<div class="tiny" style="margin-top:4px;">${esc(f.help)}</div>` : ''}
           </div>`).join('')
       + navRow({ cont: 'Continue' }) + '<p class="msg" id="form-msg"></p>';
     wireNav(st);
@@ -722,10 +726,10 @@
         evaluate and improve My World. Participating families receive our founding-family price.</p>
       <div id="f-slot"><p class="msg">Checking availability…</p></div>`;
     fetch('/api/waitlist?action=founding-status').then((r) => r.json()).catch(() => ({ open: true }))
-      .then((d) => drawFounding(d && d.open !== false, maybe));
+      .then((d) => drawFounding(d && d.open !== false, maybe, d && d.priority === true));
   }
 
-  function drawFounding(open, maybe) {
+  function drawFounding(open, maybe, priority) {
     const slot = document.getElementById('f-slot');
     if (!slot) return;
     if (!open) {
@@ -744,6 +748,7 @@
         <div class="price" style="font-size:26px;font-weight:800;margin:4px 0 8px;">
           <span class="strike">$99.99</span>$49.99 <small style="font-size:13px;color:var(--muted);font-weight:600;">one time</small></div>
         <div class="tiny" style="margin-bottom:10px;font-weight:700;">Limited to the first 100 qualifying families</div>
+        ${priority ? '<div class="tiny" style="margin-bottom:10px;color:#047857;font-weight:700;">Deposits placed now land in the first hundred — priority setup.</div>' : ''}
         <ul style="margin:0;padding-left:19px;font-size:14px;">
           <li>Personalized communication board</li>
           <li>Supported visual style</li>
@@ -758,16 +763,16 @@
       ${maybe ? `<label class="ack"><input type="checkbox" id="f-affirm">
         <span>I'm interested in actively participating in the early-access program (we'll walk through the
         exact participation and data terms before anything is collected).</span></label>` : ''}
-      <div style="margin-top:12px;">
-        <label class="tiny" style="font-weight:700;">Email for your receipt and invite code</label>
-        <input type="email" id="f-email" value="${esc(S.a.email || '')}" placeholder="you@example.com" style="margin-top:4px;">
-      </div>
+      <p class="tiny" style="margin-top:12px;">How it works: finish this survey, <b>create your account</b>,
+        add your child's photos, then place your <b>$49.99 deposit</b> — right away, or later: creating the
+        account and uploading photos holds your place on the list either way. Your board is only counted
+        against the founding seats once the deposit is placed.</p>
       <div class="opts">
-        <button class="opt" id="f-yes" style="border-color:var(--pink);font-weight:700;">YES — Reserve my board for $49.99</button>
+        <button class="opt" id="f-yes" style="border-color:var(--pink);font-weight:700;">YES — Create my account &amp; get started</button>
         <button class="opt" id="f-maybe">MAYBE — Send me more information</button>
         <button class="opt" id="f-no">NO — Keep me on the waitlist</button>
       </div>
-      <p class="msg" id="f-msg">${canceled ? 'Checkout canceled — no charge was made. You can try again any time.' : ''}</p>
+      <p class="msg" id="f-msg">${canceled ? 'Checkout canceled — no charge was made. You can place your deposit any time from your account.' : ''}</p>
       <div class="nav"><button class="back" data-nav="back">← Back</button></div>`;
     wireFoundingNav(slot, maybe);
   }
@@ -780,9 +785,12 @@
     const msg = slot.querySelector('#f-msg');
     const yes = slot.querySelector('#f-yes');
     if (!yes) return;
+    // YES routes into account creation (survey completion IS the signup
+    // credential): finish the remaining questions, then the done screen's
+    // "Create your account" button carries the survey token to /signup.
+    // The deposit itself is placed signed-in (pay now or later — a spot is
+    // only consumed when a deposit is PAID).
     yes.addEventListener('click', async () => {
-      const email = (slot.querySelector('#f-email').value || '').trim().toLowerCase();
-      if (!EMAIL_RE.test(email)) { msg.className = 'msg err'; msg.textContent = 'Add a valid email first — it\'s where your invite code goes.'; return; }
       if (maybe) {
         const affirm = slot.querySelector('#f-affirm');
         if (!affirm || !affirm.checked) {
@@ -792,42 +800,13 @@
         }
         S.a.data_sharing_interest = 'yes';
       }
-      S.a.email = email;
       S.a.founding_purchase_interest = 'yes';
-      persist();
-      yes.disabled = true;
-      msg.className = 'msg'; msg.textContent = 'Opening secure checkout…';
-      try {
-        await save();   // make sure the row + token exist and carry this state
-        if (!S.id || !S.token) throw new Error('Could not save your survey — please try again.');
-        const r = await fetch('/api/store?action=founding-checkout', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ surveyId: S.id, token: S.token, email }),
-        });
-        const d = await r.json().catch(() => ({}));
-        if (r.status === 409) {
-          msg.className = 'msg err';
-          msg.textContent = 'Founding Family spots are full. Join the next early-access group.';
-          yes.disabled = true;
-          return;
-        }
-        if (!r.ok || !d.url) throw new Error(d.error === 'stripe_not_configured'
-          ? 'Checkout isn\'t open quite yet — choose MAYBE and we\'ll email you the moment it is.'
-          : (d.detail || d.error || 'Checkout could not start. Please try again.'));
-        location.href = d.url;
-      } catch (err) {
-        yes.disabled = false;
-        msg.className = 'msg err'; msg.textContent = err.message;
-      }
+      persist(); save(); next();
     });
     slot.querySelector('#f-maybe').addEventListener('click', () => {
-      const email = (slot.querySelector('#f-email').value || '').trim().toLowerCase();
-      if (EMAIL_RE.test(email)) S.a.email = email;
       S.a.founding_purchase_interest = 'maybe'; persist(); save(); next();
     });
     slot.querySelector('#f-no').addEventListener('click', () => {
-      const email = (slot.querySelector('#f-email').value || '').trim().toLowerCase();
-      if (EMAIL_RE.test(email)) S.a.email = email;
       S.a.founding_purchase_interest = 'no'; persist(); save(); next();
     });
   }
@@ -886,13 +865,23 @@
     const paidBit = S.paid
       ? '<p class="intro">💛 Your Founding Personalized Board is reserved — watch your inbox for your personal invite code and next steps.</p>'
       : '';
+    // Completing the survey IS the signup credential — the button carries the
+    // row token to /signup (server re-verifies completion). Built BEFORE the
+    // draft state clears so a reload of this screen can't lose the link.
+    const signupHref = (S.id && S.token)
+      ? '/signup?sv=' + S.id + '&st=' + encodeURIComponent(S.token) : null;
+    const accountBit = signupHref
+      ? `<p class="intro"><b>Next step:</b> create your account${isFam(S.a) ? ', add your child\'s photos' : ''}${S.a.founding_purchase_interest === 'yes' ? ', and place your founding deposit — now or later, your place holds either way' : ''}.</p>
+         <div class="nav"><a class="btn" href="${signupHref}">Create your account →</a>
+           <a class="btn ghost" href="/practice">Try the board first</a></div>`
+      : `<p class="intro">Want to see what My World feels like right now? The practice board is live — no account needed.</p>
+         <div class="nav"><a class="btn" href="/practice">Try the board live →</a></div>`;
     card.innerHTML = `
       <h1>Thank you 💛</h1>
       <p class="intro">Your answers genuinely shape what we build next — which styles, which languages, which
         features, and what it all should cost.</p>
       ${paidBit}
-      <p class="intro">Want to see what My World feels like right now? The practice board is live — no account needed.</p>
-      <div class="nav"><a class="btn" href="/practice">Try the board live →</a></div>`;
+      ${accountBit}`;
     try { localStorage.removeItem(LS_KEY); } catch (_) {}
   }
 

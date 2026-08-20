@@ -26,6 +26,20 @@ N=$(grep -rl "createHash('sha256')" api/tts.js api/_lib/onboarding-render.js api
 if [ "$N" -eq 3 ]; then pass "B3 three TTS cache-key sites present"; else
   fail "B3 expected 3 TTS cache-key sites, found $N — read skill B3 before touching"; fi
 
+# ── B3b: TTS cache keys are VOICE-scoped (owner rule 2026-08-18) ─────────────
+# The hash input is model|voice|emotion|text — voice IN, child OUT. That one
+# shape delivers both cache policies at once: supported voices share one
+# global entry per phrase across every family (amortized cost), while a
+# cloned voice's unique id makes its entries reachable only through that
+# family's own board (personal by construction). Adding childId fragments
+# the global cache; dropping voiceId would speak one family's cloned voice
+# on another family's board. Exact-string pins on both hash inputs:
+grep -qF 'update(`${modelId}|${voiceId}|${emotionKey}|${text}`)' api/tts.js \
+  || fail "B3b api/tts.js cache key no longer model|voice|emotion|text — read skill B3b"
+grep -qF 'update(`${mid}|${vid}|default|${body}`)' api/_lib/onboarding-render.js \
+  || fail "B3b synthesizeVoice cache key no longer model|voice|default|text — read skill B3b"
+pass "B3b TTS cache keys voice-scoped (global for shared voices, personal for clones)"
+
 # ── A1: media ownership union covers every child-media table ────────────────
 for T in items categories persons reference_images pending_tiles item_image_history tile_jobs; do
   grep -q "FROM $T WHERE" api/media.js || fail "A1 media.js ownership union lost table: $T"
@@ -155,9 +169,11 @@ E13_HITS=$(grep -rln "support_cases" api | sort)
 if [ "$E13_HITS" == "$E13_WANT" ]; then pass "E13 support_cases containment (4 intended files)"; else
   fail "E13 support_cases reachable from unexpected files: $(echo "$E13_HITS" | tr '\n' ' ')"; fi
 
-# ── E10: web self-signup requires a valid invite code ────────────────────────
+# ── E10: web self-signup requires a valid credential ─────────────────────────
 # The page-level invite wall moved off the funnel (/, /practice, /signup are
-# public); the private preview is enforced INSIDE account creation instead.
+# public); the gate is enforced INSIDE account creation instead. Two accepted
+# credentials (2026-08-20): a COMPLETED survey row token, or an invite code.
+# Both greps below must hold — losing either means the wall has a hole.
 E10=0
 grep -q "validateInviteCode" api/auth/register.js || { fail "E10 register.js no longer validates an invite code on self-signup"; E10=1; }
 grep -q "invite_required" api/auth/register.js || { fail "E10 register.js lost the invite_required rejection"; E10=1; }
