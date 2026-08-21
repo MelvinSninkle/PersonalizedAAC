@@ -1029,6 +1029,10 @@ Size: {size}.',
     // uploads never get these — they keep the generic default board.
     await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS person_ref_key TEXT`;
     await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS stuff_ref_key TEXT`;
+    // What the PUBLIC practice board calls the style's PRIMARY demo kid (the
+    // person_ref_key child — "kid 0"). NULL → clients show "Our demo kid".
+    // Renamed from the wizard's kids list, exactly like extra demo kids.
+    await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS demo_kid_label TEXT`;
     // Pre-generated, style-matched default art: one image per (taxonomy row ×
     // offered style). /api/sync resolves a child's default-able tiles against
     // their chosen style's set first, then the generic default_image_key.

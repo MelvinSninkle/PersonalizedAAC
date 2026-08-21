@@ -289,6 +289,16 @@
   let kidCandidate = null;   // unsaved generated/uploaded kid ref key
 
   function paintKids() {
+    // Row 0: the PRIMARY demo kid (style_guides.person_ref_key — no
+    // style_demo_children row). Renameable like the extras; the label is what
+    // the public practice board's "Meet" switcher calls the default child.
+    const primaryLabel = (STYLE && STYLE.demoKidLabel) || 'Our demo kid';
+    const primary = '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #fce4ef;">'
+      + (STYLE && STYLE.personRefKey ? '<img src="' + media(STYLE.personRefKey) + '" alt="" style="width:44px;height:44px;border-radius:10px;object-fit:cover;">' : '')
+      + '<b>' + String(primaryLabel).replace(/[<>&]/g, '') + '</b>'
+      + '<span style="flex:1;color:var(--muted);font-size:12px;">main demo kid — the whole default board renders around them</span>'
+      + '<button class="secondary" type="button" data-kid-rename="0" data-kid-name="' + String(primaryLabel).replace(/["<>&]/g, '') + '">✏️ Rename</button>'
+      + '</div>';
     const rows = KIDS.map((k) => {
       const st = k.status || {};
       const pct = st.tiles ? Math.round(100 * (st.tilesDone || 0) / st.tiles) : 0;
@@ -300,13 +310,14 @@
         + (k.personRefKey ? '<img src="' + media(k.personRefKey) + '" alt="" style="width:44px;height:44px;border-radius:10px;object-fit:cover;">' : '')
         + '<b>' + String(k.label || '').replace(/[<>&]/g, '') + '</b>'
         + '<span style="flex:1;">' + pct + '%' + stateTxt + '</span>'
+        + '<button class="secondary" type="button" data-kid-rename="' + k.id + '" data-kid-name="' + String(k.label || '').replace(/["<>&]/g, '') + '">✏️ Rename</button>'
         + '<button class="secondary" type="button" data-kid-jobs="' + k.id + '">🚀 Render their tiles</button>'
         + '<button class="secondary" type="button" data-kid-force="' + k.id + '" title="Re-render EVERY tile for this kid, including finished ones — the recovery path when a set came out wrong.">↻ Re-render all</button>'
         + '<button class="secondary" type="button" data-kid-remove="' + k.id + '">Remove</button>'
         + '</div>';
     });
-    $('kids-list').innerHTML = rows.length ? rows.join('')
-      : 'Just the main demo kid so far.';
+    $('kids-list').innerHTML = primary + (rows.length ? rows.join('')
+      : '<div style="padding:6px 0;color:var(--muted);">No extra kids yet.</div>');
     // Mirror the kids into step 4's per-kid gallery links.
     const kl = $('review-kid-links');
     if (kl) {
@@ -335,6 +346,16 @@
         startPoll();
         await refresh();
       } catch (e) { setMsg('kids-msg', e.message, 'err'); b.disabled = false; }
+    }));
+    $('kids-list').querySelectorAll('[data-kid-rename]').forEach((b) => b.addEventListener('click', async () => {
+      const label = prompt('New name (shows on the practice board\'s "Meet" switcher):', b.dataset.kidName || '');
+      if (label === null) return;
+      if (!label.trim()) { setMsg('kids-msg', 'A name is required.', 'err'); return; }
+      try {
+        await wiz({ op: 'kid-rename', kidId: Number(b.dataset.kidRename), label: label.trim() });
+        setMsg('kids-msg', 'Renamed ✓ — the practice board picks it up within a few minutes (CDN).', 'ok');
+        await refresh();
+      } catch (e) { setMsg('kids-msg', 'Rename failed: ' + e.message, 'err'); }
     }));
     $('kids-list').querySelectorAll('[data-kid-remove]').forEach((b) => b.addEventListener('click', async () => {
       if (!confirm('Remove this demo kid from the practice board? Their rendered art is kept.')) return;

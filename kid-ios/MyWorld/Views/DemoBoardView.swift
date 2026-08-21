@@ -27,6 +27,8 @@ struct DemoBoardView: View {
         let tiles: [DemoTile]
         let styles: [StyleOpt]?
         let kids: [KidOpt]?
+        /// Admin-set name for the style's PRIMARY demo kid (kid 0).
+        let kidZeroLabel: String?
         let voices: [VoiceOpt]?
     }
 
@@ -79,7 +81,7 @@ struct DemoBoardView: View {
             }
             if let kids = payload?.kids, !kids.isEmpty, styleId != nil {
                 Menu {
-                    Button("Main kid") { kidId = nil }
+                    Button(kidZeroLabel) { kidId = nil }
                     ForEach(kids, id: \.id) { k in
                         Button(k.label) { kidId = k.id }
                     }
@@ -129,9 +131,12 @@ struct DemoBoardView: View {
         guard let id = styleId else { return "Classic" }
         return payload?.styles?.first { $0.id == id }?.label ?? "Classic"
     }
+    private var kidZeroLabel: String {
+        payload?.kidZeroLabel ?? "Main kid"
+    }
     private var currentKidLabel: String {
-        guard let id = kidId else { return "Main kid" }
-        return payload?.kids?.first { $0.id == id }?.label ?? "Main kid"
+        guard let id = kidId else { return kidZeroLabel }
+        return payload?.kids?.first { $0.id == id }?.label ?? kidZeroLabel
     }
     private var currentVoiceName: String {
         payload?.voices?.first { $0.id == effectiveVoiceId }?.name ?? "Default"
