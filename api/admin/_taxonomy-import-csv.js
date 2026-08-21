@@ -73,18 +73,28 @@ export default async function handler(req, res) {
           continue;
         }
         const have = new Set((cur.match_terms || []).map((s) => s.toLowerCase()));
+        // CLEAR SENTINEL: a cell containing exactly '-' means "blank this
+        // field on the live row" — COALESCE alone can only add/replace,
+        // never remove, and a recategorization (e.g. the 2026-08 verb
+        // reorg) must be able to wipe a stale subcategory like 'More'.
+        // Supported for category + subcategory only.
         plan.enrich.push({
           id,
           clues: cluesArr(r.descriptive_clues),
           prompt: txt(r.prompt_template),
           pron: txt(r.pronunciation),
-          category: txt(r.category),
-          subcategory: txt(r.subcategory),
+          category: txt(r.category) === '-' ? null : txt(r.category),
+          categoryClear: txt(r.category) === '-',
+          subcategory: txt(r.subcategory) === '-' ? null : txt(r.subcategory),
+          subcategoryClear: txt(r.subcategory) === '-',
           growth: txt(r.growth_stage),
           meal: txt(r.meal_context),
           notes: txt(r.notes),
           sort: Number.isFinite(parseInt(r.sort_order, 10)) ? parseInt(r.sort_order, 10) : null,
           addVariants: variants(r.listen_variants).filter((v) => !have.has(v) && v !== label.toLowerCase()),
+          // Raw personalization-metadata cells; parsed at write time (metaOf).
+          metaRaw: { roles_present: r.roles_present, objects_present: r.objects_present,
+                     related_images: r.related_images, has_relationship: r.has_relationship },
         });
         continue;
       }
@@ -116,6 +126,38 @@ export default async function handler(req, res) {
                  SELECT ARRAY(SELECT DISTINCT x FROM unnest(COALESCE(match_terms, '{}') || ${m.addedVariants}::text[]) AS x)
                ) WHERE id = ${m.id}`;
     }
+    // Personalization metadata (roles_present / objects_present /
+    // has_relationship / related_images) — the aac-prompt-author rule is
+    // "prompt and metadata are ONE job", so an authored CSV can now carry
+    // them. Applied as a separate best-effort UPDATE (pre-migration tables
+    // without the columns skip silently rather than failing the whole
+    // import). `personalized` is deliberately NOT importable — it's the
+    // hard stop only a parent's personalization flips.
+    const pipeArr = (v) => {
+      const s = String(v == null ? '' : v).trim();
+      if (!s) return null;
+      const a = [...new Set(s.split('|').map((x) => x.trim()).filter(Boolean))].slice(0, 24);
+      return a.length ? a : null;
+    };
+    const metaOf = (r) => {
+      const roles = pipeArr(r.roles_present), objects = pipeArr(r.objects_present),
+            related = pipeArr(r.related_images);
+      const rel = String(r.has_relationship == null ? '' : r.has_relationship).trim().toLowerCase();
+      const hasRel = rel === 'true' || rel === '1' ? true : (rel === 'false' || rel === '0' ? false : null);
+      if (!roles && !objects && !related && hasRel === null) return null;
+      return { roles, objects, related, hasRel };
+    };
+    const applyMeta = async (id, m) => {
+      try {
+        await db`UPDATE taxonomy SET
+                   roles_present    = COALESCE(${m.roles}::text[], roles_present),
+                   objects_present  = COALESCE(${m.objects}::text[], objects_present),
+                   related_images   = COALESCE(${m.related}::text[], related_images),
+                   has_relationship = COALESCE(${m.hasRel}, has_relationship)
+                 WHERE id = ${id}`;
+      } catch (_) { /* pre-migration table — metadata columns absent */ }
+    };
+
     // Targeted enrichment of existing rows: COALESCE keeps the live value
     // whenever the CSV cell was empty; match_terms merge, never replace.
     for (const e of plan.enrich) {
@@ -123,8 +165,10 @@ export default async function handler(req, res) {
                  descriptive_clues = COALESCE(${e.clues}, descriptive_clues),
                  prompt_template   = COALESCE(${e.prompt}, prompt_template),
                  pronunciation     = COALESCE(${e.pron}, pronunciation),
-                 category          = COALESCE(${e.category}, category),
-                 subcategory       = COALESCE(${e.subcategory}, subcategory),
+                 category          = CASE WHEN ${e.categoryClear === true} THEN NULL
+                                          ELSE COALESCE(${e.category}, category) END,
+                 subcategory       = CASE WHEN ${e.subcategoryClear === true} THEN NULL
+                                          ELSE COALESCE(${e.subcategory}, subcategory) END,
                  growth_stage      = COALESCE(${e.growth}, growth_stage),
                  meal_context      = COALESCE(${e.meal}, meal_context),
                  notes             = COALESCE(${e.notes}, notes),
@@ -134,6 +178,8 @@ export default async function handler(req, res) {
                    ELSE match_terms END,
                  updated_at        = NOW(), updated_by = ${ACTOR}
                WHERE id = ${e.id}`;
+      const m = metaOf(e.metaRaw || {});
+      if (m) await applyMeta(e.id, m);
     }
     for (const r of plan.inserts) {
       await db`INSERT INTO taxonomy (
@@ -151,6 +197,8 @@ export default async function handler(req, res) {
           'draft', ${txt(r.notes)}, ${txt(r.prompt_template) ?? ''},
           ${Number.isFinite(parseInt(r.sort_order, 10)) ? parseInt(r.sort_order, 10) : null}
         ) ON CONFLICT (id) DO NOTHING`;
+      const m = metaOf(r);
+      if (m) await applyMeta(txt(r.id), m);
     }
 
     await db`INSERT INTO taxonomy_audit (actor, action, summary, note)

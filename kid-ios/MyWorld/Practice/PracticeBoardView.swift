@@ -65,6 +65,9 @@ struct PracticeBoardView: View {
         let voices: [VoiceOpt]?
         let styles: [StyleOpt]?
         let kids: [KidOpt]?
+        /// Admin-set name for the style's PRIMARY demo kid (kid 0); nil →
+        /// the default "Our demo kid".
+        let kidZeroLabel: String?
         let listenBlocklist: [String]?
         /// Curated fluent-sentence showcase lines with pre-rendered clips
         /// under demo-audio/<vid>/sentences/ (the membership feature demo).
@@ -468,7 +471,7 @@ struct PracticeBoardView: View {
                 Button {
                     kidId = nil
                 } label: {
-                    if kidId == nil { Label("Our demo kid", systemImage: "checkmark") } else { Text("Our demo kid") }
+                    if kidId == nil { Label(kidZeroLabel, systemImage: "checkmark") } else { Text(kidZeroLabel) }
                 }
                 ForEach(payload?.kids ?? [], id: \.id) { k in
                     Button {
@@ -570,9 +573,13 @@ struct PracticeBoardView: View {
         guard let id = styleId else { return "Classic" }
         return payload?.styles?.first { $0.id == id }?.label ?? "Classic"
     }
+    /// The primary demo kid's display name (admin-renameable per style).
+    private var kidZeroLabel: String {
+        payload?.kidZeroLabel ?? "Our demo kid"
+    }
     private var currentKidLabel: String {
-        guard let id = kidId else { return "Our demo kid" }
-        return payload?.kids?.first { $0.id == id }?.label ?? "Our demo kid"
+        guard let id = kidId else { return kidZeroLabel }
+        return payload?.kids?.first { $0.id == id }?.label ?? kidZeroLabel
     }
     private var currentVoiceName: String {
         if effectiveVoiceId == "" { return "Device voice" }

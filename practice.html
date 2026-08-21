@@ -622,7 +622,7 @@
     if (!kids.length) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
     fillSelect(document.getElementById('sel-kid'),
-               [{ id: 0, label: 'Our demo kid' }, ...kids], KID);
+               [{ id: 0, label: DATA.kidZeroLabel || 'Our demo kid' }, ...kids], KID);
   }
 
   async function reloadBoard(styleId, kidId) {

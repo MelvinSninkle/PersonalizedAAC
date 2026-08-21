@@ -80,7 +80,7 @@ export default async function handler(req, res) {
     });
     if (!charge.ok) {
       res.status(402).json({ error: 'not_enough_credits', needed: COST.person, balance: charge.balance,
-                             detail: 'Adding a family member uses 3 image credits. Add credits in the store and try again.' });
+                             detail: `Adding a family member uses ${COST.person} image credits. Add credits in the store and try again.` });
       return;
     }
     // 1) Stylize the person in the child's HOUSE STYLE. This MUST match the

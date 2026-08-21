@@ -141,6 +141,7 @@
   <select id="style-picker" title="Which style's default set to review">
     <option value="">Generic (unstyled)</option>
   </select>
+  <select id="kid-picker" hidden title="Which demo kid's picture set to view (person tiles re-render per kid; objects and folders are shared)"></select>
   <span class="chip-warn" id="ref-warn" hidden>⚠️ upload 👤/🧸 refs on the Lab style card for best results</span>
   <span class="stat" id="stat">Loading…</span>
   <div class="spacer"></div>
@@ -239,9 +240,9 @@
   let BOARDS = new Map();        // 'section|category_norm' → {storeOnly, pricing} (Lab board catalog)
 
   function styleGuideId() { return parseInt(document.getElementById('style-picker').value, 10) || 0; }
-  // Demo-kid view (wizard 2b gallery links): tiles shown/regen'd are THAT
-  // kid's person-scope set. 0 = the main board.
-  const KID_VIEW = parseInt(new URLSearchParams(location.search).get('demoChildId'), 10) || 0;
+  // Demo-kid view (wizard 2b gallery links or the header dropdown): tiles
+  // shown/regen'd are THAT kid's person-scope set. 0 = the main board.
+  let KID_VIEW = parseInt(new URLSearchParams(location.search).get('demoChildId'), 10) || 0;
 
   // ── Tile / chip state ─────────────────────────────────────────────────
   function tileState(t) {
@@ -458,6 +459,25 @@
     if (want && STYLES.some((s) => String(s.id) === String(want))) sel.value = want;
   }
 
+  // Header demo-kid dropdown (style mode only): browse each kid's picture
+  // set — "Main board" is the primary demo kid (kid 0), the rest come from
+  // the wizard's 2b list. Only kids with a saved reference are offered.
+  async function loadKidPicker(id) {
+    const sel = document.getElementById('kid-picker');
+    if (!id) { sel.hidden = true; sel.innerHTML = ''; return; }
+    let primaryLabel = 'Main board', kids = [];
+    try {
+      const d = await api('/api/admin/lab?action=style-wizard&styleGuideId=' + id);
+      if (d.style && d.style.demoKidLabel) primaryLabel = 'Main board — ' + d.style.demoKidLabel;
+      kids = d.kids || [];
+    } catch (_) { /* not a wizard-managed (global) style — just the main set */ }
+    sel.innerHTML = '<option value="0">🧒 ' + esc(primaryLabel) + '</option>' +
+      kids.map((k) => '<option value="' + k.id + '">🧒 ' + esc(k.label) + '</option>').join('');
+    if (KID_VIEW && kids.some((k) => Number(k.id) === KID_VIEW)) sel.value = String(KID_VIEW);
+    else { sel.value = '0'; KID_VIEW = 0; }
+    sel.hidden = false;
+  }
+
   async function load() {
     const board = document.getElementById('board');
     board.innerHTML = '<div class="empty">Loading the default board…</div>';
@@ -470,14 +490,18 @@
         BOARDS = new Map((bd.boards || []).map((b) => [b.section + '|' + norm(b.label), b]));
       } catch (_) { BOARDS = new Map(); }
       if (id) {
-        // ?demoChildId=N (the wizard's per-kid gallery links): view that demo
-        // kid's person-scope set instead of the main board's.
+        // ?demoChildId=N (the wizard's per-kid gallery links or the header
+        // dropdown): view that demo kid's person-scope set instead of the
+        // main board's. The picker loads first so a stale kid id in the URL
+        // is corrected before the tile fetch uses it.
+        await loadKidPicker(id);
         const d = await api('/api/admin/lab?action=style-defaults&styleGuideId=' + id
                             + (KID_VIEW ? '&demoChildId=' + KID_VIEW : ''));
         STYLE_INFO = d.style || null;
         TILES = d.tiles || [];
         CHIPS = (d.chips || []).map((c) => ({ ...c, parent: c.parent || '' }));
       } else {
+        await loadKidPicker(0);
         const d = await api('/api/admin/lab?action=defaults-view');
         STYLE_INFO = null;
         TILES = (d.tiles || []).map((t) => ({ ...t, status: null, error: null }));
@@ -524,7 +548,7 @@
   // ── Style mode: chunked bulk generation ───────────────────────────────
   function setBusy(b) {
     BUSY = b;
-    for (const id of ['gen-tiles', 'gen-chips', 'regen-all', 'refresh', 'push-defaults', 'style-picker']) {
+    for (const id of ['gen-tiles', 'gen-chips', 'regen-all', 'refresh', 'push-defaults', 'style-picker', 'kid-picker']) {
       document.getElementById(id).disabled = b;
     }
   }
@@ -713,9 +737,19 @@
 
   document.getElementById('style-picker').addEventListener('change', () => {
     const id = styleGuideId();
+    KID_VIEW = 0;   // kids belong to a style — a style switch resets to the main board
     const url = new URL(location.href);
     if (id) url.searchParams.set('styleGuideId', String(id));
     else url.searchParams.delete('styleGuideId');
+    url.searchParams.delete('demoChildId');
+    history.replaceState(null, '', url);
+    load();
+  });
+  document.getElementById('kid-picker').addEventListener('change', () => {
+    KID_VIEW = parseInt(document.getElementById('kid-picker').value, 10) || 0;
+    const url = new URL(location.href);
+    if (KID_VIEW) url.searchParams.set('demoChildId', String(KID_VIEW));
+    else url.searchParams.delete('demoChildId');
     history.replaceState(null, '', url);
     load();
   });

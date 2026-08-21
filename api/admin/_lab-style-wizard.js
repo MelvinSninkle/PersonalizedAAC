@@ -20,6 +20,9 @@
 //   POST { styleGuideId, op:'kid-save', label, blobKey, kidId? } → add/update a kid
 //   POST { styleGuideId, op:'kid-jobs', kidId }  → queue that kid's person-scope tiles
 //   POST { styleGuideId, op:'kid-remove', kidId } → deactivate (art kept)
+//   POST { styleGuideId, op:'kid-rename', kidId, label } → rename; kidId 0 =
+//        the PRIMARY demo kid (style_guides.demo_kid_label — what the public
+//        practice board's "Meet" switcher calls the default child)
 //
 // Drafts: wizard-created styles are active=FALSE until Publish — the
 // onboarding picker (active=TRUE filter) and the demo switcher can never
@@ -75,7 +78,13 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const meta = (await db`SELECT active, preview_blob_key FROM style_guides WHERE id = ${styleGuideId}`)[0] || {};
+      let meta;
+      try {
+        meta = (await db`SELECT active, preview_blob_key, demo_kid_label FROM style_guides WHERE id = ${styleGuideId}`)[0] || {};
+      } catch (_) {
+        // pre-migration DB (no demo_kid_label yet)
+        meta = (await db`SELECT active, preview_blob_key FROM style_guides WHERE id = ${styleGuideId}`)[0] || {};
+      }
       const status = await styleBuildStatus(db, styleGuideId);
       // Extra demo kids + each one's person-scope render progress.
       await ensureStyleDefaultTables(db);
@@ -95,6 +104,7 @@ export default async function handler(req, res) {
         style: { id: style.id, label: style.label, description: style.description,
                  blobKey: style.blob_key, personRefKey: style.person_ref_key,
                  stuffRefKey: style.stuff_ref_key, previewKey: meta.preview_blob_key || null,
+                 demoKidLabel: meta.demo_kid_label || null,
                  active: !!meta.active },
         status,
         kids,
@@ -223,6 +233,30 @@ export default async function handler(req, res) {
         note: b.force === true
           ? 'Re-rendering this kid\'s whole set — the drain works through it on its own.'
           : 'Queued — only the person tiles re-render for this kid; objects and folders are shared.' });
+      return;
+    }
+
+    if (op === 'kid-rename') {
+      // Rename what the practice board's "Meet" switcher shows. kidId 0 is
+      // the style's PRIMARY demo kid — no style_demo_children row exists for
+      // it, so the label lives on style_guides itself.
+      const label = String(b.label || '').trim().slice(0, 60);
+      if (!label) { res.status(400).json({ error: 'label required' }); return; }
+      const kidId = Number(b.kidId) || 0;
+      if (kidId > 0) {
+        const upd = await db`UPDATE style_demo_children SET label = ${label}
+                             WHERE id = ${kidId} AND style_guide_id = ${styleGuideId}
+                             RETURNING id`;
+        if (!upd.length) { res.status(404).json({ error: 'kid not found' }); return; }
+      } else {
+        try {
+          await db`UPDATE style_guides SET demo_kid_label = ${label} WHERE id = ${styleGuideId}`;
+        } catch (_) {
+          await db`ALTER TABLE style_guides ADD COLUMN IF NOT EXISTS demo_kid_label TEXT`;
+          await db`UPDATE style_guides SET demo_kid_label = ${label} WHERE id = ${styleGuideId}`;
+        }
+      }
+      res.status(200).json({ ok: true, kidId, label });
       return;
     }
 

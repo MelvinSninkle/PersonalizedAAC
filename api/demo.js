@@ -102,7 +102,14 @@ export default async function handler(req, res) {
     let styledTiles = new Map();
     let styledChips = new Map();
     let kids = [];
+    let kidZeroLabel = null;
     if (Number.isFinite(styleId) && styleId > 0) {
+      // What the "Meet" switcher calls the style's PRIMARY demo kid (kid 0).
+      // Admin-renameable in the wizard; NULL → clients keep "Our demo kid".
+      try {
+        const g = (await db`SELECT demo_kid_label FROM style_guides WHERE id = ${styleId}`)[0];
+        kidZeroLabel = g?.demo_kid_label || null;
+      } catch (_) { /* pre-migration DB — default label */ }
       try {
         let t;
         try {
@@ -273,6 +280,7 @@ export default async function handler(req, res) {
     // page's listening demo masks these as "Bad Word", censor always ON.
     // Same shared list every real board receives on sync; no family data.
     res.status(200).json({ ok: true, tiles, folders, voices, styles, kids,
+                           kidZeroLabel,
                            classicHidden,
                            listenBlocklist: BAD_WORDS,
                            // Fluent-sentence showcase: when the demo sentence
