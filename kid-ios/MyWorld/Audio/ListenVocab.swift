@@ -340,12 +340,11 @@ final class ListenVocab {
     }
 
     static func tokenize(_ text: String) -> [String] {
-        text.lowercased()
+        let words = text.lowercased()
             .replacingOccurrences(of: "’", with: "'")
             .components(separatedBy: CharacterSet.letters.union(CharacterSet(charactersIn: "'")).inverted)
             .filter { !$0.isEmpty }
-            .prefix(60)
-            .map(String.init)
+        return Array(words.prefix(60))
     }
 
     private static func dayKey(_ date: Date = Date()) -> String {
